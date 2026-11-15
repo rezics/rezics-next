@@ -31,6 +31,13 @@ import {
 } from './canonical-source-store.ts';
 import { CANONICAL_SOURCE_REPAIR_STEP, canonicalSourceCallAllowance } from './canonical-source-bounds.ts';
 import { librarySemanticObservations } from './semantic-observation.ts';
+import { COLLECTION_PUBLICATION_WORKFLOW } from './contract/index.ts';
+import publicationRecoverySQL from './collection-publication-recovery.sql';
+import publicationSupersededSQL from './collection-publication-superseded.sql';
+import { collectionPublicationOutputProducer } from './collection-publication-output.ts';
+import { publicOutputRetireWork } from '../semantic/identity-public-output-work.ts';
+import { withCollectionReadConnection } from './collection-read-connection.ts';
+import { workStepDeadline } from './collection-command-work.ts';
 
 const sourceStepAllowance = (observations = librarySemanticObservations()): CanonicalAllowance => ({
   reservationId: randomUUID(),
@@ -98,6 +105,46 @@ async function advanceSourceStep(
   });
   return published.state === 'published' ? 'ready' : 'unavailable';
 }
+async function retireSupersededPublication(context: WorkContext, row: { route: number; collection: string }) {
+  const deadline = workStepDeadline();
+  const retired = await withCollectionReadConnection(context.pool, deadline, async (tx) =>
+    (
+      await tx.query<{ captureId: string; bindingDigest: string }>(publicationSupersededSQL.sql, [
+        row.route,
+        row.collection,
+      ])
+    ).rows[0],
+  );
+  if (!retired) return;
+  // One retained page or transition per visit. Pending or refused custody stays in the indexed source.
+  await collectionPublicationOutputProducer(context).retireSuperseded(
+    { kind: 'public-output', partition: partitionOf(row.route), ...retired },
+    { deadline, allowance: { reservationId: retired.captureId, remaining: publicOutputRetireWork() } },
+  );
+}
+
+async function recoverCollectionPublication(
+  context: WorkContext,
+  input: { route: number; collection: string; owner: string },
+  sweep: string,
+): Promise<void> {
+  const { route, collection, owner } = input;
+  const publication = await withCollectionReadConnection(context.pool, workStepDeadline(), async (tx) =>
+    (await tx.query<{ publicationId: string }>(publicationRecoverySQL.sql, [route, collection, owner])).rows[0],
+  );
+  if (!publication) return;
+  await context.client.enqueue(
+    {
+      queueName: 'workflows',
+      workflowName: COLLECTION_PUBLICATION_WORKFLOW,
+      workflowID: `${publication.publicationId}:recovery:${sweep}:output:0`,
+      workflowIDReusePolicy: 'return-existing',
+    },
+    { route, publicationId: publication.publicationId, collectionId: collection, ownerAccountId: owner, accounts: [owner] },
+    0,
+  );
+}
+
 /** The existing Library worker owns native checkpoints. No Source GET writes, scheduler or new participant. */
 export async function registerCollectionSourceWork(context: WorkContext): Promise<void> {
   bindCanonicalSourceWork(context);
@@ -107,8 +154,9 @@ export async function registerCollectionSourceWork(context: WorkContext): Promis
   const sweepPage = DBOS.registerStep(
     async (input: SourceSweep): Promise<SourceSweep> => {
       const { rows } = await withConnection(context.pool, (client) =>
-        client.query<{ route: number; collection: string; owner: string | null }>(
-          `SELECT route,collection_id::text AS collection,curator_account_id::text AS owner FROM library.collection
+        client.query<{ route: number; collection: string; owner: string | null; builtin: string | null }>(
+          `SELECT route,collection_id::text AS collection,curator_account_id::text AS owner,builtin_kind AS builtin
+       FROM library.collection
        WHERE route BETWEEN $1 AND $2 AND ($3::integer IS NULL OR (route,collection_id)>($3,$4::uuid))
        ORDER BY route,collection_id LIMIT 1`,
           [input.partition * 16, input.partition * 16 + 15, input.route, input.collection],
@@ -116,6 +164,10 @@ export async function registerCollectionSourceWork(context: WorkContext): Promis
       );
       const row = rows[0];
       if (!row) return { ...input, partition: input.partition + 1, route: null, collection: null };
+      if (row.builtin === 'everything' || row.builtin === 'state') {
+        if (row.owner) await recoverCollectionPublication(context, { ...row, owner: row.owner }, input.root);
+        await retireSupersededPublication(context, row);
+      }
       if (row.owner) await page({ accounts: [row.owner], collectionId: row.collection });
       return { ...input, route: row.route, collection: row.collection };
     },

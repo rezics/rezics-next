@@ -30,7 +30,7 @@ type NativePublicOutputPort = NativePublicOutputApplication<CommandTransaction, 
 import type { PublicFilterSourceFactory } from './public-filter-source-contract.ts';
 import { createPublicFilterSourceBinding, type PublicFilterSourceDefinition } from './public-filter-source-binding.ts';
 import { publicFilterSource } from './public-filter-source.ts';
-import { NativeCollectionWork, instrumentNativeCollectionWork } from '../library/collection-source-work.ts';
+import { NativeCollectionWork, instrumentNativeCollectionWork } from '../library/collection-native-work.ts';
 import type { WorkAllowance } from '../library/contract/work-dimensions.ts';
 import type { IdentityNativeReceipt } from './identity-epoch-contract.ts';
 import { recordIdentityEpochNativeCommit } from './identity-adapters/native-commit.ts';
@@ -92,6 +92,7 @@ import stageSQL from './identity-public-output-stage.sql';
 import selectedCaptureSQL from './identity-public-output-selected-capture.sql';
 import readableOriginalsSQL from './identity-public-output-readable-originals.sql';
 import resumeSQL from './identity-public-output-resume.sql';
+import supersededSQL from './identity-public-output-superseded.sql';
 import releaseSizeSQL from './identity-public-output-release-size.sql';
 import { readRelease } from './definition-release-read.ts';
 
@@ -998,11 +999,25 @@ export function createPublicIdentityOutputCapture(
     if (!(await read(deadline, (tx) => one(tx, cutReleasedSQL, [c.home, l.partition, l.captureId, c.original]))))
       return refuse('provenance');
   }
-  async function cancel(l: T.PublicIdentityOutputCapture, options: T.PublicIdentityOutputWork) {
+  async function cancel(l: T.PublicIdentityOutputCapture, options: T.PublicIdentityOutputWork, superseded = false) {
     return execute(options, async (work) => {
       const a = await command(l.partition, options.deadline, l.captureId, async (tx) => {
         const a = await load(tx, l);
         await one(tx, scopeSQL, [l.partition, a.scope_key, l.captureId]);
+        if (superseded) {
+          const source = a.binding.tuple.identity;
+          if (
+            a.capture_id !== source.outputGeneration ||
+            !(await one(tx, supersededSQL, [
+              source.route,
+              source.collectionId,
+              source.incarnation,
+              source.activation.sourceGeneration,
+              source.outputGeneration,
+            ]))
+          )
+            return refuse('current', 'changed');
+        }
         const fence = await one<{ kind: string }>(tx, fenceSQL, [l.partition, l.captureId]);
         if (fence && fence.kind !== 'cancelled') return refuse('fenced');
         const n = await component(tx, 'identity-public-output-cancelled');
@@ -1233,7 +1248,9 @@ export function createPublicIdentityOutputCapture(
       options: T.PublicIdentityOutputWork,
     ) => canonicalRead(l, options, { after, limit }),
     enrollConsumer,
-    cancel,
+    cancel: (capture: T.PublicIdentityOutputCapture, options: T.PublicIdentityOutputWork) => cancel(capture, options),
+    retireSuperseded: (capture: T.PublicIdentityOutputCapture, options: T.PublicIdentityOutputWork) =>
+      cancel(capture, options, true),
     apply,
   };
 }
