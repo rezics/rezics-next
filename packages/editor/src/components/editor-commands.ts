@@ -7,6 +7,7 @@ import type { EditorCommandLabel } from './editor-labels.ts';
 import { editorCommandsForPresentation } from './editor-command-preferences.ts';
 import { compactHistory } from './editor-compact-transaction.ts';
 import { clearEditorFindHighlights } from './editor-find.tsx';
+import { runCompactEditorChain } from './editor-compact-commands.ts';
 
 export interface EditorCommand {
   id: string;
@@ -60,7 +61,7 @@ const mark = (id: string, label: EditorCommandLabel): EditorCommand => ({
   mark: id,
   active: (editor) => editor.isActive(id),
   run: (editor) => {
-    editor.chain().toggleMark(id).run();
+    runCompactEditorChain(editor, (chain) => chain.toggleMark(id));
   },
 });
 
@@ -90,7 +91,7 @@ export const markCommands: readonly EditorCommand[] = [
     id: 'clearFormatting',
     label: 'clearFormatting',
     run: (editor) => {
-      editor.chain().unsetAllMarks().run();
+      runCompactEditorChain(editor, (chain) => chain.unsetAllMarks());
     },
   },
 ];
@@ -121,7 +122,7 @@ export const redoCommand: EditorCommand = {
   run: (editor) => applyHistory(editor, redo),
 };
 
-const heading = (level: 1 | 2 | 3): EditorCommand => ({
+const heading = (level: 1 | 2 | 3 | 4 | 5 | 6): EditorCommand => ({
   id: `heading${level}`,
   label: `heading${level}`,
   node: 'heading',
@@ -152,6 +153,9 @@ export const blockCommands: readonly EditorCommand[] = [
   heading(1),
   heading(2),
   heading(3),
+  heading(4),
+  heading(5),
+  heading(6),
   list('bulletList', 'listItem', 'bulletList', ['ul', 'bullet', 'list']),
   list('orderedList', 'listItem', 'orderedList', ['ol', 'numbered', 'list']),
   list('taskList', 'taskItem', 'taskList', ['todo', 'task', 'checkbox', 'checklist']),

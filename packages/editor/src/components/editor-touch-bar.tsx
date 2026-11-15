@@ -308,7 +308,9 @@ export function EditorTouchBar({
           <div
             className={cn(
               'flex min-w-0 flex-1 items-center gap-0.5 py-1',
-              docked ? 'overflow-x-auto overscroll-x-contain' : 'flex-wrap',
+              docked
+                ? 'flex-nowrap overflow-x-auto overscroll-x-contain'
+                : 'flex-nowrap overflow-x-auto overscroll-x-contain md:flex-wrap',
             )}
           >
             {blockCommands.length ? (

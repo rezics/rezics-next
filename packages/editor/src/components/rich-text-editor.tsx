@@ -44,6 +44,7 @@ import {
 import { EditorFindHighlights } from './editor-find.tsx';
 import { setEditorCommandPreferences } from './editor-command-preferences.ts';
 import { recordTextReplayBatch, skipProvenTextReplay } from './editor-compact-transaction.ts';
+import { editorContentRejected } from './editor-compact-commands.ts';
 import { restoreMovedUnitIdentity } from './editor-drag-identity.ts';
 import type { EditorWorkbenchLabels } from './editor-workbench-labels.ts';
 import type {
@@ -70,7 +71,9 @@ import {
   type LinkRange,
   type LinkVisitRange,
 } from './editor-link.tsx';
-import { ImageInsert, withImageView } from './editor-image.tsx';
+import { ImageInsert, withMediaViews } from './editor-image.tsx';
+import type { DocumentImageRenderer, DocumentMediaRenderer } from './document-media.tsx';
+import { refreshEditorMediaViews, type EditorMediaPorts } from './editor-media-runtime.ts';
 import {
   editorUploads,
   type ImageUploader,
@@ -126,6 +129,9 @@ export interface RichTextEditorProps {
   inspection?: ReactNode;
   maxLength?: number;
   upload?: ImageUploader;
+  renderImage?: DocumentImageRenderer;
+  renderMedia?: DocumentMediaRenderer;
+  mediaVisitKey?: unknown;
   lookupMention?: MentionSource;
   onUploadState?: (state: UploadState, count: number, attachments?: number) => void;
   /** Caller presentation uses this editor's existing insertion, retry and dismissal owner. */
@@ -331,6 +337,9 @@ export function RichTextEditor({
   inspection,
   maxLength,
   upload,
+  renderImage,
+  renderMedia,
+  mediaVisitKey,
   onUploadState,
   renderUpload,
   onSnapshotPending,
@@ -430,6 +439,11 @@ export function RichTextEditor({
   const committedMentionGeneration = useRef(mentionSourceState.current.generation);
   const mentionRetirement = useRef<MentionRetirement | null>(null);
   const [snapshotError, setSnapshotError] = useState(false);
+  const [rejectedContent, setRejectedContent] = useState<'structuredPaste' | null>(null);
+  const rejectContent = useCallback((reason?: 'structuredPaste') => {
+    setSnapshotError(true);
+    setRejectedContent(reason ?? null);
+  }, []);
   const hasUpload = !!upload;
   const hasMention = !!lookupMention;
   const menuContainer = useRef<HTMLDivElement>(null);
@@ -467,6 +481,17 @@ export function RichTextEditor({
 
   const labelsRef = useRef(resolvedLabels);
   labelsRef.current = resolvedLabels;
+  const mediaSource = useRef(mediaVisitKey);
+  mediaSource.current = mediaVisitKey;
+  const mediaAdmission = useRef<() => boolean>(() => false);
+  const mediaPorts = useRef<EditorMediaPorts>({ labels: resolvedLabels, isCurrent: () => mediaAdmission.current() });
+  mediaPorts.current = {
+    labels: resolvedLabels,
+    isCurrent: () => mediaAdmission.current(),
+    ...(renderImage ? { renderImage } : {}),
+    ...(renderMedia ? { renderMedia } : {}),
+    visit: mediaVisitKey,
+  };
   const slashHandlers = useRef(idleSlashHandlers);
   const mentionHandlers = useRef(idleMentionHandlers);
   const mentionEnabled = useRef(hasMention);
@@ -492,11 +517,13 @@ export function RichTextEditor({
         snapshot = editorSnapshot(editor.state.doc, value.profile);
       } catch {
         setSnapshotError(true);
+        setRejectedContent(null);
         latest.current.onSnapshotError?.(editor.state.doc.toJSON() as DocumentNode);
         return;
       }
 
       setSnapshotError(false);
+      setRejectedContent(null);
       emittedKey.current = snapshotKey(snapshot);
       lastPublishedDoc.current = editor.state.doc;
       publishedEditor.current = editor;
@@ -539,16 +566,16 @@ export function RichTextEditor({
         EditorHistory,
         EditorFindHighlights,
         ...withMentionView(
-          withImageView(
+          withMediaViews(
             editorExtensions(value.profile, {
               ...(placeholder === undefined ? {} : { placeholder }),
               ...(maxLength === undefined ? {} : { maxLength }),
               taskStatus: () => labelsRef.current.taskStatus ?? 'Task status',
-              onInvalidContent: () => {
-                if (mounted.current) setSnapshotError(true);
+              onInvalidContent: (reason) => {
+                if (mounted.current) rejectContent(reason);
               },
             }),
-            () => labelsRef.current,
+            () => mediaPorts.current,
           ),
           mentionHandles,
           mentionHandleUsage,
@@ -630,7 +657,11 @@ export function RichTextEditor({
         handlePaste: (view, event) => {
           const files = Array.from(event.clipboardData?.files ?? []);
           if (!files.length) return false;
-          if (view.editable) uploads.current?.add(files, view.state.selection.from);
+          if (view.editable) {
+            if (!view.state.schema.nodes.image || !latest.current.upload || !uploads.current)
+              rejectContent('structuredPaste');
+            else uploads.current.add(files, view.state.selection.from);
+          }
           return true;
         },
         handleDrop: (view, event, _slice, moved) => {
@@ -638,12 +669,18 @@ export function RichTextEditor({
           if (moved || !files.length) return false;
           const position =
             view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? view.state.selection.from;
-          if (view.editable) uploads.current?.add(files, position);
+          if (view.editable) {
+            if (!view.state.schema.nodes.image || !latest.current.upload || !uploads.current)
+              rejectContent('structuredPaste');
+            else uploads.current.add(files, position);
+          }
           return true;
         },
       },
-      onTransaction: ({ transaction, appendedTransactions }) =>
-        recordTextReplayBatch(transaction, appendedTransactions),
+      onTransaction: ({ transaction, appendedTransactions }) => {
+        recordTextReplayBatch(transaction, appendedTransactions);
+        if (transaction.getMeta(editorContentRejected)) rejectContent();
+      },
       onUpdate: ({ editor: current }) => scheduleRef.current(current),
       onBlur: ({ editor: current }) => {
         if (!mounted.current || renderedEditor.current !== current || current.isDestroyed) return;
@@ -657,6 +694,12 @@ export function RichTextEditor({
     [value.profile, placeholder, maxLength],
   );
   renderedEditor.current = editor;
+  const mediaEpoch = documentEpoch.current;
+  const mediaVisit = useMemo(
+    () => ({ editor, epoch: mediaEpoch, source: mediaVisitKey }),
+    [editor, mediaEpoch, mediaVisitKey],
+  );
+  mediaPorts.current.visit = mediaVisit;
 
   useLayoutEffect(() => {
     if (!editor || editor.isDestroyed) return;
@@ -712,6 +755,17 @@ export function RichTextEditor({
     () => ownsVisit(visit, value.profile, currentMentionGeneration, editor),
     [currentMentionGeneration, editor, ownsVisit, value.profile, visit],
   );
+  mediaAdmission.current = () =>
+    mounted.current &&
+    !renderedExternalReplacement &&
+    !renderedEditorReplacement &&
+    editor !== null &&
+    editor === renderedEditor.current &&
+    !editor.isDestroyed &&
+    schemaMatchesProfile &&
+    renderedProfile.current === value.profile &&
+    documentEpoch.current === mediaEpoch &&
+    mediaSource.current === mediaVisitKey;
   const handleHistoryInput = useCallback(
     (view: EditorView, event: Event): boolean => {
       const input = event as InputEvent;
@@ -924,6 +978,7 @@ export function RichTextEditor({
       if (lostUploader && !externalReplacement && !editorChanged && !lostEditability) setOwnedImagePosition(null);
       if (externalReplacement) {
         setSnapshotError(false);
+        setRejectedContent(null);
         if (schemaMatchesProfile && editor) {
           editor
             .chain()
@@ -1008,6 +1063,7 @@ export function RichTextEditor({
       mounted.current &&
       uploadLease.current === lease &&
       documentEpoch.current === ownerEpoch &&
+      mediaSource.current === mediaVisitKey &&
       currentEditor.current === editor &&
       editableRef.current &&
       !editor.isDestroyed &&
@@ -1046,7 +1102,7 @@ export function RichTextEditor({
       manager.destroy();
       resetUploadState(true);
     };
-  }, [editor, editable, hasUpload, value.profile, documentRevision, resetUploadState]);
+  }, [editor, editable, hasUpload, value.profile, documentRevision, mediaVisitKey, resetUploadState]);
 
   const focusEditor = useCallback(() => {
     if (isCurrent() && editor && !editor.isDestroyed && editor.isEditable) editor.view.focus();
@@ -1172,6 +1228,9 @@ export function RichTextEditor({
   }, [editor, isCurrent]);
 
   const coarsePointer = useCoarsePointer();
+  useLayoutEffect(() => {
+    if (editor && !editor.isDestroyed) refreshEditorMediaViews(editor);
+  }, [editor, renderImage, renderMedia, resolvedLabels, mediaVisit]);
   const editorFocused = useEditorFocus(editor);
   const toolbarVisible =
     editable &&
@@ -1232,7 +1291,7 @@ export function RichTextEditor({
           isCurrent={isCurrent}
           inspection={inspection}
           preset={selectedPreset}
-          onInvalidContent={() => setSnapshotError(true)}
+          onInvalidContent={rejectContent}
           toolbarHidden={toolbarMode === 'hidden'}
           preferencesPanel={{
             scope: preferencesScope,
@@ -1455,7 +1514,9 @@ export function RichTextEditor({
       ) : null}
       {snapshotError ? (
         <p role="alert" className="mt-2 text-sm text-foreground">
-          {resolvedLabels.documentError}
+          {rejectedContent === 'structuredPaste'
+            ? (resolvedLabels.structuredPasteRejected ?? resolvedLabels.documentError)
+            : resolvedLabels.documentError}
         </p>
       ) : null}
     </div>

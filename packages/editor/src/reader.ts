@@ -10,3 +10,9 @@ export {
 } from './components/document-body.tsx';
 export { DocumentSpoiler } from './components/document-spoiler.tsx';
 export { Prose } from './components/prose.tsx';
+export type {
+  DocumentImageOccurrence,
+  DocumentMediaOccurrence,
+  DocumentImageRenderer,
+  DocumentMediaRenderer,
+} from './components/document-media.tsx';

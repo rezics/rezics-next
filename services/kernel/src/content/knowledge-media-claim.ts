@@ -33,7 +33,7 @@ export async function claimKnowledgeMedia(
     new Set(input.mediaIds).size !== input.mediaIds.length) throw new InvalidMediaClaimError();
   if (routeOf(input.revisionId) !== route || input.mediaIds.some((id) => routeOf(id) !== route))
     throw new MediaUnavailableError();
-  const [result] = await claim.run(tx, {
+  const result = await claim.run(tx, {
     route,
     document_id: input.documentId,
     revision_id: input.revisionId,

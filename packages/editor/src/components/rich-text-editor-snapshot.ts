@@ -7,6 +7,7 @@ import {
   type DocumentSnapshot,
 } from '@rezics/document';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
+import { assertJsonByteBudget } from './editor-json-budget.ts';
 
 export const maxSnapshotBytes = 2 * 1024 * 1024;
 
@@ -23,19 +24,19 @@ function wireNode(node: DocumentNode): DocumentNode {
 }
 
 export function assertSnapshotSize(snapshot: DocumentSnapshot): void {
-  if (new TextEncoder().encode(JSON.stringify(snapshot)).byteLength > maxSnapshotBytes) {
-    throw new RangeError('Document snapshots may not exceed 2 MiB');
-  }
+  assertJsonByteBudget(snapshot, maxSnapshotBytes);
 }
 
 /** Convert one editor state to a validated document snapshot. */
 export function editorSnapshot(doc: ProseMirrorNode, profile: DocumentProfile): DocumentSnapshot {
   const content = wireNode(doc.toJSON() as DocumentNode);
-  const snapshot = normalizeDocument({
+  const candidate: DocumentSnapshot = {
     version: documentVersion,
     profile,
     doc: withDocumentIds(content),
-  });
+  };
+  assertSnapshotSize(candidate);
+  const snapshot = normalizeDocument(candidate);
 
   assertSnapshotSize(snapshot);
   return snapshot;

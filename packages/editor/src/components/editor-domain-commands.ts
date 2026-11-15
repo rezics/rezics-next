@@ -1,7 +1,10 @@
 import type { Editor } from '@tiptap/core';
 import { closeHistory } from '@tiptap/pm/history';
-import { Fragment, type Node, type Slice } from '@tiptap/pm/model';
+import { Fragment, Slice, type Node } from '@tiptap/pm/model';
 import { NodeSelection, TextSelection, type Selection, type Transaction } from '@tiptap/pm/state';
+import { AddMarkStep, RemoveMarkStep, type Step } from '@tiptap/pm/transform';
+import { compactIdentityTransaction } from './editor-compact-transaction.ts';
+import { TextDocumentIndex } from './editor-text-document.ts';
 
 export interface AnnotationTarget {
   doc: Node;
@@ -154,6 +157,25 @@ export function applyLanguage(
   } else {
     const mark = editor.schema.marks.language;
     if (!mark || target.from === target.to) return false;
+    if (new TextDocumentIndex(editor.state.doc).edit(target.from, target.to, Slice.empty)) {
+      const steps: Step[] = [];
+      const next = values.lang || values.dir ? mark.create(values) : null;
+      editor.state.doc.nodesBetween(target.from, target.to, (node, position, parent) => {
+        if (!node.isText) return;
+        const from = Math.max(target.from, position),
+          to = Math.min(target.to, position + node.nodeSize);
+        const previous = node.marks.find((current) => current.type === mark);
+        if (previous) steps.push(new RemoveMarkStep(from, to, previous));
+        if (next && parent?.type.allowsMarkType(mark)) steps.push(new AddMarkStep(from, to, next));
+      });
+      if (steps.length) {
+        const compact = compactIdentityTransaction(editor.state, steps);
+        if (!compact) return false;
+        return dispatch(editor, compact.setStoredMarks(null));
+      }
+      return dispatch(editor, transaction);
+    }
+    // Atoms and non-closed ranges retain the maintained native selection semantics.
     transaction.removeMark(target.from, target.to, mark);
     if (values.lang || values.dir) transaction.addMark(target.from, target.to, mark.create(values));
   }

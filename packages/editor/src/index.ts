@@ -25,3 +25,12 @@ export {
   type TableControlLabels as EditorTableLabels,
 } from './components/editor-upstream/reactjs-tiptap-editor/table-labels.ts';
 export { behaviorControlLabels, type BehaviorControlLabels } from './components/editor-behavior-labels.ts';
+export { editorMediaLabels, type EditorMediaLabels } from './components/editor-media-labels.ts';
+export { AuthorFormattingControls } from './components/editor-formatting-controls.tsx';
+export { formattingControlLabels, type FormattingControlLabels } from './components/editor-formatting-labels.ts';
+export type {
+  DocumentImageOccurrence,
+  DocumentMediaOccurrence,
+  DocumentImageRenderer,
+  DocumentMediaRenderer,
+} from './components/document-media.tsx';
