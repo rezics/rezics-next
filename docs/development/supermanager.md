@@ -4,6 +4,23 @@ The resident supermanager is the only manager. It owns direction with the mainta
 unit scheduling, cross-owner choices, allowance runway, incidents, progress reporting and publication. Product and
 module names identify contracts and code ownership; they do not require resident domain managers.
 
+## Desktop dispatch
+
+Proactive desktop dispatch is the first control-plane delivery priority. Under the maintainer's standing REZICS
+dispatch authorization, the resident allocates eligible work and starts each unit as an independent chat in the
+Codex desktop app. It starts a persistent native Goal in the assigned worktree and registers the actual session.
+Routine launches within that authorization use the configured project, host, pool, allowance and capacity without
+per-unit confirmation.
+
+Use a supported dispatch interface that honors standing authorization and reaches the desktop runtime. Register
+the app host and thread ID so the operator can reopen the same live Goal. After an uncertain launch, reconcile
+the assigned unit before retrying. If the desktop route is unavailable, keep the assignment queued and expose
+the cause in the control plane.
+
+Make desktop dispatch the default after a live acceptance run shows that the resident can pick an adopted brief,
+start its Goal without an operator action, and let the operator reopen that same running chat in the app. Replaying
+the same assignment must keep one thread and one worktree. Existing terminal units keep their registered sessions.
+
 ## Execution units
 
 The manager may assign a worker to author a concrete Goal: user outcome, current owner links, write boundary, adopted
@@ -17,9 +34,9 @@ worktrees. Within a unit, assign disjoint write boundaries and designate one int
 coherent commits. Preserve ongoing source when consolidating work; do not restart a useful attempt merely to change
 its worktree. An independent editor unit retains its own tree and interface authority.
 
-Register the unit's actual native session, Goal, shared worktree and termspaces pane through the supported
-[Goal tooling](../../tools/goal/README.md) entry point. A native Goal is not a fabricated managed-task record. Keep
-runtime identities in local state, and preserve that same Goal and pane across ordinary continuation. Source
+Register the unit's actual native session, Goal and shared worktree through the supported
+[Goal tooling](../../tools/goal/README.md) entry point. The termspaces entry point also verifies the pane. Keep
+runtime identities in local state and preserve the same Goal and session across ordinary continuation. Source
 coordination inside a unit does not grant live controller, pool or publisher authority.
 
 Units decide implementation order and routine choices. Allocate implementation, acceptance and infrastructure repairs
