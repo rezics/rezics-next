@@ -4,6 +4,7 @@ import { Field } from '@base-ui/react/field';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
+import { voteDisplayNumber } from '../../ratings/question-contract';
 import type { QuestionBoundRatingInput, SubjectRatingFormHint } from './rating-actions';
 import { sessionQueryKey, type BrowserSession } from '../../session';
 import {
@@ -197,9 +198,11 @@ export function RatingControlView({
   const scale = question.scale;
   const sliderValue =
     value ?? scale.min + Math.floor((scale.max - scale.min) / scale.displayStep / 2) * scale.displayStep;
-  const number = (units: number) => new Intl.NumberFormat(locale).format(units);
+  const displayNumber = voteDisplayNumber(locale, question);
   const display = (units: number | null) =>
-    units === null ? m.subject_rating_control_unrated({}, options) : `${number(units)} / ${number(scale.max)}`;
+    units === null
+      ? m.subject_rating_control_unrated({}, options)
+      : `${displayNumber.value(units)} / ${displayNumber.max}`;
   const valueText = display(value);
   const clearOnKey = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Home' && !pending && event.target instanceof HTMLInputElement && event.target.type === 'range') {
@@ -255,7 +258,6 @@ export function RatingControlView({
           </output>
         </div>
         <Slider.Root
-
           data-slot="slider"
           disabled={nativeFallback && pending}
           aria-disabled={pending}
@@ -299,10 +301,7 @@ export function RatingControlView({
           </Slider.Control>
         </Slider.Root>
         <p id={scaleId} className="text-xs text-muted-foreground tabular-nums">
-          {m.rating_native_scale(
-            { min: number(scale.min), max: number(scale.max), step: number(scale.displayStep) },
-            options,
-          )}
+          {m.rating_native_scale({ min: displayNumber.min, max: displayNumber.max, step: displayNumber.step }, options)}
         </p>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -367,7 +366,8 @@ export function RatingRecoveryView({
   onRead: () => void;
 }) {
   const options = { locale: locale as never };
-  const number = (units: number) => new Intl.NumberFormat(locale).format(units);
+  const originalDisplay = voteDisplayNumber(locale, original.question);
+  const currentDisplay = voteDisplayNumber(locale, { id: original.question.id, scale: currentScale });
   const busy = pending || reading.kind === 'loading';
   return (
     <div className="min-w-0 space-y-2" data-slot="rating-recovery" aria-busy={busy}>
@@ -378,7 +378,7 @@ export function RatingRecoveryView({
         {original.units === null
           ? m.subject_rating_control_original_clear({}, options)
           : m.subject_rating_control_original_save(
-              { score: number(original.units), max: number(original.question.scale.max) },
+              { score: originalDisplay.value(original.units), max: originalDisplay.max },
               options,
             )}
       </p>
@@ -402,7 +402,7 @@ export function RatingRecoveryView({
               {reading.units === null
                 ? m.subject_rating_control_current_clear({}, options)
                 : m.subject_rating_control_current_save(
-                    { score: number(reading.units), max: number(currentScale.max) },
+                    { score: currentDisplay.value(reading.units), max: currentDisplay.max },
                     options,
                   )}
             </p>
@@ -452,7 +452,7 @@ function NoScriptForm({
   const inputId = `${formId}-units`;
   const labelId = `${formId}-label`;
   const scaleId = `${formId}-scale`;
-  const number = (units: number) => new Intl.NumberFormat(locale).format(units);
+  const displayNumber = voteDisplayNumber(locale, question);
   return (
     <noscript>
       <form
@@ -490,9 +490,9 @@ function NoScriptForm({
         <p id={scaleId} className="basis-full text-xs text-muted-foreground">
           {m.rating_native_scale(
             {
-              min: number(question.scale.min),
-              max: number(question.scale.max),
-              step: number(question.scale.displayStep),
+              min: displayNumber.min,
+              max: displayNumber.max,
+              step: displayNumber.step,
             },
             options,
           )}

@@ -16,11 +16,25 @@ export type SessionAccess = {
   signInHref: string;
 };
 
+const settingsReturnSections = new Set([
+  '#account',
+  '#account-tools',
+  '#display',
+  '#notifications',
+  '#privacy',
+  '#profile',
+  '#public-activity',
+  '#reading',
+  '#verification',
+  '#watches',
+]);
+
 const signedInPaths = [
   /^\/collections\/[^/]+\/publish(?:\/|$)/,
   /^\/(?:drafts|operations|studio)(?:\/|$)/,
   /^\/boards\/[^/]+\/moderation(?:\/|$)/,
-  /^\/moderation\/(?:cases|reports)(?:\/|$)/,
+  /^\/moderation\/(?:cases|reports|decisions|workbench)(?:\/|$)/,
+  /^\/realms(?:\/?$|\/new(?:\/|$)|\/[^/]+\/(?:questions|claims|claim-requests)(?:\/|$))/,
   /^\/my\/contexts(?:\/|$)/,
   /^\/editions\/?$/,
   /^\/editions\/new(?:\/|$)/,
@@ -36,7 +50,7 @@ const signedInPaths = [
   /^\/(?:accounts(?:\/|$)|review\/account-verifications(?:\/|$))/,
   /^\/organizations(?:\/|$)/,
   /^\/collections\/[^/]+\/rule\/?$/,
-  /^\/(?:library(?:\/|$)|settings(?:\/|$)|collections\/new(?:\/|$)|boards\/[^/]+\/new(?:\/|$)|orders(?:\/|$)|curate\/presentation(?:\/|$)|realms(?:\/?$|\/new(?:\/|$)|\/[^/]+\/(?:questions|claims|claim-requests)(?:\/|$))|moderation\/(?:workbench(?:\/|$)|(?:decisions|reports)\/[^/]+(?:\/|$)))/,
+  /^\/(?:library(?:\/|$)|settings(?:\/|$)|collections\/new(?:\/|$)|boards\/[^/]+\/new(?:\/|$)|orders(?:\/|$)|curate\/presentation(?:\/|$))/,
 ];
 
 /** Whether a localized route pathname belongs to a page protected by `requireSignedIn`. */
@@ -49,7 +63,9 @@ export function isSignedInPath(pathname: string): boolean {
 /** Read the current page session without turning an indeterminate result into anonymous access. */
 export async function requirePrivatePageAccess({ context, location }: GuardContext): Promise<SessionAccess> {
   const url = new URL(location.publicHref, 'https://site.invalid');
-  const signInHref = websiteSignInHref(url.pathname + url.search + url.hash);
+  // Only Settings' known section anchors are sign-in return coordinates.
+  const section = /(?:^|\/)settings\/?$/.test(url.pathname) && settingsReturnSections.has(url.hash) ? url.hash : '';
+  const signInHref = websiteSignInHref(url.pathname + url.search + section);
   try {
     await context.queryClient.ensureQueryData(sessionQuery);
   } catch {

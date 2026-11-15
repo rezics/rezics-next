@@ -56,6 +56,7 @@ import {
   extractLocaleFromRequestAsync,
   extractLocaleFromRequestWithStrategies,
   localizeUrl,
+  isLocale,
   locales,
 } from './paraglide/runtime.js';
 
@@ -457,6 +458,12 @@ async function fetchRequest(request: Request): Promise<Response> {
     }
   }
   const isRead = request.method === 'GET' || request.method === 'HEAD';
+  const [, prefix, ...segments] = url.pathname.split('/');
+  if (isRead && isLocale(prefix) && segments.join('/') === 'auth/sign-in')
+    return new Response(null, {
+      status: 307,
+      headers: { location: `/auth/sign-in${url.search}`, 'cache-control': 'private, no-store' },
+    });
   const isServerFn = url.pathname === '/_serverFn' || url.pathname.startsWith('/_serverFn/');
   const isMedia = url.pathname === '/media' || url.pathname.startsWith('/media/');
   if (

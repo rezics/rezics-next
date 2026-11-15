@@ -69,7 +69,8 @@ export async function readHomeFeedPage(
       !Array.isArray(page.feedItems) ||
       page.feedItems.length > HOME_FEED_LIMIT ||
       (!authorization &&
-        (page.sources.following !== 'not_requested' ||
+        (page.viewerPersonalActions !== undefined ||
+          page.sources.following !== 'not_requested' ||
           page.sources.continue !== 'not_requested' ||
           page.feedItems.some((item) => {
             if (item.source !== 'discovery') return true;

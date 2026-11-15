@@ -55,7 +55,9 @@ export const Route = createFileRoute('/boards/$id')({
           credentialMode === 'anonymous' &&
             deps.cursor === undefined &&
             deps.sort === undefined &&
-            read.page.threads.threads.length > 0,
+            [...read.page.threads.pinnedThreads, ...read.page.threads.threads].some(
+              (thread) => thread.availability === 'available' && thread.firstPost.availability === 'available',
+            ),
         );
         caller.assertLoadCurrent();
         if (credentialMode === 'anonymous') {
