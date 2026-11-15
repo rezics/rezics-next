@@ -51,19 +51,29 @@ CROSS JOIN LATERAL (
       OR EXISTS (
         SELECT 1 FROM library.collection_source_output_member m
         JOIN originals o ON o.original=m.subject_id
-        JOIN library.collection_source_output_publication p USING (route,collection_id,generation)
         WHERE m.route=home.route
           AND (
+            -- The terminal disposer removes the account publication row after successor custody.
             EXISTS (
-              SELECT 1 FROM library.collection_source_output_head h
-              WHERE h.route=p.route AND h.collection_id=p.collection_id AND h.generation=p.generation
-                AND h.source_generation=p.source_generation
+              SELECT 1 FROM library.collection_retained_output f
+              WHERE f.route=m.route AND f.collection_id=m.collection_id AND f.generation=m.generation
             )
             OR EXISTS (
-              SELECT 1 FROM library.native_public_output_hold h
-              WHERE h.route=p.route AND h.collection_id=p.collection_id AND h.output_generation=p.generation
-                AND h.activation_transaction_id=p.transaction_id AND h.activation_source_generation=p.source_generation
-                AND h.consumed_by IS NULL
+              SELECT 1 FROM library.collection_source_output_publication p
+              WHERE p.route=m.route AND p.collection_id=m.collection_id AND p.generation=m.generation
+                AND (
+                  EXISTS (
+                    SELECT 1 FROM library.collection_source_output_head h
+                    WHERE h.route=p.route AND h.collection_id=p.collection_id AND h.generation=p.generation
+                      AND h.source_generation=p.source_generation
+                  )
+                  OR EXISTS (
+                    SELECT 1 FROM library.native_public_output_hold h
+                    WHERE h.route=p.route AND h.collection_id=p.collection_id AND h.output_generation=p.generation
+                      AND h.activation_transaction_id=p.transaction_id AND h.activation_source_generation=p.source_generation
+                      AND h.consumed_by IS NULL
+                  )
+                )
             )
           )
       )

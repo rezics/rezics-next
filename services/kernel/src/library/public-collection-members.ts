@@ -129,12 +129,8 @@ export async function readPublicCollectionMembers(
     });
   const disclosed: { rows: readonly PublicOutputOriginalKey[]; readable: boolean[] }[] = [];
   const members: { kind: 'dynamic'; subjectId: string }[] = [];
-  let terminal: string | null = null;
-  let visible = false;
+  let lastDisclosed: string | null = null;
   let exhausted = false;
-  const append = () => {
-    if (terminal !== null && visible) members.push({ kind: 'dynamic', subjectId: terminal });
-  };
   let first: Awaited<ReturnType<typeof seek>>;
   let version: string;
   const rawLimit = Math.min(100, 2 * input.limit + 1);
@@ -158,21 +154,19 @@ export async function readPublicCollectionMembers(
       const readable = await disclose(page.rows, at);
       disclosed.push({ rows: page.rows, readable });
       for (const [index, row] of page.rows.entries()) {
-        if (row.terminal !== terminal) {
-          append();
-          if (members.length > input.limit) break;
-          terminal = row.terminal;
-          visible = false;
-        }
-        if (readable[index]) visible = true;
+        if (!readable[index] || row.terminal === lastDisclosed) continue;
+        members.push({ kind: 'dynamic', subjectId: row.terminal });
+        lastDisclosed = row.terminal;
+        if (members.length > input.limit) break;
       }
       if (members.length > input.limit) break;
       if (!page.more) {
-        append();
         exhausted = true;
         break;
       }
-      after = page.rows.at(-1)!;
+      const last = page.rows.at(-1)!;
+      // A disclosed original proves this canonical member. Other aliases in that group cannot add another row.
+      after = last.terminal === lastDisclosed ? { terminal: last.terminal, original: lastOriginal } : last;
     }
   } finally {
     releaseOperationalTime(at);
