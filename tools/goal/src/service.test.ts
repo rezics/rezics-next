@@ -267,7 +267,7 @@ test('a 5-second child through the host process helper delays a concurrent timer
   expect(worst).toBeLessThan(200);
 }, 15_000);
 
-test('the host logs an event-loop stall over 10 seconds with the operation, at most once a minute', async () => {
+test('the host logs an event-loop stall with observed operation context, at most once a minute', async () => {
   const lines: string[] = [];
   const stop = startHostStallMonitor((line) => lines.push(line), {
     ...defaultPolicy.service,
@@ -281,7 +281,7 @@ test('the host logs an event-loop stall over 10 seconds with the operation, at m
   try {
     await runHostOperation('store write', () => occupy(80));
     await Bun.sleep(60);
-    expect(lines.some((line) => /event-loop stall: \d+ms during store write/.test(line))).toBe(true);
+    expect(lines.some((line) => /event-loop stall: \d+ms;.*last completed: store write; CPU owner unproven/.test(line))).toBe(true);
     const first = lines.length;
     await runHostOperation('store write', () => occupy(80));
     await Bun.sleep(60);
@@ -289,8 +289,37 @@ test('the host logs an event-loop stall over 10 seconds with the operation, at m
     await Bun.sleep(250);
     await runHostOperation('retry intents', () => occupy(80));
     await Bun.sleep(60);
-    expect(lines.some((line) => /event-loop stall: \d+ms during retry intents/.test(line))).toBe(true);
+    expect(lines.some((line) => /event-loop stall: \d+ms;.*last completed: retry intents; CPU owner unproven/.test(line))).toBe(true);
   } finally {
+    stop();
+  }
+});
+
+test('overlapping async host operations never restore a completed operation as active', async () => {
+  const lines: string[] = [];
+  let clock = 0;
+  let finishDaily!: () => void;
+  let finishArchitecture!: () => void;
+  const stop = startHostStallMonitor((line) => lines.push(line), {
+    ...defaultPolicy.service, stallMs: 20, stallLogEveryMs: 0,
+  }, () => clock);
+  const daily = runHostOperation('daily step audit', () => new Promise<void>((resolve) => { finishDaily = resolve; }));
+  const architecture = runHostOperation('architecture repairs', () => new Promise<void>((resolve) => { finishArchitecture = resolve; }));
+  try {
+    finishDaily();
+    await daily;
+    clock += 40;
+    await Bun.sleep(15);
+    expect(lines.at(-1)).toContain('active operations observed: architecture repairs;');
+    finishArchitecture();
+    await architecture;
+    clock += 40;
+    await Bun.sleep(15);
+    expect(lines.at(-1)).toContain('active operations observed: none; last completed: architecture repairs;');
+    expect(lines.at(-1)).toContain('CPU owner unproven');
+  } finally {
+    finishDaily(); finishArchitecture();
+    await Promise.all([daily, architecture]);
     stop();
   }
 });

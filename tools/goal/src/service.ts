@@ -253,24 +253,30 @@ export async function ensureServiceHost(
     throw new Error(`Manager host socket unavailable after starting ${HOST_UNIT}: ${socket}`);
 }
 
-let currentHostOperation: string | undefined;
-let lastHostOperation: string | undefined;
+// Diagnostic storage only: overflow never rejects work or changes host admission.
+const HOST_OPERATION_TRACKING_LIMIT = 64;
+const activeHostOperations = new Map<symbol, string>();
+let untrackedHostOperations = 0;
+let lastCompletedHostOperation: string | undefined;
 
-/** Name the host work that is occupying this event loop so a stall log can point at it. */
+/** Track independent async lifetimes; one completion must never restore an already finished operation. */
 export async function runHostOperation<T>(name: string, work: () => T | Promise<T>): Promise<T> {
-  const previous = currentHostOperation;
-  currentHostOperation = name;
-  lastHostOperation = name;
+  const label = name.replace(/[\r\n\t]+/g, ' ').slice(0, defaultPolicy.service.diagnosticCharacters);
+  const token = activeHostOperations.size < HOST_OPERATION_TRACKING_LIMIT ? Symbol() : undefined;
+  if (token) activeHostOperations.set(token, label);
+  else untrackedHostOperations++;
   try {
     return await work();
   } finally {
-    currentHostOperation = previous;
+    if (token) activeHostOperations.delete(token);
+    else untrackedHostOperations--;
+    lastCompletedHostOperation = label;
   }
 }
 
 /**
- * Log an event-loop stall over policy.stallMs with the operation that caused it, at most once per
- * policy.stallLogEveryMs. The timer only fires after the stall ends, so the gap is the stall length.
+ * Log a stall and operations observed when the timer resumes, at most once per policy.stallLogEveryMs.
+ * Concurrent async lifetimes and the last completion are context, not proof of which operation used CPU.
  */
 export function startHostStallMonitor(
   log: (line: string) => void = (line) => console.error(line),
@@ -286,7 +292,9 @@ export function startHostStallMonitor(
       lastTurn = at;
       if (gap < policy.stallMs || at - lastLog < policy.stallLogEveryMs) return;
       lastLog = at;
-      log(`event-loop stall: ${Math.round(gap)}ms during ${currentHostOperation ?? lastHostOperation ?? 'unknown'}`);
+      const active = [...activeHostOperations.values()].join(', ') || 'none';
+      const overflow = untrackedHostOperations ? `; ${untrackedHostOperations} additional operation names untracked` : '';
+      log(`event-loop stall: ${Math.round(gap)}ms; active operations observed: ${active}${overflow}; last completed: ${lastCompletedHostOperation ?? 'unknown'}; CPU owner unproven`.slice(0, policy.diagnosticCharacters));
     },
     Math.max(10, Math.min(1000, Math.floor(policy.stallMs / 4))),
   );
