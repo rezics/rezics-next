@@ -14,6 +14,86 @@ const reviewEntries = [
   {
     heading: 'Writing presets',
     items: [
+      { id: 'editor-presets-review--writing', name: 'Writing' },
+      { id: 'editor-presets-review--knowledge', name: 'Knowledge' },
+      { id: 'editor-presets-review--compact', name: 'Compact' },
+      { id: 'editor-presets-review--read-only', name: 'Read-only' },
+    ],
+  },
+  {
+    heading: 'Preferences',
+    items: [
+      { id: 'editor-preferences-review--sparse-device-overrides', name: 'Sparse device overrides' },
+      { id: 'editor-preferences-review--long-labels', name: 'Long labels' },
+      { id: 'editor-preferences-review--invalid-shortcut', name: 'Invalid shortcut' },
+    ],
+  },
+  {
+    heading: 'Inspection',
+    items: [
+      { id: 'editor-inspection-review--long-query', name: 'Long query' },
+      { id: 'editor-inspection-review--empty-results', name: 'Empty results' },
+      { id: 'editor-inspection-review--long-heading-labels', name: 'Long heading labels' },
+      { id: 'editor-inspection-review--empty-outline', name: 'Empty outline' },
+    ],
+  },
+  {
+    heading: 'Command palette',
+    items: [
+      { id: 'editor-command-palette--long-localized-commands', name: 'Long localized commands' },
+      { id: 'editor-command-palette--disabled-commands', name: 'Disabled commands' },
+      { id: 'editor-command-palette--empty-results', name: 'Empty results' },
+    ],
+  },
+  {
+    heading: 'Media controls',
+    items: [
+      { id: 'editor-media-controls--long-alt-text', name: 'Long alt text' },
+      { id: 'editor-media-controls--invalid-dimensions', name: 'Invalid dimensions' },
+      { id: 'editor-media-controls--long-caption', name: 'Long caption' },
+    ],
+  },
+  {
+    heading: 'Tables',
+    items: [
+      { id: 'editor-tables-review--creation-long-translated-labels', name: 'Creation, long translated labels' },
+      { id: 'editor-tables-review--actions-long-translated-labels', name: 'Actions, long translated labels' },
+    ],
+  },
+  {
+    heading: 'Document reader',
+    items: [
+      { id: 'editor-document-reader-review--long-unbroken-links', name: 'Long unbroken links' },
+      { id: 'editor-document-reader-review--media-captions', name: 'Media captions' },
+      { id: 'editor-document-reader-review--missing-media', name: 'Missing media' },
+      { id: 'editor-document-reader-review--mixed-cjk-text', name: 'Mixed CJK text' },
+    ],
+  },
+  {
+    heading: 'Links',
+    items: [
+      { id: 'editor-links-review--long-url', name: 'Long URL' },
+      { id: 'editor-links-review--long-translated-labels', name: 'Long translated labels' },
+      { id: 'editor-links-review--invalid-url', name: 'Invalid URL' },
+    ],
+  },
+  {
+    heading: 'Notation',
+    items: [
+      {
+        id: 'editor-notation-review--mixed-script-ruby-language-and-direction',
+        name: 'Mixed-script ruby, language and direction',
+      },
+      { id: 'editor-notation-review--footnote-references-and-definitions', name: 'Footnote references and definitions' },
+      { id: 'editor-notation-review--structured-table', name: 'Structured table' },
+    ],
+  },
+] as const;
+
+const interactionRegressions = [
+  {
+    heading: 'Product journeys',
+    items: [
       { id: 'components-editorproduct--writing', name: 'Writing' },
       { id: 'components-editorproduct--knowledge', name: 'Knowledge' },
       { id: 'components-editorproduct--compact', name: 'Compact' },
@@ -57,6 +137,32 @@ const reviewEntries = [
   },
 ] as const;
 
+function EntryList({
+  sections,
+}: {
+  sections: readonly { heading: string; items: readonly { id: string; name: string }[] }[];
+}) {
+  return (
+    <div className="flex flex-col gap-8">
+      {sections.map((section) => (
+        <section key={section.heading} className="flex flex-col gap-3">
+          <h3 className="text-lg font-semibold">{section.heading}</h3>
+          <ul className="flex flex-col gap-2">
+            {section.items.map((item) => (
+              <li key={item.id}>
+                <a className="text-foreground underline underline-offset-4" href={`?path=/story/${item.id}`}>
+                  {item.name}
+                </a>
+                <span className="text-muted-foreground"> {item.id}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 function EditorOverview() {
   const [document, setDocument] = useState<DocumentSnapshot>(syntheticChapter);
   return (
@@ -64,8 +170,9 @@ function EditorOverview() {
       <header className="flex flex-col gap-3">
         <h1 className="text-xl font-semibold">Editor</h1>
         <p className="text-muted-foreground">
-          Implemented review states for the extracted editor in the composed UI catalogue. Width, locale and theme stay
-          on the toolbar. Host save, publication and native acceptance remain separately scheduled.
+          Implemented review states for the extracted editor in the composed UI catalogue. Primary entries open in their
+          named state. Width, locale and theme stay on the toolbar. Host save, publication and native acceptance remain
+          separately scheduled.
         </p>
       </header>
       <RichTextEditor
@@ -75,22 +182,23 @@ function EditorOverview() {
         preset="writing"
       />
       <Separator />
-      <nav aria-label="Editor review entries" className="flex flex-col gap-8">
-        {reviewEntries.map((section) => (
-          <section key={section.heading} className="flex flex-col gap-3">
-            <h2 className="text-lg font-semibold">{section.heading}</h2>
-            <ul className="flex flex-col gap-2">
-              {section.items.map((item) => (
-                <li key={item.id}>
-                  <a className="text-foreground underline underline-offset-4" href={`?path=/story/${item.id}`}>
-                    {item.name}
-                  </a>
-                  <span className="text-muted-foreground"> {item.id}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))}
+      <nav aria-labelledby="editor-review-entries-heading" className="flex flex-col gap-8">
+        <h2 id="editor-review-entries-heading" className="text-xl font-semibold">
+          Review entries
+        </h2>
+        <EntryList sections={reviewEntries} />
+      </nav>
+      <Separator />
+      <nav aria-labelledby="editor-interaction-regressions-heading" className="flex flex-col gap-8">
+        <div className="flex flex-col gap-3">
+          <h2 id="editor-interaction-regressions-heading" className="text-xl font-semibold">
+            Interaction regressions
+          </h2>
+          <p className="text-muted-foreground">
+            Play-based journeys. Open these only when you want those automated tours.
+          </p>
+        </div>
+        <EntryList sections={interactionRegressions} />
       </nav>
     </div>
   );
