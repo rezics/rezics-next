@@ -16,7 +16,7 @@ expectTypeOf<WatchManagementPage['actions']['remove']>().toEqualTypeOf<'availabl
 type AvailableWatch = Extract<WatchManagementItem, { state: 'available' }>;
 type UnavailableWatch = Extract<WatchManagementItem, { state: 'unavailable' }>;
 expectTypeOf<keyof AvailableWatch>().toEqualTypeOf<
-  'id' | 'kind' | 'revision' | 'createdAt' | 'state' | 'resourceId' | 'title' | 'command'
+  'id' | 'kind' | 'revision' | 'createdAt' | 'state' | 'resourceId' | 'title' | 'place' | 'command'
 >();
 expectTypeOf<AvailableWatch['resourceId']>().toEqualTypeOf<string>();
 expectTypeOf<AvailableWatch['title']>().toEqualTypeOf<string | null>();
@@ -66,6 +66,7 @@ test('installed watch inventory preserves sparse cursors, unavailable retry and 
   const threadResource = '019a1b2c-3d4e-7f00-8a00-000000000003';
   const boardId = '019a1b2c-3d4e-7f00-8a00-000000000004';
   const boardResource = '019a1b2c-3d4e-7f00-8a00-000000000005';
+  const realmId = '019a1b2c-3d4e-7f00-8a00-000000000008';
   const identity = { revision: 2, createdAt: '2026-11-04T00:00:00.000Z' };
   const envelope = {
     viewer: { state: 'current' as const, accountId },
@@ -86,6 +87,7 @@ test('installed watch inventory preserves sparse cursors, unavailable retry and 
         state: 'available',
         resourceId: threadResource,
         title: 'Watched thread',
+        place: { boardId: boardResource, title: 'Watched board' },
         command: command(threadId, 'thread'),
       },
       {
@@ -108,6 +110,7 @@ test('installed watch inventory preserves sparse cursors, unavailable retry and 
         state: 'available',
         resourceId: boardResource,
         title: null,
+        place: { realmId, title: 'Watched realm' },
         command: command(boardId, 'board'),
       },
       {
