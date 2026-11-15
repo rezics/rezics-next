@@ -282,7 +282,7 @@ function addPreparedControls(fixture: Fixture, cacheState: 'hit' | 'miss' = 'mis
       host: fixture.host,
       run: fixture.run,
       deadline: 123.456,
-      limitMs: 60_000,
+      limitMs: 900_000,
     }) + '\n',
   );
   writeOwned(
@@ -298,7 +298,7 @@ function addPreparedControls(fixture: Fixture, cacheState: 'hit' | 'miss' = 'mis
       packages: [],
       nativeChecks: [],
       installerSeconds: cacheState === 'hit' ? null : 1.113,
-      phaseSeconds: { 'cache-io-pressure-wait': 260.388 },
+      phaseSeconds: { 'host-pressure-wait-io': 260.388 },
     }) + '\n',
   );
   const cache = join(fixture.root, 'bun-runtime-transpiler-cache');
