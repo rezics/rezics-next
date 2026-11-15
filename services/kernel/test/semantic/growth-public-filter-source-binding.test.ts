@@ -5,10 +5,7 @@ import { createPublicFilterSourceBinding } from '../../src/semantic/public-filte
 import type { PublicFilterSourceCaptureInput } from '../../src/semantic/public-filter-source-binding.ts';
 import type { PublicFilterDependencyKey } from '../../src/semantic/public-filter-source-contract.ts';
 import { createPublicFilterCustody } from '../../src/search/public-filter-custody.ts';
-import type {
-  PublicFilterConsumerCapture,
-  PublicFilterConsumerCaptureInput,
-} from '../../src/search/public-filter-consumer-contract.ts';
+import type { PublicFilterConsumerCaptureInput } from '../../src/search/public-filter-consumer-contract.ts';
 import { parseText } from '../../src/search/text.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { assertGrowthAccessPaths, capture, checkGrowth, costOf, seed } from '../support/growth.ts';
@@ -331,11 +328,8 @@ test('original capture survives native derived execution windows and exact relea
     const book: string = (await f.post('/v1/subjects', { type: 'schema:Book', labels: { en: term }, statements: {} }))
       .subject.id;
     // Finish the actual retained capture job; progress is not query or settlement authority.
-    const captured: PublicFilterConsumerCapture = await capturedConsumer(f, consumer, root, 'pit');
+    const captured = await capturedConsumer(f, consumer, root, 'pit');
     expect(captured.status).toBe('captured');
-    if (captured.status !== 'captured') {
-      throw new Error(captured.status === 'preparing' ? 'Native capture still preparing' : captured.reason);
-    }
     const original = await binding.join({ queried: captured.queried }, readContext());
     if (original.status !== 'joined') throw new Error(original.reason);
     const release = structuredClone(f.meaning.release);
