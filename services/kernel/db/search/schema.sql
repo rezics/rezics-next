@@ -826,6 +826,18 @@ CREATE TABLE search.generation_publication_home (
 
 
 --
+-- Name: generation_publication_lock; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.generation_publication_lock (
+    physical_target text NOT NULL COLLATE pg_catalog."C",
+    revision bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT generation_publication_lock_physical_target_check CHECK (((octet_length(physical_target) >= 1) AND (octet_length(physical_target) <= 255))),
+    CONSTRAINT generation_publication_lock_revision_check CHECK ((revision >= 0))
+);
+
+
+--
 -- Name: identity_receiving_native_copy; Type: TABLE; Schema: search; Owner: -
 --
 
@@ -1921,6 +1933,14 @@ ALTER TABLE ONLY search.generation_publication_home
 
 
 --
+-- Name: generation_publication_lock generation_publication_lock_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.generation_publication_lock
+    ADD CONSTRAINT generation_publication_lock_pkey PRIMARY KEY (physical_target);
+
+
+--
 -- Name: generation_publication generation_publication_partition_no_physical_target_consume_key; Type: CONSTRAINT; Schema: search; Owner: -
 --
 
@@ -2427,6 +2447,13 @@ CREATE INDEX identity_receiving_native_copy_pending ON search.identity_receiving
 --
 
 CREATE INDEX identity_writer_pending ON search.identity_writer USING btree (partition_no, physical_target, original_id) WHERE (writer_token IS NOT NULL);
+
+
+--
+-- Name: identity_writer_target_frontier; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX identity_writer_target_frontier ON search.identity_writer USING btree (physical_target, partition_no);
 
 
 --

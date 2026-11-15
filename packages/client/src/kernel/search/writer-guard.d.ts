@@ -176,6 +176,7 @@ export type SearchWriterPublicationGuard = SearchWriterGuard & Readonly<{
         status: 'draining' | 'drained';
         fence: SearchWriterPublicationFence;
         cost: SearchPublicFilterCost;
+        advanced?: boolean;
     } | PublicFilterConsumerUnavailable>;
     adoptPublication(fence: SearchWriterPublicationFence, context: PublicFilterConsumerContext): Promise<{
         status: 'held';

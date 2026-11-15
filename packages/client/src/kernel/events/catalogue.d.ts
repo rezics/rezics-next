@@ -1426,6 +1426,11 @@ export declare function EVENT_TYPES(): Readonly<{
     readonly 'com.rezics.library.collection.deleted.v1': Type.TObject<{
         collectionId: Type.TString;
     }>;
+    readonly 'com.rezics.library.collection.output.reclaimed.v1': Type.TObject<{
+        collectionId: Type.TString;
+        generation: Type.TString;
+        removed: Type.TInteger;
+    }>;
     readonly 'com.rezics.library.collection.member.changed.v1': Type.TObject<{
         collectionId: Type.TString;
         memberId: Type.TString;
@@ -1622,6 +1627,18 @@ export declare function EVENT_TYPES(): Readonly<{
         id: Type.TString;
         survivor: Type.TString;
         voters: Type.TInteger;
+    }>;
+    readonly "com.rezics.semantic.canonical-generation.committed.v1": Type.TObject<{
+        partition: Type.TInteger;
+        generation: Type.TString;
+    }>;
+    readonly "com.rezics.semantic.canonical-generation.delivered.v1": Type.TObject<{
+        partition: Type.TInteger;
+        generation: Type.TString;
+    }>;
+    readonly "com.rezics.semantic.canonical-generation.continuation.v1": Type.TObject<{
+        after: Type.TInteger;
+        limit: Type.TInteger;
     }>;
     readonly "com.rezics.semantic.identity-scope.retirement.v1": Type.TObject<{
         sourceKey: Type.TString;

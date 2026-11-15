@@ -2177,6 +2177,14 @@
                                   }
                                 ]
                               },
+                              "builtinKind": {
+                                "enum": [
+                                  "everything",
+                                  "state",
+                                  "liked"
+                                ],
+                                "type": "string"
+                              },
                               "cover": {
                                 "anyOf": [
                                   {
@@ -2522,7 +2530,10 @@
                                 "type": "null"
                               },
                               "coverSource": {
-                                "const": "none",
+                                "enum": [
+                                  "none",
+                                  "pending"
+                                ],
                                 "type": "string"
                               },
                               "curator": {
@@ -2594,7 +2605,11 @@
                                 ]
                               },
                               "visibility": {
-                                "const": "private",
+                                "enum": [
+                                  "private",
+                                  "unlisted",
+                                  "public"
+                                ],
                                 "type": "string"
                               }
                             },
@@ -10658,6 +10673,15 @@
             "schema": {
               "maxLength": 4096,
               "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "subjectId",
+            "required": false,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
               "type": "string"
             }
           }
@@ -73620,6 +73644,14 @@
                                   }
                                 ]
                               },
+                              "builtinKind": {
+                                "enum": [
+                                  "everything",
+                                  "state",
+                                  "liked"
+                                ],
+                                "type": "string"
+                              },
                               "cover": {
                                 "anyOf": [
                                   {
@@ -74167,7 +74199,10 @@
                                 "type": "null"
                               },
                               "coverSource": {
-                                "const": "none",
+                                "enum": [
+                                  "none",
+                                  "pending"
+                                ],
                                 "type": "string"
                               },
                               "curator": {
@@ -74441,7 +74476,11 @@
                                 ]
                               },
                               "visibility": {
-                                "const": "private",
+                                "enum": [
+                                  "private",
+                                  "unlisted",
+                                  "public"
+                                ],
                                 "type": "string"
                               }
                             },
@@ -75731,6 +75770,14 @@
                                 }
                               ]
                             },
+                            "builtinKind": {
+                              "enum": [
+                                "everything",
+                                "state",
+                                "liked"
+                              ],
+                              "type": "string"
+                            },
                             "cover": {
                               "anyOf": [
                                 {
@@ -76047,7 +76094,10 @@
                               "type": "null"
                             },
                             "coverSource": {
-                              "const": "none",
+                              "enum": [
+                                "none",
+                                "pending"
+                              ],
                               "type": "string"
                             },
                             "curatorAccountId": {
@@ -76090,7 +76140,11 @@
                               ]
                             },
                             "visibility": {
-                              "const": "private",
+                              "enum": [
+                                "private",
+                                "unlisted",
+                                "public"
+                              ],
                               "type": "string"
                             }
                           },
@@ -78041,6 +78095,14 @@
                                 }
                               ]
                             },
+                            "builtinKind": {
+                              "enum": [
+                                "everything",
+                                "state",
+                                "liked"
+                              ],
+                              "type": "string"
+                            },
                             "cover": {
                               "anyOf": [
                                 {
@@ -78386,7 +78448,10 @@
                               "type": "null"
                             },
                             "coverSource": {
-                              "const": "none",
+                              "enum": [
+                                "none",
+                                "pending"
+                              ],
                               "type": "string"
                             },
                             "curator": {
@@ -78458,7 +78523,11 @@
                               ]
                             },
                             "visibility": {
-                              "const": "private",
+                              "enum": [
+                                "private",
+                                "unlisted",
+                                "public"
+                              ],
                               "type": "string"
                             }
                           },
@@ -79251,7 +79320,7 @@
                   },
                   "revision": {
                     "maximum": 9007199254740991,
-                    "minimum": 1,
+                    "minimum": 0,
                     "type": "integer"
                   },
                   "title": {
@@ -79659,6 +79728,14 @@
                                 }
                               ]
                             },
+                            "builtinKind": {
+                              "enum": [
+                                "everything",
+                                "state",
+                                "liked"
+                              ],
+                              "type": "string"
+                            },
                             "cover": {
                               "anyOf": [
                                 {
@@ -79975,7 +80052,10 @@
                               "type": "null"
                             },
                             "coverSource": {
-                              "const": "none",
+                              "enum": [
+                                "none",
+                                "pending"
+                              ],
                               "type": "string"
                             },
                             "curatorAccountId": {
@@ -80018,7 +80098,11 @@
                               ]
                             },
                             "visibility": {
-                              "const": "private",
+                              "enum": [
+                                "private",
+                                "unlisted",
+                                "public"
+                              ],
                               "type": "string"
                             }
                           },
@@ -92519,6 +92603,14 @@
                                 }
                               ]
                             },
+                            "builtinKind": {
+                              "enum": [
+                                "everything",
+                                "state",
+                                "liked"
+                              ],
+                              "type": "string"
+                            },
                             "cover": {
                               "anyOf": [
                                 {
@@ -92835,7 +92927,10 @@
                               "type": "null"
                             },
                             "coverSource": {
-                              "const": "none",
+                              "enum": [
+                                "none",
+                                "pending"
+                              ],
                               "type": "string"
                             },
                             "curatorAccountId": {
@@ -92878,7 +92973,11 @@
                               ]
                             },
                             "visibility": {
-                              "const": "private",
+                              "enum": [
+                                "private",
+                                "unlisted",
+                                "public"
+                              ],
                               "type": "string"
                             }
                           },
@@ -96826,6 +96925,14 @@
                             }
                           ]
                         },
+                        "builtinKind": {
+                          "enum": [
+                            "everything",
+                            "state",
+                            "liked"
+                          ],
+                          "type": "string"
+                        },
                         "cover": {
                           "anyOf": [
                             {
@@ -98227,6 +98334,14 @@
                                 }
                               ]
                             },
+                            "builtinKind": {
+                              "enum": [
+                                "everything",
+                                "state",
+                                "liked"
+                              ],
+                              "type": "string"
+                            },
                             "cover": {
                               "anyOf": [
                                 {
@@ -98543,7 +98658,10 @@
                               "type": "null"
                             },
                             "coverSource": {
-                              "const": "none",
+                              "enum": [
+                                "none",
+                                "pending"
+                              ],
                               "type": "string"
                             },
                             "curatorAccountId": {
@@ -98586,7 +98704,11 @@
                               ]
                             },
                             "visibility": {
-                              "const": "private",
+                              "enum": [
+                                "private",
+                                "unlisted",
+                                "public"
+                              ],
                               "type": "string"
                             }
                           },
@@ -141284,6 +141406,83 @@
                         "continue"
                       ],
                       "type": "object"
+                    },
+                    "viewerFollows": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "state": {
+                              "const": "unavailable",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "state"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "rows": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "actions": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "follow": {
+                                        "type": "boolean"
+                                      },
+                                      "unfollow": {
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "required": [
+                                      "follow",
+                                      "unfollow"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "following": {
+                                    "type": "boolean"
+                                  },
+                                  "targetId": {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  "targetType": {
+                                    "enum": [
+                                      "collection",
+                                      "space"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "targetId",
+                                  "targetType",
+                                  "following",
+                                  "actions"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 20,
+                              "type": "array"
+                            },
+                            "state": {
+                              "const": "current",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "rows"
+                          ],
+                          "type": "object"
+                        }
+                      ]
                     },
                     "viewerPersonalActions": {
                       "anyOf": [
@@ -318896,6 +319095,14 @@
                                           }
                                         ]
                                       },
+                                      "builtinKind": {
+                                        "enum": [
+                                          "everything",
+                                          "state",
+                                          "liked"
+                                        ],
+                                        "type": "string"
+                                      },
                                       "cover": {
                                         "anyOf": [
                                           {
@@ -319212,7 +319419,10 @@
                                         "type": "null"
                                       },
                                       "coverSource": {
-                                        "const": "none",
+                                        "enum": [
+                                          "none",
+                                          "pending"
+                                        ],
                                         "type": "string"
                                       },
                                       "curatorAccountId": {
@@ -319255,7 +319465,11 @@
                                         ]
                                       },
                                       "visibility": {
-                                        "const": "private",
+                                        "enum": [
+                                          "private",
+                                          "unlisted",
+                                          "public"
+                                        ],
                                         "type": "string"
                                       }
                                     },
@@ -543293,6 +543507,7 @@
     },
     "/v1/subjects:search": {
       "post": {
+        "description": "Exact Book, Book Series and Edition searches are public. Other requests use Search grants.",
         "operationId": "subject.search",
         "requestBody": {
           "content": {
@@ -554228,7 +554443,10 @@
                   "additionalProperties": false,
                   "properties": {
                     "code": {
-                      "const": "forbidden",
+                      "enum": [
+                        "forbidden",
+                        "platform_closed"
+                      ],
                       "type": "string"
                     },
                     "detail": {
@@ -554276,19 +554494,28 @@
                       "type": "string"
                     },
                     "retryable": {
-                      "const": false,
-                      "type": "boolean"
+                      "enum": [
+                        false,
+                        false
+                      ],
+                      "type": "string"
                     },
                     "status": {
                       "const": 403,
                       "type": "number"
                     },
                     "title": {
-                      "const": "Forbidden",
+                      "enum": [
+                        "Forbidden",
+                        "Platform Closed"
+                      ],
                       "type": "string"
                     },
                     "type": {
-                      "const": "https://rezics.com/problems/forbidden",
+                      "enum": [
+                        "https://rezics.com/problems/forbidden",
+                        "https://rezics.com/problems/platform_closed"
+                      ],
                       "type": "string"
                     }
                   },
@@ -554305,7 +554532,7 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden; Platform closed"
           },
           "409": {
             "content": {
@@ -554652,7 +554879,7 @@
           {}
         ],
         "x-action": "subject:read",
-        "x-exposure": "gate:search"
+        "x-exposure": "public"
       }
     },
     "/v1/subjects:suggest": {
@@ -584618,6 +584845,14 @@
                                   }
                                 ]
                               },
+                              "builtinKind": {
+                                "enum": [
+                                  "everything",
+                                  "state",
+                                  "liked"
+                                ],
+                                "type": "string"
+                              },
                               "cover": {
                                 "anyOf": [
                                   {
@@ -584934,7 +585169,10 @@
                                 "type": "null"
                               },
                               "coverSource": {
-                                "const": "none",
+                                "enum": [
+                                  "none",
+                                  "pending"
+                                ],
                                 "type": "string"
                               },
                               "curatorAccountId": {
@@ -584977,7 +585215,11 @@
                                 ]
                               },
                               "visibility": {
-                                "const": "private",
+                                "enum": [
+                                  "private",
+                                  "unlisted",
+                                  "public"
+                                ],
                                 "type": "string"
                               }
                             },

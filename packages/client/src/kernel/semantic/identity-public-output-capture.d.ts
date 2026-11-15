@@ -17,7 +17,17 @@ export declare function createPublicIdentityOutputCapture(config: Parameters<Pub
             bindingDigest: string;
         }>;
     }>>;
-    capturePage: (l: T.PublicIdentityOutputCapture, continuation: string, inputLimit: number, options: T.PublicIdentityOutputWork) => Promise<T.PublicIdentityOutputResult<{
+    advancePublication: (publication: T.PublicIdentityOutputAcceptance['publication'], releaseDigest: string, options: T.PublicIdentityOutputWork) => Promise<T.PublicIdentityOutputResult<{
+        status: 'more';
+    } | {
+        status: 'sealed';
+    }>>;
+    advanceFrozenPublication: (publication: T.PublicIdentityOutputAcceptance['publication'], releaseDigest: string | null, options: T.PublicIdentityOutputWork) => Promise<T.PublicIdentityOutputResult<{
+        status: 'more';
+    } | {
+        status: 'sealed';
+    }>>;
+    capturePage: (capture: T.PublicIdentityOutputCapture, continuation: string, limit: number, options: T.PublicIdentityOutputWork) => Promise<T.PublicIdentityOutputResult<{
         status: "exhausted" | "progress";
         capture: Readonly<{
             kind: 'public-output';
@@ -27,7 +37,7 @@ export declare function createPublicIdentityOutputCapture(config: Parameters<Pub
         }>;
         continuation: string;
     }>>;
-    seal: (l: T.PublicIdentityOutputCapture, options: T.PublicIdentityOutputWork) => Promise<T.PublicIdentityOutputResult<{
+    seal: (capture: T.PublicIdentityOutputCapture, options: T.PublicIdentityOutputWork) => Promise<T.PublicIdentityOutputResult<{
         status: 'sealed';
         seal: {
             capture: Readonly<{
@@ -133,7 +143,30 @@ export declare function createPublicIdentityOutputCapture(config: Parameters<Pub
         }>;
         consumerId: string;
     }>>;
-    cancel: (l: T.PublicIdentityOutputCapture, options: T.PublicIdentityOutputWork) => Promise<T.PublicIdentityOutputResult<{
+    cancel: (capture: T.PublicIdentityOutputCapture, options: T.PublicIdentityOutputWork) => Promise<T.PublicIdentityOutputResult<{
+        status: 'pending';
+        capture: Readonly<{
+            kind: 'public-output';
+            partition: number;
+            captureId: string;
+            bindingDigest: string;
+        }>;
+    } | {
+        status: "applied" | "cancelled";
+        capture: Readonly<{
+            kind: 'public-output';
+            partition: number;
+            captureId: string;
+            bindingDigest: string;
+        }>;
+        disposition: Readonly<{
+            partition: number;
+            epoch: number;
+            position: bigint;
+            transactionId: string;
+        }>;
+    }>>;
+    retireSuperseded: (capture: T.PublicIdentityOutputCapture, options: T.PublicIdentityOutputWork) => Promise<T.PublicIdentityOutputResult<{
         status: 'pending';
         capture: Readonly<{
             kind: 'public-output';
@@ -157,6 +190,21 @@ export declare function createPublicIdentityOutputCapture(config: Parameters<Pub
         }>;
     }>>;
     apply: (l: T.PublicIdentityOutputCapture, options: T.PublicIdentityOutputWork) => Promise<T.PublicIdentityOutputResult<{
+        status: "applied" | "cancelled";
+        capture: Readonly<{
+            kind: 'public-output';
+            partition: number;
+            captureId: string;
+            bindingDigest: string;
+        }>;
+        disposition: Readonly<{
+            partition: number;
+            epoch: number;
+            position: bigint;
+            transactionId: string;
+        }>;
+    }>>;
+    retainFrozen: (capture: T.PublicIdentityOutputCapture, options: T.PublicIdentityOutputWork) => Promise<T.PublicIdentityOutputResult<{
         status: "applied" | "cancelled";
         capture: Readonly<{
             kind: 'public-output';
@@ -241,6 +289,33 @@ export declare function readPublicIdentityOutputCaptureCurrent(pool: Pool, selec
     status: "changed" | "unavailable";
     reason: "binding" | "closure" | "continuation" | "current" | "fenced" | "foreign_closure_missing" | "provenance";
     dependency?: string;
+    work: import("../library/access-capabilities.ts").WorkReceipt;
+}>;
+export type PublicOutputOriginalKey = Readonly<{
+    terminal: string;
+    original: string;
+}>;
+/** One selected COMPLETE output and its committed canonical seal, current under the native hold through commit. */
+export declare function readSelectedPublicIdentityOutput(pool: Pool, selection: {
+    collectionId: string;
+    sourceGeneration: string;
+    after: PublicOutputOriginalKey | null;
+    limit: number;
+}, options: T.PublicIdentityOutputWork, nativeOutput: NativePublicOutputPort): Promise<{
+    status: 'ready';
+    generation: string;
+    epoch: number;
+    digest: string;
+    rows: Readonly<{
+        terminal: string;
+        original: string;
+    }>[];
+    more: boolean;
+    work: import("../library/access-capabilities.ts").WorkReceipt;
+    reason?: never;
+} | {
+    status: "changed" | "unavailable";
+    reason: "binding" | "closure" | "continuation" | "current" | "fenced" | "foreign_closure_missing" | "provenance";
     work: import("../library/access-capabilities.ts").WorkReceipt;
 }>;
 /** Original pre-arm receipts invalidate even a stale retained output; they never grant fresh eligibility. */

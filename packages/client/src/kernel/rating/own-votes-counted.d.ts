@@ -4,6 +4,14 @@ import { type RatingVoteSemantic } from './adapters/vote-semantic.ts';
 import { STANDARD_QUESTION_ID } from './standard-question.ts';
 import { type VoteReviewGuard, type VoteReviewSlot } from './own-votes-review.ts';
 export declare const OWN_COUNTED_VOTE_TARGET_LIMIT = 100;
+/** The selected question's native units; no conversion to the standard scale. */
+export type OwnCountedVoteMeasurement = Readonly<{
+    questionId: string;
+    revision: number;
+    minimumUnits: number;
+    maximumUnits: number;
+    stepUnits: number;
+}>;
 export type StandardRatingMeasurement = Readonly<{
     questionId: typeof STANDARD_QUESTION_ID;
     revision: 1;
@@ -12,9 +20,11 @@ export type StandardRatingMeasurement = Readonly<{
     stepUnits: 1;
 }>;
 export declare const STANDARD_RATING_MEASUREMENT: StandardRatingMeasurement;
-export type OwnCountedVoteRequest = Readonly<{
+/** Omission keeps the standard contract. Use <string> for a dynamic exact question selection. */
+export type OwnCountedVoteRequest<QuestionId extends string = typeof STANDARD_QUESTION_ID> = Readonly<{
     actor: Actor;
     targetIds: readonly string[];
+    questionId?: QuestionId;
 }>;
 export type OwnCountedVoteIdentity = Readonly<{
     requestedTargetId: string;
@@ -63,7 +73,7 @@ export type OwnCountedVotePrepareResult = Readonly<{
     preparation: OwnCountedVotePreparation;
 }> | Readonly<{
     status: 'preparing';
-    reason: 'identity-pending' | 'identity-changed' | 'question-changed';
+    reason: 'request-changed' | 'identity-pending' | 'identity-changed' | 'question-changed';
     retry: 'same-input';
     targets: readonly Readonly<{
         requestedTargetId: string;
@@ -92,10 +102,10 @@ export type OwnCountedVoteReadResult = Readonly<{
     reason: 'request-changed' | 'preparation-changed' | 'account-changed';
     retry: 'same-input';
 }>;
-export type OwnCountedVoteObservation = (OwnCountedVoteIdentity & Readonly<{
+export type OwnCountedVoteObservation<Measurement extends OwnCountedVoteMeasurement = StandardRatingMeasurement> = (OwnCountedVoteIdentity & Readonly<{
     state: 'counted';
     review: VoteReviewGuard;
-    measurement: StandardRatingMeasurement;
+    measurement: Measurement;
     originalTargetId: string;
     units: number;
     revision: number;
@@ -105,7 +115,7 @@ export type OwnCountedVoteObservation = (OwnCountedVoteIdentity & Readonly<{
 }>) | (OwnCountedVoteIdentity & Readonly<{
     state: 'clear';
     review: VoteReviewGuard;
-    measurement: StandardRatingMeasurement;
+    measurement: Measurement;
     originalTargetId: string;
     units: null;
     revision: number;
@@ -115,16 +125,16 @@ export type OwnCountedVoteObservation = (OwnCountedVoteIdentity & Readonly<{
 }>) | (OwnCountedVoteIdentity & Readonly<{
     state: 'absent';
     review: VoteReviewGuard;
-    measurement: StandardRatingMeasurement;
+    measurement: Measurement;
 }>) | Readonly<{
     requestedTargetId: string;
     state: 'unavailable';
 }>;
-export type OwnCountedVoteResult = Readonly<{
+export type OwnCountedVoteResult<Measurement extends OwnCountedVoteMeasurement = StandardRatingMeasurement> = Readonly<{
     status: 'current';
-    measurement: StandardRatingMeasurement;
+    measurement: Measurement;
     requestedTargetIds: readonly string[];
-    observations: readonly OwnCountedVoteObservation[];
+    observations: readonly OwnCountedVoteObservation<Measurement>[];
 }> | Readonly<{
     status: 'preparing';
     reason: 'request-changed' | 'preparation-changed' | 'account-changed' | 'question-changed' | 'identity-changed' | 'vote-changed';
@@ -136,8 +146,9 @@ export type OwnCountedVoteReaderDependencies = Readonly<{
     semantic?: RatingVoteSemantic;
 }>;
 export type OwnCountedVoteReader = Readonly<{
-    prepare(request: OwnCountedVoteRequest, deadline: number): Promise<OwnCountedVotePrepareResult>;
-    read(client: Pick<PoolClient, 'query'>, request: OwnCountedVoteRequest, preparation: OwnCountedVotePreparation): Promise<OwnCountedVoteReadResult>;
+    prepare(request: OwnCountedVoteRequest<string>, deadline: number): Promise<OwnCountedVotePrepareResult>;
+    read(client: Pick<PoolClient, 'query'>, request: OwnCountedVoteRequest<string>, preparation: OwnCountedVotePreparation): Promise<OwnCountedVoteReadResult>;
     finish(request: OwnCountedVoteRequest, preparation: OwnCountedVotePreparation, readResult: OwnCountedVoteReadResult, deadline: number): Promise<OwnCountedVoteResult>;
+    finish(request: OwnCountedVoteRequest<string>, preparation: OwnCountedVotePreparation, readResult: OwnCountedVoteReadResult, deadline: number): Promise<OwnCountedVoteResult<OwnCountedVoteMeasurement>>;
 }>;
 export declare function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencies): OwnCountedVoteReader;

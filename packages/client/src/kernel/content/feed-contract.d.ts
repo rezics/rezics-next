@@ -3,7 +3,7 @@ import type { AccountDiscoverySummary } from '../search/index.ts';
 import type { ViewerReactionKind } from './reads.ts';
 import type { ReactionTarget } from './reactions.ts';
 import type { FeedReviewContext } from './model.ts';
-import type { FeedItem, FeedPage } from './contract/index.ts';
+import { type FeedItem, type FeedPage } from './contract/index.ts';
 export declare const FeedSelectionIdSchema: import("typebox").TString;
 export type FeedSelection = {
     spaceId?: string;
@@ -92,6 +92,7 @@ export declare const FeedSourceStateSchema: import("typebox").TUnion<[import("ty
 export declare function FeedPageSchema(): import("typebox").TUnsafe<Readonly<{
     feedItems: readonly FeedItem[];
     viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
+    viewerFollows?: import("./contract/feed.ts").FeedViewerFollows;
     next: string | null;
     asOf: string;
     reactionsAsOf?: import("./contract/feed.ts").FeedReactionFreshness | null;

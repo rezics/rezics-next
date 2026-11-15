@@ -24,6 +24,9 @@ export type KnowledgePageInput = Readonly<{
     limit?: number;
     cursor?: string;
 }>;
+export type KnowledgeOwnedNotebookPageInput = KnowledgePageInput & Readonly<{
+    subjectId?: string;
+}>;
 export type KnowledgeOutlinePageInput = KnowledgePageInput & Readonly<{
     parentPlacementId?: string;
     revisionId?: string;

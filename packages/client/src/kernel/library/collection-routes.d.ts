@@ -146,13 +146,13 @@ export declare function collectionReadSchema(): import("typebox").TUnion<[import
     builtinLabels: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TString>>;
     title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     description: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-    visibility: import("typebox").TLiteral<"private">;
+    visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
     allowedVisibilityActions: import("typebox").TOptional<import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>>>;
     revision: import("typebox").TInteger;
     presentationKind: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     presentationKindSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"mixed">]>;
     cover: import("typebox").TNull;
-    coverSource: import("typebox").TLiteral<"none">;
+    coverSource: import("typebox").TUnion<[import("typebox").TLiteral<"none">, import("typebox").TLiteral<"pending">]>;
 } & {
     curator: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
         id: import("typebox").TString;
@@ -208,6 +208,7 @@ export declare function savedDynamicCollectionSchema(): import("typebox").TObjec
     subjectIds: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
     revision: import("typebox").TInteger;
     membershipKind: import("typebox").TLiteral<"dynamic">;
+    builtinKind: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"everything">, import("typebox").TLiteral<"state">, import("typebox").TLiteral<"liked">]>>;
 }>;
 export declare const collectionPublicationSchema: import("typebox").TObject<{
     generation: import("typebox").TString;
@@ -318,6 +319,7 @@ export declare function collectionResourceSchema(): import("typebox").TUnion<[im
     subjectIds: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
     revision: import("typebox").TInteger;
     membershipKind: import("typebox").TLiteral<"dynamic">;
+    builtinKind: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"everything">, import("typebox").TLiteral<"state">, import("typebox").TLiteral<"liked">]>>;
 }>, import("typebox").TObject<{
     id: import("typebox").TString;
     curatorAccountId: import("typebox").TString;
@@ -336,13 +338,13 @@ export declare function collectionResourceSchema(): import("typebox").TUnion<[im
     builtinLabels: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TString>>;
     title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     description: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-    visibility: import("typebox").TLiteral<"private">;
+    visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
     allowedVisibilityActions: import("typebox").TOptional<import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>>>;
     revision: import("typebox").TInteger;
     presentationKind: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     presentationKindSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"mixed">]>;
     cover: import("typebox").TNull;
-    coverSource: import("typebox").TLiteral<"none">;
+    coverSource: import("typebox").TUnion<[import("typebox").TLiteral<"none">, import("typebox").TLiteral<"pending">]>;
 }>]>;
 /** Transport only: the merged commands and reads own authorization, privacy and ordering. */
 export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
@@ -8463,6 +8465,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     subjectIds?: string[];
                                     revision: number;
                                     membershipKind: "dynamic";
+                                    builtinKind?: "everything" | "liked" | "state";
                                 };
                                 publication: {
                                     generation: string;
@@ -8703,6 +8706,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             visibility: import("./collection-model.ts").CollectionVisibility;
                             revision: number;
                             membershipKind: 'dynamic';
+                            builtinKind?: "everything" | "liked" | "state";
                         } | {
                             presentationKind: string | null;
                             presentationKindSource: 'mixed' | 'owner';
@@ -8731,6 +8735,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             visibility: import("./collection-model.ts").CollectionVisibility;
                             revision: number;
                             membershipKind: 'dynamic';
+                            builtinKind?: "everything" | "liked" | "state";
                             coverMediaId: string | null;
                         } | {
                             presentationKind: string | null;
@@ -8822,13 +8827,13 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             builtinLabels?: Record<string, string>;
                             title: string | null;
                             description: string | null;
-                            visibility: "private";
+                            visibility: "private" | "public" | "unlisted";
                             allowedVisibilityActions?: ("private" | "public" | "unlisted")[];
                             revision: number;
                             presentationKind: string | null;
                             presentationKindSource: "mixed" | "owner";
                             cover: null;
-                            coverSource: "none";
+                            coverSource: "none" | "pending";
                         } | {
                             id: string;
                             curatorAccountId: string | null;
@@ -8877,6 +8882,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             subjectIds?: string[];
                             revision: number;
                             membershipKind: "dynamic";
+                            builtinKind?: "everything" | "liked" | "state";
                         };
                     };
                     400: Response | {
@@ -9098,13 +9104,13 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             builtinLabels?: Record<string, string>;
                             title: string | null;
                             description: string | null;
-                            visibility: "private";
+                            visibility: "private" | "public" | "unlisted";
                             allowedVisibilityActions?: ("private" | "public" | "unlisted")[];
                             revision: number;
                             presentationKind: string | null;
                             presentationKindSource: "mixed" | "owner";
                             cover: null;
-                            coverSource: "none";
+                            coverSource: "none" | "pending";
                             previewMembers?: {
                                 subjectId: string;
                                 subject: {
@@ -9238,6 +9244,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             }[];
                             previewStatus?: "pending" | "ready";
                             membershipKind: "dynamic";
+                            builtinKind?: "everything" | "liked" | "state";
                         })[];
                         next: string | null;
                         ownerManagement?: "owner";
@@ -9423,13 +9430,13 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     builtinLabels?: Record<string, string>;
                                     title: string | null;
                                     description: string | null;
-                                    visibility: "private";
+                                    visibility: "private" | "public" | "unlisted";
                                     allowedVisibilityActions?: ("private" | "public" | "unlisted")[];
                                     revision: number;
                                     presentationKind: string | null;
                                     presentationKindSource: "mixed" | "owner";
                                     cover: null;
-                                    coverSource: "none";
+                                    coverSource: "none" | "pending";
                                 } | {
                                     curator?: {
                                         id: string;
@@ -9483,6 +9490,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     subjectIds?: string[];
                                     revision: number;
                                     membershipKind: "dynamic";
+                                    builtinKind?: "everything" | "liked" | "state";
                                 })[];
                                 next: string | null;
                             };
@@ -9666,13 +9674,13 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 builtinLabels?: Record<string, string>;
                                 title: string | null;
                                 description: string | null;
-                                visibility: "private";
+                                visibility: "private" | "public" | "unlisted";
                                 allowedVisibilityActions?: ("private" | "public" | "unlisted")[];
                                 revision: number;
                                 presentationKind: string | null;
                                 presentationKindSource: "mixed" | "owner";
                                 cover: null;
-                                coverSource: "none";
+                                coverSource: "none" | "pending";
                             } | {
                                 curator?: {
                                     id: string;
@@ -9726,6 +9734,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 subjectIds?: string[];
                                 revision: number;
                                 membershipKind: "dynamic";
+                                builtinKind?: "everything" | "liked" | "state";
                             };
                         };
                         400: Response | {
@@ -10648,13 +10657,13 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     builtinLabels?: Record<string, string>;
                                     title: string | null;
                                     description: string | null;
-                                    visibility: "private";
+                                    visibility: "private" | "public" | "unlisted";
                                     allowedVisibilityActions?: ("private" | "public" | "unlisted")[];
                                     revision: number;
                                     presentationKind: string | null;
                                     presentationKindSource: "mixed" | "owner";
                                     cover: null;
-                                    coverSource: "none";
+                                    coverSource: "none" | "pending";
                                 } | {
                                     id: string;
                                     curatorAccountId: string | null;
@@ -10703,6 +10712,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     subjectIds?: string[];
                                     revision: number;
                                     membershipKind: "dynamic";
+                                    builtinKind?: "everything" | "liked" | "state";
                                 };
                             };
                             400: Response | {
@@ -10883,13 +10893,13 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 builtinLabels?: Record<string, string>;
                                 title: string | null;
                                 description: string | null;
-                                visibility: "private";
+                                visibility: "private" | "public" | "unlisted";
                                 allowedVisibilityActions?: ("private" | "public" | "unlisted")[];
                                 revision: number;
                                 presentationKind: string | null;
                                 presentationKindSource: "mixed" | "owner";
                                 cover: null;
-                                coverSource: "none";
+                                coverSource: "none" | "pending";
                             } | {
                                 id: string;
                                 curatorAccountId: string | null;
@@ -10938,6 +10948,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 subjectIds?: string[];
                                 revision: number;
                                 membershipKind: "dynamic";
+                                builtinKind?: "everything" | "liked" | "state";
                             };
                         };
                         400: Response | {
@@ -11212,13 +11223,13 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     builtinLabels?: Record<string, string>;
                                     title: string | null;
                                     description: string | null;
-                                    visibility: "private";
+                                    visibility: "private" | "public" | "unlisted";
                                     allowedVisibilityActions?: ("private" | "public" | "unlisted")[];
                                     revision: number;
                                     presentationKind: string | null;
                                     presentationKindSource: "mixed" | "owner";
                                     cover: null;
-                                    coverSource: "none";
+                                    coverSource: "none" | "pending";
                                 } | {
                                     id: string;
                                     curatorAccountId: string | null;
@@ -11267,6 +11278,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     subjectIds?: string[];
                                     revision: number;
                                     membershipKind: "dynamic";
+                                    builtinKind?: "everything" | "liked" | "state";
                                 };
                             };
                             400: Response | {

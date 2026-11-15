@@ -24578,6 +24578,7 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                                 query: {
                                     limit?: string | number;
                                     cursor?: string;
+                                    subjectId?: string;
                                 };
                                 headers: unknown;
                                 response: {

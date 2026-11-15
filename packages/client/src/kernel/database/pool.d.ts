@@ -2,7 +2,7 @@ import { type Pool, type PoolClient } from 'pg';
 import { type BoundedReadLifetimeOptions } from './bounded-read-lifetime.ts';
 export { partitionReadClient, partitionReadClientObservation, partitionReadClients } from './read-snapshot.ts';
 export { boundedReadWindow } from './bounded-read-window.ts';
-export { BoundedReadDeadlineError, RetiredReadClientError } from './bounded-read-lifetime.ts';
+export { BoundedReadDeadlineError, RetiredReadClientError, type NativeReadQueryConfig, } from './bounded-read-lifetime.ts';
 export declare const KERNEL_POOL_MAX = 10;
 export declare function readPoolAcquireTimeoutMillis(env?: NodeJS.ProcessEnv): number;
 export declare class NestedPoolCheckoutError extends Error {

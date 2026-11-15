@@ -506,7 +506,8 @@ BEGIN
      'sourceGeneration',r.source_generation::text,'memberFence',r.member_fence::text,'members',r.expected_members::text)
    AND b.payload->'tuple'->'observation'=jsonb_build_object('partition',b.partition_no,'epoch',b.owner_epoch,
      'position',(b.accepted_position-1)::text)
- ) THEN RAISE EXCEPTION 'native_public_output_binding_requires_semantic_same_command_capture'; END IF;
+ ) AND NOT library.frozen_public_output_binding_committed(NEW.partition_no,NEW.capture_id)
+ THEN RAISE EXCEPTION 'native_public_output_binding_requires_semantic_same_command_capture'; END IF;
  RETURN NULL;
 END; $$;
 
@@ -1170,6 +1171,164 @@ END; $$;
 
 
 --
+-- Name: frozen_public_output_binding_committed(integer, uuid); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.frozen_public_output_binding_committed(home integer, capture uuid) RETURNS boolean
+    LANGUAGE sql STABLE STRICT
+    AS $$
+ SELECT EXISTS (
+  SELECT 1 FROM library.native_public_output_binding b
+  JOIN LATERAL library.frozen_public_output_origin(b.route,b.collection_id,b.output_generation) f ON true
+  JOIN semantic.identity_epoch_native_commit n ON (n.partition_no,n.transaction_id,n.epoch,n.position)=
+    (b.partition_no,b.accepted_transaction_id,b.owner_epoch,b.accepted_position)
+  JOIN core.partition p ON (p.partition_no,p.epoch,p.position)=(n.partition_no,n.epoch,n.position)
+  JOIN core.outbox o ON (o.partition_no,o.position,o.epoch)=(n.partition_no,n.position,n.epoch) AND o.event_seq=0
+  JOIN library.native_public_output_receiving e ON (e.partition_no,e.capture_id)=(b.partition_no,b.capture_id)
+  JOIN library.native_public_output_hold k ON (k.partition_no,k.hold_id,k.capture_id)=(b.partition_no,b.hold_id,b.capture_id)
+  WHERE b.partition_no=home AND b.capture_id=capture AND b.capture_id=b.output_generation
+   AND b.native_xid=pg_current_xact_id() AND b.xmin=n.xmin AND n.xmin=o.xmin
+   AND n.purpose='identity-public-output-capture' AND o.type='com.rezics.semantic.public-output.capture.v1'
+   AND p.write_state='active' AND p.moved_to IS NULL
+   AND f.incarnation=b.incarnation AND f.epoch=b.owner_epoch
+   AND (f.transaction_id,f.activation_position,f.source_generation)=
+       (b.activation_transaction_id,b.activation_position,b.activation_source_generation)
+   AND k.native_xid=pg_current_xact_id() AND k.role='predecessor'
+   AND k.consumed_by IS NULL AND e.state='open' AND e.receiving_epoch=b.receiving_epoch
+   AND b.payload->>'captureId'=b.capture_id::text AND b.payload->>'holdId'=b.hold_id::text
+   AND b.payload->>'definitionDigest'=b.definition_digest AND b.payload->>'bindingDigest'=b.binding_digest
+   AND b.payload->'accepted'=jsonb_build_object('partition',b.partition_no,'epoch',b.owner_epoch,
+     'position',b.accepted_position::text,'transactionId',b.accepted_transaction_id::text)
+   AND b.payload->'tuple'->'identity'=jsonb_build_object('scope','public_output','route',b.route,
+     'collectionId',b.collection_id::text,'incarnation',b.incarnation,'generation',f.source_generation::text,
+     'ownerEpoch',b.owner_epoch,'receivingEpoch',b.receiving_epoch::text,'effectKey',b.effect_key,
+     'outputGeneration',b.output_generation::text,'activation',jsonb_build_object(
+       'transactionId',b.activation_transaction_id::text,'position',b.activation_position::text,
+       'sourceGeneration',b.activation_source_generation::text))
+   AND b.payload->'tuple'->'publication'=jsonb_build_object('generation',f.generation::text,
+     'transactionId',f.transaction_id::text,'position',f.activation_position::text,'nativeXid',f.native_xid,
+     'sourceGeneration',f.source_generation::text,'memberFence',f.member_fence::text,'members',f.members::text)
+   AND b.payload->'tuple'->'observation'=jsonb_build_object('partition',b.partition_no,'epoch',b.owner_epoch,
+     'position',(b.accepted_position-1)::text)
+ )
+$$;
+
+
+--
+-- Name: frozen_public_output_origin(integer, uuid, uuid); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.frozen_public_output_origin(rte integer, cid uuid, gen uuid) RETURNS TABLE(generation uuid, transaction_id uuid, activation_position bigint, native_xid text, source_generation bigint, member_fence bigint, members bigint, incarnation text, epoch integer, current_position bigint)
+    LANGUAGE sql STABLE STRICT
+    AS $$
+ SELECT f.generation,f.transaction_id,COALESCE(f.activation_position,w.position,held.activation_position),f.native_xid::text,
+  f.source_generation,f.member_fence,f.members,
+  c.collection_id::text || ':' || extract(epoch FROM c.created_at)::text,p.epoch,p.position
+ FROM library.collection_retained_output f
+ JOIN library.collection c ON (c.route,c.collection_id)=(f.route,f.collection_id)
+ JOIN library.collection_source_output g ON (g.route,g.collection_id,g.generation)=(f.route,f.collection_id,f.generation)
+ JOIN library.collection_source_output_head h ON (h.route,h.collection_id,h.generation)=(f.route,f.collection_id,f.generation)
+ LEFT JOIN editorial.write_basis w ON f.activation_position IS NULL
+  AND w.partition_no=f.partition_no AND w.transaction_id=f.transaction_id
+  AND w.xmin::text=f.native_xid::text AND w.principal_kind='account' AND w.position>0
+ LEFT JOIN LATERAL (
+   SELECT b.owner_epoch,b.activation_position,n.position AS accepted_position
+   FROM library.native_public_output_binding b
+   JOIN semantic.identity_public_output_accepted a ON (a.partition_no,a.capture_id)=(b.partition_no,b.capture_id)
+    AND a.binding=b.payload AND a.binding_digest=b.binding_digest AND a.xmin=b.xmin
+    AND (a.transaction_id,a.native_epoch,a.native_position)=(b.accepted_transaction_id,b.owner_epoch,b.accepted_position)
+   JOIN semantic.identity_epoch_native_commit n ON (n.partition_no,n.transaction_id,n.epoch,n.position)=
+     (a.partition_no,a.transaction_id,a.native_epoch,a.native_position)
+    AND n.purpose='identity-public-output-capture' AND n.xmin=a.xmin
+   JOIN core.outbox o ON (o.partition_no,o.epoch,o.position)=(n.partition_no,n.epoch,n.position)
+    AND o.event_seq=0 AND o.type='com.rezics.semantic.public-output.capture.v1' AND o.xmin=n.xmin
+   WHERE f.activation_position IS NULL AND w.position IS NULL
+    AND (b.partition_no,b.capture_id,b.route,b.collection_id,b.output_generation)=
+        (f.partition_no,f.generation,f.route,f.collection_id,f.generation)
+    AND (b.activation_transaction_id,b.activation_source_generation)=(f.transaction_id,f.source_generation)
+    AND b.payload#>>'{tuple,publication,nativeXid}'=f.native_xid::text
+    AND b.incarnation=c.collection_id::text || ':' || extract(epoch FROM c.created_at)::text
+    AND b.native_xid IS DISTINCT FROM pg_current_xact_id_if_assigned()
+ ) held ON true
+ JOIN core.partition p ON p.partition_no=f.partition_no AND p.epoch=COALESCE(f.activation_epoch,w.epoch,held.owner_epoch)
+  AND p.position>=COALESCE(held.accepted_position,f.activation_position,w.position)
+  AND p.write_state='active' AND p.moved_to IS NULL
+ WHERE (f.route,f.collection_id,f.generation)=(rte,cid,gen)
+  AND c.state='active' AND c.visibility='public' AND c.membership_kind='dynamic'
+  AND c.builtin_kind IN ('everything','state')
+  AND c.source_generation=f.source_generation AND h.source_generation=f.source_generation
+  AND g.source_generation+1=f.source_generation AND g.state='complete'
+  AND g.member_count=f.members AND g.expected_members=f.members AND g.written_members=f.members
+  AND g.member_fence=f.member_fence
+  AND f.native_xid IS DISTINCT FROM pg_current_xact_id_if_assigned()
+  AND f.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid
+  AND ((c.curator_account_id IS NULL AND g.account_id IS NULL)
+   OR (c.curator_account_id=g.account_id AND EXISTS (
+      SELECT 1 FROM access.account a WHERE (a.route,a.account_id)=(c.route,c.curator_account_id)
+       AND a.state='deleted' AND a.authn_fenced
+   )))
+$$;
+
+
+--
+-- Name: frozen_public_output_successor(integer, uuid, uuid); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.frozen_public_output_successor(rte integer, cid uuid, gen uuid) RETURNS TABLE(hold_id uuid, activation_position bigint)
+    LANGUAGE sql STABLE STRICT
+    AS $$
+ SELECT successor.hold_id,b.activation_position
+ FROM library.collection_retained_output f
+ JOIN library.collection c ON (c.route,c.collection_id)=(f.route,f.collection_id)
+ JOIN library.collection_source_output g ON (g.route,g.collection_id,g.generation)=(f.route,f.collection_id,f.generation)
+ JOIN library.native_public_output_binding b
+  ON b.partition_no=f.partition_no AND b.capture_id=f.generation AND (b.route,b.collection_id)=(f.route,f.collection_id)
+  AND b.output_generation=f.generation AND b.activation_transaction_id=f.transaction_id
+  AND b.activation_source_generation=f.source_generation
+  AND b.payload#>>'{tuple,publication,nativeXid}'=f.native_xid::text
+ JOIN library.native_public_output_hold predecessor
+  ON (predecessor.partition_no,predecessor.hold_id,predecessor.capture_id)=(b.partition_no,b.hold_id,b.capture_id)
+ JOIN library.native_public_output_transition t
+  ON (t.partition_no,t.hold_id,t.capture_id,t.binding_digest)=(b.partition_no,b.hold_id,b.capture_id,b.binding_digest)
+  AND t.kind='applied' AND t.epoch=b.owner_epoch AND t.transaction_id=predecessor.consumed_by
+ JOIN library.native_public_output_hold successor
+  ON (successor.partition_no,successor.hold_id,successor.capture_id)=(t.partition_no,t.successor_hold_id,t.capture_id)
+  AND successor.role='successor' AND successor.consumed_by IS NULL AND successor.transaction_id=t.transaction_id
+  AND (successor.route,successor.collection_id,successor.output_generation,successor.activation_transaction_id,
+       successor.activation_position,successor.activation_source_generation,successor.incarnation)=
+      (b.route,b.collection_id,b.output_generation,b.activation_transaction_id,
+       b.activation_position,b.activation_source_generation,b.incarnation)
+ JOIN library.native_public_output_receiving recv
+  ON (recv.partition_no,recv.capture_id)=(b.partition_no,b.capture_id)
+  AND recv.state='applied' AND recv.transaction_id=t.transaction_id AND recv.receiving_epoch=b.receiving_epoch+1
+ JOIN semantic.identity_public_output_disposition d
+  ON (d.partition_no,d.capture_id,d.hold_id,d.binding_digest,d.transaction_id,d.native_epoch,d.native_position,d.kind)=
+     (t.partition_no,t.capture_id,t.hold_id,t.binding_digest,t.transaction_id,t.epoch,t.position,t.kind)
+ JOIN semantic.identity_public_output_transition sd
+  ON (sd.partition_no,sd.capture_id,sd.transaction_id,sd.native_epoch,sd.native_position,sd.kind,sd.successor_hold_id)=
+     (d.partition_no,d.capture_id,d.transaction_id,d.native_epoch,d.native_position,d.kind,t.successor_hold_id)
+ JOIN semantic.identity_public_output_seal seal
+  ON (seal.partition_no,seal.capture_id,seal.transaction_id,seal.manifest_digest)=
+     (d.partition_no,d.capture_id,d.seal_transaction_id,d.manifest_digest)
+  AND seal.raw_count=f.members
+ JOIN semantic.identity_epoch_native_commit n
+  ON (n.partition_no,n.transaction_id,n.epoch,n.position,n.purpose)=
+     (t.partition_no,t.transaction_id,t.epoch,t.position,t.purpose)
+  AND n.xmin=t.xmin AND n.xmin=d.xmin AND n.xmin=sd.xmin AND n.xmin=successor.xmin AND n.xmin=recv.xmin
+ JOIN core.outbox o ON (o.partition_no,o.epoch,o.position)=(n.partition_no,n.epoch,n.position)
+  AND o.event_seq=0 AND o.type='com.rezics.semantic.public-output.capture.v1' AND o.xmin=n.xmin
+ JOIN core.partition p ON p.partition_no=n.partition_no AND p.epoch=n.epoch AND p.position>=n.position
+  AND p.write_state='active' AND p.moved_to IS NULL
+ WHERE (f.route,f.collection_id,f.generation)=(rte,cid,gen)
+  AND c.state='active' AND c.visibility='public' AND c.builtin_kind IN ('everything','state')
+  AND c.source_generation=f.source_generation AND b.incarnation=c.collection_id::text || ':' || extract(epoch FROM c.created_at)::text
+  AND g.state='complete' AND g.expected_members=f.members AND g.written_members=f.members
+  AND g.member_count=f.members AND g.member_fence=f.member_fence
+  AND t.native_xid IS DISTINCT FROM pg_current_xact_id_if_assigned()
+$$;
+
+
+--
 -- Name: guard_collection_membership_kind(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -1499,10 +1658,11 @@ $$;
 CREATE FUNCTION library.guard_retained_output_insert() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
+DECLARE verified_epoch integer; verified_position bigint;
 BEGIN
   PERFORM 1 FROM library.collection WHERE route=NEW.route AND collection_id=NEW.collection_id FOR UPDATE;
-  IF NOT EXISTS (
-    SELECT 1 FROM library.collection_source_output_publication r
+  SELECT b.epoch,b.position INTO verified_epoch,verified_position
+  FROM library.collection_source_output_publication r
     JOIN library.collection_source_output_head h USING(route,collection_id,generation)
     JOIN library.collection_source_output g USING(route,collection_id,generation)
     JOIN library.collection s ON s.route=r.route AND s.collection_id=r.collection_id
@@ -1522,8 +1682,12 @@ BEGIN
       AND g.member_count=r.expected_members AND g.member_fence=r.member_fence
       AND r.xmin=b.xmin AND r.xmin=g.xmin AND r.xmin=h.xmin
       AND r.native_xid IS DISTINCT FROM pg_current_xact_id_if_assigned()
-      AND b.principal_kind='account' AND b.position>0 AND p.write_state='active' AND p.moved_to IS NULL
-  ) THEN RAISE EXCEPTION 'Retained output requires terminal ownership and committed complete A' USING ERRCODE='23514'; END IF;
+      AND b.principal_kind='account' AND b.position>0 AND p.write_state='active' AND p.moved_to IS NULL;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Retained output requires terminal ownership and committed complete A' USING ERRCODE='23514';
+  END IF;
+  NEW.activation_epoch:=verified_epoch;
+  NEW.activation_position:=verified_position;
   RETURN NEW;
 END; $$;
 
@@ -1535,7 +1699,7 @@ END; $$;
 CREATE FUNCTION library.guard_retained_public_output() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
-DECLARE item record; step integer; retained boolean;
+DECLARE item record; step integer; retained boolean; frozen_generation uuid;
 BEGIN
  FOR step IN 1..2 LOOP
   IF step=1 THEN
@@ -1546,16 +1710,28 @@ BEGIN
    item:=NEW;
   END IF;
   PERFORM 1 FROM library.collection WHERE route=item.route AND collection_id=item.collection_id FOR UPDATE;
-  -- Every real admission advances this Core row. An older REPEATABLE READ writer therefore
-  -- serializes or fails rather than overlooking a hold inserted after its snapshot began.
   PERFORM 1 FROM core.partition WHERE partition_no=item.route >> 4 FOR SHARE;
   IF TG_TABLE_NAME='collection' THEN
    IF TG_OP='UPDATE' AND (NEW.route,NEW.collection_id,NEW.created_at,NEW.curator_account_id)
      IS NOT DISTINCT FROM (OLD.route,OLD.collection_id,OLD.created_at,OLD.curator_account_id)
      AND NOT (OLD.state='deleted' AND NEW.state='active') THEN CONTINUE; END IF;
+   IF TG_OP='UPDATE' AND NEW.curator_account_id IS NULL AND OLD.curator_account_id IS NOT NULL
+     AND (to_jsonb(NEW)-'curator_account_id')=(to_jsonb(OLD)-'curator_account_id') THEN
+     SELECT f.generation INTO frozen_generation FROM library.collection_retained_output f
+     WHERE f.route=item.route AND f.collection_id=item.collection_id;
+     IF library.may_deidentify_frozen_output(item.route,item.collection_id,frozen_generation) THEN CONTINUE; END IF;
+   END IF;
    SELECT EXISTS(SELECT 1 FROM library.native_public_output_hold
      WHERE route=item.route AND collection_id=item.collection_id AND consumed_by IS NULL LIMIT 1) INTO retained;
   ELSE
+   IF TG_TABLE_NAME='collection_source_output' AND TG_OP='UPDATE' THEN
+     IF NEW.account_id IS NULL AND OLD.account_id IS NOT NULL
+       AND (to_jsonb(NEW)-'account_id')=(to_jsonb(OLD)-'account_id')
+       AND library.may_deidentify_frozen_output(item.route,item.collection_id,item.generation)
+     THEN CONTINUE; END IF;
+   ELSIF TG_TABLE_NAME='collection_source_output_publication' AND TG_OP='DELETE' THEN
+     IF library.may_deidentify_frozen_output(item.route,item.collection_id,item.generation) THEN CONTINUE; END IF;
+   END IF;
    SELECT EXISTS(SELECT 1 FROM library.native_public_output_hold
      WHERE route=item.route AND collection_id=item.collection_id AND output_generation=item.generation
        AND consumed_by IS NULL LIMIT 1) INTO retained;
@@ -1819,6 +1995,27 @@ BEGIN
   END IF;
   RETURN NULL;
 END;
+$$;
+
+
+--
+-- Name: may_deidentify_frozen_output(integer, uuid, uuid); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.may_deidentify_frozen_output(rte integer, cid uuid, gen uuid) RETURNS boolean
+    LANGUAGE sql STABLE STRICT
+    AS $$
+ SELECT EXISTS (
+   SELECT 1
+   FROM library.frozen_public_output_successor(rte,cid,gen) proof
+   JOIN library.collection c ON c.route=rte AND c.collection_id=cid
+   JOIN access.account a ON a.route=c.route AND a.account_id=c.curator_account_id
+   WHERE a.state='deleted' AND a.authn_fenced
+    AND NOT EXISTS (
+      SELECT 1 FROM library.native_public_output_hold h
+      WHERE h.route=rte AND h.collection_id=cid AND h.consumed_by IS NULL AND h.hold_id<>proof.hold_id
+    )
+ )
 $$;
 
 
@@ -3866,6 +4063,9 @@ CREATE TABLE library.collection_retained_output (
     transaction_id uuid NOT NULL,
     native_xid xid8 NOT NULL,
     partition_no integer GENERATED ALWAYS AS ((route >> 4)) STORED,
+    activation_epoch integer,
+    activation_position bigint,
+    CONSTRAINT collection_retained_output_activation CHECK ((((activation_epoch IS NULL) AND (activation_position IS NULL)) OR ((activation_epoch IS NOT NULL) AND (activation_position IS NOT NULL) AND (activation_epoch > 0) AND (activation_position > 0)))),
     CONSTRAINT collection_retained_output_members_check CHECK ((members >= 0))
 );
 
@@ -9078,6 +9278,13 @@ CREATE UNIQUE INDEX collection_member_deletion_id ON library.collection_member U
 
 
 --
+-- Name: collection_member_identity_original; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_member_identity_original ON library.collection_member USING btree (route, subject_id, collection_id) WHERE (deletion_id IS NULL);
+
+
+--
 -- Name: collection_member_live_ordinal; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -9166,6 +9373,13 @@ CREATE INDEX collection_source_output_account ON library.collection_source_outpu
 --
 
 CREATE UNIQUE INDEX collection_source_output_building ON library.collection_source_output USING btree (route, collection_id) WHERE (state = 'building'::text);
+
+
+--
+-- Name: collection_source_output_member_identity_original; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_source_output_member_identity_original ON library.collection_source_output_member USING btree (route, subject_id, collection_id, generation);
 
 
 --
@@ -9610,6 +9824,13 @@ CREATE INDEX hosted_reading_activity_idx ON library.hosted_reading USING btree (
 
 
 --
+-- Name: identity_epoch_participant_follow_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX identity_epoch_participant_follow_pending ON library.identity_epoch_participant_work USING btree (partition_no, job_id, job_epoch, effect_key) WHERE (NOT follow_complete);
+
+
+--
 -- Name: identity_epoch_participant_handoff_pending; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -9663,6 +9884,13 @@ CREATE INDEX identity_scope_plan_capture ON library.identity_scope_plan USING bt
 --
 
 CREATE UNIQUE INDEX identity_scope_plan_generation ON library.identity_scope_plan USING btree (route, collection_id, generation);
+
+
+--
+-- Name: identity_scope_plan_output_generation; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX identity_scope_plan_output_generation ON library.identity_scope_plan USING btree (route, collection_id, ((source_identity ->> 'outputGeneration'::text))) WHERE ((source_identity ->> 'scope'::text) = 'active_explicit_output'::text);
 
 
 --
@@ -9887,6 +10115,13 @@ CREATE INDEX native_source_capture_collection ON library.native_source_capture U
 --
 
 CREATE INDEX native_source_capture_identity ON library.native_source_capture USING btree (route, collection_id, account_id, incarnation, generation, scope, owner_epoch, receiving_epoch, effect_key, collection_fence, account_fence, capture_id);
+
+
+--
+-- Name: native_source_capture_output_generation; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX native_source_capture_output_generation ON library.native_source_capture USING btree (route, collection_id, output_generation) WHERE (scope = 'active_explicit_output'::text);
 
 
 --

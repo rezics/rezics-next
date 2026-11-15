@@ -12573,6 +12573,13 @@ CREATE UNIQUE INDEX identity_epoch_step_erasure_key ON semantic.identity_epoch_s
 
 
 --
+-- Name: identity_epoch_step_library_completion; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_step_library_completion ON semantic.identity_epoch_step USING btree (partition_no, job_id, job_epoch, native_position, transaction_id) WHERE ((step = 'library-private-follow-counts'::text) AND (state = 'complete'::text));
+
+
+--
 -- Name: identity_epoch_topology_open_home; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -12584,6 +12591,13 @@ CREATE INDEX identity_epoch_topology_open_home ON semantic.identity_epoch_bootst
 --
 
 CREATE INDEX identity_public_dirty_revision ON semantic.identity_public_dirty USING btree (partition_no, revision, original);
+
+
+--
+-- Name: identity_public_output_original_order; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_public_output_original_order ON semantic.identity_public_output_original USING btree (partition_no, capture_id, terminal, original);
 
 
 --
@@ -14570,6 +14584,13 @@ CREATE TRIGGER identity_epoch_step_immutable BEFORE DELETE OR UPDATE ON semantic
 
 
 --
+-- Name: identity_epoch_mapping identity_mapping_canonical_generation; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_mapping_canonical_generation AFTER INSERT OR DELETE OR UPDATE ON semantic.identity_epoch_mapping FOR EACH ROW EXECUTE FUNCTION semantic.capture_canonical_identity_generation();
+
+
+--
 -- Name: identity_epoch_prearm_page identity_prearm_release_fence; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -14938,13 +14959,6 @@ CREATE TRIGGER identity_public_output_transition_no_truncate BEFORE TRUNCATE ON 
 --
 
 CREATE TRIGGER identity_public_writer AFTER INSERT OR DELETE OR UPDATE ON semantic.subject FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_public_writer();
-
-
---
--- Name: identity_epoch_mapping identity_mapping_canonical_generation; Type: TRIGGER; Schema: semantic; Owner: -
---
-
-CREATE TRIGGER identity_mapping_canonical_generation AFTER INSERT OR DELETE OR UPDATE ON semantic.identity_epoch_mapping FOR EACH ROW EXECUTE FUNCTION semantic.capture_canonical_identity_generation();
 
 
 --
@@ -15354,17 +15368,17 @@ CREATE TRIGGER record_source_set_member_immutable BEFORE INSERT OR DELETE OR UPD
 
 
 --
--- Name: redirect redirect_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
---
-
-CREATE CONSTRAINT TRIGGER redirect_erasure_capture AFTER INSERT OR UPDATE ON semantic.redirect DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_redirect_erasure();
-
-
---
 -- Name: redirect redirect_canonical_generation; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
 CREATE TRIGGER redirect_canonical_generation AFTER INSERT OR DELETE OR UPDATE ON semantic.redirect FOR EACH ROW EXECUTE FUNCTION semantic.capture_canonical_identity_generation();
+
+
+--
+-- Name: redirect redirect_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER redirect_erasure_capture AFTER INSERT OR UPDATE ON semantic.redirect DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_redirect_erasure();
 
 
 --

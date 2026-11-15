@@ -42,6 +42,7 @@ type SourceSubject = {
 };
 type Prepared = {
     partition: number;
+    deadline: number;
     runtime: Awaited<ReturnType<typeof activeRelease>>;
     rows: SelectedStatement[];
     releases: Map<string, Release | null>;

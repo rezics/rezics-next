@@ -13,14 +13,14 @@ export type BuiltinCollectionView = {
     builtinKind: 'everything' | 'state' | 'liked';
     builtin: BuiltinCollectionKey;
     builtinLabels?: Readonly<Record<string, string>>;
-    visibility: 'private';
+    visibility: 'private' | 'public' | 'unlisted';
     title: string | null;
     description: string | null;
     revision: number;
     presentationKind: CollectionKind['presentationKind'];
     presentationKindSource: CollectionKind['presentationKindSource'];
     cover: null;
-    coverSource: 'none';
+    coverSource: 'none' | 'pending';
 };
 export type DynamicMemberView = {
     kind: 'dynamic';
@@ -32,7 +32,7 @@ export declare function createNativeBuiltinRuntime(ports: NativeLibraryPresentat
     access?: Access;
     tokens?: KeyRing;
 }): {
-    read: (actor: Actor, id: string, scope?: ReadScope, deadline?: number) => Promise<BuiltinCollectionView | null>;
+    read: (actor: Actor, id: string, scope?: ReadScope, deadline?: number, forMembers?: boolean) => Promise<BuiltinCollectionView | null>;
     discover: (actor: Actor, after?: string | null, limit?: number) => Promise<BuiltinCollectionView[]>;
     resolve: (actor: Actor, key: Exclude<BuiltinCollectionKey, {
         kind: 'liked';

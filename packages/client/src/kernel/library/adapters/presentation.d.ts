@@ -54,7 +54,7 @@ export type NativeLibraryPresentationPorts = {
 export declare function createNativeLibraryPresentation(ports: NativeLibraryPresentationPorts): {
     semanticObservations: LibrarySemanticObservationCapability;
     builtins: (config: Parameters<typeof createNativeBuiltinRuntime>[1]) => {
-        read: (actor: Actor, id: string, scope?: "collection:delete" | "collection:read" | "collection:update", deadline?: number) => Promise<import("./builtin-runtime.ts").BuiltinCollectionView | null>;
+        read: (actor: Actor, id: string, scope?: "collection:delete" | "collection:read" | "collection:update", deadline?: number, forMembers?: boolean) => Promise<import("./builtin-runtime.ts").BuiltinCollectionView | null>;
         discover: (actor: Actor, after?: string | null, limit?: number) => Promise<import("./builtin-runtime.ts").BuiltinCollectionView[]>;
         resolve: (actor: Actor, key: Exclude<import("../builtin-identity.ts").BuiltinCollectionKey, {
             kind: 'liked';

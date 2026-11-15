@@ -1,4 +1,4 @@
-import { identityRatingReviewEvidence, type IdentityMappingEvidence, type IdentityMappingRequest, type IdentityRatingControlLocator, type IdentityRatingNativeEvidence, type IdentityRatingReviewOperand, type IdentityRatingReviewResult, type IdentityRatingReviewUnavailableReason } from '../identity-core/index.ts';
+import { identityRatingReviewEvidence, type IdentityMappingEvidence, type IdentityOwnerEvidence, type IdentitySourceEvidence, type IdentityPendingEvidence, type IdentityControlEvidence, type IdentityMappingRequest, type IdentityRatingControlLocator, type IdentityRatingNativeEvidence, type IdentityRatingReviewOperand, type IdentityRatingReviewResult, type IdentityRatingReviewUnavailableReason } from '../identity-core/index.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { CommandTransaction } from '../../command/command.ts';
 import type { IdentityNativeReaders, NativeIdentityCapabilities } from '../identity-adapter-port.ts';
@@ -42,6 +42,19 @@ export declare function readIdentityRepairEvidenceInTransaction(client: Queryabl
 }>): Promise<IdentityRepairEvidence>;
 /** Pure classifier reused by the transaction participant after it has acquired the native owner fence. */
 export declare function classifyIdentityRatingReviewEvidence(requestedOriginalId: string, canonicalTerminalId: string, sourceIdentities: readonly string[], sourceHomes: readonly number[], evidence: IdentityRatingNativeEvidence): IdentityRatingReviewResult;
+/** The caller owns one repeatable-read snapshot of the physical pool. Read the
+ * same full native keys as ordinary mapping without opening another checkout
+ * or admitting a pending job's unpublished mappings. */
+export declare function readReleasedIdentityMappingsInSnapshot(client: Queryable, originals: readonly string[]): Promise<{
+    mappings: IdentityMapping[];
+    evidence: Readonly<{
+        sourceOwners: readonly IdentityOwnerEvidence[];
+        sourceRows: readonly IdentitySourceEvidence[];
+        controlOwners: readonly IdentityOwnerEvidence[];
+        pendingRows: readonly IdentityPendingEvidence[];
+        currentRows: readonly IdentityControlEvidence[];
+    }>;
+}>;
 /** One keyed selection in the captured generation, independent of presentation visibility. */
 export declare function selectIdentityEpochRemainder(tx: CommandTransaction, intent: IdentityIntent, input: {
     partition_no: number;

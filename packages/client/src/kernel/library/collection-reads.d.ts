@@ -41,6 +41,7 @@ export type CuratedCollectionView = CollectionView & {
 };
 export type SavedDynamicCollectionView = Omit<CollectionView, 'membershipKind' | 'memberCount' | 'orderEpoch' | 'createdAt' | 'updatedAt'> & {
     membershipKind: 'dynamic';
+    builtinKind?: BuiltinCollectionView['builtinKind'];
 };
 export type CollectionResourceView = CollectionView | SavedDynamicCollectionView | (BuiltinCollectionView & {
     allowedVisibilityActions?: ('private' | 'unlisted' | 'public')[];
@@ -67,6 +68,7 @@ export declare function collectionReadView(value: CollectionResourceView): {
     generation?: string;
     subjectIds?: string[];
     membershipKind: 'dynamic';
+    builtinKind?: BuiltinCollectionView['builtinKind'];
     allowedVisibilityActions?: ("private" | "public" | "unlisted")[];
 } | {
     allowedVisibilityActions?: ("private" | "public" | "unlisted")[];
@@ -76,14 +78,14 @@ export declare function collectionReadView(value: CollectionResourceView): {
     builtinKind: 'everything' | 'state' | 'liked';
     builtin: import("./builtin-identity.ts").BuiltinCollectionKey;
     builtinLabels?: Readonly<Record<string, string>>;
-    visibility: 'private';
+    visibility: 'private' | 'public' | 'unlisted';
     title: string | null;
     description: string | null;
     revision: number;
     presentationKind: import("./collection-kind.ts").CollectionKind['presentationKind'];
     presentationKindSource: import("./collection-kind.ts").CollectionKind['presentationKindSource'];
     cover: null;
-    coverSource: 'none';
+    coverSource: 'none' | 'pending';
 } | {
     presentationKind: string | null;
     presentationKindSource: 'mixed' | 'owner';

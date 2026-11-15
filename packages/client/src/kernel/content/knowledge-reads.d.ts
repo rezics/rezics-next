@@ -1,6 +1,6 @@
 import { type KnowledgeProvenance } from './knowledge-portable.ts';
 import type { ReadContext } from './model.ts';
-import { type KnowledgeOutlinePageInput, type KnowledgePageInput, type KnowledgeStructureHistoryInput, type KnowledgeStructureChangeAction, type KnowledgeStructureChangeKind, type KnowledgeDependencies } from './knowledge-model.ts';
+import { type KnowledgeOutlinePageInput, type KnowledgeOwnedNotebookPageInput, type KnowledgePageInput, type KnowledgeStructureHistoryInput, type KnowledgeStructureChangeAction, type KnowledgeStructureChangeKind, type KnowledgeDependencies } from './knowledge-model.ts';
 /** A public read selects the live pointer or an exact revision retained in the current publication generation.
  * Search may be behind or paused; its candidate is never authority to return an unselected revision. */
 export declare function readKnowledgePublicDocument(deps: KnowledgeDependencies, documentId: string, selection: Readonly<{
@@ -91,7 +91,7 @@ export declare function readKnowledgePrivateDocument(deps: KnowledgeDependencies
     }>[];
 }>;
 /** Reloads an owner's notebook directory with the native encrypted keyset cursor. */
-export declare function readKnowledgeOwnedNotebooks(deps: KnowledgeDependencies, accountId: string, query: KnowledgePageInput, context: ReadContext): Promise<{
+export declare function readKnowledgeOwnedNotebooks(deps: KnowledgeDependencies, accountId: string, query: KnowledgeOwnedNotebookPageInput, context: ReadContext): Promise<{
     value: {
         notebooks: {
             notebookId: string;
