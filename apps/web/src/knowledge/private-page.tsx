@@ -20,7 +20,17 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { Label } from '@rezics/ui/shadcn/label';
 import { useLocation } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+  type MouseEvent,
+} from 'react';
 import { useOperationAdmission } from '../kernel/exposure';
 import { viewerExposureLifetime, viewerExposureQuery } from '../kernel/viewer-exposure';
 import { m } from '../paraglide/messages.js';
@@ -164,6 +174,12 @@ type PrivateOperationResult<T> =
   | KnowledgeCommand<T>
   | { state: 'signed-out' | 'retired' }
   | { state: 'unavailable'; status?: number };
+type LifecycleFocusRequest = {
+  phase: 'review' | 'result' | 'return';
+  action: 'trash' | 'restore';
+  opener: HTMLElement;
+  focusedTarget: HTMLElement;
+};
 
 export type KnowledgePrivateOperations = Readonly<{
   lifecycle?: KnowledgeLifecycleOperations;
@@ -356,6 +372,19 @@ function immutable<T>(value: T): T {
   return Object.freeze(value);
 }
 
+function currentVisibleTarget(target: HTMLElement | null): target is HTMLElement {
+  if (
+    !target?.isConnected ||
+    target.hidden ||
+    target.matches(':disabled') ||
+    target.closest('[hidden], [inert], [aria-hidden="true"]')
+  )
+    return false;
+  if (target.getClientRects().length === 0) return false;
+  const style = getComputedStyle(target);
+  return style.display !== 'none' && style.visibility !== 'hidden';
+}
+
 function copyDraft(head: KnowledgePrivateHead): DocumentDraft {
   return {
     title: head.title,
@@ -469,12 +498,16 @@ function PrivatePageFrame({
   children,
   navigation,
   status,
+  lifecycleFocusBoundaryRef,
+  lifecycleHeadingRef,
 }: {
   title: string;
   locale: string;
   children: React.ReactNode;
   navigation?: React.ReactNode;
   status?: React.ReactNode;
+  lifecycleFocusBoundaryRef?: React.Ref<HTMLDivElement>;
+  lifecycleHeadingRef?: React.Ref<HTMLHeaderElement>;
 }) {
   const options = localeOptions(locale);
   return (
@@ -482,7 +515,12 @@ function PrivatePageFrame({
       className="mx-auto w-full min-w-0 max-w-6xl px-4 py-6 text-foreground [overflow-wrap:anywhere] sm:px-6 sm:py-8"
       data-private-knowledge-visit
     >
-      <header className="mb-8 min-w-0 space-y-3 border-b border-border pb-6">
+      <header
+        ref={lifecycleHeadingRef}
+        tabIndex={lifecycleHeadingRef ? -1 : undefined}
+        aria-label={lifecycleHeadingRef ? title : undefined}
+        className="mb-8 min-w-0 space-y-3 border-b border-border pb-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
         <p className="text-xs font-medium tracking-wide text-muted-foreground">
           {m.knowledge_workspace_only_you({}, options)}
         </p>
@@ -490,7 +528,14 @@ function PrivatePageFrame({
         {status}
       </header>
       {navigation}
-      <div className="mx-auto min-w-0 max-w-3xl">
+      <div
+        key={lifecycleFocusBoundaryRef ? 'knowledge-lifecycle-focus-boundary' : undefined}
+        ref={lifecycleFocusBoundaryRef}
+        tabIndex={lifecycleFocusBoundaryRef ? -1 : undefined}
+        role={lifecycleFocusBoundaryRef ? 'region' : undefined}
+        aria-label={lifecycleFocusBoundaryRef ? title : undefined}
+        className="mx-auto min-w-0 max-w-3xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
         <div className="min-w-0 space-y-8">{children}</div>
       </div>
     </main>
@@ -613,6 +658,12 @@ function PrivateKnowledgeEditor({
   const [destinationReviewed, setDestinationReviewed] = useState(false);
   const [templateKind, setTemplateKind] = useState<KnowledgeTemplateKind | null>(null);
   const [createdAddress, setCreatedAddress] = useState<KnowledgePrivateAddress | null>(null);
+  const [lifecycleOperationAction, setLifecycleOperationAction] = useState<'trash' | 'restore' | null>(null);
+  const lifecycleFocusRequest = useRef<LifecycleFocusRequest | null>(null);
+  const lifecycleFocusBoundaryRef = useRef<HTMLDivElement>(null);
+  const lifecycleHeadingRef = useRef<HTMLHeaderElement>(null);
+  const lifecycleReviewTargetRef = useRef<HTMLDivElement>(null);
+  const lifecycleReviewOpenerRef = useRef<HTMLButtonElement>(null);
   const notebookIntentRef = useRef(notebookIntent);
   const documentIntentRef = useRef(documentIntent);
   const revisionIntentRef = useRef(revisionIntent);
@@ -632,6 +683,116 @@ function PrivateKnowledgeEditor({
   revisionIntentRef.current = revisionIntent;
 
   useEffect(() => {
+    const cancel = () => {
+      lifecycleFocusRequest.current = null;
+    };
+    const onFocusIn = (event: FocusEvent) => {
+      const request = lifecycleFocusRequest.current;
+      if (!request) return;
+      if (
+        event.target === request.focusedTarget ||
+        event.target === request.opener ||
+        ((event.target === document.body || event.target === document.documentElement) &&
+          request.focusedTarget === request.opener)
+      )
+        return;
+      cancel();
+    };
+    const onKeyDown = () => cancel();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') cancel();
+    };
+    document.addEventListener('focusin', onFocusIn);
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('blur', cancel);
+    return () => {
+      document.removeEventListener('focusin', onFocusIn);
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('blur', cancel);
+      cancel();
+    };
+  }, []);
+
+  function claimLifecycleFocus(
+    event: MouseEvent<HTMLButtonElement>,
+    phase: LifecycleFocusRequest['phase'],
+    action: LifecycleFocusRequest['action'],
+  ) {
+    if (event.detail !== 0 || document.activeElement !== event.currentTarget || !active.current || retired) {
+      lifecycleFocusRequest.current = null;
+      return;
+    }
+    lifecycleFocusRequest.current = {
+      phase,
+      action,
+      opener: event.currentTarget,
+      focusedTarget: event.currentTarget,
+    };
+  }
+
+  function reviewLifecycle(event: MouseEvent<HTMLButtonElement>, action: 'trash' | 'restore', blocked: boolean) {
+    setLifecycleOperationAction(action);
+    claimLifecycleFocus(event, 'review', action);
+    lifecycle.review(blocked);
+  }
+
+  function submitLifecycle(event: MouseEvent<HTMLButtonElement>, action: 'trash' | 'restore', blocked: boolean) {
+    setLifecycleOperationAction(action);
+    claimLifecycleFocus(event, 'result', action);
+    void lifecycle.submit(blocked);
+  }
+
+  function cancelLifecycle(event: MouseEvent<HTMLButtonElement>, action: 'trash' | 'restore') {
+    claimLifecycleFocus(event, 'return', action);
+    lifecycle.cancel();
+  }
+
+  useLayoutEffect(() => {
+    const request = lifecycleFocusRequest.current;
+    if (!request || !active.current || retired || lifecycleOperationAction !== request.action) return;
+    if (document.visibilityState === 'hidden') {
+      lifecycleFocusRequest.current = null;
+      return;
+    }
+    let target: HTMLElement | null = null;
+    if (request.phase === 'review') {
+      if (lifecycle.commandState !== 'confirm') return;
+      target = lifecycleReviewTargetRef.current;
+    } else if (request.phase === 'return') {
+      if (lifecycle.commandState !== 'idle') return;
+      const opener = lifecycleReviewOpenerRef.current;
+      target = opener && !opener.disabled ? opener : lifecycleHeadingRef.current;
+    } else {
+      if (
+        !['pending', 'acknowledged', 'conflict', 'not-found', 'uncertain', 'unavailable'].includes(
+          lifecycle.commandState,
+        )
+      )
+        return;
+      target = lifecycleFocusBoundaryRef.current;
+    }
+    if (!currentVisibleTarget(target)) {
+      lifecycleFocusRequest.current = null;
+      return;
+    }
+    if (request.focusedTarget === target && document.activeElement === target) return;
+    request.focusedTarget = target;
+    target.focus({ preventScroll: true });
+    if (request.phase === 'return') lifecycleFocusRequest.current = null;
+  }, [
+    lifecycle.commandState,
+    lifecycle.readState,
+    lifecycle.revision,
+    lifecycle.editing,
+    lifecycleOperationAction,
+    retired,
+  ]);
+
+  useEffect(() => {
     active.current = true;
     return () => {
       active.current = false;
@@ -642,6 +803,7 @@ function PrivateKnowledgeEditor({
 
   function retire(state: 'retired' | 'denied' | 'signed-out' = 'retired') {
     if (!active.current) return;
+    lifecycleFocusRequest.current = null;
     active.current = false;
     generation.current += 1;
     readSequence.current += 1;
@@ -1545,10 +1707,28 @@ function PrivateKnowledgeEditor({
 
   const lifecycleBlocked =
     resumeDirty || pending || !!revisionIntent || readBusy || requiresHeadReview || publicationBusy;
+  const lifecycleResultPresent =
+    !!lifecycleOperationAction &&
+    ['pending', 'acknowledged', 'conflict', 'not-found', 'uncertain', 'unavailable'].includes(lifecycle.commandState);
   if (lifecycle.enabled && !lifecycle.editing) {
     return (
-      <PrivatePageFrame title={m.knowledge_private_heading({}, options)} locale={locale}>
-        <KnowledgeLifecyclePanel controller={lifecycle} blocked={lifecycleBlocked} locale={locale} />
+      <PrivatePageFrame
+        title={m.knowledge_private_heading({}, options)}
+        locale={locale}
+        lifecycleFocusBoundaryRef={lifecycle.enabled ? lifecycleFocusBoundaryRef : undefined}
+        lifecycleHeadingRef={lifecycle.enabled ? lifecycleHeadingRef : undefined}
+      >
+        <KnowledgeLifecyclePanel
+          controller={lifecycle}
+          blocked={lifecycleBlocked}
+          locale={locale}
+          operationAction={lifecycleOperationAction}
+          reviewTargetRef={lifecycleReviewTargetRef}
+          reviewOpenerRef={lifecycleReviewOpenerRef}
+          onReview={reviewLifecycle}
+          onSubmit={submitLifecycle}
+          onCancel={cancelLifecycle}
+        />
       </PrivatePageFrame>
     );
   }
@@ -1564,12 +1744,33 @@ function PrivateKnowledgeEditor({
         ? 'preparing'
         : readState;
     return (
-      <PrivatePageFrame title={m.knowledge_private_heading({}, options)} locale={locale}>
-        <FailureNotice
-          state={state}
-          locale={locale}
-          retry={canRead && state !== 'preparing' ? () => void readCurrent('initial') : undefined}
-        />
+      <PrivatePageFrame
+        title={m.knowledge_private_heading({}, options)}
+        locale={locale}
+        lifecycleFocusBoundaryRef={lifecycle.enabled ? lifecycleFocusBoundaryRef : undefined}
+        lifecycleHeadingRef={lifecycle.enabled ? lifecycleHeadingRef : undefined}
+      >
+        <>
+          <FailureNotice
+            state={state}
+            locale={locale}
+            retry={canRead && state !== 'preparing' ? () => void readCurrent('initial') : undefined}
+          />
+          {lifecycleResultPresent ? (
+            <KnowledgeLifecyclePanel
+              controller={lifecycle}
+              blocked
+              showBlockedMessage={false}
+              locale={locale}
+              operationAction={lifecycleOperationAction}
+              reviewTargetRef={lifecycleReviewTargetRef}
+              reviewOpenerRef={lifecycleReviewOpenerRef}
+              onReview={reviewLifecycle}
+              onSubmit={submitLifecycle}
+              onCancel={cancelLifecycle}
+            />
+          ) : null}
+        </>
       </PrivatePageFrame>
     );
   }
@@ -1593,6 +1794,8 @@ function PrivateKnowledgeEditor({
     <PrivatePageFrame
       title={head.title}
       locale={locale}
+      lifecycleFocusBoundaryRef={lifecycle.enabled ? lifecycleFocusBoundaryRef : undefined}
+      lifecycleHeadingRef={lifecycle.enabled ? lifecycleHeadingRef : undefined}
       status={
         <p className="text-sm text-muted-foreground">
           {dirty ? m.knowledge_workspace_unsaved({}, options) : m.knowledge_private_current_head({}, options)}
@@ -1748,7 +1951,17 @@ function PrivateKnowledgeEditor({
             {m.knowledge_publication_heading({}, options)}
           </a>
         </nav>
-        <KnowledgeLifecyclePanel controller={lifecycle} blocked={lifecycleBlocked} locale={locale} />
+        <KnowledgeLifecyclePanel
+          controller={lifecycle}
+          blocked={lifecycleBlocked}
+          locale={locale}
+          operationAction={lifecycleOperationAction}
+          reviewTargetRef={lifecycleReviewTargetRef}
+          reviewOpenerRef={lifecycleReviewOpenerRef}
+          onReview={reviewLifecycle}
+          onSubmit={submitLifecycle}
+          onCancel={cancelLifecycle}
+        />
         <KnowledgeHistoryPanel
           address={{ notebookId: head.notebookId, documentId: head.documentId }}
           binding={binding}
