@@ -4496,7 +4496,8 @@ class Resources:
                 self.identity = (stat.st_dev, stat.st_ino)
                 self.receipt['cgroup'] = {'path': group if not RESOURCE_CGROUP_OVERRIDE else str(path),
                     'device': stat.st_dev, 'inode': stat.st_ino, 'invocation': invocation}
-                durable(self.root / 'physical-resources.json', json.dumps(self.receipt, sort_keys=True))
+                durable(self.root.parent.parent / 'receipts' / self.receipt['run'] / 'physical-resources.json',
+                        json.dumps(self.receipt, sort_keys=True))
                 return
             except (OSError, ValueError, StopIteration, subprocess.TimeoutExpired):
                 return
@@ -5683,7 +5684,7 @@ try:
         live=(fields[19]==marker['started'] and fields[0] not in ['Z','X'] and
               int(fields[2])==marker.get('group') and process.stat().st_uid==marker.get('uid'))
     if live:
-        resource=json.loads((root/'physical-resources.json').read_text())
+        resource=json.loads((root.parent.parent/'receipts'/${JSON.stringify(run)}/'physical-resources.json').read_text())
         cgroup=resource['cgroup']; info=group.stat()
         if (resource.get('schema')!=1 or resource.get('host')!=${JSON.stringify(host)} or resource.get('run')!=${JSON.stringify(run)} or
                 resource.get('boot')!=Path('/proc/sys/kernel/random/boot_id').read_text().strip() or
@@ -5695,7 +5696,7 @@ try:
         print('PREPARING')
     elif not (root/'.preparation-started').exists():
         # Missing command markers alone are insufficient: retain exact boot/owner evidence and reject results.
-        resource=json.loads((root/'physical-resources.json').read_text())
+        resource=json.loads((root.parent.parent/'receipts'/${JSON.stringify(run)}/'physical-resources.json').read_text())
         if (resource.get('schema')!=1 or resource.get('host')!=${JSON.stringify(host)} or resource.get('run')!=${JSON.stringify(run)} or
                 resource.get('boot')!=Path('/proc/sys/kernel/random/boot_id').read_text().strip() or
                 resource['supervisor']!={'pid':marker['pid'],'start':marker['started'],'group':marker['group']} or
