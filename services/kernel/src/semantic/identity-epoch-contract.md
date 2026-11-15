@@ -1695,6 +1695,11 @@ consulting custody. Publication may then advance terminal, control group, contro
 completion checks the held pre-publication custody and the current command effect, not those new mapping control
 fields. The re-bind retires the binding again before commit.
 
+Foreign installation populates the terminal home and may leave the unclaimed birth gate on the Source home.
+The Source arm can rebind that gate from its matching creation revision to the current active foreign mapping.
+The same command must complete the foreign point withdrawal with its acquired native custody or roll back
+the gate change. An existing pending owner or a gate from any other transaction keeps the ordinary conflict rule.
+
 The existing mapping publication/source handoff must retire only that distinguishable same-job point binding
 and leave the Source withdrawn for existing output-closure enrollment. It does not manufacture an active ACK,
 reset to legacy or release an old reservation. Completion validates its actual native unit/job binding before

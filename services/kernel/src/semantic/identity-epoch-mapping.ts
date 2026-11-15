@@ -829,11 +829,12 @@ async function effectGate(
   previous: string,
   measured: Work,
   transactionId: string,
+  withdrawingSource = false,
 ) {
   const frame = mappingSourceFrames.get(tx);
   if (!frame || (frame.targets.size > 0 && !frame.targets.has(destination)))
     throw unavailable('A local mapping plan requires exactly one native Source destination');
-  await gate(tx, job, destination, original, previous, saved.scope_digest, measured, transactionId);
+  await gate(tx, job, destination, original, previous, saved.scope_digest, measured, transactionId, withdrawingSource);
   await identityEpochStore().admitHomeEffect(tx, { kind: 'structural', original, destination, job });
   frame.targets.add(destination);
 }
@@ -1061,6 +1062,7 @@ async function apply(
       change.previousTerminal,
       measured,
       transactionId,
+      true,
     );
     const withdrawn = await withdrawMappingSourcePoint(tx, job, saved, change.original, measured);
     const result = await query(tx, measured, sourceEffect.sql, [
@@ -1668,6 +1670,7 @@ async function gate(
   scope: string,
   measured: Work,
   transactionId: string,
+  withdrawingSource: boolean,
 ) {
   const route = routed(destination);
   if (currentCommand(tx).partition !== partitionOf(route)) throw stale();
@@ -1684,18 +1687,39 @@ async function gate(
     [route, destination, job.jobId, job.epoch.toString(), transactionId],
   );
   if (fenced.rowCount !== 1) throw unavailable('Another native mapping attempt fences this destination');
+  // A foreign installation leaves the source's unclaimed birth gate. Only the Source arm can
+  // rebind it: the following withdrawal in this command must prove current foreign custody.
   const row = (
     await query(
       tx,
       measured,
-      `INSERT INTO semantic.identity_epoch_home_gate(route,destination,original,terminal,epoch,pending_job,pending_epoch,recorded_transaction_id)
-    SELECT $1,$2,$3,m.terminal,m.epoch,$5,$6,$7 FROM semantic.identity_epoch_mapping m
-      JOIN core.partition p ON p.partition_no=$1/16 AND p.epoch=m.owner_epoch AND p.write_state='active'
-      WHERE m.route=$1 AND m.original=$2
-    ON CONFLICT(route,destination,original) DO UPDATE SET pending_job=$5,pending_epoch=$6,recorded_transaction_id=$7
-    WHERE (semantic.identity_epoch_home_gate.pending_job IS NULL OR (semantic.identity_epoch_home_gate.pending_job=$5 AND semantic.identity_epoch_home_gate.pending_epoch=$6))
-      AND (semantic.identity_epoch_home_gate.terminal=$4 OR semantic.identity_epoch_home_gate.pending_job=$5) RETURNING original`,
-      [route, destination, original, previous, job.jobId, job.epoch.toString(), transactionId],
+      `WITH source AS MATERIALIZED (
+       SELECT m.terminal,m.epoch,m.closure_state,m.control_partition,m.control_group
+       FROM semantic.identity_epoch_mapping m
+       JOIN core.partition p ON p.partition_no=$1/16 AND p.epoch=m.owner_epoch AND p.write_state='active'
+       WHERE m.route=$1 AND m.original=$2
+     )
+     INSERT INTO semantic.identity_epoch_home_gate AS g
+       (route,destination,original,terminal,epoch,pending_job,pending_epoch,recorded_transaction_id)
+     SELECT $1,$2,$3,source.terminal,source.epoch,$5,$6,$7 FROM source
+     ON CONFLICT(route,destination,original) DO UPDATE SET
+       terminal=CASE WHEN g.pending_job IS NULL AND g.terminal<>$4 THEN excluded.terminal ELSE g.terminal END,
+       epoch=CASE WHEN g.pending_job IS NULL AND g.terminal<>$4 THEN excluded.epoch ELSE g.epoch END,
+       pending_job=$5,pending_epoch=$6,recorded_transaction_id=$7
+     WHERE (g.pending_job IS NULL OR (g.pending_job=$5 AND g.pending_epoch=$6)) AND (
+       g.terminal=$4 OR g.pending_job=$5 OR (
+        $8::boolean AND g.pending_job IS NULL AND g.pending_epoch IS NULL
+        AND g.destination=g.original AND g.terminal=g.original
+        AND EXISTS (
+         SELECT 1 FROM source
+         JOIN semantic.revision r ON (r.route,r.subject_id,r.revision)=(g.route,g.original,1)
+          AND r.kind='create' AND r.recorded_transaction_id=g.recorded_transaction_id AND r.xmin=g.xmin
+         WHERE source.closure_state='active' AND source.control_partition<>$1/16
+          AND source.control_group=$4 AND source.terminal=$4
+        )
+       )
+     ) RETURNING original`,
+      [route, destination, original, previous, job.jobId, job.epoch.toString(), transactionId, withdrawingSource],
     )
   ).rows[0];
   if (!row || !scope) throw stale();
