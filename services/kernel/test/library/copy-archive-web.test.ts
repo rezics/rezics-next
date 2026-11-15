@@ -190,7 +190,7 @@ beforeAll(async () => {
   const client = createKernelClient('http://kernel.test', {
     fetch: (async (url, init) => {
       const request = new Request(url, init);
-      if (request.url.endsWith(':apply')) {
+      if (new URL(request.url).pathname.endsWith('/$apply')) {
         originals.push({ key: request.headers.get('idempotency-key')!, command: request.url });
         if (interrupt) {
           interrupt = false;
@@ -200,7 +200,7 @@ beforeAll(async () => {
             service.applyProgress(
               owner.actor,
               match[3]!,
-              match[5]!.split(':')[0]!,
+              match[5]!,
               JSON.parse(request.headers.get('idempotency-key')!),
               abort.signal,
               () => abort.abort(),
@@ -279,7 +279,7 @@ async function independent() {
 async function journey() {
   const value = new ProgressRecoveryJourney(port, entryKey(), () => true);
   journeys.add(value);
-  await value.upload(new File([artifact], 'completed-v2.json'));
+  await value.upload(new File([artifact], 'completed-v1.json'));
   return value;
 }
 async function select(journey: ProgressRecoveryJourney, sessionId: string) {
