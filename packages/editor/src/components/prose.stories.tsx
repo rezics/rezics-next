@@ -67,7 +67,7 @@ export const Article: Story = {
     // About 65 characters per line.
     const reference = document.createElement('span');
     reference.style.cssText = 'position:absolute;visibility:hidden;font:inherit;width:65ch';
-    prose.append(reference);
+    prose.appendChild(reference);
     expect(prose.getBoundingClientRect().width).toBeLessThanOrEqual(reference.getBoundingClientRect().width + 1);
     reference.remove();
     expect(lineHeightRatio(prose)).toBeCloseTo(1.75, 1);

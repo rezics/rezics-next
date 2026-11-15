@@ -169,7 +169,7 @@ const painted = (canvas: HTMLElement, property: 'backgroundColor' | 'outlineColo
   const probe = canvas.ownerDocument.createElement('span');
   if (property === 'backgroundColor') probe.style.backgroundColor = value;
   else probe.style.outline = `2px solid ${value}`;
-  canvas.append(probe);
+  canvas.appendChild(probe);
   const read = getComputedStyle(probe)[property];
   probe.remove();
   return read;
