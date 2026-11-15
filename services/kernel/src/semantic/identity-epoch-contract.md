@@ -1662,11 +1662,21 @@ Decision: an admitted structural mapping unit may withdraw its exact local Sourc
 `effectGate` and `admitHomeEffect` checks, before executing Source SQL. This is a same-job transition; ordinary
 terminal drain is not a substitute because it refuses a pending job and changes the admitted group basis.
 The transition verifies the saved job/epoch/scope/unit plan digest, current native effect frame, source owner
-and image, and the admitted generation/version and matching pending/prearm ownership. Released foreign-home
-evidence must retain its existing native binding; the Source transaction never reads foreign control rows.
-Foreign-control active points stay unavailable until a control-home producer deposits bound prepared/acquired
-evidence the source command can consume locally. An active closure is eligible only without an outstanding
-successor or export obligation. An incompatible or missing binding refuses without changing custody.
+and image, and the admitted generation/version and matching pending/prearm ownership. A same-home control
+partition is proved by that source command's own group, bridge, attempt, handoff, prepared, acquired,
+registration, install and ACK joins, and that join does not consult custody. A different control home is
+proved inside this same mapping step by two native commands. The control-home command inserts
+`identity_epoch_mapping_point_custody` only from the current group, bridge, acquired attempt, handoff
+element, prepared and acquired admission commits, and the installed original's registration commit, copying
+enrollment, source revision, source epoch, export, registration and install pins. After that command commits
+and releases its connection, a released read re-qualifies the committed row and its mapping commit. The
+source-home command then deposits a second row for the same job and original: it copies those committed
+pins, keeps the control owner epoch distinct from the source owner epoch, and proves the local install and
+ACK commits. Begin and complete consume only that local deposit and its own mapping commit, with the local
+effect, fence, gate, install and ACK joins. The source transaction never reads foreign control rows, and no
+caller receipt or proof document is accepted. A missing, moved, revoked or changed proof refuses with no
+source effect. An active closure is eligible only without an outstanding successor or export obligation. An
+incompatible or missing binding refuses without changing custody.
 
 Point withdrawal changes only that mapping's closure state and current-command mutation XID through the
 existing fields. It preserves the Original rows, group generation, version, membership and counters. It neither
@@ -1674,7 +1684,9 @@ claims a foreign successor/claim nor clears one, and it supplies no participant 
 current command's mutation XID binds the actual Source write; another job, unit, command or stale source image
 cannot consume it. Same-unit replay uses its actual retained native effect rather than withdrawing again.
 A later same-job unit of that original re-binds the withdrawn point's mutation XID in its own command before
-Source SQL or mapping publication writes, then retires it again before commit.
+Source SQL or mapping publication writes. That re-bind reuses the committed exact-key custody row whose
+native pins still match, including once the source phase has withdrawn the point, then retires the binding
+again before commit.
 
 The existing mapping publication/source handoff must retire only that distinguishable same-job point binding
 and leave the Source withdrawn for existing output-closure enrollment. It does not manufacture an active ACK,
@@ -1684,7 +1696,7 @@ enrollment handoff must consume the withdrawn point rather than strand it behind
 Source image capture follows the final Source writes and includes the
 withdrawn logical state. Pre-export exclusion may recognize a withdrawn point only through that exact current
 same-job image/frame and mutation binding; the ordinary reservation/foreign-claim refusal remains in force.
-No new job, generation, scope authority, guard exception, retry or deadline is introduced.
+No new job, queue, generation, scope authority, guard exception, retry or deadline is introduced.
 
 Decision: bootstrap excludes an unchanged native birth only through the same revision-1, self-mapping,
 self-gate, native transaction and XID proof used by installation, with its actual settled source head.

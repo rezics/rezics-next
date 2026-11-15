@@ -272,6 +272,7 @@ async function minimizePayload(
       'identity_epoch_mapping_fence',
       'identity_epoch_mapping_withdrawal',
       'identity_epoch_mapping_undo',
+      'identity_epoch_mapping_point_custody',
     ].includes(store)
   )
     return { defer: true, rawKeys: 0, bytes: 0 };
