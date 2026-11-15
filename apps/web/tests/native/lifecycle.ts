@@ -241,15 +241,22 @@ export class NativeTestLifecycle {
     const reserved = Math.min(cleanupReserveMs, Math.floor(timeoutMs / 3));
     const operationDeadlineMs = Math.max(1, timeoutMs - reserved);
     let timeout: ReturnType<typeof setTimeout> | undefined;
+    let deadlineError: NativeLifecycleTimeoutError | undefined;
+    let deadlineCleanup: Promise<void> | undefined;
     let rejectDeadline!: (error: Error) => void;
     const expired = new Promise<never>((_, reject) => (rejectDeadline = reject));
     const task = activeLifecycle.run(this, () => Promise.resolve().then(() => operation(this.signal)));
     task.catch(() => {});
     timeout = setTimeout(() => {
       const error = new NativeLifecycleTimeoutError(phase, timeoutMs);
-      void this.close(error)
-        .catch(() => {})
-        .finally(() => {
+      // Cleanup can reject or resolve the operation by stopping its resources.
+      // Latch expiry before any abort listener or resource close can settle it.
+      deadlineError = error;
+      deadlineCleanup = this.close(error)
+        .catch((cleanup: unknown) => {
+          error.cleanupFailures.push(cleanup instanceof Error ? cleanup.name : typeof cleanup);
+        })
+        .then(() => {
           if (error.cleanupFailures.length)
             error.message += `; bounded cleanup diagnostics: ${error.cleanupFailures.join(', ').slice(0, 500)}`;
           rejectDeadline(error);
@@ -257,13 +264,25 @@ export class NativeTestLifecycle {
     }, operationDeadlineMs);
 
     try {
-      const value = await Promise.race([task, expired]);
+      const value = await Promise.race([task, expired]).finally(() => {
+        // Reserved cleanup belongs to the settled operation, not a new timeout.
+        if (timeout) clearTimeout(timeout);
+        timeout = undefined;
+      });
+      if (deadlineError) {
+        await deadlineCleanup;
+        throw deadlineError;
+      }
       if (closeOnSuccess) await this.close();
       return value;
     } catch (error) {
-      await this.close(error);
-      if (this.parent) await this.parent.close(error);
-      throw error;
+      const cause = deadlineError ?? error;
+      if (deadlineError) await deadlineCleanup;
+      // The first operation failure (or latched expiry) remains authoritative
+      // even when resource or parent cleanup also fails.
+      await this.close(cause).catch(() => {});
+      if (this.parent) await this.parent.close(cause).catch(() => {});
+      throw cause;
     } finally {
       if (timeout) clearTimeout(timeout);
     }
