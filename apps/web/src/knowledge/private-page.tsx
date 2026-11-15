@@ -1881,7 +1881,7 @@ function DocumentDraftFields({
           }}
           label={m.knowledge_private_body({}, options)}
           labels={labels}
-          upload={media.upload}
+          {...(media.upload ? { upload: media.upload } : {})}
           renderImage={renderImage}
           onUploadState={(state, _count, attachments) => {
             imagePending.current = state === 'pending' || (attachments ?? 0) > 0;

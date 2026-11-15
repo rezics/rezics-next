@@ -9,6 +9,7 @@ import {
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { Editor } from '@tiptap/core';
 import { useCallback, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import { RichTextEditor } from './rich-text-editor.tsx';
 import { DocumentBody } from './document-body.tsx';
@@ -242,7 +243,7 @@ export const MediaVisitRetirement: Story = {
     const staleApply = dialog.getByRole('button', { name: 'Apply' });
     const editor = (textbox as HTMLElement & { editor: Editor }).editor;
     const generation = editorMediaRuntime(editor).generation;
-    retirement.controls.retire();
+    flushSync(() => retirement.controls.retire());
     await waitFor(() => expect(editorMediaRuntime(editor).generation).toBeGreaterThan(generation));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Image properties' })).toBeNull());
     staleApply.click();

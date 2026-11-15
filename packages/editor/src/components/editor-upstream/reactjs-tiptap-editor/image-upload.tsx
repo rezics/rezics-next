@@ -57,7 +57,7 @@ export function ImageUploadDialog({
         }}
       >
         <Field>
-          <FieldLabel htmlFor={`${id}-file-button`}>{labels.uploadFile}</FieldLabel>
+          <FieldLabel htmlFor={`${id}-file`}>{labels.uploadFile}</FieldLabel>
           <Button
             id={`${id}-file-button`}
             type="button"
@@ -71,6 +71,7 @@ export function ImageUploadDialog({
             {labels.uploadFile}
           </Button>
           <input
+            id={`${id}-file`}
             ref={fileInput}
             hidden
             type="file"

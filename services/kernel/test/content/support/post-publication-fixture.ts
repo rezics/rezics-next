@@ -1,4 +1,6 @@
 import { expect } from 'bun:test';
+import { threadTarget } from '../../../src/content/commands.ts';
+import { routeOf } from '../../../src/route/route.ts';
 import { fromPlainText, normalizeDocument } from '@rezics/document';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
@@ -74,8 +76,86 @@ export async function postPublicationFixture() {
       value: (await response.json()) as Record<string, any>,
     };
   }
+  let probedAppliedThreadFailure = false;
   async function command(path: string, body: unknown, status = 201, method = 'POST', head?: string) {
-    const result = await call(method, path, body, head === undefined ? {} : { head });
+    const key = crypto.randomUUID();
+    const result = await call(method, path, body, { key, ...(head === undefined ? {} : { head }) });
+    if (
+      !probedAppliedThreadFailure &&
+      method === 'POST' &&
+      path === '/v1/threads' &&
+      result.status === 404 &&
+      result.value.effect_status === 'applied'
+    ) {
+      probedAppliedThreadFailure = true;
+      try {
+        const target = threadTarget(system.routeKey, author.actor.accountId, key);
+        const stored = (
+          await pool.query<{
+            thread_id: string;
+            first_post_id: string | null;
+            board_id: string;
+            visibility: string;
+            availability: string;
+          }>({
+            text: `SELECT thread_id,first_post_id,board_id,visibility,availability
+                 FROM content.thread WHERE route=$1 AND thread_id=$2`,
+            values: [target.route, target.id],
+            query_timeout: 5000,
+          })
+        ).rows;
+        const boardId =
+          stored[0]?.board_id ??
+          (body && typeof body === 'object' && 'boardId' in body && typeof body.boardId === 'string'
+            ? body.boardId
+            : null);
+        const boards = boardId
+          ? (
+              await pool.query<{ realm_id: string | null }>({
+                text: 'SELECT realm_id FROM content.board WHERE route=$1 AND board_id=$2',
+                values: [routeOf(boardId), boardId],
+                query_timeout: 5000,
+              })
+            ).rows
+          : [];
+        const paths: { kind: string; path: string }[] = [{ kind: 'thread', path: `/v1/threads/${target.id}` }];
+        if (stored[0]?.first_post_id)
+          paths.push({ kind: 'post', path: `/v1/threads/${target.id}/posts/${stored[0].first_post_id}` });
+        if (boardId) paths.push({ kind: 'board', path: `/v1/boards/${boardId}` });
+        if (boards[0]?.realm_id) paths.push({ kind: 'realm', path: `/v1/realms/${boards[0].realm_id}` });
+        const reads = [];
+        for (const candidate of paths) {
+          const read = await call('GET', candidate.path);
+          reads.push({
+            kind: candidate.kind,
+            status: read.status,
+            code: typeof read.value.code === 'string' ? read.value.code : null,
+            requestId: typeof read.value.request_id === 'string' ? read.value.request_id : null,
+          });
+        }
+        console.info(
+          'post-create-disclosure-probe',
+          JSON.stringify({
+            fixture: 'publication',
+            originalStatus: result.status,
+            originalRequestId: result.value.request_id,
+            target,
+            stored,
+            boardId,
+            realmId: boards[0]?.realm_id ?? null,
+            reads,
+          }),
+        );
+      } catch (error) {
+        console.info(
+          'post-create-disclosure-probe',
+          JSON.stringify({
+            fixture: 'publication',
+            unavailable: error instanceof Error ? error.message.slice(0, 300) : 'unknown probe failure',
+          }),
+        );
+      }
+    }
     expect(result.status, JSON.stringify(result.value)).toBe(status);
     return result.value;
   }
