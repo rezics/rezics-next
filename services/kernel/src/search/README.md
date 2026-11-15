@@ -2209,16 +2209,18 @@ metadata update. Existing generation allocation, live-three-generation quota and
 by the native generation implementations; this port neither allocates a parallel registry nor launches a worker.
 Discovery allocation obtains the historical high water with the primary key's descending full-key LIMIT 1 and the live set through `discovery_generation_live` with LIMIT 4; a fourth live row or unsafe integer exhaustion is unavailable before inserts.
 
-The Source binding/key-page modules publish the selected owner declarations and retain their existing
-unavailable adapters. The delivered ordinary writer retains its real native admission, dispatch, uncertainty
-and settlement implementation. Publication extends the same admission gate: a durable global target fence
-blocks new enrollment, and one bounded retained frontier visits all home-local writer copies, cancelling
-only undispatched enrollment. Dispatched uncertainty remains retained. Generation publication still requires its separate owner receiving protocol. For erasure, the same gate
-resolves the actual retained physical-home job, checks each home for writer and retained-copy custody, and
-consumes the native Source all-home terminal proof before returning drained or held. Native copy enrollment
-takes the same admission lock and refuses creation while this fence is held. Dispatched uncertainty remains
-draining; neither an elapsed deadline nor an ordinary writer scan supplies missing Source proof. No native or
-public-runtime acceptance pass is inferred from compilation.
+The ordinary writer owns native admission, dispatch, uncertainty and settlement. Generation publication and
+erasure share one target fence. A registration replay may confirm the exact stored definition and incarnation while
+the fence is held. Creating registrations, observations, prepared rows, segments, reader references or new writer
+custody requires open admission. Writer commands lock the target revision row in addition to the advisory lock so a
+Serializable snapshot taken before a committed fence transition retries before it can admit a writer.
+
+The drain seeks the next occupied home through target-leading writer and registration-target indexes. A held fence
+prevents new occupied homes, and the retained fence revision guards every advance. Within an occupied home each
+step examines a bounded writer page and its retained-copy custody. It cancels undispatched enrollment and waits
+for dispatched uncertainty and remaining readers. Publication still requires its original Semantic completion.
+Erasure resolves its own retained physical-home job and independent all-home terminal proof. An elapsed deadline
+cannot satisfy either requirement.
 
 Decision: Search accepts generation-publication completion only from Semantic's delivered original native
 Source completion for the persisted job and cut. Consumer checkpoints, counts, Account-erasure barriers and
@@ -2241,8 +2243,10 @@ Cost: pages admit 50 native inputs, preserve the lower owner 100/256-key limits 
 native generation preparation/repair shares one maintenance meter whose point and row multipliers apply to
 examined input keys, as in Source's maintenance-step bound, rather than serving candidates. Serving retains
 its candidate-based bound. Both retain the 1000-input and 4 MiB ceilings without resetting between owners.
-Steps retain a scalar frontier rather than rechecking every partition in one request. Source enumeration runs
-only in generation maintenance. Publication adopts an unfiltered full-population definition; a narrowed
+Steps retain a scalar frontier. Subject reconciliation validates up to 256 saved native home heads in one
+statement snapshot per step, and mixed discovery also checks its Account-owner witnesses. Durable progress dispatches
+the next preparation step immediately. A step waiting for a dependency or in-flight writer backs off. Source
+enumeration runs only in generation maintenance. Publication adopts an unfiltered full-population definition; a narrowed
 query observation cannot provide generation-wide Source coverage. Expired enumeration PITs restart their finite
 engine pass without reusing an old frontier. New native outcomes cover incomplete population/barrier refusal, physical
 recreation and lost alias response recovery; existing generation growth bounds remain applicable.

@@ -758,12 +758,14 @@ type NativeGenerationInput = Readonly<{
   capture: PublicFilterConsumerCaptureInput;
   observation?: string;
 }>;
+type NativeGenerationOutcome = (NativePublicFilterPublicationCompletion | PublicFilterConsumerUnavailable) &
+  Readonly<{ advanced?: boolean }>;
 const generationSources = new WeakMap<
   PublicDiscoveryConsumerOperations,
   (
     input: NativeGenerationInput,
     context: PublicFilterConsumerContext,
-  ) => Promise<NativePublicFilterPublicationCompletion | PublicFilterConsumerUnavailable>
+  ) => Promise<NativeGenerationOutcome>
 >();
 
 /** Advance the existing native preparation/repair owner; this grants no serving authority. */
@@ -1497,6 +1499,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     q: PublicFilterQueriedObservation,
     m: Meter,
     context: PublicFilterConsumerContext,
+    settledPublication = false,
   ): Promise<boolean> {
     if (q.snapshot.kind !== 'prepared') return true;
     if (q.snapshot.build !== work.bootstrap.id) throw new ConsumerFailure('observation_lost');
@@ -1511,6 +1514,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     // In-flight observations from the array-backed generation remain readable
     // under their original custody reader and erasure contract.
     if (frontier.state === 'legacy') return true;
+    // A publication restart may revisit the original proof after its payload started
+    // draining. The verified Source tuple is reusable, and this build stays unavailable to readers.
+    if (settledPublication && frontier.state === 'erasing') return true;
     if (frontier.state === 'complete') return frontier.rawExhausted;
     if (frontier.state !== 'building' || !frontier.rawExhausted) return false;
     const completed = m.take(
@@ -2958,15 +2964,16 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       m.add(original.cost);
       if ('publication' in original) {
         if (original.status === 'pending') {
-          await repairStep(
+          const repair = await repairStep(
             { consumer: input.consumer, job: original.publication.queried.snapshot.observation },
             context,
             m,
           );
+          return { ...original, advanced: repair.status === 'progress' || repair.status === 'settled', cost: m.cost };
         } else if (original.publication.queried.snapshot.kind === 'prepared') {
           const q = original.publication.queried;
           const loaded = await load({ consumer: input.consumer, job: q.snapshot.observation }, m);
-          if (!(await finishPreparationBuild(loaded.work, q, m, context))) return m.unavailable('source_pending');
+          if (!(await finishPreparationBuild(loaded.work, q, m, context, true))) return m.unavailable('source_pending');
         }
         return { ...original, cost: m.cost };
       }
@@ -2982,7 +2989,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       );
       if (!q || q.snapshot.kind !== 'prepared' || preparing.rows[0]!.consumer_work) {
         const capture = await capturePlan(input.capture, 'prepared', context, undefined, input.consumer, m);
-        if (capture.status !== 'captured') return m.unavailable('source_pending');
+        if (capture.status !== 'captured')
+          return { ...m.unavailable('source_pending'), advanced: capture.status === 'preparing' };
         q = capture.queried;
       }
       const job = { consumer: input.consumer, job: q.snapshot.observation };
@@ -3038,7 +3046,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       );
       m.add(completion.cost);
       if (completion.status === 'pending') {
-        await repairStep(job, context, m);
+        const repair = await repairStep(job, context, m);
+        return { ...completion, advanced: repair.status === 'progress' || repair.status === 'settled', cost: m.cost };
       }
       if (completion.status === 'complete' && !(await finishPreparationBuild(work, q, m, context)))
         return m.unavailable('source_pending');
