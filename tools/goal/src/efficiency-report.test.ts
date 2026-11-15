@@ -20,6 +20,7 @@ import { checkResumeOperationId, recordCheckResumeReady, recordFlow, type FlowEv
 import { SqliteLandingQueue } from './land.ts';
 import { WorkerStore, workerRecordEndedAtExpression } from './store.ts';
 import { SqliteManagerInbox } from './inbox.ts';
+import { nativeUnitMigrations } from './native-units.ts';
 import { temporaryDirectory } from './test-support.ts';
 
 function fixture() {
@@ -99,6 +100,45 @@ function runCaptureChild(databasePath: string, productLines: number, sourceRevis
     );
   });
 }
+
+test('scheduled native reports omit the legacy lifetime census while manual reports retain it', async () => {
+  const h = fixture();
+  try {
+    const stages: string[] = [];
+    const options = {
+      bucket: '2026-10-31T01:00:00.000Z',
+      now: new Date('2026-10-31T02:00:00.000Z'),
+      observeStage: (stage: string, event: string) => {
+        if (event === 'start') stages.push(stage);
+      },
+    };
+    await renderHourlyEfficiencyReport(h.db, { ...options, view: 'native-scheduled' });
+    expect(stages).toContain('lifecycle');
+    migrate(h.db, nativeUnitMigrations);
+    const unit = {
+      id: 'native',
+      worktree: h.directory.path,
+      codexHome: h.directory.path,
+      threadId: 'thread',
+      goalId: 'goal',
+    };
+    h.db
+      .query('INSERT INTO native_execution_units VALUES (?, ?, ?, ?, ?)')
+      .run(unit.id, unit.threadId, '%1', unit.worktree, JSON.stringify(unit));
+    stages.length = 0;
+    const scheduled = await renderHourlyEfficiencyReport(h.db, { ...options, view: 'native-scheduled' });
+    expect(stages).not.toContain('lifecycle');
+    expect(stages).toContain('native');
+    expect(scheduled).toContain('Legacy managed lifecycle census: unmeasured');
+    expect(scheduled).toContain('unknown (lifetime census omitted)');
+    stages.length = 0;
+    const manual = await renderHourlyEfficiencyReport(h.db, options);
+    expect(stages).toContain('lifecycle');
+    expect(manual).not.toContain('lifetime census omitted');
+  } finally {
+    h.close();
+  }
+});
 
 test('hourly report uses timestamped outcomes and leaves missing lifecycle evidence unknown', async () => {
   const h = fixture();
