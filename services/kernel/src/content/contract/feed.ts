@@ -310,9 +310,22 @@ export type FeedQuestionSession = Readonly<{
   finish(): Promise<void>;
 }>;
 
+export type FeedViewerFollows =
+  | Readonly<{ state: 'unavailable' }>
+  | Readonly<{
+      state: 'current';
+      rows: readonly Readonly<{
+        targetId: string;
+        targetType: 'collection' | 'space';
+        following: boolean;
+        actions: Readonly<{ follow: boolean; unfollow: boolean }>;
+      }>[];
+    }>;
+
 export type FeedPage = Readonly<{
   feedItems: readonly FeedItem[];
   viewerPersonalActions?: ViewerPersonalActionsPage;
+  viewerFollows?: FeedViewerFollows;
   next: string | null;
   asOf: string;
   reactionsAsOf?: FeedReactionFreshness | null;
@@ -473,6 +486,11 @@ export type FeedFinishPort = Readonly<{
   ): Promise<{ items: FeedItem[]; finish?(items: FeedItem[]): Promise<FeedItem[]>; hasTargets?: boolean }>;
   subjectReactions(items: FeedItem[], actor: FeedActor, deadline: number): Promise<FeedFinishResult>;
   followSupport(items: FeedItem[], actor: FeedActor, deadline: number): Promise<FeedFinishResult>;
+  viewerFollows?(
+    items: readonly FeedItem[],
+    actor: FeedAccountActor,
+    deadline: number,
+  ): Promise<FeedViewerFollows | undefined>;
   personalActions(
     items: FeedItem[],
     actor: FeedActor,

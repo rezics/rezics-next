@@ -29,6 +29,8 @@ export type FollowControlProps = {
   onChange?: (following: boolean) => void;
   onRemovalUnsettledChange?: (unsettled: boolean) => void;
   onRetry?: () => void;
+  /** A lost reply can leave a previously displayed edge out of date. Preserve the command for exact retry. */
+  unavailableOnUnknownWrite?: boolean;
   /** Explicit, permitted own-edge or current-list review; never a target read or a write. */
   onReview?: () => Promise<FollowState | null>;
   /** Routed controls bind callbacks to actual mounted viewer and directional write admission. */
@@ -122,6 +124,7 @@ function FollowControlState({
   onChange,
   onRemovalUnsettledChange,
   onRetry,
+  unavailableOnUnknownWrite,
   onReview,
   isCurrent,
   readLifetime,
@@ -304,6 +307,10 @@ function FollowControlState({
       } else {
         conflict.current = result.reason === 'conflict';
         if (conflict.current) intent.markConflicted(input);
+        if (unavailableOnUnknownWrite && result.reason === 'unavailable') {
+          setCurrent({ state: 'unavailable' });
+          setRemoved(false);
+        }
         setFailure(result.reason);
       }
     } finally {
@@ -411,7 +418,10 @@ function FollowControlState({
             </>
           ) : null}
         </>
-      ) : onRetry && current.state !== 'ready' && current.state !== 'pending' ? (
+      ) : onRetry &&
+        !(unavailableOnUnknownWrite && intent.current) &&
+        current.state !== 'ready' &&
+        current.state !== 'pending' ? (
         <Button type="button" variant="ghost" disabled={pending} onClick={onRetry}>
           {m.library_follow_retry({}, options)}
         </Button>

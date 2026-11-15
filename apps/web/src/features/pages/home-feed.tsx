@@ -8,6 +8,7 @@ import { homeFeedRecoveryMessages, type FeedEmptyContext } from '../feed/feed-em
 import { homeFeedItemPresentation } from '../feed/home-feed-item';
 import { HomeFeedActions } from '../feed/action-bar';
 import { HomeWorkLibraryProvider } from '../feed/home-work-library/view';
+import { HomeOwnerFollows } from '../feed/home-public-owner/follows';
 import type {
   HomeWorkLibraryLease,
   HomeWorkLibraryProjection,
@@ -691,6 +692,59 @@ export function HomeFeedConsumer({
   };
   // The installed page supplies personal facts for its own rows; the provider maps them under this window's lease.
   const personal = snapshot.result.state === 'ready' ? snapshot.result.page.viewerPersonalActions : undefined;
+  const feed = (
+    <HomeFeed
+      result={snapshot.result}
+      catalogue={catalogue}
+      verification={verification}
+      locale={locale}
+      signedIn={signedIn}
+      stream={snapshot.input.stream}
+      busy={snapshot.busy}
+      input={snapshot.input}
+      filterSelections={filterSelections}
+      onClearFilters={clearFilters}
+      suppressResultMessage={filterOwnsResultMessage}
+      spaceControl={
+        <HomeFeedSpaceControl selection={spaces} snapshot={spaceSnapshot} locale={locale} origin={origin} />
+      }
+      questionControl={
+        <HomeFeedQuestionControl
+          choices={questions}
+          snapshot={questionSnapshot}
+          locale={locale}
+          selectedId={snapshot.input.ratingQuestionId}
+          onRestore={() => void restoreSelection(window.snapshot().input)}
+        />
+      }
+      kindControl={
+        <HomeFeedKindControl
+          choices={choices}
+          snapshot={kinds}
+          locale={locale}
+          onSelect={(choice) => {
+            choices.select(choice);
+            const { cursor: _cursor, kind: _kind, ...selection } = snapshot.input;
+            loadSelection({ ...selection, ...(choice ? { kind: choice.id } : {}) });
+          }}
+        />
+      }
+      onSelect={(stream) => {
+        const { cursor: _cursor, ...selection } = snapshot.input;
+        loadSelection({ ...selection, stream });
+      }}
+      onRetry={retry}
+      onRestart={() => {
+        const { cursor: _cursor, ...selection } = snapshot.input;
+        loadSelection(selection, 'replace');
+      }}
+      onNext={(cursor) => {
+        const input = { ...snapshot.input, cursor };
+        saveNavigation(input, 'push');
+        if (!loadRefusal(snapshot.input)) void window.load(input);
+      }}
+    />
+  );
   return (
     <HomeWorkLibraryProvider
       expectedScope={homeWorkLibraryScope}
@@ -700,57 +754,21 @@ export function HomeFeedConsumer({
       {...(personal ? { personal } : {})}
       feedLease={feedLease}
     >
-      <HomeFeed
-        result={snapshot.result}
-        catalogue={catalogue}
-        verification={verification}
-        locale={locale}
-        signedIn={signedIn}
-        stream={snapshot.input.stream}
-        busy={snapshot.busy}
-        input={snapshot.input}
-        filterSelections={filterSelections}
-        onClearFilters={clearFilters}
-        suppressResultMessage={filterOwnsResultMessage}
-        spaceControl={
-          <HomeFeedSpaceControl selection={spaces} snapshot={spaceSnapshot} locale={locale} origin={origin} />
-        }
-        questionControl={
-          <HomeFeedQuestionControl
-            choices={questions}
-            snapshot={questionSnapshot}
-            locale={locale}
-            selectedId={snapshot.input.ratingQuestionId}
-            onRestore={() => void restoreSelection(window.snapshot().input)}
-          />
-        }
-        kindControl={
-          <HomeFeedKindControl
-            choices={choices}
-            snapshot={kinds}
-            locale={locale}
-            onSelect={(choice) => {
-              choices.select(choice);
-              const { cursor: _cursor, kind: _kind, ...selection } = snapshot.input;
-              loadSelection({ ...selection, ...(choice ? { kind: choice.id } : {}) });
-            }}
-          />
-        }
-        onSelect={(stream) => {
-          const { cursor: _cursor, ...selection } = snapshot.input;
-          loadSelection({ ...selection, stream });
-        }}
-        onRetry={retry}
-        onRestart={() => {
-          const { cursor: _cursor, ...selection } = snapshot.input;
-          loadSelection(selection, 'replace');
-        }}
-        onNext={(cursor) => {
-          const input = { ...snapshot.input, cursor };
-          saveNavigation(input, 'push');
-          if (!loadRefusal(snapshot.input)) void window.load(input);
-        }}
-      />
+      {signedIn && reader && credentialEpoch ? (
+        <HomeOwnerFollows
+          snapshot={snapshot}
+          reader={reader}
+          credentialEpoch={credentialEpoch}
+          locale={locale}
+          read={read}
+          retry={retry}
+          window={window}
+        >
+          {feed}
+        </HomeOwnerFollows>
+      ) : (
+        feed
+      )}
     </HomeWorkLibraryProvider>
   );
 }

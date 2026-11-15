@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useContext, type ReactNode } from 'react';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
@@ -8,6 +8,7 @@ import { homeCollectionMemberHref } from './member-destination';
 import { accountHref } from '../../../subject/subject-href';
 import type { FeedItem } from '../../pages/home-feed-read';
 import { homeFeedDestination, homeFeedRealmDestination, homeFeedTitle } from '../../pages/home-feed-destination';
+import { HomeOwnerFollowsContext } from './follows';
 
 type SpaceSummary = Extract<FeedItem['summary'], { address: string }>;
 type CollectionCard = Extract<FeedItem['summary'], { card: unknown }>['card'];
@@ -233,7 +234,7 @@ export function HomePublicOwnerContext({ item, locale }: { item: FeedItem; local
   );
 }
 
-/** Insertion seam in Home's existing action owner. Private actions await the native bounded projection. */
+/** Public navigation stays usable while the viewer's own follow state is unavailable. */
 export function HomePublicOwnerActions({
   item,
   locale,
@@ -247,6 +248,7 @@ export function HomePublicOwnerActions({
 }) {
   const options = { locale: locale as Locale };
   const href = homeFeedDestination(item, locale);
+  const renderFollow = useContext(HomeOwnerFollowsContext);
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-2" data-home-public-owner-actions>
       {href ? (
@@ -260,11 +262,13 @@ export function HomePublicOwnerActions({
           {m.home_card_open({ title: homeFeedTitle(item, locale) }, options)}
         </a>
       ) : null}
-      {signedIn ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {m.library_follow_unavailable({}, options)}
-        </p>
-      ) : null}
+      {signedIn
+        ? (renderFollow?.(item) ?? (
+            <p role="status" className="text-sm text-muted-foreground">
+              {m.library_follow_unavailable({}, options)}
+            </p>
+          ))
+        : null}
       {children}
     </div>
   );

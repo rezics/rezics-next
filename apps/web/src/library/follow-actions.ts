@@ -26,13 +26,22 @@ export const readCurrentFollowState = createServerFn({ method: 'GET' })
   });
 
 export const setFollow = createServerFn({ method: 'POST' })
-  .validator((input: { targetId: string; following: boolean; idempotencyKey: string }) => {
+  .validator((input: { targetId: string; following: boolean; idempotencyKey: string; expectedReader?: string }) => {
     targetId(input);
-    if (typeof input.following !== 'boolean' || typeof input.idempotencyKey !== 'string' || !validFollowInput(input))
+    if (
+      typeof input.following !== 'boolean' ||
+      typeof input.idempotencyKey !== 'string' ||
+      !validFollowInput(input) ||
+      (input.expectedReader !== undefined &&
+        (typeof input.expectedReader !== 'string' ||
+          input.expectedReader.length === 0 ||
+          input.expectedReader.length > 128))
+    )
       throw new Error('Invalid follow request');
-    return { targetId: input.targetId, following: input.following, idempotencyKey: input.idempotencyKey };
+    const { targetId: id, following, idempotencyKey, expectedReader } = input;
+    return { targetId: id, following, idempotencyKey, expectedReader };
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    return writeFollowRecord(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    return writeFollowRecord(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, data.expectedReader);
   });

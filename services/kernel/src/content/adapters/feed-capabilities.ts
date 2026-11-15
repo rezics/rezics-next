@@ -7,6 +7,7 @@ import type { AccountDiscoverySummary, DiscoverySearch } from '../../search/inde
 import type { SearchService } from '../../search/service-scope.ts';
 import type { CollectionResourceView, ViewerPersonalActionsReader } from '../../library/adapters/index.ts';
 import type { ViewerPersonalActionsPage } from '../../library/contract/index.ts';
+import type { readFollowDiscovery } from '../../library/follow-discovery.ts';
 import type { ReadingPageViewerActionRuntime } from '../reading-page.ts';
 import type { FeedActivityStore, FeedActivityTarget } from '../feed-activity.ts';
 import type {
@@ -63,6 +64,11 @@ export type FeedNativeSuppliers = Readonly<{
     query: { targets: readonly FeedActivityTarget[] },
     deadline: number,
   ): Promise<readonly { target: FeedActivityTarget; status: 'following' | 'not_following' | 'unavailable' }[]>;
+  readViewerFollows?(
+    actor: Actor,
+    targets: Parameters<typeof readFollowDiscovery>[2],
+    deadline: number,
+  ): ReturnType<typeof readFollowDiscovery>;
   readCollection(actor: Actor, id: string, deadline: number): Promise<CollectionResourceView>;
   readPublication(
     realmId: string,
