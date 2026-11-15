@@ -4,6 +4,7 @@ import { tanstackStart } from '@tanstack/react-start/plugin/vite';
 import { cloudflare, getLocalWorkerdCompatibilityDate } from '@cloudflare/vite-plugin';
 import tailwindcss from '@tailwindcss/vite';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
+import { messageImports } from '../web/scripts/message-imports.ts';
 import { viteNonceMarker } from './src/security/headers.ts';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -36,7 +37,8 @@ export default defineConfig((context) => {
       __AUTH_ORIGIN__: JSON.stringify(command === 'serve' ? (process.env.AUTH_ORIGIN ?? '') : ''),
     },
     plugins: [
-      paraglideVitePlugin({ project: './project.inlang' }),
+      paraglideVitePlugin({ project: './project.inlang', outputStructure: 'message-modules' }),
+      messageImports(appRoot),
       tanstackStart({ router: { basepath: '/' } }),
       react(),
       tailwindcss(),
