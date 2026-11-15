@@ -6,7 +6,7 @@ import {
   knowledgeMediaSource,
   type KnowledgeMediaSelection,
 } from '@rezics/definitions/knowledge-media';
-import { runCommand } from '../../src/command/command.ts';
+import { noEffect, runCommand } from '../../src/command/command.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { readErasureStatus } from '../../src/access/erasure.ts';
 import {
@@ -307,7 +307,7 @@ test('account disposition retains all selected revisions and media without priva
               .digest(),
           },
         },
-        async (tx) => ({ value: await advanceKnowledgeAccountErasure(tx, accountId, cursor, 4), events: [] }),
+        async (tx) => noEffect(await advanceKnowledgeAccountErasure(tx, accountId, cursor, 4)),
       );
     const firstPage = await page(null, step++);
     expect((await page(null, 0)).value).toEqual(firstPage.value);
