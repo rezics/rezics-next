@@ -26,7 +26,6 @@ import { cn } from '@rezics/ui/utils';
 import {
   ContentSection,
   ContentSectionBody,
-  ContentSectionDescription,
   ContentSectionHeader,
   ContentSectionTitle,
 } from '@rezics/ui/content-section';
@@ -179,7 +178,6 @@ function SettingsFailure({
         <ContentSectionTitle>
           <h2 id="settings-reading-heading">{m.settings_reading_heading()}</h2>
         </ContentSectionTitle>
-        <ContentSectionDescription>{m.settings_reading_text()}</ContentSectionDescription>
       </ContentSectionHeader>
       <ContentSectionBody>
         <Alert

@@ -585,7 +585,6 @@ export function CollectionPrivacyView({
           <ContentSectionDescription>
             {m.settings_privacy_text()} {m.settings_privacy_members()}
           </ContentSectionDescription>
-          <ContentSectionDescription>{m.settings_automatic_save_help()}</ContentSectionDescription>
         </ContentSectionHeader>
         <ContentSectionBody className="min-w-0 space-y-4">
           {state.loading ? <p role="status">{m.settings_privacy_loading()}</p> : null}

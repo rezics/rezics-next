@@ -124,7 +124,6 @@ function ReceivedCopy({
         <h3 id={heading} lang={title?.lang} className="h-auto font-semibold [overflow-wrap:anywhere]">
           {title?.text ?? m.library_subject_unavailable()}
         </h3>
-        <p className="text-sm text-muted-foreground">{m.library_copy_compare_record_hint()}</p>
       </header>
       <dl className="min-w-0">
         <Fact label={m.library_copy_compare_edition()} different={false} compared={false}>
@@ -226,8 +225,7 @@ function ReceivedCopy({
               <summary className="cursor-pointer content-center rounded-md py-2 text-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                 {m.library_copy_compare_identifiers()}
               </summary>
-              <p className="py-2 text-xs text-muted-foreground">{m.library_copy_compare_identifiers_hint()}</p>
-              <dl className="space-y-2 text-sm">
+              <dl className="space-y-2 pt-2 text-sm">
                 <div>
                   <dt className="font-medium">{m.library_copy_compare_id()}</dt>
                   <dd className="break-all">
@@ -437,7 +435,6 @@ export function CopyInventoryReview({
       ) : null}
       {selection.count === 4 ? <p className="text-sm">{m.library_copy_compare_limit()}</p> : null}
       <div id={`${id}-body`} hidden={!selection.open} className="min-w-0 space-y-4">
-        <p className="text-sm text-muted-foreground">{m.library_copy_compare_reading_hint()}</p>
         {editorOpen ? (
           <div className="space-y-2 rounded-lg border border-border p-3 text-sm">
             <p>{m.library_copy_compare_editor_open()}</p>
@@ -469,7 +466,6 @@ export function CopyInventoryReview({
             ))}
           </div>
         )}
-        <p className="text-sm text-muted-foreground">{m.library_copy_compare_edit_hint()}</p>
       </div>
     </section>
   );

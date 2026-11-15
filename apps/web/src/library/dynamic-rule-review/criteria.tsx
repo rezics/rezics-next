@@ -385,7 +385,6 @@ export const DynamicRuleReview = memo(function DynamicRuleReview({
         <h2 id="rule-review-heading" className="text-lg font-semibold">
           {m.library_rule_review_heading()}
         </h2>
-        <p className="max-w-prose text-sm text-muted-foreground">{m.library_rule_review_intro()}</p>
         <p role="status" className="font-medium">
           {stageMessage(stage)}
         </p>

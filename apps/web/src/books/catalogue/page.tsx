@@ -115,7 +115,6 @@ export function BookCataloguePage({ locale, choices }: { locale: string; choices
     <section className="mx-auto max-w-3xl space-y-8" data-slot="book-catalogue">
       <header className="space-y-3">
         <PageHeading>{m.books_catalogue_title({}, options)}</PageHeading>
-        <p className="max-w-prose text-muted-foreground">{m.books_catalogue_intro({}, options)}</p>
       </header>
       {ready.length > 0 && <BookSearch key={ready.map(({ type }) => type).join('|')} locale={locale} choices={ready} />}
       <ul className="min-w-0 divide-y" data-slot="book-catalogue-types">
@@ -129,7 +128,6 @@ export function BookCataloguePage({ locale, choices }: { locale: string; choices
         </a>
       )}
       <div className="space-y-3 border-t pt-8" data-slot="book-catalogue-personal">
-        <p className="max-w-prose text-sm text-muted-foreground">{m.books_catalogue_return({}, options)}</p>
         <ul className="flex min-w-0 flex-col">
           {ready.map((choice) => (
             <li key={choice.type} className="min-w-0">

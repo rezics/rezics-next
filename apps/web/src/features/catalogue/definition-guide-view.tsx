@@ -497,7 +497,7 @@ function ComparisonGuide({
           {m.guide_retry({}, o)}
         </Button>
       )}
-      <p className="text-sm text-muted-foreground">{m.guide_native({}, o)}</p>
+
     </section>
   );
 }
@@ -1046,7 +1046,6 @@ function ActiveGuide({
               )}
             </>
           )}
-          <p className="text-sm text-muted-foreground">{m.guide_native({}, o)}</p>
         </section>
       )}
     </section>
@@ -1323,7 +1322,6 @@ export function DefinitionGuideContent({
                   )}
                 </>
               )}
-              <p className="text-sm text-muted-foreground">{m.guide_native({}, o)}</p>
             </section>
           )}
         </>

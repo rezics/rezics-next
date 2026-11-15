@@ -138,7 +138,7 @@ test('human settings and ordered inherit/suppress facts lead while exact referen
   try {
     const text = visibleText(panel.host);
     expect(text).toContain(m.ctxw_settings({}, o));
-    expect(text).toContain(m.ctxw_settings_help({}, o));
+    expect(text).not.toContain(m.ctxw_settings_help({}, o));
     expect(text).toContain(m.ctx_reader_settings_selected({}, o));
     expect(text).not.toContain('editorial');
     expect(text).not.toContain('released-settings-digest');

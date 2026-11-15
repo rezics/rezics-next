@@ -152,7 +152,6 @@ export function WritingInspectionOutline({
             {m.thread_inspection_issues_omitted({ count: projection.issueTotal - projection.issues.length })}
           </p>
         ) : null}
-        <p className="text-sm text-muted-foreground">{m.thread_inspection_admission()}</p>
       </section>
     </div>
   );

@@ -317,7 +317,6 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload, search = 
                   </dd>
                 </div>
               </dl>
-              <p className="text-sm text-muted-foreground">{m.manga_terms_help({}, o)}</p>
             </details>
           </header>
           <p className="text-muted-foreground">{m.facts_separate_results({}, o)}</p>

@@ -230,7 +230,8 @@ test('Saved publication with an unavailable read recovers through Refresh withou
   await act(async () => user.click(canvas.getByRole('button', { name: m.edition_publication_refresh() })));
   expect(canvas.queryByRole('alert')).toBeNull();
   const published = canvas.getByRole('status');
-  expect(published.textContent).toContain('Your edition is published.');
+  expect(published.textContent).toContain(m.edition_publication_published_heading());
+  expect(published.textContent).not.toContain(m.edition_publication_published_help());
   expect(published.textContent).toContain('夜の航路');
   const edition = fixture.controller.snapshot().edition!;
   const details = published.querySelector('details')!;

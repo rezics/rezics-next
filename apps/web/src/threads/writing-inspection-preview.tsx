@@ -59,8 +59,6 @@ export function WritingInspectionSize({ summary }: { summary: InspectionSummary 
           <dd>{summary.links}</dd>
         </div>
       </dl>
-      <p className="text-sm text-muted-foreground">{m.thread_inspection_units()}</p>
-      <p className="text-sm text-muted-foreground">{m.thread_inspection_request_unknown()}</p>
     </section>
   );
 }

@@ -96,7 +96,6 @@ export function CatalogueFileCreateFields({
       <ContentItemHeading level={2} className="font-sans text-lg font-semibold">
         {m.catalogue_file_create_facts({}, o)}
       </ContentItemHeading>
-      <p className="text-sm text-muted-foreground">{m.catalogue_file_create_grain_help({}, o)}</p>
       {grain === 'file' && <p>{m.catalogue_file_create_file_grain({}, o)}</p>}
       {grain === 'group' && <p>{m.catalogue_file_create_group_grain({}, o)}</p>}
       <p className="text-sm text-muted-foreground">{m.catalogue_file_create_identity({}, o)}</p>

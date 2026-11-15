@@ -102,7 +102,6 @@ export function ReleasedTypeChoices({
       ) : (
         <p className="text-sm text-muted-foreground">{m.collection_choice_no_released_types()}</p>
       )}
-      <p className="text-sm text-muted-foreground">{m.collection_choice_type_frame_help()}</p>
     </fieldset>
   );
 }

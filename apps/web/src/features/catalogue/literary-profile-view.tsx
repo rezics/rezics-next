@@ -1098,7 +1098,6 @@ function LiteraryCorrection({
                   </dd>
                 </div>
               </dl>
-              <p className="text-sm text-muted-foreground">{m.literary_terms_help({}, o)}</p>
             </details>
           </>
         )}

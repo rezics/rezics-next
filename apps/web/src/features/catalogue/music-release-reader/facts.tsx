@@ -407,7 +407,6 @@ export function MusicReleaseOccurrenceFacts({
           />
           <section className="min-w-0 space-y-3" aria-label={m.music_release_accepting_meaning({}, o)}>
             <h4 className="font-semibold">{m.music_release_accepting_meaning({}, o)}</h4>
-            <p className="text-sm text-muted-foreground">{m.music_release_accepting_scope({}, o)}</p>
             {historicalStatement(statement, page.digest) ? (
               <p role="status">{m.release_fidelity_historical({}, o)}</p>
             ) : null}

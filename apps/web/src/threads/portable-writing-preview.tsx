@@ -51,7 +51,6 @@ export function PortableWritingPreview({
         {m.thread_portable_preview()}
       </h3>
       <p className="text-sm text-muted-foreground">{m.thread_portable_format({ format, bytes: preview.inputBytes })}</p>
-      <p className="text-sm">{m.thread_portable_authority()}</p>
       <WritingRepairNotice repairs={preview.repairs} />
       <div className="min-w-0 max-h-96 overflow-auto rounded-lg bg-muted/40 p-3">
         <DocumentBody

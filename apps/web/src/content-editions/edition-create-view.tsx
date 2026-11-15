@@ -461,7 +461,6 @@ export function EditionPublication({
       <header className="space-y-3">
         <p className="text-sm font-medium text-muted-foreground">{m.edition_publication_eyebrow()}</p>
         <PageHeading>{m.edition_publication_heading()}</PageHeading>
-        <p className="max-w-prose text-sm text-muted-foreground">{m.edition_publication_intro()}</p>
       </header>
       {!edition && !state.intent && state.resumeEditionId === null && initialEditionId === undefined ? (
         <section className="space-y-4" aria-label={m.edition_publication_source_heading()}>
@@ -760,7 +759,6 @@ export function EditionPublication({
           <h2 ref={resultHeading} tabIndex={-1} className="text-lg font-semibold">
             {m.edition_publication_published_heading()}
           </h2>
-          <p className="text-sm">{m.edition_publication_published_help()}</p>
           <EditionIdentitySummary edition={edition} />
           <EditionTechnicalDetails edition={edition} />
           <div className="flex flex-wrap items-center gap-2">

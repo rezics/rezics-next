@@ -884,7 +884,6 @@ function GameCorrection({
               </dd>
             </div>
           </dl>
-          <p className="text-sm text-muted-foreground">{m.game_profile_terms_help({}, o)}</p>
         </details>
       )}
     </article>

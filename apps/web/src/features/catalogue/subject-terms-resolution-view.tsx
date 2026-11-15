@@ -37,8 +37,6 @@ export function TermsConflictResolution({
   omittedLanguages,
   removals,
   patch,
-  etag,
-  revision,
   reviewed,
   locale,
   fieldLabel,
@@ -55,8 +53,6 @@ export function TermsConflictResolution({
   omittedLanguages: readonly string[];
   removals: readonly { language: string; field: TermField }[];
   patch: TermsPatch;
-  etag: string;
-  revision: number;
   reviewed: boolean;
   locale: string;
   fieldLabel: (field: TermField) => string;
@@ -235,7 +231,6 @@ export function TermsConflictResolution({
           >
             {m.catalogue_terms_review_title({}, options)}
           </ContentItemHeading>
-          <p>{m.catalogue_terms_review_help({ revision: String(revision), etag }, options)}</p>
           <dl className="flex min-w-0 flex-col gap-2 text-sm">
             {termPatchRows(patch, fieldLabel, absent).map((row) => (
               <div key={row.key}>

@@ -84,7 +84,6 @@ export function BoardDirectory({ request, contribution, result, previous, onNavi
       <header className="min-w-0 space-y-3">
         <p className="text-sm font-medium text-muted-foreground">{m.board_directory_global()}</p>
         <PageHeading>{m.board_directory_heading()}</PageHeading>
-        <p className="max-w-2xl text-muted-foreground">{m.board_directory_description()}</p>
         {contribution ? <p>{m.board_directory_subject({ title: contribution.subjectTitle })}</p> : null}
       </header>
       <nav aria-label={m.board_directory_purpose()} className="flex flex-wrap items-center gap-2">

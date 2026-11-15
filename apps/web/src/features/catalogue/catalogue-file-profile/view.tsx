@@ -299,7 +299,6 @@ function CatalogueFileProfileLive({
               headingRef={heading}
               headingTabIndex={-1}
             />
-            <p className="text-muted-foreground">{m.catalogue_file_intro({}, o)}</p>
             <p data-slot="catalogue-file-disclaimer">{m.catalogue_file_disclaimer({}, o)}</p>
             {read.profile === 'unreleased' && (
               <p data-slot="catalogue-file-unreleased">{m.catalogue_file_unreleased({}, o)}</p>

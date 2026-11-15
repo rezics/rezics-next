@@ -228,7 +228,6 @@ function ContributionLifecycleLive({
           <ContentItemHeading level={2} className="text-xl font-semibold leading-snug">
             {m.contribution_title({}, o)}
           </ContentItemHeading>
-          <p className="text-sm leading-relaxed text-muted-foreground">{m.contribution_intro({}, o)}</p>
         </header>
         {busy && (
           <p role="status" className="text-sm leading-relaxed">

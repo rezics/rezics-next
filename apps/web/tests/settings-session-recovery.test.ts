@@ -503,7 +503,8 @@ test('a successful original subject with null CSRF renders the actual read-only 
     const html = await pageMarkup(client, session, '/fr/settings#reading');
     expect(html).toContain('data-settings-panel="reading"');
     expect(html).toContain('id="settings-reading-heading"');
-    expect(html).toContain(m.settings_reading_text());
+    expect(html).toContain(m.settings_reading_heading());
+    expect(html).not.toContain(m.settings_reading_text());
     expect(html).not.toContain(m.settings_session_unavailable());
     expect(html).not.toContain('old-loader-token');
     expect(html).not.toContain('ignored-prop');

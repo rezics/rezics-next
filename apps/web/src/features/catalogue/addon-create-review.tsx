@@ -75,7 +75,6 @@ export function AddonCreateReview({
         {m.addon_create_review_title({}, o)}
       </ContentItemHeading>
       <p className="text-sm text-muted-foreground">{m.addon_create_review_intro({}, o)}</p>
-      <p className="text-sm text-muted-foreground">{m.addon_create_review_reuse_base({}, o)}</p>
       {stale && (
         <p role="status" className="text-sm">
           {m.addon_create_review_stale({}, o)}

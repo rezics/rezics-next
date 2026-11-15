@@ -297,7 +297,6 @@ function MetadataHistoryVisit({ collectionId, isCurrent, source = defaultSource 
     >
       <summary className="cursor-pointer font-medium">{m.library_collection_metadata_history()}</summary>
       <div className="space-y-4 pt-3">
-        <p className="max-w-3xl text-sm text-muted-foreground">{m.library_collection_metadata_history_description()}</p>
         {cursor !== null ? (
           <Button
             type="button"

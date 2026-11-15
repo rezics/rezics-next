@@ -392,7 +392,6 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
           <ContentItemHeading level={3} className="text-lg font-semibold">
             {m.realm_publication_curate()}
           </ContentItemHeading>
-          <p className="text-sm text-muted-foreground">{m.realm_publication_scope()}</p>
           <fieldset disabled={control.locked} className="min-w-0 space-y-3">
             {selected ? (
               <ContentItemFrame

@@ -536,7 +536,6 @@ function AlbumCorrectionWorkspaceLive({
                 </dd>
               </div>
             </dl>
-            <p className="text-sm text-muted-foreground">{m.album_terms_help({}, o)}</p>
           </details>
         </section>
       )}

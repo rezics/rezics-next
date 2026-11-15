@@ -143,10 +143,7 @@ export function WorkbenchTriageDetails({
           <h3 id={headingId} className="text-sm font-semibold">
             {m.moderation_workbench_triage_details()}
           </h3>
-          <p className="mt-2 max-w-prose text-sm text-muted-foreground [overflow-wrap:anywhere]">
-            {m.moderation_workbench_triage_report_time_note()}
-          </p>
-          <p className="mt-1 max-w-prose text-sm text-muted-foreground">{m.moderation_workbench_triage_timezone()}</p>
+          <p className="mt-2 max-w-prose text-sm text-muted-foreground">{m.moderation_workbench_triage_timezone()}</p>
           <DetailList item={item} locale={locale} />
           <Button type="button" variant="outline" className={`${control} mt-4 justify-start`} onClick={close}>
             {m.moderation_workbench_triage_close()}

@@ -157,7 +157,6 @@ function ProfileIntro({ read, locale, returnHref }: { read: Current; locale: str
           ))}
         </dl>
       )}
-      <p className="text-muted-foreground">{m.people_profile_terms({}, o)}</p>
       <p className="text-muted-foreground">{m.people_profile_disclosure({}, o)}</p>
       {profile &&
         peopleBiographyGroups(read.release, profile.id, locale, read.public, !!read.public).map((group) => (

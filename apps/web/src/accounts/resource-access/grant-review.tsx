@@ -201,7 +201,6 @@ export function GrantReview({
           endsAt={nativeDate(endsAt)}
         />
       </div>
-      <p className="text-sm text-muted-foreground">{m.access_interval_semantics()}</p>
       <div className="flex flex-wrap gap-2">
         <Button type="button" variant="outline" onClick={onBack}>
           {m.access_review_edit()}

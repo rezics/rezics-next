@@ -9,14 +9,7 @@ import {
   CodeBlockTitle,
 } from '@rezics/ui/shadcn/code-block';
 import { Button } from '@rezics/ui/shadcn/button';
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@rezics/ui/shadcn/dialog';
+import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from '@rezics/ui/shadcn/dialog';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { DocumentBody } from '../document-body';
@@ -313,9 +306,6 @@ function WideDocumentInspector({
           <DialogHeader className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
             <div className="min-w-0 space-y-1">
               <DialogTitle className="[overflow-wrap:anywhere]">{title}</DialogTitle>
-              <DialogDescription className="[overflow-wrap:anywhere]">
-                {m.wide_document_inspector_description({}, options)}
-              </DialogDescription>
             </div>
             <DialogClose
               render={

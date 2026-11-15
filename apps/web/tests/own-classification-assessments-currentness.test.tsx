@@ -170,7 +170,12 @@ test('inspection retires on source replacement and old selection callbacks canno
     await act(async () => render());
     const old = host.querySelector('button')!;
     await act(async () => old.click());
-    expect(host.querySelector('section')?.textContent).toContain('Original Subject and association');
+    expect(host.querySelector('section')?.textContent).toContain(
+      m.subject_classification_assessment_provenance({}, { locale: 'en' }),
+    );
+    expect(host.querySelector('section')?.textContent).not.toContain(
+      m.own_classifications_original({}, { locale: 'en' }),
+    );
     expect(
       [...host.querySelectorAll('a')].every(
         (link) => link.href.includes('/en/subjects/') && !link.href.includes('/v1/'),

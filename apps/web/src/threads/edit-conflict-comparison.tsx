@@ -146,7 +146,6 @@ function ConflictDocumentReading({
         <>
           <nav aria-label={m.thread_inspect_sections_for({ title })} className="min-w-0 space-y-3">
             <h3 className="text-sm font-semibold">{m.thread_inspect_sections()}</h3>
-            <p className="text-sm text-muted-foreground">{m.thread_inspect_index_description()}</p>
             <ol start={page * conflictInspectionLimits.page + 1} className="min-w-0 space-y-1">
               {visible.map((section) => (
                 <li key={section.offset} className="min-w-0">

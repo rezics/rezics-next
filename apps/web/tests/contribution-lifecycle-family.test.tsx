@@ -237,7 +237,7 @@ test('own-contribution family preserves independent panels, exact recovery and r
       expect(region.firstElementChild?.tagName).toBe('DIV');
       expect(region.querySelector('a, [data-slot="list-row-link"]')).toBeNull();
       expect(region.querySelector('[data-content-item-slot="actions"]')).not.toBeNull();
-      expect(region.textContent).toContain(m.contribution_intro());
+      expect(region.textContent).not.toContain(m.contribution_intro());
       expect(region.textContent).not.toContain(m.contribution_deleted());
       expect([...region.querySelectorAll('button')].map((node) => node.textContent)).toEqual([
         m.contribution_withdraw(),

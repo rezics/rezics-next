@@ -377,7 +377,6 @@ export function WorkPartsOrderingReview({
       <ContentItemHeading level={3} className="text-base font-semibold">
         {m.work_parts_order_review_title({}, o)}
       </ContentItemHeading>
-      <p className="text-sm text-muted-foreground">{m.work_parts_order_review_intro({}, o)}</p>
       {stale && (
         <p role="status" className="text-sm">
           {m.work_parts_order_stale({}, o)}

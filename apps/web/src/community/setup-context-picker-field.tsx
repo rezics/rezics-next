@@ -225,9 +225,6 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
         <FieldLabel className="min-w-0 max-w-full" htmlFor={`${id}-query`}>
           {m.space_setup_context_label()}
         </FieldLabel>
-        <FieldDescription className="text-start" id={`${id}-hint`}>
-          {m.setup_context_hint()}
-        </FieldDescription>
       </div>
       {current ? (
         <div className="flex min-w-0 flex-col gap-3 rounded-xl border border-border p-4">
@@ -329,7 +326,6 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
           maxLength={256}
           className="ps-9"
           placeholder={m.setup_context_placeholder()}
-          aria-describedby={`${id}-hint`}
           disabled={disabled}
           onFocus={() => {
             if (page.phase === 'idle') picker.search(state.query, state.query, searchVersion);

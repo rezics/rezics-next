@@ -16,13 +16,11 @@ export function CoverAvailability({ members }: { members: readonly CollectionMem
           <div className="min-w-0 space-y-1 rounded-lg bg-muted/40 p-3">
             <dt className="font-medium">{m.collection_choice_eligible_covers_label()}</dt>
             <dd>{m.collection_choice_eligible_covers_count({ count: availability.eligible })}</dd>
-            <dd className="text-muted-foreground">{m.collection_choice_eligible_covers_help()}</dd>
           </div>
           {availability.missing ? (
             <div className="min-w-0 space-y-1 rounded-lg bg-muted/40 p-3">
               <dt className="font-medium">{m.collection_choice_missing_covers_label()}</dt>
               <dd>{m.collection_choice_cover_occurrences_count({ count: availability.missing })}</dd>
-              <dd className="text-muted-foreground">{m.collection_choice_missing_covers_help()}</dd>
             </div>
           ) : null}
           {availability.withheld ? (
@@ -36,7 +34,6 @@ export function CoverAvailability({ members }: { members: readonly CollectionMem
             <div className="min-w-0 space-y-1 rounded-lg bg-muted/40 p-3">
               <dt className="font-medium">{m.collection_choice_unsupported_covers_label()}</dt>
               <dd>{m.collection_choice_cover_occurrences_count({ count: availability.unsupported })}</dd>
-              <dd className="text-muted-foreground">{m.collection_choice_unsupported_covers_help()}</dd>
             </div>
           ) : null}
           {availability.unavailable ? (

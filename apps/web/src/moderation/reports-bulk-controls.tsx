@@ -145,7 +145,6 @@ export function ReportsBulkControls({
         {m.moderation_bulk_title()}
       </ContentItemHeading>
       <div className="flex min-w-0 flex-col gap-3">
-        <p className="text-sm text-muted-foreground">{m.moderation_bulk_bound()}</p>
         {snapshot.phase === 'selecting' ? (
           <>
             <p aria-live="polite" className="text-sm">

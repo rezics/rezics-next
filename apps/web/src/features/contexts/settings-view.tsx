@@ -385,7 +385,6 @@ export function SettingsReview({
       <div className="space-y-2">
         <h3 className="font-semibold">{m.ctxw_review_defaults({}, o)}</h3>
         <SettingsDefaultsList locale={locale} snapshot={snapshot} defaults={preview.defaults} />
-        <p className="text-sm text-muted-foreground">{m.ctxw_review_scope({}, o)}</p>
       </div>
     </section>
   );
@@ -414,7 +413,6 @@ export function CapturedSettings({
   return (
     <section className="space-y-3" data-context-captured-settings>
       <h2 className="text-xl font-semibold">{m.ctxw_settings({}, o)}</h2>
-      <p className="text-sm text-muted-foreground">{m.ctxw_settings_help({}, o)}</p>
       {mismatch && preview ? <p role="status">{m.ctxw_captured_mismatch({}, o)}</p> : null}
       {captured.settings ? (
         <div className="space-y-2">

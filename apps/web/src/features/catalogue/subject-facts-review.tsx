@@ -33,7 +33,6 @@ export function FactsChangedReview({
       <ContentItemHeading level={2} className="text-lg font-semibold">
         {m.facts_review_title({}, o)}
       </ContentItemHeading>
-      <p className="text-sm text-muted-foreground">{m.facts_review_intro({}, o)}</p>
       <p className="text-sm text-muted-foreground">{m.facts_review_independent({}, o)}</p>
       {stale && (
         <p role="status" className="text-sm">

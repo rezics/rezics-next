@@ -192,7 +192,6 @@ export function AnnotationSaved({ entry }: { entry: PersonalEntry }) {
   return (
     <div className="space-y-3 rounded-md border p-3" role="status">
       <h3 className="font-semibold">{m.library_annotation_saved()}</h3>
-      <p className="text-sm text-muted-foreground">{m.library_annotation_saved_help()}</p>
       <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
         <div className="min-w-0">
           <dt className="mb-1 text-sm font-medium">{m.library_rich_entry_note()}</dt>

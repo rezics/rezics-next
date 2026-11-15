@@ -112,7 +112,6 @@ export function ClassificationChangedSet({
   return (
     <div className="min-w-0 space-y-4" data-classification-review>
       <FactsChangedReview items={items} read={read} locale={locale} stale={stale} onJump={onJump} />
-      <p className="text-sm text-muted-foreground">{m.classification_review_native({}, o)}</p>
       {readFailed && <p role="status">{m.classification_read_failed({}, o)}</p>}
       {!!retained.length && <p className="text-sm text-muted-foreground">{m.classification_retained_locked({}, o)}</p>}
       <ul className="min-w-0 space-y-2 text-sm">

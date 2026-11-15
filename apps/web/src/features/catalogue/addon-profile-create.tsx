@@ -197,7 +197,6 @@ export function AddonProfileCreate({
               />
               {reuse && (
                 <>
-                  <p className="text-sm text-muted-foreground">{m.addon_create_review_reuse_base({}, o)}</p>
                   <ReferenceReusePanel
                     source={reuse.source}
                     drafts={addonFactDrafts(facts)}

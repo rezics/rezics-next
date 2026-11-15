@@ -223,7 +223,6 @@ export function CreatorEditionsView({ page, cursor }: CreatorEditionsViewProps) 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 space-y-3">
           <PageHeading id="creator-editions-heading">{m.creator_editions_heading()}</PageHeading>
-          <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.creator_editions_intro()}</p>
         </div>
         <Button nativeButton={false} render={<a href={localizeHref('/editions/new')} />}>
           {m.creator_editions_create()}
@@ -364,10 +363,7 @@ export function CreatorEditionsView({ page, cursor }: CreatorEditionsViewProps) 
               ))}
             </ul>
           )}
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
-              {m.creator_editions_permissions()}
-            </p>
+          <div className="flex flex-wrap items-center justify-end gap-4">
             <nav className="flex flex-wrap gap-3" aria-label={m.creator_editions_pagination()}>
               {cursor && (
                 <Button

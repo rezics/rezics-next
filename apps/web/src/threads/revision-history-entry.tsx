@@ -364,7 +364,6 @@ export function RevisionSummaryRow({
                   {m.revision_history_back_to_navigator()}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">{m.revision_history_return_help()}</p>
             </footer>
           </section>
         ) : null}

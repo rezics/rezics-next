@@ -85,7 +85,6 @@ export function ErasureProgressView({
   const progress = useRef<HTMLElement>(null);
   const progressId = `${id}-progress`;
   const titleId = `${id}-title`;
-  const introId = `${id}-intro`;
   const statusId = `${id}-status`;
   const participantsId = `${id}-participants`;
   const retainedId = `${id}-retained`;
@@ -95,15 +94,11 @@ export function ErasureProgressView({
     <article className="mx-auto flex w-full min-w-0 max-w-4xl flex-col gap-6 pb-8 [overflow-wrap:anywhere]">
       <header className="flex flex-col gap-3">
         <PageHeading id={titleId}>{m.erasure_title()}</PageHeading>
-        <p id={introId} className="text-muted-foreground">
-          {m.erasure_intro()}
-        </p>
         {page.status !== 'signed-out' ? (
           <a
             className="inline-flex self-start items-center py-2 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
             href={`#${progressId}`}
             aria-controls={progressId}
-            aria-describedby={introId}
             onClick={() => progress.current?.focus({ preventScroll: true })}
           >
             {m.author_erasure_view_progress()}
@@ -115,7 +110,6 @@ export function ErasureProgressView({
         id={progressId}
         tabIndex={-1}
         aria-labelledby={titleId}
-        aria-describedby={introId}
         aria-live="polite"
         aria-busy={page.status === 'loading'}
         className="flex scroll-mt-6 flex-col gap-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"

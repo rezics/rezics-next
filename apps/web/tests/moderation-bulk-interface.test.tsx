@@ -152,7 +152,8 @@ test('Complete usable bulk moderation controls', async () => {
     const select = button(host, m.moderation_bulk_select_loaded());
     expect(button(host, m.moderation_bulk_clear()).disabled).toBe(true);
     expect(button(host, m.moderation_bulk_review()).disabled).toBe(true);
-    expect(article.textContent).toContain(m.moderation_bulk_bound());
+    expect(article.textContent).toContain(m.moderation_bulk_title());
+    expect(article.textContent).not.toContain(m.moderation_bulk_bound());
     wrappingControls(article);
     publicOnly(article);
     select.focus();

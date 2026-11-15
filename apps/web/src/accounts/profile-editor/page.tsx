@@ -205,8 +205,6 @@ export function AccountProfileView({
     <>
       <header className="space-y-2">
         <h2 className="text-lg font-semibold">{page.profile.displayName || m.managed_unnamed()}</h2>
-        <p className="break-all text-sm text-muted-foreground">{accountId}</p>
-        <p className="text-sm text-muted-foreground">{m.account_profile_authority()}</p>
       </header>
       <ProfileCard editor={editor} />
       <PublicViewsCard editor={editor} />
