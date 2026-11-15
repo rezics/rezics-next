@@ -3,7 +3,7 @@ import { CoverCard } from '@rezics/ui/cover-card';
 import { ContentItem } from '@rezics/ui/content-item';
 import { ListRowControl } from '@rezics/ui/list-row';
 import { Menu } from '@rezics/ui/menu';
-import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Button } from '@rezics/ui/shadcn/button';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { Link, useLinkProps } from '@tanstack/react-router';
 import {
