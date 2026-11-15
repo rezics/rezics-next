@@ -349,7 +349,16 @@ export function withBoardDisclosure<T>(
   decisions?: ReadDecisions,
   options: Pick<BoardDisclosureHint, 'query' | 'expectedRevisions' | 'onFinal'> = {},
 ): Promise<T> {
-  return boardDisclosureHint.run({ boardId, board, ...(decisions ? { decisions } : {}), ...options }, work);
+  return boardDisclosureHint.run(
+    {
+      boardId,
+      board: { ...board },
+      ...(decisions ? { decisions } : {}),
+      ...options,
+      ...(options.expectedRevisions ? { expectedRevisions: new Map(options.expectedRevisions) } : {}),
+    },
+    work,
+  );
 }
 
 function batchKey(id: string, threadId = id): BatchKey {
@@ -1148,13 +1157,13 @@ export async function selectBoardThreadCandidates(
 export async function discloseBoardPageThreads(
   dependencies: ContentReadDependencies,
   boardId: BoardId,
-  baseline: BoardView,
-  threadIds: readonly string[],
-  expectedRevisions: ReadonlyMap<string, string>,
-  context: ReadContext,
+  inputBaseline: BoardView,
+  inputThreadIds: readonly string[],
+  inputExpectedRevisions: ReadonlyMap<string, string>,
+  inputContext: ReadContext,
   decisions: ReadDecisions,
   query = '',
-  subjectScope?: { subjectId: string; placeId: string },
+  inputSubjectScope?: { subjectId: string; placeId: string },
 ): Promise<
   Readonly<{
     items: readonly Anchored<ThreadView | null>[];
@@ -1162,6 +1171,12 @@ export async function discloseBoardPageThreads(
     parentAllowed: boolean;
   }>
 > {
+  const baseline = { ...inputBaseline };
+  const threadIds = [...inputThreadIds];
+  const expectedRevisions = new Map(inputExpectedRevisions);
+  // Retain the Actor object carrying the Session proof and the original absolute deadline.
+  const context: ReadContext = { ...inputContext };
+  const subjectScope = inputSubjectScope ? { ...inputSubjectScope } : undefined;
   const ids = [boardId, ...threadIds];
   if (baseline.realmId) ids.push(baseline.realmId);
   if (subjectScope) for (const threadId of threadIds) await dependencies.disclosureBarrier?.({ threadId });
@@ -2636,13 +2651,16 @@ export async function discloseThreads(
 
 async function discloseThreadBatch(
   dependencies: ContentReadDependencies,
-  threadIds: readonly ThreadId[],
-  context: ReadContext,
-  subjectScope?: { subjectId: string; placeId: string },
+  inputThreadIds: readonly ThreadId[],
+  inputContext: ReadContext,
+  inputSubjectScope?: { subjectId: string; placeId: string },
 ): Promise<readonly Anchored<ThreadView | null>[]> {
-  if (threadIds.length > 200) throw new RangeError('At most 200 disclosure candidates');
+  if (inputThreadIds.length > 200) throw new RangeError('At most 200 disclosure candidates');
+  const threadIds = [...inputThreadIds];
+  const subjectScope = inputSubjectScope ? { ...inputSubjectScope } : undefined;
   const hint = subjectScope ? undefined : boardDisclosureHint.getStore();
   if (threadIds.length === 0 && !hint) return [];
+  const context: ReadContext = { ...inputContext };
   const decisions = hint?.decisions ?? (await prepareBoardPageDecisions(dependencies, context));
   if (hint) {
     const disclosed = await discloseBoardPageThreads(
@@ -2751,16 +2769,18 @@ export async function readExactPublishedRulesForAuthoring(
 
 async function readExactPublishedRulesInternal(
   dependencies: Pick<ContentReadDependencies, 'pool' | 'access' | 'clock'>,
-  references: readonly (import('./community-presentation-rules.ts').RulesReference & { realmId: string })[],
-  context: ReadContext,
+  inputReferences: readonly (import('./community-presentation-rules.ts').RulesReference & { realmId: string })[],
+  inputContext: ReadContext,
   includeAuthoring: boolean,
 ): Promise<{
   rules: ReadonlyMap<string, import('./community-presentation-rules.ts').PresentedRules>;
   authoring: ReadonlyMap<string, ExactPublishedRulesAuthoringObservation>;
 }> {
-  if (references.length > 100) throw new RangeError('At most 100 rules references');
+  if (inputReferences.length > 100) throw new RangeError('At most 100 rules references');
+  const references = inputReferences.map(({ postId, revisionId, realmId }) => ({ postId, revisionId, realmId }));
   const refs = [...new Map(references.map((ref) => [`${ref.postId}/${ref.revisionId}/${ref.realmId}`, ref])).values()];
   if (!refs.length) return { rules: new Map(), authoring: new Map() };
+  const context: ReadContext = { ...inputContext };
   const decisions = await prepareReadDecisions(dependencies.access, {
     actor: context.actor,
     actions: new Set([
@@ -3441,17 +3461,19 @@ async function boardRecordRound(
  */
 export async function observeBoardRecords(
   dependencies: ContentReadDependencies,
-  boardIds: readonly string[],
-  context: ReadContext,
+  inputBoardIds: readonly string[],
+  inputContext: ReadContext,
 ): Promise<
   Readonly<{
     records: readonly Anchored<import('./model.ts').BoardRecord | null>[];
     current: () => Promise<boolean>;
   }>
 > {
-  if (boardIds.length > 100) throw new RangeError('At most 100 board identities');
+  if (inputBoardIds.length > 100) throw new RangeError('At most 100 board identities');
+  const boardIds = [...inputBoardIds];
   const ids = [...new Set(boardIds)];
   if (!ids.length) return { records: [], current: async () => true };
+  const context: ReadContext = { ...inputContext };
   const round = async () => {
     const decisions = await prepareBoardPageDecisions(dependencies, context);
     return boardRecordRound(dependencies, ids, context, decisions);
@@ -3486,12 +3508,14 @@ export async function observeBoardRecords(
 
 export async function readBoards(
   dependencies: ContentReadDependencies,
-  boardIds: readonly string[],
-  context: ReadContext,
+  inputBoardIds: readonly string[],
+  inputContext: ReadContext,
 ): Promise<readonly Anchored<import('./model.ts').BoardView | null>[]> {
-  if (boardIds.length > 100) throw new RangeError('At most 100 board identities');
-  if (!boardIds.length) return [];
+  if (inputBoardIds.length > 100) throw new RangeError('At most 100 board identities');
+  if (!inputBoardIds.length) return [];
+  const boardIds = [...inputBoardIds];
   const ids = [...new Set(boardIds)];
+  const context: ReadContext = { ...inputContext };
   const decisions = await prepareBoardPageDecisions(dependencies, context);
   const round = () => boardRecordRound(dependencies, ids, context, decisions);
   const initial = await round();
