@@ -3697,9 +3697,9 @@ CREATE FUNCTION semantic.retain_public_filter_definition() RETURNS trigger
     AS $$
 BEGIN
   IF (NEW.partition_no,NEW.read_definition,NEW.source_id,NEW.configuration,NEW.release_digest,
-      NEW.subject_type,NEW.capture_digest,NEW.capture,NEW.dependency_keys) IS DISTINCT FROM
+      NEW.capture_digest,NEW.capture,NEW.dependency_keys) IS DISTINCT FROM
      (OLD.partition_no,OLD.read_definition,OLD.source_id,OLD.configuration,OLD.release_digest,
-      OLD.subject_type,OLD.capture_digest,OLD.capture,OLD.dependency_keys)
+      OLD.capture_digest,OLD.capture,OLD.dependency_keys)
      OR (OLD.coverage_keys IS NOT NULL AND NEW.coverage_keys IS DISTINCT FROM OLD.coverage_keys) THEN
     RAISE EXCEPTION 'Original public-filter definitions are immutable' USING ERRCODE='23514';
   END IF;
@@ -8400,7 +8400,6 @@ CREATE TABLE semantic.public_filter_projection_build (
     route integer NOT NULL,
     subject_id uuid NOT NULL,
     meaning_digest text NOT NULL,
-    meaning_type text NOT NULL,
     build_id uuid NOT NULL,
     generation bigint NOT NULL,
     owner_epoch integer NOT NULL,
@@ -8467,7 +8466,6 @@ CREATE TABLE semantic.public_filter_read_definition (
     source_id uuid NOT NULL,
     configuration uuid NOT NULL,
     release_digest text NOT NULL,
-    subject_type text NOT NULL,
     capture_digest text NOT NULL,
     capture text NOT NULL,
     dependency_keys jsonb NOT NULL,
@@ -11113,19 +11111,19 @@ ALTER TABLE ONLY semantic.public_filter_projection_replay
 
 
 --
--- Name: public_filter_read_definition public_filter_read_definition_partition_no_source_id_config_key; Type: CONSTRAINT; Schema: semantic; Owner: -
---
-
-ALTER TABLE ONLY semantic.public_filter_read_definition
-    ADD CONSTRAINT public_filter_read_definition_partition_no_source_id_config_key UNIQUE (partition_no, source_id, configuration, release_digest, subject_type, capture_digest);
-
-
---
 -- Name: public_filter_read_definition public_filter_read_definition_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
 ALTER TABLE ONLY semantic.public_filter_read_definition
     ADD CONSTRAINT public_filter_read_definition_pkey PRIMARY KEY (partition_no, read_definition);
+
+
+--
+-- Name: public_filter_read_definition public_filter_read_definition_release_capture_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_read_definition
+    ADD CONSTRAINT public_filter_read_definition_release_capture_key UNIQUE (partition_no, source_id, configuration, release_digest, capture_digest);
 
 
 --

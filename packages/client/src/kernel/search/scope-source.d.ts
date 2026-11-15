@@ -60,7 +60,7 @@ export type ScopePrepareOptions = Readonly<{
     allowance?: WorkAllowance;
     /** Read an already published scope without retaining, preparing or saving reader progress. */
     readOnly?: boolean;
-    /** Exact released projection type, when the source requires a selected catalogue profile. */
+    /** Concrete catalogue type used by a private-owner branch's public metadata capture. */
     type?: string;
     /** Current Library Collection to seed through the verified reader before preparing its predicate. */
     collectionId?: string;
