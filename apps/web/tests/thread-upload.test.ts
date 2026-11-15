@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
+import { knowledgeMediaSource } from '@rezics/definitions/knowledge-media';
 
 import * as start from '../.storybook/react-start';
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 const session = await import('../src/session/query');
-const { resumeReplyImageUpload, uploadReplyImage, uploadAvatar, UploadRefusal } = await import('../src/threads/upload');
+const { resumeReplyImageUpload, uploadReplyImage, uploadAvatar, uploadKnowledgeImage, resumeKnowledgeImageUpload,
+  createMediaReservationIntent, UploadRefusal } = await import('../src/threads/upload');
 const { ReplyImageUploadRecovery } = await import('../src/threads/media-upload-recovery');
 
 const mediaId = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
@@ -510,4 +512,35 @@ test('exact avatar reservation replay observes settled media without transferrin
       expect(calls.map(({ init }) => init.method)).toEqual(['POST', 'GET']);
     }
   }
+});
+
+
+test('Knowledge uploads and known-outcome recovery keep their native purpose, document, File and credential', async () => {
+  const documentId = '0192f3a0-6c1e-7b2a-9d4e-000000000020';
+  const intent = createMediaReservationIntent({ containerId: documentId }, file, 'knowledge-image',
+    'knowledge-author', 'prepared-knowledge-csrf');
+  spyOn(session, 'sessionCsrfToken').mockReturnValue('replacement-csrf');
+  let reads = 0;
+  fastBackoff();
+  intercept((_path, init) => {
+    if (init.method === 'POST') return media('reserved', mediaId, documentId);
+    if (init.method === 'PUT') throw new Error('unknown completion outcome');
+    return media(++reads === 1 ? 'uploaded' : 'available', mediaId, documentId);
+  });
+  const failure = await refusal(uploadKnowledgeImage(documentId, file, signal(), { reservation: intent }));
+  expect(failure.mediaId).toBe(mediaId);
+  const resumed = await resumeKnowledgeImageUpload(documentId, mediaId, file, signal(), { reservation: intent });
+  expect(resumed).toEqual({ src: knowledgeMediaSource(mediaId), width: 7, height: 5 });
+  expect(calls.filter(({ init }) => init.method === 'POST')).toHaveLength(1);
+  expect(JSON.parse(String(calls[0]!.init.body))).toEqual({
+    containerId: documentId, purpose: 'knowledge-image', mediaType: file.type, byteCount: file.size,
+  });
+  expect(new Headers(calls[0]!.init.headers).get('idempotency-key')).toBe(JSON.stringify(intent.key));
+  for (const { init } of calls.filter(({ init }) => init.method !== 'GET'))
+    expect(new Headers(init.headers).get('X-CSRF-Token')).toBe('prepared-knowledge-csrf');
+  const before = calls.length;
+  await refusal(uploadKnowledgeImage('0192f3a0-6c1e-7b2a-9d4e-000000000021', file, signal(), { reservation: intent }));
+  const postIntent = createMediaReservationIntent({ containerId: documentId }, file, 'post-image', 'knowledge-author');
+  await refusal(uploadKnowledgeImage(documentId, file, signal(), { reservation: postIntent }));
+  expect(calls).toHaveLength(before);
 });

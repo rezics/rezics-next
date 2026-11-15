@@ -1,0 +1,43 @@
+import type { FormattingControlLabels } from '@rezics/editor';
+import { m } from '../paraglide/messages.js';
+
+export function localizedFormattingLabels(): FormattingControlLabels {
+  return {
+    cannotApply: m.editor_formatting_cannot_apply(),
+    authoredFormatting: m.editor_formatting_authored_formatting(),
+    textStyle: m.editor_formatting_text_style(),
+    textStyleHelp: m.editor_formatting_text_style_help(),
+    textColor: m.editor_formatting_text_color(),
+    backgroundColor: m.editor_formatting_background_color(),
+    colorHelp: m.editor_formatting_color_help(),
+    textEmphasis: m.editor_formatting_text_emphasis(),
+    textEmphasisHelp: m.editor_formatting_text_emphasis_help(),
+    emphasisShape: m.editor_formatting_emphasis_shape(),
+    emphasisFill: m.editor_formatting_emphasis_fill(),
+    emphasisPosition: m.editor_formatting_emphasis_position(),
+    emphasisColor: m.editor_formatting_emphasis_color(),
+    dot: m.editor_formatting_dot(),
+    sesame: m.editor_formatting_sesame(),
+    circle: m.editor_formatting_circle(),
+    'double-circle': m.editor_formatting_double_circle(),
+    triangle: m.editor_formatting_triangle(),
+    filled: m.editor_formatting_filled(),
+    open: m.editor_formatting_open(),
+    over: m.editor_formatting_over(),
+    under: m.editor_formatting_under(),
+    removeEmphasis: m.editor_formatting_remove_emphasis(),
+    codeLanguage: m.editor_formatting_code_language(),
+    codeLanguageHelp: m.editor_formatting_code_language_help(),
+    codeLanguageField: m.editor_formatting_code_language_field(),
+    clearCodeLanguage: m.editor_formatting_clear_code_language(),
+    alignLeft: m.editor_formatting_align_left(),
+    alignCenter: m.editor_formatting_align_center(),
+    alignRight: m.editor_formatting_align_right(),
+    alignJustify: m.editor_formatting_align_justify(),
+    alignDefault: m.editor_formatting_align_default(),
+    invalidColor: m.editor_formatting_invalid_color(),
+    heading4: m.editor_formatting_heading4(),
+    heading5: m.editor_formatting_heading5(),
+    heading6: m.editor_formatting_heading6(),
+  };
+}

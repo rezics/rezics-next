@@ -1,4 +1,9 @@
 import { normalizeDocument, type DocumentNode, type DocumentSnapshot } from '@rezics/document';
+import {
+  knowledgeMediaSource,
+  parseKnowledgeMediaSource,
+  type KnowledgeMediaSelection,
+} from '@rezics/definitions/knowledge-media';
 import { prepareEditionSubjectIdentities } from './edition-subject.ts';
 import { snapshot } from './reads.ts';
 import { routeOf } from '../route/route.ts';
@@ -62,6 +67,7 @@ export async function projectKnowledgePublicBody(
   snapshot: DocumentSnapshot,
   references: readonly KnowledgeReference[],
   deadline: number,
+  mediaContext?: KnowledgeMediaSelection,
 ): Promise<Readonly<{ snapshot: DocumentSnapshot; references: readonly KnowledgeReference[] }>> {
   const context = { actor: { kind: 'anonymous' as const }, deadline };
   const permitted: KnowledgeReference[] = [];
@@ -74,6 +80,58 @@ export async function projectKnowledgePublicBody(
   const available = new Set(
     permitted.filter((reference) => reference.target !== null).map((reference) => reference.id),
   );
+  const ownMediaContext = mediaContext === undefined ? undefined : structuredClone(mediaContext);
+  const mediaLocations = new Map<string, { mediaId: string; selection: KnowledgeMediaSelection }>();
+  const mediaLocation = (node: DocumentNode) => {
+    const parsed = parseKnowledgeMediaSource(node.attrs?.src);
+    const selection = parsed?.selection ?? ownMediaContext;
+    return parsed && selection?.representation === 'public'
+      ? { mediaId: parsed.mediaId, selection, source: knowledgeMediaSource(parsed.mediaId, selection) }
+      : null;
+  };
+  const collectMedia = (node: DocumentNode): void => {
+    if (node.type === 'image' || node.type === 'media') {
+      const location = mediaLocation(node);
+      if (location && mediaLocations.size < 32) mediaLocations.set(location.source, location);
+    }
+    for (const child of node.content ?? []) collectMedia(child);
+  };
+  collectMedia(snapshot.doc);
+  const mediaGroups = new Map<string, { selection: KnowledgeMediaSelection; ids: Set<string> }>();
+  for (const { mediaId, selection } of mediaLocations.values()) {
+    const key = JSON.stringify([
+      selection.representation,
+      selection.documentId,
+      selection.revisionId,
+      selection.sourceSha256,
+      selection.publicationId,
+    ]);
+    let group = mediaGroups.get(key);
+    if (!group) {
+      group = { selection, ids: new Set() };
+      mediaGroups.set(key, group);
+    }
+    group.ids.add(mediaId);
+  }
+  const availableMedia = new Set<string>();
+  const groups = [...mediaGroups.values()];
+  if (groups.length) {
+    const { readKnowledgeMediaAvailability } = await import('./knowledge-media.ts');
+    // A document has at most 32 managed source entries; release every source checkout between windows.
+    for (let start = 0; start < groups.length; start += 4)
+      await Promise.all(
+        groups.slice(start, start + 4).map(async (group) => {
+          const ids = await readKnowledgeMediaAvailability(
+            deps,
+            context.actor,
+            [...group.ids],
+            group.selection,
+            deadline,
+          );
+          for (const id of ids) availableMedia.add(knowledgeMediaSource(id, group.selection));
+        }),
+      );
+  }
   const rewrite = (node: DocumentNode): DocumentNode => {
     if (
       (node.type === 'extensionBlock' || node.type === 'extensionInline') &&
@@ -82,13 +140,16 @@ export async function projectKnowledgePublicBody(
       const referenceId = (node.attrs!.payload as { referenceId: string }).referenceId;
       if (!available.has(referenceId)) return { ...node, attrs: { ...node.attrs, fallback: 'Unavailable reference' } };
     }
-    // Knowledge has no media claim destination. Do not turn a stored locator or signed URL into public authority.
-    if (node.type === 'image' || node.type === 'media')
+    if (node.type === 'image' || node.type === 'media') {
+      const location = mediaLocation(node);
+      if (location && availableMedia.has(location.source))
+        return { ...node, attrs: { ...node.attrs, src: location.source } };
       return {
         type: 'paragraph',
         attrs: { id: node.attrs!.id! },
         content: [{ type: 'text', text: 'Unavailable media' }],
       };
+    }
     return { ...node, ...(node.content ? { content: node.content.map(rewrite) } : {}) };
   };
   return { snapshot: normalizeDocument({ ...snapshot, doc: rewrite(snapshot.doc) }), references: permitted };

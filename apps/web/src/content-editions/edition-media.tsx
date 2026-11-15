@@ -2,6 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import type { ComponentType } from 'react';
 import { m } from '../paraglide/messages.js';
+import type { DocumentImageOccurrence } from '@rezics/editor/reader';
 
 /** Consumer-local declaration of the original media contract while its producer is absent. */
 export type DocumentImagePresentation = Readonly<{
@@ -18,7 +19,12 @@ export type DocumentImagePresentation = Readonly<{
 export type DocumentMediaRead =
   | { kind: 'ready'; images: ReadonlyMap<string, DocumentImagePresentation> }
   | { kind: 'unavailable' };
-type ImageProps = { image: DocumentImagePresentation | null; alt: string; locale: string };
+type ImageProps = {
+  image: DocumentImagePresentation | null;
+  alt: string;
+  locale: string;
+  occurrence?: DocumentImageOccurrence;
+};
 type SharedDocumentMedia = {
   loadDocumentMedia(client: KernelClient, ids: readonly string[], authorization?: string): Promise<DocumentMediaRead>;
   NativeDocumentImage: ComponentType<ImageProps>;

@@ -1,7 +1,9 @@
 import { expect, test } from 'bun:test';
 import { checkDocument } from '@rezics/document';
-import { undo } from '@tiptap/pm/history';
-import { NodeSelection, TextSelection } from '@tiptap/pm/state';
+import { undo, undoDepth } from '@tiptap/pm/history';
+import { NodeSelection, TextSelection, EditorState, type Transaction } from '@tiptap/pm/state';
+import { compactTransactionMetrics } from '../src/components/editor-compact-transaction.ts';
+import { undoCommand, redoCommand } from '../src/components/editor-commands.ts';
 import {
   applyLanguage,
   applyRuby,
@@ -15,6 +17,95 @@ import {
 } from '../src/components/editor-domain-commands.ts';
 import { editorInputSettings, setEditorInputSettings } from '../src/components/editor-surface.ts';
 import { editorStateFixture, nodePositions } from './helpers/editor-state.ts';
+
+test('large mixed-language selection keeps exact other marks and native compact undo/redo', () => {
+  const fixture = editorStateFixture({
+    type: 'doc',
+    content: [
+      {
+        type: 'paragraph',
+        attrs: { id: 'kept', lang: 'fr' },
+        content: Array.from({ length: 5000 }, (_, index) => ({
+          type: 'text',
+          text: `word${index} `,
+          marks: [
+            { type: 'language', attrs: { lang: index % 2 ? 'ja' : 'fr', dir: 'ltr' } },
+            { type: index % 2 ? 'bold' : 'italic' },
+          ],
+        })),
+      },
+    ],
+  });
+  const editor = fixture.editor;
+  fixture.select(TextSelection.create(editor.state.doc, editor.state.doc.content.size - 2, 2));
+  const original = editor.state.doc,
+    selection = editor.state.selection.getBookmark();
+  const target = captureAnnotationTarget(editor)!;
+  const seen: Transaction[] = [],
+    dispatch = editor.view.dispatch;
+  editor.view.dispatch = (transaction) => {
+    seen.push(transaction);
+    dispatch(transaction);
+  };
+  expect(applyLanguage(editor, target, { lang: 'zh-Hant', dir: 'rtl', scope: 'selection' }, () => true)).toBe(true);
+  expect(editor.state.doc.firstChild!.attrs).toMatchObject({ id: 'kept', lang: 'fr' });
+  editor.state.doc.nodesBetween(target.from, target.to, (node) => {
+    if (!node.isText) return;
+    expect(node.marks.find((mark) => mark.type.name === 'language')!.attrs).toEqual({ lang: 'zh-Hant', dir: 'rtl' });
+    expect(node.marks.some((mark) => ['bold', 'italic'].includes(mark.type.name))).toBe(true);
+  });
+  expect(editor.state.selection.eq(selection.resolve(editor.state.doc))).toBe(true);
+  expect(undoDepth(editor.state)).toBe(1);
+  expect(compactTransactionMetrics(seen[0]!)?.ordinarySteps).toBe(0);
+  expect(applyLanguage(editor, target, { lang: 'de', dir: '', scope: 'selection' }, () => true)).toBe(false);
+  undoCommand.run(editor, () => {});
+  expect(editor.state.doc.eq(original)).toBe(true);
+  redoCommand.run(editor, () => {});
+  expect(editor.state.doc.textContent).toBe(original.textContent);
+  for (const transaction of seen)
+    if (transaction.docChanged) expect(compactTransactionMetrics(transaction)?.ordinarySteps).toBe(0);
+});
+
+test('language selection containing an atom retains the native fallback and its exact marks', () => {
+  const fixture = editorStateFixture({
+    type: 'doc',
+    content: [
+      {
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'before', marks: [{ type: 'language', attrs: { lang: 'fr' } }] },
+          {
+            type: 'mention',
+            attrs: { accountId: '00000000-0000-4000-8000-000000000000' },
+            marks: [{ type: 'language', attrs: { lang: 'fr' } }],
+          },
+          { type: 'text', text: 'after', marks: [{ type: 'bold' }] },
+        ],
+      },
+    ],
+  });
+  const editor = fixture.editor;
+  fixture.select(TextSelection.create(editor.state.doc, 1, editor.state.doc.content.size - 1));
+  const target = captureAnnotationTarget(editor)!,
+    mark = editor.schema.marks.language!;
+  const native = EditorState.create({
+    schema: editor.schema,
+    doc: editor.state.doc,
+    selection: editor.state.selection,
+  }).tr;
+  native
+    .removeMark(target.from, target.to, mark)
+    .addMark(target.from, target.to, mark.create({ lang: 'de', dir: null }));
+  let observed: Transaction | undefined;
+  const dispatch = editor.view.dispatch;
+  editor.view.dispatch = (transaction) => {
+    observed = transaction;
+    dispatch(transaction);
+  };
+  expect(applyLanguage(editor, target, { lang: 'de', dir: '', scope: 'selection' }, () => true)).toBe(true);
+  expect(editor.state.doc.eq(native.doc)).toBe(true);
+  expect(compactTransactionMetrics(observed!)).toBeUndefined();
+});
 
 test('ruby creation, editing and removal retain base marks, neighboring text and block identity', () => {
   const fixture = editorStateFixture({

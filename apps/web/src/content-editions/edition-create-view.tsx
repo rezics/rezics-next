@@ -54,7 +54,12 @@ import {
   type EditionPublicationState,
 } from './edition-create';
 
-type NativeDocumentImageProps = { image: EditionPreviewImage | null; alt: string; locale: string };
+type NativeDocumentImageProps = {
+  image: EditionPreviewImage | null;
+  alt: string;
+  locale: string;
+  occurrence?: import('@rezics/editor/reader').DocumentImageOccurrence;
+};
 // The sole document-media component owns derivative selection, credit and the authorized Worker URL.
 const NativeDocumentImage =
   (() => {
@@ -600,8 +605,13 @@ export function EditionPublication({
           <DocumentBody
             document={previewSource.body}
             locale={locale}
-            renderImage={({ mediaId, alt }) => (
-              <NativeDocumentImage image={images.get(mediaId) ?? null} alt={alt} locale={locale} />
+            renderImage={(occurrence) => (
+              <NativeDocumentImage
+                image={images.get(occurrence.mediaId) ?? null}
+                occurrence={occurrence}
+                alt={occurrence.alt}
+                locale={locale}
+              />
             )}
           />
           <div className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-5">

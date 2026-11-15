@@ -9,11 +9,13 @@ import { KnowledgeInvalidInputError } from './knowledge-model.ts';
 /** Only authored bare managed locators request a claim in the saved revision. */
 export function collectKnowledgeMediaIds(snapshot: DocumentSnapshot): readonly string[] {
   const ids = new Set<string>();
+  const sources = new Set<string>();
   const visit = (node: DocumentNode): void => {
     if (node.type === 'image' || node.type === 'media') {
       const source = parseKnowledgeMediaSource(node.attrs?.src);
+      if (source) sources.add(knowledgeMediaSource(source.mediaId, source.selection ?? undefined));
       if (source?.selection === null) ids.add(source.mediaId);
-      if (ids.size > 32) throw new KnowledgeInvalidInputError();
+      if (sources.size > 32) throw new KnowledgeInvalidInputError();
     }
     for (const child of node.content ?? []) visit(child);
   };
@@ -27,8 +29,7 @@ export function contextualizeKnowledgeCopyMedia(
   selection: KnowledgeMediaSelection,
 ): DocumentSnapshot {
   const rewrite = (node: DocumentNode): DocumentNode => {
-    const source =
-      node.type === 'image' || node.type === 'media' ? parseKnowledgeMediaSource(node.attrs?.src) : null;
+    const source = node.type === 'image' || node.type === 'media' ? parseKnowledgeMediaSource(node.attrs?.src) : null;
     return {
       ...node,
       ...(source?.selection === null

@@ -120,10 +120,11 @@ function EvidenceContent({ evidence }: { evidence: ModerationEvidence['moderatio
             className="mx-0! w-full min-w-0 overflow-x-auto [overflow-wrap:anywhere]"
             document={post.body}
             locale={locale}
-            renderImage={({ mediaId, alt }) => (
+            renderImage={(occurrence) => (
               <NativeDocumentImage
-                image={revisionDocumentImage(evidence.documentMedia, post, mediaId)}
-                alt={alt}
+                image={revisionDocumentImage(evidence.documentMedia, post, occurrence.mediaId)}
+                occurrence={occurrence}
+                alt={occurrence.alt}
                 locale={locale}
               />
             )}

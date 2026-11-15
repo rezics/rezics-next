@@ -8,6 +8,7 @@ import { TextSelection } from '@tiptap/pm/state';
 import type { RichTextEditorLabels } from './editor-labels.ts';
 import { bubbleOptions } from './editor-menu-helpers.ts';
 import { safeDocumentUrl } from './document-url.ts';
+import { runCompactEditorChain } from './editor-compact-commands.ts';
 import { LinkEditBlock, LinkViewBlock } from './editor-upstream/reactjs-tiptap-editor/link-controls.tsx';
 
 export interface LinkRange {
@@ -84,12 +85,13 @@ export function applyLink(
   )
     return false;
   const target = exactLinkRange(editor, range);
-  const chain = editor.chain().setTextSelection(target);
-  if (href === null) return chain.unsetMark('link').run();
-  if (target.from === target.to) {
-    return chain.insertContent({ type: 'text', text: href, marks: [{ type: 'link', attrs: { href } }] }).run();
-  }
-  return chain.setMark('link', { href }).run();
+  return runCompactEditorChain(editor, (chain) => {
+    const selected = chain.setTextSelection(target);
+    if (href === null) return selected.unsetMark('link');
+    if (target.from === target.to)
+      return selected.insertContent({ type: 'text', text: href, marks: [{ type: 'link', attrs: { href } }] });
+    return selected.setMark('link', { href });
+  });
 }
 
 /** Keep a live ProseMirror selection if its mapped positions still resolve; never invent a retired range. */
