@@ -1,8 +1,7 @@
-import { useRecoveryLifetime } from '../recovery-lifetime';
-import { useLocation } from '@tanstack/react-router';
+import { useArchiveRouteLifetime } from '../recovery-lifetime';
 import { useEffect, useReducer, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
-import { getLocale, localizeHref } from '../../paraglide/runtime.js';
+import { localizeHref } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
 import type { ProgressChoices } from '../progress-profile';
 import { ArchiveRecoveryDeparture } from '../archive-collection-recovery/departure';
@@ -24,8 +23,9 @@ type Journey = ProgressRecoveryJourney<ProgressChoices>;
 type View = Snapshot<ProgressChoices>;
 
 export function ArchiveProgressRecoveryPage() {
-  const location = useLocation();
-  const scope = useRecoveryLifetime(location.pathname + location.searchStr, getLocale());
+  const scope = useArchiveRouteLifetime();
+  const [failed, setFailed] = useState<typeof scope | null>(null);
+  const [connectionAttempt, retry] = useState(0);
   const [, update] = useReducer((n) => n + 1, 0);
   const [owned, setJourney] = useState<{ scope: typeof scope; journey: Journey } | null>(null);
   const journey = owned?.scope === scope ? owned.journey : null;
@@ -33,22 +33,40 @@ export function ArchiveProgressRecoveryPage() {
     if (!scope.subject || !scope.csrfToken || !scope.current()) return;
     let active = true;
     let mounted: Journey | undefined;
-    const current = () =>
-      active && scope.current() && scope.address === window.location.pathname + window.location.search;
-    const stop = scope.onRetire(() => mounted?.retire());
+    const current = () => active && scope.current();
+    const stop = scope.onRetire(() => mounted?.dispose());
     void browserProgressRecoveryPort({ expectedReader: scope.subject, expectedCredential: scope.csrfToken }).then(
       (port) => {
         if (!current()) return;
         mounted = new ProgressRecoveryJourney(port, crypto.randomUUID(), current, update);
         setJourney({ scope, journey: mounted });
       },
+      () => {
+        if (current()) setFailed(scope);
+      },
     );
     return () => {
       active = false;
       stop();
-      mounted?.retire();
+      mounted?.dispose();
     };
-  }, [scope]);
+  }, [scope, connectionAttempt]);
+  if (scope.current() && failed === scope)
+    return (
+      <main className="space-y-4 p-6">
+        <PageHeading>{m.library_archive_progress_title()}</PageHeading>
+        <p role="status">{m.library_archive_unavailable()}</p>
+        <Button
+          variant="outline"
+          onClick={() => {
+            setFailed(null);
+            retry((attempt) => attempt + 1);
+          }}
+        >
+          {m.library_archive_progress_retry()}
+        </Button>
+      </main>
+    );
   const snap = journey?.snapshot();
   if (!scope.current() || !journey || !snap)
     return (
@@ -76,6 +94,7 @@ export function RecoveryJourney({ journey, snap, owner }: { journey: Journey; sn
     refused: m.library_archive_progress_refused,
     expired: m.library_archive_progress_expired,
     oversize: m.library_archive_progress_oversize,
+    'file-read-failed': m.library_archive_recovery_upload_read_failed,
     cancelled: m.library_archive_progress_cancelled,
     removed: m.library_archive_progress_removed,
   };

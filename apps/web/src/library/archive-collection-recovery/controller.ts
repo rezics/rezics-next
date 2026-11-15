@@ -264,6 +264,7 @@ export function createArchiveCollectionRecoveryJourney(input: {
     expiredTimer = undefined;
     visit.retire();
     clearPrivateEvidence();
+    originalArchiveBase64 = null;
     uploadId = null;
     expiresAt = null;
     status = null;
@@ -297,6 +298,8 @@ export function createArchiveCollectionRecoveryJourney(input: {
     if (response.kind === 'denied') {
       stage = 'denied';
       clearPrivateEvidence();
+      originalArchiveBase64 = null;
+      status = null;
     } else if (response.kind === 'conflict') {
       stage = 'conflict';
     } else if (response.kind === 'not-found') {
@@ -616,12 +619,12 @@ export function createArchiveCollectionRecoveryJourney(input: {
       return () => listeners.delete(listener);
     },
     upload(archiveBase64: string) {
-      const admitted = archiveBase64;
-      originalArchiveBase64 = admitted;
+      if (!live() || busy || unknown || stage !== 'upload') return Promise.resolve();
+      originalArchiveBase64 = archiveBase64;
       const command: Extract<RecoveryEffectCommand, { kind: 'upload' }> = {
         kind: 'upload',
         key: newRecoveryCommandKey(),
-        body: { archiveBase64: admitted },
+        body: { archiveBase64 },
       };
       return dispatch(command);
     },

@@ -1,10 +1,9 @@
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { useLocation } from '@tanstack/react-router';
-import { useRecoveryLifetime } from '../recovery-lifetime';
+import { useArchiveRouteLifetime } from '../recovery-lifetime';
 import { useEffect, useRef, useState } from 'react';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../../paraglide/messages.js';
-import { getLocale, localizeHref } from '../../paraglide/runtime.js';
+import { localizeHref } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
 import { ArchiveEntryRecoveryJourney, supportedRecoverySection } from './controller';
 
@@ -34,8 +33,9 @@ type FocusIntent = {
 
 /** Every callback consults the current query cache and address, including before React effects run. */
 export function ArchiveEntryRecoveryPage() {
-  const location = useLocation();
-  const scope = useRecoveryLifetime(location.pathname + location.searchStr, getLocale());
+  const scope = useArchiveRouteLifetime();
+  const [failed, setFailed] = useState<typeof scope | null>(null);
+  const [connectionAttempt, retry] = useState(0);
   const [owned, setJourney] = useState<{ scope: typeof scope; journey: ArchiveEntryRecoveryJourney } | null>(null);
   const journey = owned?.scope === scope ? owned.journey : null;
   useEffect(() => {
@@ -52,8 +52,7 @@ export function ArchiveEntryRecoveryPage() {
       locale: scope.locale,
       exposure: crypto.randomUUID(),
     };
-    const current = () =>
-      active && scope.current() && scope.address === window.location.pathname + window.location.search ? binding : null;
+    const current = () => (active && scope.current() ? binding : null);
     const stop = scope.onRetire(() => mounted?.retire());
     void browserArchiveRecoveryPort({ expectedReader: scope.subject, expectedCredential: scope.csrfToken }).then(
       (port) => {
@@ -61,13 +60,32 @@ export function ArchiveEntryRecoveryPage() {
         mounted = new ArchiveEntryRecoveryJourney(port, current, Date.now() + 7 * 86_400_000);
         setJourney({ scope, journey: mounted });
       },
+      () => {
+        if (current()) setFailed(scope);
+      },
     );
     return () => {
       active = false;
       stop();
       mounted?.retire();
     };
-  }, [scope]);
+  }, [scope, connectionAttempt]);
+  if (scope.current() && failed === scope)
+    return (
+      <main className="space-y-4 p-6">
+        <PageHeading>{m.library_archive_title()}</PageHeading>
+        <p role="status">{m.library_archive_unavailable()}</p>
+        <Button
+          variant="outline"
+          onClick={() => {
+            setFailed(null);
+            retry((attempt) => attempt + 1);
+          }}
+        >
+          {m.library_archive_progress_retry()}
+        </Button>
+      </main>
+    );
   return <ArchiveEntryRecoveryView journey={scope.current() ? journey : null} />;
 }
 
@@ -259,7 +277,7 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                 ? m.library_archive_entry_working()
                 : ''}
       </p>
-      {snapshot?.notice && snapshot.notice !== 'uncertain' && snapshot.notice !== 'file_too_large' ? (
+      {snapshot?.notice && snapshot.notice !== 'uncertain' && snapshot.notice !== 'file_too_large' && snapshot.notice !== 'file_read_failed' ? (
         <EvidenceDetails value={{ notice: snapshot.notice }} />
       ) : null}
     </>
@@ -797,6 +815,7 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
 
 function notice(value: string) {
   if (value === 'uncertain') return m.library_archive_recovery_uncertain();
+  if (value === 'file_read_failed') return m.library_archive_recovery_upload_read_failed();
   if (value === 'file_too_large') return m.library_archive_recovery_upload_too_large();
   if (value === 'ready') return m.library_archive_present_ready();
   if (value === 'pruned') return m.library_archive_present_pruned();

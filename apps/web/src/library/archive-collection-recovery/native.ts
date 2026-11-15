@@ -74,12 +74,13 @@ export function kernelArchiveCollectionRecoveryPort(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   originConfigured: boolean,
+  authorize = () => identity(request, sessionEnv, originConfigured),
 ): RecoveryPort {
   async function call<T>(input: {
     mutation?: RecoveryEffectCommand;
     send: (api: Api, authorization: string) => Promise<NativeResult<T>>;
   }): Promise<RecoveryResult<T>> {
-    const authorization = await identity(request, sessionEnv, originConfigured);
+    const authorization = await authorize();
     const api = nativeArchiveCollectionRecovery(client);
     if (!authorization || !api) return { kind: 'unavailable' };
     try {
@@ -96,12 +97,14 @@ export function kernelArchiveCollectionRecoveryPort(
     }
   }
 
-  const readHeaders = (authorization: string) => ({ authorization });
-  const writeHeaders = (authorization: string, key: string) => ({
-    authorization,
-    'idempotency-key': JSON.stringify(key),
+  const readOptions = (authorization: string) => ({
+    headers: { authorization },
+    fetch: { cache: 'no-store' as const, redirect: 'manual' as const },
   });
-  const effectHeaders = (authorization: string) => ({ authorization });
+  const writeOptions = (authorization: string, key: string) => ({
+    ...readOptions(authorization),
+    headers: { authorization, 'idempotency-key': JSON.stringify(key) },
+  });
   const idOf = (uploadId: string) => (isId(uploadId) ? uploadId : '');
 
   return {
@@ -109,13 +112,13 @@ export function kernelArchiveCollectionRecoveryPort(
       if (command.body.archiveBase64.length > RECOVERY_UPLOAD_BASE64_CHARS) return Promise.resolve({ kind: 'invalid' });
       return call({
         mutation: command,
-        send: (api, authorization) => api.post(command.body, { headers: writeHeaders(authorization, command.key) }),
+        send: (api, authorization) => api.post(command.body, writeOptions(authorization, command.key)),
       });
     },
     status(uploadId) {
       const id = idOf(uploadId);
       if (!id) return Promise.resolve({ kind: 'not-found' });
-      return call({ send: (api, authorization) => api({ id }).get({ headers: readHeaders(authorization) }) });
+      return call({ send: (api, authorization) => api({ id }).get(readOptions(authorization)) });
     },
     collections(uploadId, query) {
       const id = idOf(uploadId);
@@ -123,7 +126,7 @@ export function kernelArchiveCollectionRecoveryPort(
       if (query.limit !== RECOVERY_PAGE_ROWS || (query.cursor && query.cursor.length > 4_096))
         return Promise.resolve({ kind: 'invalid' });
       return call({
-        send: (api, authorization) => api({ id }).collections.get({ query, headers: readHeaders(authorization) }),
+        send: (api, authorization) => api({ id }).collections.get({ ...readOptions(authorization), query }),
       });
     },
     occurrences(uploadId, collectionId, query) {
@@ -135,7 +138,7 @@ export function kernelArchiveCollectionRecoveryPort(
         send: (api, authorization) =>
           api({ id })
             .collections({ collectionId })
-            .occurrences.get({ query, headers: readHeaders(authorization) }),
+            .occurrences.get({ ...readOptions(authorization), query }),
       });
     },
     review(command) {
@@ -143,9 +146,7 @@ export function kernelArchiveCollectionRecoveryPort(
       return call({
         mutation: command,
         send: (api, authorization) =>
-          api({ id: command.uploadId }).review.post(command.body, {
-            headers: writeHeaders(authorization, command.key),
-          }),
+          api({ id: command.uploadId }).review.post(command.body, writeOptions(authorization, command.key)),
       });
     },
     apply(command) {
@@ -153,7 +154,7 @@ export function kernelArchiveCollectionRecoveryPort(
       return call({
         mutation: command,
         send: (api, authorization) =>
-          api({ id: command.uploadId }).apply.post(command.body, { headers: effectHeaders(authorization) }),
+          api({ id: command.uploadId }).apply.post(command.body, readOptions(authorization)),
       });
     },
     outcomes(uploadId, query) {
@@ -162,7 +163,7 @@ export function kernelArchiveCollectionRecoveryPort(
       if (query.limit !== RECOVERY_PAGE_ROWS || (query.cursor && query.cursor.length > 4_096))
         return Promise.resolve({ kind: 'invalid' });
       return call({
-        send: (api, authorization) => api({ id }).outcomes.get({ query, headers: readHeaders(authorization) }),
+        send: (api, authorization) => api({ id }).outcomes.get({ ...readOptions(authorization), query }),
       });
     },
     cancel(command) {
@@ -170,7 +171,7 @@ export function kernelArchiveCollectionRecoveryPort(
       return call({
         mutation: command,
         send: (api, authorization) =>
-          api({ id: command.uploadId }).delete(undefined, { headers: effectHeaders(authorization) }),
+          api({ id: command.uploadId }).delete(undefined, readOptions(authorization)),
       });
     },
     receivingCollection(collectionId, cursor) {
@@ -179,10 +180,10 @@ export function kernelArchiveCollectionRecoveryPort(
       if (cursor && cursor.length > 4_096) return Promise.resolve({ kind: 'invalid' });
       return call({
         send: async (_api, authorization) => {
-          const headers = { authorization };
+          const options = readOptions(authorization);
           const collection = await client.collections({ collectionId: id }).get({
             query: { view: 'FULL' },
-            headers,
+            ...options,
           });
           if (collection.error) return collection;
           const members = await client.collections({ collectionId: id }).members.get({
@@ -190,7 +191,7 @@ export function kernelArchiveCollectionRecoveryPort(
               cursor !== undefined
                 ? { view: 'FULL', limit: RECEIVING_COLLECTION_PAGE, cursor }
                 : { view: 'FULL', limit: RECEIVING_COLLECTION_PAGE },
-            headers,
+            ...options,
           });
           if (members.error) return members;
           if (collection.data === null || members.data === null)

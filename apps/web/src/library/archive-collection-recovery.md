@@ -60,8 +60,9 @@ Decision: disable the file chooser while preparing one selected archive; keep a 
 Decision: Keep separate bounded cursor windows for Collections, selected-Collection occurrences, and outcomes; commit coordinates only after the exact current read succeeds, and retry its staged cursor as a read.
 
 The upload, current page, selected operands and previews live only in mounted page memory. The upload uses a same-site
-no-store server function and the current viewer/CSRF session; neither archive bytes, continuation cursors nor source
-IDs enter the URL or persistent browser storage. Current session, CSRF credential epoch, route unmount or native
+no-store server function and the original sender sealed for the current viewer/CSRF session. Every private call
+validates that viewer before using the sealed sender. Archive bytes, continuation cursors and source IDs stay out
+of URLs and persistent browser storage. Current session, CSRF credential epoch, route unmount or native
 expiry retires the visit and ignores late callbacks. Native evidence expires 24 hours after upload; reads do not
 extend it.
 

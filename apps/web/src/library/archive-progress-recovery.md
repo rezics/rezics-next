@@ -17,7 +17,8 @@ No archived count, date, profile pin or revision becomes a current native operan
 
 One occurrence, review and confirmation creates one Session. Recovery reads the actual native result after apply;
 recoverable replies hide facts until original checkpoint reconciliation. Cancellation and evidence removal preserve
-accepted Sessions. Unresolved commands remain in memory when the protected visit retires; navigation is blocked
-until they can be acknowledged. Full browser reload is not a persisted-command resume mechanism.
+accepted Sessions. The mounted visit keeps unresolved operands for explicit retry and blocks voluntary departure
+while they are pending. Replacing the signed-in visit or leaving the document releases its local archive buffers
+and pending operands. A full reload starts a fresh visit.
 
 Decision: lead review and outcomes with localized native effects and supplied unit meanings; keep exact IDs, operands and complete evidence in closed labelled details. Keep the three recovery visits independent, with unchanged confirmation, retry and page-read contracts. Presentation acceptance is added to the named route stories; execution and native, keyboard and visual verification are deferred to the verifier.

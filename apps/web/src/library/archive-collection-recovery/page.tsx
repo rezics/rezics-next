@@ -77,7 +77,7 @@ function ArchiveCollectionRecoveryPageForVisit({ current }: { current: RecoveryV
 }
 
 function RecoverySession({ visit }: { visit: RecoveryVisit }) {
-  const port = useArchiveCollectionRecoveryPort();
+  const port = useArchiveCollectionRecoveryPort(visit);
   const journeyRef = useRef<ArchiveCollectionRecoveryJourney | null>(null);
   if (!journeyRef.current) {
     journeyRef.current = createArchiveCollectionRecoveryJourney({ port, visit });

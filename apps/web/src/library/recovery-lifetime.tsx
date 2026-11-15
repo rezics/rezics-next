@@ -1,6 +1,8 @@
 import { QueryClientContext } from '@tanstack/react-query';
+import { useLocation, useRouter } from '@tanstack/react-router';
 import { useContext, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useLibraryApplication } from './application';
+import { getLocale } from '../paraglide/runtime.js';
 
 /** Each archive section owns its visit; the application supplies only current reader evidence. */
 export function useRecoveryLifetime(address: string, locale: string) {
@@ -59,4 +61,18 @@ export function useRecoveryLifetime(address: string, locale: string) {
   }, [observation, address, locale, observer]);
   useLayoutEffect(() => scope.mount(), [scope]);
   return scope;
+}
+
+/** Use the public address on both sides of the router's locale rewrite. */
+export function useArchiveRouteLifetime() {
+  const router = useRouter();
+  const address = useLocation({ select: (location) => location.publicHref.split('#', 1)[0] ?? '' });
+  const scope = useRecoveryLifetime(address, getLocale());
+  return useMemo(
+    () => ({
+      ...scope,
+      current: () => scope.current() && router.history.location.href.split('#', 1)[0] === address,
+    }),
+    [router, scope, address],
+  );
 }
