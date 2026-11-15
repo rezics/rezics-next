@@ -293,6 +293,7 @@ export function captureFrozenHourlyEfficiencyReport(
   candidate: ObservationCandidate | undefined,
   createObservation: () => HourlyObservationData,
   render: (observation: HourlyObservationData) => string,
+  observeStage?: (stage: string, event: 'start' | 'finish', wallMs: number, cpuMs: number) => void,
 ): CaptureResult {
   const bucket = parseUtcHour(bucketValue);
   migrate(db, efficiencyReportMigrations);
@@ -330,8 +331,20 @@ export function captureFrozenHourlyEfficiencyReport(
     prepared = { observation, report, reportRef };
   }
 
+  const writerWaitStarted = performance.now();
+  const writerWaitCpu = process.cpuUsage();
+  let writerAcquiredAt: number | undefined;
+  let writerAcquiredCpu: ReturnType<typeof process.cpuUsage> | undefined;
+  observeStage?.('capture-writer-acquire', 'start', 0, 0);
+  try {
   return db
     .transaction(() => {
+      writerAcquiredAt = performance.now();
+      writerAcquiredCpu = process.cpuUsage();
+      const waitingCpu = process.cpuUsage(writerWaitCpu);
+      observeStage?.('capture-writer-acquire', 'finish', Math.round(writerAcquiredAt - writerWaitStarted),
+        Math.round((waitingCpu.user + waitingCpu.system) / 1000));
+      observeStage?.('capture-writer-commit', 'start', 0, 0);
       const existing = deliveryRow(db, bucket.start);
       if (existing) {
         if (!candidate || sameObservation(existing, candidate))
@@ -408,6 +421,12 @@ export function captureFrozenHourlyEfficiencyReport(
       };
     })
     .immediate();
+  } finally {
+    const spentCpu = process.cpuUsage(writerAcquiredCpu ?? writerWaitCpu);
+    observeStage?.(writerAcquiredAt === undefined ? 'capture-writer-acquire' : 'capture-writer-commit', 'finish',
+      Math.round(performance.now() - (writerAcquiredAt ?? writerWaitStarted)),
+      Math.round((spentCpu.user + spentCpu.system) / 1000));
+  }
 }
 
 export type DeliveryDisposition =
