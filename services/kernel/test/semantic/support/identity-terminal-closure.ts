@@ -179,34 +179,60 @@ export async function atBoundary<T>(
     const query = client.query;
     saved.set(client, query);
     let matched = false;
-    client.query = async function (...args: unknown[]) {
-      const sql = typeof args[0] === 'string' ? args[0] : ((args[0] as { text?: string })?.text ?? '');
-      if (/^BEGIN\b/.test(sql)) matched = false;
-      const parameters = args[1] as unknown[] | undefined;
+    client.query = function (...args: unknown[]) {
+      const { sql, values: parameters } = statementOf(args);
+      if (/^BEGIN\b/i.test(sql)) matched = false;
+      const first = parameters[0];
+      const scalar =
+        typeof first === 'number' && Number.isSafeInteger(first)
+          ? first
+          : typeof first === 'string' && /^(?:0|[1-9][0-9]*)$/.test(first)
+            ? Number(first)
+            : undefined;
       const nativePartition =
-        boundary === 'install' ||
-        boundary === 'ack' ||
-        boundary === 'hold' ||
-        boundary === 'withdraw' ||
-        boundary === 'claim-release'
-          ? Math.floor(Number(parameters?.[0]) / 16)
-          : parameters?.[0];
+        scalar !== undefined &&
+        (boundary === 'install' ||
+          boundary === 'ack' ||
+          boundary === 'hold' ||
+          boundary === 'withdraw' ||
+          boundary === 'claim-release')
+          ? Math.floor(scalar / 16)
+          : scalar;
       const matchesSource =
         (sourcePartition === undefined || nativePartition === sourcePartition) &&
-        (original === undefined || parameters?.includes(original));
-      if (!fired && matchesSource && boundarySQL[boundary].test(sql)) {
-        matched = true;
-        if (when === 'before') {
+        (original === undefined || parameters.includes(original));
+      const before = !fired && matchesSource && boundarySQL[boundary].test(sql) && when === 'before';
+      if (!fired && matchesSource && boundarySQL[boundary].test(sql)) matched = true;
+      const afterCommit = !fired && matched && /^COMMIT\s*;?\s*$/i.test(sql) && when === 'after-commit';
+      if (before) fired = true;
+      const after = async () => {
+        if (afterCommit && !fired) {
           fired = true;
           await action();
         }
+      };
+      if (!before && !afterCommit) return Reflect.apply(query, client, args);
+      const callback = args.at(-1);
+      if (typeof callback === 'function') {
+        const nativeArgs = [...args];
+        nativeArgs[nativeArgs.length - 1] = (...received: unknown[]) => {
+          if (received[0]) return callback(...received);
+          void after().then(
+            () => callback(...received),
+            (error: unknown) => callback(error),
+          );
+        };
+        const dispatch = () => Reflect.apply(query, client, nativeArgs);
+        if (!before) return dispatch();
+        void Promise.resolve().then(action).then(dispatch).catch((error: unknown) => callback(error));
+        return undefined;
       }
-      const result = await Reflect.apply(query, client, args);
-      if (!fired && matched && sql === 'COMMIT' && when === 'after-commit') {
-        fired = true;
-        await action();
-      }
-      return result;
+      return (async () => {
+        if (before) await action();
+        const result = await Reflect.apply(query, client, args);
+        await after();
+        return result;
+      })();
     } as PoolClient['query'];
   };
   db.pool.on('acquire', acquire);
@@ -338,7 +364,9 @@ export async function isolatedDeployment() {
   let enforcedTransactions = 0;
   let firstBindingError: { error: unknown } | undefined;
   const acquire = (client: PoolClient) => {
-    const query = saved.get(client) ?? client.query;
+    // Install once per physical lease owner so later boundary wrappers remain composed above it.
+    if (saved.has(client)) return;
+    const query = client.query;
     saved.set(client, query);
     client.query = wrapHomeQuery(
       client,

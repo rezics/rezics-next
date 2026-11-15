@@ -107,7 +107,7 @@ test('terminal directory preserves caller order, duplicate originals and positiv
   }
 });
 
-for (const disposition of ['cycle', 'missing', 'absent-terminal', 'moved', 'unknown'] as const) {
+for (const disposition of ['cycle', 'missing', 'absent-terminal', 'moved'] as const) {
   test(`native ${disposition} retains unavailable custody without guessing a terminal`, async () => {
     const db = await isolatedDeployment();
     try {
@@ -124,8 +124,6 @@ for (const disposition of ['cycle', 'missing', 'absent-terminal', 'moved', 'unkn
           "UPDATE core.partition SET write_state='moved',moved_to='missing-test-node' WHERE partition_no=$1",
           [home(b)],
         );
-      if (disposition === 'unknown')
-        await db.admin.query('DELETE FROM core.partition WHERE partition_no=$1', [home(b)]);
       for (let round = 0; round < 8; round++) {
         for (const partition of [...new Set(ids.map(home))]) {
           try {
@@ -142,6 +140,35 @@ for (const disposition of ['cycle', 'missing', 'absent-terminal', 'moved', 'unkn
     }
   });
 }
+
+test('registered owner deletion is refused before terminal enrollment without losing its readable identity', async () => {
+  const db = await isolatedDeployment();
+  try {
+    const ids = await seedChain(db, 2);
+    const [a, b, terminal] = ids as [string, string, string];
+    await db.install();
+    const owner = () => db.admin.query(
+      `SELECT p.node,p.epoch,p.write_state,p.moved_to,p.position::text,
+         d.domain_id::text,d.node AS domain_node,d.epoch AS domain_epoch,
+         d.admitted_position::text,d.state AS domain_state
+       FROM core.partition p JOIN access.live_copy_domain d USING(partition_no)
+       WHERE p.partition_no=$1`,
+      [home(b)],
+    );
+    const before = (await owner()).rows;
+    expect(before).toHaveLength(1);
+    // Registered live-copy lineage keeps topology present before Semantic acquires closure custody.
+    await expect(db.admin.query('DELETE FROM core.partition WHERE partition_no=$1', [home(b)])).rejects.toMatchObject({
+      code: '23503',
+      constraint: 'live_copy_domain_partition_no_fkey',
+    });
+    expect((await owner()).rows).toEqual(before);
+    expect((await settle(db, ids)).observed).toMatchObject({ state: 'mapped', original: a, terminal });
+    expect((await readIdentityMappings(db.pool, [a]))[0]).toMatchObject({ state: 'mapped', original: a, terminal });
+  } finally {
+    await db.close();
+  }
+});
 
 for (const boundary of ['receive', 'install', 'promote', 'ack'] as const satisfies readonly Boundary[]) {
   for (const aba of [false, true]) {
