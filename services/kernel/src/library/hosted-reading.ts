@@ -21,6 +21,8 @@ import {
   type HostedReadingClearInput,
   type HostedReadingClearResult,
   type HostedReadingPort,
+  type HostedReadingMetadata,
+  type HostedReadingResume,
   type HostedReadingMetadataView,
   type HostedReadingSaveInput,
   type HostedReadingSaveResult,
@@ -84,6 +86,53 @@ async function authorizeOwner(
 
 function storedAddress(row: HostedReadingRow): HostedReadingAddress {
   return addressFromRow(row);
+}
+
+function exactChapter(address: HostedReadingAddress, value: HostedReadingMetadata): boolean {
+  return (
+    value.availability === 'available' &&
+    value.kind === 'chapter' &&
+    value.occurrenceId === address.occurrenceId &&
+    (address.bodyLanguage === undefined || value.bodyLanguage === address.bodyLanguage) &&
+    value.target.postId === address.targetPostId &&
+    value.target.revisionId === address.targetRevisionId &&
+    value.target.sha256 === address.targetSha256
+  );
+}
+
+function withheldChapter(
+  address: HostedReadingAddress,
+): Extract<HostedReadingMetadata, { availability: 'unavailable' }> {
+  return { availability: 'unavailable', occurrenceId: address.occurrenceId, kind: 'unknown' };
+}
+
+function admittedMetadata(address: HostedReadingAddress, value: HostedReadingMetadata): HostedReadingMetadata {
+  if (value.availability === 'unavailable' && value.occurrenceId === address.occurrenceId)
+    return { availability: 'unavailable', occurrenceId: address.occurrenceId, kind: value.kind };
+  if (value.availability !== 'available' || !exactChapter(address, value)) return withheldChapter(address);
+  return {
+    availability: 'available',
+    occurrenceId: value.occurrenceId,
+    parentId: value.parentId,
+    position: value.position,
+    kind: value.kind,
+    title: value.title,
+    ...(value.bodyLanguage === undefined ? {} : { bodyLanguage: value.bodyLanguage }),
+    target: {
+      threadId: value.target.threadId,
+      postId: value.target.postId,
+      revisionId: value.target.revisionId,
+      sha256: value.target.sha256,
+    },
+  };
+}
+
+function admittedResume(address: HostedReadingAddress, value: HostedReadingResume): HostedReadingResume {
+  const metadata = admittedMetadata(address, value);
+  if (metadata.availability === 'unavailable') return metadata;
+  if (value.availability === 'available' && value.document.sha256 === address.targetSha256)
+    return { ...metadata, document: value.document };
+  return withheldChapter(address);
 }
 
 type HostedReadingPageRow = HostedReadingRow &
@@ -190,6 +239,7 @@ async function confirmHostedReadingOwnerCurrent(
   dependencies: HostedReadingDependencies,
   owner: AccountActor,
   selectedEpoch: number,
+  selected: readonly { subjectId: string; revision: string | null }[],
   deadline: number,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -197,8 +247,30 @@ async function confirmHostedReadingOwnerCurrent(
     dependencies,
     owner,
     deadline,
-    async (_client, current) => {
+    async (client, current) => {
       if (current.epoch !== selectedEpoch) throw new ProblemError('stale_cursor');
+      if (!selected.length) return;
+      // Content work runs after the selecting transaction releases its home. Recheck the exact displayed
+      // checkpoints in one bounded statement. Revisions survive clear and re-creation, so equality detects ABA.
+      const { rows } = await client.query<{ changed: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1
+           FROM unnest($3::uuid[], $4::bigint[]) AS expected(subject_id, revision)
+           LEFT JOIN LATERAL (
+             SELECT revision FROM library.hosted_reading
+             WHERE route=$1 AND account_id=$2::uuid AND subject_id=expected.subject_id
+             LIMIT 1
+           ) AS stored ON true
+           WHERE stored.revision IS DISTINCT FROM expected.revision
+         ) AS changed`,
+        [
+          current.route,
+          owner.accountId,
+          selected.map(({ subjectId }) => subjectId),
+          selected.map(({ revision }) => revision),
+        ],
+      );
+      if (rows[0]?.changed !== false) throw new ProblemError('dependency_unavailable');
     },
     signal,
   );
@@ -272,7 +344,7 @@ export function createHostedReadingReads(dependencies: HostedReadingDependencies
         HOSTED_READING_METADATA_CONCURRENCY,
         async (row) => {
           const address = storedAddress(row);
-          const metadata = await dependencies.content.readMetadata(owner, address, deadline);
+          const metadata = admittedMetadata(address, await dependencies.content.readMetadata(owner, address, deadline));
           return {
             subjectId: row.subject_id,
             revision: row.revision,
@@ -284,7 +356,14 @@ export function createHostedReadingReads(dependencies: HostedReadingDependencies
         alive,
       );
       alive();
-      await confirmHostedReadingOwnerCurrent(dependencies, owner, selected.epoch, deadline, signal);
+      await confirmHostedReadingOwnerCurrent(
+        dependencies,
+        owner,
+        selected.epoch,
+        shown.map((row) => ({ subjectId: row.subject_id, revision: row.revision })),
+        deadline,
+        signal,
+      );
       const last = shown.at(-1);
       return {
         items,
@@ -304,13 +383,14 @@ export function createHostedReadingReads(dependencies: HostedReadingDependencies
       requireOwner(actor, 'progress_session:list');
       const owner = actor as AccountActor;
       const stored = await readHostedReadingCheckpoint(dependencies, owner, subjectId, deadline, signal);
+      const selected = [{ subjectId, revision: stored.row?.revision ?? null }];
       if (!stored.row) {
-        await confirmHostedReadingOwnerCurrent(dependencies, owner, stored.epoch, deadline, signal);
+        await confirmHostedReadingOwnerCurrent(dependencies, owner, stored.epoch, selected, deadline, signal);
         return { state: 'none' as const, subjectId };
       }
       const address = storedAddress(stored.row);
-      const resume = await dependencies.content.resolveExact(owner, address, deadline);
-      await confirmHostedReadingOwnerCurrent(dependencies, owner, stored.epoch, deadline, signal);
+      const resume = admittedResume(address, await dependencies.content.resolveExact(owner, address, deadline));
+      await confirmHostedReadingOwnerCurrent(dependencies, owner, stored.epoch, selected, deadline, signal);
       return {
         state: 'saved' as const,
         subjectId,
@@ -329,13 +409,14 @@ export function createHostedReadingReads(dependencies: HostedReadingDependencies
       requireOwner(actor, 'progress_session:list');
       const owner = actor as AccountActor;
       const stored = await readHostedReadingCheckpoint(dependencies, owner, subjectId, deadline, signal);
+      const selected = [{ subjectId, revision: stored.row?.revision ?? null }];
       if (!stored.row) {
-        await confirmHostedReadingOwnerCurrent(dependencies, owner, stored.epoch, deadline, signal);
+        await confirmHostedReadingOwnerCurrent(dependencies, owner, stored.epoch, selected, deadline, signal);
         return { state: 'none', subjectId };
       }
       const address = storedAddress(stored.row);
-      const metadata = await dependencies.content.readMetadata(owner, address, deadline);
-      await confirmHostedReadingOwnerCurrent(dependencies, owner, stored.epoch, deadline, signal);
+      const metadata = admittedMetadata(address, await dependencies.content.readMetadata(owner, address, deadline));
+      await confirmHostedReadingOwnerCurrent(dependencies, owner, stored.epoch, selected, deadline, signal);
       return {
         state: 'saved',
         subjectId,
