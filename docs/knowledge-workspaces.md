@@ -318,7 +318,8 @@ claims: an independently retained source context must remain currently readable,
 Knowledge media reuses Content's uploader-bound reservation, processing, variants, claim and moderation machinery.
 The destination is an existing owned Knowledge document, never a surrogate Post. Claim during a saved revision
 validates the ordinary current notebook/account authority, same-home destination, uploader and exact managed IDs;
-the immutable revision retains its bounded managed-media membership. Private uploads that are not in the selected
+the immutable revision retains its bounded managed-media membership. A revision admits at most 32 distinct managed
+media sources, using Content's existing media request bound. Private uploads that are not in the selected
 revision cannot become public through publication of that document.
 
 Private media reads retain current Knowledge ancestry and owner admission. Public media URLs carry an explicit
@@ -409,6 +410,15 @@ contributions after account erasure. That state resolves the retained publicatio
 notebook ancestor chain or author-account permission. It retains only permitted published selections and source
 lifecycle evidence; it creates no second publication store or writer. Moderation remains effective. Native account
 erasure acceptance must prove this transition before the capability opens.
+
+Account disposition first marks every eligible document's current selected publication generation across the entire
+owner population, before cutting any private primary ancestry. A later bounded pass fences each notebook, removes
+private/unselected revisions and private structure/history, de-identifies retained revision authors and removes
+authoring-origin copy provenance. Retained public bytes, source digests, licences, selected reference manifests and
+managed-media membership remain exact. Retained and terminal documents detach from notebook and working-head
+identity; only the marked selected generation can remain public without a private path. Terminal private documents
+retain a minimized purge witness for Media, with no manuscript or owner/path metadata. Holds leave disposition
+pending. Native account-erasure receipts and cursor authority own the work; no second job or grant engine is added.
 
 ## Structure, storage and concurrency
 
