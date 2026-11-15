@@ -470,9 +470,9 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
       pool,
       { partition: identityJobPartition(job), deadline: Date.now() + 5000 },
       async (tx, { transactionId }) => {
-        bindSemanticProducerRoles(tx, saved.roles);
         const locked = await lock(tx, job, measured);
         if (locked) return noEffect(null);
+        bindSemanticProducerRoles(tx, saved.roles);
         await admitGroupEffect(tx, job, saved, identityJobPartition(job), measured);
         await query(
           tx,
@@ -501,7 +501,6 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
   const controlHome = identityJobPartition(job);
   // The pending intent commits before any other home is visited. Competing deliveries use the same unit/hash.
   const intended = await runCommand(pool, { partition: controlHome, deadline: Date.now() + 5000 }, async (tx) => {
-    bindSemanticProducerRoles(tx, mergedRoles(saved.roles, head.payload?.roles));
     const current = await lock(tx, job, measured);
     if (!current || current.unit !== head.unit) return noEffect(false);
     const key = String(head.unit + 1);
@@ -517,6 +516,7 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
       if (previous.plan_digest !== digest) throw stale();
       return noEffect(true);
     }
+    bindSemanticProducerRoles(tx, mergedRoles(saved.roles, head.payload?.roles));
     await query(
       tx,
       measured,
@@ -544,7 +544,6 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
   let local = await receipt(pool, job, proposed.home, head.unit + 1, digest, measured);
   if (!local) {
     await runCommand(pool, { partition: proposed.home, deadline: Date.now() + 5000 }, async (tx, { transactionId }) => {
-      bindSemanticProducerRoles(tx, mergedRoles(saved.roles, head.payload?.roles));
       const existing = (
         await query(
           tx,
@@ -557,6 +556,7 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
         if (existing.plan_digest !== digest) throw stale();
         return noEffect(null);
       }
+      bindSemanticProducerRoles(tx, mergedRoles(saved.roles, head.payload?.roles));
       await query(
         tx,
         measured,
@@ -594,9 +594,9 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
     throw unavailable();
   }
   await runCommand(pool, { partition: controlHome, deadline: Date.now() + 5000 }, async (tx, { transactionId }) => {
-    bindSemanticProducerRoles(tx, mergedRoles(saved.roles, payload.payload?.roles));
     const current = await lock(tx, job, measured);
     if (!current || current.unit !== head.unit) return noEffect(null);
+    bindSemanticProducerRoles(tx, mergedRoles(saved.roles, payload.payload?.roles));
     const recorded = await query(
       tx,
       measured,
@@ -1654,7 +1654,6 @@ async function cleanCustodiedPayload(
   );
   if (!saved?.native_transaction_id) throw unavailable('Mapping payload lacks released control custody');
   await runCommand(pool, { partition: saved.home, deadline: Date.now() + 5000 }, async (tx) => {
-    bindSemanticProducerRoles(tx, roles);
     const removed = await query(
       tx,
       measured,
@@ -1662,7 +1661,9 @@ async function cleanCustodiedPayload(
       WHERE (p.partition_no,p.job_id,p.unit)=(e.partition_no,e.job_id,e.unit) AND p.partition_no=$1 AND p.job_id=$2 AND p.unit=$3 AND e.transaction_id=$4 RETURNING p.unit`,
       [saved.home, job.jobId, head.unit, saved.native_transaction_id],
     );
-    return removed.rowCount ? { value: null, events: [wake(job, saved.home)] } : noEffect(null);
+    if (!removed.rowCount) return noEffect(null);
+    bindSemanticProducerRoles(tx, roles);
+    return { value: null, events: [wake(job, saved.home)] };
   });
 }
 
