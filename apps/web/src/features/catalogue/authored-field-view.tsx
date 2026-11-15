@@ -1265,6 +1265,7 @@ function AuthoredFieldLive({
                   <Field orientation="horizontal">
                     <Checkbox
                       id={ids.original}
+                      aria-labelledby={`${ids.original}-label`}
                       className="size-11 shrink-0 md:pointer-fine:size-4"
                       aria-invalid={errors.some((error) => errorField(error) === 'original')}
                       aria-describedby={
@@ -1275,6 +1276,7 @@ function AuthoredFieldLive({
                       onCheckedChange={(checked) => update({ original: checked === true })}
                     />
                     <FieldLabel
+                      id={`${ids.original}-label`}
                       htmlFor={ids.original}
                       className="min-h-11 min-w-0 max-w-full whitespace-normal break-words md:pointer-fine:min-h-0"
                     >

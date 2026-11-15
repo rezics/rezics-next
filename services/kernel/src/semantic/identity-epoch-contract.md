@@ -1662,6 +1662,31 @@ remain independent obligations.
 
 #### Native source image custody
 
+Decision: an admitted structural mapping unit may withdraw its exact local Source point after the existing
+`effectGate` and `admitHomeEffect` checks, before executing Source SQL. This is a same-job transition; ordinary
+terminal drain is not a substitute because it refuses a pending job and changes the admitted group basis.
+The transition verifies the saved job/epoch/scope/unit plan digest, current native effect frame, source owner
+and image, and the admitted generation/version and matching pending/prearm ownership. Released foreign-home
+evidence must retain its existing native binding; the Source transaction never reads foreign control rows.
+An active closure is eligible only without an outstanding successor or export obligation. An incompatible or
+missing binding refuses without changing custody.
+
+Point withdrawal changes only that mapping's closure state and current-command mutation XID through the
+existing fields. It preserves the Original rows, group generation, version, membership and counters. It neither
+claims a foreign successor/claim nor clears one, and it supplies no participant ACK, disposal or refund. The
+current command's mutation XID binds the actual Source write; another job, unit, command or stale source image
+cannot consume it. Same-unit replay uses its actual retained native effect rather than withdrawing again.
+
+The existing mapping publication/source handoff must retire only that distinguishable same-job point binding
+and leave the Source withdrawn for existing output-closure enrollment. It does not manufacture an active ACK,
+reset to legacy or release an old reservation. Completion validates its actual native unit/job binding before
+clearing the transient mutation XID; foreign or changed claims remain untouched and unavailable. The existing
+enrollment handoff must consume the withdrawn point rather than strand it behind a completed command's binding.
+Source image capture follows the final Source writes and includes the
+withdrawn logical state. Pre-export exclusion may recognize a withdrawn point only through that exact current
+same-job image/frame and mutation binding; the ordinary reservation/foreign-claim refusal remains in force.
+No new job, generation, scope authority, guard exception, retry or deadline is introduced.
+
 Decision: bootstrap excludes an unchanged native birth only through the same revision-1, self-mapping,
 self-gate, native transaction and XID proof used by installation, with its actual settled source head.
 The creation mapping records that dirty head in the creation transaction; a default revision is not custody.

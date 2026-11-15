@@ -611,7 +611,7 @@ function AddPart({
   allowItems,
 }: {
   allowItems?: boolean;
-  ids: string[];
+  ids: readonly string[] | (() => readonly string[]);
   read: StatementFieldsRead;
   locale: string;
   label: string;
@@ -619,13 +619,16 @@ function AddPart({
 }) {
   const selectId = useId();
   const [property, setProperty] = useState('');
-  const choices = ids.flatMap((id) => {
+  const [open, setOpen] = useState(false);
+  const lazy = typeof ids === 'function';
+  const visibleIds = lazy ? (open ? ids() : property ? [property] : []) : ids;
+  const choices = visibleIds.flatMap((id) => {
     const definition = read.release.properties[id];
     const name = pageText(definition?.labels, locale).text;
     const supportedItem = allowItems && definition?.datatype === 'wikibase-item' && !!definition.targets?.length;
     return (supportedItem || editableScalar(definition)) && name ? [{ id, name }] : [];
   });
-  if (!choices.length) return null;
+  if (!lazy && !choices.length) return null;
   return (
     <div data-add-part className="flex min-w-0 flex-wrap items-end gap-3">
       <Field className="min-w-0 flex-1 basis-full sm:basis-48">
@@ -634,6 +637,8 @@ function AddPart({
         </FieldLabel>
         <Select
           value={property === '' ? null : property}
+          open={open}
+          onOpenChange={setOpen}
           onValueChange={(nextSelectValue) => setProperty(nextSelectValue ?? '')}
         >
           <SelectTrigger className={selectClassName} id={selectId} aria-label={label}>
@@ -1151,7 +1156,7 @@ export function StatementFields({
             ))}
             <AddPart
               allowItems={!!partControl}
-              ids={Object.keys(current.release.properties)}
+              ids={() => Object.keys(current.release.properties)}
               read={current}
               locale={locale}
               label={m.correction_add_part({}, o)}

@@ -86,7 +86,21 @@ test('mounted draft updates preserve occurrence identity, history, counts, and p
     head = renamed.value.revisionId;
     const renamedPage = await f.native.call('GET', `${path}/children?kind=structure&parentId=${parentId}`);
     expect(renamedPage.value.items).toEqual([
-      expect.objectContaining({ occurrenceId: nestedId, kind: 'part', title: 'Renamed nested part' }),
+      expect.objectContaining({
+        occurrenceId: nestedId,
+        parentId,
+        position: 0,
+        kind: 'part',
+        title: 'Renamed nested part',
+      }),
+      expect.objectContaining({
+        occurrenceId: nextChapterId,
+        parentId,
+        position: 1,
+        kind: 'chapter',
+        title: 'Next chapter',
+        target: originalTarget,
+      }),
     ]);
 
     const revisedSource = await f.native.revise(source.firstPost, {});
@@ -146,7 +160,15 @@ test('mounted draft updates preserve occurrence identity, history, counts, and p
       `${path}/children?kind=structure&parentId=${parentId}&revisionId=${originalRevisionId}`,
     );
     expect(oldNestedPart.value.items).toEqual([
-      expect.objectContaining({ occurrenceId: nestedId, title: 'Nested part' }),
+      expect.objectContaining({ occurrenceId: nestedId, parentId, position: 0, kind: 'part', title: 'Nested part' }),
+      expect.objectContaining({
+        occurrenceId: nextChapterId,
+        parentId,
+        position: 1,
+        kind: 'chapter',
+        title: 'Next chapter',
+        target: originalTarget,
+      }),
     ]);
     expect(oldChapter.value.occurrence).toMatchObject({
       occurrenceId: chapterId,
@@ -179,7 +201,21 @@ test('mounted draft updates preserve occurrence identity, history, counts, and p
     const afterStale = await f.native.call('GET', `${path}/children?kind=structure&parentId=${parentId}`);
     expect(afterStale.value.revisionId).toBe(later.value.revisionId);
     expect(afterStale.value.items).toEqual([
-      expect.objectContaining({ occurrenceId: nestedId, title: 'Renamed nested part' }),
+      expect.objectContaining({
+        occurrenceId: nestedId,
+        parentId,
+        position: 0,
+        kind: 'part',
+        title: 'Renamed nested part',
+      }),
+      expect.objectContaining({
+        occurrenceId: nextChapterId,
+        parentId,
+        position: 1,
+        kind: 'chapter',
+        title: 'Next chapter',
+        target: originalTarget,
+      }),
     ]);
     expect(await readCounts(later.value.revisionId)).toMatchObject({ placement_count: '5', chapter_count: '2' });
   } finally {
