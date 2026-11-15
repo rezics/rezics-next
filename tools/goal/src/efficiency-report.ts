@@ -1028,7 +1028,9 @@ function buildHourlyEfficiencyReport(
     checkWaitLine,
     ...bucketSummary.checkHandoffLines,
     ...lifecycleLines,
-    promotionSummary(db, metrics),
+    nativeScheduled
+      ? 'Legacy managed promotion: unmeasured in the scheduled native view; the manual report retains it.'
+      : hourlyReportStage(options.observeStage, 'promotion', () => promotionSummary(db, metrics)),
     operatorAttention(metrics, policy),
     sharedIncidentSummary(incidents.incidents, incidents.available, policy),
     hourlyReportStage(options.observeStage, 'guards', () => guardEndingLine(db, bucket)),

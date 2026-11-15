@@ -807,7 +807,17 @@ function detail(operationId: string, action: string, write = false) {
     'x-action': action,
     'x-exposure': 'gate:personal_library',
     security: [{ bearerAuth: [] }],
-    ...(['library_entry:list', 'library_entry:read', 'copy:list'].includes(action)
+    ...([
+      'library_entry:list',
+      'library_entry:read',
+      'library_entry:update',
+      'library_entry:delete',
+      'copy:list',
+      'copy:read',
+      'copy:create',
+      'copy:update',
+      'copy:delete',
+    ].includes(action)
       ? { 'x-authority-anchor': 'own-account', 'x-authority-resource-types': Object.keys(bundledRelease.types) }
       : {}),
     ...(write ? { 'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }) } : {}),
