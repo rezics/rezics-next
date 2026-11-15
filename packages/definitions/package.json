@@ -30,6 +30,10 @@
     "./schema/catalogue.json": "./schema/catalogue.json",
     "./schema/catalogue-node.json": "./schema/catalogue-node.json",
     "./schema/kind.json": "./schema/kind.json",
+    "./presentation/game/zone.json": "./presentation/game/zone.json",
+    "./presentation/manga/zone.json": "./presentation/manga/zone.json",
+    "./presentation/recipe/zone.json": "./presentation/recipe/zone.json",
+    "./presentation/series/zone.json": "./presentation/series/zone.json",
     "./language": "./src/language.ts"
   },
   "scripts": {

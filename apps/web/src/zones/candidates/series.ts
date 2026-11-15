@@ -1,5 +1,5 @@
 import type { CompositionDocument } from '@rezics/composition';
-import seriesStarter from '../../../../../packages/definitions/presentation/series/zone.json';
+import seriesStarter from '@rezics/definitions/presentation/series/zone.json';
 import type { ZonePageResponse, ZonePublic } from '../appearance';
 import { copyStarterIntro } from './starter-document';
 

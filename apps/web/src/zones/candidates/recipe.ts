@@ -2,7 +2,7 @@ import type { SubjectRead } from '@rezics/client';
 import { PAGE_GLOBAL_CONTEXT, planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import definitions from '../../kernel/recorded/definitions-release.json';
-import recipeStarter from '../../../../../packages/definitions/presentation/recipe/zone.json';
+import recipeStarter from '@rezics/definitions/presentation/recipe/zone.json';
 import type { ZonePageResponse, ZonePublic } from '../appearance';
 import { copyStarterIntro } from './starter-document';
 

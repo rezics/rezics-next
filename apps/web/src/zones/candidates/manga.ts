@@ -1,5 +1,5 @@
 import type { CompositionDocument, ZoneConfiguration } from '@rezics/composition';
-import mangaStarter from '../../../../../packages/definitions/presentation/manga/zone.json';
+import mangaStarter from '@rezics/definitions/presentation/manga/zone.json';
 import type { ZonePublic } from '../appearance';
 import { copyStarterIntro } from './starter-document';
 

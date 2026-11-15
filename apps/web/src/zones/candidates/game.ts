@@ -7,7 +7,7 @@ import {
 } from '@rezics/composition';
 import platformProfileJson from '@rezics/composition/profiles/platform.json' with { type: 'json' };
 import type { ZonePageResponse, ZonePublic } from '../appearance';
-import starterJson from '../../../../../packages/definitions/presentation/game/zone.json' with { type: 'json' };
+import starterJson from '@rezics/definitions/presentation/game/zone.json' with { type: 'json' };
 import { copyStarterIntro } from './starter-document';
 
 type Starter = {
