@@ -157,7 +157,16 @@ test('paging Stay retains exact reservation and confirmation; Leave discards uns
   await click(m.auth_members_stay());
   expect(host.querySelector<HTMLInputElement>('input[type=checkbox]')!.checked).toBe(true);
   expect(membership.readMembershipCommand()).toEqual(saved);
-  expect(host.textContent).toContain(reservation);
+  expect(host.querySelector('#membership-confirmation')).not.toBeNull();
+  expect(host.textContent).toContain(
+    m.auth_members_confirmation({
+      organization: org,
+      member,
+      effect: m.auth_members_owner_effect(),
+    }),
+  );
+  expect(host.textContent).toContain(m.auth_members_initiator({ account }));
+  expect(host.textContent).not.toContain(reservation);
   await click(m.auth_inventory_next());
   await click(m.auth_members_leave());
   expect(list.mock.calls.at(-1)).toEqual([org, account, 'next', expect.any(AbortSignal)]);

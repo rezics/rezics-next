@@ -123,7 +123,9 @@ test('destination review labels imported data, holds the acting account, and wai
   await submitForm(host, '#transfer-request-input');
   expect(host.textContent).toContain(m.auth_transfer_acting_as({ account: session.accountId }));
   expect(host.textContent).toContain(m.auth_transfer_imported_request_provenance());
-  expect(host.textContent).toContain(m.auth_transfer_native_advice_destination());
+  expect(host.textContent).toContain(m.auth_transfer_handoff_accept_heading());
+  expect(host.textContent).toContain(m.auth_transfer_handoff_consequences());
+  expect(host.textContent).not.toContain(m.auth_transfer_native_advice_destination());
   expect(calls.some(({ path }) => path === '/account-operations/approve')).toBe(false);
   await flush(() => host.querySelector<HTMLInputElement>('#transfer-confirm')!.click());
   expect(calls.some(({ path }) => path === '/account-operations/approve')).toBe(false);

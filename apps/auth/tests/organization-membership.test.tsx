@@ -483,7 +483,7 @@ test('a read-only recovery review restores private review only for the exact ini
   expect(host.textContent).toContain(organizationId);
   expect(host.textContent).toContain(memberAccountId);
   expect(host.textContent).toContain(accountId);
-  expect(host.textContent).toContain(reservationId);
+  expect(host.textContent).not.toContain(reservationId);
   expect(document.activeElement).toBe(host.querySelector('#membership-confirmation'));
   expect(membership.readMembershipCommand()).toEqual(saved);
 
