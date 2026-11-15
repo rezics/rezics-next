@@ -134,7 +134,7 @@ BEGIN
       IF TG_TABLE_NAME='collection' THEN
         attributed := item.curator_account_id;
       END IF;
-    ELSIF TG_TABLE_NAME IN ('progress_unit','progress_change') THEN
+    ELSIF TG_TABLE_NAME IN ('progress_unit','progress_episode','progress_change') THEN
       k := 'account';
       SELECT account_id INTO owner FROM library.progress_session
         WHERE route=r AND session_id=item.session_id;
@@ -11069,6 +11069,13 @@ CREATE TRIGGER native_source_writer AFTER INSERT OR DELETE OR UPDATE ON library.
 --
 
 CREATE TRIGGER native_source_writer AFTER INSERT OR DELETE OR UPDATE ON library.progress_change FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
+-- Name: progress_episode native_source_writer; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_source_writer AFTER INSERT OR DELETE OR UPDATE ON library.progress_episode FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
 
 
 --

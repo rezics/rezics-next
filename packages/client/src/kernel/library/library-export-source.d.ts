@@ -122,6 +122,8 @@ export type ExportSeek = {
     bytes: number;
     sectionTotals: [number, number][];
 };
+/** A unit frontier names a fact family; it never rewrites the stored unit ID. */
+export declare function validUnitExportFrontier(parent: string, after: string): boolean;
 export declare const initialExportSeek: () => ExportSeek;
 export type ExportSourcePage = {
     records: ExportRecord[];
