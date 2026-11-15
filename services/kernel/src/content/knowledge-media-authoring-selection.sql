@@ -8,4 +8,5 @@ JOIN content.knowledge_document document ON document.route=i.route AND document.
 JOIN content.knowledge_notebook notebook ON notebook.route=document.route AND notebook.notebook_id=document.notebook_id
 JOIN content.knowledge_revision revision
   ON revision.route=document.route AND revision.document_id=document.document_id AND revision.revision_id=i.revision_id
-WHERE content.knowledge_document_eligible(document.route,document.document_id);
+WHERE NOT document.account_erased AND NOT notebook.account_erased
+  AND content.knowledge_document_eligible(document.route,document.document_id);
