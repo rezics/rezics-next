@@ -49,6 +49,19 @@ function outcomeLabel(report: CatalogueReport) {
   return null;
 }
 
+function actionLabel(action: 'dismiss' | 'hide' | 'restore') {
+  if (action === 'dismiss') return m.moderation_dismiss();
+  if (action === 'hide') return m.catalogue_reports_hide_subject();
+  return m.catalogue_reports_restore_subject();
+}
+
+function reportVisibilityLabel(visibility: string): string {
+  if (visibility === 'visible') return m.catalogue_reports_visibility_visible();
+  if (visibility === 'hidden') return m.catalogue_reports_visibility_hidden();
+  if (visibility === 'taken_down') return m.catalogue_reports_visibility_taken_down();
+  return visibility;
+}
+
 export function CatalogueReportsView({
   page,
   onSelect,
@@ -114,20 +127,6 @@ export function CatalogueReportsView({
           : page.action.reason === 'unavailable'
             ? m.moderation_bulk_unavailable()
             : m.report_unavailable();
-  const visibility =
-    page.action.state === 'confirmed' && page.action.result.kind === 'visibility'
-      ? page.action.result.visibility
-      : page.subject.state === 'changed'
-        ? page.subject.visibility
-        : null;
-  const visibilityLabel =
-    visibility === 'visible'
-      ? m.catalogue_reports_visibility_visible()
-      : visibility === 'hidden'
-        ? m.catalogue_reports_visibility_hidden()
-        : visibility === 'taken_down'
-          ? m.catalogue_reports_visibility_taken_down()
-          : null;
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-8 sm:py-10" aria-labelledby="catalogue-reports-heading">
@@ -164,137 +163,224 @@ export function CatalogueReportsView({
             ) : null}
           </nav>
           {selected ? (
-            <article className="min-w-0 rounded-2xl border p-4 sm:p-6" aria-label={m.moderation_queue_submission()}>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h2 className="text-lg font-semibold">{m.moderation_queue_submission()}</h2>
-                  <p className="mt-1 break-all text-sm text-muted-foreground">{selected.id}</p>
+            <div className="min-w-0 space-y-4">
+              <article className="min-w-0 rounded-2xl border p-4 sm:p-6" aria-label={m.moderation_queue_submission()}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-semibold">{m.moderation_queue_submission()}</h2>
+                    <p className="mt-1 break-all text-sm text-muted-foreground">{selected.id}</p>
+                  </div>
+                  {outcomeLabel(selected) ? <span className="text-sm font-medium">{outcomeLabel(selected)}</span> : null}
                 </div>
-                {outcomeLabel(selected) ? <span className="text-sm font-medium">{outcomeLabel(selected)}</span> : null}
-              </div>
-              <dl className="mt-5 grid gap-3 text-sm">
-                <div>
-                  <dt className="font-medium">{m.moderation_reason_label()}</dt>
-                  <dd className="mt-1">{selected.reason}</dd>
-                </div>
-                {selected.evidence ? (
+                <dl className="mt-5 grid gap-3 text-sm">
                   <div>
-                    <dt className="font-medium">{m.moderation_queue_submission()}</dt>
-                    <dd className="mt-1 whitespace-pre-wrap break-words">{selected.evidence}</dd>
+                    <dt className="font-medium">{m.moderation_reason_label()}</dt>
+                    <dd className="mt-1">{selected.reason}</dd>
+                  </div>
+                  {selected.evidence ? (
+                    <div>
+                      <dt className="font-medium">{m.moderation_queue_submission()}</dt>
+                      <dd className="mt-1 whitespace-pre-wrap break-words">{selected.evidence}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+                <section className="mt-6 rounded-xl bg-muted/50 p-4" aria-label={m.catalogue_reports_current_subject()}>
+                  <h3 className="font-semibold">{m.catalogue_reports_current_subject()}</h3>
+                  {page.subject.state === 'loading' || page.subject.state === 'idle' ? (
+                    <p role="status" className="mt-2 text-sm text-muted-foreground">
+                      {m.moderation_queue_loading()}
+                    </p>
+                  ) : page.subject.state === 'loaded' ? (
+                    <div className="mt-2 break-words text-sm">
+                      <p className="font-medium">{page.subject.subject.label}</p>
+                      {page.subject.subject.description ? (
+                        <p className="mt-1 whitespace-pre-wrap">{page.subject.subject.description}</p>
+                      ) : null}
+                      <p className="text-muted-foreground">{page.subject.subject.type}</p>
+                      <p className="break-all text-muted-foreground">{page.subject.subject.id}</p>
+                    </div>
+                  ) : page.subject.state === 'error' ? (
+                    <div className="mt-2">
+                      <p role="alert" className="text-sm text-muted-foreground">
+                        {m.moderation_appeals_read_unavailable()}
+                      </p>
+                      <Button className="mt-2" size="sm" variant="outline" onClick={onRetrySubject}>
+                        {m.moderation_queue_retry()}
+                      </Button>
+                    </div>
+                  ) : page.subject.state === 'changed' ? (
+                    <p role="status" className="mt-2 text-sm">
+                      {m.catalogue_reports_visibility_confirmed({
+                        visibility: reportVisibilityLabel(page.subject.visibility),
+                      })}
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-sm text-muted-foreground">{m.moderation_target_unavailable()}</p>
+                  )}
+                </section>
+                {!page.command && page.action.state === 'uncertain' ? (
+                  <div className="mt-5">
+                    <p role="alert" className="text-sm text-destructive">
+                      {m.moderation_queue_uncertain()}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">{m.moderation_queue_retry_hint()}</p>
+                    <Button className="mt-3" onClick={onRetryAction}>
+                      {m.moderation_queue_retry_action()}
+                    </Button>
                   </div>
                 ) : null}
-              </dl>
-              <section className="mt-6 rounded-xl bg-muted/50 p-4" aria-label={m.catalogue_reports_current_subject()}>
-                <h3 className="font-semibold">{m.catalogue_reports_current_subject()}</h3>
-                {page.subject.state === 'loading' || page.subject.state === 'idle' ? (
-                  <p role="status" className="mt-2 text-sm text-muted-foreground">
-                    {m.moderation_queue_loading()}
-                  </p>
-                ) : page.subject.state === 'loaded' ? (
-                  <div className="mt-2 break-words text-sm">
-                    <p className="font-medium">{page.subject.subject.label}</p>
-                    {page.subject.subject.description ? (
-                      <p className="mt-1 whitespace-pre-wrap">{page.subject.subject.description}</p>
-                    ) : null}
-                    <p className="text-muted-foreground">{page.subject.subject.type}</p>
-                    <p className="break-all text-muted-foreground">{page.subject.subject.id}</p>
-                  </div>
-                ) : page.subject.state === 'error' ? (
-                  <div className="mt-2">
-                    <p role="alert" className="text-sm text-muted-foreground">
-                      {m.moderation_appeals_read_unavailable()}
+                {!page.command && failedText ? (
+                  <div className="mt-5">
+                    <p role="alert" className="text-sm text-destructive">
+                      {failedText}
                     </p>
-                    <Button className="mt-2" size="sm" variant="outline" onClick={onRetrySubject}>
-                      {m.moderation_queue_retry()}
+                    <Button className="mt-3" variant="outline" onClick={onRefresh}>
+                      {m.moderation_queue_refresh()}
                     </Button>
                   </div>
-                ) : page.subject.state === 'changed' ? (
-                  <p role="status" className="mt-2 text-sm">
+                ) : null}
+                {page.action.state === 'invalid' ? (
+                  <p role="alert" className="mt-4 text-sm text-destructive">
+                    {m.moderation_queue_reason_invalid()}
+                  </p>
+                ) : null}
+                {!page.command && page.action.state === 'confirmed' && page.action.result.kind === 'dismissed' ? (
+                  <p role="status" className="mt-5 text-sm font-medium">
+                    {m.moderation_dismissed()}
+                  </p>
+                ) : null}
+                {!page.command && page.action.state === 'confirmed' && page.action.result.kind === 'visibility' ? (
+                  <p role="status" className="mt-5 text-sm font-medium">
                     {m.catalogue_reports_visibility_confirmed({
-                      visibility: visibilityLabel ?? page.subject.visibility,
+                      visibility: reportVisibilityLabel(page.action.result.visibility),
                     })}
                   </p>
-                ) : (
-                  <p className="mt-2 text-sm text-muted-foreground">{m.moderation_target_unavailable()}</p>
-                )}
-              </section>
-              {page.action.state === 'uncertain' ? (
-                <div className="mt-5">
-                  <p role="alert" className="text-sm text-destructive">
-                    {m.moderation_queue_uncertain()}
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">{m.moderation_queue_retry_hint()}</p>
-                  <Button className="mt-3" onClick={onRetryAction}>
-                    {m.moderation_queue_retry_action()}
-                  </Button>
-                </div>
-              ) : null}
-              {failedText ? (
-                <div className="mt-5">
-                  <p role="alert" className="text-sm text-destructive">
-                    {failedText}
-                  </p>
-                  <Button className="mt-3" variant="outline" onClick={onRefresh}>
+                ) : null}
+                {!page.command && (page.action.state === 'confirmed' || page.action.state === 'failed') ? (
+                  <Button className="mt-4" variant="outline" onClick={onRefresh}>
                     {m.moderation_queue_refresh()}
                   </Button>
-                </div>
-              ) : null}
-              {page.action.state === 'invalid' ? (
-                <p role="alert" className="mt-4 text-sm text-destructive">
-                  {m.moderation_queue_reason_invalid()}
-                </p>
-              ) : null}
-              {page.action.state === 'confirmed' && page.action.result.kind === 'dismissed' ? (
-                <p role="status" className="mt-5 text-sm font-medium">
-                  {m.moderation_dismissed()}
-                </p>
-              ) : null}
-              {page.action.state === 'confirmed' && page.action.result.kind === 'visibility' ? (
-                <p role="status" className="mt-5 text-sm font-medium">
-                  {m.catalogue_reports_visibility_confirmed({
-                    visibility: visibilityLabel ?? page.action.result.visibility,
-                  })}
-                </p>
-              ) : null}
-              {page.action.state === 'confirmed' || page.action.state === 'failed' ? (
-                <Button className="mt-4" variant="outline" onClick={onRefresh}>
-                  {m.moderation_queue_refresh()}
-                </Button>
-              ) : null}
-              {selected.outcome === null && page.subject.state === 'loaded' ? (
-                <fieldset className="mt-6 grid gap-3 border-t pt-5" disabled={locked}>
-                  <label className="grid gap-2 text-sm font-medium">
-                    {m.moderation_reason_label()}
-                    <Textarea
-                      value={page.reason}
-                      maxLength={1024}
-                      onChange={(event) => onReason(event.currentTarget.value)}
-                    />
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" onClick={() => onAct('dismiss')}>
-                      {m.moderation_dismiss()}
+                ) : null}
+                {selected.outcome === null && page.subject.state === 'loaded' ? (
+                  <fieldset className="mt-6 grid gap-3 border-t pt-5" disabled={locked}>
+                    <label className="grid gap-2 text-sm font-medium">
+                      {m.moderation_reason_label()}
+                      <Textarea
+                        value={page.reason}
+                        maxLength={1024}
+                        onChange={(event) => onReason(event.currentTarget.value)}
+                      />
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" onClick={() => onAct('dismiss')}>
+                        {m.moderation_dismiss()}
+                      </Button>
+                      <Button onClick={() => onAct('hide')}>{m.catalogue_reports_hide_subject()}</Button>
+                    </div>
+                  </fieldset>
+                ) : null}
+                {canRestore && selected.outcome !== 'dismissed' ? (
+                  <fieldset className="mt-6 grid gap-3 border-t pt-5" disabled={locked}>
+                    <label className="grid gap-2 text-sm font-medium">
+                      {m.moderation_reason_label()}
+                      <Textarea
+                        value={page.reason}
+                        maxLength={1024}
+                        onChange={(event) => onReason(event.currentTarget.value)}
+                      />
+                    </label>
+                    <Button variant="outline" onClick={() => onAct('restore')}>
+                      {m.catalogue_reports_restore_subject()}
                     </Button>
-                    <Button onClick={() => onAct('hide')}>{m.catalogue_reports_hide_subject()}</Button>
-                  </div>
-                </fieldset>
+                  </fieldset>
+                ) : null}
+              </article>
+              {page.command ? (
+                <section
+                  className="min-w-0 rounded-2xl border p-4 sm:p-6"
+                  aria-label={actionLabel(page.command.input.action)}
+                >
+                  <h2 className="text-lg font-semibold">{actionLabel(page.command.input.action)}</h2>
+                  <dl className="mt-4 grid gap-3 text-sm">
+                    <div>
+                      <dt className="font-medium">{m.moderation_queue_submission()}</dt>
+                      <dd className="mt-1 break-all">{page.command.report.id}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium">{m.catalogue_reports_current_subject()}</dt>
+                      <dd className="mt-1 break-all">{page.command.input.subjectId}</dd>
+                    </div>
+                    {'reason' in page.command.input ? (
+                      <div>
+                        <dt className="font-medium">{m.moderation_reason_label()}</dt>
+                        <dd className="mt-1 whitespace-pre-wrap break-words">{page.command.input.reason}</dd>
+                      </div>
+                    ) : null}
+                  </dl>
+                  {page.action.state === 'sending' ? (
+                    <p role="status" className="mt-5 text-sm text-muted-foreground">
+                      {m.moderation_queue_loading()}
+                    </p>
+                  ) : null}
+                  {page.action.state === 'uncertain' ? (
+                    <div className="mt-5">
+                      <p role="alert" className="text-sm text-destructive">
+                        {m.moderation_queue_uncertain()}
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">{m.moderation_queue_retry_hint()}</p>
+                      <Button className="mt-3" onClick={onRetryAction}>
+                        {m.moderation_queue_retry_action()}
+                      </Button>
+                    </div>
+                  ) : null}
+                  {failedText ? (
+                    <div className="mt-5">
+                      <p role="alert" className="text-sm text-destructive">
+                        {failedText}
+                      </p>
+                    </div>
+                  ) : null}
+                  {page.action.state === 'confirmed' && page.action.result.kind === 'dismissed' ? (
+                    <p role="status" className="mt-5 text-sm font-medium">
+                      {m.moderation_dismissed()}
+                    </p>
+                  ) : null}
+                  {page.action.state === 'confirmed' && page.action.result.kind === 'visibility' ? (
+                    <p role="status" className="mt-5 text-sm font-medium">
+                      {m.catalogue_reports_visibility_confirmed({
+                        visibility: reportVisibilityLabel(page.action.result.visibility),
+                      })}
+                    </p>
+                  ) : null}
+                  {page.action.state === 'confirmed' || page.action.state === 'failed' ? (
+                    <Button className="mt-4" variant="outline" onClick={onRefresh}>
+                      {m.moderation_queue_refresh()}
+                    </Button>
+                  ) : null}
+                  <details className="mt-5 rounded-xl border px-4 py-3">
+                    <summary className="cursor-pointer font-medium">{m.moderation_queue_submission()}</summary>
+                    <dl className="mt-4 grid gap-3 text-sm">
+                      <div>
+                        <dt className="font-medium">{m.moderation_reason_label()}</dt>
+                        <dd className="mt-1 whitespace-pre-wrap break-words">{page.command.report.reason}</dd>
+                      </div>
+                      {page.command.report.revisionId ? (
+                        <div>
+                          <dt className="font-medium">{m.moderation_reported_revision_label()}</dt>
+                          <dd className="mt-1 break-all">{page.command.report.revisionId}</dd>
+                        </div>
+                      ) : null}
+                      {page.command.report.evidence ? (
+                        <div>
+                          <dt className="font-medium">{m.moderation_queue_submission()}</dt>
+                          <dd className="mt-1 whitespace-pre-wrap break-words">{page.command.report.evidence}</dd>
+                        </div>
+                      ) : null}
+                    </dl>
+                  </details>
+                </section>
               ) : null}
-              {canRestore && selected.outcome !== 'dismissed' ? (
-                <fieldset className="mt-6 grid gap-3 border-t pt-5" disabled={locked}>
-                  <label className="grid gap-2 text-sm font-medium">
-                    {m.moderation_reason_label()}
-                    <Textarea
-                      value={page.reason}
-                      maxLength={1024}
-                      onChange={(event) => onReason(event.currentTarget.value)}
-                    />
-                  </label>
-                  <Button variant="outline" onClick={() => onAct('restore')}>
-                    {m.catalogue_reports_restore_subject()}
-                  </Button>
-                </fieldset>
-              ) : null}
-            </article>
+            </div>
           ) : null}
         </div>
       )}
