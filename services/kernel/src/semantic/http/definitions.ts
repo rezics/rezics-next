@@ -10,6 +10,7 @@ import {
 } from '@rezics/definitions';
 import {
   cataloguePin,
+  DEFINITION_CATALOGUE_READ_KEY_BOUND,
   type NativeDefinitionCatalogue,
   type DefinitionCatalogueReadContext,
 } from '../definition-catalogue.ts';
@@ -251,7 +252,14 @@ function catalogueReadContext(
 ): DefinitionCatalogueReadContext {
   // Reuse the native caller ledger. Access preparation, final authorization and metadata SQL share it.
   const ledger = new LeafNativeWork(
-    { keys: 1024, points: 256, rows: 2048, witnesses: 1024, bytes: 8 * 1048576, emptySeeks: 512 },
+    {
+      keys: 1024 + DEFINITION_CATALOGUE_READ_KEY_BOUND,
+      points: 256,
+      rows: 2048,
+      witnesses: 1024,
+      bytes: 8 * 1048576,
+      emptySeeks: 512,
+    },
     deadline,
   );
   return { actor, deadline, work: ledger.accounting };
