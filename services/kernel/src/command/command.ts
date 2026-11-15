@@ -8,6 +8,7 @@ import {
 export const DEFAULT_REQUEST_DEADLINE_MS = 2000;
 
 import type { Pool, PoolClient } from 'pg';
+import type { StandardQueryV1 } from 'reylo';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Actor } from '../request/access.ts';
 import { AccessUnavailableError, classifyUnavailability, CommandUnavailableError } from '../access/unavailable.ts';
@@ -433,6 +434,21 @@ function remaining(deadline: number): number {
 }
 function pause(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+/** Selected controls execute one compiled statement; Reylo retains its wire codec and cardinality. */
+async function runCompiledFence<Input, Output>(
+  client: PoolClient,
+  query: StandardQueryV1<Input, Output, 'postgres'> & { readonly sql: string },
+  input: Input,
+): Promise<Output> {
+  const statement = query['~standard'].query;
+  const result = await client.query<(string | null)[]>({
+    text: statement.text,
+    values: [...statement.encode(input)],
+    rowMode: 'array',
+    types: { getTypeParser: () => (value: string) => value },
+  });
+  return statement.decode(result.rows);
 }
 async function boundedRead<T>(client: PoolClient, deadline: number, read: () => Promise<T>): Promise<T> {
   await client.query('BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY');
@@ -930,14 +946,18 @@ async function executeCommand<T>(
               client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`),
             );
           else await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
-          const noEffectFence = () =>
-            noEffectFenceStatement.run(client, {
+          const noEffectFence = () => {
+            const parameters: (typeof noEffectFenceStatement)['~reylo']['input'] = {
               partition_no: partition,
               transaction_id: transactionId,
               receipt: jsonParameter(receipt),
-            });
-          const eventFence = () =>
-            fenceStatement.run(client, {
+            };
+            return dispatch
+              ? runCompiledFence(client, noEffectFenceStatement, parameters)
+              : noEffectFenceStatement.run(client, parameters);
+          };
+          const eventFence = () => {
+            const parameters: (typeof fenceStatement)['~reylo']['input'] = {
               partition_no: partition,
               events: jsonParameter(events),
               transaction_id: transactionId,
@@ -945,7 +965,11 @@ async function executeCommand<T>(
                 ? { principal: options.principal, clientId: basis.clientId, requestedBy: basis.requestedBy }
                 : null,
               receipt: jsonParameter(receipt),
-            });
+            };
+            return dispatch
+              ? runCompiledFence(client, fenceStatement, parameters)
+              : fenceStatement.run(client, parameters);
+          };
           const row = noEffect
             ? await (dispatch ? dispatch.control('noEffectFence', noEffectFence) : noEffectFence())
             : await (dispatch ? dispatch.control('eventFence', eventFence) : eventFence());
