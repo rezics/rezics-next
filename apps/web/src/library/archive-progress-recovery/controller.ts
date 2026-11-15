@@ -1,6 +1,9 @@
 import type { Application, Holdings, Occurrences, Reply, Result, Review, ReviewInput, Units, Upload } from './native';
 import { UPLOAD_BYTES } from './native';
 import type { ProgressRecoveryPort, NativePort } from './native';
+import { archiveBytesBase64 } from '../private-export/archive-bytes';
+
+export { archiveBytesBase64 as archiveBase64 } from '../private-export/archive-bytes';
 
 export type Occurrence = Occurrences['occurrences'][number]['evidence'];
 export type Snapshot<Choices = unknown> = {
@@ -21,7 +24,16 @@ export type Snapshot<Choices = unknown> = {
   cancelled: boolean;
   removing: boolean;
   removed: number;
-  notice: 'ready' | 'uncertain' | 'recoverable' | 'refused' | 'expired' | 'oversize' | 'cancelled' | 'removed';
+  notice:
+    | 'ready'
+    | 'uncertain'
+    | 'recoverable'
+    | 'refused'
+    | 'expired'
+    | 'oversize'
+    | 'file-read-failed'
+    | 'cancelled'
+    | 'removed';
   refusal: number | null;
   hasOriginalArchive: boolean;
 };
@@ -56,11 +68,6 @@ const empty = <Choices>(): Snapshot<Choices> => ({
   refusal: null,
   hasOriginalArchive: false,
 });
-export function archiveBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
-  return btoa(binary);
-}
 
 export class ProgressRecoveryJourney<Choices = unknown> {
   #state = empty<Choices>();
@@ -127,7 +134,14 @@ export class ProgressRecoveryJourney<Choices = unknown> {
   retire() {
     this.#retired = true;
     this.#selection++;
+    this.#original = null;
     this.#state = empty<Choices>();
+  }
+  dispose() {
+    this.retire();
+    // A real viewer/route retirement destroys this mount's unique binding.
+    unresolved.delete(this.binding);
+    cancellations.delete(this.binding);
   }
   #accept<T>(reply: Reply<T>): T | null {
     if (!this.#live()) return null;
@@ -169,10 +183,16 @@ export class ProgressRecoveryJourney<Choices = unknown> {
       return;
     }
     await this.#work(async () => {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      this.#original = { bytes: new Uint8Array(bytes), name: file.name };
-      const base64 = archiveBase64(bytes);
+      let bytes: Uint8Array;
+      try {
+        bytes = new Uint8Array(await file.arrayBuffer());
+      } catch {
+        if (this.#live()) this.#state.notice = 'file-read-failed';
+        return;
+      }
       if (!this.#live()) return;
+      this.#original = { bytes, name: file.name };
+      const base64 = archiveBytesBase64(bytes);
       // Store the exact request and original sender before delivery. No JSON parse/re-encode occurs.
       unresolved.set(this.binding, { kind: 'upload', base64, key: crypto.randomUUID(), port: this.port, upload: null });
       await this.#deliver();

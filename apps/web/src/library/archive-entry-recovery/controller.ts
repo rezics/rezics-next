@@ -139,6 +139,7 @@ export class ArchiveEntryRecoveryJourney {
 
   /** File size is checked before reading; native validation receives the original bytes. */
   async upload(file: File) {
+    if (!this.#current() || this.#busy || this.#pendingUpload || this.snapshot().retryOriginal) return;
     if (file.size > archiveUploadBytes) {
       this.#notice = 'file_too_large';
       this.#emit();
@@ -151,7 +152,13 @@ export class ArchiveEntryRecoveryJourney {
     this.#readback = null;
     this.#reviewed = [];
     await this.#run(async () => {
-      const bytes = new Uint8Array(await file.arrayBuffer());
+      let bytes: Uint8Array;
+      try {
+        bytes = new Uint8Array(await file.arrayBuffer());
+      } catch {
+        if (!request.signal.aborted && this.#current()) this.#notice = 'file_read_failed';
+        return;
+      }
       if (request.signal.aborted || !this.#current()) return;
       this.#originalBytes = bytes;
       this.#originalName = file.name;
@@ -394,6 +401,7 @@ export class ArchiveEntryRecoveryJourney {
     this.#pendingUpload = null;
     this.#notice = '';
     this.#evidenceId = null;
+    clearTimeout(this.#expiry);
     this.visit.restart();
     this.#emit();
   }

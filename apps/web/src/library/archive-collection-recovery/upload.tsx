@@ -2,22 +2,14 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { RECOVERY_UPLOAD_BYTES } from './contract';
 import { m } from '../../paraglide/messages.js';
 import { actionClass } from '../private-export/controls';
+import { archiveBytesBase64 } from '../private-export/archive-bytes';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
-
-function base64(bytes: Uint8Array): string {
-  const parts: string[] = [];
-  const chunkSize = 16 * 1024;
-  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    parts.push(String.fromCharCode(...bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length))));
-  }
-  return btoa(parts.join(''));
-}
 
 export async function encodeArchiveFile(file: File): Promise<string> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   try {
-    return base64(bytes);
+    return archiveBytesBase64(bytes);
   } finally {
     bytes.fill(0);
   }

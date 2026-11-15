@@ -1,7 +1,5 @@
-import { useLocation } from '@tanstack/react-router';
 import { useMemo } from 'react';
-import { getLocale } from '../../paraglide/runtime.js';
-import { useRecoveryLifetime } from '../recovery-lifetime';
+import { useArchiveRouteLifetime } from '../recovery-lifetime';
 
 export type RecoveryVisit = {
   subject: string;
@@ -13,8 +11,7 @@ export type RecoveryVisit = {
 
 /** Collection recovery retains its own controller and exact original command operands. */
 export function useRecoveryVisit(): RecoveryVisit | null {
-  const location = useLocation();
-  const scope = useRecoveryLifetime(location.pathname + location.searchStr, getLocale());
+  const scope = useArchiveRouteLifetime();
   return useMemo(() => {
     if (!scope.subject || !scope.csrfToken) return null;
     const controller = new AbortController();
