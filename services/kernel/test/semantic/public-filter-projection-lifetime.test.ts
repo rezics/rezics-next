@@ -5,6 +5,7 @@ import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { retainedPublicFilterProjectionDependenciesCurrent } from '../../src/semantic/public-filter-projection.ts';
 import type { PublicFilterProjectionPage } from '../../src/semantic/public-filter-source-contract.ts';
+import readReplayHead from '../../src/semantic/public-filter-projection-replay-head.sql';
 
 const routes = [0x0101, 0x1212, 0x2323] as const;
 const [subject, terminal, foreign] = routes.map(newId);
@@ -81,7 +82,19 @@ function fakeClient(
     query(input: QueryConfig | string, values?: unknown[]) {
       const sql = typeof input === 'string' ? input : input.text;
       const operands = typeof input === 'string' ? (values ?? []) : (input.values ?? []);
-      return Promise.resolve().then(() => query(sql, operands));
+      return Promise.resolve().then(() => query(sql, operands)).then((native) => {
+        if (typeof input !== 'string' && 'rowMode' in input && input.rowMode === 'array')
+          return {
+            ...native,
+            rows: native.rows.map((row) => Object.values(row).map((value) => {
+              if (value === null || typeof value === 'string') return value;
+              if (typeof value === 'number' || typeof value === 'bigint' || typeof value === 'boolean')
+                return String(value);
+              throw new TypeError('Lifetime fixture requires scalar PostgreSQL text fields');
+            })),
+          };
+        return native;
+      });
     },
     release,
   } as unknown as PoolClient;
@@ -98,7 +111,12 @@ function fakePool(connect: () => Promise<PoolClient>): Pool {
 
 const isBuild = (sql: string) => sql.includes('FROM semantic.public_filter_projection_build');
 const isHead = (sql: string) => sql.includes('FROM semantic.public_filter_projection_head e');
-const partitionArgument = (values: readonly unknown[]) => values.find((value): value is number => typeof value === 'number');
+const partitionArgument = (values: readonly unknown[]) => {
+  const value = values[readReplayHead.params.indexOf('partition_no')];
+  if (typeof value !== 'string' || !/^(0|[1-9][0-9]*)$/.test(value))
+    throw new TypeError('Expected the generated partition binding in PostgreSQL text form');
+  return Number(value);
+};
 const read = (pool: Pool, deadline = Date.now() + 500) =>
   retainedPublicFilterProjectionDependenciesCurrent(pool, request, { deadline });
 

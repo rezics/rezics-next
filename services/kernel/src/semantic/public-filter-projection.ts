@@ -26,6 +26,7 @@ import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-val
 import { factDataTypes, resolveItem, type FactRow, type Statement } from './item.ts';
 import { indexedStatement } from './search-source.ts';
 import { readRelease } from './definition-release-read.ts';
+import { nativeSourceQuery } from './native-source-query.ts';
 import { hasPublicFilterMeaningShape } from './public-filter-source-contract.ts';
 import type {
   PrivacyReductionHead,
@@ -159,7 +160,7 @@ export async function readRetainedPublicFilterProjectionPage(
     pool,
     deadline,
     (client) =>
-      readOriginalPage.run(client, {
+      nativeSourceQuery(client, readOriginalPage, {
         partition_no: 0,
         bootstrap: request.identity.bootstrap,
         execution: request.identity.execution,
@@ -203,7 +204,7 @@ export async function retainedPublicFilterProjectionDependenciesCurrent(
   if (!routed || !validRetainedMeaning(meaning)) return false;
   return inSnapshot(pool, deadline, async (client) => {
     const build = rows(
-      await readBuild.run(client, {
+      await nativeSourceQuery(client, readBuild, {
         partition_no: routed.partition,
         route: routed.route,
         subject_id: page.source.subject,
@@ -242,7 +243,7 @@ export async function retainedPublicFilterProjectionDependenciesCurrent(
     // enumeration or a newly captured replacement for the original Source page.
     for (const partition of homes) {
       requireAccessDeadline(deadline);
-      const head = await readReplayHead.run(client, { build_id: page.frontier.build, partition_no: partition });
+      const head = await nativeSourceQuery(client, readReplayHead, { build_id: page.frontier.build, partition_no: partition });
       if (
         !head ||
         head.write_state !== 'active' ||
@@ -420,7 +421,7 @@ async function storedMeaningRelease(pool: Pool, digest: string, deadline: number
   return inSnapshot(pool, deadline, async (client) => {
     const owner = await readPartition(client, 0);
     if (!owner || owner.writeState !== 'active') return null;
-    const found = rows(await readReleases.run(client, { route: 0, digests: [digest] })) as {
+    const found = rows(await nativeSourceQuery(client, readReleases, { route: 0, digests: [digest] })) as {
       digest: string;
       body: unknown;
     }[];
@@ -614,10 +615,10 @@ async function readPublicIdentities(
       const result = await inSnapshot(config.pool, deadline, async (client) => {
         const owner = await readPartition(client, partition);
         if (!owner || owner.writeState === 'moved' || owner.writeState !== 'active') return null;
-        const privacy = await readPrivacyHead.run(client, { partition_no: partition });
+        const privacy = await nativeSourceQuery(client, readPrivacyHead, { partition_no: partition });
         if (!privacy) return null;
         const found = rows(
-          await readSubjects.run(client, {
+          await nativeSourceQuery(client, readSubjects, {
             partition_no: partition,
             routes: group.map(({ route }) => route),
             subject_ids: group.map(({ id }) => id),
@@ -702,7 +703,7 @@ async function ensureBuildHeads(
 ): Promise<boolean> {
   if (heads.size === 0) return true;
   const retained = rows(
-    await upsertRetainedHeads.run(client, {
+    await nativeSourceQuery(client, upsertRetainedHeads, {
       build_id: build,
       heads: [...heads.values()].map((head) => ({
         partition_no: head.partition,
@@ -731,9 +732,9 @@ async function saveBuild(
     try {
       await client.query(`SET LOCAL statement_timeout = '${Math.max(1, Math.floor(deadline - Date.now()))}ms'`);
       const owner = await readPartition(client, observation.partition);
-      const privacy = await readPrivacyHead.run(client, { partition_no: observation.partition });
+      const privacy = await nativeSourceQuery(client, readPrivacyHead, { partition_no: observation.partition });
       const current = rows(
-        await readSubjects.run(client, {
+        await nativeSourceQuery(client, readSubjects, {
           partition_no: observation.partition,
           routes: [route],
           subject_ids: [subject],
@@ -755,9 +756,9 @@ async function saveBuild(
         await client.query('ROLLBACK');
         return null;
       }
-      await retireBuildHeads.run(client, { partition_no: observation.partition, subject_id: subject });
+      await nativeSourceQuery(client, retireBuildHeads, { partition_no: observation.partition, subject_id: subject });
       const created = rows(
-        await startBuild.run(client, {
+        await nativeSourceQuery(client, startBuild, {
           partition_no: observation.partition,
           route,
           subject_id: subject,
@@ -882,18 +883,18 @@ export async function readPublicFilterProjectionPage(
         if (owner.writeState !== 'active') return unready('owner_pending', cost);
 
         const sourceRows = rows(
-          await readSubjects.run(client, { partition_no: partition, routes: [route], subject_ids: [request.subject] }),
+          await nativeSourceQuery(client, readSubjects, { partition_no: partition, routes: [route], subject_ids: [request.subject] }),
         ) as SubjectRow[];
         const subject = sourceRows[0];
         if (!subject) return unavailable('missing_owner', cost);
         if (!subject.selection_ready) return unready('owner_pending', cost);
         if (!subject.current_revision || !subject.currentRelease) return unready('metadata_missing', cost);
-        const privacy = await readPrivacyHead.run(client, { partition_no: partition });
+        const privacy = await nativeSourceQuery(client, readPrivacyHead, { partition_no: partition });
         if (!privacy) return unready('metadata_missing', cost);
         const time = await mintReadTime(client, config.clock);
         const buildRows = request.frontier
           ? rows(
-              await readBuild.run(client, {
+              await nativeSourceQuery(client, readBuild, {
                 partition_no: partition,
                 route,
                 subject_id: request.subject,
@@ -920,7 +921,7 @@ export async function readPublicFilterProjectionPage(
         const properties = facetProperties(meaning.release, [subject.type]);
         const selected = selectionPhase
           ? (rows(
-              await readPage.run(client, {
+              await nativeSourceQuery(client, readPage, {
                 partition_no: partition,
                 route,
                 subject_id: request.subject,
@@ -965,7 +966,7 @@ export async function readPublicFilterProjectionPage(
       const releases = await inSnapshot(config.pool, deadline, async (client) => {
         const owner = await readPartition(client, 0);
         if (!owner || owner.writeState !== 'active') return null;
-        const found = rows(await readReleases.run(client, { route: 0, digests: missingDigests })) as {
+        const found = rows(await nativeSourceQuery(client, readReleases, { route: 0, digests: missingDigests })) as {
           digest: string;
           body: unknown;
         }[];
@@ -1121,7 +1122,7 @@ export async function readPublicFilterProjectionPage(
         const fences = [] as Awaited<ReturnType<typeof readFences>>[number][];
         for (let offset = 0; offset < values.length; offset += 100)
           fences.push(...(await readFences(client, values.slice(offset, offset + 100))));
-        const privacy = await readPrivacyHead.run(client, { partition_no: home });
+        const privacy = await nativeSourceQuery(client, readPrivacyHead, { partition_no: home });
         if (!privacy) return null;
         return { owner, fences, privacy };
       });
@@ -1196,9 +1197,9 @@ export async function readPublicFilterProjectionPage(
 
     const currentSource = await inSnapshot(config.pool, deadline, async (client) => {
       const owner = await readPartition(client, partition);
-      const privacy = await readPrivacyHead.run(client, { partition_no: partition });
+      const privacy = await nativeSourceQuery(client, readPrivacyHead, { partition_no: partition });
       const currentRows = rows(
-        await readSubjects.run(client, { partition_no: partition, routes: [route], subject_ids: [request.subject] }),
+        await nativeSourceQuery(client, readSubjects, { partition_no: partition, routes: [route], subject_ids: [request.subject] }),
       ) as SubjectRow[];
       return { owner, privacy, subject: currentRows[0] };
     });
@@ -1283,7 +1284,7 @@ export async function readPublicFilterProjectionPage(
     const dependencyCursor = nextCursor;
     const retainedHeads = rows(
       await inSnapshot(config.pool, deadline, (client) =>
-        readRetainedHeadPage.run(client, {
+        nativeSourceQuery(client, readRetainedHeadPage, {
           build_id: retained.build_id,
           after_partition: dependencyCursor.partition,
           input_limit: request.inputLimit,
@@ -1294,7 +1295,7 @@ export async function readPublicFilterProjectionPage(
     cost.dependencyPoints += retainedHeads.length;
     for (const expected of retainedHeads) {
       const current = await inSnapshot(config.pool, deadline, (client) =>
-        readCurrentRetainedHead.run(client, { partition_no: expected.partition_no }),
+        nativeSourceQuery(client, readCurrentRetainedHead, { partition_no: expected.partition_no }),
       );
       if (
         !current ||
@@ -1417,7 +1418,7 @@ export async function readOriginalPublicFilterProjectionPage(
   const page = addCost(produced, { inputKeys: 1, frontierWrites: 1 });
   const pageData = encodeReplayValue(page);
   const inserted = await withConnection(config.pool, (client) =>
-    writeOriginalPage.run(client, { ...values, page_data: pageData, page_digest: replayDigest(pageData) }),
+    nativeSourceQuery(client, writeOriginalPage, { ...values, page_data: pageData, page_digest: replayDigest(pageData) }),
   );
   if (inserted) return page;
 
