@@ -333,6 +333,7 @@ test('mounted generated journey pages a completed export and creates distinct eq
   expect(j.snapshot().review!.unsupported.length).toBeGreaterThan(0);
   await j.confirm(j.snapshot().review!.reviewId);
   const unitResult = j.snapshot().result!;
+  expect(unitResult.application).toMatchObject({ state: 'applied', acceptedSteps: 2, error: null });
   expect(unitResult.progressSession!.completedUnitCount).toBe(0);
   expect(unitResult.completedEpisodes!.episodes.filter((episode) => episode.completed)).toHaveLength(1);
   const read = await response(
