@@ -189,3 +189,6 @@ BEGIN
  THEN RAISE EXCEPTION 'native_public_output_binding_requires_semantic_same_command_capture'; END IF;
  RETURN NULL;
 END; $$;
+
+-- migrate:down
+DO $$ BEGIN RAISE EXCEPTION 'Retained frozen output activation requires a forward migration'; END; $$;

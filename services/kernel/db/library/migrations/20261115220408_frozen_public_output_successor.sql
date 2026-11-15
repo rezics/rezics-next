@@ -111,3 +111,6 @@ BEGIN
  IF TG_OP='DELETE' THEN RETURN OLD; END IF;
  RETURN NEW;
 END; $$;
+
+-- migrate:down
+DO $$ BEGIN RAISE EXCEPTION 'Frozen output successor custody requires a forward migration'; END; $$;
