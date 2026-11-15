@@ -37,7 +37,7 @@ import publicationSupersededSQL from './collection-publication-superseded.sql';
 import { collectionPublicationOutputProducer } from './collection-publication-output.ts';
 import { reclaimSupersededCollectionOutput } from './collection-publication-reclaim.ts';
 import frozenCaptureSQL from './collection-publication-frozen-capture.sql';
-import { publicOutputFreezeWork, publicOutputRetireWork } from '../semantic/identity-public-output-work.ts';
+import { publicOutputFreezeWork, publicOutputFrozenCaptureWork, publicOutputRetireWork } from '../semantic/identity-public-output-work.ts';
 import { withCollectionReadConnection } from './collection-read-connection.ts';
 import { workStepDeadline } from './collection-command-work.ts';
 
@@ -107,18 +107,49 @@ async function advanceSourceStep(
   });
   return published.state === 'published' ? 'ready' : 'unavailable';
 }
-async function retainFrozenPublication(context: WorkContext, row: { route: number; collection: string }) {
+async function retainFrozenPublication(
+  context: WorkContext,
+  row: { route: number; collection: string },
+): Promise<boolean> {
   const deadline = workStepDeadline();
   const capture = await withCollectionReadConnection(context.pool, deadline, async (tx) =>
     (
-      await tx.query<{ captureId: string; bindingDigest: string }>(frozenCaptureSQL.sql, [row.route, row.collection])
+      await tx.query<{
+        generation: string;
+        transactionId: string;
+        position: string;
+        sourceGeneration: string;
+        releaseDigest: string | null;
+        sealedBindingDigest: string | null;
+      }>(frozenCaptureSQL.sql, [row.route, row.collection])
     ).rows[0],
   );
-  if (!capture) return;
-  await collectionPublicationOutputProducer(context).retainFrozen(
-    { kind: 'public-output', partition: partitionOf(row.route), ...capture },
-    { deadline, allowance: { reservationId: capture.captureId, remaining: publicOutputFreezeWork() } },
+  if (!capture) return false;
+  const producer = collectionPublicationOutputProducer(context);
+  if (capture.sealedBindingDigest) {
+    await producer.retainFrozen(
+      {
+        kind: 'public-output',
+        partition: partitionOf(row.route),
+        captureId: capture.generation,
+        bindingDigest: capture.sealedBindingDigest,
+      },
+      { deadline, allowance: { reservationId: capture.generation, remaining: publicOutputFreezeWork() } },
+    );
+    return false;
+  }
+  const { generation, transactionId, position, sourceGeneration } = capture;
+  const result = await producer.advanceFrozenPublication(
+    {
+      route: row.route,
+      collectionId: row.collection,
+      generation,
+      activation: { transactionId, position, sourceGeneration },
+    },
+    capture.releaseDigest,
+    { deadline, allowance: { reservationId: generation, remaining: publicOutputFrozenCaptureWork() } },
   );
+  return result.status === 'more' || result.status === 'sealed';
 }
 
 async function retireSupersededPublication(context: WorkContext, row: { route: number; collection: string }) {
@@ -191,7 +222,8 @@ export async function registerCollectionSourceWork(context: WorkContext): Promis
       if (!row) return { ...input, partition: input.partition + 1, route: null, collection: null };
       if (row.builtin === 'everything' || row.builtin === 'state') {
         if (row.owner) await recoverCollectionPublication(context, { ...row, owner: row.owner }, input.root);
-        await retainFrozenPublication(context, row);
+        // Revisit only when the retained capture advanced. The existing segment still caps invocations.
+        if (await retainFrozenPublication(context, row)) return input;
         await retireSupersededPublication(context, row);
       }
       if (row.owner) await page({ accounts: [row.owner], collectionId: row.collection });

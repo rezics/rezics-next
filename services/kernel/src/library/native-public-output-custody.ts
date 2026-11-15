@@ -30,7 +30,7 @@ import type {
   PublicOutputTuple,
   PublicOutputWork,
 } from './contract/native-public-output.ts';
-import type { CollectionOutputPublication } from './collection-source-output.ts';
+import type { CollectionOutputPublication, CollectionOutputRef } from './collection-source-output.ts';
 import { NativeCollectionWork, instrumentNativeCollectionWork } from './collection-native-work.ts';
 import type { NativePublicOutputIdentity } from './native-source-output-types.ts';
 import {
@@ -55,7 +55,8 @@ import transitionSQL from './native-public-output-transition.sql';
 import consumeSQL from './native-public-output-consume.sql';
 import fenceSQL from './native-public-output-fence.sql';
 import retainedSQL from './native-public-output-retained.sql';
-import frozenLockSQL from './native-public-output-frozen-lock.sql';
+import frozenOriginSQL from './native-public-output-frozen-origin.sql';
+import frozenOwnerLockSQL from './native-public-output-frozen-owner-lock.sql';
 import frozenSuccessorSQL from './native-public-output-frozen-successor.sql';
 
 type Client = Pick<PoolClient, 'query'>;
@@ -278,6 +279,39 @@ async function currentTuple(
   return { identity: id, publication: metadata.outputPublication, observation: metadata.stamp };
 }
 
+async function frozenOrigin(client: Client, ref: CollectionOutputRef, lock: boolean) {
+  if (lock && !(await client.query(frozenOwnerLockSQL.sql, [ref.route, ref.collectionId])).rows.length)
+    return null;
+  const row = (
+    await client.query<CollectionOutputPublication & { incarnation: string; epoch: number; currentPosition: string }>(
+      frozenOriginSQL.sql,
+      [ref.route, ref.collectionId, ref.generation],
+    )
+  ).rows[0];
+  if (!row) return null;
+  const { incarnation, epoch, currentPosition, ...publication } = row;
+  return { incarnation, epoch, position: currentPosition, publication };
+}
+
+async function currentFrozenTuple(client: Client, stored: Stored): Promise<PublicOutputTuple | null> {
+  if (!open(stored)) return null;
+  const expected = stored.binding.tuple;
+  const id = expected.identity;
+  const origin = await frozenOrigin(client, { ...id, generation: id.outputGeneration }, false);
+  if (
+    !origin ||
+    origin.incarnation !== id.incarnation ||
+    origin.epoch !== id.ownerEpoch ||
+    !isDeepStrictEqual(origin.publication, expected.publication)
+  )
+    return null;
+  return {
+    identity: id,
+    publication: origin.publication,
+    observation: { partition: partitionOf(id.route), epoch: origin.epoch, position: BigInt(origin.position) },
+  };
+}
+
 /** One public RR snapshot contains observation, committed native binding and the entire raw page. */
 async function readNativePublicCollectionOutput(
   pool: Pool,
@@ -310,7 +344,9 @@ async function readNativePublicCollectionOutput(
             let result: PublicOutputPage;
             if (!stored || !(await committed(metered, stored))) result = refusal(work);
             else {
-              const tuple = await currentTuple(metered, stored, work, false, observe);
+              const tuple = options.frozen
+                ? await currentFrozenTuple(metered, stored)
+                : await currentTuple(metered, stored, work, false, observe);
               if (!tuple) result = refusal(work, 'changed');
               else {
                 const rows = (
@@ -401,7 +437,11 @@ async function bindAndHoldNativePublicCollectionOutput(
       throw new TypeError('Invalid public output binding selection');
     const current = command(tx, context, partitionOf(ref.route));
     const client = nativePublicOutputClient(tx, work, context.deadline);
-    const original = await owner(client, ref.route, ref.collectionId);
+    if (selection.frozen && (current.basis !== null || selection.captureId !== ref.generation))
+      return refusal(work);
+    const frozen = selection.frozen ? await frozenOrigin(client, ref, true) : null;
+    const live = selection.frozen ? null : await owner(client, ref.route, ref.collectionId);
+    const original = frozen ?? live;
     if (!original) return refusal(work);
     const existing = await load(client, current.partition, selection.captureId, true);
     if (existing) {
@@ -418,30 +458,36 @@ async function bindAndHoldNativePublicCollectionOutput(
       const xid = (await client.query<{ xid: string }>(publicOutputXidSQL())).rows[0]!.xid;
       const stagedHere = b.accepted.transactionId === current.transactionId && existing.row.nativeXid === xid;
       if (!stagedHere && !(await committed(client, existing))) return refusal(work);
-      if (!(await currentTuple(client, existing, work, true, observe))) return refusal(work, 'changed');
+      const tuple = frozen
+        ? await currentFrozenTuple(client, existing)
+        : await currentTuple(client, existing, work, true, observe);
+      if (!tuple) return refusal(work, 'changed');
       return { status: 'bound', binding: b, work: work.receipt() };
     }
-    if (!(await client.query(lifecycleSQL.sql, [ref.route, original.accountId])).rows.length)
-      return refusal(work, 'changed');
-    const metadata = await observe(client, ref, work);
-    if (
-      !metadata ||
-      metadata.incarnation !== original.incarnation ||
-      metadata.stamp.epoch !== original.epoch ||
-      routeOf(metadata.curatorAccountId!) !== ref.route ||
-      metadata.outputGeneration !== ref.generation
-    )
-      return refusal(work, 'changed');
-    const publication = (
-      await client.query<CollectionOutputPublication>(publicationSQL.sql, [
-        ref.route,
-        ref.collectionId,
-        metadata.sourceGeneration,
-      ])
-    ).rows[0];
+    let publication = frozen?.publication;
+    if (live) {
+      if (!(await client.query(lifecycleSQL.sql, [ref.route, live.accountId])).rows.length)
+        return refusal(work, 'changed');
+      const metadata = await observe(client, ref, work);
+      if (
+        !metadata ||
+        metadata.incarnation !== original.incarnation ||
+        metadata.stamp.epoch !== original.epoch ||
+        routeOf(metadata.curatorAccountId!) !== ref.route ||
+        metadata.outputGeneration !== ref.generation
+      )
+        return refusal(work, 'changed');
+      publication = (
+        await client.query<CollectionOutputPublication>(publicationSQL.sql, [
+          ref.route,
+          ref.collectionId,
+          metadata.sourceGeneration,
+        ])
+      ).rows[0];
+      if (!isDeepStrictEqual(publication, metadata.outputPublication)) return refusal(work, 'changed');
+    }
     if (
       !publication ||
-      !isDeepStrictEqual(publication, metadata.outputPublication) ||
       publication.transactionId !== ref.activation.transactionId ||
       publication.position !== ref.activation.position ||
       publication.sourceGeneration !== ref.activation.sourceGeneration
@@ -459,8 +505,8 @@ async function bindAndHoldNativePublicCollectionOutput(
       scope: 'public_output',
       route: ref.route,
       collectionId: ref.collectionId,
-      incarnation: metadata.incarnation,
-      generation: metadata.sourceGeneration,
+      incarnation: original.incarnation,
+      generation: publication.sourceGeneration,
       ownerEpoch: original.epoch,
       receivingEpoch: '1',
       effectKey,
@@ -471,7 +517,11 @@ async function bindAndHoldNativePublicCollectionOutput(
       captureId: selection.captureId,
       holdId,
       definitionDigest: selection.definitionDigest,
-      tuple: { identity, publication, observation: metadata.stamp },
+      tuple: {
+        identity,
+        publication,
+        observation: { partition: accepted.partition, epoch: accepted.epoch, position: accepted.position - 1n },
+      },
       accepted,
     };
     const binding: NativePublicOutputBinding = { ...body, bindingDigest: bindingDigest(body) };
@@ -562,14 +612,12 @@ async function lockNativeFrozenCollectionOutput(
       if (!(await client.query(frozenSuccessorSQL.sql, key)).rows.length) return refusal(work, 'changed');
       return { status: 'locked' as const, binding: stored.binding, work: work.receipt() };
     }
-    const original = await owner(client, id.route, id.collectionId);
-    if (!original || original.epoch !== id.ownerEpoch || original.incarnation !== id.incarnation)
-      return refusal(work, 'changed');
+    // Lock the Collection and Core partition before reading or locking its hold.
+    if (!(await frozenOrigin(client, { ...id, generation: id.outputGeneration }, true))) return refusal(work, 'changed');
     const stored = await load(client, selected.accepted.partition, selected.captureId, true);
-    if (!stored || !open(stored) || !isDeepStrictEqual(stored.binding, selected) || !(await committed(client, stored)))
+    if (!stored || !isDeepStrictEqual(stored.binding, selected) || !(await committed(client, stored)))
       return refusal(work);
-    if (!(await client.query(frozenLockSQL.sql, key)).rows.length) return refusal(work, 'changed');
-    if (!(await client.query(retainedSQL.sql, key)).rows.length) return refusal(work, 'changed');
+    if (!(await currentFrozenTuple(client, stored))) return refusal(work, 'changed');
     return { status: 'locked' as const, binding: stored.binding, work: work.receipt() };
   });
 }
@@ -639,7 +687,8 @@ async function transition(
     const located = await load(client, current.partition, selection.captureId, false);
     if (!located) return refusal(work);
     const id = located.binding.tuple.identity;
-    const original = await owner(client, id.route, id.collectionId);
+    const original = await owner(client, id.route, id.collectionId) ??
+      (kind === 'applied' ? await frozenOrigin(client, { ...id, generation: id.outputGeneration }, true) : null);
     if (!original || original.epoch !== id.ownerEpoch || original.incarnation !== id.incarnation)
       return refusal(work, 'changed');
     const stored = await load(client, current.partition, selection.captureId, true);
@@ -689,7 +738,10 @@ async function transition(
           }
         : { status: 'released' as const, release: receipt, work: work.receipt() };
     }
-    if (!(await client.query(retainedSQL.sql, [current.partition, selection.captureId])).rows.length)
+    if (
+      !(await client.query(retainedSQL.sql, [current.partition, selection.captureId])).rows.length &&
+      (kind !== 'applied' || !(await currentFrozenTuple(client, stored)))
+    )
       return refusal(work);
     // A different uncommitted command, a released pre-transfer disposition, or merely a seal cannot consume custody.
     const receipt: NativePublicOutputReceipt = {

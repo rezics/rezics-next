@@ -56,11 +56,12 @@ export async function purgeSavedCollectionPage(
   const row = (
     await tx.query<{
       membership_kind: string;
+      builtin_kind: string | null;
       state: string;
       visibility: string;
       source_generation: string;
     }>(
-      `SELECT membership_kind,state,visibility,source_generation::text FROM library.collection
+      `SELECT membership_kind,builtin_kind,state,visibility,source_generation::text FROM library.collection
       WHERE route=$1 AND collection_id=$2`,
       keys,
     )
@@ -163,17 +164,14 @@ export async function purgeSavedCollectionPage(
     WHERE route=$1 AND collection_id=$2 AND consumed_by IS NULL LIMIT 1`,
     keys,
   );
-  if (
-    held.rowCount &&
-    (!frozen ||
-      !(
-        await tx.query(
-          'SELECT 1 WHERE library.may_deidentify_frozen_output($1,$2,$3)',
-          [...keys, frozen],
-        )
-      ).rowCount)
-  )
-    return { status: 'retained', removed: 0, custody: 'collection_source_and_destination_disposition' };
+  const builtIn = row.builtin_kind === 'everything' || row.builtin_kind === 'state';
+  if (held.rowCount || (frozen && builtIn)) {
+    const successor =
+      frozen &&
+      (await tx.query('SELECT 1 WHERE library.may_deidentify_frozen_output($1,$2,$3)', [...keys, frozen])).rowCount;
+    if (!successor)
+      return { status: 'retained', removed: 0, custody: 'collection_source_and_destination_disposition' };
+  }
   // Either the hold is gone or the frozen successor can resolve its publication without the curator.
   const history = await tx.query(
     'DELETE FROM library.collection_listing_history WHERE route=$1 AND collection_id=$2',
