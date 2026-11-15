@@ -23,7 +23,7 @@ export function configuredCopyOrigin(options: {
 }): ConfiguredCopyOrigin {
   return {
     isCurrent: options.isCurrent,
-    headers: (operation) => options.headers?.(operation) ?? csrfHeaders(),
+    headers: (operation) => (options.headers ? options.headers(operation) : csrfHeaders()),
     readDetail: (id) => readCopyDetail({ data: { id } }),
     readSubject: async (id) =>
       id === options.subjectId
@@ -128,8 +128,8 @@ export function ConfiguredCopyPanel({
           {m.library_configured_next_copies()}
         </Button>
       ) : null}
-      {writable ? (
-        editing === undefined ? (
+      {editing === undefined ? (
+        writable ? (
           <Exposure operation="copy.create">
             <Button
               type="button"
@@ -140,33 +140,33 @@ export function ConfiguredCopyPanel({
               {m.library_configured_add_copy()}
             </Button>
           </Exposure>
-        ) : (
-          <CopyForm
-            key={editing?.id ?? editorKey}
-            originating={originating}
-            {...(editing ? { copy: editing } : {})}
-            profile={profile}
-            sendKind={sendKind}
-            inline
-            subjectId={subjectId}
-            addKey={editorKey}
-            onClose={close}
-            onCreated={(copy) => {
-              onCreated(copy);
-              close();
-            }}
-            onSaved={(copy) => {
-              onSaved(copy);
-              close();
-            }}
-            onRemoved={(id, result, deadline) => {
-              onRemoved(id, result, deadline);
-              close();
-            }}
-            onKey={(key) => setEditorKey(key)}
-          />
-        )
-      ) : null}
+        ) : null
+      ) : (
+        <CopyForm
+          key={editing?.id ?? editorKey}
+          originating={originating}
+          {...(editing ? { copy: editing } : {})}
+          profile={profile}
+          sendKind={sendKind}
+          inline
+          subjectId={subjectId}
+          addKey={editorKey}
+          onClose={close}
+          onCreated={(copy) => {
+            onCreated(copy);
+            close();
+          }}
+          onSaved={(copy) => {
+            onSaved(copy);
+            close();
+          }}
+          onRemoved={(id, result, deadline) => {
+            onRemoved(id, result, deadline);
+            close();
+          }}
+          onKey={(key) => setEditorKey(key)}
+        />
+      )}
     </section>
   );
 }

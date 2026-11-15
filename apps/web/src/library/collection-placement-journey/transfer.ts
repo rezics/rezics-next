@@ -109,8 +109,12 @@ export function collectionTransferReceiptUpdate(
   destination: { id: string; revision: number } | undefined,
   membersAdmitted = false,
 ): CollectionTransferReceipt {
-  const sourceMatch = source?.id === receipt.sourceId ? source : undefined;
-  const destinationMatch = destination?.id === receipt.destinationId ? destination : undefined;
+  const sourceMatch =
+    source?.id === receipt.sourceId && source.revision >= receipt.sourceRevision ? source : undefined;
+  const destinationMatch =
+    destination?.id === receipt.destinationId && destination.revision >= receipt.destinationRevision
+      ? destination
+      : undefined;
   const admittedMembers = Boolean(destinationMatch) && membersAdmitted;
   return {
     ...receipt,

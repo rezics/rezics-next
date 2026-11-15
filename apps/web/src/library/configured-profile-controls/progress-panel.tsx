@@ -59,13 +59,19 @@ export function ConfiguredProgressPanel({
   const [draft, setDraft] = useState(stored);
   const [submitted, setSubmitted] = useState(false);
   const [pending, setPending] = useState(false);
+  const busy = useRef(false);
+  const uncertain = useRef(false);
   const [outcome, setOutcome] = useState<GuardedOutcome | null>(null);
   const [history, setHistory] = useState<{ open: boolean; page: ProgressSessionPage | null; error: boolean }>({
     open: false,
     page: null,
     error: false,
   });
-  const startIntent = useRef<GuardedCommand<ProgressStartInput, StartResult> | null>(null);
+  const startIntent = useRef<{
+    command: GuardedCommand<ProgressStartInput, StartResult>;
+    amount: string;
+    recordKey: string;
+  } | null>(null);
   const recordIntent = useRef<GuardedCommand<ProgressRecordInput, RecordResult> | null>(null);
   const rules = progress.meaning === 'unsupported' ? undefined : progress.rules;
   const issue = progressDecimalIssue(draft, rules ?? {}, true);
@@ -100,121 +106,96 @@ export function ConfiguredProgressPanel({
     `${subjectId}:${progress.meaning}:${'session' in progress ? progress.session.id : ''}:${draft}`,
   );
 
-  async function save() {
-    if (!current() || progress.meaning === 'unsupported' || pending) return;
-    setSubmitted(true);
-    if (issue) return;
+  function settle(result: GuardedOutcome) {
+    setOutcome(result);
+    if (result.state === 'unavailable') uncertain.current = true;
+    if (uncertain.current && result.state !== 'acknowledged' && result.state !== 'conflict') return;
+    uncertain.current = false;
+    const cleared = recordIntent.current?.operands.clear === true;
+    startIntent.current = null;
+    recordIntent.current = null;
+    if (result.state === 'acknowledged' && cleared) setDraft('');
+    if (result.state === 'acknowledged' || result.state === 'conflict') onAcknowledged();
+  }
+
+  async function deliver() {
+    if (!current() || busy.current) return;
+    busy.current = true;
     setPending(true);
     setOutcome(null);
-    const settle = (result: GuardedOutcome) => {
-      setOutcome(result);
-      if (result.state === 'acknowledged' || result.state === 'conflict') {
-        startIntent.current = null;
-        recordIntent.current = null;
-        onAcknowledged();
-      }
-    };
     try {
-      if (progress.meaning === 'absent' && !('session' in progress)) {
-        const start =
-          startIntent.current ??
-          createGuardedCommand<ProgressStartInput, StartResult>(startSender, credential, {
-            subjectId,
-            mode: progress.measure.mode,
-            unit: progress.measure.unit.id,
-            idempotencyKey: crypto.randomUUID(),
-          });
-        startIntent.current = start;
-        const started = await dispatchGuardedCommand(start, current);
+      const start = startIntent.current;
+      if (!recordIntent.current && start) {
+        const started = await dispatchGuardedCommand(start.command, current);
         if (!started || !current()) return;
-        const startOutcome = progressWriteOutcome(started);
-        if (startOutcome.state !== 'acknowledged' || !started.ok) {
-          settle(startOutcome);
+        if (!started.ok) {
+          settle(progressWriteOutcome(started));
           return;
         }
-        const record =
-          recordIntent.current ??
-          createGuardedCommand<ProgressRecordInput, RecordResult>(recordSender, credential, {
-            sessionId: started.id,
-            revision: 1,
-            measureId: progress.measure.unit.id,
-            amount: draft.trim(),
-            idempotencyKey: crypto.randomUUID(),
-          });
-        recordIntent.current = record;
-        const recorded = await dispatchGuardedCommand(record, current);
-        if (!recorded || !current()) return;
-        settle(progressWriteOutcome(recorded));
-        return;
-      }
-      if (!('session' in progress)) return;
-      const record =
-        recordIntent.current ??
-        createGuardedCommand<ProgressRecordInput, RecordResult>(recordSender, credential, {
-          sessionId: progress.session.id,
-          revision: progress.session.revision,
-          measureId: progress.session.unit,
-          amount: draft.trim(),
-          idempotencyKey: crypto.randomUUID(),
+        // A recovered start continues the reviewed amount with the same follow-up key.
+        recordIntent.current = createGuardedCommand(recordSender, start.command.credential, {
+          sessionId: started.id,
+          revision: 1,
+          measureId: start.command.operands.unit,
+          amount: start.amount,
+          idempotencyKey: start.recordKey,
         });
-      recordIntent.current = record;
+      }
+      const record = recordIntent.current;
+      if (!record) return;
       const recorded = await dispatchGuardedCommand(record, current);
-      if (!recorded || !current()) return;
-      settle(progressWriteOutcome(recorded));
+      if (recorded && current()) settle(progressWriteOutcome(recorded));
+    } catch {
+      if (current()) settle({ state: 'unavailable' });
     } finally {
+      busy.current = false;
       if (current()) setPending(false);
     }
   }
 
-  async function clearAmount() {
-    if (!current() || !('session' in progress) || pending) return;
-    setPending(true);
-    setOutcome(null);
-    try {
-      const record =
-        recordIntent.current ??
-        createGuardedCommand<ProgressRecordInput, RecordResult>(recordSender, credential, {
-          sessionId: progress.session.id,
-          revision: progress.session.revision,
-          measureId: progress.session.unit,
-          clear: true,
+  function save() {
+    if (!current() || progress.meaning === 'unsupported' || busy.current || startIntent.current || recordIntent.current)
+      return;
+    setSubmitted(true);
+    if (issue) return;
+    const amount = draft.trim();
+    const session = progress.session;
+    if (session) {
+      recordIntent.current = createGuardedCommand(recordSender, credential, {
+        sessionId: session.id,
+        revision: session.revision,
+        measureId: session.unit,
+        amount,
+        idempotencyKey: crypto.randomUUID(),
+      });
+    } else {
+      startIntent.current = {
+        command: createGuardedCommand(startSender, credential, {
+          subjectId,
+          mode: progress.measure.mode,
+          unit: progress.measure.unit.id,
           idempotencyKey: crypto.randomUUID(),
-        });
-      recordIntent.current = record;
-      const recorded = await dispatchGuardedCommand(record, current);
-      if (!recorded || !current()) return;
-      const result = progressWriteOutcome(recorded);
-      setOutcome(result);
-      if (result.state === 'acknowledged' || result.state === 'conflict') {
-        recordIntent.current = null;
-        if (result.state === 'acknowledged') setDraft('');
-        onAcknowledged();
-      }
-    } finally {
-      if (current()) setPending(false);
+        }),
+        amount,
+        recordKey: crypto.randomUUID(),
+      };
     }
+    void deliver();
   }
 
-  async function retry() {
-    if (!current()) return;
-    setPending(true);
-    try {
-      const result = recordIntent.current
-        ? await dispatchGuardedCommand(recordIntent.current, current)
-        : startIntent.current
-          ? await dispatchGuardedCommand(startIntent.current, current)
-          : undefined;
-      if (!result || !current()) return;
-      const next = progressWriteOutcome(result);
-      setOutcome(next);
-      if (next.state === 'acknowledged') {
-        recordIntent.current = null;
-        startIntent.current = null;
-        onAcknowledged();
-      }
-    } finally {
-      if (current()) setPending(false);
-    }
+  function clearAmount() {
+    if (!current() || progress.meaning === 'unsupported' || busy.current || startIntent.current || recordIntent.current)
+      return;
+    const session = progress.session;
+    if (!session) return;
+    recordIntent.current = createGuardedCommand(recordSender, credential, {
+      sessionId: session.id,
+      revision: session.revision,
+      measureId: session.unit,
+      clear: true,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    void deliver();
   }
 
   async function openHistory() {
@@ -266,13 +247,14 @@ export function ConfiguredProgressPanel({
           issue={submitted ? issue : null}
           rules={rules}
           aria-describedby={submitted && issue ? errorId : undefined}
-          onChange={(event) => current() && setDraft(event.currentTarget.value)}
+          disabled={locked}
+          onChange={(event) => current() && !locked && setDraft(event.currentTarget.value)}
         />
         <ProgressInputError id={errorId} issue={submitted ? issue : null} rules={rules} />
       </Field>
       <div className="flex flex-wrap gap-3">
         <Exposure operation="progress_session.record">
-          <Button type="button" variant="default" className={button} disabled={pending} onClick={() => void save()}>
+          <Button type="button" variant="default" className={button} disabled={locked} onClick={save}>
             {progress.meaning === 'absent' && !('session' in progress)
               ? m.library_configured_start_progress()
               : m.library_configured_record_progress()}
@@ -280,7 +262,7 @@ export function ConfiguredProgressPanel({
         </Exposure>
         {'session' in progress ? (
           <Exposure operation="progress_session.record">
-            <Button type="button" variant="outline" className={quiet} disabled={pending} onClick={() => void clearAmount()}>
+            <Button type="button" variant="outline" className={quiet} disabled={locked} onClick={clearAmount}>
               {m.library_configured_clear_progress()}
             </Button>
           </Exposure>
@@ -303,13 +285,13 @@ export function ConfiguredProgressPanel({
                 : m.library_progress_unavailable()}
         </p>
       ) : null}
-      {outcome?.state === 'unavailable' ? (
+      {outcome && uncertain.current ? (
         <Button
           type="button"
           variant="outline" className={quiet}
           disabled={pending}
-          aria-describedby={outcomeId}
-          onClick={() => void retry()}
+          aria-describedby={outcome.state === 'unavailable' ? outcomeId : undefined}
+          onClick={() => void deliver()}
         >
           {m.library_configured_retry()}
         </Button>

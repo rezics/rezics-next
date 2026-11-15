@@ -146,6 +146,7 @@ export class ArchiveEntryRecoveryJourney {
       return;
     }
     const request = this.visit.startUpload();
+    clearTimeout(this.#expiry);
     this.#cancelRequest = null;
     this.#cancelAcknowledged = false;
     this.#cancelNeedsReconcile = false;

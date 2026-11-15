@@ -1376,33 +1376,7 @@ function CollectionPageLifetime({
           run.transferRevisions.destination,
         );
         setTransferReceipt(receipt);
-        const [sourceRead, destinationRead] = await Promise.allSettled([
-          refreshPage(),
-          readTransferDestination(capturedTransfer.destination.id),
-        ]);
-        if (!isCurrent()) return;
-        const sourcePage = sourceRead.status === 'fulfilled' ? sourceRead.value : undefined;
-        const destinationReadback =
-          destinationRead.status === 'fulfilled'
-            ? destinationRead.value
-            : { destination: undefined, membersAdmitted: false };
-        const sourceReady = collectionTransferMatchedSource(capturedTransfer.sourceId, sourcePage);
-        if (sourceReady) {
-          queryClient.setQueryData(queryKey, sourceReady);
-          await router.invalidate();
-          if (!isCurrent()) return;
-          resetEditor(sourceReady, true);
-        } else {
-          resetEditor(page, true);
-        }
-        setTransferReceipt(
-          collectionTransferReceiptUpdate(
-            receipt,
-            sourceReady,
-            destinationReadback.destination,
-            destinationReadback.membersAdmitted,
-          ),
-        );
+        await reconcileTransferReceipt(receipt, true);
         return;
       }
       const refreshed = await reloadCollection(true);
@@ -1448,6 +1422,32 @@ function CollectionPageLifetime({
     }
   }
 
+  async function reconcileTransferReceipt(receipt: CollectionTransferReceipt, closeEditor: boolean) {
+    const [sourceRead, destinationRead] = await Promise.allSettled([
+      refreshPage(),
+      readTransferDestination(receipt.destinationId),
+    ]);
+    if (!isCurrent()) return;
+
+    const readSource = sourceRead.status === 'fulfilled' ? sourceRead.value : undefined;
+    const sourceReady =
+      readSource && readSource.revision >= receipt.sourceRevision
+        ? collectionTransferMatchedSource(receipt.sourceId, readSource)
+        : undefined;
+    const target = destinationRead.status === 'fulfilled' ? destinationRead.value : undefined;
+    const destination = target?.destination;
+    setTransferReceipt(collectionTransferReceiptUpdate(receipt, sourceReady, destination, target?.membersAdmitted));
+
+    if (sourceReady) {
+      queryClient.setQueryData(queryKey, sourceReady);
+      if (closeEditor || editing) resetEditor(sourceReady, closeEditor);
+      // Route refresh has independent failure handling. The transfer receipt has already settled from native reads.
+      await router.invalidate().catch(() => {});
+    } else if (closeEditor) {
+      resetEditor(page, true);
+    }
+  }
+
   async function rereadTransferReceipt() {
     if (!transferReceipt || transferReceipt.state !== 'unavailable' || !isCurrent() || inFlight.current) return;
     const previousReceipt = transferReceipt;
@@ -1455,31 +1455,7 @@ function CollectionPageLifetime({
     if (!request) return;
     setTransferReceipt({ ...previousReceipt, state: 'reading' });
     try {
-      const [sourceRead, destinationRead] = await Promise.allSettled([
-        refreshPage(),
-        readTransferDestination(previousReceipt.destinationId),
-      ]);
-      if (!isCurrent()) return;
-      const sourcePage = sourceRead.status === 'fulfilled' ? sourceRead.value : undefined;
-      const destinationReadback =
-        destinationRead.status === 'fulfilled'
-          ? destinationRead.value
-          : { destination: undefined, membersAdmitted: false };
-      const sourceReady = collectionTransferMatchedSource(previousReceipt.sourceId, sourcePage);
-      if (sourceReady) {
-        queryClient.setQueryData(queryKey, sourceReady);
-        await router.invalidate();
-        if (!isCurrent()) return;
-        if (editing) resetEditor(sourceReady);
-      }
-      setTransferReceipt(
-        collectionTransferReceiptUpdate(
-          previousReceipt,
-          sourceReady,
-          destinationReadback.destination,
-          destinationReadback.membersAdmitted,
-        ),
-      );
+      await reconcileTransferReceipt(previousReceipt, false);
     } catch {
       if (isCurrent()) setTransferReceipt({ ...previousReceipt, state: 'unavailable' });
     } finally {
