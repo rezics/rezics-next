@@ -92,7 +92,7 @@ function archiveOccurrences(value: unknown): ArchiveOccurrence[] {
     isRecord(row) &&
     isRecord(row.evidence) &&
     typeof row.evidence.subject_id === 'string' &&
-    typeof row.evidence.amount === 'string';
+    (typeof row.evidence.amount === 'string' || row.evidence.amount === null);
   if (!Array.isArray(value) || !value.every(isOccurrence)) throw new Error('Copy archive occurrences are invalid');
   return value.filter(isOccurrence);
 }

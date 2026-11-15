@@ -6,8 +6,8 @@ import { runCommand, type CommandTransaction, type CommandBasis, type CommandRec
  */
 export declare function admitIdentityTerminalCapture(tx: CommandTransaction, originals: readonly string[]): Promise<void>;
 /** Two explicit phases: authenticated source discovery, released native drain,
- * then a newly authorized source attempt consuming that exact drain. Contention
- * remains unavailable; this adds no executor retry or module backoff loop.
+ * then a newly authorized source attempt consuming that exact drain. Core owns
+ * contention policy, including any enclosing single-attempt maintenance scope.
  */
 type PrincipalOptions = Parameters<typeof runCommand>[1];
 type LegacyOptions = {

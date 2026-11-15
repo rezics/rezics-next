@@ -36,6 +36,7 @@ import { affectedTests } from './affected.ts';
 import { buildSearchImage, cgroupArgs, subjectAutoCreateIndexSetting, waitForSearch } from './search.ts';
 import { withCommandPhase } from './command-phases.ts';
 import { prepareReyloAnalysisCache } from './reylo-cache.ts';
+import { writeReyloProject } from './reylo-project.ts';
 import {
   captureArtifactReturns,
   registerArtifactDeclarations,
@@ -476,16 +477,6 @@ export function diagnosticFiles(
   const all = new Set(files);
   for (const file of changed(revision)) if (file.startsWith(prefix)) all.add(file.slice(prefix.length));
   return Array.from(all).sort();
-}
-
-/**
- * Writes the Reylo project file that points every analysis at `analysisUrl`, in `directory`, which then holds `.reylo/`.
- * Reylo keys its entries by database name, so analysing in each file's own copy re-describes every statement there.
- */
-export function writeReyloProject(directory: string, analysisUrl: string): string {
-  const file = resolve(directory, '.reylo.yaml');
-  writeFileSync(file, `direct_url: ${JSON.stringify(analysisUrl)}\n`);
-  return file;
 }
 
 /** Bind both full and selected compiler spawns to the check's explicit Reylo project. */

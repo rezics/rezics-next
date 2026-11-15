@@ -279,9 +279,10 @@ export function createLibraryCommandRunner(config: {
       async prepare(attempt) {
         await plan?.consumeAttempt();
         if (request.attemptPlan) await consumeLabelCommandAttempt(request.attemptPlan);
-        const evidence = await native?.prepare?.(attempt);
         await prepare?.(attempt);
-        return evidence;
+        // Finish dependency reads before minting short-lived owner evidence
+        // for this attempt's transaction under the original deadline.
+        return native?.prepare?.(attempt);
       },
       async authorize(tx, attempt, evidence) {
         const reservation = request.followOperation

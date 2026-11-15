@@ -4,7 +4,8 @@ import { spawnSync } from 'node:child_process';
 import { basename, dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import pg from 'pg';
-import { fileEnvironment, invokeTypecheck, writeReyloProject } from '../scripts/check.ts';
+import { fileEnvironment, invokeTypecheck } from '../scripts/check.ts';
+import { writeReyloProject } from '../scripts/reylo-project.ts';
 
 const KERNEL_ROOT = resolve(import.meta.dir, '..');
 

@@ -51,6 +51,10 @@ export interface NativeDefinitionCatalogue {
   ): Promise<CatalogueBuildStatus | null>;
 }
 const MAX_RESPONSE_BYTES = 1_048_576;
+const MAX_KIND_PAGE = 100;
+// Metadata pages reserve two index rows per lookahead key, one body per
+// returned key, and the boundary, home and ready probes in the same ledger.
+export const DEFINITION_CATALOGUE_READ_KEY_BOUND = 3 * MAX_KIND_PAGE + 5;
 const cursorKeys = new WeakMap<Pool, KeyRing>();
 /** Ordinary host composition supplies its existing cursor key ring; this never grants read authority. */
 export function configureDefinitionCatalogue(pool: Pool, keys: KeyRing) {
@@ -62,7 +66,8 @@ function unavailable(): never {
   throw new AccessUnavailableError('overloaded');
 }
 function limitOf(limit = 20) {
-  if (!Number.isInteger(limit) || limit < 1 || limit > 100) catalogueFail('invalid', 'Expected page size 1–100');
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_KIND_PAGE)
+    catalogueFail('invalid', 'Expected page size 1–100');
   return limit;
 }
 type KeyRow = { id_key: string; ordinal: string; size: number; precedence: number; label_sort?: Buffer };
@@ -396,7 +401,7 @@ export function createNativeDefinitionCatalogue({
       const ids = [...input.ids];
       if (
         !ids.length ||
-        ids.length > 100 ||
+        ids.length > MAX_KIND_PAGE ||
         new Set(ids).size !== ids.length ||
         catalogueBytes(ids).length > MAX_RESPONSE_BYTES
       )

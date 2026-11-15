@@ -235,10 +235,13 @@ export class LeafNativeWork {
   ) {
     this.accounting = new AccessWorkAccounting(
       {
-        reserve: (_operation, bound) => {
+        reserve: (operation, bound) => {
           const axes = ACCESS_WORK_AXES;
-          if (axes.some((axis) => this.reserved[axis] + bound[axis] > budget[axis]))
-            throw new LeafReservationUnavailable();
+          const axis = axes.find((axis) => this.reserved[axis] + bound[axis] > budget[axis]);
+          if (axis)
+            throw new LeafReservationUnavailable(
+              `${operation}: ${axis} requires ${bound[axis]}, remaining ${budget[axis] - this.reserved[axis]}`,
+            );
           this.reserved = Object.fromEntries(
             axes.map((axis) => [axis, this.reserved[axis] + bound[axis]]),
           ) as AccessWork;
