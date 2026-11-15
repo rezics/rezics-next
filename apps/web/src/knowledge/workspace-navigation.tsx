@@ -32,6 +32,7 @@ export function KnowledgeWorkspaceNavigation({
   const [open, setOpen] = useState(false);
   const [opened, setOpened] = useState(false);
   const regionId = useId();
+  const titleId = `${regionId}-title`;
   const options = { locale: locale as never };
   const currentVisit = useRef(current);
   currentVisit.current = current;
@@ -62,7 +63,7 @@ export function KnowledgeWorkspaceNavigation({
   return (
     <ShellContextNavigation label={m.knowledge_workspace_documents({}, options)}>
       <div
-        className="min-w-0 space-y-4"
+        className="min-w-0 space-y-4 [overflow-wrap:anywhere]"
         onClick={(event) => {
           if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
           const link = event.target instanceof Element ? event.target.closest('a[aria-current="page"]') : null;
@@ -70,21 +71,25 @@ export function KnowledgeWorkspaceNavigation({
           if (link) selectNavigation(current(), () => document.getElementById('main-content'));
         }}
       >
-        <p aria-current="page" className="border-l-2 border-primary py-2 pl-3 text-sm font-medium">
+        <p
+          id={titleId}
+          aria-current="page"
+          className="min-w-0 border-l-2 border-primary py-2 pl-3 text-sm font-medium [overflow-wrap:anywhere]"
+        >
           {title}
         </p>
-        <div className="flex flex-wrap gap-x-4 lg:flex-col lg:items-start">
+        <div className="flex min-w-0 flex-wrap gap-x-4 gap-y-2 lg:flex-col lg:items-start">
           {notebookReturn ?? (
             <Link
               to="/knowledge/notebooks/$notebookId"
               params={{ notebookId: address.notebookId }}
               preload={false}
-              className={knowledgeLink}
+              className={`${knowledgeLink} shrink-0`}
             >
               {m.knowledge_navigation_return({}, options)}
             </Link>
           )}
-          <Link to="/knowledge" preload={false} className={knowledgeLink}>
+          <Link to="/knowledge" preload={false} className={`${knowledgeLink} shrink-0`}>
             {m.knowledge_navigation_heading({}, options)}
           </Link>
         </div>
@@ -94,6 +99,7 @@ export function KnowledgeWorkspaceNavigation({
           className={knowledgeControl}
           aria-expanded={open}
           aria-controls={regionId}
+          aria-describedby={titleId}
           onClick={() => {
             setOpened(true);
             setOpen((value) => !value);

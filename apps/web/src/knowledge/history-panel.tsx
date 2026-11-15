@@ -259,6 +259,15 @@ export function KnowledgeHistoryPanel({
   const leftSelectId = `${id}-history-left`;
   const rightSelectId = `${id}-history-right`;
   const historyIntroId = `${id}-history-intro`;
+  const admissionStatusId = `${id}-admission`;
+  const compareStatusId = `${id}-compare-status`;
+  const compareHelpId = `${id}-compare-help`;
+  const compareDescribedBy =
+    compareAdmission !== 'available' && (open || conflictPair)
+      ? compareStatusId
+      : open && !showComparison
+        ? compareHelpId
+        : undefined;
   const leftSummaryId = showComparison && pair ? pair.leftRevisionId : leftRevisionId;
   const rightSummaryId = showComparison && pair ? pair.rightRevisionId : rightRevisionId;
   const leftSummaryRow = page?.revisions.find((row) => row.revisionId === leftSummaryId);
@@ -266,7 +275,7 @@ export function KnowledgeHistoryPanel({
   return (
     <section
       id="knowledge-revisions"
-      className="min-w-0 scroll-mt-6 space-y-5 border-t border-border pt-6"
+      className="min-w-0 scroll-mt-6 space-y-5 border-t border-border pt-6 [overflow-wrap:anywhere]"
       aria-label={m.knowledge_history_heading({}, options)}
     >
       <div className="flex min-w-0 flex-wrap gap-3">
@@ -276,6 +285,7 @@ export function KnowledgeHistoryPanel({
           variant="outline"
           className={control}
           disabled={pending || open || admission !== 'available' || !operations}
+          aria-describedby={admission !== 'available' ? admissionStatusId : undefined}
           onClick={(event) => void load(firstKnowledgeHistoryPage(), event)}
         >
           {m.knowledge_history_open({}, options)}
@@ -287,13 +297,23 @@ export function KnowledgeHistoryPanel({
             variant="outline"
             className={control}
             disabled={pending || compareAdmission !== 'available' || !operations}
+            aria-describedby={compareDescribedBy}
             onClick={(event) => void compare(conflictPair, conflictTrigger.current, event)}
           >
             {m.knowledge_history_compare_heads({}, options)}
           </Button>
         ) : null}
       </div>
-      {admission !== 'available' ? <p role="status">{failureText(admission)}</p> : null}
+      {admission !== 'available' ? (
+        <p id={admissionStatusId} role="status">
+          {failureText(admission)}
+        </p>
+      ) : null}
+      {compareAdmission !== 'available' && (open || conflictPair) ? (
+        <p id={compareStatusId} role="status">
+          {failureText(compareAdmission)}
+        </p>
+      ) : null}
       {open ? (
         <div className="min-w-0 space-y-6" aria-busy={pending}>
           <h2
@@ -379,7 +399,7 @@ export function KnowledgeHistoryPanel({
                     side === 'left' ? m.knowledge_history_left({}, options) : m.knowledge_history_right({}, options);
                   const selectedIsOnPage = page?.revisions.some((row) => row.revisionId === value) ?? false;
                   return (
-                    <Field key={side}>
+                    <Field key={side} className="min-w-0">
                       <FieldLabel htmlFor={selectId}>{selectedLabel}</FieldLabel>
                       <Select
                         value={value || null}
@@ -393,7 +413,7 @@ export function KnowledgeHistoryPanel({
                         <SelectTrigger
                           id={selectId}
                           aria-describedby={historyIntroId}
-                          className="h-auto min-h-11 w-full min-w-0 whitespace-normal py-2 text-start"
+                          className="h-auto min-h-11 w-full min-w-0 whitespace-normal py-2 text-start [overflow-wrap:anywhere] *:data-[slot=select-value]:line-clamp-none *:data-[slot=select-value]:whitespace-normal"
                           disabled={pending || !page}
                         >
                           <SelectValue placeholder={m.knowledge_private_revision({}, options)} />
@@ -405,7 +425,11 @@ export function KnowledgeHistoryPanel({
                                 <SelectLabel className="break-all whitespace-normal">
                                   {selectedLabel}: {value}
                                 </SelectLabel>
-                                <SelectItem value={value} disabled className="min-h-11 whitespace-normal">
+                                <SelectItem
+                                  value={value}
+                                  disabled
+                                  className="min-h-11 whitespace-normal [&>:first-child]:min-w-0 [&>:first-child]:max-w-full [&>:first-child]:shrink [&>:first-child]:whitespace-normal [&>:first-child]:[overflow-wrap:anywhere]"
+                                >
                                   <span className="min-w-0 whitespace-normal break-all">{value}</span>
                                 </SelectItem>
                               </>
@@ -415,7 +439,7 @@ export function KnowledgeHistoryPanel({
                                 key={row.revisionId}
                                 value={row.revisionId}
                                 disabled={row.revisionId === otherValue}
-                                className="min-h-14 items-start whitespace-normal py-2"
+                                className="min-h-14 items-start whitespace-normal py-2 [&>:first-child]:min-w-0 [&>:first-child]:max-w-full [&>:first-child]:shrink [&>:first-child]:whitespace-normal [&>:first-child]:[overflow-wrap:anywhere]"
                               >
                                 <span className="min-w-0 whitespace-normal [overflow-wrap:anywhere]">
                                   <span className="block break-words font-medium leading-snug">{row.title}</span>
@@ -443,6 +467,7 @@ export function KnowledgeHistoryPanel({
                 variant="outline"
                 className={control}
                 hidden={showComparison}
+                aria-describedby={compareDescribedBy}
                 disabled={
                   showComparison ||
                   pending ||
@@ -458,14 +483,12 @@ export function KnowledgeHistoryPanel({
               >
                 {m.knowledge_history_compare({}, options)}
               </Button>
-              {!showComparison ? (
+              {!showComparison && compareAdmission === 'available' ? (
                 <p
-                  role="status"
+                  id={compareHelpId}
                   className="min-w-0 flex-1 basis-48 text-sm leading-relaxed text-muted-foreground"
                 >
-                  {compareAdmission === 'available'
-                    ? m.knowledge_history_difference_help({}, options)
-                    : failureText(compareAdmission)}
+                  {m.knowledge_history_difference_help({}, options)}
                 </p>
               ) : pair && !pending && compareState !== 'ready' && compareAdmission === 'available' ? (
                 <Button
@@ -477,8 +500,6 @@ export function KnowledgeHistoryPanel({
                 >
                   {m.knowledge_history_retry_pair({}, options)}
                 </Button>
-              ) : compareAdmission !== 'available' ? (
-                <p role="status">{failureText(compareAdmission)}</p>
               ) : null}
             </div>
           </section>
@@ -493,7 +514,7 @@ export function KnowledgeHistoryPanel({
                 <ol className="min-w-0 divide-y divide-border">
                   {page.revisions.map((row) => (
                     <li key={row.revisionId} className="min-w-0 space-y-3 py-5">
-                      <h3 className="font-semibold leading-snug">{row.title}</h3>
+                      <h3 className="min-w-0 font-semibold leading-snug [overflow-wrap:anywhere]">{row.title}</h3>
                       <p className="break-all font-mono text-xs text-muted-foreground">{row.revisionId}</p>
                       <time dateTime={row.createdAt} className="block text-sm tabular-nums text-muted-foreground">
                         {formatHistoryDate(row.createdAt)}
@@ -506,13 +527,15 @@ export function KnowledgeHistoryPanel({
                       ) : null}
                       <KnowledgeDetails label={m.knowledge_workspace_details({}, options)}>
                         <dl className="grid min-w-0 gap-3 sm:grid-cols-2">
-                          <div>
+                          <div className="min-w-0">
                             <dt className="text-sm font-medium">{m.knowledge_private_language({}, options)}</dt>
                             <dd className="text-sm text-muted-foreground">{row.language ?? '—'}</dd>
                           </div>
-                          <div>
+                          <div className="min-w-0">
                             <dt className="text-sm font-medium">{m.knowledge_private_licence({}, options)}</dt>
-                            <dd className="break-words text-sm text-muted-foreground">{row.licence}</dd>
+                            <dd className="break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                              {row.licence}
+                            </dd>
                           </div>
                           <div className="min-w-0 sm:col-span-2">
                             <dt className="text-sm font-medium">{m.knowledge_history_digest({}, options)}</dt>
