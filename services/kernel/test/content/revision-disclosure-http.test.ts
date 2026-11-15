@@ -95,8 +95,10 @@ async function send(path: string, body: unknown, key: string, bearer = f.native.
 }
 
 test('author issues and revokes exact Book consent over native HTTP without broadening direct Posts', async () => {
-  const publicSource = await f.native.thread('published', fromPlainText('Public source A'));
-  const privateSource = await f.native.thread('draft', fromPlainText('Private source C'));
+  const publicDocument = fromPlainText('Public source A');
+  const privateDocument = fromPlainText('Private source C');
+  const publicSource = await f.native.thread('published', publicDocument);
+  const privateSource = await f.native.thread('draft', privateDocument);
   const [publicTarget, privateTarget] = await Promise.all([targetFor(publicSource), targetFor(privateSource)]);
   const publicChapter: Item = {
     occurrenceId: f.newOccurrenceId(),
@@ -192,7 +194,7 @@ test('author issues and revokes exact Book consent over native HTTP without broa
     title: 'Private C',
     target: privateTarget,
   });
-  expect(privateAfter.value.document.canonicalBytes).toBe(canonicalBytes(fromPlainText('Private source C')));
+  expect(privateAfter.value.document.canonicalBytes).toBe(canonicalBytes(privateDocument));
   const publicBook = await f.native.call(
     'GET',
     resolutionPath(f.catalogueId, publicChapter.occurrenceId, publicationId),
@@ -200,7 +202,7 @@ test('author issues and revokes exact Book consent over native HTTP without broa
     { anonymous: true },
   );
   expect(publicBook.status).toBe(200);
-  expect(publicBook.value.document.canonicalBytes).toBe(canonicalBytes(fromPlainText('Public source A')));
+  expect(publicBook.value.document.canonicalBytes).toBe(canonicalBytes(publicDocument));
   expect((await f.native.call('GET', `/v1/posts/${privateTarget.postId}`, undefined, { anonymous: true })).status).toBe(
     404,
   );
@@ -274,7 +276,7 @@ test('author issues and revokes exact Book consent over native HTTP without broa
     { anonymous: true },
   );
   expect(publicStill.status).toBe(200);
-  expect(publicStill.value.document.canonicalBytes).toBe(canonicalBytes(fromPlainText('Public source A')));
+  expect(publicStill.value.document.canonicalBytes).toBe(canonicalBytes(publicDocument));
   const otherStill = await f.native.call(
     'GET',
     resolutionPath(otherCatalogue.firstPost.id, otherChapter.occurrenceId, otherPublicationId),

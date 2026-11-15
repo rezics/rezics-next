@@ -321,7 +321,12 @@ test.each(cases)(
       expect(getByRole(v.host, 'region', { name: m.studio_workspace_preview_region() }).textContent).toContain(
         m.studio_workspace_preview_unsaved(),
       );
-      expect(getByRole(v.host, 'heading', { name: 'Newer <working>', exact: true })).toBeTruthy();
+      expect(
+        getByRole(getByRole(v.host, 'region', { name: m.studio_workspace_preview_region() }), 'heading', {
+          name: 'Newer <working>',
+          exact: true,
+        }),
+      ).toBeTruthy();
       await v.click(m.studio_workspace_write());
       f.saveFailure('uncertain');
       await v.click(m.studio_workspace_save());

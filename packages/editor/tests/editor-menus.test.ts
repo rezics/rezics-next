@@ -35,6 +35,7 @@ test('the rich-text editor formats a selection from a keyboard-reachable menu an
       .sort();
     expect(code, browserFailureDetails(result, `${stdout.slice(-2000)}\n${stderr.slice(-4000)}`)).toBe(0);
     expect(outcomes).toEqual([
+      'All Selection Link: passed',
       'Block Commands: passed',
       'Edit And Remove Link: passed',
       'Inline Lifetime Journey: passed',

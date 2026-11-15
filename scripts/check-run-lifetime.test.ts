@@ -1791,6 +1791,7 @@ test('a second failed discard waits for the original invocation fence and cannot
       throw new Error('first discard completed before entering the owned removal callback');
     }),
   ]);
+  let secondOutcome: Promise<PromiseSettledResult<unknown>> | undefined;
   try {
     const second = discardCheckRunFailedSnapshot(
       f.registration.invocationId,
@@ -1801,16 +1802,24 @@ test('a second failed discard waits for the original invocation fence and cannot
       },
       f.options,
     );
-    const rejected = expect(second).rejects.toThrow('retained terminal custody');
-    for (let index = 0; index < 4; index++) await Promise.resolve();
+    // Observe immediately, but consume no pending assertion while the first owner holds the fence.
+    secondOutcome = second.then(
+      (value) => ({ status: 'fulfilled' as const, value }),
+      (reason: unknown) => ({ status: 'rejected' as const, reason }),
+    );
     expect(removals).toBe(1);
     release();
     expect((await first).snapshotCustody).toBe('removed');
-    await rejected;
+    const outcome = await secondOutcome;
+    expect(outcome.status).toBe('rejected');
+    if (outcome.status !== 'rejected') throw new Error('second discard bypassed changed snapshot custody');
+    expect(outcome.reason).toBeInstanceOf(Error);
+    expect(String(outcome.reason)).toContain('retained terminal custody');
     expect(removals).toBe(1);
   } finally {
     release();
     await first.catch(() => undefined);
+    await secondOutcome;
   }
 });
 

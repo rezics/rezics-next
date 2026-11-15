@@ -145,7 +145,8 @@ async function prepare(canvasElement: HTMLElement) {
   const labels = localizedEditorPreferences();
   const panel = await within(canvasElement).findByRole('region', { name: labels.heading });
   const controls = within(panel);
-  await expect(controls.getByRole('combobox', { name: labels.scope })).toHaveValue('account');
+  await waitFor(() => expect(controls.getByRole('combobox', { name: labels.scope })).toHaveValue('account'));
+  await waitFor(() => expect(controls.getByRole('spinbutton', { name: labels.textSize })).toBeEnabled());
   // Seed the existing shared account owner from Settings before mounting its consumers.
   bound.mountConsumers();
   await waitFor(() => expect(canvasElement.querySelectorAll('[data-editor-consumer] .tiptap')).toHaveLength(2));

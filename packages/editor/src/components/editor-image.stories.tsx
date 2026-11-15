@@ -1,6 +1,7 @@
 import { checkDocument, fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import { Button } from '@rezics/ui/shadcn/button';
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import type { Editor } from '@tiptap/core';
 import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { RichTextEditor } from './rich-text-editor.tsx';
@@ -406,10 +407,13 @@ async function lifetimeCaret(canvasElement: HTMLElement, offset = 7) {
   const textbox = within(canvasElement).getByRole('textbox', { name: 'Lifetime post' });
   await userEvent.click(textbox);
   const text = textbox.querySelector('p')?.firstChild;
-  if (text?.nodeType === Node.TEXT_NODE) {
-    window.getSelection()?.collapse(text, Math.min(offset, text.textContent?.length ?? 0));
-    document.dispatchEvent(new Event('selectionchange'));
-  }
+  if (text?.nodeType !== Node.TEXT_NODE) throw new Error('The lifetime fixture needs its first paragraph text node');
+  const target = Math.min(offset, text.textContent?.length ?? 0);
+  window.getSelection()?.collapse(text, target);
+  document.dispatchEvent(new Event('selectionchange'));
+  const editor = (textbox as HTMLElement & { editor: Editor }).editor;
+  const position = editor.view.posAtDOM(text, target);
+  await waitFor(() => expect(editor.state.selection.empty && editor.state.selection.from === position).toBe(true));
   return textbox;
 }
 
@@ -417,7 +421,15 @@ async function chooseLifetimeFile(canvasElement: HTMLElement, name: string, alt:
   const canvas = within(canvasElement);
   let textbox = await lifetimeCaret(canvasElement, slash ? Number.MAX_SAFE_INTEGER : 7);
   if (slash) {
-    await userEvent.type(textbox, '/i');
+    // The helper already placed the caret at a valid slash boundary; type() would click the host again.
+    const editor = (textbox as HTMLElement & { editor: Editor }).editor;
+    const position = editor.state.selection.$from;
+    const before = position.parent.textBetween(0, position.parentOffset);
+    expect(
+      before.length === 0 || /\s$/u.test(before),
+      'The fixture must offer slash insertion at its intended text boundary',
+    ).toBe(true);
+    await userEvent.keyboard('/i');
     await canvas.findByRole('option', { name: 'Image' });
     await userEvent.keyboard('{Enter}');
   } else {

@@ -4,7 +4,8 @@ import { getMarkRange, type Editor } from '@tiptap/core';
 import { useEditorState } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { TextSelection } from '@tiptap/pm/state';
+import { AllSelection, TextSelection, type SelectionBookmark } from '@tiptap/pm/state';
+import type { Mark, Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { RichTextEditorLabels } from './editor-labels.ts';
 import { bubbleOptions } from './editor-menu-helpers.ts';
 import { safeDocumentUrl } from './document-url.ts';
@@ -15,12 +16,14 @@ export interface LinkRange {
   from: number;
   to: number;
 }
-export interface LinkVisitRange extends LinkRange {
+export interface CapturedLink extends LinkRange {
+  selectionBookmark: SelectionBookmark;
+  storedMarks: readonly Mark[] | null;
+}
+export interface LinkVisitRange extends CapturedLink {
   id: number;
   visit: number;
   url: string;
-  /** The caret/selection before expanding an existing link for exact address editing. */
-  selection?: LinkRange;
 }
 
 export function isLinkRangeValid(editor: Editor, range: LinkRange): boolean {
@@ -44,53 +47,147 @@ export function isLinkRangeValid(editor: Editor, range: LinkRange): boolean {
   }
 }
 
-export function linkHref(editor: Editor, range: LinkRange): string {
-  if (!isLinkRangeValid(editor, range)) return '';
+/** Native mark eligibility, restricted to text: atoms and their payloads are never link targets. */
+function visitLinkText(
+  editor: Editor,
+  range: LinkRange,
+  visit?: (node: ProseMirrorNode, from: number, to: number) => boolean | void,
+): boolean {
   const link = editor.schema.marks.link;
-  if (!link) return '';
+  if (!link) return false;
+  let found = false,
+    done = false;
+  editor.state.doc.nodesBetween(range.from, range.to, (node, position, parent) => {
+    if (done || (node.isAtom && !node.isText)) return false;
+    if (!node.isText || !parent?.type.allowsMarkType(link)) return;
+    if (!link.isInSet(node.marks) && node.marks.some((mark) => mark.type.excludes(link))) return;
+    const from = Math.max(position, range.from),
+      to = Math.min(position + node.nodeSize, range.to);
+    if (from >= to) return;
+    found = true;
+    done = visit ? visit(node, from, to) === false : true;
+  });
+  return found;
+}
+
+export function linkHref(editor: Editor, range: LinkRange): string {
+  if (!isLinkRangeValid(editor, range) || !editor.schema.marks.link) return '';
+  const target = range.from === range.to ? exactLinkRange(editor, range) : range;
+  if (target.from === target.to) return '';
   let href = '';
-  if (range.from === range.to) {
-    const $position = editor.state.doc.resolve(range.from);
-    const mark = $position.marks().find((candidate) => candidate.type === link);
-    return String(mark?.attrs.href ?? '');
-  }
-  editor.state.doc.nodesBetween(range.from, range.to, (node) => {
-    const mark = node.marks.find((candidate) => candidate.type === link);
-    if (mark && !href) href = String(mark.attrs.href ?? '');
+  visitLinkText(editor, target, (node) => {
+    const mark = node.marks.find((candidate) => candidate.type === editor.schema.marks.link);
+    if (mark) {
+      href = String(mark.attrs.href ?? '');
+      return false;
+    }
   });
   return href;
 }
 
-/** Capture the whole link under a caret once; an explicit text selection keeps its exact extent. */
+/** Capture the whole text link under a caret once; explicit text selections keep their exact extent. */
 export function exactLinkRange(editor: Editor, range: LinkRange): LinkRange {
   if (!isLinkRangeValid(editor, range) || range.from !== range.to || !editor.schema.marks.link) return range;
-  return getMarkRange(editor.state.doc.resolve(range.from), editor.schema.marks.link) ?? range;
+  const linked = getMarkRange(editor.state.doc.resolve(range.from), editor.schema.marks.link);
+  return linked && visitLinkText(editor, linked) ? linked : range;
 }
 
-/** Validate at the mutation boundary as well as in the address field. */
+/** Shared text eligibility for capture, mapped drafts and submission. */
+export function eligibleLinkRange(
+  editor: Editor,
+  range: LinkRange,
+  storedMarks: readonly Mark[] | null,
+): LinkRange | null {
+  if (!isLinkRangeValid(editor, range) || !editor.schema.marks.link) return null;
+  const target = exactLinkRange(editor, range),
+    link = editor.schema.marks.link;
+  if (target.from !== target.to) return visitLinkText(editor, target) ? target : null;
+  const position = editor.state.doc.resolve(target.from),
+    marks = storedMarks ?? position.marks();
+  return position.parent.type.allowsMarkType(link) &&
+    (link.isInSet(marks) || !marks.some((mark) => mark.type.excludes(link)))
+    ? target
+    : null;
+}
+
+/** Read-only capture. Ctrl+A projects through maintained text-selection rules without changing the live selection. */
+export function captureLink(editor: Editor, isCurrent: () => boolean = () => true): CapturedLink | null {
+  if (!isCurrent() || editor.isDestroyed || !editor.isEditable || editor.view.composing || !editor.schema.marks.link)
+    return null;
+  const original = editor.state.selection;
+  const selected =
+    original instanceof AllSelection
+      ? TextSelection.between(original.$anchor, original.$head)
+      : original instanceof TextSelection
+        ? original
+        : null;
+  // A structural/atom-only selection has no text to link. An explicit text caret can still insert a URL.
+  if (!(selected instanceof TextSelection) || (original instanceof AllSelection && selected.empty)) return null;
+  const target = eligibleLinkRange(editor, selected, editor.state.storedMarks);
+  return target
+    ? { ...target, selectionBookmark: original.getBookmark(), storedMarks: editor.state.storedMarks }
+    : null;
+}
+
+/** Restore native selection class/direction and explicit stored marks; never publish a document or history event. */
+export function restoreLinkSelection(
+  editor: Editor,
+  target: CapturedLink,
+  isCurrent: () => boolean = () => true,
+): boolean {
+  if (!isCurrent() || editor.isDestroyed || !editor.isEditable || editor.view.composing) return false;
+  try {
+    const selection = target.selectionBookmark.resolve(editor.state.doc);
+    if (selection.$from.doc !== editor.state.doc) return false;
+    editor.view.dispatch(
+      editor.state.tr.setSelection(selection).setStoredMarks(target.storedMarks).setMeta('addToHistory', false),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Validate the same text eligibility at submission, retaining stock mark behavior on closed text spans. */
 export function applyLink(
   editor: Editor,
   range: LinkRange,
   href: string | null,
   isCurrent: () => boolean = () => true,
+  storedMarks?: readonly Mark[] | null,
 ): boolean {
   if (
     !isCurrent() ||
     editor.isDestroyed ||
     !editor.isEditable ||
-    !editor.schema.marks.link ||
     editor.view.composing ||
-    !isLinkRangeValid(editor, range) ||
+    !editor.schema.marks.link ||
     (href !== null && !safeDocumentUrl(href))
   )
     return false;
-  const target = exactLinkRange(editor, range);
+  const capturedMarks = storedMarks === undefined ? editor.state.storedMarks : storedMarks;
+  const target = eligibleLinkRange(editor, range, capturedMarks);
+  if (!target) return false;
+  const link = editor.schema.marks.link;
   return runCompactEditorChain(editor, (chain) => {
     const selected = chain.setTextSelection(target);
-    if (href === null) return selected.unsetMark('link');
-    if (target.from === target.to)
-      return selected.insertContent({ type: 'text', text: href, marks: [{ type: 'link', attrs: { href } }] });
-    return selected.setMark('link', { href });
+    if (target.from === target.to) {
+      if (href === null) return selected.unsetMark('link');
+      const marks = capturedMarks ?? editor.state.doc.resolve(target.from).marks();
+      const previous = marks.find((mark) => mark.type === link);
+      const linked = link.create({ ...previous?.attrs, href }).addToSet(marks);
+      return selected.insertContent({ type: 'text', text: href, marks: linked.map((mark) => mark.toJSON()) });
+    }
+    return selected.command(({ tr }) => {
+      visitLinkText(editor, target, (node, from, to) => {
+        if (href === null) tr.removeMark(from, to, link);
+        else {
+          const previous = node.marks.find((mark) => mark.type === link);
+          tr.addMark(from, to, link.create({ ...previous?.attrs, href }));
+        }
+      });
+      return true;
+    });
   });
 }
 
@@ -165,18 +262,24 @@ export function LinkField({
       setInvalid(true);
       return;
     }
-    if (applyLink(editor, range, href, current)) {
-      const original = range.selection;
-      if (range.from !== range.to && original && isCurrent() && isLinkRangeValid(editor, original))
-        editor.commands.setTextSelection(original);
+    if (applyLink(editor, range, href, current, range.storedMarks)) {
+      const link = editor.schema.marks.link!;
+      const storedMarks =
+        range.storedMarks === null
+          ? null
+          : href === null
+            ? link.removeFromSet(range.storedMarks)
+            : range.storedMarks.map((mark) => (mark.type === link ? link.create({ ...mark.attrs, href }) : mark));
+      if (range.from !== range.to) restoreLinkSelection(editor, { ...range, storedMarks }, isCurrent);
+      else if (isCurrent())
+        editor.view.dispatch(editor.state.tr.setStoredMarks(storedMarks).setMeta('addToHistory', false));
       onClose();
       focusEditor();
     }
   }
   function cancel() {
     if (!current()) return;
-    const original = range.selection ?? range;
-    if (isLinkRangeValid(editor, original)) editor.commands.setTextSelection(original);
+    restoreLinkSelection(editor, range, current);
     onClose();
     focusEditor();
   }
