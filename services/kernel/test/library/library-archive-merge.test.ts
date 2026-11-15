@@ -9,7 +9,7 @@ import { createLabelAssignmentCommands } from '../../src/library/label-assignmen
 import { createSessionCommands } from '../../src/library/sessions.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { purgeOwnedGraphPage } from '../../src/library/erasure-owned-graph.ts';
-import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identityEpochStore } from '../../src/semantic/identity-adapters/index.ts';
@@ -1157,14 +1157,14 @@ test('missing personal targets stay inert and concurrent annotation or journal r
           ordinal: missingAnnotation.ordinal,
           kind: 'annotation',
           subjectId: subjects[0],
-          incarnationId: key(),
+          incarnationId: newId(routeOf(missingFactOwner.actor.accountId)!),
           fields: { note: 'set' },
         },
         {
           ordinal: missingJournal.ordinal,
           kind: 'journal',
           subjectId: subjects[0],
-          sessionId: key(),
+          sessionId: newId(routeOf(missingFactOwner.actor.accountId)!),
           fields: { startDate: 'set' },
         },
         {
@@ -1410,17 +1410,7 @@ test('cancellation stops pending effects and terminal erasure removes retained a
   ).toMatchObject({ privacy: { status: 'known', meaning: 'source_visible' } });
 
   const { id: deletedId } = await makeUpload(deletedOwner);
-  const grants = createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' });
-  await grants.create(
-    { pool: f.pool, actor: f.steward.actor, deadline: deadlineFor(30_000) },
-    {
-      resource: { route: routeOf(deletedOwner.actor.accountId)!, id: deletedOwner.actor.accountId },
-      subject: { kind: 'account', id: deletedOwner.actor.accountId },
-      actions: ['account:delete'],
-      valid: '(,)',
-      key: key(),
-    },
-  );
+  await f.grantAccountActions(deletedOwner.actor.accountId, ['account:delete']);
   await createLifecycleCommands({ pool: f.pool, access: f.access }).tombstone(
     { actor: deletedOwner.actor, deadline: deadlineFor(30_000) },
     { accountId: deletedOwner.actor.accountId, key: key() },
