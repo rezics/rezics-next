@@ -41,6 +41,7 @@ export type NoticeInput = Readonly<{
 
 type QueryClient = Pick<Pool | PoolClient, 'query'>;
 
+/** Hold the recipient partition stable through the notice write, including concurrent erasure. */
 export async function withWritableNoticeRoute<T>(
   pool: Pool,
   route: number,

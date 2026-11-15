@@ -11,7 +11,7 @@ import type { Access, AccessClient, Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { CONTENT_EVENTS } from './events.ts';
 import { createAppealEffect } from './appeals.ts';
-import { writeNotices } from './notices.ts';
+import { withWritableNoticeRoute, writeNotices } from './notices.ts';
 import { moderationReadSnapshot as snapshot } from './moderation-read-connection.ts';
 import readDecisionSource from './decision-page-source.sql';
 import readHistorySource from './moderation-history-source.sql';
@@ -277,7 +277,7 @@ export function createModerationDecisionEffect(pool: Pool): Effect {
       const authorAccountId = decision.author_account_id;
       if (authorAccountId === null) return;
       const recipientRoute = routeOf(authorAccountId)!;
-      await writeOnRoute(pool, recipientRoute, deadline, async (client) => {
+      await withWritableNoticeRoute(pool, recipientRoute, async (client) => {
         if (await notificationAllowed(client, { recipient: authorAccountId, kind: 'moderation_decision' }))
           await writeNotices(client, [
             {
@@ -293,7 +293,7 @@ export function createModerationDecisionEffect(pool: Pool): Effect {
               createdAt: new Date(decidedAt),
             },
           ]);
-      });
+      }, deadline);
     },
   };
 }

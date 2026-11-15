@@ -30,7 +30,7 @@ import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { CONTENT_EVENTS } from './events.ts';
 import { liftTakedown } from './lift-takedown.ts';
-import { writeNotices } from './notices.ts';
+import { withWritableNoticeRoute, writeNotices } from './notices.ts';
 import type { RequestContext } from './model.ts';
 import {
   appealReviewSnapshot,
@@ -583,7 +583,7 @@ export function createAppealEffect(pool: Pool): Effect {
       );
       if (event.type !== resolvedType) return;
       const recipientRoute = routeOf(row.appellant_account_id)!;
-      await write(recipientRoute, async (client) => {
+      await withWritableNoticeRoute(pool, recipientRoute, async (client) => {
         if (await notificationAllowed(client, { recipient: row.appellant_account_id, kind: 'moderation_decision' }))
           await writeNotices(client, [
             {
@@ -599,7 +599,7 @@ export function createAppealEffect(pool: Pool): Effect {
               createdAt: new Date(row.resolved_at!),
             },
           ]);
-      });
+      }, deadline);
     },
   };
 }

@@ -19,7 +19,7 @@ import type { AccessClient, Actor } from '../request/access.ts';
 import { derivedId, newId, partitionOf, routeOf } from '../route/route.ts';
 import { globalContextAnchor } from '../semantic/context.ts';
 import { CONTENT_EVENTS } from './events.ts';
-import { writeNotices } from './notices.ts';
+import { withWritableNoticeRoute, writeNotices } from './notices.ts';
 import type { ReportDependencies, ReportTarget } from './reports.ts';
 import { ReportUnavailableError } from './reports.ts';
 import type { RequestContext } from './model.ts';
@@ -100,13 +100,14 @@ async function report(pool: Pool, id: string, deadline?: number) {
 /** The immutable resolution and native event are committed together. A replay
  * after a recipient failure can safely retry the separate notice transaction. */
 async function notify(pool: Pool, id: string) {
-  const row = await report(pool, id);
+  const deadline = Date.now() + 30_000;
+  const row = await report(pool, id, deadline);
   if (!row?.outcome || !row.reporter_account_id) return;
   const recipient = row.reporter_account_id;
   const route = routeOf(recipient)!;
-  await atPartition(pool, route, true, async (client) => {
-    if (!(await claimNotice.run(client, { route, recipient_id: recipient, report_id: id }))) return;
-    if (await notificationAllowed(client, { recipient, kind: 'moderation_decision' }))
+  await withWritableNoticeRoute(pool, route, async (client) => {
+    if (!(await notificationAllowed(client, { recipient, kind: 'moderation_decision' }))) return;
+    if (await claimNotice.run(client, { route, recipient_id: recipient, report_id: id }))
       await writeNotices(client, [
         {
           recipientId: recipient,
@@ -121,7 +122,7 @@ async function notify(pool: Pool, id: string) {
           createdAt: new Date(row.resolved_at!),
         },
       ]);
-  });
+  }, deadline);
 }
 
 export async function dismissReport(deps: ReportDependencies, actor: Actor, id: string, context: RequestContext) {
