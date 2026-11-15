@@ -23,7 +23,7 @@ import {
 } from './work-parts-ordering';
 
 const wrap =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+  'h-auto min-h-8 max-w-full whitespace-normal [overflow-wrap:anywhere] py-1.5 max-md:min-h-11 max-md:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11';
 
 function identityLabel(draft: OrderingDraft, locale: string) {
   return draft.summary?.label?.value || m.subject_value_unlabelled({}, { locale: locale as never });
@@ -97,13 +97,13 @@ export function WorkPartsOrderingSelect({
     <Field orientation="horizontal" className="min-w-0">
       <Checkbox
         id={controlId}
-       
+        className="size-11 after:inset-0"
         checked={selected}
         disabled={busy || disabled}
         onCheckedChange={(value) => onToggle(value === true)}
       />
       <FieldLabel
-        className="min-w-0 items-center whitespace-normal [overflow-wrap:anywhere]"
+        className="min-h-11 min-w-0 items-center whitespace-normal [overflow-wrap:anywhere]"
         htmlFor={controlId}
       >
         {m.work_parts_order_select({}, o)}
@@ -183,6 +183,7 @@ export function WorkPartsOrderingBoard({
             const locked = orderingLocked(draft) || busy;
             const positionId = `${titleId}-${draft.key}-position`;
             const headingId = `${titleId}-${draft.key}`;
+            const selectionId = `${titleId}-${draft.key}-selection`;
             return (
               <li key={draft.key}>
                 <ContentItemFrame as="div" className="min-w-0 space-y-3">
@@ -196,6 +197,14 @@ export function WorkPartsOrderingBoard({
                   >
                     {identityLabel(draft, locale)}
                   </ContentItemHeading>
+                  <WorkPartsOrderingSelect
+                    selected={draft.included}
+                    busy={busy}
+                    disabled={orderingLocked(draft) || !!draft.command}
+                    locale={locale}
+                    controlId={selectionId}
+                    onToggle={(included) => onChange({ ...draft, included })}
+                  />
                   <p className="text-sm text-muted-foreground">
                     {draft.direction === 'forward'
                       ? m.work_parts_order_forward({}, o)
@@ -245,15 +254,6 @@ export function WorkPartsOrderingBoard({
                   )}
                   <AssertionReadout draft={draft} labels={labels} locale={locale} />
                   <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      className={wrap}
-                      variant="outline"
-                      disabled={locked || !!draft.command}
-                      onClick={() => onChange({ ...draft, included: false })}
-                    >
-                      {m.work_parts_order_exclude({}, o)}
-                    </Button>
                     <Button type="button" className={wrap} variant="outline" onClick={() => onJump(draft.key)}>
                       {m.work_parts_order_repair({}, o)}
                     </Button>
@@ -377,6 +377,7 @@ export function WorkPartsOrderingReview({
       <ContentItemHeading level={3} className="text-base font-semibold">
         {m.work_parts_order_review_title({}, o)}
       </ContentItemHeading>
+      <p className="text-sm text-muted-foreground">{m.work_parts_order_review_intro({}, o)}</p>
       {stale && (
         <p role="status" className="text-sm">
           {m.work_parts_order_stale({}, o)}
