@@ -197,7 +197,9 @@ test('decoded per-member and aggregate limits are checked before reading or allo
   const maximumMember = encodeOutputTree(producer, source);
   expect(validateOutputTree(maximumMember, authority(maximumMember)).members[0]!.size).toBe(PROFILE.maxMemberBytes);
   truncateSync(join(producer, path), PROFILE.maxMemberBytes + 1);
-  expect(() => encodeOutputTree(producer, source)).toThrow('per-member byte bound: bytes=4194305, max=4194304');
+  expect(() => encodeOutputTree(producer, source)).toThrow(
+    `per-member byte bound: bytes=${PROFILE.maxMemberBytes + 1}, max=${PROFILE.maxMemberBytes}`,
+  );
   rmSync(join(producer, path));
   for (let index = 0; index < PROFILE.maxBytes / PROFILE.maxMemberBytes; index++) {
     const name = `${PROFILE.root}/${index}.d.ts`;
@@ -213,14 +215,15 @@ test('decoded per-member and aggregate limits are checked before reading or allo
   );
   const oversized = bundle([{ ...member('x'), size: PROFILE.maxMemberBytes + 1 }], []);
   expect(() => validateOutputTree(oversized, authority(oversized))).toThrow(
-    'member size bound: bytes=4194305, max=4194304',
+    `member size bound: bytes=${PROFILE.maxMemberBytes + 1}, max=${PROFILE.maxMemberBytes}`,
   );
   const aggregate = bundle([], [], { totalBytes: PROFILE.maxBytes + 1 });
   expect(() => validateOutputTree(aggregate, authority(aggregate))).toThrow('decoded byte');
+  const fullMembers = PROFILE.maxBytes / PROFILE.maxMemberBytes;
   const oversizedCatalogue = bundle(
-    Array.from({ length: 17 }, (_, index) => ({
+    Array.from({ length: fullMembers + 1 }, (_, index) => ({
       ...member(`${String(index).padStart(2, '0')}.d.ts`),
-      size: index === 16 ? 1 : PROFILE.maxMemberBytes,
+      size: index === fullMembers ? 1 : PROFILE.maxMemberBytes,
     })),
     [],
   );
