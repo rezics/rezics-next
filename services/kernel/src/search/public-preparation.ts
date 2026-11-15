@@ -91,6 +91,15 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
   const running = new Set<Promise<unknown>>();
   type PublicationPhase = 'prepare' | 'step' | 'activate';
   const unavailable = new Map<PublicationPhase, string>();
+  const failures = new Map<PreparationLocator['kind'], string>();
+  const reportFailure = (kind: PreparationLocator['kind'], error: unknown) => {
+    const name = error instanceof Error ? error.name : 'Error';
+    const message = (error instanceof Error ? error.message : String(error)).slice(0, 1000);
+    const state = `${name}:${message}`;
+    if (failures.get(kind) === state) return;
+    failures.set(kind, state);
+    console.warn(JSON.stringify({ event: 'search.public_preparation.failed', prefix: options.prefix, kind, name, message }));
+  };
   const reportUnavailable = (phase: PublicationPhase, generation: number, result: PublicFilterConsumerUnavailable) => {
     const state = `${generation}:${result.reason}`;
     if (unavailable.get(phase) === state) return;
@@ -256,15 +265,23 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
         const record = await store.claim(id, revision, context.deadline);
         if (!record) return;
         if (Number(record.expires_at) <= Date.now()) return store.advance(record, null, 0, context.deadline);
-        if (record.locator.kind === 'population') return population(record, record.locator, context);
-        const outcome = await options.runtime.repair(record.locator.job, context);
-        // 'settled' releases scheduling only. It never activates a generation or certifies output.
-        await store.advance(
-          record,
-          outcome.status === 'settled' ? null : record.locator,
-          outcome.status === 'progress' ? 0 : 1000,
-          context.deadline,
-        );
+        try {
+          if (record.locator.kind === 'population') await population(record, record.locator, context);
+          else {
+            const outcome = await options.runtime.repair(record.locator.job, context);
+            // 'settled' releases scheduling only. It never activates a generation or certifies output.
+            await store.advance(
+              record,
+              outcome.status === 'settled' ? null : record.locator,
+              outcome.status === 'progress' ? 0 : 1000,
+              context.deadline,
+            );
+          }
+          failures.delete(record.locator.kind);
+        } catch (error) {
+          reportFailure(record.locator.kind, error);
+          throw error;
+        }
       });
     },
     discover(deadline = deadlineFor(30_000)) {
