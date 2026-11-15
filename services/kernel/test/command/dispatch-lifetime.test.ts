@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import {
   CommandUnavailableError,
+  CommandCommitUncertainError,
   authoritativeTimeValue,
   currentCommand,
   currentCommandResources,
@@ -15,6 +16,8 @@ import {
   runCommand,
   withSingleCommandAttempt,
   type CommandTransaction,
+  type CommandAttempt,
+  type CommandAuthorization,
 } from '../../src/command/command.ts';
 import {
   COMMAND_DISPATCH_ALLOWANCE,
@@ -26,6 +29,7 @@ import {
   type CommandDispatchOwner,
 } from '../../src/command/dispatch-lifetime.ts';
 import { createPool } from '../../src/database/pool.ts';
+import { newId } from '../../src/route/route.ts';
 import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
 import { declareCommandRecordSources } from '../../src/history/adapters/record-source.ts';
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
@@ -121,6 +125,19 @@ beforeAll(async () => {
     partition,
   ]);
   await admin.query('CREATE TABLE public.dispatch_lifetime_probe(id uuid PRIMARY KEY)');
+  await admin.query('CREATE SEQUENCE public.dispatch_commit_abort_attempt');
+  await admin.query('CREATE TABLE public.dispatch_commit_abort_probe(id uuid PRIMARY KEY, abort_code text NOT NULL)');
+  await admin.query(`CREATE FUNCTION public.dispatch_commit_abort_once() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN
+      IF nextval('public.dispatch_commit_abort_attempt') = 1 THEN
+        RAISE EXCEPTION USING ERRCODE = NEW.abort_code, MESSAGE = 'Native deferred COMMIT abort';
+      END IF;
+      RETURN NEW;
+    END;
+  $$`);
+  await admin.query(`CREATE CONSTRAINT TRIGGER dispatch_commit_abort_once
+    AFTER INSERT ON public.dispatch_commit_abort_probe DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW EXECUTE FUNCTION public.dispatch_commit_abort_once()`);
 });
 afterEach(async () => {
   for (const observer of observers.splice(0)) await observer.close();
@@ -128,6 +145,9 @@ afterEach(async () => {
   await admin.query('TRUNCATE public.dispatch_lifetime_probe');
 });
 afterAll(async () => {
+  await admin.query('DROP TABLE public.dispatch_commit_abort_probe');
+  await admin.query('DROP FUNCTION public.dispatch_commit_abort_once()');
+  await admin.query('DROP SEQUENCE public.dispatch_commit_abort_attempt');
   await admin.query('DROP TABLE public.dispatch_lifetime_probe');
   await pool.end();
   await foreign.end();
@@ -679,6 +699,80 @@ test('ordinary commands retain native context, authorization-before-receipt, den
       return noEffect(0);
     }),
   ).rejects.toThrow('no-effect command registers no work');
+});
+
+for (const code of ['40001', '40P01']) {
+  test(`ordinary native COMMIT ${code} retries the whole authorized transaction with one receipt and effect`, async () => {
+    await admin.query('ALTER SEQUENCE public.dispatch_commit_abort_attempt RESTART WITH 1');
+    const observer = observe();
+    const id = newId(partition << 4);
+    const deadline = Date.now() + 30_000;
+    const attempts: CommandAttempt[] = [];
+    const proofs: object[] = [];
+    const transactions: string[] = [];
+    let authorized = 0;
+    const authorization: CommandAuthorization = {
+      action: 'test',
+      resource: { route: partition << 4, id },
+      async prepare(attempt) {
+        attempts.push(attempt);
+        const proof = {};
+        proofs.push(proof);
+        return proof;
+      },
+      async authorize(_tx, attempt, proof) {
+        authorized++;
+        expect(attempt).toBe(attempts.at(-1)!);
+        expect(proof).toBe(proofs.at(-1));
+        return 'execute';
+      },
+      denied: () => new Error('denied'),
+    };
+    const receipt = {
+      actorAccountId: randomUUID(), kind: 'test.dispatch.commit-abort', key: randomUUID(), digest: new Uint8Array(32),
+    };
+    const options = { partition, deadline, receipt, authorization };
+    const result = await runCommand(pool, options, async (tx) => {
+      transactions.push(currentCommand(tx).transactionId);
+      expect(currentCommandResources(tx).deadline).toBe(deadline);
+      await tx.query('INSERT INTO public.dispatch_commit_abort_probe VALUES($1,$2)', [id, code]);
+      return noEffect(id);
+    });
+    expect(result.value).toBe(id);
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0]).not.toBe(attempts[1]);
+    expect(proofs[0]).not.toBe(proofs[1]);
+    expect(authorized).toBe(2);
+    expect(new Set(transactions).size).toBe(2);
+    expect(texts(observer).filter((sql) => sql === begin)).toHaveLength(2);
+    expect(texts(observer).filter((sql) => sql === 'ROLLBACK')).toHaveLength(1);
+    expect((await admin.query('SELECT id FROM public.dispatch_commit_abort_probe WHERE id=$1', [id])).rows).toEqual([{ id }]);
+    expect((await admin.query(`SELECT transaction_id FROM core.receipt
+      WHERE partition_no=$1 AND principal_id=$2 AND command_kind=$3`,
+      [partition, receipt.actorAccountId, receipt.kind])).rows).toEqual([{ transaction_id: result.transactionId }]);
+    const replay = await runCommand(pool, options, async () => { throw new Error('replayed body'); });
+    expect(replay).toEqual({ ...result, replayed: true });
+    expect(transactions).toHaveLength(2);
+    expect(authorized).toBe(3);
+  });
+}
+
+test('ordinary lost COMMIT response stays uncertain without retry after the real effect commits', async () => {
+  const observer = observe();
+  const error = Object.assign(new Error('lost response'), { code: '40001' });
+  observer.armFault({ match: { statement: 'COMMIT' }, boundary: 'after', error });
+  const id = randomUUID();
+  let bodies = 0;
+  const failure = await failed(runCommand(pool, { partition, deadline: Date.now() + 30_000 }, async (tx) => {
+    bodies++;
+    await tx.query('INSERT INTO public.dispatch_lifetime_probe VALUES($1)', [id]);
+    return noEffect(id);
+  }));
+  expect(failure).toBeInstanceOf(CommandCommitUncertainError);
+  expect(failure).toMatchObject({ cause: error });
+  expect(bodies).toBe(1);
+  expect(texts(observer).filter((sql) => sql === begin)).toHaveLength(1);
+  expect((await admin.query('SELECT id FROM public.dispatch_lifetime_probe WHERE id=$1', [id])).rows).toEqual([{ id }]);
 });
 
 // Literal derivation assertions are authored alongside native outcomes, not physical proof.
