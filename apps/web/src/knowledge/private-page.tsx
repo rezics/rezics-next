@@ -1,3 +1,4 @@
+import { knowledgeAuthoringImageSelection as knowledgePrivateMediaSelection } from './media';
 import type { KnowledgeMediaSelection } from '@rezics/definitions/knowledge-media';
 import { useKnowledgeImageUploader, type KnowledgeImageUploadBinding } from './media-upload';
 import { useKnowledgeImageRenderer } from './media-view';
@@ -353,17 +354,6 @@ function immutable<T>(value: T): T {
   if (typeof value !== 'object' || value === null || Object.isFrozen(value)) return value;
   for (const nested of Object.values(value)) immutable(nested);
   return Object.freeze(value);
-}
-
-function knowledgePrivateMediaSelection(head: KnowledgePrivateHead): KnowledgeMediaSelection | null {
-  return typeof head.sha256 === 'string' && /^[0-9a-f]{64}$/.test(head.sha256)
-    ? {
-        representation: 'authoring',
-        documentId: head.documentId,
-        revisionId: head.revisionId,
-        sourceSha256: head.sha256,
-      }
-    : null;
 }
 
 function copyDraft(head: KnowledgePrivateHead): DocumentDraft {

@@ -33,6 +33,20 @@ export function knowledgeImageSources(body: DocumentSnapshot): { sources: readon
   return { sources: overflow ? [] : [...sources], overflow };
 }
 
+/** Only the admitted private revision digest can establish an authoring source; never hash the local draft. */
+export function knowledgeAuthoringImageSelection(head: {
+  documentId: string;
+  revisionId: string;
+  sha256?: string;
+}): KnowledgeMediaSelection | null {
+  return parseKnowledgeMediaSelection({
+    representation: 'authoring',
+    documentId: head.documentId,
+    revisionId: head.revisionId,
+    sourceSha256: head.sha256,
+  });
+}
+
 /** A bare authored locator can use only its saved owner's source; explicit references retain their own context. */
 export function knowledgeImageSelection(
   src: string,
