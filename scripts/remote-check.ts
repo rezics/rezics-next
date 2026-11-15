@@ -5589,7 +5589,7 @@ run_directory=${quote(directory)}
 ${cleanupCommands()}`;
 }
 
-function stopRunScript(id: string): string {
+export function stopRunScript(id: string): string {
   const slice = quote(runSlice(id));
   return `${stopSupervisor(quote(`${ROOT}/runs/${id}`), 'controller-stop', true)} || true
 systemctl stop ${slice} >/dev/null 2>&1 || true
