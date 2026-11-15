@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { compileCatalogue } from '@rezics/definitions/compile';
 import { releaseDigest } from '@rezics/definitions';
+import { sameLibraryProfilePin } from '../../src/library/profile-pin.ts';
 import { fixture, libraryProfile } from '../../../../packages/definitions/test/support/library-profiles.ts';
 import {
   hasCopyStatus,
@@ -9,6 +10,25 @@ import {
   resolveLibraryProfilePin,
   selectLibraryProfile,
 } from '../../src/library/profile.ts';
+
+test('profile pin equality preserves field identity across JSONB property order', () => {
+  const pin = {
+    provenance: 'profile' as const,
+    releaseDigest: 'sha256:' + 'a'.repeat(64),
+    acceptingType: 'ex:Child',
+    profileId: 'fixture.child',
+  };
+  const reordered = {
+    profileId: pin.profileId,
+    acceptingType: pin.acceptingType,
+    releaseDigest: pin.releaseDigest,
+    provenance: pin.provenance,
+  };
+  expect(sameLibraryProfilePin(pin, reordered)).toBe(true);
+  expect(sameLibraryProfilePin(pin, { ...reordered, profileId: 'fixture.other' })).toBe(false);
+  expect(sameLibraryProfilePin(pin, null)).toBe(false);
+  expect(sameLibraryProfilePin(null, null)).toBe(true);
+});
 
 test('profile selection uses the actual compiled reference and stored pins never current ancestry or a default legacy capability', async () => {
   const parent = libraryProfile('fixture.parent', 'page');

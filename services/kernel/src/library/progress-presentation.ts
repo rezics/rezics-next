@@ -1,3 +1,4 @@
+import { sameLibraryProfilePin } from './profile-pin.ts';
 import type { Release } from '@rezics/definitions';
 import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
@@ -149,7 +150,7 @@ export async function prepareProgressPresentation(deps: LibraryProfileSourceDepe
             source?.kind !== final.source.kind ||
             (source.kind === 'supported' &&
               final.source.kind === 'supported' &&
-              JSON.stringify(source.pin) !== JSON.stringify(final.source.pin))
+              !sameLibraryProfilePin(source.pin, final.source.pin))
           )
             throw new ProblemError('semantic_not_ready');
         }
