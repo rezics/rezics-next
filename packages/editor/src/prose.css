@@ -87,6 +87,7 @@ img.ProseMirror-separator {
   font-size: 1.0625rem;
   line-height: 1.75;
   overflow-wrap: anywhere;
+  word-break: break-word;
   text-autospace: normal;
 }
 .rezics-document:lang(zh),
@@ -171,6 +172,8 @@ img.ProseMirror-separator {
   color: var(--primary);
   text-decoration: underline;
   text-underline-offset: 0.15em;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .rezics-document code {
   font-family: var(--font-mono);
@@ -197,21 +200,29 @@ img.ProseMirror-separator {
 }
 .rezics-document figure {
   margin-block: 1em;
+  margin-inline: 0;
+  min-width: 0;
+  max-width: 100%;
 }
 .rezics-document img,
 .rezics-document video {
   max-width: 100%;
+  min-width: 0;
   height: auto;
   border-radius: var(--radius);
 }
 .rezics-document audio {
   max-width: 100%;
+  min-width: 0;
 }
 .rezics-document figcaption {
   margin-block-start: 0.4em;
+  min-width: 0;
   font-family: var(--font-interface);
   font-size: 0.8em;
   color: var(--muted-foreground);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 .rezics-document .document-table-scroll,
 .rezics-document .tableWrapper {
