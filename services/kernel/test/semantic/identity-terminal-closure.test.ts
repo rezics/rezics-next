@@ -115,11 +115,27 @@ for (const disposition of ['cycle', 'missing', 'deleted', 'moved', 'unknown'] as
       const [a, b, terminal] = ids as [string, string, string];
       if (disposition === 'cycle') await historicalEdge(db, terminal, a);
       if (disposition === 'missing') await historicalEdge(db, b, newId(0x7340));
-      if (disposition === 'deleted')
-        await db.admin.query('DELETE FROM semantic.subject WHERE route=$1 AND subject_id=$2', [
-          routeOf(terminal),
-          terminal,
-        ]);
+      if (disposition === 'deleted') {
+        // Remove the complete historical seed in FK order before native installation.
+        const historical = await db.admin.connect();
+        try {
+          await historical.query('BEGIN');
+          await historical.query('DELETE FROM semantic.revision WHERE route=$1 AND subject_id=$2', [
+            routeOf(terminal),
+            terminal,
+          ]);
+          await historical.query('DELETE FROM semantic.subject WHERE route=$1 AND subject_id=$2', [
+            routeOf(terminal),
+            terminal,
+          ]);
+          await historical.query('COMMIT');
+        } catch (error) {
+          await historical.query('ROLLBACK');
+          throw error;
+        } finally {
+          historical.release();
+        }
+      }
       await db.install();
       // These owners have not acquired closure custody; this tests unavailable
       // inputs, separately from the post-enrollment owner guard below.
