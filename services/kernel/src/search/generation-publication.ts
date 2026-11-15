@@ -752,6 +752,7 @@ export function createSearchGenerationPublication(
       [before.partition, job.job, job.pass],
     );
     if (old && !same(old, before)) {
+      console.warn('Search publication trace', { gate: 'remember', home: before.partition, old, before });
       await client.query('DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2', [
         before.partition,
         job.job,
@@ -810,6 +811,7 @@ export function createSearchGenerationPublication(
     if (job.family === 'subjects') {
       const actions = await readSearchWriterGenerationActions(writerGuard, partition, ids, position);
       meter.inputKeys += ids.length * 2; // current Source inputs and retained native copies
+      if (!actions) console.warn('Search publication trace', { gate: 'writer-actions', partition, count: ids.length });
       if (actions) {
         meter.engineSearches++;
         try {
@@ -817,6 +819,7 @@ export function createSearchGenerationPublication(
           return;
         } catch (error) {
           if (!(error instanceof GenerationReconciliationMismatch)) throw error;
+          console.warn('Search publication trace', { gate: 'engine-actions', partition, count: ids.length });
         }
       }
       // Ordinary write() settles identity_writer. Subject population consumes that
@@ -904,6 +907,10 @@ export function createSearchGenerationPublication(
           const page = await sourceKeys.read({ partition: job.home, after, inputLimit: PAGE }, context);
           add(meter, page.cost);
           if (page.status !== 'eligible') {
+            console.warn('Search publication trace', {
+              gate: 'source-page', home: job.home, status: page.status,
+              reason: 'reason' in page ? page.reason : undefined,
+            });
             job.after_route = null;
             job.after_id = null;
             await client.query('DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2', [
@@ -915,8 +922,12 @@ export function createSearchGenerationPublication(
               page.status === 'unavailable' && page.reason === 'deadline' ? 'deadline' : 'source_pending',
             );
           }
-          if (page.partition !== job.home || page.epoch !== before.epoch || page.position !== BigInt(before.position))
+          if (page.partition !== job.home || page.epoch !== before.epoch || page.position !== BigInt(before.position)) {
+            console.warn('Search publication trace', {
+              gate: 'source-head', before, partition: page.partition, epoch: page.epoch, position: page.position.toString(),
+            });
             throw new Pending('source_pending');
+          }
           ids = page.ids;
           next = page.after;
           complete = page.complete;
@@ -956,7 +967,11 @@ export function createSearchGenerationPublication(
           keys = ids.map((id) => ({ owner: 'accounts', kind: 'account', id, route: routeOf(id)! }));
         }
         await reconcile(job, job.home, ids, keys, BigInt(before.position), context, meter);
-        if (!same(before, await head(job.home, context))) throw new Pending('source_pending');
+        const observed = await head(job.home, context);
+        if (!same(before, observed)) {
+          console.warn('Search publication trace', { gate: 'post-reconcile-head', before, observed });
+          throw new Pending('source_pending');
+        }
         job.after_route = next?.route ?? null;
         job.after_id = next?.id ?? null;
         if (complete) {
@@ -1302,9 +1317,15 @@ export function createSearchGenerationPublication(
             else if (error instanceof Pending && error.reason === 'source_pending') await save(client, job, meter);
             throw error;
           }
+          // Fencing and intent do no step work; the existing scheduler must resume activate.
           return {
             status:
-              job.phase === 'reconciled' || job.phase === 'active' ? ('reconciled' as const) : ('progress' as const),
+              job.phase === 'reconciled' ||
+              job.phase === 'fencing' ||
+              job.phase === 'intent' ||
+              job.phase === 'active'
+                ? ('reconciled' as const)
+                : ('progress' as const),
             job: reference(job),
             cost: meter,
           };
