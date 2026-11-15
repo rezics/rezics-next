@@ -10721,3 +10721,27 @@ time.sleep(10)`] }] });
   expect(parseRemotePreparationAbortEvidence({ ...evidence,
     diagnostics: { ...receipt.diagnostics, phaseElapsedMs: -1 } }, identity)).toBeNull();
 });
+
+
+test('real caller cancellation uses exact remote stop before releasing its lease', async () => {
+  const fixture = scenario({ a: { available: 8e9, hang: true, silentHang: true } });
+  const directory = workspace();
+  const child = Bun.spawn([process.execPath, '--eval', `
+    import { remoteCheck, readHosts } from ${JSON.stringify(remoteCheck)};
+    const cancellation = new AbortController();
+    try {
+      await remoteCheck({ hosts: readHosts(process.env.KERNEL_CHECK_REMOTE), workspace: ${JSON.stringify(directory)},
+        command: ['true'], maxMs: 5000, started: () => setTimeout(() => cancellation.abort(), 100),
+      }, cancellation.signal);
+    } catch { process.exitCode = cancellation.signal.aborted ? 0 : 1; }
+  `], { env: fixture.env, stdout: 'pipe', stderr: 'pipe' });
+  const [code, , stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+  expect(code, stderr).toBe(0);
+  const events = fixture.events();
+  const stopped = events.findIndex(event => event.kind === 'stop');
+  const released = events.findIndex(event => event.kind === 'release');
+  expect(stopped).toBeGreaterThanOrEqual(0);
+  expect(released).toBeGreaterThan(stopped);
+  expect(events[stopped]!.slotHeld).toBe(true);
+  expect(slotMarkers(fixture.env, 'a')).toEqual([]);
+});
