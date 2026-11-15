@@ -9,14 +9,14 @@ WITH input AS NOT MATERIALIZED (
          :format::text AS format, :width::integer AS width
 )
 SELECT m.media_id, m.container_id, m.claimed_item_id, m.uploader_id, m.purpose, m.state, m.claimed_at::text,
-       m.key, m.sha256, m.media_type, m.actual_byte_count, m.erased, m.collection_pending,
+       m.key, m.sha256, m.media_type, m.actual_byte_count::text, m.erased, m.collection_pending,
        m.taken_down, m.security_revision::text, m.provenance,
        COALESCE(m.crop[3], m.width) AS width, COALESCE(m.crop[4], m.height) AS height,
        CASE WHEN octet_length(m.thumbhash) <= 32 THEN encode(m.thumbhash, 'base64') END AS thumbhash,
        CASE WHEN octet_length(m.average_color) = 7 AND m.average_color ~ '^#[0-9a-f]{6}$'
             THEN m.average_color END AS average_color, m.focal_x, m.focal_y, m.credit,
        v.key AS variant_key, v.sha256 AS variant_sha256, v.media_type AS variant_media_type,
-       v.byte_count AS variant_byte_count, v.format AS variant_format,
+       v.byte_count::text AS variant_byte_count, v.format AS variant_format,
        v.width AS variant_width, v.height AS variant_height
 FROM input i JOIN content.media m ON m.route = i.route AND m.media_id = i.media_id
 LEFT JOIN content.media_variant v
