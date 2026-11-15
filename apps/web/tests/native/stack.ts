@@ -865,6 +865,8 @@ async function startStack(): Promise<
         return response;
       };
     };
+    // Observe issuance before the semantic driver binds this transport and creates personas.
+    installAuthPageBridge();
     // The semantic harness reads DATABASE_URL during module evaluation.
     const { createSemanticDriver } = await import('../../../../services/kernel/test/semantic/outcome-driver.ts');
     const { createKernel } = await import('../../../../services/kernel/src/http/kernel.ts');
@@ -994,7 +996,6 @@ async function startStack(): Promise<
         strictCleanup: true,
       },
     );
-    installAuthPageBridge();
     reportStackProgress('Native web stack startup: native kernel and Auth fixtures ready');
 
     await driver.fixtures.openFeatures(['search']);
