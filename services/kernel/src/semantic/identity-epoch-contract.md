@@ -1660,6 +1660,69 @@ No 4096 home receipts are charged or claimed for absence. Legacy exports and ALL
 topology copies keep their existing budgets. Full erasure/shared-copy binding and all-nine Cost certification
 remain independent obligations.
 
+#### Native source image custody
+
+Decision: bootstrap excludes an unchanged native birth only through the same revision-1, self-mapping,
+self-gate, native transaction and XID proof used by installation, with its actual settled source head.
+The creation mapping records that dirty head in the creation transaction; a default revision is not custody.
+The proof does not depend on mutable PREPARE or pending-job bookkeeping. Admission preserves an already
+validated active native mapping; other legacy input requires that birth proof or the existing installed-cutover
+and sealed-source-home barrier. The bounded source cursor advances over the complete raw page before filtering.
+A retained unchanged birth may use its existing exact-head path before conversion; this does not authorize
+discarding a converted or changed source.
+
+A mapping source effect can change its gate and source while the input generation remains pinned. Its transient
+payload is deleted after the next control acknowledgement, before output publication. Effect existence, a closed
+hold, origin, IDs, clocks or a typed creation event cannot replace proof of the current source image.
+
+The existing `identity_epoch_mapping_effect` row therefore retains nullable `source_image_version` and a 32-byte
+`source_image_digest`. The only current version is 1. NULL is unproved; no old row is reconstructed or backfilled.
+Each local mapping plan has at most one actual Source destination. After its source writes and native mapping
+commit recorder, the same command client captures the server-computed image. The image is bound to the exact
+home, job, job epoch, unit, scope, plan, frame transaction and actual mapping native commit. The guard permits
+only one NULL-to-version-1 fill in the creator transaction, computing the digest itself rather than accepting image
+data. Replay cannot overwrite it. Deferred validation rechecks the final source image and Core commit fence,
+so a later callback cannot commit a stale image. Gate-free effects retain NULL.
+
+`identity_epoch_source_image_v1` defines the complete domain-separated image for capture and comparison.
+Its dependencies are explicit:
+
+| Actual columns | Source reader or proof dependency | Writers and treatment |
+| --- | --- | --- |
+| `core.partition.partition_no,node,epoch,write_state,moved_to` | `source()` actual owner and active-state checks; native frame ownership | Core owner movement/fencing. Hash incarnation/state; exclude advancing position and clocks. |
+| `subject.subject_id,recorded_transaction_id,xmin` | Source presence and physical replacement/version | Native birth and subject mutation/removal. Hash presence, creation transaction and current version; no labels or bodies. |
+| `identity_epoch_dirty.original,revision,captured_revision` | `source()` and exact-head export/ACK checks | Source capture, initializer, mapping and bootstrap ACK. Hash row presence and actual heads; later changes and ABA advance revision. |
+| Latest `redirect.sequence,target,recorded_transaction_id` | Descending-head immediate target used by source export/installation | Native redirect writers. Hash the actual head or explicit absence; no chain traversal. |
+| `mapping.route,original,terminal,epoch,origin,recorded_transaction_id,control_partition,control_group,source_revision,owner_epoch` | Current local mapping and control basis | Initializer, closure and native mapping publication. Hash every listed field; origin alone grants nothing. |
+| `mapping.closure_state,closure_enrollment,closure_generation,closure_incarnation,closure_immediate` | Export, successor, registration, installation, ACK and source finalization | Native closure phases. Hash every field; independently refuse transitional conversion. |
+| `mapping.closure_export_transaction,closure_hold_transaction,closure_hold_xid,closure_registration_transaction,closure_install_transaction,closure_install_xid,closure_ack_transaction,closure_ack_xid,closure_withdraw_transaction,closure_withdraw_xid` | Committed closure recovery and directory provenance | Native closure phases. Hash all fields; required native receipt joins remain mandatory. |
+| `mapping.closure_source_reservation,closure_ticket_reservation,closure_successor_ticket,closure_successor_original,closure_cancelled_successor,closure_claim,closure_mutation_xid` | Reservation, successor, cancellation, claim and mutation custody | Closure reserve/drain/release. Excluded bookkeeping; the pre-export consumer refuses any non-NULL value and grants no disposal. |
+| `mapping.erasure_key` | Erasure locator identity | Existing erasure hooks. Excluded from logical image; existing retention obligations remain. |
+| `mapping_fence.route,destination,job_id,job_epoch,transaction_id,xmin` | Actual local Source serialization | Native gate producer. Require exactly one same-frame fence, hash its semantic fields and match creator XID. |
+| `home_gate.route,destination,original,terminal,epoch,pending_job,pending_epoch,recorded_transaction_id,xmin` | Actual source gate and fence | Initializer and native mapping/closure writers. Hash the exact tuple and match its effect job, epoch and creator XID. Pending fields alone grant nothing. |
+| `mapping_effect.partition_no,job_id,job_epoch,unit,scope_digest,plan_digest,transaction_id,xmin` | Immutable local native plan frame | Mapping producer and guarded image fill. Hash immutable fields and bind the creator transaction. |
+| `identity_epoch_native_commit.partition_no,transaction_id,epoch,purpose,xmin,position` | Actual committed mapping frame | Native commit recorder and final Core fence. Match transaction, creator XID, epoch and mapping purpose; require the final committed position. Position is not hashed. |
+
+Initial consumption is only before bootstrap export. At most 100 requested source keys are checked in the same
+home against their actual presence, source head and immediate target. Exclusion additionally requires the current
+fence/gate, immutable version-1 effect image, scope/frame binding, mapping native commit and active current owner.
+It refuses transitional mapping state or any live reservation, successor, cancelled successor, claim or mutation
+custody. It reads no foreign job/control-home row and does not turn image equality into Access or admission.
+Any later image dependency change, including a gate version change with an equal terminal, makes the old image
+uncurrent. Unsupported or unproved states retain the ordinary unavailable/bootstrap path.
+
+This image grants no new retained-page ACK, discard, counter refund, generation reopening or guard exception.
+An older retained conversion still needs its existing receiving and disposal proofs. Existing payload cleanup
+leaves the image on the effect row; existing effect retention, native minimization and erasure-role obligations
+also cover its added bytes. Capture/validation use bounded indexed frame, gate and source points, rejecting a
+multi-row frame at two rows. SQL, points, bytes, indexes, FK/trigger work and physical storage remain counted in
+the original work frame and deadline. There is no new job, table, allowance, retry, larger page or pool.
+
+Native evidence must cover mixed legacy/native input, actual PREPARE and replay, gate-only and changed-source
+effects, payload cleanup before output, lost acknowledgement/crash recovery, later native mutation/ABA,
+cancellation, and erasure/provenance retention. A focused passing case does not certify full participant
+publication, external mutation after publication or erasure minimization.
+
 Default legacy bootstrap effects execute at most 100 existing bounded native steps. Initial closure uses eight released
 home pipelines and amortizes topology overhead: one local command selects at most 100 unclosed topology slots,
 advances the cursor; one later local command takes at most 100 independently released native closure receipts.

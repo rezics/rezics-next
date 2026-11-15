@@ -8,6 +8,7 @@ import {
 import { reserveIdentityTerminalClosure } from './identity-epoch-mapping.ts';
 import { runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
 import { currentNativeIdentityBirths } from './identity-epoch-bootstrap-native-birth.ts';
+import { currentNativeIdentitySourceImages } from './identity-epoch-bootstrap-native-source.ts';
 import selectFrontier from './identity-epoch-bootstrap-select-frontier.sql';
 import takeClosures from './identity-epoch-bootstrap-take-closures.sql';
 import receivingBasis from './identity-epoch-bootstrap-basis.sql';
@@ -355,6 +356,8 @@ async function stepBootstrapHome(
           if ((phase === 'subjects' || phase === 'dirty') && rows.length) {
             const nativeBirths = await currentNativeIdentityBirths(tx, partition, rows, work);
             rows = rows.filter((row) => !nativeBirths.has(row.original));
+            const nativeImages = await currentNativeIdentitySourceImages(tx, partition, rows, work);
+            rows = rows.filter((row) => !nativeImages.has(row.original));
           }
           recordIdentityEpochNativeCommit(tx, 'bootstrap');
           registerCommandCallback(tx, async (transactionId) => {
