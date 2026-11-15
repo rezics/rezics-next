@@ -150,6 +150,12 @@ export async function inSearchSnapshot<T>(pool: Pool, work: (client: PoolClient)
   return withReadTransaction(pool, work);
 }
 
+function isSettledServerError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const details = error as { code?: unknown; severity?: unknown };
+  return typeof details.code === 'string' && /^[0-9A-Z]{5}$/.test(details.code) && details.severity === 'ERROR';
+}
+
 /** Repair one unreadied subject on the caller's Search deadline, then let the read refuse. */
 async function resumeSelection(pool: Pool, deadline: number, pending: Pick<SubjectRow, 'route' | 'id'>): Promise<void> {
   await withBoundedReadConnection(
@@ -171,6 +177,8 @@ async function resumeSelection(pool: Pool, deadline: number, pending: Pick<Subje
         }
         return error;
       },
+      isUncertainError: (error) => classifyUnavailability(error) !== undefined,
+      isUncertainSettledQueryError: (error) => !isSettledServerError(error),
     },
   );
 }
