@@ -45,7 +45,8 @@ filtering and original schemas. No public request switch or Source option select
   selection, then the native `zone_sources` exposure point and exact Global gate checks. No source is read.
 - Bound: one group admission with the original deadline and clock after Zone authority; constant keyed rows
   and statements under the existing Access cap, logarithmic gate index probes, and no membership/source scan.
-  Static document selection retains the existing configuration limits and performs no extra gate lookup.
+  Static document selection retains the existing configuration limits. After presentation resolution it rereads
+  the exact authorized Zone route and rejects a changed revision or document before returning.
 - Growth check: reuses `test/access/gates/growth-admission.test.ts` for the keyed gate point. Native static 200,
   ungranted 403, granted fail-closed readiness, concealment and clock evidence are in
   `test/zones/public-slice-exposure.test.ts` and `test/zones/static-page-runtime.test.ts`; neither declarations

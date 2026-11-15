@@ -1,5 +1,6 @@
 import type { ReviewedSubjectRead } from './import-client.ts';
 import { isDeepStrictEqual } from 'node:util';
+import { createBoundedPublicSubjectGet, MAX_IMPORT_DEADLINE_MS } from './import-fetch.ts';
 
 export const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
 const subjectId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
@@ -249,7 +250,7 @@ export function admitSelectedSynopsisSupport(
 }
 
 async function readCurrentSubject(
-  fetcher: typeof fetch,
+  read: ReturnType<typeof createBoundedPublicSubjectGet>,
   origin: URL,
   id: string,
   signal: AbortSignal | undefined,
@@ -261,56 +262,60 @@ async function readCurrentSubject(
     (selectedSynopsis.length === 0 || new TextEncoder().encode(selectedSynopsis).byteLength > 2048)
   )
     throw new TypeError('Invalid selected synopsis query');
-  const visited = new Set<string>();
+  const controller = new AbortController();
+  const deadline = setTimeout(
+    () => controller.abort(new DOMException('Public Subject read deadline exceeded', 'TimeoutError')),
+    MAX_IMPORT_DEADLINE_MS,
+  );
+  const readSignal = signal === undefined ? controller.signal : AbortSignal.any([signal, controller.signal]);
   let current = id;
-  while (!visited.has(current)) {
-    visited.add(current);
-    const url = new URL(`/v1/subjects/${current}`, origin);
-    url.searchParams.set('context', GLOBAL_CONTEXT);
-    if (selectedSynopsis !== undefined) url.searchParams.set('selectedSynopsis', selectedSynopsis);
-    const response = await fetcher(url, {
-      headers: { accept: 'application/json' },
-      ...(signal ? { signal } : {}),
-      redirect: 'manual',
-      cache: 'no-store',
-    });
-    if (response.status === 308) {
-      const body = (await response.json()) as { redirect?: { from?: unknown; to?: unknown } };
-      if (body.redirect?.from !== current || typeof body.redirect.to !== 'string' || !subjectId.test(body.redirect.to))
-        throw new TypeError('Invalid public subject redirect');
-      if (selectedSynopsis !== undefined) throw new TypeError('Selected synopsis cannot follow a canonical redirect');
-      // Native identity redirects address Subjects on this API, never a foreign Location URL.
-      current = body.redirect.to;
-      continue;
+  try {
+    for (;;) {
+      const url = new URL(`/v1/subjects/${current}`, origin);
+      url.searchParams.set('context', GLOBAL_CONTEXT);
+      if (selectedSynopsis !== undefined) url.searchParams.set('selectedSynopsis', selectedSynopsis);
+      const response = await read(url.href, readSignal);
+      if (response.status === 308) {
+        const body = (await response.json()) as { redirect?: { from?: unknown; to?: unknown } };
+        const target = body.redirect?.to;
+        if (body.redirect?.from !== current || typeof target !== 'string' || !subjectId.test(target))
+          throw new TypeError('Invalid public subject redirect');
+        if (selectedSynopsis !== undefined) throw new TypeError('Selected synopsis cannot follow a canonical redirect');
+        if (target === id || target === current) throw new TypeError('Cyclic public subject redirect');
+        if (current !== id) throw new TypeError('Public subject canonical identity changed during read');
+        // The response identifies a Subject on this API. Ignore the Location header.
+        current = target;
+        continue;
+      }
+      if (!response.ok) {
+        // A non-JSON 503 from a proxy carries no problem type and stays an ordinary failure.
+        const problem =
+          response.status === 503 ? ((await response.json().catch(() => null)) as { type?: unknown } | null) : null;
+        if (problem?.type === SUBJECT_NOT_READY_TYPE) throw new ReviewedSubjectNotReady(current);
+        if (response.status === 503) throw new PublicSubjectGetUnavailable(current);
+        throw new Error(`Public subject read returned ${response.status}`);
+      }
+      const body = (await response.json()) as ReviewedSubjectRead;
+      readSignal.throwIfAborted();
+      if (body?.subject?.id !== current) throw new TypeError('Public subject read returned a different identity');
+      return body;
     }
-    if (!response.ok) {
-      // A non-JSON 503 from a proxy carries no problem type and stays an ordinary failure.
-      const problem =
-        response.status === 503 ? ((await response.json().catch(() => null)) as { type?: unknown } | null) : null;
-      if (problem?.type === SUBJECT_NOT_READY_TYPE) throw new ReviewedSubjectNotReady(current);
-      if (response.status === 503) throw new PublicSubjectGetUnavailable(current);
-      throw new Error(`Public subject read returned ${response.status}`);
-    }
-    const body = (await response.json()) as ReviewedSubjectRead;
-    if (body?.subject?.id !== current) throw new TypeError('Public subject read returned a different identity');
-    return body;
+  } finally {
+    clearTimeout(deadline);
   }
-  throw new TypeError('Cyclic public subject redirect');
 }
 
 /** A viewer read with no account token or review context attached. */
 export function createPublicBulkClient(options: { origin: string; fetch?: typeof fetch }): PublicBulkClient {
   const origin = new URL(options.origin);
-  if (!['http:', 'https:'].includes(origin.protocol) || origin.username || origin.password)
-    throw new TypeError('Invalid public API origin');
-  const fetcher = options.fetch ?? fetch;
+  const read = createBoundedPublicSubjectGet(options);
 
   return {
     async readSubject(id, signal) {
-      return readCurrentSubject(fetcher, origin, id, signal);
+      return readCurrentSubject(read, origin, id, signal);
     },
     async readSelectedSynopsis(id, query, signal) {
-      return readCurrentSubject(fetcher, origin, id, signal, query);
+      return readCurrentSubject(read, origin, id, signal, query);
     },
   };
 }

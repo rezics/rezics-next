@@ -1,7 +1,8 @@
+import { BOOK_CATALOGUE_TYPES } from '@rezics/definitions/contract';
 import { discoverySearchHref } from '../../search/search';
 
 /** Exact released identities. An Edition is never silently replaced by its work. */
-export const bookCatalogueTypes = ['schema:Book', 'schema:BookSeries', 'bf:Instance'] as const;
+export const bookCatalogueTypes = BOOK_CATALOGUE_TYPES;
 export type BookCatalogueType = (typeof bookCatalogueTypes)[number];
 
 export type BookCatalogueChoice = {

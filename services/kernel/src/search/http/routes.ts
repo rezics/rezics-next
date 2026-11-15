@@ -1,3 +1,4 @@
+import { hasPublicBookSearchShape } from '../request.ts';
 import { knowledgeDiscoveryRoutes } from '../http.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import { memoizedValue } from '../../memoized.ts';
@@ -244,19 +245,31 @@ export function searchRoutes<App>(
           200: subjectSearchResponse(),
           400: problemSchema('invalid_request'),
           401: unauthorized(),
-          403: problemSchema('forbidden'),
+          403: problemSchema('forbidden', 'platform_closed'),
           409: problemSchema('search_restart_required'),
           422: problemSchema('unsupported_query', { textDiagnostic: t.Optional(TextDiagnosticSchema()) }),
           503: problemSchema('semantic_not_ready', 'index_not_ready', 'overloaded', 'deadline_exceeded'),
         },
         detail: {
           operationId: 'subject.search',
-          'x-exposure': 'gate:search',
+          'x-exposure': 'public',
           'x-action': 'subject:read',
+          description: 'Exact Book, Book Series and Edition searches are public. Other requests use Search grants.',
           security: [{ bearerAuth: [] }, {}],
         },
       },
       async ({ body, authorize, admission, job, actor, set }) => {
+        const publicBook = hasPublicBookSearchShape(body) && !requiresAdvancedSearch(body);
+        if (!publicBook)
+          await admitGroup({
+            pool,
+            access: gateAccess ?? (() => routeAccess()!),
+            actor,
+            group: 'search',
+            clientAction: 'subject:read',
+            deadline: job.deadline,
+            clock,
+          });
         const { emptyRecoveryActions: _emptyRecoveryActions, ...nativeBody } = body;
         // Guard: without discovery-v1 the legacy grammar would ignore credited fields and answer catalogue text.
         if (
@@ -274,9 +287,10 @@ export function searchRoutes<App>(
           throw new ProblemError('unsupported_query', { errors: [{ pointer: '/population', code: 'unsupported' }] });
         async function prepare(): Promise<AccessCheck> {
           if (
-            body.representation === 'discovery-v1'
+            !publicBook &&
+            (body.representation === 'discovery-v1'
               ? requiresAdvancedDiscoverySearch({ ...body, representation: 'discovery-v1' })
-              : requiresAdvancedSearch(body)
+              : requiresAdvancedSearch(body))
           )
             await admitGroup({
               pool,

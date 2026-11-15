@@ -1,3 +1,4 @@
+import { BOOK_CATALOGUE_TYPES } from '@rezics/definitions/contract';
 import { FilterError, parseDiscoveryFilter, parseFilter } from '@rezics/filter';
 import { SEARCH_GLOBAL_CONTEXT as GLOBAL_CONTEXT } from './global-context.ts';
 import { ProblemError, type FieldErrorCode } from '../http/problem-error.ts';
@@ -16,6 +17,27 @@ export function unsupported(pointer: string, code: FieldErrorCode = 'unsupported
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+const bookCatalogueTypes = new Set<string>(BOOK_CATALOGUE_TYPES);
+const publicBookSearchFields = new Set(['filter', 'text', 'sort', 'limit', 'cursor', 'languages', 'descriptions']);
+
+/** The public slice accepts one positive predicate over exact released bibliographic Types. */
+export function hasPublicBookSearchShape(request: { filter?: unknown; sort?: unknown }): boolean {
+  if (Object.entries(request).some(([key, value]) => value !== undefined && !publicBookSearchFields.has(key)))
+    return false;
+  if (request.sort === 'rating' || request.sort === 'collections') return false;
+  const filter = request.filter;
+  if (!isRecord(filter) || Object.keys(filter).length !== 1 || !isRecord(filter.type)) return false;
+  const types: unknown = filter.type.in;
+  return (
+    Object.keys(filter.type).length === 1 &&
+    Array.isArray(types) &&
+    types.length > 0 &&
+    types.length <= BOOK_CATALOGUE_TYPES.length &&
+    types.every((type) => typeof type === 'string' && bookCatalogueTypes.has(type)) &&
+    new Set(types).size === types.length
+  );
 }
 
 export function containsRealmPredicate(value: unknown): boolean {

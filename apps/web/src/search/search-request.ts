@@ -1,3 +1,4 @@
+import { BOOK_CATALOGUE_TYPES } from '@rezics/definitions/contract';
 import { problemCode } from './refinement/request';
 import { searchFilterWithScope } from './advanced-scope';
 import type { DiscoveryRequest } from './discovery';
@@ -23,6 +24,32 @@ export async function readSearchPage<Response extends SearchResponsePage, Reques
     return { response, restarted: false };
   const { cursor: _cursor, kindCursor: _kindCursor, ...firstPage } = request;
   return { response: await send(firstPage), restarted: true };
+}
+
+const bookCatalogueTypes = new Set<string>(BOOK_CATALOGUE_TYPES);
+
+export function bookCatalogueSearchRequest(params: SearchLoaderDeps, languages: string[]): SubjectSearchRequest | null {
+  if (
+    !params.type ||
+    !bookCatalogueTypes.has(params.type) ||
+    params.condition ||
+    params.filter ||
+    params.resourceScope ||
+    params.ratingPopulation ||
+    params.kinds?.length ||
+    Object.keys(params.facets).length ||
+    Object.keys(params.ranges ?? {}).length ||
+    params.sort === 'rating'
+  )
+    return null;
+  return {
+    filter: { type: { in: [params.type] } },
+    languages: params.languages ?? languages,
+    descriptions: true,
+    limit: 20,
+    ...(params.query ? { text: params.query } : {}),
+    ...(params.cursor ? { cursor: params.cursor } : {}),
+  };
 }
 
 /** Preserve every submitted predicate. Native admission owns unsupported fields and kinds. */

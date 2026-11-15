@@ -155,32 +155,33 @@ async function composeZonePage(
   const active = await presentationApplication().activeProfile(dependencies.pool);
   requireAccessDeadline(input.deadline);
   if (!active) return zoneUnavailable();
-  const session = {
-    ring: dependencies.tokens,
-    scope: input.actor.kind === 'account' ? `account:${input.actor.accountId}` : 'anonymous',
-  };
-  const budget = new PageReadBudget();
   if (!dependent) {
-    const page = await readPage({
-      dispatch: input.dispatch,
-      incoming: input.request,
-      reads: plan!.reads,
-      session,
-      ...(languages ? { languages } : {}),
-    });
+    // Profile resolution can wait across a visibility or configuration change.
+    const current = await reads.page(input.actor, input.id, route, input.deadline);
+    if (
+      current.sources.revision !== selected.sources.revision ||
+      !isDeepStrictEqual(current.document, selected.document)
+    )
+      return zoneUnavailable();
+    requireAccessDeadline(input.deadline);
     return {
       status: 200,
       value: {
         profile: active.digest,
         template: { scope: 'route', key: route },
-        document: selected.document,
-        reads: page.results,
-        zone: selected.zone,
+        document: current.document,
+        reads: {},
+        zone: current.zone,
       },
-      component: selected.component,
+      component: current.component,
       components: [],
     };
   }
+  const session = {
+    ring: dependencies.tokens,
+    scope: input.actor.kind === 'account' ? `account:${input.actor.accountId}` : 'anonymous',
+  };
+  const budget = new PageReadBudget();
   const work = zoneWork(
     input.deadline,
     plan
