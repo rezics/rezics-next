@@ -347,7 +347,7 @@ NOT yet supply complete scoped observations or registration/summary custody:
 | ---------------------------------------------------------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Library `collection-source.ts:createCollectionSource`                        | Source shape/observations; methods return unavailable             | Complete admitted native prepare/prefix/containsSubject/readRawStoredPrefix binding for structural owner and Collection plans, including false/NOT/order dependencies |
 | Library `collection-source-native.ts` and its header/members/facts/probe SQL | Actual header, stored-original ranges and bounded points          | Structural inverse directory, first registration/fence, source-local scoped summary consumption and final coherent observation                                        |
-| Library `owner-write-sequence.ts:allocateOwnerWriteSeq`                      | Delivered native allocator and private counter/entry columns      | Production set/clear/Undo integration, bounded legacy cutover and canonical readiness; the primitive alone supplies neither directory nor identity ACK                |
+| Library `owner-write-sequence.ts:allocateOwnerWriteSeq`                      | Delivered native allocator, private counter/entry columns, and integrated set/clear/Undo writers | Bounded legacy NULL cutover and canonical readiness; the primitive alone supplies neither directory nor identity ACK                                                |
 | Library `owner-fact-version.ts:readOwnerFactVersion`                         | Indexed account-home mutation version                             | Complete dependency capture/registration and summary custody; broad mutation alarm alone is insufficient                                                              |
 | Search `scope-source.ts`                                                     | Admission scaffolding, unavailable native prepare/prefix/evaluate | Complete native canonical Source and physical namespace/source authorization, including negative/excluded/order population                                            |
 | Search `source.ts:SubjectSource`, Semantic `search-source.ts:subjectSource`  | Subject chunks/snapshots and bounded facet samples/probes         | Complete scoped producer observation and native canonical-index participant, not sampled returned IDs                                                                 |
@@ -725,14 +725,10 @@ candidate, support, first-apply registration, follow, total, pending/published f
 All six member, entry, label, session, copy and output drivers are included, with working/ready bases, accepted
 meaning and exhaustion evidence. Owner state chooses the highest live native `entry.owner_write_seq`, preserves
 conflicts, unions labels and keeps sessions/copies distinct. That sequence increments in the SAME successful
-set/clear/Undo transaction; Undo is a new write despite historic dates. The delivered
-[owner sequence prerequisite](../library/owner-write-sequence.md) supplies
-`allocateOwnerWriteSeq(tx: CommandTransaction, accountId: string): Promise<bigint>`, private
-`library.owner_write_counter (route,account_id)` and nullable positive `owner_write_seq` columns on live/archive
-entries. It performs indexed initialization and increment in two statements in the same authorized owner command;
-replay skips allocation and failed/noEffect allocation rolls back. These are actual primitives, not missing
-schema or an invented callable. Production entry set/clear/Undo writers and bounded legacy migration/cutover
-remain missing: null legacy sequences are not ready or ordered. Successful equal-value set still allocates;
+set/clear/Undo transaction; Undo is a new write despite historic dates. The
+[native owner write sequence](../library/owner-write-sequence.md) owns the allocator, private counter/columns
+and integrated set/clear/Undo callers on that same authorized command. Bounded legacy NULL migration, cutover
+and canonical readiness remain separate unexecuted producers: null legacy sequences are not ready or ordered. Successful equal-value set still allocates;
 archive sequences never compete as live state and Undo allocates afresh. Timestamps, UUIDs,
 `type_source_position`, per-slot revisions or invented legacy ordering cannot substitute. Clear and replay retain
 their native meaning. The counter requires its own exact Library terminal cleanup after T fences writers;

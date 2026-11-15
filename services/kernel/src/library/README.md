@@ -1191,7 +1191,7 @@ structural directory point per step; zero original fact enumeration, engine call
 command/callback/Source hold/control ACK/replay work and all retained copies remain charged to shared limits.
 Frozen refusal, positive reversal, and six-driver custody and growth acceptance remain required.
 
-### Native owner state-write sequencing (required; runtime incomplete)
+### Native owner state-write sequencing
 
 [Owner state-write order](../../../../docs/library-and-collections.md#owner-state-write-order) owns the rule. Entry
 create/update, physical clear and Undo restore must increment one per-account counter in the owner's partition,
@@ -1210,11 +1210,10 @@ allocate nothing. Epoch maintenance consumes `owner_write_seq` and re-keys only 
 The counter is private ordering data, never permission, an account lifecycle generation, a membership witness store
 or a disclosed aggregate.
 
-The delivered [`allocateOwnerWriteSeq` ABI and schema](owner-write-sequence.md) require a live native execute transaction,
-same-owner attribution and matching partition. Private `owner_write_counter` storage and nullable positive bigint
-`entry.owner_write_seq` / `entry_deleted.owner_write_seq` exist; null is legacy/unsequenced, with no default/backfill.
-Native row adapters and set/clear/Undo binding are delivered, including the original-keyed clear register.
-Bounded migration/cutover/readiness, epoch consumer and complete terminal/shared-custody cleanup remain separate producers. Existing unsequenced values must not be ordered by dates, transaction UUIDs, source-type positions or fabricated zero.
+The delivered [`allocateOwnerWriteSeq` contract](owner-write-sequence.md) owns the live-execute, same-owner allocator,
+private counter/columns and integrated native set/clear/Undo callers on that same authorized command, including the
+original-keyed clear register. Null is legacy/unsequenced, with no default/backfill.
+Bounded legacy NULL migration/cutover/readiness, epoch consumer and complete terminal/shared-custody cleanup remain separate producers. Existing unsequenced values must not be ordered by dates, transaction UUIDs, source-type positions or fabricated zero.
 The [native cutover plan](../../../../docs/library-owner-queries.md#sequencing-cutover-bounded-cuts-and-native-proof)
 requires complete authoritative native state-write evidence, exact verified locators and bounded live-write cutover,
 or explicit real owner reassertion. Affected winner/NOT-state/Continue state stays unready; independent complete
