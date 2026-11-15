@@ -43,6 +43,7 @@ export interface NativeDefinitionCatalogue {
         pin: KindCataloguePin;
     }, context: DefinitionCatalogueReadContext): Promise<CatalogueBuildStatus | null>;
 }
+export declare const DEFINITION_CATALOGUE_READ_KEY_BOUND: number;
 /** Ordinary host composition supplies its existing cursor key ring; this never grants read authority. */
 export declare function configureDefinitionCatalogue(pool: Pool, keys: KeyRing): void;
 export declare const cataloguePin: (rootDigest: string) => KindCataloguePin;
