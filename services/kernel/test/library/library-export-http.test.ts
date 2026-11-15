@@ -5,6 +5,7 @@ import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { createKernelClient } from '../../../../packages/client/src/index.ts';
 import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { purgeOwnedGraphPage as purge } from '../../src/library/erasure-owned-graph.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -33,6 +34,7 @@ const collection = newId(route),
   copy = newId(route),
   version = newId(route);
 const scopes = [
+  'library_archive:read',
   'library_entry:list',
   'library_entry:read',
   'library_entry:update',
@@ -118,7 +120,10 @@ beforeAll(async () => {
     clock: () => new Date(now),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(29)]]) },
     access: fixture.access,
-    writeRate: fixture.writeRate,
+    writeRate: createWriteRateLimiter({
+      secret: 'library-export-fixture-rate-secret',
+      overrides: JSON.stringify({ 'new-account': { write: { maximum: 100000, seconds: 86400 } } }),
+    }),
     ratePeer: () => '127.0.0.1',
   });
   await sql`INSERT INTO access.exposure_opening("group",valid,transaction_id) SELECT g,tstzrange('2020-01-01',NULL,'[)'),${owner} FROM unnest(${['personal_library', 'reading_progress', 'collections']}::text[]) g`;
