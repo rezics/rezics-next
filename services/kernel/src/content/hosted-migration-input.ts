@@ -55,7 +55,7 @@ type InputRow = {
   expires_at: Date | string;
 };
 
-type RevisionRow = { kind: 'structure' | 'publication' };
+type RevisionRow = { kind: 'structure' | 'publication'; ordered: boolean };
 type DescriptorRow = {
   base_revision_id: string;
   base_placement_count: string;
@@ -285,12 +285,16 @@ export async function captureHostedMigrationInput(
       if (catalogue.head_revision_id !== input.expectedRevisionId) throw new RevisionPreconditionError();
       const revision = (
         await tx.query<RevisionRow>(
-          `SELECT kind FROM content.hosted_structure_revision
-           WHERE route=$1 AND catalogue_id=$2 AND revision_id=$3`,
+          `SELECT revision.kind,EXISTS(SELECT 1 FROM content.hosted_version_revision selected
+             WHERE selected.route=revision.route AND selected.catalogue_id=revision.catalogue_id AND selected.revision_id=revision.revision_id) AS ordered
+           FROM content.hosted_structure_revision revision
+           WHERE revision.route=$1 AND revision.catalogue_id=$2 AND revision.revision_id=$3`,
           [route, input.catalogueId, input.expectedRevisionId],
         )
       ).rows[0];
       if (!revision || revision.kind !== 'structure') throw new ContentNotFoundError();
+      if (revision.ordered)
+        throw new InvalidHostedMigrationInputError('Canonical drafts are not development-maintenance input');
 
       const descriptor = (
         await tx.query<DescriptorRow>(

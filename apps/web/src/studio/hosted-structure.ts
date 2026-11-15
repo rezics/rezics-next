@@ -47,6 +47,9 @@ export function hostedBookStructure(book: HostedBook): BookStructure {
         occurrenceId: entry.occurrenceId,
         parentOccurrenceId: entry.parentId,
         title: entry.title,
+        ...(entry.kind === 'chapter' && book.defaultLanguages?.[entry.occurrenceId]
+          ? { defaultLanguage: book.defaultLanguages[entry.occurrenceId]! }
+          : {}),
         target:
           entry.kind === 'part'
             ? { kind: 'part' }

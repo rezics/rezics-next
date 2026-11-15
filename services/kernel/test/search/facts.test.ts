@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { calendarInterval } from '@rezics/filter';
 import { bulkLines, documentActions } from '../../src/search/document.ts';
 import { createSubjectIndex, subjectIndexName } from '../../src/search/indices.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
@@ -98,7 +99,13 @@ test('a subject document carries one fact per facet-capable statement', () => {
   expect(document.facts).toEqual([
     { property: 'schema:author', value: author, qualifiers: [`rezics:role=${lead}`] },
     { property: 'schema:genre', value: fantasy, qualifiers: [] },
-    { property: 'schema:datePublished', year: 1995, qualifiers: [] },
+    {
+      property: 'schema:datePublished',
+      year: 1995,
+      time_lower: calendarInterval({ year: 1995 }).lower,
+      time_upper: calendarInterval({ year: 1995 }).upper,
+      qualifiers: [],
+    },
     { property: 'schema:totalTime', amount: 45, unit: 'unit:MIN', qualifiers: [] },
   ]);
   expect(document.statements).toContain('schema:name=Stored name');

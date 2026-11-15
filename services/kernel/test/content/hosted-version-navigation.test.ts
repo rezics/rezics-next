@@ -24,27 +24,6 @@ type NavigationPage = Readonly<{
   nextCursor: string | null;
 }>;
 
-async function convertDraft(path: string, expectedRevisionId: string): Promise<string> {
-  const conversion = `${path}:convertDraft`;
-  const capture = await f.native.command(conversion, { step: 'capture', expectedRevisionId }, 200);
-  const inputId = capture.inputId as string;
-  let progress = await f.native.command(conversion, { step: 'begin', inputId, expectedRevisionId }, 200);
-  while (progress.nextStep === 'page') {
-    progress = await f.native.command(
-      conversion,
-      { step: 'page', inputId, expectedRevisionId, cursor: progress.frontier },
-      200,
-    );
-  }
-  progress = await f.native.command(conversion, { step: 'seal', inputId, expectedRevisionId }, 200);
-  progress = await f.native.command(conversion, { step: 'materialize', inputId, expectedRevisionId }, 200);
-  while (progress.nextStep === 'materializePage') {
-    progress = await f.native.command(conversion, { step: 'materializePage', inputId, expectedRevisionId }, 200);
-  }
-  const committed = await f.native.command(conversion, { step: 'commit', inputId, expectedRevisionId }, 200);
-  return committed.revisionId as string;
-}
-
 test('mounted chapter navigation pages exact nested snapshots in both directions', async () => {
   const catalogue = await f.native.thread();
   const path = `/v1/hostedCatalogues/${catalogue.firstPost.id}`;
@@ -79,7 +58,7 @@ test('mounted chapter navigation pages exact nested snapshots in both directions
     placements,
   });
   expect(created.status).toBe(201);
-  const revisionId = await convertDraft(path, created.value.revisionId as string);
+  const revisionId = created.value.revisionId as string;
 
   async function navigate(
     originId: string,

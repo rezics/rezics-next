@@ -806,7 +806,12 @@ remain separate questions for the existing compiler/health chain; this cohort su
    `HEAD` and `dev` to their merge base. It does not transfer `.git`, the mutable index, configuration, remotes,
    credentials, hooks, reflogs or object alternates. A
    reusable immutable pack is accepted only when its object format, `HEAD`, `dev` base, shallow boundary, index tree
-   and manifest/pack integrity match. Snapshot staging reports local duration; GitHub fetch is a separate host line;
+   and manifest/pack integrity match. The owned manifest marker is `rezics-native-git-snapshot-v1` for both
+   publication and full-pack delivery; Git SHA-1/SHA-256 object formats remain unchanged. Reusable packs live in a
+   format-specific namespace beneath `.temp/remote-check-git-cache`, so a new envelope never relabels or rewrites an
+   older immutable cache. Captured runs settle using their captured code; the runtime owner coordinates deployment
+   after those runs settle, preserving manifests, refs and cleanup custody. Snapshot staging reports local duration;
+   GitHub fetch is a separate host line;
    rsync reports duration, bytes sent, file count and mode (`overlay after GitHub fetch`, `checksum copy-dest`, or
    `full tree`). The per-run local staging directory is removed after transfer, including on failure.
    Ref changes and per-run lock-file lifecycle use the shared store lock. Before changing

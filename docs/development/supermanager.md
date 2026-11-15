@@ -1,115 +1,96 @@
 # Supermanager
 
-The supermanager is the resident session that keeps direction for the Goals: direction, priorities and scope with the
-maintainer, the allowance runway, critical grants and deadlocks between owners. Managers own the work and decide among
-themselves when the supermanager is unreachable ([delivery](delivery.md)). A token-free watchdog supervises the
-supermanager and raises the alarm when it is stuck.
+The resident supermanager is the only manager. It owns direction with the maintainer, release scope, Goal allocation,
+unit scheduling, cross-owner choices, allowance runway, incidents, progress reporting and publication. Product and
+module names identify contracts and code ownership; they do not require resident domain managers.
+
+## Execution units
+
+The manager may assign a worker to author a concrete Goal: user outcome, current owner links, write boundary, adopted
+decisions and observable completion. The manager reviews that contract and allocates it to an execution unit. The unit
+consumes it through a native Codex Goal, using native subagents and Grok CLI autonomously where useful. A unit is an
+execution worker, not another manager or a management tier. Do not start domain-manager sessions, require domain
+backlog quotas or revive old manager continuations.
+
+Each unit has one shared worktree for its native session, subagents and Grok CLI. Different units use separate
+worktrees. Within a unit, assign disjoint write boundaries and designate one integration writer for staging and
+coherent commits. Preserve ongoing source when consolidating work; do not restart a useful attempt merely to change
+its worktree. An independent editor unit retains its own tree and interface authority.
+
+Register the unit's actual native session, Goal, shared worktree and termspaces pane through the supported
+[Goal tooling](../../tools/goal/README.md) entry point. A native Goal is not a fabricated managed-task record. Keep
+runtime identities in local state, and preserve that same Goal and pane across ordinary continuation. Source
+coordination inside a unit does not grant live controller, pool or publisher authority.
+
+Units decide implementation order and routine in-scope choices, repair shared causes in the owner module, and continue
+independent work while checks run. The manager owns cross-unit allocation and resolves product conflicts. An unavailable
+manager is not a reason to stop work permitted by the Goal; only the genuinely dependent operation waits.
 
 ## Writing briefs
 
-Trust model for briefs. Agents and internal callers are trusted; REZICS is a community product, and a mistake on dev
-is caught and returned after integration. When an incident shows a wrong result, brief the repair that produces the
-right result where the problem appears (resolve, merge, regenerate, normalize), so the pipeline continues. Do not
-brief a new refusal, rejection, stop or failed attempt unless no agent could produce the correct result there; if you
-still need one, state the defect it prevents and the attempts and hours it will cost. Ask for validation only at
-system boundaries: HTTP input, imported records, external files and third-party responses. Acceptance covers the
-behaviour asked for; ask for refusal tests only for boundary input and authorization rules. Money movement
-(payments, payouts, balances) keeps strict guards.
+Agents and internal callers are trusted; a mistake on dev is repaired after integration. Brief the correction that
+produces the right result where the problem appears: resolve, merge, regenerate or normalize. Do not add a refusal or
+stop unless no agent can repair the defect there; state the defect prevented and the attempt/hour cost when one is
+needed. Validate untrusted HTTP input, imported records, external files and third-party responses. Money movement
+retains its strict guards.
 
-Native boot acceptance fixtures provide required trusted material such as `KERNEL_RECEIPT_KEYS` in the test
-environment before startup, so independently composed command consumers can read the same dedicated ring.
+Keep the Goal and its native subagent briefs focused. Link current owner contracts; omit historical manager duties,
+old prompts, inbox reconstructions and repeated rules. workers who author Goals produce an executable outcome contract,
+not another management layer. Completion retains the owner acceptance and promoted-revision requirements.
+
+Native boot acceptance fixtures supply trusted material such as `KERNEL_RECEIPT_KEYS` before startup so independently
+composed consumers can read the same dedicated ring.
+
+## Scheduling and progress
+
+Keep the existing progress reports running. Include native unit and subagent activity alongside managed historical
+work without double-counting usage, source or integration. Compare accepted user journeys, integrated source,
+allowance per accepted result, observed writing time and check/admission/integration waits. Report missing attribution
+as unknown. A process or a native Goal's active label alone does not establish productive writing or accepted outcomes.
+
+Set unit and subagent width from independent writable outcomes, host capacity and authorized allowance. Do not use old
+domain-manager quotas or fixed coder floors to create filler. At a requested half-hour checkpoint, use the existing
+inbox/reminder path to inspect the largest delivery loss and make a scheduling decision. Count the context reload cost;
+do not add a second timer or polling loop. Keep a timeboxed experiment's planned wakes finite.
+
+After a completed hour below the [throughput target](efficiency.md#output-and-flow), inspect source output and visible
+product outcomes, act on the largest measured loss, and continue the project's progress report. Re-evaluate the finish
+forecast from accepted remaining journeys. Report a missed timebox honestly and preserve completed work.
 
 ## Environment incidents
 
-When the same failure line ends three or more tasks within 20 minutes, it is one shared incident. The supermanager is
-alerted with the line, the count, example tasks and the source location, and the Telegram group is told. Fix the cause
-or hand it to its owner within 15 minutes, then retry the affected tasks.
-
-## Hourly target
-
-After every completed hour below the [current Web campaign target](efficiency.md#output-and-flow), the supermanager
-is woken with Web campaign additions, overall product throughput, source changes and visible product outcomes. It uses the
-observed source output and visible outcomes to analyse causes from the task store and run logs, choose the next-hour
-action, and report the cause and action in the project's Telegram group without waiting to be asked.
-
-## Implementation sprint width
-
-Decision: keep fewer than 25 confirmed source coders or ready independent source outcomes below usable width as
-intervention triggers, retain the ten-minute checkpoint, and treat 32–64 as a capacity-conditioned target.
-
-For the current 6–8 hour implementation window, aim for 32–64 active source workers only when owned independent work,
-safe host admission and current authorized allowance support them. This range is an operating target, not a hard cap or
-authority to raise one. Use the existing ten-minute checkpoint; add no alert or timer.
-
-Managers follow [Delivery ownership](delivery.md#delivery-ownership) for ongoing source discovery and review, useful
-worker proposals and dispatch. At each checkpoint, distinguish machine telemetry from manager action and observed first
-source: telemetry reports owned starts and process or admission state; managers act on source gaps and proposals, confirm
-actual starts, and inspect assigned worktrees or commits for the first source change. A process or task status alone does
-not confirm coding, and queued work or checks do not count as coding. Count an active source worker only after an actual
-start and first source activity are observed; exclude reservations, duplicate starts, ready tasks, parked checks,
-verification and landing.
-
-Real ready supply is independent, reviewed source work eligible to start now, as defined by Delivery ownership. Usable
-width is the concurrent source-worker capacity supported by safe host admission and current authorized allowance. The
-resident acts when confirmed coding width falls below 25 or the supply of ready independent source outcomes falls below
-usable width. Restore useful independent starts and confirm their first source within ten minutes of observing either
-deficit. If a specific host, allowance, authority or source dependency prevents recovery in that window, surface the
-dependency, accountable owner and unblocking action, while continuing independent starts that can proceed. Keep the
-intervention active until width and supply recover or the window ends; do not create filler or interrupt live writers.
-
-Consolidate resident managers whose work duplicates another owner's or whose role produces no independent decision
-or actionable work. Transfer their Goals and outstanding task ownership through Goal before stopping the redundant
-session. The supermanager owns the evidence and cross-Goal trade-offs; product managers still own worker starts.
+When the same failure line ends three or more tasks within 20 minutes, treat it as one shared incident. Include the
+line, count, examples and source location in the manager's alert and the project notice. Fix the cause or assign its
+owner within 15 minutes, then retry the affected operations. A retry alone is not a class repair.
 
 ## Questions for the maintainer
 
-Never ask a blocking question: no dialog, prompt or tool call that waits for an answer while the Goal runs. The work
-continues while a question is open.
+Never ask a blocking question while useful work can proceed. Ask only for money, third-party accounts,
+outcome-changing product direction, irreversible actions or a change to standing directions. Decide routine
+engineering and operating choices, continue the reversible default and report it. When the maintainer is present,
+state the choice, recommendation and independent work continuing. Otherwise use the project's authorized question
+channel. Telegram remains a notice channel for progress, alerts and question links.
 
-- When the maintainer is in the current conversation and the question follows directly from it, ask in the reply
-  itself: the question, the options, a recommendation and what will happen meanwhile. Keep working; take the
-  recommended reversible option if the answer does not come.
-- Otherwise open a GitHub issue in this repository labelled `question`: the decision needed, its context with links,
-  the options, the recommendation and the default with the time it applies. Proceed with the default when it is
-  reversible; park only what cannot proceed without the answer.
-- Ask only what the maintainer alone can decide: money, third-party accounts, outcome-changing product direction,
-  irreversible actions, or a change to his standing directions. Everything else is decided and reported.
+## Resident supervision
 
-Telegram stays a notice channel: stage reports, alerts and the link to any new question issue.
+The token-free watcher leaves full event bodies in the native inbox. It sends a short mailbox notification only when
+actionable personally unread mail is at least 60 seconds old and the registered resident has been explicitly idle for
+ten seconds. Busy turns, long tools and transcript silence do not establish idleness. Codex activity comes from its
+identity-verified transcript lifecycle; an unsupported activity source stays unknown. New mail coalesces while the
+resident is busy or a notification is outstanding.
 
-# Resident supermanager supervision
+The authenticated resident reads full oldest-unread pages with `inbox read <manager>`. Only returned rows advance its
+durable personal cursor. An explicit initial `--cursor <id>` may bootstrap a backlog already consumed; acknowledgement
+and foreign inspection do not consume the resident's inbox. The watcher uses `--start-after <id>` only until that cursor
+exists and requires the registered transcript. Its transport journal prevents duplicate submitted notifications across
+restarts. Recovery and report producers emit inbox events instead of independently typing prompts into the pane.
 
-The supermanager is a resident role. It owns direction, priorities, maintainer-level scope, allowance runway and
-unresolved owner deadlocks. Managers remain responsible for deciding and delivering their outcomes. When the
-supermanager or maintainer is unreachable, concerned managers settle a choice after one exchange, record reasons and
-proceed: producers decide interfaces and outcome owners decide shared choices. Only genuinely dependent work waits.
+Register the resident from its own session with `bun tools/goal/src/cli.ts manager register-supermanager`; its native
+provider session is the authority. Registration creates no managed session, Goal or budget, and host recovery does not
+resume the resident. Resume the registered Codex thread in the same window with `codex resume <registered-thread-id>`;
+never start a second manager.
 
-The token-free watcher leaves every message intact in the native manager inbox. It sends one short mailbox
-notification when actionable personally unread mail is at least 60 seconds old and the registered session has been
-explicitly idle for ten seconds. Busy turns, long tools and transcript silence never establish idleness. Codex
-activity comes from its identity-verified transcript's turn lifecycle; an unsupported activity source stays unknown.
-New mail coalesces while the resident is busy or a notification is outstanding. Consuming its triggering event
-rearms notification for remaining unread pages once the session is explicitly idle. Reading, acknowledging or inspecting
-another manager's mail does not consume the resident's personal inbox.
-
-The authenticated resident reads full event bodies with `inbox read <manager>`, oldest unread page first. Only returned
-rows advance its durable personal cursor. An explicit `--cursor <id>` on the first owner read can bootstrap a backlog
-already consumed; later reads continue the stored cursor. Acknowledgement is not a delivery receipt. The watcher
-uses `--start-after <id>` only until that personal cursor exists, and requires `--transcript <path>` for activity.
-Its transport journal prevents repeating an already staged or submitted notification across retries and restarts.
-Recovery and hourly producers emit native inbox events; they do not type separate prompts into the resident window.
-
-If operator recovery is needed, resume the registered provider session in the same window and thread: Codex uses
-`codex resume <registered-thread-id>`; Claude uses
-`claude --resume <registered-thread-id> --permission-mode bypassPermissions`. Never start a second supermanager.
-
-The resident may be an external Codex or Claude session. Register it from that session with
-`bun tools/goal/src/cli.ts manager register-supermanager`; its native `CODEX_THREAD_ID` or `CLAUDE_CODE_SESSION_ID`
-is its authority. Registration creates no managed session or budget, and host recovery never resumes the resident.
-For an explicit role transfer, stop the previous resident and its watchdog, update the manager host, then register
-from the new session with `manager register-supermanager --replace-session <previous-thread-id>`. The write compares
-the previous registered thread atomically, immediately invalidates the old identity and keeps the manager and inbox.
-A missing or changed previous thread refuses replacement. Restart supervision against the new provider and thread.
-
-While the resident is stuck, managers keep independent work moving under the owner-agreement rules and escalate only
-architecture, scope or choices requiring the maintainer.
+For an explicit role transfer, stop the previous resident and watchdog, update the host, then register with
+`manager register-supermanager --replace-session <previous-thread-id>` from the new session. The atomic comparison
+invalidates the old identity while retaining the manager and inbox; a missing or changed previous thread refuses the
+transfer. Restart supervision against the new provider session and transcript.

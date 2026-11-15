@@ -21,20 +21,6 @@ afterAll(async () => {
   await f?.close();
 });
 
-async function convertDraft(path: string, expectedRevisionId: string): Promise<string> {
-  const route = `${path}:convertDraft`;
-  const captured = await f.native.command(route, { step: 'capture', expectedRevisionId }, 200);
-  const inputId = captured.inputId as string;
-  const advance = (step: string, cursor?: unknown) =>
-    f.native.command(route, { step, inputId, expectedRevisionId, ...(cursor === undefined ? {} : { cursor }) }, 200);
-  let progress = await advance('begin');
-  while (progress.nextStep === 'page') progress = await advance('page', progress.frontier);
-  progress = await advance('seal');
-  progress = await advance('materialize');
-  while (progress.nextStep === 'materializePage') progress = await advance('materializePage');
-  return (await advance('commit')).revisionId as string;
-}
-
 test('outline and chapter windows hydrate only visible rows with bounded temporal batches', async () => {
   const catalogue = await f.native.thread();
   const target = f.target(await f.native.thread());
@@ -65,10 +51,10 @@ test('outline and chapter windows hydrate only visible rows with bounded tempora
     ],
   });
   expect(created.status).toBe(201);
-  const revisionId = await convertDraft(path, created.value.revisionId as string);
+  const revisionId = created.value.revisionId as string;
   const client = f.native.pool;
   const snapshot = await readHostedDraftPointSnapshot(client, catalogue.firstPost.id, revisionId);
-  if (!snapshot) throw new Error('Converted hosted catalogue has no exact ordered snapshot');
+  if (!snapshot) throw new Error('Created hosted catalogue has no exact ordered snapshot');
   observer = observeSql(f.native.pool);
 
   async function page(

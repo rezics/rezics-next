@@ -75,6 +75,7 @@ export const workerMigrations = [
     sql: `
 CREATE TABLE worker_tasks (id TEXT PRIMARY KEY, sequence INTEGER NOT NULL UNIQUE, current_attempt INTEGER NOT NULL, body TEXT NOT NULL);
 CREATE TABLE worker_attempts (task_id TEXT NOT NULL REFERENCES worker_tasks(id), attempt INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(task_id, attempt));
+CREATE INDEX worker_attempts_session ON worker_attempts(json_extract(body, '$.session'));
 CREATE TABLE worker_events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL REFERENCES worker_tasks(id), attempt INTEGER NOT NULL, kind TEXT NOT NULL, at TEXT NOT NULL, body TEXT NOT NULL);
 CREATE TABLE worker_records (task_id TEXT NOT NULL REFERENCES worker_tasks(id), attempt INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(task_id, attempt));
 `,

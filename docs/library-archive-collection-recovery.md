@@ -1,6 +1,6 @@
 # Native Library archive Collection recovery
 
-This page owns recovery of one manually curated Collection from a completed V1–V4 native Library export. The
+This page owns recovery of one manually curated Collection from a completed canonical v1 native Library export. The
 [export contract](library-export.md) remains the authority for producer fields and capture semantics. The consumer
 uses `decodeLibraryArchive` from `services/kernel/src/library/library-archive.ts`; it does not install another
 archive format, exporter, general importer or retained raw-file store.
@@ -57,7 +57,7 @@ uses the existing native pin command.
 
 ## Bounds and work
 
-The consumer shares the installed decoder vocabulary for V1 through V4, preserving each original inventory,
+The consumer shares the canonical v1 decoder vocabulary, preserving its complete inventory,
 manifest, accounting and unsupported coverage. Personal annotations, provenance, journals and provider records remain
 unsupported by Collection recovery. It reuses the
 producer manifest and limits: upload bytes `U <= 34 MiB`, depth at most 32, `N <= 100,000` archive records, aggregate compact

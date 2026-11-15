@@ -3,6 +3,9 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
+import { Database } from 'bun:sqlite';
+import { openDb } from '../../../tools/goal/src/db.ts';
+import { nativeUnitEnvironment, registerNativeUnit } from '../../../tools/goal/src/native-units.ts';
 import type { Browser } from 'playwright';
 import {
   hasWebCheckCustody,
@@ -541,6 +544,107 @@ function createForeignDriver(temporaryRoot: string): string {
   return repository;
 }
 
+function registeredUnitDriver(fixture: ReturnType<typeof createDriverGitFixture>) {
+  git(fixture.candidateRoot, ['checkout', '--detach', fixture.integratedRevision]);
+  writeFileSync(join(fixture.candidateRoot, 'unrelated-model.txt'), 'another unit-owned model\n');
+  commit(fixture.candidateRoot, 'advance unrelated model');
+  const stateDirectory = join(fixture.temporaryRoot, 'unit-state');
+  const codexHome = join(fixture.temporaryRoot, 'native-codex');
+  mkdirSync(stateDirectory);
+  mkdirSync(codexHome);
+  const thread = '11111111-1111-4111-8111-111111111111';
+  const goal = '22222222-2222-4222-8222-222222222222';
+  const goals = new Database(join(codexHome, 'goals_1.sqlite'));
+  goals.exec(
+    'CREATE TABLE thread_goals(thread_id TEXT PRIMARY KEY, goal_id TEXT, objective TEXT, status TEXT, updated_at_ms INTEGER)',
+  );
+  goals.query('INSERT INTO thread_goals VALUES (?, ?, ?, ?, ?)').run(thread, goal, 'Read a book', 'active', 1);
+  goals.close();
+  const threads = new Database(join(codexHome, 'state_5.sqlite'));
+  threads.exec('CREATE TABLE threads(id TEXT PRIMARY KEY, cwd TEXT, rollout_path TEXT, source TEXT)');
+  threads.query('INSERT INTO threads VALUES (?, ?, ?, ?)').run(thread, fixture.candidateRoot, '', 'vscode');
+  threads.close();
+  const briefPath = join(fixture.temporaryRoot, 'native-goal.md');
+  writeFileSync(
+    briefPath,
+    '---\nacceptance:\n  command: [bun, test, book-journey.test.ts]\n  requires: [native, browser]\n---\nRead a book.\n',
+  );
+  const db = openDb(join(stateDirectory, 'goal.sqlite'));
+  try {
+    const unit = registerNativeUnit(db, {
+      id: 'books',
+      threadId: thread,
+      pane: '%12',
+      worktree: fixture.candidateRoot,
+      briefPath,
+      codexHome,
+      pool: 'codex',
+      mainCheckout: fixture.repository,
+      stateDirectory,
+      termspacesStatus: {
+        protocolVersion: 1,
+        ok: true,
+        data: {
+          sessions: [
+            {
+              owned: true,
+              windows: [
+                {
+                  owned: true,
+                  panes: [
+                    {
+                      runtimeId: '%12',
+                      owned: true,
+                      dead: false,
+                      cwd: fixture.candidateRoot,
+                      spec: { argv: ['codex', 'resume', thread] },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+    return { ...nativeUnitEnvironment(unit), WEB_CHECK_DRIVER_ROOT: fixture.candidateRoot };
+  } finally {
+    db.close();
+  }
+}
+
+test('a registered native unit uses its clean canonical driver closure in the shared worktree', () => {
+  const f = createDriverGitFixture();
+  try {
+    const environment = registeredUnitDriver(f);
+    expect(git(f.candidateRoot, ['merge-base', 'HEAD', 'dev'])).not.toBe(git(f.candidateRoot, ['rev-parse', 'HEAD']));
+    expect(trustedDriver(f.candidateRoot, environment)).toBe(f.candidateRoot);
+    writeFileSync(join(f.candidateRoot, 'scripts/driver-helper.ts'), 'dirty driver\n');
+    expect(() => trustedDriver(f.candidateRoot, environment)).toThrow('driver sources must be clean');
+  } finally {
+    rmSync(f.temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test('native unit driver selection still refuses foreign and mismatched committed closures', () => {
+  const f = createDriverGitFixture();
+  try {
+    const environment = registeredUnitDriver(f);
+    const foreign = createForeignDriver(f.temporaryRoot);
+    expect(() => trustedDriver(f.candidateRoot, { ...environment, WEB_CHECK_DRIVER_ROOT: foreign })).toThrow(
+      'share the candidate common Git repository',
+    );
+    writeFileSync(join(f.candidateRoot, 'scripts/driver-helper.ts'), 'export function run(): number { return 99; }\n');
+    commit(f.candidateRoot, 'different committed driver');
+    expect(() => trustedDriver(f.candidateRoot, environment)).toThrow('differs from canonical dev');
+    expect(() => trustedDriver(f.candidateRoot, { WEB_CHECK_DRIVER_ROOT: f.candidateRoot })).toThrow(
+      'must be separate',
+    );
+  } finally {
+    rmSync(f.temporaryRoot, { recursive: true, force: true });
+  }
+});
+
 function gitFixtureAdapter(candidateRoot: string) {
   const f = fixture();
   f.adapter.custody = () => false;
@@ -588,10 +692,10 @@ test('canonical dev accepts an integrated snapshot despite unrelated untracked f
 test('changed committed producer bytes are refused even when Git reports a clean snapshot', async () => {
   const gitFixture = createDriverGitFixture();
   try {
-    git(gitFixture.repository, ['config', 'core.autocrlf', 'true']);
     const producerPath = join(gitFixture.integratedRoot, 'scripts', 'check-run.ts');
     const producer = readFileSync(producerPath, 'utf8');
     writeFileSync(producerPath, producer.replace(/\r?\n/g, '\r\n'));
+    git(gitFixture.integratedRoot, ['update-index', '--assume-unchanged', 'scripts/check-run.ts']);
     expect(git(gitFixture.integratedRoot, ['status', '--porcelain', '--untracked-files=normal'])).toBe('');
 
     const f = gitFixtureAdapter(gitFixture.candidateRoot);

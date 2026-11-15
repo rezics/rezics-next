@@ -1,9 +1,6 @@
+import { retainedHostedData } from './support/hosted-retained-data.ts';
 import { expect, setDefaultTimeout, test } from 'bun:test';
-import {
-  appendHostedRootChapter,
-  insertHostedDraftPoint,
-  type HostedCommandDependencies,
-} from '../../src/content/hosted-chapters-commands.ts';
+import { insertHostedDraftPoint, type HostedCommandDependencies } from '../../src/content/hosted-chapters-commands.ts';
 import {
   advanceHostedMigrationInput,
   captureHostedMigrationInput,
@@ -51,11 +48,11 @@ async function createStructure(
   catalogue = { postId: fixture.catalogueId, threadId: fixture.threadId },
 ): Promise<string> {
   return (
-    await fixture.native.command('/v1/hostedCatalogues', {
-      postId: catalogue.postId,
+    await retainedHostedData({
+      native: fixture.native,
+      catalogueId: catalogue.postId,
       threadId: catalogue.threadId,
-      placements,
-    })
+    }).structure(placements)
   ).revisionId as string;
 }
 
@@ -169,18 +166,12 @@ test('activates a 513-entry sealed builder and accepts the first ordered point w
       target,
     }));
     const baseRevisionId = await createStructure(fixture, placements);
-    const appended = await appendHostedRootChapter(
-      dependencies(fixture),
-      fixture.native.author.actor,
-      fixture.catalogueId,
-      {
-        expectedRevisionId: baseRevisionId,
-        occurrenceId: fixture.newOccurrenceId(),
-        title: 'Chapter 512',
-        target,
-      },
-      context(),
-    );
+    const appended = await fixture.retained.append({
+      expectedRevisionId: baseRevisionId,
+      occurrenceId: fixture.newOccurrenceId(),
+      title: 'Chapter 512',
+      target,
+    });
     const sourceRevisionId = appended.value.revisionId;
     const captured = await sealBuilder(fixture, sourceRevisionId);
     const before = await pointers(fixture);
@@ -225,12 +216,8 @@ test('activates a 513-entry sealed builder and accepts the first ordered point w
     expect(mapped.kind).toBe('ordered');
     const legacy = await resolveHostedVersionRevision(fixture.native.pool, fixture.catalogueId, sourceRevisionId);
     expect(legacy.kind).toBe('compatibility');
-    const oldChildren = await fixture.native.call(
-      'GET',
-      `/v1/hostedCatalogues/${fixture.catalogueId}/children?kind=structure&revisionId=${sourceRevisionId}`,
-    );
-    expect(oldChildren.status).toBe(200);
-    expect((oldChildren.value.items as { occurrenceId: string }[]).length).toBeGreaterThan(0);
+    const oldChildren = await fixture.retained.children(sourceRevisionId);
+    expect(oldChildren.length).toBeGreaterThan(0);
 
     const inserted = await insertHostedDraftPoint(
       dependencies(fixture),
@@ -359,18 +346,12 @@ test('refuses stale CAS, cancelled source and empty activation without moving th
       beginHostedVersionDraftActivation(tx, fixture.catalogueId, staleCapture.inputId),
     );
     await activatePages(fixture, staleCapture.inputId);
-    await appendHostedRootChapter(
-      dependencies(fixture),
-      fixture.native.author.actor,
-      fixture.catalogueId,
-      {
-        expectedRevisionId: staleRevisionId,
-        occurrenceId: fixture.newOccurrenceId(),
-        title: 'Racing append',
-        target,
-      },
-      context(),
-    );
+    await fixture.retained.append({
+      expectedRevisionId: staleRevisionId,
+      occurrenceId: fixture.newOccurrenceId(),
+      title: 'Racing append',
+      target,
+    });
     const staleHead = (await pointers(fixture)).head_revision_id;
     expect(staleHead).not.toBe(staleRevisionId);
     await expect(

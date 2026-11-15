@@ -1,3 +1,4 @@
+import { knowledgeMediaSource } from '@rezics/definitions/knowledge-media';
 import type { FutureThreadUploadEpisode } from './thread-upload-episode/episode';
 import { sessionCsrfToken } from '../reader/lifetime/index';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
@@ -35,7 +36,7 @@ type ReservedMedia = Pick<Media, 'id' | 'state' | 'mediaType' | 'byteCount' | 'c
 type FutureThread = { boardId: string; idempotencyKey: string };
 type PostReserveTarget = string | { containerId: string } | { newThread: FutureThread };
 type ReserveTarget = PostReserveTarget | { realmId: string };
-type ImagePurpose = 'post-image' | 'avatar' | 'realm-icon' | 'realm-banner';
+type ImagePurpose = 'post-image' | 'knowledge-image' | 'avatar' | 'realm-icon' | 'realm-banner';
 
 /** One attachment's original commands. A disclosed container gets its own immutable reservation command. */
 export type ReplyImageReservation = {
@@ -494,7 +495,7 @@ export function uploadReplyImage(
 }
 
 /** Resume only missing bytes on the original reservation, then observe its native processing state. */
-export async function resumeReplyImageUpload(
+async function resumeImageUpload(
   mediaId: string,
   file: File,
   signal: AbortSignal,
@@ -535,6 +536,61 @@ export async function resumeReplyImageUpload(
     failure.mediaId = mediaId;
     throw failure;
   }
+}
+
+/** Preserve the existing Post/avatar resume surface over the shared protocol. */
+export function resumeReplyImageUpload(
+  mediaId: string,
+  file: File,
+  signal: AbortSignal,
+  onStage?: UploadStageUpdate,
+  intent?: MediaReservationIntent,
+  onResponseWait?: UploadResponseWait,
+): Promise<UploadedImage> {
+  return resumeImageUpload(mediaId, file, signal, onStage, intent, onResponseWait);
+}
+
+export type KnowledgeImageUploadOptions = Readonly<{
+  reservation: MediaReservationIntent;
+  onStage?: UploadStageUpdate;
+  onResponseWait?: UploadResponseWait;
+}>;
+
+function knowledgeReservation(documentId: string, options: KnowledgeImageUploadOptions) {
+  const intent = options.reservation;
+  if (intent.body.purpose !== 'knowledge-image' || !('containerId' in intent.body) ||
+      intent.body.containerId !== documentId) throw new UploadRefusal('unavailable');
+  return intent;
+}
+
+function knowledgeImage(image: UploadedImage): UploadedImage {
+  try { return { ...image, src: knowledgeMediaSource(image.src) }; }
+  catch { throw new UploadRefusal('unavailable'); }
+}
+
+/** The original immutable command, File and credential use ordinary Media transport.
+ * The saved body receives a registered own-claim locator, never a public blob URL.
+ */
+export async function uploadKnowledgeImage(
+  documentId: string,
+  file: File,
+  signal: AbortSignal,
+  options: KnowledgeImageUploadOptions,
+): Promise<UploadedImage> {
+  const intent = knowledgeReservation(documentId, options);
+  return knowledgeImage(await uploadImage({ containerId: documentId }, file, signal, 'knowledge-image',
+    intent, options.onStage, undefined, options.onResponseWait));
+}
+
+export async function resumeKnowledgeImageUpload(
+  documentId: string,
+  mediaId: string,
+  file: File,
+  signal: AbortSignal,
+  options: KnowledgeImageUploadOptions,
+): Promise<UploadedImage> {
+  const intent = knowledgeReservation(documentId, options);
+  return knowledgeImage(await resumeImageUpload(mediaId, file, signal, options.onStage, intent, options.onResponseWait));
 }
 
 export function uploadAvatar(

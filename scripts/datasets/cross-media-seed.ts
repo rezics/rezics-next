@@ -172,7 +172,10 @@ export async function runDevelopmentSeed(
   const gameEnvironmentBindings = env.REZICS_DEV_BANGUMI_GAME_ENVIRONMENT_BINDINGS?.trim();
   const gameGenreBindings = env.REZICS_DEV_BANGUMI_GAME_GENRE_BINDINGS?.trim();
   const exportPath = env.REZICS_DEV_VNDB_EXPORT?.trim();
-  await (options.waitForKernel ?? waitForKernelReadiness)({ origin: api, signal: options.signal });
+  await (options.waitForKernel ?? waitForKernelReadiness)({
+    origin: api,
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  });
   options.signal?.throwIfAborted();
   const personalXml = exportPath ? await readShowcasePersonalListExport(exportPath) : undefined;
   const dumps = await (options.fetchDumps ?? fetchCrossMediaDumps)();

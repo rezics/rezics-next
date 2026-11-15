@@ -1,12 +1,11 @@
 import { memoizedValue } from '../memoized.ts';
+import { canonicalLanguageKey } from '@rezics/definitions/language';
 import {
-  exportSectionsV4,
+  exportSections,
   LIBRARY_EXPORT_FORMAT,
   LIBRARY_EXPORT_LIMITS,
-  sectionsForVersion,
   type LibraryArchiveManifest,
   type LibraryExportSection,
-  type LibraryExportVersion,
 } from './library-export-format.ts';
 
 /** Consumer bounds, fixed before parsing. No upload, permission or effect is admitted here. */
@@ -19,7 +18,7 @@ export function LIBRARY_ARCHIVE_LIMITS() {
         // Compact producer records plus commas, the final manifest and bounded formatting whitespace.
         uploadBytes: 34 * 1024 * 1024,
         depth: 32,
-        sections: exportSectionsV4.length,
+        sections: exportSections.length,
       }) as const,
   );
 }
@@ -175,10 +174,8 @@ function parse(bytes: Uint8Array): unknown {
 function manifestOf(value: unknown): LibraryArchiveManifest {
   if (value === null || value === undefined) fail('incomplete_capture');
   const m = object(value, 'invalid_envelope');
-  if (m.format !== LIBRARY_EXPORT_FORMAT || (m.version !== 1 && m.version !== 2 && m.version !== 3 && m.version !== 4))
-    fail('unsupported_version');
-  const version = m.version as LibraryExportVersion;
-  const installedSections: readonly string[] = sectionsForVersion(version);
+  if (m.format !== LIBRARY_EXPORT_FORMAT || m.version !== 1) fail('unsupported_version');
+  const installedSections: readonly string[] = exportSections;
   if (m.rows === undefined || m.recordBytes === undefined || m.sections === undefined) fail('incomplete_capture');
   const required = [
     'format',
@@ -193,7 +190,8 @@ function manifestOf(value: unknown): LibraryArchiveManifest {
     'fullExport',
     'rows',
     'recordBytes',
-    ...(version >= 2 ? ['coverage', 'sectionTotals'] : []),
+    'coverage',
+    'sectionTotals',
   ];
   if (
     !exactKeys(m, required) ||
@@ -204,7 +202,7 @@ function manifestOf(value: unknown): LibraryArchiveManifest {
     m.privacy !== 'private' ||
     m.completeness !== 'supported-native-facts' ||
     m.fullExport !== false ||
-    (version >= 2 && m.coverage !== `private-library-owner-facts-v${version}`)
+    m.coverage !== 'private-library-owner-facts-v1'
   )
     fail('invalid_envelope');
   const sections = m.sections;
@@ -239,7 +237,7 @@ function manifestOf(value: unknown): LibraryArchiveManifest {
     (m.recordBytes as number) > LIBRARY_EXPORT_LIMITS.recordBytes
   )
     fail('bounds');
-  if (version >= 2) {
+  {
     const totals = object(m.sectionTotals, 'invalid_envelope');
     if (
       !exactKeys(totals, installedSections) ||
@@ -299,7 +297,7 @@ function validJournalDate(value: unknown): boolean {
   return day <= days;
 }
 
-function supportedRecord(row: ObjectValue, section: MergeSection, version: LibraryArchiveManifest['version']) {
+function supportedRecord(row: ObjectValue, section: MergeSection) {
   if (section === 'provenance') {
     if (
       !exactKeys(row, [
@@ -360,7 +358,7 @@ function supportedRecord(row: ObjectValue, section: MergeSection, version: Libra
   }
   if (section === 'journals') {
     const journal = object(row.journal, 'invalid_record');
-    const assessment = version >= 3 ? object(journal.assessment, 'invalid_record') : null;
+    const assessment = object(journal.assessment, 'invalid_record');
     if (
       !exactKeys(row, [
         'section',
@@ -376,11 +374,7 @@ function supportedRecord(row: ObjectValue, section: MergeSection, version: Libra
         'lastChangedAt',
         'journal',
       ]) ||
-      !exactKeys(
-        journal,
-        ['sessionId', 'revision', ...(version >= 3 ? ['startDate', 'finishDate', 'reflection', 'assessment'] : [])],
-        version >= 3 ? [] : ['startDate', 'finishDate', 'reflection'],
-      ) ||
+      !exactKeys(journal, ['sessionId', 'revision', 'startDate', 'finishDate', 'reflection', 'assessment']) ||
       !uuid(row.accountId) ||
       !uuid(row.sessionId) ||
       !uuid(row.subjectId) ||
@@ -403,15 +397,14 @@ function supportedRecord(row: ObjectValue, section: MergeSection, version: Libra
     )
       fail('invalid_record');
     if (
-      version >= 3 &&
-      (!assessment ||
-        !exactKeys(assessment, ['meaningRevision', 'units']) ||
-        !Number.isSafeInteger(assessment.meaningRevision) ||
-        (assessment.meaningRevision as number) < 1 ||
-        (assessment.units !== null &&
-          (typeof assessment.units !== 'number' ||
-            !Number.isFinite(assessment.units) ||
-            Math.abs(assessment.units) > Number.MAX_SAFE_INTEGER)))
+      !assessment ||
+      !exactKeys(assessment, ['meaningRevision', 'units']) ||
+      !Number.isSafeInteger(assessment.meaningRevision) ||
+      (assessment.meaningRevision as number) < 1 ||
+      (assessment.units !== null &&
+        (typeof assessment.units !== 'number' ||
+          !Number.isFinite(assessment.units) ||
+          Math.abs(assessment.units) > Number.MAX_SAFE_INTEGER))
     )
       fail('invalid_record');
     return;
@@ -463,6 +456,58 @@ function supportedRecord(row: ObjectValue, section: MergeSection, version: Libra
     fail('invalid_record');
 }
 
+/** A saved address is private evidence, never current Content admission or a checkpoint command. */
+function hostedReadingRecord(row: ObjectValue) {
+  if (
+    !exactKeys(
+      row,
+      [
+        'section',
+        'subject_id',
+        'subject_id_reference',
+        'catalogue_id',
+        'publication_revision_id',
+        'occurrence_id',
+        'target_post_id',
+        'target_revision_id',
+        'target_sha256',
+        'document_block_id',
+        'document_offset',
+        'revision',
+        'changed_at',
+      ],
+      ['bodyLanguage'],
+    ) ||
+    !uuid(row.catalogue_id) ||
+    !uuid(row.publication_revision_id) ||
+    !uuid(row.occurrence_id) ||
+    !uuid(row.target_post_id) ||
+    !uuid(row.target_revision_id) ||
+    typeof row.target_sha256 !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(row.target_sha256) ||
+    typeof row.revision !== 'string' ||
+    !/^[1-9][0-9]{0,18}$/.test(row.revision) ||
+    BigInt(row.revision) > 9223372036854775807n ||
+    !timestamp(row.changed_at)
+  )
+    fail('invalid_record');
+  reference(row, 'subject_id');
+  const block = row.document_block_id,
+    offset = row.document_offset;
+  if (
+    (block === null) !== (offset === null) ||
+    (block !== null && (typeof block !== 'string' || block.length < 1 || block.length > 128)) ||
+    (offset !== null && (!Number.isSafeInteger(offset) || Number(offset) < 0 || Number(offset) > 2097152))
+  )
+    fail('invalid_record');
+  if (
+    Object.hasOwn(row, 'bodyLanguage') &&
+    row.bodyLanguage !== null &&
+    canonicalLanguageKey(row.bodyLanguage) !== row.bodyLanguage
+  )
+    fail('invalid_record');
+}
+
 const identityFields: Record<LibraryExportSection, readonly string[]> = {
   entries: ['subject_id'],
   labels: ['label_id'],
@@ -485,6 +530,7 @@ const identityFields: Record<LibraryExportSection, readonly string[]> = {
   vndbEvidence: ['upload_id', 'ordinal'],
   anilistUploads: ['upload_id'],
   anilistEvidence: ['upload_id', 'ordinal'],
+  hostedReading: ['subject_id'],
 };
 function recordKey(row: ObjectValue, section: LibraryExportSection) {
   const values = identityFields[section].map((key) => {
@@ -514,10 +560,10 @@ export function decodeLibraryArchive(bytes: Uint8Array): LibraryArchive {
   if (!Array.isArray(envelope.records)) fail('invalid_envelope');
   if (envelope.records.length > LIBRARY_ARCHIVE_LIMITS().records) fail('bounds');
   if (envelope.records.length !== manifest.rows) fail('inconsistent_manifest');
-  const manifestSections: readonly string[] = sectionsForVersion(manifest.version);
-  const counts = new Map<LibraryExportSection, number>(exportSectionsV4.map((s) => [s, 0]));
+  const manifestSections: readonly string[] = exportSections;
+  const counts = new Map<LibraryExportSection, number>(exportSections.map((s) => [s, 0]));
   const totals = new Map<LibraryExportSection, { rows: number; recordBytes: number }>(
-    exportSectionsV4.map((s) => [s, { rows: 0, recordBytes: 0 }]),
+    exportSections.map((s) => [s, { rows: 0, recordBytes: 0 }]),
   );
   const seen = new Set<string>(),
     labelIds = new Set<string>(),
@@ -534,8 +580,8 @@ export function decodeLibraryArchive(bytes: Uint8Array): LibraryArchive {
     if (size > LIBRARY_ARCHIVE_LIMITS().pageBytes) fail('bounds');
     recordBytes += size;
     if (recordBytes > LIBRARY_ARCHIVE_LIMITS().recordBytes) fail('bounds');
-    if ((archiveMergeSections as readonly string[]).includes(section))
-      supportedRecord(row, section as MergeSection, manifest.version);
+    if ((archiveMergeSections as readonly string[]).includes(section)) supportedRecord(row, section as MergeSection);
+    if (section === 'hostedReading') hostedReadingRecord(row);
     const key = recordKey(row, section);
     if (seen.has(key)) fail('duplicate_record');
     seen.add(key);
@@ -552,9 +598,9 @@ export function decodeLibraryArchive(bytes: Uint8Array): LibraryArchive {
     if (section === 'assignments' && !labelIds.has(row.label_id as string)) fail('incomplete_capture');
   }
   if (recordBytes !== manifest.recordBytes) fail('inconsistent_manifest');
-  if (manifest.version !== 1) {
+  {
     const sectionTotals = manifest.sectionTotals as Record<string, { rows: number; recordBytes: number }>;
-    for (const section of sectionsForVersion(manifest.version)) {
+    for (const section of exportSections) {
       const expected = sectionTotals[section]!;
       const actual = totals.get(section)!;
       if (expected.rows !== actual.rows || expected.recordBytes !== actual.recordBytes) fail('inconsistent_manifest');
@@ -564,7 +610,7 @@ export function decodeLibraryArchive(bytes: Uint8Array): LibraryArchive {
     manifest,
     records: envelope.records as ArchiveRecord[],
     fullRestoration: false,
-    coverage: exportSectionsV4.map((section) => ({
+    coverage: exportSections.map((section) => ({
       section,
       rows: counts.get(section)!,
       capture: counts.get(section) ? 'present' : 'empty',

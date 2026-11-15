@@ -15,8 +15,11 @@ import {
 } from './book-toc';
 import { sameExact, type BookStructureChange, type ExactDocument } from './contract';
 import type { StudioController, StudioState } from './controller';
+import { BookChapterLanguageAssociation } from './book-chapter-language-association';
 
-export type BookOrganizationRequest = { kind: 'add' } | { kind: 'rename' | 'move' | 'remove'; occurrenceId: string };
+export type BookOrganizationRequest =
+  | { kind: 'add' }
+  | { kind: 'rename' | 'move' | 'remove' | 'language'; occurrenceId: string };
 type OrganizationDraft = {
   request: BookOrganizationRequest;
   catalogueId: string;
@@ -130,6 +133,8 @@ export function useBookOrganization(controller: StudioController, state: StudioS
   }
   return {
     draft,
+    controller,
+    state,
     outline,
     pending,
     open,
@@ -150,6 +155,7 @@ function organizationChange(
   const structure = state.structure;
   if (!outline || !structure || structure.catalogueId !== draft.catalogueId) return null;
   const { request } = draft;
+  if (request.kind === 'language') return null;
   if (request.kind === 'move') return moveBookOccurrenceTo(request.occurrenceId, draft.parent, draft.before, outline);
   if (request.kind !== 'add') {
     const row = outline.byId.get(request.occurrenceId);
@@ -213,6 +219,19 @@ export function BookOrganizationCanvas({
   const { draft, outline, edit } = organization;
   if (!draft) return null;
   const { request } = draft;
+  if (request.kind === 'language')
+    return (
+      <BookChapterLanguageAssociation
+        key={`${draft.catalogueId}:${request.occurrenceId}`}
+        controller={organization.controller}
+        state={organization.state}
+        occurrenceId={request.occurrenceId}
+        active={active}
+        onDirty={() => organization.edit({})}
+        onSaved={onCancel}
+        onCancel={onCancel}
+      />
+    );
   const row = request.kind === 'add' ? null : outline?.byId.get(request.occurrenceId);
   const unavailable = !outline || (request.kind !== 'add' && !row);
   const fieldsDisabled = !active || unavailable || (disabled && !organization.pending);

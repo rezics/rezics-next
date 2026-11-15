@@ -14,9 +14,8 @@ import { parseBangumiUpload } from '../../src/library/list-import-bangumi-model.
 import { parseVndb } from '../../src/library/list-import-vndb-parser.ts';
 import { parseAniList } from '../../src/library/list-import-anilist-parser.ts';
 import { readExportSourcePage, initialExportSeek } from '../../src/library/library-export-source.ts';
-import { exportSectionsV4 } from '../../src/library/library-export-format.ts';
 import { parseMal } from '../../src/library/list-import-mal-parser.ts';
-import { exportSections, exportSectionsV2, libraryExportManifest } from '../../src/library/library-export-format.ts';
+import { exportSections } from '../../src/library/library-export-format.ts';
 import { decodeLibraryArchive, type ArchiveRecord } from '../../src/library/library-archive.ts';
 import { createLibraryArchiveCollectionRecovery } from '../../src/library/library-archive-collection-recovery.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
@@ -216,7 +215,7 @@ test('native owner export streams independent persisted facts, preserves dates, 
   }
   const sections = Object.groupBy(records, (r) => r.section);
   expect(pages).toBeGreaterThan(2);
-  expect(final).toMatchObject({ state: 'ready', next: null, manifest: { version: 4, fullExport: false } });
+  expect(final).toMatchObject({ state: 'ready', next: null, manifest: { version: 1, fullExport: false } });
   expect(final.manifest.rows).toBe(records.length);
   expect(final.manifest.recordBytes).toBe(
     records.reduce((bytes, record) => bytes + Buffer.byteLength(JSON.stringify(record), 'utf8'), 0),
@@ -299,50 +298,10 @@ test('native owner export streams independent persisted facts, preserves dates, 
   expect(sections.malEvidence?.[0]).toMatchObject({ evidence: { dates: { started: { precision: 'year' } } } });
   expect(
     decodeLibraryArchive(Buffer.from(JSON.stringify({ manifest: final.manifest, records }))).manifest.version,
-  ).toBe(4);
-  const archiveRecords = records.filter((record) =>
-    exportSections.includes(record.section as (typeof exportSections)[number]),
-  );
-  const archiveManifest = {
-    ...libraryExportManifest({
-      export_id: id,
-      created_at: final.manifest.capturedAt,
-      expires_at: final.manifest.expiresAt,
-      format_version: 1,
-    }),
-    fullExport: false as const,
-    rows: archiveRecords.length,
-    recordBytes: archiveRecords.reduce((bytes, record) => bytes + Buffer.byteLength(JSON.stringify(record), 'utf8'), 0),
-  };
-  const v2Records = records.filter((record) =>
-    exportSectionsV2.includes(record.section as (typeof exportSectionsV2)[number]),
-  );
-  const v2Manifest = {
-    ...libraryExportManifest({
-      export_id: id,
-      created_at: final.manifest.capturedAt,
-      expires_at: final.manifest.expiresAt,
-      format_version: 2,
-    }),
-    fullExport: false,
-    rows: v2Records.length,
-    recordBytes: v2Records.reduce((n, r) => n + Buffer.byteLength(JSON.stringify(r)), 0),
-    sectionTotals: Object.fromEntries(
-      exportSectionsV2.map((section) => {
-        const rows = v2Records.filter((r) => r.section === section);
-        return [
-          section,
-          { rows: rows.length, recordBytes: rows.reduce((n, r) => n + Buffer.byteLength(JSON.stringify(r)), 0) },
-        ];
-      }),
-    ),
-  };
-  expect(
-    decodeLibraryArchive(Buffer.from(JSON.stringify({ manifest: v2Manifest, records: v2Records }))).manifest.version,
-  ).toBe(2);
-  const decoded = decodeLibraryArchive(
-    Buffer.from(JSON.stringify({ manifest: archiveManifest, records: archiveRecords })),
-  );
+  ).toBe(1);
+  const archiveRecords = records;
+  const archiveManifest = final.manifest;
+  const decoded = decodeLibraryArchive(Buffer.from(JSON.stringify({ manifest: final.manifest, records })));
   expect<unknown>(decoded.records).toEqual(archiveRecords);
   expect(decoded.coverage.find((s) => s.section === 'entries')).toMatchObject({
     rows: 18,
@@ -824,8 +783,8 @@ test('provider changes, expiry and completed-request replay cannot deliver a dif
 });
 
 test('provider encoded-row limits include nested evidence and escaped UTF-8', async () => {
-  const section = exportSectionsV4.indexOf('anilistEvidence');
-  const seek = { ...initialExportSeek(4), section, parent: copy };
+  const section = exportSections.indexOf('anilistEvidence');
+  const seek = { ...initialExportSeek(), section, parent: copy };
   const client = {
     query: async () => ({
       rows: [
@@ -833,11 +792,11 @@ test('provider encoded-row limits include nested evidence and escaped UTF-8', as
       ],
     }),
   };
-  const page = await readExportSourcePage(client as any, route, owner, seek, new Date(now).toISOString(), 4);
+  const page = await readExportSourcePage(client as any, route, owner, seek, new Date(now).toISOString());
   expect(page).toMatchObject({ records: [], oversized: true });
 });
 
-test('version 4 streams annotations, accepted provenance and addressed live journals as independent facts', async () => {
+test('canonical export streams annotations, accepted provenance and addressed live journals as independent facts', async () => {
   const annotationSubject = subjectIds[16]!;
   const provenanceSubject = subjectIds[15]!;
   const annotationWrite = await command('PUT', `/v1/libraryEntries/${annotationSubject}/annotations`, {
@@ -878,7 +837,7 @@ test('version 4 streams annotations, accepted provenance and addressed live jour
 
   const requestKey = randomUUID();
   const captureStatus = await capture(requestKey);
-  expect(captureStatus).toMatchObject({ version: 4, fullExport: false });
+  expect(captureStatus).toMatchObject({ version: 1, fullExport: false });
   expect(captureStatus.sections.slice(14, 17)).toEqual(['annotations', 'provenance', 'journals']);
   const firstPath = `/v1/libraryExports/${captureStatus.exportId}/pages?cursor=${encodeURIComponent(captureStatus.first)}`;
   const first = await get(firstPath);
@@ -892,7 +851,7 @@ test('version 4 streams annotations, accepted provenance and addressed live jour
     if (final.next) expect(final.manifest).toBeNull();
     cursor = final.next;
   }
-  expect(final).toMatchObject({ state: 'ready', next: null, manifest: { version: 4, fullExport: false } });
+  expect(final).toMatchObject({ state: 'ready', next: null, manifest: { version: 1, fullExport: false } });
   expect(final.manifest.rows).toBe(records.length);
   expect(final.manifest.recordBytes).toBe(
     records.reduce((bytes, record) => bytes + Buffer.byteLength(JSON.stringify(record), 'utf8'), 0),
@@ -983,21 +942,7 @@ test('version 4 streams annotations, accepted provenance and addressed live jour
   expect(await get(firstPath)).toMatchObject({ state: 'stale', records: [], next: null, manifest: null });
 });
 
-test('stored V3 keeps its assessment sections and provider oversize refuses the final artifact', async () => {
-  const old = await capture();
-  await sql`UPDATE library.library_export SET format_version=3 WHERE route=${route} AND account_id=${owner}`;
-  const status = await get(`/v1/libraryExports/${old.exportId}`);
-  expect(status).toMatchObject({ version: 3, sections: expect.arrayContaining(['journals']) });
-  expect(status.sections).toHaveLength(17);
-  let cursor = status.first,
-    last: any;
-  while (cursor) {
-    last = await get(`/v1/libraryExports/${old.exportId}/pages?cursor=${encodeURIComponent(cursor)}`);
-    cursor = last.next;
-  }
-  expect(last.manifest).toMatchObject({ version: 3, rows: expect.any(Number) });
-  expect(Object.keys(last.manifest.sectionTotals)).toHaveLength(17);
-  await json(await request('DELETE', `/v1/libraryExports/${old.exportId}`));
+test('provider oversize refuses the final canonical artifact', async () => {
   const evidence = { notes: '\u0001'.repeat(11000) };
   for (const provider of ['vndb', 'anilist']) {
     if (provider === 'vndb')

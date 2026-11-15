@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { classifyDiscoveryMetadataProducers } from '../../src/search/discovery-readiness.ts';
 import type { Pool } from 'pg';
 import {
   allocateDiscovery,
@@ -7,7 +8,6 @@ import {
   SECOND_SCOPE_PUBLIC_METADATA_KINDS,
   discoveryCapabilityMatches,
   discoveryCapabilityWitnesses,
-  classifyDiscoveryMetadataProducers,
   DiscoveryPopulationCutChangedError,
   advanceDiscovery,
   DISCOVERY_LIVE_GENERATIONS_SQL,

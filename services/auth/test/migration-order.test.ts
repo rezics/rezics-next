@@ -1,8 +1,19 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { migrate, testDatabase } from '../scripts/database.ts';
+
+test('Auth migrations declare both dbmate blocks before native startup', () => {
+  const directory = resolve(import.meta.dir, '../db/migrations');
+  for (const name of readdirSync(directory).filter((name) => name.endsWith('.sql'))) {
+    const source = readFileSync(resolve(directory, name), 'utf8');
+    const up = source.indexOf('-- migrate:up');
+    const down = source.indexOf('-- migrate:down');
+    expect(up, `${name} up block`).toBeGreaterThanOrEqual(0);
+    expect(down, `${name} down block follows up`).toBeGreaterThan(up);
+  }
+});
 
 test('a new lower UTC migration upgrades applied future history exactly once', async () => {
   const temporaryRoot = resolve(import.meta.dir, '../../../.temp');

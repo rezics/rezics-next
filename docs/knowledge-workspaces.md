@@ -264,6 +264,16 @@ published by its author is distinct from resolver-fetched text. Legally permitte
 content with attribution, not a hidden target cache. Current erasure and moderation policy still governs retained
 copies. Access control cannot retract bytes a recipient already downloaded or prevent deliberate manual disclosure.
 
+Public reads expose `sha256` for the disclosed representation and `sourceSha256` for the immutable selected source
+revision. Public export selections retain both with their exact publication ID; authoring selections use their
+canonical `sha256`. Exact managed citations use the source digest, while downloaded-byte verification uses the
+representation digest. Neither digest grants access or causes target bodies to be loaded during reference checks.
+
+An explicit re-selection of a revision already admitted in the current publication generation reuses that
+generation's immutable publication identity and binding. It may move the current selection but does not invent
+another origin identity for the same admitted revision. Withdrawal or lifecycle replacement closes the generation;
+later explicit publication requires a new binding. Receipt replay never moves a publication pointer.
+
 Decision: The Web editor retains each admitted reference manifest beside its compatible body and freezes both in
 create/revise intents, including exact uncertain retries. Inline reference editing requires explicit Apply or Cancel;
 body/manifest inconsistencies require explicit component restoration, unavailable-entry retention, duplicate removal,
@@ -302,9 +312,23 @@ component is `rezics.knowledge.reference` version `1`, with only `{referenceId}`
 stores the finite-role typed manifest separately. Missing targets become unavailable markers without target IDs.
 Block IDs, component IDs, reference IDs, manifest source anchors and local `#block` links are regenerated on copy;
 external exact locators and unrelated opaque payloads are preserved. Provenance retains the original permitted
-source selection, and public output withholds authoring-origin provenance. Knowledge has no media claim destination;
-public media nodes become unavailable markers and copy creates no media claims. Managed media and lifecycle
-acceptance remain with their owner integrations before opening the capability.
+source selection, and public output withholds authoring-origin provenance. Copy creates no new media ownership or
+claims: an independently retained source context must remain currently readable, otherwise its media is unavailable.
+
+Knowledge media reuses Content's uploader-bound reservation, processing, variants, claim and moderation machinery.
+The destination is an existing owned Knowledge document, never a surrogate Post. Claim during a saved revision
+validates the ordinary current notebook/account authority, same-home destination, uploader and exact managed IDs;
+the immutable revision retains its bounded managed-media membership. A revision admits at most 32 distinct managed
+media sources, using Content's existing media request bound. Private uploads that are not in the selected
+revision cannot become public through publication of that document.
+
+Private media reads retain current Knowledge ancestry and owner admission. Public media URLs carry an explicit
+exact Knowledge source context and recheck current publication eligibility, exact revision/source digest, membership
+and current Media moderation/erasure before serving bytes or derivatives. They are not globally readable blob URLs.
+Withdrawal, trash or terminal lifecycle conceals this context immediately, including delayed derivative work. Public
+projection/export emits only admitted source-gated managed media; unclaimed, foreign or opaque signed locators remain
+unavailable markers. Rendering and editor bindings consume the same ordinary media port, without a separate grant
+engine or eager body/reference hydration. Media and lifecycle acceptance remain required before opening capability.
 
 The export digest is SHA-256 over RFC 8785 JSON of all envelope fields except `sha256`; `selection.sha256` hashes
 only the selected representation's canonical Document bytes. Both can be checked independently of storage. There
@@ -386,6 +410,15 @@ contributions after account erasure. That state resolves the retained publicatio
 notebook ancestor chain or author-account permission. It retains only permitted published selections and source
 lifecycle evidence; it creates no second publication store or writer. Moderation remains effective. Native account
 erasure acceptance must prove this transition before the capability opens.
+
+Account disposition first marks every eligible document's current selected publication generation across the entire
+owner population, before cutting any private primary ancestry. A later bounded pass fences each notebook, removes
+private/unselected revisions and private structure/history, de-identifies retained revision authors and removes
+authoring-origin copy provenance. Retained public bytes, source digests, licences, selected reference manifests and
+managed-media membership remain exact. Retained and terminal documents detach from notebook and working-head
+identity; only the marked selected generation can remain public without a private path. Terminal private documents
+retain a minimized purge witness for Media, with no manuscript or owner/path metadata. Holds leave disposition
+pending. Native account-erasure receipts and cursor authority own the work; no second job or grant engine is added.
 
 ## Structure, storage and concurrency
 

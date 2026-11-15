@@ -21,10 +21,12 @@ export type HostedBookJourneySeed = Readonly<{
   authorAccountId: string;
   memberAccountId: string;
   author: KernelClient;
+  member: KernelClient;
   anonymous: KernelClient;
   opening: JourneyPost;
   chapterOne: JourneyPost;
   chapterTwo: JourneyPost;
+  chapterFrench: JourneyPost;
 }>;
 
 export type HostedReaderControl = Readonly<{
@@ -176,6 +178,13 @@ export async function createHostedBookJourneySeed(
     `${label} · Chapter two draft`,
     'At dawn, the ferryman left a map beneath the lantern for the next traveler.',
   );
+  const chapterFrench = await createPost(
+    base.author,
+    base.board.boardId,
+    base.subjectId,
+    `${label} · French chapter draft`,
+    'Mara regardait les lanternes du port pendant que le dernier bac rentrait à la maison.',
+  );
   return {
     subjectId: base.subjectId,
     subjectTitle: base.subjectTitle,
@@ -183,10 +192,12 @@ export async function createHostedBookJourneySeed(
     authorAccountId: base.authorAccountId,
     memberAccountId: base.memberAccountId,
     author: base.author,
+    member: base.member,
     anonymous: base.anonymous,
     opening,
     chapterOne,
     chapterTwo,
+    chapterFrench,
   };
 }
 

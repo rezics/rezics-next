@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { sourceObservation } from '../../kernel/src/rating/source-provider.ts';
-import type { ImportSourceStatistic, ImportSourceStatisticClear } from './import-contract.ts';
+import type { ImportSourceObservationHead, ImportSourceStatistic, ImportSourceStatisticClear } from './import-contract.ts';
 
 export const SOURCE_OBSERVATION_PROVIDER = 'vndb' as const;
 export const SOURCE_OBSERVATION_PAGE_MAX = 20;
@@ -82,6 +82,7 @@ export function observationDigest(
     mean?: number;
     licence?: string;
     attribution?: string;
+    figures?: IntendedWrite['figures'];
   },
 ): string {
   return sourceObservation(subjectId, SOURCE_OBSERVATION_PROVIDER, {
@@ -93,6 +94,7 @@ export function observationDigest(
     ...(value.mean === undefined ? {} : { mean: value.mean }),
     ...(value.licence === undefined ? {} : { licence: value.licence }),
     ...(value.attribution === undefined ? {} : { attribution: value.attribution }),
+    ...(value.figures === undefined ? {} : { figures: value.figures }),
   }).digest;
 }
 
@@ -114,6 +116,7 @@ export function intendedPayload(intended: IntendedObservation): Record<string, u
     asOf: intended.asOf,
     licence: intended.licence,
     attribution: intended.attribution,
+    ...(intended.figures === undefined ? {} : { figures: intended.figures }),
   };
 }
 
@@ -224,44 +227,76 @@ export function safeObservationSummary(input: {
   };
 }
 
-export function headFromStatistic(
+export function headFromInspection(subjectId: string, head: ImportSourceObservationHead): ObservationHeadRead {
+  if (head.state === 'empty')
+    return head.digest === null && head.observation === null
+      ? { kind: 'absent' }
+      : { kind: 'unavailable', code: 'source_observation_unavailable' };
+  const observation = head.observation;
+  const digest = head.digest;
+  if (
+    typeof digest !== 'string' ||
+    !DIGEST.test(digest) ||
+    !observation || observation.digest !== digest || observation.payloadVersion !== 1 ||
+    observation.provenance?.kind !== 'unversioned' || observation.provenance.digest !== digest ||
+    (head.state !== 'published' && head.state !== 'cleared')
+  )
+    return { kind: 'unavailable', code: 'source_observation_unavailable' };
+  const payload = observation.payload;
+  const fields = head.state === 'cleared'
+    ? ['sourceAlias', 'sourceRecordId', 'count', 'asOf']
+    : ['sourceAlias', 'sourceRecordId', 'count', 'asOf', 'scale', 'mean', 'figures', 'licence', 'attribution'];
+  if (
+    !payload || typeof payload !== 'object' || Array.isArray(payload) ||
+    !Object.keys(payload).every((key) => fields.includes(key)) ||
+    typeof observation.sourceAlias !== 'string' || payload.sourceAlias !== observation.sourceAlias ||
+    typeof observation.sourceRecordId !== 'string' || payload.sourceRecordId !== observation.sourceRecordId ||
+    typeof observation.asOf !== 'string' || payload.asOf !== observation.asOf ||
+    !Number.isSafeInteger(payload.count) || payload.count < 0 || payload.count > 2_147_483_647 ||
+    (head.state === 'cleared' ? payload.count !== 0 : payload.count <= 0) ||
+    (payload.count > 0 && (!('scale' in payload) || !('mean' in payload)))
+  )
+    return { kind: 'unavailable', code: 'source_observation_unavailable' };
+  // Verify the persisted envelope, without creating an identity for a mutable row.
+  try {
+    if (sourceObservation(subjectId, SOURCE_OBSERVATION_PROVIDER, payload).digest !== digest)
+      return { kind: 'unavailable', code: 'source_observation_unavailable' };
+  } catch {
+    return { kind: 'unavailable', code: 'source_observation_unavailable' };
+  }
+  return {
+    kind: 'head',
+    head: {
+      provider: SOURCE_OBSERVATION_PROVIDER,
+      sourceAlias: observation.sourceAlias,
+      sourceRecordId: observation.sourceRecordId,
+      asOf: observation.asOf,
+      count: payload.count,
+      ...('scale' in payload ? { scale: payload.scale, mean: payload.mean } : {}),
+      cleared: head.state === 'cleared',
+      digest,
+    },
+  };
+}
+
+/** The transport has acknowledged this exact command payload. Never use this
+ * helper to infer an identity for an unversioned mutable statistic read.
+ */
+export function headFromAcknowledgedObservation(
   subjectId: string,
-  row: {
-    source: string;
-    sourceAlias?: string;
-    sourceRecordId: string;
-    asOf: string;
-    count: number;
-    scale: { min: number; max: number };
-    mean: number;
-    licence?: string;
-    attribution?: string;
-    observation?: { kind: 'unversioned'; digest: string };
-  },
+  intended: IntendedObservation,
 ): RetainedObservationHead {
-  const sourceAlias = row.sourceAlias ?? row.source;
-  const digest =
-    row.observation?.digest ??
-    observationDigest(subjectId, {
-      ...(row.sourceAlias === undefined ? {} : { sourceAlias: row.sourceAlias }),
-      sourceRecordId: row.sourceRecordId,
-      scale: row.scale,
-      mean: row.mean,
-      count: row.count,
-      asOf: row.asOf,
-      licence: row.licence ?? 'ODbL-1.0',
-      attribution: row.attribution ?? 'VNDB',
-    });
+  if (intended.kind === 'clear') return headFromClear(subjectId, intended);
   return {
     provider: SOURCE_OBSERVATION_PROVIDER,
-    sourceAlias,
-    sourceRecordId: row.sourceRecordId,
-    asOf: row.asOf,
-    count: row.count,
-    scale: row.scale,
-    mean: row.mean,
+    sourceAlias: effectiveAlias(intended.sourceAlias),
+    sourceRecordId: intended.sourceRecordId,
+    asOf: intended.asOf,
+    count: intended.count,
+    scale: intended.scale,
+    mean: intended.mean,
     cleared: false,
-    digest,
+    digest: observationDigest(subjectId, intended),
   };
 }
 

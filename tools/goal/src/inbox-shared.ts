@@ -15,7 +15,11 @@ const inboxMigrations = [
         id INTEGER PRIMARY KEY AUTOINCREMENT, manager TEXT NOT NULL, event TEXT NOT NULL,
         wakeable INTEGER NOT NULL, notified INTEGER NOT NULL DEFAULT 0, read_at INTEGER, acknowledged_at INTEGER
       );
-      CREATE INDEX manager_inbox_pending ON manager_inbox(manager, wakeable, read_at);`,
+      CREATE INDEX manager_inbox_pending ON manager_inbox(manager, wakeable, read_at);
+      CREATE TABLE manager_inbox_delivery_keys (
+        manager TEXT NOT NULL, delivery_key TEXT NOT NULL, inbox_id INTEGER NOT NULL,
+        PRIMARY KEY(manager, delivery_key)
+      );`,
   },
   {
     module: 'inbox',

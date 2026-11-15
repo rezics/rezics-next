@@ -59,15 +59,21 @@ export function HostedSourceConsentView({
       </div>
       <div className="studio-action-row">
         {unknown ? (
-          <Button type="button" variant="outline" disabled={disabled} onClick={() => void visit.replay()}>
+          <Button type="button" type="button" variant="outline" disabled={disabled} onClick={() => void visit.replay()}>
             {m.studio_source_consent_replay({}, options)}
           </Button>
         ) : state.phase === 'issued' ? (
-          <Button type="button" variant="outline" disabled={disabled} onClick={() => void visit.revoke()}>
+          <Button type="button" type="button" variant="outline" disabled={disabled} onClick={() => void visit.revoke()}>
             {m.studio_source_consent_revoke({}, options)}
           </Button>
         ) : (
-          <Button type="button" variant="outline" disabled={disabled || busy} onClick={() => void visit.issue()}>
+          <Button
+            type="button"
+            type="button"
+            variant="outline"
+            disabled={disabled || busy}
+            onClick={() => void visit.issue()}
+          >
             {m.studio_source_consent_issue({}, options)}
           </Button>
         )}

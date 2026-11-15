@@ -18,7 +18,6 @@ import type {
 } from './discovery.ts';
 import type { SubjectListingSource } from './source.ts';
 import {
-  nativeDiscoveryRegistry,
   createDiscoveryProjection,
   validateAccountPage,
   validateAccountSnapshot,
@@ -31,7 +30,7 @@ import {
   readDiscoveryPhysicalIdentity,
   discoveryAlias,
   createDiscoveryIndex,
-  readDiscoveryDocumentCodec,
+  requireDiscoveryIndexFormat,
 } from './indices.ts';
 import {
   discoveryDocumentActions,
@@ -44,12 +43,8 @@ import { validateObservation } from './indexer.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { DiscoveryMetadataKind, DiscoveryMetadataProducer, DiscoveryMetadataProducers } from './discovery-api.ts';
 import { DiscoveryPopulationCutChangedError, DiscoveryProducerCoverageError } from './discovery-errors.ts';
-import {
-  classifyDiscoveryMetadataProducers,
-  discoveryCapabilityWitnesses,
-  SECOND_SCOPE_PUBLIC_METADATA_KINDS,
-} from './discovery-readiness.ts';
-import type { DiscoveryCapabilityWitnesses, DiscoveryProducerOmission } from './discovery-readiness.ts';
+import { discoveryCapabilityWitnesses, SECOND_SCOPE_PUBLIC_METADATA_KINDS } from './discovery-readiness.ts';
+import type { DiscoveryCapabilityWitnesses } from './discovery-readiness.ts';
 import { discardConnection } from '../database/pool.ts';
 import { MAX_SUBJECT_GENERATIONS } from './generation-limit.ts';
 import {
@@ -76,12 +71,8 @@ import lockRebuild from './rebuild-lock.sql';
 import unlockRebuild from './rebuild-unlock.sql';
 
 export { DiscoveryPopulationCutChangedError, DiscoveryProducerCoverageError } from './discovery-errors.ts';
-export {
-  classifyDiscoveryMetadataProducers,
-  discoveryCapabilityWitnesses,
-  SECOND_SCOPE_PUBLIC_METADATA_KINDS,
-} from './discovery-readiness.ts';
-export type { DiscoveryCapabilityWitnesses, DiscoveryProducerOmission } from './discovery-readiness.ts';
+export { discoveryCapabilityWitnesses, SECOND_SCOPE_PUBLIC_METADATA_KINDS } from './discovery-readiness.ts';
+export type { DiscoveryCapabilityWitnesses } from './discovery-readiness.ts';
 
 export { observedWrite };
 import type { SubjectSource } from './source.ts';
@@ -224,13 +215,20 @@ export function searchTurnMetadataProducers(producers: DiscoveryMetadataProducer
   return Object.fromEntries(
     Object.entries(producers).flatMap(([kind, producer]) => {
       if (!producer) return [];
-      return [[kind, {
-        ...producer,
-        readiness: () => searchTurnCall(() => producer.readiness()),
-        page: (...args: Parameters<DiscoveryMetadataProducer['page']>) => searchTurnCall(() => producer.page(...args)),
-        read: (...args: Parameters<DiscoveryMetadataProducer['read']>) => searchTurnCall(() => producer.read(...args)),
-        position: (partition: number) => searchTurnCall(() => producer.position(partition)),
-      }] as const];
+      return [
+        [
+          kind,
+          {
+            ...producer,
+            readiness: () => searchTurnCall(() => producer.readiness()),
+            page: (...args: Parameters<DiscoveryMetadataProducer['page']>) =>
+              searchTurnCall(() => producer.page(...args)),
+            read: (...args: Parameters<DiscoveryMetadataProducer['read']>) =>
+              searchTurnCall(() => producer.read(...args)),
+            position: (partition: number) => searchTurnCall(() => producer.position(partition)),
+          },
+        ] as const,
+      ];
     }),
   );
 }
@@ -436,8 +434,6 @@ export async function rebuildSubjects(options: {
   runner: { refresh(context?: SearchTurnContext): Promise<void> };
   /** The real default worker owns identified reconciliation and alias activation. */
   publication?: 'native';
-  /** Successor date projection. Omit to prepare the calendar format; null retains the legacy writer shape. */
-  calendarFormat?: 1 | null;
   pollMs?: number;
   rounds?: number;
   timeoutMs?: number;
@@ -513,21 +509,20 @@ export async function rebuildSubjects(options: {
       const previous = state.active;
       const highest = state.generations.at(-1) ?? 0;
       generation = highest > (previous ?? 0) ? highest : highest + 1;
-      const calendarFormat = options.calendarFormat === undefined ? 1 : options.calendarFormat;
       // Advanced checkpoints cannot replay documents through a different physical writer codec.
       const resumable =
         highest > (previous ?? 0) &&
         (await readSubjectSortFormat(search, options.prefix, highest)) === SUBJECT_SORT_FORMAT &&
-        (await readSubjectCalendarMappingFormat(search, options.prefix, highest)) === calendarFormat &&
+        (await readSubjectCalendarMappingFormat(search, options.prefix, highest)) === 1 &&
         (await readSubjectCreditMappingFormat(search, options.prefix, highest)) === 1;
       generation = resumable ? highest : highest + 1;
       if (generation > highest && state.generations.length >= MAX_SUBJECT_GENERATIONS)
         throw new RebuildError('limit', generation);
-      await createSubjectIndex(search, options.prefix, generation, calendarFormat ?? undefined);
+      await createSubjectIndex(search, options.prefix, generation);
       const format = await readSubjectSortFormat(search, options.prefix, generation);
       if (format !== SUBJECT_SORT_FORMAT)
         throw new SearchUnavailableError('Search rebuild requires a new bounded-format generation');
-      if ((await readSubjectCalendarMappingFormat(search, options.prefix, generation)) !== calendarFormat)
+      if ((await readSubjectCalendarMappingFormat(search, options.prefix, generation)) !== 1)
         throw new SearchUnavailableError('Search rebuild requires the requested calendar projection');
       if ((await readSubjectCreditMappingFormat(search, options.prefix, generation)) !== 1)
         throw new SearchUnavailableError('Search rebuild requires the credited-name projection');
@@ -626,21 +621,16 @@ export async function rebuildSubjects(options: {
 
       check();
       const activatedAt = new Date().toISOString();
-      const calendarIncarnation =
-        calendarFormat === 1 ? await markSubjectCalendarReady(search, options.prefix, generation) : undefined;
+      const calendarIncarnation = await markSubjectCalendarReady(search, options.prefix, generation);
       await observedWrite(
         () =>
           search.request('PUT', `/${index}/_mapping`, {
             _meta: {
               name_sort_format: format,
               activated_at: activatedAt,
-              ...(calendarFormat === 1
-                ? {
-                    calendar_range_format: 1,
-                    calendar_range_ready: 1,
-                    calendar_range_incarnation: calendarIncarnation,
-                  }
-                : {}),
+              calendar_range_format: 1,
+              calendar_range_ready: 1,
+              calendar_range_incarnation: calendarIncarnation,
             },
           }),
         async () => {
@@ -652,8 +642,6 @@ export async function rebuildSubjects(options: {
           if (!record(entry) || !record(entry.mappings) || !record(entry.mappings.properties)) return false;
           const meta = entry.mappings._meta;
           if (!record(meta) || meta.name_sort_format !== format || meta.activated_at !== activatedAt) return false;
-          if (calendarFormat !== 1)
-            return !Object.hasOwn(meta, 'calendar_range_ready') && !Object.hasOwn(meta, 'calendar_range_incarnation');
           if (
             meta.calendar_range_format !== 1 ||
             meta.calendar_range_ready !== 1 ||
@@ -1121,24 +1109,28 @@ async function reconcileDiscoveryPage(
     return key;
   });
   let expected: DiscoveryIndexAction[];
-  const codec = await readDiscoveryDocumentCodec(search, discoveryIndexName(target.prefix, target.generation));
+  await requireDiscoveryIndexFormat(search, discoveryIndexName(target.prefix, target.generation));
   if (entry.owner === 'accounts') {
     const snapshot = validateAccountSnapshot(
       await searchTurnCall(() =>
-        entry.source.read(partition, keys.map(({ id }) => id)),
+        entry.source.read(
+          partition,
+          keys.map(({ id }) => id),
+        ),
       ),
       partition,
       keys.map(({ id }) => id),
       census.position,
     );
-    expected = discoveryDocumentActions(registry, { owner: 'accounts', snapshot }, keys, undefined, codec);
+    expected = discoveryDocumentActions(registry, { owner: 'accounts', snapshot }, keys, undefined);
   } else {
-    const snapshot =
-      codec === 'mixed-credit-v1'
-        ? await searchTurnCall(() =>
-            readCreditIndexSnapshot(entry.source, partition, keys.map(({ id }) => id)),
-          )
-        : await searchTurnCall(() => entry.source.read(partition, keys.map(({ id }) => id)));
+    const snapshot = await searchTurnCall(() =>
+      readCreditIndexSnapshot(
+        entry.source,
+        partition,
+        keys.map(({ id }) => id),
+      ),
+    );
     validateObservation(
       snapshot,
       partition,
@@ -1147,9 +1139,12 @@ async function reconcileDiscoveryPage(
       true,
     );
     const counts = await searchTurnCall(() =>
-      projection.listing.read(partition, snapshot.subjects.map(({ id }) => id)),
+      projection.listing.read(
+        partition,
+        snapshot.subjects.map(({ id }) => id),
+      ),
     );
-    expected = discoveryDocumentActions(registry, { owner: 'semantic', snapshot }, keys, counts, codec);
+    expected = discoveryDocumentActions(registry, { owner: 'semantic', snapshot }, keys, counts);
   }
   expected = await prepareBoundedSortKeys(search, discoveryIndexName(target.prefix, target.generation), expected);
   let mismatch = false;
@@ -1331,7 +1326,11 @@ async function reconcileMetadataDiscoveryPage(
     return { route: key.route, id: key.id };
   });
   const snapshot = await searchTurnCall(() =>
-    projection.prepareOwnerActions(kind, row.partition, keys.map(({ id }) => id)),
+    projection.prepareOwnerActions(
+      kind,
+      row.partition,
+      keys.map(({ id }) => id),
+    ),
   );
   if (row.reconcile_position !== null && BigInt(row.reconcile_position) !== snapshot.position) {
     await restartMetadataReconciliation(pool, target, row.partition, kind);
@@ -1477,8 +1476,7 @@ async function completeDiscoveryActivation(
         await client.query('COMMIT');
         return;
       }
-      if (ready.rows[0]?.state !== 'ready')
-        throw new SearchUnavailableError('Discovery activation target changed');
+      if (ready.rows[0]?.state !== 'ready') throw new SearchUnavailableError('Discovery activation target changed');
       await client.query(
         "UPDATE search.discovery_generation SET state='retiring' WHERE partition_no=0 AND prefix=$1 AND state='active' AND generation<>$2",
         [target.prefix, target.generation],
@@ -1711,7 +1709,10 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
   for (let offset = 0; offset < observations.length; offset += 100) {
     const chunk = observations.slice(offset, offset + 100);
     const witnesses = await searchTurnCall(() =>
-      readAccountDiscoveryWitness(pool, chunk.map(({ partition }) => partition)),
+      readAccountDiscoveryWitness(
+        pool,
+        chunk.map(({ partition }) => partition),
+      ),
     );
     const checks = await mapBounded(
       chunk,
@@ -1820,18 +1821,17 @@ export async function nativeGenerationActions(options: {
   const listing = subjectListingSource(pool);
   if (!registry) {
     const source = subjectSource(pool);
-    const calendarFormat = await readSubjectCalendarMappingFormatForIndex(search, index);
-    const creditFormat = await readSubjectCreditMappingFormatForIndex(search, index);
-    const snapshot =
-      creditFormat === 1 ? await readCreditIndexSnapshot(source, partition, ids) : await source.read(partition, ids);
+    await readSubjectCalendarMappingFormatForIndex(search, index);
+    await readSubjectCreditMappingFormatForIndex(search, index);
+    const snapshot = await readCreditIndexSnapshot(source, partition, ids);
     validateObservation(snapshot, partition, ids, obligation, true);
     // The supplied native writer owns factual projection, foreign fences and rating decoration.
     // This raw native observation supplies eligibility, key identity and external versions only.
-    return documentActions(snapshot, ids, undefined, calendarFormat ?? undefined, creditFormat ?? undefined);
+    return documentActions(snapshot, ids);
   }
   const keys = options.keys;
   if (!keys || keys.length !== ids.length) throw new TypeError('Native discovery keys are required');
-  const codec = await readDiscoveryDocumentCodec(search, index);
+  await requireDiscoveryIndexFormat(search, index);
   const account = keys[0]?.owner === 'accounts';
   if (keys.some((key) => (key.owner === 'accounts') !== account)) throw new TypeError('Mixed owner key batch');
   let actions: DiscoveryIndexAction[];
@@ -1839,14 +1839,11 @@ export async function nativeGenerationActions(options: {
     const entry = registry.get('account');
     if (entry.owner !== 'accounts') throw new TypeError('Native Account producer is required');
     const snapshot = validateAccountSnapshot(await entry.source.read(partition, ids), partition, ids, obligation);
-    actions = discoveryDocumentActions(registry, { owner: 'accounts', snapshot }, keys, undefined, codec);
+    actions = discoveryDocumentActions(registry, { owner: 'accounts', snapshot }, keys, undefined);
   } else {
     const entry = registry.entries.find((entry) => entry.owner === 'semantic');
     if (!entry || entry.owner !== 'semantic') throw new TypeError('Native Subject producer is required');
-    const observed =
-      codec === 'mixed-credit-v1'
-        ? await readCreditIndexSnapshot(entry.source, partition, ids)
-        : await entry.source.read(partition, ids);
+    const observed = await readCreditIndexSnapshot(entry.source, partition, ids);
     validateObservation(observed, partition, ids, obligation, true);
     // A type change removes the old kind-key; native key enumeration separately supplies the new kind-key.
     const kind = new Map(keys.map((key) => [key.id, key.kind]));
@@ -1855,7 +1852,7 @@ export async function nativeGenerationActions(options: {
       partition,
       snapshot.subjects.map(({ id }) => id),
     );
-    actions = discoveryDocumentActions(registry, { owner: 'semantic', snapshot }, keys, counts, codec);
+    actions = discoveryDocumentActions(registry, { owner: 'semantic', snapshot }, keys, counts);
     const semantic = actions.filter(
       (
         action,

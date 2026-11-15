@@ -70,10 +70,21 @@ test('32/64/128 VNDB observation intents stay O(N+A+R) with indexed pages and fi
       async readFence() {
         return { fenced: false, securityRevision: null };
       },
-      async readSourceStatistics(input: { subjectId: string }) {
+      async readSourceObservationHead(input: { subjectId: string }) {
         heads++;
         const row = stored.get(input.subjectId);
-        return row ? [{ source: 'vndb', ...row }] : [];
+        if (!row) return { state: 'empty', digest: null, observation: null };
+        const { expectedObservation: _expected, ...fields } = row;
+        const payload: Record<string, unknown> = { ...fields, sourceAlias: fields.sourceAlias ?? 'vndb' };
+        const digest = observationDigest(input.subjectId, payload as never);
+        return {
+          state: 'published', digest,
+          observation: {
+            digest, payloadVersion: 1, sourceAlias: payload.sourceAlias,
+            sourceRecordId: payload.sourceRecordId, asOf: payload.asOf, nativeOrder: '1', legacy: false,
+            provenance: { kind: 'unversioned', digest }, payload,
+          },
+        };
       },
       async readPublicFigure() {
         figures++;

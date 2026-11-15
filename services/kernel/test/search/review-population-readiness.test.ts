@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
+import { classifyDiscoveryMetadataProducers } from '../../src/search/discovery-readiness.ts';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
 import {
-  classifyDiscoveryMetadataProducers,
   discoveryCapabilityWitnesses,
   DiscoveryPopulationCutChangedError,
 } from '../../src/search/generations.ts';

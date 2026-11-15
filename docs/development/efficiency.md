@@ -42,11 +42,11 @@ Report actual shortfalls without changing the measure.
 Decision: The frozen report measures Web additions from the pinned `dev` revision, preserves all-product
 throughput separately, and labels unavailable Web attribution unknown.
 
-The Web manager owns assignment, priority, independent refill, actual worker starts and integration follow-through
-without waiting for another maintainer prompt. Use up to the authorized 32 concurrent Web workers when independent
-writable outcomes and shared host capacity support them. Confirm execution from process identity and source
-checkpoints; queued tasks and a `running` label alone are not evidence of productive work. Resolve an idle queue,
-repeated setup failure or landing bottleneck in its owning module rather than repeating the same failed attempt.
+The resident manager owns Goal allocation, priority, useful unit starts and integration follow-through without waiting
+for another maintainer prompt. Set unit and native-subagent width from independent writable outcomes, authorized
+allowance and shared host capacity. Confirm execution from native identity and source checkpoints; queued work or an
+active label alone is not productive work. Resolve idle supply, repeated setup failure and integration bottlenecks in
+their owner modules rather than repeating a failed attempt.
 
 Every hourly delivery assessment pairs the product-line measure with changed routes, integrated revisions and
 published visual results. Choose the next-hour action from observed source output and visible product outcomes. A
@@ -73,7 +73,8 @@ missing timing.
 
 Decision: The hourly report reads each UTC bucket once, normalizes landing targets during aggregation, and reports conflicting task attribution as unknown; lifecycle and other window policies remain unchanged.
 
-Decision: Managers dispatch complete release work from live gaps and proposals; compare output on matched work, model, stage and actual exposure, and use first-source evidence to target flow loss.
+The manager allocates complete release Goals from live gaps and worker proposals. Compare output on matched work,
+model, stage and actual exposure, using first-source evidence to target flow loss.
 
 The control plane exists to cut the cost of each landed outcome, and agents are its resolvers. A problem an agent
 can fix where it appears goes to an agent at that point, and the pipeline continues. Such problems include a merge
@@ -89,7 +90,7 @@ check even though dev is the unstable branch; those checks moved to post-merge v
 
 Decision: check-result planning batch-reads committed workspace manifests into one cached tree projection for closure, package tree IDs and global inputs; the default reuse policy stays unchanged.
 
-Trust managers’ decisions and workers’ evidence by default. Reuse the owner’s result; do not repeat their investigation
+Trust the manager’s decisions and workers’ evidence by default. Reuse the owner’s result; do not repeat their investigation
 or validation unless a concrete failure, conflicting evidence, or missing required proof changes a decision. Give the owner
 the exact discrepancy and check only the missing evidence.
 
@@ -128,10 +129,9 @@ record the effect, including when it is not yet observable.
 - Repairs of integrated code that is broken on dev (type diagnostics, boot failures, failing tests named in landed
   summaries) go out as urgent briefs under the manager's urgent grant. They carry an honest estimate and are batched
   per area, never one per diagnostic. The dispatch estimate floor is advisory.
-- Take outcomes in this order: capability rows still red, each built end to end until its composed acceptance passes;
-  systems that [scope](../scope.md) lists as built but closed, finished to the polish bar and kept closed; then the
-  [architecture migration](../research/architecture-paradigms-opus-5-5.md) steps in the Goal's own modules. Deferred
-  systems stay deferred until the scope table changes.
+- Finish released capability rows end to end until their composed acceptance passes. Current [scope](../scope.md)
+  controls admission: closed and deferred systems receive no proactive implementation, research or polish without
+  explicit authorization. A historical checklist does not reopen them.
 - Commission research only for a named open choice with a consumer task; use one report by default.
 - Send a handoff as one message containing the revision, remaining question, proposed decision and affected consumer.
   Co-owner review answers accept or one counterexample.
@@ -142,8 +142,9 @@ Decision: enforce the 32-task per-Goal limit at worker start admission.
 
 - The supermanager decides operational and engineering trade-offs itself, by the best efficiency, and does not wait for
   the maintainer. It reports the decision afterwards.
-- Every hour the supermanager checks that each manager session is running and its inbox is read, and renews a paused
-  one. Control-plane work goes out as briefs the supermanager dispatches; no manager inbox stands in for that.
+- The resident is the only manager. At scheduling checkpoints, inspect the registered native units, their consumed
+  Goals, first source and actionable failures. Preserve productive Goal continuity; do not renew domain managers.
+  Control-plane changes go to an implementation worker with an owned boundary.
 - Follow [delivery ownership](delivery.md#delivery-ownership). Keep the next independent assignment ready before
   the current one parks. Use worker proposals and existing defects to refill; do not wait for the manager to
   discover every repair personally.
@@ -154,8 +155,7 @@ Decision: enforce the 32-task per-Goal limit at worker start admission.
 - An alarm fires only on a real problem, and its receiver fixes the cause at once. An alarm that repeats for the same
   cause without a fix escalates to the supermanager. Throttling or batching an alarm hides the problem; fix the cause or
   the threshold.
-- Managers challenge any rule or instruction, the supermanager's included, as soon as evidence shows it produces bad
-  results.
+- Every agent promptly challenges a rule or instruction, the manager's included, when evidence shows harmful results.
   Codex runs on the Standard tier (`serviceTier: "default"`). Fast requires the maintainer's explicit permission.
   Keep allowance balances, account selection and operating ceilings in private configuration.
 
@@ -186,8 +186,10 @@ cross-module contracts, security and money.
 Decision: the cross-module evidence and admission work for one reviewed Person across VN and anime retains the routed
 model default.
 
-Record attempts and accepted landings by Goal, task class and model profile. Include failed, replaced and abandoned
-attempts. Count resumed cumulative usage by deltas, once.
+Record attempts and accepted landings by Goal, task class and model profile, including native unit/subagent sessions
+and failed, replaced or abandoned work. Count cumulative usage by deltas, once; exclude child totals already included
+in a parent aggregate. Do not fabricate managed task starts to represent native activity. Preserve existing progress
+reports, adding native activity without double-counting historical records; mark unavailable attribution unknown.
 
 Maintain an hourly diagnostic ledger of allowance, wait requests, replacement input, compactions and acceptance
 failures alongside the flow report. Use it to locate avoidable costs in briefs, exploration, rereads, polling,
@@ -229,8 +231,9 @@ Plan against each pool's observed reset and remaining allowance. When real work 
 whose allowance expires first and queue work early enough to save coherent changes before reset. Stay within explicit
 pauses, reserves, pacing and host limits; leave allowance unused when no suitable work is ready.
 
-Decision: The Claude allowance keeps the resident supermanager running and nothing else. It routes no workers, and it
-holds no reserve beyond that; workers run on Codex and Cursor.
+Execution uses the currently authorized pools and service tier. Native units and their subagents must not silently
+activate another provider or a higher tier. Explicitly authorized Grok research runs inside the unit's shared worktree
+and is measured separately from Codex execution. Private configuration owns account selection and allowance policy.
 
 ## Incident method
 
@@ -242,7 +245,7 @@ observations from hypotheses; do not invent missing timing or claim a fix withou
 Repair each class where it appears: give the problem to an agent at that point (resolver, same-session fix,
 regeneration), so the pipeline continues. Add a check that refuses or ends work only when no agent can repair the
 problem in place. Register that check in the guard ledger with the defect it prevents, and price it from its first
-firing. Tell every manager the adopted rule and its owner link. Verify its effect in the next hourly
+firing. Send the manager and affected units the adopted rule and its owner link. Verify its effect in the next hourly
 report using comparable evidence; if the effect is not yet observable, record that limit and the next observation.
 Use the [worked incident procedure](../../.agents/skills/rezics-workflow/references/efficiency.md#incident-analysis)
 when preparing the cause-to-fix record.

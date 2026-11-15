@@ -1,3 +1,4 @@
+import { canonicalLanguageKey } from '@rezics/definitions/language';
 import * as v from 'valibot';
 import type { ExactDocument, StudioResult } from './contract';
 
@@ -30,6 +31,17 @@ export const hostedPlacement = v.variant('kind', [
 ]);
 const placements = v.pipe(v.array(hostedPlacement), v.maxLength(512));
 export const hostedCreate = v.strictObject({ postId: hostedId, threadId: hostedId, placements });
+export const hostedBindLanguage = v.strictObject({
+  expectedRevisionId: hostedId,
+  language: v.pipe(
+    v.string(),
+    v.check((value) => canonicalLanguageKey(value) === value),
+  ),
+  title,
+  target,
+  makeDefault: v.optional(v.boolean()),
+});
+export type HostedBindLanguage = v.InferOutput<typeof hostedBindLanguage>;
 export const hostedRevise = v.strictObject({ expectedRevisionId: hostedId, placements });
 export const hostedPublish = v.strictObject({
   expectedRevisionId: hostedId,
@@ -65,7 +77,21 @@ export const hostedPage = v.strictObject({
           title,
           target: v.null(),
         }),
-        v.strictObject({ ...address, kind: v.literal('chapter'), availability: v.literal('available'), title, target }),
+        v.strictObject({
+          ...address,
+          kind: v.literal('chapter'),
+          availability: v.literal('available'),
+          title,
+          target,
+          selectedLanguage: v.exactOptional(
+            v.nullable(
+              v.pipe(
+                v.string(),
+                v.check((value) => canonicalLanguageKey(value) === value),
+              ),
+            ),
+          ),
+        }),
       ]),
     ),
     v.maxLength(20),
@@ -101,6 +127,14 @@ export const hostedOutlineWindowPage = v.strictObject({
           availability: v.literal('available'),
           title,
           target,
+          selectedLanguage: v.exactOptional(
+            v.nullable(
+              v.pipe(
+                v.string(),
+                v.check((value) => canonicalLanguageKey(value) === value),
+              ),
+            ),
+          ),
         }),
       ]),
     ),
@@ -204,7 +238,11 @@ export type HostedSelection = v.InferOutput<typeof hostedSelection>;
 export type HostedCreate = v.InferOutput<typeof hostedCreate>;
 export type HostedRevise = v.InferOutput<typeof hostedRevise>;
 export type HostedPublish = v.InferOutput<typeof hostedPublish>;
-export type HostedBook = Readonly<{ revision: HostedRevision; placements: readonly HostedPlacement[] }>;
+export type HostedBook = Readonly<{
+  revision: HostedRevision;
+  placements: readonly HostedPlacement[];
+  defaultLanguages?: Readonly<Record<string, string | null>>;
+}>;
 export type HostedOwnerBook = v.InferOutput<typeof hostedOwnerBook>;
 export type HostedOwnerScope = v.InferOutput<typeof hostedOwnerScope>;
 export type HostedOwnerViewer = v.InferOutput<typeof hostedOwnerViewer>;
@@ -308,6 +346,13 @@ export function sameHostedViewer(left: HostedOwnerViewer, right: HostedOwnerView
 
 /** Reads admit the complete bounded tree or fail; redacted slots never become editable empty chapters. */
 export interface HostedBookNative {
+  bindLanguage?(
+    catalogueId: string,
+    occurrenceId: string,
+    input: HostedBindLanguage,
+    key: string,
+    signal: AbortSignal,
+  ): Promise<StudioResult<HostedBook>>;
   listHistory(
     catalogueId: string,
     cursor: string | null,

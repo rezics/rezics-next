@@ -326,6 +326,7 @@ export class KnowledgeTransferVisit {
       return;
     }
     if (!this.current(generation)) return;
+    // Copy refusal can come from the private destination; only source-only reads can withdraw public content.
     if (result.state === 'acknowledged') {
       this.intent = null;
       this.publish({ receipt: result.receipt, copyState: 'readback' });
@@ -334,7 +335,7 @@ export class KnowledgeTransferVisit {
     else if (result.state === 'conflict') {
       this.intent = null;
       this.publish({ copyState: 'conflict', reviewed: false });
-    } else if (!this.lost(result.state, true)) {
+    } else if (!this.lost(result.state)) {
       this.intent = null;
       this.publish({ copyState: 'unavailable', reviewed: false });
     }

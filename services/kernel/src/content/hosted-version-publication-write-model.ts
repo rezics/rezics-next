@@ -1,4 +1,4 @@
-import type { HostedChapterTarget } from './hosted-chapters-model.ts';
+import type { HostedChapterTarget, HostedChapterLanguages } from './hosted-chapters-model.ts';
 import type { HostedPointSelection } from './hosted-publication-point-selection.ts';
 import type { HostedVersionSnapshot } from './hosted-version-model.ts';
 import type {
@@ -9,7 +9,12 @@ import type {
 /** The public value stored for one selected occurrence; order is represented by the indexes. */
 export type HostedVersionPublicationValue =
   | Readonly<{ kind: 'part'; title: string | null }>
-  | Readonly<{ kind: 'chapter'; title: string | null; target: HostedChapterTarget | null }>;
+  | Readonly<{
+      kind: 'chapter';
+      title: string | null;
+      target: HostedChapterTarget | null;
+      bodyLanguages?: HostedChapterLanguages;
+    }>;
 
 /** Stored payload includes the chapter summary needed by temporal index nodes. */
 export type HostedVersionPublicationStoredValue = HostedVersionPublicationValue & Readonly<{ chapterCount: bigint }>;

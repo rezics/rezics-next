@@ -1,7 +1,7 @@
 /**
  * Current-dev first-public-scope walk for Web. Runs inside `dev-stack.ts walk`. Anonymous paths use real seeded
- * pages and kernel readback. Signed-in paths stay FAIL-unreached while issuer/JWKS origins differ; ce33aabc owns
- * that sign-in startup repair. Evidence stays under `.temp/goal/web/` and never records secrets.
+ * pages and kernel readback. Paths owned by isolated native/browser host suites name their exact separate
+ * entrypoints and stay FAIL-unreached here. Evidence stays under `.temp/goal/web/` and never records secrets.
  */
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -20,8 +20,9 @@ const launchLocales = ['en', 'zh-Hant'] as const;
 const phone = { width: 390, height: 844 };
 const desktop = { width: 1280, height: 860 };
 
-export const SIGN_IN_STARTUP_CAUSE =
-  'issuer JWKS origin differs from native Auth JWKS; urgent ce33aabc owns sign-in startup';
+export const SIGN_IN_STARTUP_CAUSE = 'native sign-in prerequisites unavailable';
+const SEPARATE_NATIVE_JOURNEY_CAUSE =
+  'This seeded walk has no walker for this required journey; run its isolated native/browser host suite separately';
 
 type Json = Record<string, unknown>;
 type Stack = { web: string; issuer: string; native: string; kernel: string };
@@ -34,6 +35,7 @@ type PathResult = {
   elapsedMs: number;
   source: string;
   evidence: unknown;
+  acceptanceCommand?: string[];
   firstWrong?: string;
 };
 
@@ -625,7 +627,7 @@ function hourly(results: PathResult[]): void {
   const failing = results.filter((row) => row.status !== 'PASS');
   const slowest = failing.slice().sort((a, b) => b.elapsedMs - a.elapsedMs)[0];
   console.log(
-    `first-public-scope: ${passing}/35` +
+    `first-public-scope: ${passing}/${FIRST_PUBLIC_SCOPE_PATHS.length}` +
       (slowest ? `; slowest failing ${slowest.id} ${slowest.elapsedMs}ms ${slowest.status}` : ''),
   );
 }
@@ -640,16 +642,20 @@ export async function run(): Promise<PathResult[]> {
   const failRest = (cause: string, persona = 'setup') => {
     for (const path of FIRST_PUBLIC_SCOPE_PATHS) {
       if (results.some((row) => row.id === path.id)) continue;
+      const pathCause = 'nativeHost' in path ? SEPARATE_NATIVE_JOURNEY_CAUSE : cause;
       results.push({
         id: path.id,
         job: path.job,
         auth: path.auth,
         status: 'FAIL-unreached',
-        persona,
+        persona: 'nativeHost' in path ? 'mixed' : persona,
         elapsedMs: 0,
         source,
-        evidence: { cause },
-        firstWrong: cause,
+        evidence: { cause: pathCause, ...(pathCause !== cause ? { setupCause: cause } : {}) },
+        ...('nativeHost' in path
+          ? { acceptanceCommand: ['bun', 'apps/web/scripts/check.ts', '--host', path.nativeHost] }
+          : {}),
+        firstWrong: pathCause,
       });
     }
   };
@@ -697,6 +703,24 @@ export async function run(): Promise<PathResult[]> {
     for (const path of FIRST_PUBLIC_SCOPE_PATHS) {
       const started = performance.now();
       try {
+        if ('nativeHost' in path) {
+          const acceptanceCommand = ['bun', 'apps/web/scripts/check.ts', '--host', path.nativeHost];
+          const cause = SEPARATE_NATIVE_JOURNEY_CAUSE;
+          results.push({
+            id: path.id,
+            job: path.job,
+            auth: path.auth,
+            status: 'FAIL-unreached',
+            persona: 'mixed',
+            elapsedMs: Math.round(performance.now() - started),
+            source,
+            evidence: { cause },
+            acceptanceCommand,
+            firstWrong: cause,
+          });
+          hourly(results);
+          continue;
+        }
         if (path.auth === 'signed-in' && !signIn.ok) {
           results.push({
             id: path.id,
@@ -777,7 +801,7 @@ async function writeEvidence(source: string, results: PathResult[], stack?: Stac
       {
         source,
         observedAt: new Date().toISOString(),
-        passing: `${passing}/35`,
+        passing: `${passing}/${FIRST_PUBLIC_SCOPE_PATHS.length}`,
         slowestFailing: slowest ? { id: slowest.id, elapsedMs: slowest.elapsedMs, status: slowest.status } : null,
         stack,
         seed: publicFields(seed),
@@ -791,6 +815,6 @@ async function writeEvidence(source: string, results: PathResult[], stack?: Stac
 
 if (import.meta.main) {
   const results = await run();
-  const failed = results.some((row) => row.status === 'FAIL');
+  const failed = results.some((row) => row.status !== 'PASS');
   process.exit(failed ? 1 : 0);
 }

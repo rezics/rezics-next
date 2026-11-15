@@ -9,12 +9,17 @@ const authHost = resolve(import.meta.dir, './native/auth-stack.host.test.ts');
 const identityHost = resolve(import.meta.dir, './native/native-agent-identity.host.test.ts');
 const interruptHost = resolve(import.meta.dir, './native/web-publication-interrupt.host.test.ts');
 
-test('the first-public-scope walk names each of the 35 Goal paths once', () => {
-  expect(FIRST_PUBLIC_SCOPE_PATHS).toHaveLength(35);
+test('the first-public-scope walk retains in-scope IDs and names the required Book and knowledge journeys', () => {
+  expect(FIRST_PUBLIC_SCOPE_PATHS).toHaveLength(36);
   expect(FIRST_PUBLIC_SCOPE_PATHS.map((path) => path.id)).toEqual(
-    Array.from({ length: 35 }, (_, index) => `W${String(index + 1).padStart(2, '0')}`),
+    Array.from({ length: 38 }, (_, index) => `W${String(index + 1).padStart(2, '0')}`).filter(
+      (id) => id !== 'W27' && id !== 'W28',
+    ),
   );
-  expect(new Set(FIRST_PUBLIC_SCOPE_PATHS.map((path) => path.job)).size).toBe(35);
+  expect(new Set(FIRST_PUBLIC_SCOPE_PATHS.map((path) => path.job)).size).toBe(36);
+  expect(FIRST_PUBLIC_SCOPE_PATHS.map((path) => path.job).join(' ')).not.toMatch(
+    /checkout|payment|Orders or entitlements/,
+  );
 });
 
 test('the walk retains the original native host suites and does not import Auth contract', () => {
@@ -27,10 +32,33 @@ test('the walk retains the original native host suites and does not import Auth 
   expect(readFileSync(interruptHost, 'utf8')).toContain('createWebPublicationDriver');
 });
 
-test('web.capabilities records one PASS, FAIL or FAIL-unreached row for each path', () => {
+test('historical web.capabilities evidence retains every original active path', () => {
   const text = readFileSync(capabilities, 'utf8');
+  const rows = text.split('\n').map((line) => line.split('|').map((cell) => cell.trim()));
   for (const path of FIRST_PUBLIC_SCOPE_PATHS) {
-    expect(text).toMatch(new RegExp(`\\| ${path.id} \\|`));
-    expect(text).toMatch(new RegExp(`\\| ${path.id} \\|[^\\n]*\\| (PASS|FAIL-unreached|FAIL) \\|`));
+    if ('nativeHost' in path) continue;
+    const matches = rows.filter((cells) => cells[1] === path.id);
+    expect(matches).toHaveLength(1);
+    expect(['PASS', 'FAIL-unreached', 'FAIL']).toContain(matches[0]![5]);
   }
+});
+
+test('required Book and knowledge paths identify real separate native/browser suites without claiming a seeded-walk pass', () => {
+  const paths = FIRST_PUBLIC_SCOPE_PATHS.flatMap((path) => ('nativeHost' in path ? [path] : []));
+  expect(paths.map(({ id, nativeHost }) => [id, nativeHost])).toEqual([
+    ['W36', 'tests/native/book-catalogue-journey.host.test.ts'],
+    ['W37', 'tests/native/hosted-book-journey.host.test.ts'],
+    ['W38', 'tests/native/knowledge-journey.host.test.ts'],
+  ]);
+  for (const path of paths) {
+    const source = readFileSync(resolve(import.meta.dir, '..', path.nativeHost), 'utf8');
+    expect(source).toContain('nativeTest(');
+    expect(source).toContain('nativeBeforeAll(');
+  }
+  const walk = readFileSync(resolve(import.meta.dir, '../scripts/first-public-scope-walk.ts'), 'utf8');
+  expect(walk).toContain("if ('nativeHost' in path)");
+  expect(walk).toContain('acceptanceCommand');
+  expect(walk).toContain('This seeded walk has no walker for this required journey');
+  expect(walk).toContain("results.some((row) => row.status !== 'PASS')");
+  expect(walk).not.toContain('${passing}/35');
 });

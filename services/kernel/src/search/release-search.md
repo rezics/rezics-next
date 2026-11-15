@@ -8,8 +8,8 @@ Research inventory and property presence do not establish facet admission.
 
 Decision: a partial Gregorian date matches an inclusive range when their represented intervals overlap;
 unknown components remain absent from facts, and interval edges are never displayed as recorded dates.
-Decision: `rebuildSubjects` defaults to a fresh calendar successor; legacy generations stay immutable, and precise
-compilation requires readiness for the exact physical UUID.
+Decision: `rebuildSubjects` constructs the canonical complete Subject mapping; precise compilation requires
+completed population and readiness for the exact physical UUID.
 
 `CalendarDate` in `@rezics/filter` records astronomical `year`, optional `month`, and optional `day`.
 A day requires a month. These shapes mean year, month and day precision respectively. Native time content must
@@ -48,17 +48,16 @@ retain their existing year/quantity meaning. The universal parser and active-rel
 extension, including saved and Boolean filters. Current statement matching uses inclusive interval overlap and
 retains same-statement qualifiers. Its current Boolean leaf identity includes the range kind and full endpoints.
 
-`documentActions` has an explicit calendar-format projection that retains native month/day, deduplicates exact
-dates, and derives `time_lower`/`time_upper` keys. Its default remains the historical year-only projection for
-existing physical writers. `calendarIndexDefinition` derives an inert successor mapping without changing frozen
-definitions or allocating/upgrading a generation. Its compatibility predicate checks metadata and all date-key
-fields; mapping compatibility alone establishes neither complete population nor publication readiness.
+`documentActions` always retains native month/day, deduplicates exact dates and derives `time_lower`/`time_upper`
+keys. `calendarIndexDefinition` supplies those fields to the canonical mapping without allocating or upgrading a
+physical generation. Its predicate checks metadata and all date-key fields; mapping admission alone establishes
+neither complete population nor publication readiness.
 
 The generic compiler emits same-nested-fact interval comparisons only with an explicit calendar-format capability.
-The resumable Subject rebuild now allocates the successor mapping, replays it through the matching writer codec,
-and marks it ready only after reconciliation. Readiness is tied to the physical index UUID; the active Search service
-supplies the compiler capability only when that exact generation is ready. Old year-only generations remain
-unavailable for precise candidate compilation, including under NOT.
+The resumable Subject rebuild allocates the complete canonical mapping, replays current documents and marks it
+ready only after reconciliation. Readiness is tied to the physical index UUID; the active Search service supplies
+the compiler capability only when that exact generation is ready. Incomplete population remains unavailable for
+precise candidate compilation, including under NOT.
 The universal condition editor preserves imported typed endpoints as text, with its existing localized bound
 labels, rather than coercing them into numeric years. Grouped release search uses these existing precise range
 primitives when the exact physical generation is ready.
@@ -95,11 +94,9 @@ operands remain in the repair form and are never silently removed. Grouped respo
 matching release previews and standalone releases. Each work expansion has its own sealed child continuation; cards
 retain current summaries, exact recorded date precision and public figures.
 
-Decision: mixed calendar documents use format 3, derived from the immutable mixed format-2 mapping with calendar
-fact fields; format-2 documents and physical generations retain their year-only meaning. New mixed physical
-generations use the format-3 mapping, and population, replay, reconciliation and continuing native writes select
-their codec from that physical mapping. Publication remains behind the existing complete population and replay
-lifecycle; old generations keep their original mapping and writer shape.
+Decision: canonical v1 Discovery documents preserve precise calendar and credited-name projections in one
+mapping. Population, replay, reconciliation and continuing native writes use that same model. Publication remains
+behind complete current coverage; existing development indexes require a coordinated native rebuild.
 
 ## Grouping execution policy
 
@@ -143,11 +140,17 @@ measurement and browser inspection remain deferred until the applicable validati
 Decision: expose grouped release pages as `release-groups-v1` on the existing subjects search route; child requests
 carry the work ID and their own cursor while group requests retain the group cursor.
 Decision: relevance ranks each work by its first current matching release in native relevance order; ungroupable releases keep their own native relevance position.
-Decision: relevance duplicate suppression uses an immutable fixed-depth 32-nibble UUID trie per cursor; old retained positions migrate through bounded batches with a private preparation pulse, and expired nodes drain in bounded sweeps.
+Decision: relevance duplicate suppression uses one immutable fixed-depth 32-nibble UUID trie per retained
+cursor lineage. Every new lineage starts with an empty membership root. Each position has a required root;
+adding a work copies at most 32 internal nodes plus one leaf, and each membership check follows at most 32 indexed
+edges per candidate. Sibling positions share their parent root and add independent paths. Replay returns the
+same branch node and root; another emitted-work digest on that branch conflicts.
 
-`release-search-relevance-state.ts` stores one membership root on each private lineage position. Adding a work copies at most 32 internal trie nodes plus one leaf, and membership checks follow at most 32 indexed edges for each candidate. Sibling positions share their immutable parent root and add independent paths; replay returns the same branch node and membership root. New state keeps the per-position work delta for bounded expiry cleanup and compatibility with retained readers.
-
-Positions retained before the trie migration have no membership root. Resume builds one in bounded batches of at most 32 lineage positions and 256 work IDs, preserving the existing binding, expiry, branch and work records. Until that build completes, the native stream returns an empty preparation page with a changing private pulse and leaves the native position unchanged. Expired trie nodes, legacy work rows, positions and executions drain in bounded cleanup sweeps.
+`release-search-relevance-state.ts` binds every execution to its principal, complete request, physical generation
+and source cut. The canonical v1 continuation contains only its native frontier and opaque execution/node locator;
+it imports no inline work list or old lineage. Expiry cleanup drains at most 500 positions, 500 trie nodes and
+100 executions per new traversal. Older development state requires coordinated one-time maintenance or normal
+owner retention cleanup, separate from ordinary requests.
 
 Decision: grouped candidate ownership and final release hydration re-evaluate submitted text against current Subjects with the analyzer bound to the active physical generation; name-order work candidates, previews and child resumes use that same predicate, and undecidable text retains Search's `index_not_ready` outcome.
 
@@ -172,8 +175,8 @@ independent per-work progress. Both streams advance past rejected candidates and
 never determine ownership. Missing complete-reader support or evidence makes the operation unavailable; explicit
 incomplete evidence remains unproven, and concealed targets retain the owner's identity-free unknown value.
 
-The encrypted cursor keeps its native position and binding with opaque execution and node UUIDs (plus an alternating
-private migration pulse while an old position is being prepared); it never exposes work IDs. The retained execution
+The encrypted cursor keeps its native position and binding with opaque execution and node UUIDs; it never
+exposes work IDs. The retained execution
 binds the principal, complete request, physical generation and source cut. Resume renews the cursor's 15-minute
 expiry; new traversals perform fixed-size cleanup sweeps. Each state SQL operation is included in the native
 search-read reservation. Child expansion remains independently keyset-paged and does not depend on this state.

@@ -14,6 +14,7 @@ export function exportSectionLabel(section: string): string {
   if (section === 'occurrences') return m.library_export_section_occurrences();
   if (section === 'annotations') return m.library_export_section_annotations();
   if (section === 'provenance') return m.library_export_section_provenance();
+  if (section === 'hostedReading') return m.library_export_section_hosted_reading();
   if (section === 'journals') return m.library_export_section_journals();
   if (section === 'bangumiUploads' || section === 'bangumiEvidence') return m.library_export_section_bangumi();
   if (section === 'malImports' || section === 'malEvidence') return m.library_export_section_mal();

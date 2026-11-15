@@ -12,21 +12,19 @@ import {
 import { commitHostedDraftPointWrite, type HostedDraftPointRevisionWrite } from './hosted-version-draft-write.ts';
 import { resolveHostedVersionRevision } from './hosted-version-revision.ts';
 
-/**
- * Ordered heads use the existing path-local point writer. A compatibility
- * revision returns false so the caller can retain its sealed append stream.
- */
+/** Root append is a canonical path-local point write. Development data is maintained out of band. */
 export async function appendHostedOrderedRootChapter(
   client: AccessClient,
   catalogueId: string,
   expectedRevisionId: string,
   revision: HostedDraftPointRevisionWrite,
   chapter: Extract<OrderedHostedPlacement, { kind: 'chapter' }>,
-): Promise<boolean> {
+): Promise<void> {
   const resolved = await resolveHostedVersionRevision(client, catalogueId, expectedRevisionId);
   if (resolved.kind === 'missing') throw new ContentNotFoundError();
   if (resolved.revisionKind !== 'structure') throw new InvalidHostedStructureError();
-  if (resolved.kind === 'compatibility') return false;
+  if (resolved.kind !== 'ordered')
+    throw new InvalidHostedStructureError('The draft has no canonical ordered selection');
   if (resolved.snapshot.generationKind !== 'draft') throw new InvalidHostedStructureError();
 
   await commitHostedDraftPointWrite(client, catalogueId, revision, {
@@ -38,23 +36,21 @@ export async function appendHostedOrderedRootChapter(
     title: chapter.title,
     placement: { kind: 'chapter', target: chapter.target },
   });
-  return true;
 }
 
-/** Resolve only the explicitly requested members from an ordered draft.
- * Compatibility revisions return null to use their existing bounded reader. */
+/** Resolve only the explicitly requested members from the canonical ordered draft. */
 export async function hostedOrderedReleasePlacements(
   client: AccessClient,
   catalogueId: string,
   revisionId: string,
   occurrenceIds: readonly string[],
-): Promise<readonly OrderedHostedPlacement[] | null> {
+): Promise<readonly OrderedHostedPlacement[]> {
   if (!Array.isArray(occurrenceIds) || occurrenceIds.length > HOSTED_PLACEMENT_LIMIT)
     throw new InvalidHostedStructureError();
   if (!occurrenceIds.length) return [];
 
   const source = await resolveHostedPublicationOrderedSource(client, catalogueId, revisionId);
-  if (!source) return null;
+  if (!source) throw new InvalidHostedStructureError('The draft has no canonical ordered selection');
   const selected = await readHostedPublicationOrderedSourcePoints(client, source, occurrenceIds);
   return selected
     .filter((placement): placement is OrderedHostedPlacement => placement !== null)

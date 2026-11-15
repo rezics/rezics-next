@@ -4,7 +4,12 @@ import { constants } from 'node:fs';
 import { mkdir, mkdtemp, open, rm, stat, type FileHandle } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import type { PreviewPlan, PreviewRecordRow } from './dump-preview-store.ts';
+import {
+  previewInputSelection,
+  PreviewStoreFailure,
+  type PreviewPlan,
+  type PreviewRecordRow,
+} from './dump-preview-store.ts';
 import { compareRetainedProjections, parseJsonField, type SideProjection } from './plan-comparison-diff.ts';
 import {
   ComparisonStoreFailure,
@@ -69,6 +74,8 @@ const REQUIRED_PLAN_COLUMNS = [
   'source_kind',
   'converter_revision',
   'dump_path',
+  'input_kind',
+  'input_selection',
   'view_kind',
   'baseline_id',
   'baseline_present',
@@ -159,20 +166,12 @@ function requireColumns(actual: Set<string>, required: readonly string[], table:
 }
 
 function mapPreviewPlan(row: Record<string, unknown>): PreviewPlan {
-  let inputFamilies: PreviewPlan['inputFamilies'] = [];
-  if (typeof row.input_selection === 'string' && row.input_selection.length) {
-    try {
-      const parsed = JSON.parse(row.input_selection) as unknown;
-      if (Array.isArray(parsed))
-        inputFamilies = parsed.flatMap((item) => {
-          if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
-          const family = Reflect.get(item, 'family');
-          const compression = Reflect.get(item, 'compression');
-          return typeof family === 'string' && typeof compression === 'string' ? [{ family, compression }] : [];
-        });
-    } catch {
-      inputFamilies = [];
-    }
+  let input: Pick<PreviewPlan, 'inputKind' | 'inputFamilies'>;
+  try {
+    input = previewInputSelection(row);
+  } catch (error) {
+    if (error instanceof PreviewStoreFailure) throw new PlanComparisonFailure(error.message, error.code);
+    throw error;
   }
   return {
     previewId: String(row.preview_id),
@@ -180,8 +179,7 @@ function mapPreviewPlan(row: Record<string, unknown>): PreviewPlan {
     sourceKind: String(row.source_kind),
     converterRevision: String(row.converter_revision),
     dumpPath: String(row.dump_path),
-    inputKind: row.input_kind === 'dump-set' ? 'dump-set' : 'dump',
-    inputFamilies,
+    ...input,
     viewKind: row.view_kind as PreviewPlan['viewKind'],
     baselineId: row.baseline_id === null ? null : String(row.baseline_id),
     baselinePresent: Number(row.baseline_present),

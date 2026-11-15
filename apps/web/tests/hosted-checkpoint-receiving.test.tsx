@@ -25,6 +25,7 @@ const row = (n: number): HostedCheckpointPage['items'][number] => ({
     catalogueId: id(100 + n),
     publicationRevisionId: id(200 + n),
     occurrenceId: id(300 + n),
+    targetPostId: id(600 + n),
     targetRevisionId: id(400 + n),
     targetSha256: 'a'.repeat(64),
     documentPosition: null,
@@ -67,8 +68,39 @@ test('exact resume retains the saved publication, occurrence, catalogue, Subject
     ['subject', id(1)],
     ['release', id(201)],
     ['occurrence', id(301)],
+    ['bodyPost', id(601)],
+    ['bodyRevision', id(401)],
+    ['bodySha256', 'a'.repeat(64)],
     ['view', 'chapter'],
   ]);
+});
+
+test('a saved language keeps the exact full body key and refuses metadata for another language', () => {
+  const original = row(1);
+  const selected = {
+    ...original,
+    address: { ...original.address, bodyLanguage: 'zh-Hant' },
+    metadata: { ...original.metadata, bodyLanguage: 'zh-Hant' },
+  };
+  const result = presentHostedCheckpoints({ items: [selected], nextCursor: null });
+  if (result.state !== 'loaded' || result.items[0]?.availability !== 'available') throw new Error('Expected chapter');
+  const href = new URL(hostedCheckpointHref(result.items[0], 'en', hostedBookHref), 'https://site.test');
+  expect(href.searchParams.get('bodyLanguage')).toBe('zh-Hant');
+  expect(href.searchParams.get('bodyPost')).toBe(id(601));
+  expect(href.searchParams.get('bodyRevision')).toBe(id(401));
+  expect(href.searchParams.get('bodySha256')).toBe('a'.repeat(64));
+  expect(presentHostedCheckpoints({ items: [{ ...selected, metadata: original.metadata }], nextCursor: null })).toEqual(
+    {
+      state: 'unavailable',
+    },
+  );
+  for (const bodyLanguage of ['zh-hant', 'en_US', '', 'x'.repeat(64)])
+    expect(
+      presentHostedCheckpoints({
+        items: [{ ...selected, address: { ...selected.address, bodyLanguage } }],
+        nextCursor: null,
+      }),
+    ).toEqual({ state: 'unavailable' });
 });
 
 test('external response defects cannot disclose a title for a different exact target or masquerade as empty', () => {

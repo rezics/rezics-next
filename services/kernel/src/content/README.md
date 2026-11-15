@@ -7,10 +7,10 @@ adds one catalogue at an existing Post identity, in that Post's home; `post:revi
 editing and release. Columns and individual articles need no catalogue. No Subject, edition benefit, separate
 editor, scheduler or global grant is created. Bibliographic associations remain with Semantic.
 
-`hosted-chapters` owns immutable structure revisions and release manifests. Each structure is a bounded tree
-of at most 512 occurrences and depth 16. Parts may be empty; a root-only list is a tree. Caller-supplied occurrence
+`hosted-chapters` owns immutable structure revisions and release manifests. Ordered structures use bounded native
+operations; the 512-placement direct-request limit is not a total structure or release ceiling. Depth remains 16. Parts may be empty; a root-only list is a tree. Caller-supplied occurrence
 UUIDs identify placements permanently, including across moves and removals. Distinct occurrences may select the
-same Post. An occurrence cannot change kind or target Post; chapter revision/digest selections may change in a
+same Post. An occurrence cannot change kind or canonical default target Post; chapter revision/digest selections may change in a
 new structure revision. Sibling positions are dense zero-based integers; the stored preorder supplies navigation.
 Replacing the structure requires its exact head revision. Commands use native receipts and reauthorize retries;
 an attachment failure rolls back only the structure command, never the independently saved Post.
@@ -22,6 +22,11 @@ consent and current native disclosure are owned in
 [hosted chapters](hosted-chapters.md#private-to-public-boundary); unselected revisions stay private. Later body or
 structure edits do not change a released revision's bytes. Releasing an empty selection withdraws the current TOC;
 explicit historical manifests still obey current catalogue and target Access.
+
+The [chapter body-language contract](hosted-chapters.md#chapter-body-languages) adds explicit draft language
+associations to existing exact authored targets, frozen atomically by publication. It preserves the default target,
+ordinary source authority and old exact body links. Web supplies the language control; neither UI locale nor a
+mutable draft chooses different bytes for an already pinned body.
 
 Books, Posts and fixed editions share exact-selection, retained-version, current-use and reclamation invariants.
 Content owns Book candidate storage and the immutable publication descriptor; Access and Commerce retain their
@@ -3303,6 +3308,41 @@ Realm participation is not substituted for Realm reading.
 A post image belongs to the first post that claims it; that post's later revisions may name it again, any other reference is `media_unavailable`, and erasing the post erases it.
 
 A malformed media ID list is a 400 `invalid_request`. Any well-formed reference that cannot be claimed returns the same 409 `media_unavailable` response, whether its ID is unknown, belongs to another route, container or uploader, or its media is reserved, uploaded, rejected, erased or claimed by another post. This response does not identify which case applied; uploaders can read their own media state through the media routes. A 422 `idempotency_conflict` is reserved for reusing an idempotency key with a different request.
+
+### Knowledge destinations
+
+Knowledge images use the ordinary measured reservation, completion, processing, variants, moderation and object
+transport with `purpose: knowledge-image` and an existing owned document as `containerId`. Reservation and
+completion recheck current account update authority and native document ancestry. Saving a revision calls
+`claimKnowledgeMedia` after its head and placement exist, binding at most 32 available uploader-owned images to
+the exact immutable revision's managed membership. The document is the permanent container; no Post identity
+or second Media grant writer is introduced. A different document cannot acquire those images.
+
+`@rezics/definitions/knowledge-media` owns managed locators and exact source coordinates. A bare
+`rezics-media:<id>` is an authored own-claim reference. A contextual locator carries representation, document,
+revision, raw `sourceSha256`, and an exact publication ID for public material. Copying contextual media creates
+no new ownership or claim. Opaque HTTP/signed locators are not native managed references.
+
+Derivative requests require exact Knowledge context in ordinary Media presentation and download calls. Public
+source checks use anonymous Subject admission even for an authenticated owner; private source checks require
+current owner/account admission. Both recheck source metadata, revision membership, raw source digest and current
+Media availability before and after selection, without loading bodies or crossing anchors while a checkout is
+held. Unclaimed originals retain only the uploader's current private document prerequisite. Every byte request,
+including conditional/range/HEAD requests at the website port, obtains the native decision again. Cache policy
+remains private, and an image ID or copied context never grants global blob access.
+
+Publication atomically calls `publishKnowledgeMedia` for the selected revision and marks only its managed images
+with the native lifecycle generation. This marker is retention evidence, never a read grant. Account upload
+erasure retains a Knowledge image only when current source retention permits that same generation; private and
+never-selected uploads follow ordinary erasure and object deletion. Withdrawal and trash retire the generation
+without enumerating media. Claimed identities stay permanent through erasure, and collection remains the ordinary
+Media worker's responsibility.
+
+Cost: each revision/publication touches at most 32 exact image keys. Exact source selection and Media slot reads
+are indexed points; Knowledge owns its bounded ancestry and selected Subject references. Foreign Subject reads
+are prepared and released independently. Each presentation still takes at most 32 IDs, with initial/final source
+and native Media observations and no refill or history scan. Native processing, access, erasure and whole-call
+growth qualification are required after source integration.
 
 ## Account erasure
 

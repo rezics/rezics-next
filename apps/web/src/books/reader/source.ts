@@ -1,5 +1,11 @@
 import type { ComponentProps } from 'react';
 import type { PostReadingBody } from '../../threads/post-reading-body';
+import {
+  bookLanguagePreferenceWithinBounds,
+  sameBookLanguagePreference,
+  type BookLanguagePreference,
+  type BookLanguageSource,
+} from './languages';
 
 /** Consumer bounds, not a claim that a generated Content operation is installed. */
 export const BOOK_CONTENTS_LIMIT = 40;
@@ -14,11 +20,12 @@ export type BookPublication = Readonly<{
   releaseRevisionId?: string;
 }>;
 export type BookBodySelection = Readonly<{ postId: string; revisionId: string; sha256: string }>;
-export type BookSelection = Readonly<{ occurrenceId: string; body: BookBodySelection }>;
+export type BookSelection = Readonly<{ occurrenceId: string; body: BookBodySelection; bodyLanguage?: string }>;
 export type BookChapterAddress = Readonly<{
   kind: 'chapter';
   publication: BookPublication;
   selection: BookSelection;
+  languagePreference?: BookLanguagePreference;
 }>;
 export type BookContentsAddress = Readonly<{
   kind: 'contents';
@@ -26,6 +33,7 @@ export type BookContentsAddress = Readonly<{
   parentOccurrenceId: string | null;
   cursor: string | null;
   selection: BookSelection | null;
+  languagePreference?: BookLanguagePreference;
 }>;
 export type BookAddress = BookChapterAddress | BookContentsAddress;
 
@@ -63,6 +71,7 @@ export type BookChapterPage = PageBase &
     address: BookChapterAddress;
     title: string;
     language: string | null;
+    currentLocationUnavailable?: true;
     direction: 'ltr' | 'rtl' | 'auto';
     body: BookDocument;
     /** Current location; a move may change it without changing the selection. */
@@ -104,6 +113,7 @@ export type BookSourceObservation = Readonly<{
   state: 'current' | 'unavailable' | 'not-installed';
 }>;
 export type HostedBookSource = Readonly<{
+  languages?: BookLanguageSource;
   getSnapshot: () => BookSourceObservation;
   subscribe: (retired: () => void) => () => void;
   /** One bounded native observation, including exact body, context and neighbours. No hydration loop. */
@@ -127,12 +137,18 @@ export function sameSelection(a: BookSelection | null, b: BookSelection | null) 
   return a === null || b === null
     ? a === b
     : a.occurrenceId === b.occurrenceId &&
+        a.bodyLanguage === b.bodyLanguage &&
         a.body.postId === b.body.postId &&
         a.body.revisionId === b.body.revisionId &&
         a.body.sha256 === b.body.sha256;
 }
 export function sameBookAddress(a: BookAddress, b: BookAddress): boolean {
-  if (!samePublication(a.publication, b.publication) || !sameSelection(a.selection, b.selection)) return false;
+  if (
+    !samePublication(a.publication, b.publication) ||
+    !sameSelection(a.selection, b.selection) ||
+    !sameBookLanguagePreference(a.languagePreference, b.languagePreference)
+  )
+    return false;
   return a.kind === 'chapter'
     ? b.kind === 'chapter'
     : b.kind === 'contents' && a.parentOccurrenceId === b.parentOccurrenceId && a.cursor === b.cursor;
@@ -140,6 +156,7 @@ export function sameBookAddress(a: BookAddress, b: BookAddress): boolean {
 
 /** Keep untrusted host coordinates bounded before dispatch; native IDs retain their own grammar. */
 export function bookAddressWithinBounds(address: BookAddress): boolean {
+  if (!bookLanguagePreferenceWithinBounds(address.languagePreference)) return false;
   const identity = (value: string) => value.length > 0 && value.length <= 1024;
   if (!identity(address.publication.id) || !identity(address.publication.structureRevisionId)) return false;
   if (address.publication.releaseRevisionId !== undefined && !identity(address.publication.releaseRevisionId))
@@ -147,7 +164,9 @@ export function bookAddressWithinBounds(address: BookAddress): boolean {
   const selection = address.selection;
   if (
     selection &&
-    (!identity(selection.occurrenceId) ||
+    ((selection.bodyLanguage !== undefined &&
+      !bookLanguagePreferenceWithinBounds({ language: selection.bodyLanguage, preferredLanguages: [] })) ||
+      !identity(selection.occurrenceId) ||
       !identity(selection.body.postId) ||
       !identity(selection.body.revisionId) ||
       !/^[a-f0-9]{64}$/i.test(selection.body.sha256))

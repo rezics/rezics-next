@@ -172,6 +172,8 @@ const typed = [
   'GET /v1/hostedCatalogues/:id/children',
   'GET /v1/hostedCatalogues/:id/occurrences/:occurrenceId',
   'GET /v1/hostedCatalogues/:id/occurrences/:occurrenceId/metadata',
+  'GET /v1/hostedCatalogues/:id/occurrences/:occurrenceId/body',
+  'GET /v1/hostedCatalogues/:id/occurrences/:occurrenceId/languages',
   'GET /v1/hostedCatalogues/:id/occurrences/:occurrenceId/navigation',
   'GET /v1/subjects/:id/hostedCatalogues',
   'GET /v1/knowledge/documents/:id',
@@ -197,8 +199,7 @@ const typed = [
   'POST /v1/hostedCatalogues/:id/$moveDraftPoint',
   'POST /v1/hostedCatalogues/:id/$publishChapter',
   'POST /v1/hostedCatalogues/:id/$replacePublishedChapter',
-  'POST /v1/hostedCatalogues/:id/$convertDraft',
-  'POST /v1/hostedCatalogues/:id/$advanceLegacyPublicBaseline',
+  'POST /v1/hostedCatalogues/:id/occurrences/:occurrenceId/$bindLanguage',
   'POST /v1/knowledge/documents/:id/publication/$select',
   'POST /v1/knowledge/documents/:id/revisions/$revise',
   'POST /v1/knowledge/documents/:id/$trash',
@@ -668,13 +669,24 @@ test("the kernel app's type, which is the Eden contract, carries exactly the rou
     'x-rate-limit': { family: 'write', units: 1 },
     security: [{ bearerAuth: [] }],
   });
-  expect(paths['/v1/hostedCatalogues/{id}:convertDraft']?.post).toMatchObject({
-    operationId: 'hosted_catalogue.convert_draft',
+  expect(paths['/v1/hostedCatalogues/{id}/occurrences/{occurrenceId}:bindLanguage']?.post).toMatchObject({
+    operationId: 'hosted_catalogue.bind_chapter_language',
     'x-action': 'post:revise',
     'x-exposure': 'public',
     'x-rate-limit': { family: 'write', units: 1 },
     security: [{ bearerAuth: [] }],
   });
+  expect(paths['/v1/hostedCatalogues/{id}:convertDraft']).toBeUndefined();
+  expect(paths['/v1/hostedCatalogues/{id}:advanceLegacyPublicBaseline']).toBeUndefined();
+  expect(paths['/v1/hostedCatalogues/{id}/occurrences/{occurrenceId}/languages']?.get).toMatchObject({
+    operationId: 'hosted_catalogue.occurrence_languages',
+    'x-action': 'post:read',
+    'x-exposure': 'public',
+    security: [{}, { bearerAuth: [] }],
+  });
+  expect(paths['/v1/hostedCatalogues/{id}/occurrences/{occurrenceId}/body']?.get?.operationId).toBe(
+    'hosted_catalogue.occurrence_body',
+  );
   expect(paths['/v1/posts/{id}:issueRevisionDisclosure']?.post).toMatchObject({
     operationId: 'post.issue_revision_disclosure',
     'x-action': 'post:revise',

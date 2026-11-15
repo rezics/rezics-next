@@ -1,4 +1,4 @@
-import { afterAll, expect, spyOn, test } from 'bun:test';
+import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { act, createElement, useSyncExternalStore } from 'react';
 import type { StudioState } from '../src/studio/controller';
 import type { BookOrganizerPort, BookStructure, StudioPort } from '../src/studio/contract';
@@ -627,5 +627,124 @@ test('add, rename and remove recheck current identities without resetting retain
     organize.mockRestore();
     fresh.mockRestore();
     host.remove();
+  }
+});
+
+test('chapter language form uses an inspected exact saved version and replays an uncertain association without saving a Post', async () => {
+  const previousLocale = getLocale();
+  setLocale('en', { reload: false });
+  const { editionDocumentDigest } = await import('../src/content-editions/edition-model');
+  const currentBody = fromPlainText('Current saved body'),
+    oldBody = fromPlainText('Earlier saved body');
+  const exact = {
+    postId: 'saved-post',
+    revisionId: 'current-revision',
+    sha256: await editionDocumentDigest(currentBody),
+  };
+  const historical = {
+    exact: { ...exact, revisionId: 'historical-revision', sha256: await editionDocumentDigest(oldBody) },
+    title: 'Saved title',
+    body: oldBody,
+    mediaIds: [],
+    savedAt: '2026-11-15T01:00:00Z',
+  };
+  const structure: BookStructure = {
+    catalogueId: 'book',
+    revision: 'draft-head',
+    canOrganize: true,
+    limits: { maxDepth: 3, maxPlacements: 10 },
+    placements: [
+      {
+        occurrenceId: 'chapter',
+        parentOccurrenceId: null,
+        title: 'Chapter',
+        defaultLanguage: 'en',
+        target: { kind: 'chapter', document: exact },
+      },
+    ],
+  };
+  const writes: Parameters<BookOrganizerPort['change']>[0][] = [];
+  const save = mock(unavailable);
+  const bookPort: BookOrganizerPort = {
+    canBindChapterLanguage: () => true,
+    change: async (input) => {
+      writes.push(structuredClone(input));
+      return writes.length === 1
+        ? { ok: false, error: { kind: 'uncertain', message: 'Recover the same command' } }
+        : { ok: true, value: { ...structure, revision: 'associated-head' } };
+    },
+  };
+  const controller = new StudioController(
+    {
+      visitKey: 'language-association',
+      projectId: 'book',
+      title: 'Book',
+      profile: { kind: 'book', structure },
+      documents: { items: [], nextCursor: null },
+      publications: { items: [], nextCursor: null },
+      canCreateDraft: true,
+      canPublish: true,
+      initialSelection: {
+        revision: { ...historical, exact, body: currentBody },
+        permissions: { edit: true, publish: true },
+      },
+    },
+    {
+      ...port,
+      saveDraft: save,
+      versions: async () => ({ ok: true, value: { items: [historical], nextCursor: null } }),
+      revision: async () => ({ ok: true, value: historical }),
+    },
+    bookPort,
+  );
+  const disconnect = controller.connect();
+  await controller.loadVersions();
+  await controller.inspectVersion(historical.exact);
+  const host = document.body.appendChild(document.createElement('main')),
+    root = createRoot(host),
+    user = userEvent.setup({ document });
+  try {
+    await act(async () => root.render(createElement(OrganizationHarness, { controller })));
+    await act(async () => user.click(getByRole(host, 'button', { name: 'Organize Chapter', exact: true })));
+    await act(async () =>
+      user.click(getByRole(document.body, 'menuitem', { name: 'Chapter body languages', exact: true })),
+    );
+    const form = getByRole(host, 'form', { name: 'Chapter body languages' });
+    expect(form.textContent).toContain('The inspected historical version will be attached.');
+    expect(form.textContent).toContain(historical.exact.revisionId);
+    expect(getByRole(form, 'button', { name: 'Declare this language as the default' }).hasAttribute('disabled')).toBe(
+      true,
+    );
+    await act(async () => user.type(getByRole(form, 'textbox', { name: 'Language code' }), 'fr'));
+    const title = getByRole(form, 'textbox', { name: 'Chapter title in this language' });
+    await act(async () => {
+      await user.clear(title);
+      await user.type(title, 'Ouverture');
+    });
+    await act(async () => user.click(getByRole(form, 'button', { name: 'Attach saved version', exact: true })));
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toMatchObject({
+      catalogueId: 'book',
+      expectedRevision: 'draft-head',
+      change: {
+        kind: 'bind-language',
+        occurrenceId: 'chapter',
+        language: 'fr',
+        title: 'Ouverture',
+        document: historical.exact,
+        makeDefault: false,
+      },
+    });
+    await act(async () => user.click(getByRole(form, 'button', { name: 'Recover the same association', exact: true })));
+    expect(writes).toHaveLength(2);
+    expect(writes[1]).toEqual(writes[0]);
+    expect(save).not.toHaveBeenCalled();
+    expect(controller.snapshot().selected?.source.revision.exact).toEqual(exact);
+    expect(controller.snapshot().selected?.body).toBe(currentBody);
+  } finally {
+    await act(async () => root.unmount());
+    disconnect();
+    host.remove();
+    setLocale(previousLocale, { reload: false });
   }
 });

@@ -5,9 +5,10 @@ import { removeCopy, saveCopy, submitCopy } from './copies-read';
 /** The ordinary HTML form and enhanced editor use the same revisioned write functions. */
 export async function postCopyForm(client: KernelClient, request: Request, env: Partial<SessionEnv>) {
   const form = await request.clone().formData();
-  const data = Object.fromEntries(form);
+  const { mediaCondition, packagingCondition, ...data } = Object.fromEntries(form);
+  const conditions = { mediaCondition, packagingCondition };
   const condition = (field: 'mediaCondition' | 'packagingCondition') => {
-    const value = data[field];
+    const value = conditions[field];
     if (value === undefined || value === '') return {};
     if (value === '__clear__') return { [field]: null };
     return { [field]: value };

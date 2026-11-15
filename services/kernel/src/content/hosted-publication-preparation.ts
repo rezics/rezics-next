@@ -19,6 +19,7 @@ import { hostedCatalogue } from './hosted-chapters-store.ts';
 import type { HostedCommandContext, HostedDependencies } from './hosted-chapters-model.ts';
 import {
   advanceHostedPublicationStaging,
+  advanceHostedPublicationLanguageTargets,
   appendHostedPublicationSelectionBatch,
   beginHostedPublicationStaging,
   cancelHostedPublicationStagingWithEvidence,
@@ -47,6 +48,7 @@ import {
   sealHostedVersionReleaseCandidate,
 } from './hosted-version-release-candidate.ts';
 import type { HostedVersionReleaseCandidateCheckpoint } from './hosted-version-release-candidate-model.ts';
+import { resolveHostedVersionRevision } from './hosted-version-revision.ts';
 
 export type HostedPublicationPreparationDependencies = HostedDependencies & ContentCommandDependencies;
 
@@ -150,8 +152,9 @@ function preparationCommand(
     const stageBoundAuthorization: CommandAuthorization = {
       ...baseAuthorization,
       async prepare(attempt) {
-        const evidence = await baseAuthorization.prepare!(attempt);
         if (stageBinding) {
+          // Authorize the private owner read, then mint the evidence retained by the write.
+          await baseAuthorization.prepare!(attempt);
           const staged = (
             await snapshot(deps, catalogueId, context, (client) =>
               client.query<{ initiator_account_id: string; owner_epoch: string }>(
@@ -171,7 +174,7 @@ function preparationCommand(
             throw new ContentNotFoundError();
           }
         }
-        return evidence;
+        return baseAuthorization.prepare!(attempt);
       },
     };
     const preparedByTime = new WeakMap<AuthoritativeTime, unknown>();
@@ -249,6 +252,13 @@ export function startHostedPublicationPreparation(
     input,
     context,
     async (tx, time) => {
+      const source = await resolveHostedVersionRevision(tx as AccessClient, catalogueId, input.expectedRevisionId);
+      if (
+        source.kind !== 'ordered' ||
+        source.revisionKind !== 'structure' ||
+        source.snapshot.generationKind !== 'draft'
+      )
+        throw new HostedPublicationStagingConflictError('Publication preparation requires the canonical ordered draft');
       const expiresAt = new Date(Date.parse(authoritativeTimeValue(time)) + PREPARATION_LIFETIME_MS);
       const begun = await beginHostedPublicationStaging(tx as AccessClient, actor, {
         catalogueId,
@@ -411,16 +421,29 @@ export function advanceHostedPublicationPreparation(
           acknowledged ??
           preparationResult(progress(catalogueId, advanced.progress), stageRead.expired || !advanced.replayed);
       } else if (stage.state === 'ready') {
-        const source = await sealHostedPublicationStaging(tx as AccessClient, actor, stageLocator);
-        const candidate = await beginHostedVersionReleaseCandidate(tx, actor, source.seal);
-        const sealedStage = await readHostedPublicationStagingProgress(tx as AccessClient, actor, stageLocator);
-        phase = 'candidate_begin';
-        fromFrontier = '-1';
-        toFrontier = candidate.checkpoint.afterSourceOrder ?? '-1';
-        result = preparationResult(
-          progress(catalogueId, sealedStage, candidateProgress(candidate.checkpoint)),
-          stageRead.expired || !source.replayed || !candidate.replayed,
+        const languages = await advanceHostedPublicationLanguageTargets(
+          tx as AccessClient,
+          actor,
+          stageLocator,
+          preparation,
         );
+        if (languages.changed) {
+          phase = 'language_targets';
+          processed = languages.processed;
+          const currentStage = await readHostedPublicationStagingProgress(tx as AccessClient, actor, stageLocator);
+          result = preparationResult(progress(catalogueId, currentStage), true);
+        } else {
+          const source = await sealHostedPublicationStaging(tx as AccessClient, actor, stageLocator);
+          const candidate = await beginHostedVersionReleaseCandidate(tx, actor, source.seal);
+          const sealedStage = await readHostedPublicationStagingProgress(tx as AccessClient, actor, stageLocator);
+          phase = 'candidate_begin';
+          fromFrontier = '-1';
+          toFrontier = candidate.checkpoint.afterSourceOrder ?? '-1';
+          result = preparationResult(
+            progress(catalogueId, sealedStage, candidateProgress(candidate.checkpoint)),
+            stageRead.expired || !source.replayed || !candidate.replayed,
+          );
+        }
       } else if (stage.state === 'sealed') {
         const materialization = await candidateAfterSourceSeal(tx, actor, stageId, catalogueId);
         const checkpoint = materialization.checkpoint;

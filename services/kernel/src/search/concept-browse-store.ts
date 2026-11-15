@@ -96,7 +96,7 @@ export function createConceptBrowseStore(pool: Pool, prefix: string, scopeId: st
   const now = options.clock ?? Date.now;
   const charge = (statements: number, rows: number, bytes: number) => reserve?.({ statements, rows, bytes });
   const matches = (state: ConceptBrowseState) => {
-    if (state.version !== 2 || state.retained.id !== scopeId || !/^[1-9][0-9]*$/.test(state.retained.revision))
+    if (state.version !== 1 || state.retained.id !== scopeId || !/^[1-9][0-9]*$/.test(state.retained.revision))
       throw new TypeError('Foreign concept scope locator');
     return [prefix, scopeId, state.retained.revision, definitionOf(state)];
   };

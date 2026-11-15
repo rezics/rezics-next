@@ -14,10 +14,6 @@ import {
   type StoppedRecoveryReceivingAction,
 } from './stopped-action.ts';
 
-// Compatibility exports for synthetic callers; production reads its own loaded policy.
-export const WIDTH_WORKER_THRESHOLD = defaultPolicy.width.workerThreshold;
-export const WIDTH_BUCKET_MS = defaultPolicy.width.bucketMs;
-
 export const widthGovernorMigrations = [
   {
     module: 'width-governor',
@@ -28,12 +24,8 @@ export const widthGovernorMigrations = [
       manager TEXT NOT NULL,
       delivered_at TEXT NOT NULL,
       PRIMARY KEY(goal, bucket)
-    );`,
-  },
-  {
-    module: 'width-governor',
-    version: 2,
-    sql: `CREATE TABLE width_governor_receiver_deliveries (
+    );
+    CREATE TABLE width_governor_receiver_deliveries (
       goal TEXT NOT NULL,
       bucket INTEGER NOT NULL,
       manager TEXT NOT NULL,
@@ -286,7 +278,9 @@ function identitySet(sets: IdentitySets, goal: string | null): Set<string> {
   return sets.get(goal) ?? new Set();
 }
 
-function isProcessIdentity(value: WidthRow): ProcessIdentity | undefined {
+function isProcessIdentity(
+  value: Pick<WidthRow, 'pid' | 'process_start' | 'process_boot' | 'process_group'>,
+): ProcessIdentity | undefined {
   // Older non-STRICT ANY projections coerce decimal start strings to integers. Never round an unsafe value.
   const start =
     typeof value.process_start === 'number' && Number.isSafeInteger(value.process_start) && value.process_start >= 0
@@ -313,9 +307,7 @@ function tableExists(db: Database, name: string): boolean {
 }
 
 function readCodeOnlyWriterRegistry(stateDirectory: string | undefined): CodeOnlyRegistry {
-  const unavailable = (
-    reason: NonNullable<WidthEvidence['codeOnlyRegistry']['reason']>,
-  ): CodeOnlyRegistry => ({
+  const unavailable = (reason: NonNullable<WidthEvidence['codeOnlyRegistry']['reason']>): CodeOnlyRegistry => ({
     evidence: {
       status: 'unavailable',
       reason,
@@ -648,6 +640,8 @@ function finishSnapshot(
         const owners = ownership.owners.get(goal.goal) ?? [];
         return {
           ...counts(goal, goal.goal),
+          goal: goal.goal,
+          evidenceReceiverActions: goal.evidenceReceiverActions,
           sourceManagerIds: [...sourceManagers].sort((left, right) => left.localeCompare(right)),
           sourceManagerConflict: sourceManagerMissing || sourceManagers.size > 1,
           managerId: ownership.evidence.status === 'available' && owners.length === 1 ? owners[0]! : null,
@@ -694,15 +688,7 @@ function readSnapshotSync(
   );
   const ownership = readCurrentGoalOwnership(db);
   const date = at instanceof Date ? at : new Date(at);
-  return finishSnapshot(
-    date.toISOString(),
-    system,
-    goals,
-    sourceIdentities,
-    registry,
-    ownership,
-    codeOnlyWriters,
-  );
+  return finishSnapshot(date.toISOString(), system, goals, sourceIdentities, registry, ownership, codeOnlyWriters);
 }
 
 async function readSnapshotAsync(
@@ -740,15 +726,7 @@ async function readSnapshotAsync(
   );
   const ownership = readCurrentGoalOwnership(db);
   const date = at instanceof Date ? at : new Date(at);
-  return finishSnapshot(
-    date.toISOString(),
-    system,
-    goals,
-    sourceIdentities,
-    registry,
-    ownership,
-    codeOnlyWriters,
-  );
+  return finishSnapshot(date.toISOString(), system, goals, sourceIdentities, registry, ownership, codeOnlyWriters);
 }
 
 /** Read bounded indexed pages from the shared current-attempt projection. */
@@ -833,8 +811,7 @@ function receivingActionText(
 
 function registryEvidenceText(evidence: WidthEvidence['codeOnlyRegistry']): string {
   if (evidence.status === 'available') return 'available';
-  if (evidence.status === 'partial')
-    return `partial (${evidence.malformedRows} malformed writing or registry row(s))`;
+  if (evidence.status === 'partial') return `partial (${evidence.malformedRows} malformed writing or registry row(s))`;
   switch (evidence.reason) {
     case 'state-directory-not-configured':
       return 'unavailable (state directory not configured)';
@@ -901,7 +878,7 @@ export async function sweepWidthGovernor(
   const snapshot = await readWidthSnapshot(db, at, {
     yieldBetweenPages: true,
     policy,
-    stateDirectory: options.stateDirectory,
+    ...(options.stateDirectory === undefined ? {} : { stateDirectory: options.stateDirectory }),
     ...(options.processIsLive ? { processIsLive: options.processIsLive } : {}),
   });
   const date = at instanceof Date ? at : new Date(at);

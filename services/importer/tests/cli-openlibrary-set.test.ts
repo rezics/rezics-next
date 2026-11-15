@@ -39,7 +39,7 @@ async function mixedManifest(root: string, editions: Uint8Array = gzipSync(Buffe
   await writeFile(
     path,
     JSON.stringify({
-      version: 2,
+      version: 1,
       source: 'openlibrary',
       members: [
         { family: 'author', path: 'authors.txt.gz', compression: 'gzip' },
@@ -158,5 +158,5 @@ test('help names dump-set gzip members and whole-set decode-budget', async () =>
   const help = await runImportCli(['--help']);
   expect(help.stdout).toContain('--dump-set');
   expect(help.stdout).toContain('whole-set decoded-byte ceiling');
-  expect(help.stdout).toContain('version 2');
+  expect(help.stdout).toContain('Canonical dump-set version 1 requires explicit per-member none or gzip');
 });

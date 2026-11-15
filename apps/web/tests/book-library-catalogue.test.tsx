@@ -9,8 +9,6 @@ import type { SearchPageData } from '../src/search/search';
 import { literaryGrainExample } from '../src/features/catalogue/literary-reader/examples';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
-mock.module('@tanstack/react-start', () => start);
-mock.module('@tanstack/react-start/server', () => start);
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
@@ -38,6 +36,11 @@ for (const key of [
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+// Install the browser before live application imports capture browser-only read eligibility.
+const actualStart = await import('@tanstack/react-start');
+const actualServer = await import('@tanstack/react-start/server');
+mock.module('@tanstack/react-start', () => ({ ...actualStart, ...start }));
+mock.module('@tanstack/react-start/server', () => ({ ...actualServer, ...start }));
 const { createRoot } = await import('react-dom/client');
 const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
   await import('@tanstack/react-router');
@@ -63,6 +66,9 @@ const server = await import('../src/library/personal-library-server');
 const rows = await import('../src/library/shelf-rows');
 const actions = await import('../src/library/entries-actions');
 const { libraryContinueQuery } = await import('../src/library/continue-read');
+const { PageVisitBinding } = await import('../src/subject/page-visit-binding');
+const { LibraryApplicationBoundary } = await import('../src/session/library-application');
+const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
 
 const host = document.createElement('main');
 document.body.append(host);
@@ -78,7 +84,11 @@ async function render(children: ReactNode) {
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>
-        <RouterContextProvider router={router}>{children}</RouterContextProvider>
+        <RouterContextProvider router={router}>
+          <LibraryApplicationBoundary>
+            <PageVisitBinding>{children}</PageVisitBinding>
+          </LibraryApplicationBoundary>
+        </RouterContextProvider>
       </QueryClientProvider>,
     );
     await tick();
@@ -326,8 +336,15 @@ test('book shelf safe sign-in, native page bound, existing entry action/readback
   }).catch((error: unknown) => error);
   expect(denied).toMatchObject({ options: { href: `/auth/sign-in?return_to=${encodeURIComponent(href)}` } });
   client.setQueryData(['session'], viewer('A'));
-  client.setQueryData(['exposure', 'viewer'], ['personal_library', 'reading_progress']);
   client.setQueryData(['exposure', 'anonymous'], []);
+  const viewerLifetime = viewerExposureLifetime(client);
+  const releaseViewer = viewerLifetime.subscribe(() => {});
+  const observation = viewerLifetime.getSnapshot();
+  if (observation.state !== 'signed-in') throw new Error('The fixture viewer was not enrolled');
+  client.setQueryData(viewerExposureQuery(observation.observation).queryKey, {
+    subject: 'A',
+    admitted: ['personal_library', 'reading_progress'],
+  });
   const entry: PersonalLibraryEntry = {
     subjectId: id(1),
     state: 'planned',
@@ -414,5 +431,6 @@ test('book shelf safe sign-in, native page bound, existing entry action/readback
     reads.mockRestore();
     write.mockRestore();
     fetch.mockRestore();
+    releaseViewer();
   }
 });

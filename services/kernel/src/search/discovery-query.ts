@@ -7,11 +7,7 @@ import {
 import { assertCompleteSearch } from './complete-search.ts';
 import { SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import type { SearchSortValue } from './cursor.ts';
-import {
-  MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT,
-  MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT,
-  MIXED_DISCOVERY_DOCUMENT_FORMAT,
-} from './discovery.ts';
+import { DISCOVERY_DOCUMENT_FORMAT } from './discovery.ts';
 import { discoveryNativeQuery } from './discovery-native-query.ts';
 import { parseCreditedNameEvidence } from './credit-search-query.ts';
 import type { CreditSearchWitness } from './credit-search.ts';
@@ -202,7 +198,7 @@ export async function queryDiscoveryCandidates(
   return { candidates, pit: typeof renewed === 'string' ? renewed : pit };
 }
 
-/** Canonical mixed DTO decoder. A legacy document is never reinterpreted as mixed-public-v1. */
+/** Canonical discovery DTO decoder. */
 export function readDiscoveryEngineResult(
   body: unknown,
   registry: DiscoveryRegistry,
@@ -213,9 +209,7 @@ export function readDiscoveryEngineResult(
   return {
     hits: candidates.map(({ key, document, index, sort, matched, engineEvidence, creditEvidence }) => {
       if (
-        (document.document_format !== MIXED_DISCOVERY_DOCUMENT_FORMAT &&
-          document.document_format !== MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT &&
-          document.document_format !== MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT) ||
+        document.document_format !== DISCOVERY_DOCUMENT_FORMAT ||
         (plan.sort === 'name' && sort[0] !== document.name_sort)
       )
         malformed();

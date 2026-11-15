@@ -13,6 +13,14 @@ import {
   type VndbAcquisitionPhase,
 } from './vndb-acquisition.ts';
 
+/** Existing acquisitions must already carry current nullable materialization metadata. */
+export function hasVndbTableRunMetadata(database: Database): boolean {
+  const columns = database.query('PRAGMA table_info(vndb_table_runs)').all() as { name: string }[];
+  return ['materialized_generation', 'snapshot_json'].every((name) =>
+    columns.some((column) => column.name === name),
+  );
+}
+
 // Decompressed native entry content only; the reader's tar framing cap is independent.
 export const DEFAULT_VNDB_ARCHIVE_BYTES = 16 * 1024 ** 3;
 export const MAX_VNDB_ARCHIVE_BYTES = 64 * 1024 ** 3;
@@ -334,6 +342,11 @@ export class VndbTablesStore {
     this.chunkBytes = bounded(dumpChunkLimit(options.maxChunkBytes), DEFAULT_DUMP_CHUNK_BYTES);
     // Match importer staging's WAL policy: each completed statement is durable
     // across reopen, without a filesystem synchronization for every COPY row.
+    if (
+      db.query("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='vndb_table_runs'").get() &&
+      !hasVndbTableRunMetadata(db)
+    )
+      throw new Error('Unsupported VNDB table schema: materialization metadata is missing.');
     db.exec('PRAGMA journal_mode = WAL');
     db.exec('PRAGMA synchronous = NORMAL');
     db.exec(`
@@ -341,8 +354,11 @@ export class VndbTablesStore {
         source TEXT NOT NULL, run_id TEXT NOT NULL, state TEXT NOT NULL,
         source_records INTEGER NOT NULL DEFAULT 0, staged_rows INTEGER NOT NULL DEFAULT 0,
         staged_bytes INTEGER NOT NULL DEFAULT 0, child_cap INTEGER NOT NULL,
+        materialized_generation TEXT, snapshot_json TEXT,
         PRIMARY KEY (source, run_id)
       );
+      CREATE UNIQUE INDEX IF NOT EXISTS vndb_materialized_generation
+        ON vndb_table_runs(source,materialized_generation) WHERE materialized_generation IS NOT NULL;
       CREATE TABLE IF NOT EXISTS vndb_table_rows (
         source TEXT NOT NULL, run_id TEXT NOT NULL, table_name TEXT NOT NULL,
         id TEXT NOT NULL, id_number INTEGER NOT NULL, child TEXT NOT NULL, payload TEXT NOT NULL,

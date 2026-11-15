@@ -1,5 +1,8 @@
 import { afterAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
+import { openDb, migrate } from '../tools/goal/src/db.ts';
+import { nativeUnitMigrations } from '../tools/goal/src/native-units.ts';
+import { recordNativeUnitSourceObservation } from '../tools/goal/src/native-unit-provenance.ts';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -8,6 +11,7 @@ import {
   currentCheckSourceManifest,
   parseCheckRunArguments,
   prepareCheckRunInvocation,
+  prepareCandidateSnapshot,
   reconcileRegisteredCheckRun,
   runCheck,
   runPreparedCheckRunInvocation,
@@ -300,6 +304,156 @@ function removeRetainedSnapshot(fixture: ReturnType<typeof candidate>, snapshot:
   );
   rmSync(snapshot.scratch, { recursive: true, force: true });
 }
+
+function nativeUnitEnvironmentFor(fixture: ReturnType<typeof candidate>) {
+  return {
+    REZICS_NATIVE_UNIT_CONTEXT: JSON.stringify({
+      version: 1,
+      unit: 'book-unit',
+      threadId: '11111111-1111-4111-8111-111111111111',
+      goalId: '22222222-2222-4222-8222-222222222222',
+      sourceRevision: fixture.revision,
+      worktree: fixture.root,
+      registry: join(fixture.parent, 'goal.sqlite'),
+      briefHash: 'a'.repeat(64),
+      registeredAt: '2026-11-15T00:00:00.000Z',
+      goalObservedAt: '2026-11-15T00:00:00.000Z',
+      requires: ['native', 'browser'],
+    }),
+  };
+}
+
+test('native shared-tree capture uses its committed checkpoint while newer edits and commits continue', async () => {
+  const fixture = candidate();
+  writeFileSync(join(fixture.root, 'src/input.ts'), 'export const value = 8;\n');
+  git(fixture.root, 'add', 'src/input.ts');
+  git(fixture.root, 'commit', '--quiet', '-m', 'newer checkpoint');
+  writeFileSync(join(fixture.root, 'src/input.ts'), 'export const value = 9;\n');
+  writeFileSync(join(fixture.root, 'src/new.ts'), 'new unfinished work\n');
+  const snapshot = await prepareCandidateSnapshot(
+    fixture.root,
+    fixture.revision,
+    undefined,
+    [],
+    undefined,
+    'committed',
+  );
+  try {
+    expect(git(snapshot.workspace, 'rev-parse', 'HEAD')).toBe(fixture.revision);
+    expect(readFileSync(join(snapshot.workspace, 'src/input.ts'), 'utf8')).toContain('value = 7');
+    expect(existsSync(join(snapshot.workspace, 'src/new.ts'))).toBe(false);
+    expect(readFileSync(join(fixture.root, 'src/input.ts'), 'utf8')).toContain('value = 9');
+  } finally {
+    removeRetainedSnapshot(fixture, snapshot);
+  }
+});
+
+test('native shared-tree results retain exact captured pass or failure when current source advances', async () => {
+  for (const exitCode of [0, 1]) {
+    const fixture = candidate();
+    writeFileSync(fixture.envFile, JSON.stringify(nativeUnitEnvironmentFor(fixture)));
+    const finals: string[] = [];
+    const result = await runCheck(argsFor(fixture, ['bun', 'test', 'book-journey']), {
+      settlementWriter: (line) => finals.push(line),
+      stateDirectory: fixture.parent,
+      transport: async (options) => {
+        expect(readFileSync(join(options.workspace, 'src/input.ts'), 'utf8')).toContain('value = 7');
+        writeFileSync(join(fixture.root, 'src/input.ts'), 'newer unfinished source\n');
+        const native = receipt('a', exitCode);
+        await options.allocated?.({ host: 'a', run: native.run });
+        options.completed?.(native);
+        options.settled?.(remoteSettlement(options, native));
+        return exitCode;
+      },
+    });
+    expect(result).toBe(exitCode);
+    const final = JSON.parse(finals[0]!);
+    expect(final.binding).toMatchObject({ sourceMode: 'committed', sourceRevision: fixture.revision });
+    expect(final.native.exitCode).toBe(exitCode);
+    expect(final.cleanup.source).toBe('verified');
+    expect(readFileSync(join(fixture.root, 'src/input.ts'), 'utf8')).toBe('newer unfinished source\n');
+  }
+});
+
+test('native shared-tree acceptance still refuses a modified frozen source', async () => {
+  const fixture = candidate();
+  writeFileSync(fixture.envFile, JSON.stringify(nativeUnitEnvironmentFor(fixture)));
+  let retained: CandidateSnapshot | undefined;
+  const finals: string[] = [];
+  const result = await runCheck(argsFor(fixture, ['bun', 'test', 'book-journey']), {
+    settlementWriter: (line) => finals.push(line),
+    stateDirectory: fixture.parent,
+    onRetainSnapshot: (snapshot) => {
+      retained = snapshot;
+    },
+    transport: async (options) => {
+      writeFileSync(join(options.workspace, 'src/input.ts'), 'corrupted frozen source\n');
+      const native = receipt('a', 0);
+      await options.allocated?.({ host: 'a', run: native.run });
+      options.completed?.(native);
+      options.settled?.(remoteSettlement(options, native));
+      return 0;
+    },
+  });
+  expect(result).toBe(75);
+  expect(JSON.parse(finals[0]!).cleanup.source).toBe('changed');
+  if (retained) removeRetainedSnapshot(fixture, retained);
+});
+
+test('native observed source requires a run-associated frozen settlement and matching physical receipt', async () => {
+  const fixture = candidate();
+  const runId = randomUUID();
+  const environment = { ...nativeUnitEnvironmentFor(fixture), REZICS_NATIVE_UNIT_RUN_ID: runId };
+  writeFileSync(fixture.envFile, JSON.stringify(environment));
+  const registry = join(fixture.parent, 'goal.sqlite');
+  const db = openDb(registry);
+  migrate(db, nativeUnitMigrations);
+  db.query('INSERT INTO native_execution_units VALUES (?, ?, ?, ?, ?)').run(
+    'book-unit',
+    'thread',
+    '%12',
+    fixture.root,
+    '{}',
+  );
+  db.query(
+    'INSERT INTO native_unit_runs(id,unit,started_at,requested_source_commit,context,command) VALUES (?, ?, ?, ?, ?, ?)',
+  ).run(runId, 'book-unit', new Date().toISOString(), fixture.revision, environment.REZICS_NATIVE_UNIT_CONTEXT, '[]');
+  try {
+    const finals: string[] = [];
+    const native = receipt('a', 0);
+    const result = await runCheck(argsFor(fixture, ['bun', 'test', 'book-journey']), {
+      settlementWriter: (line) => finals.push(line),
+      stateDirectory: fixture.parent,
+      transport: async (options) => {
+        await options.allocated?.({ host: 'a', run: native.run });
+        options.completed?.(native);
+        options.settled?.(remoteSettlement(options, native));
+        return 0;
+      },
+    });
+    expect(result).toBe(0);
+    const final = JSON.parse(finals[0]!);
+    const record = await getCheckRunStatus(final.invocationId, { stateDirectory: fixture.parent });
+    expect(
+      db.query('SELECT requested_source_commit, source_commit FROM native_unit_runs WHERE id=?').get(runId),
+    ).toEqual({ requested_source_commit: fixture.revision, source_commit: fixture.revision });
+    expect(db.query('SELECT source_sha256, host, physical_run FROM native_unit_run_sources').get()).toEqual({
+      source_sha256: final.binding.sourceSha256,
+      host: native.host,
+      physical_run: native.run,
+    });
+    expect(recordNativeUnitSourceObservation(environment, record, { ...native, run: 'another-physical-run' })).toBe(
+      'unmatched',
+    );
+    expect(
+      recordNativeUnitSourceObservation({ ...environment, REZICS_NATIVE_UNIT_RUN_ID: randomUUID() }, record, native),
+    ).toBe('unmatched');
+    expect(recordNativeUnitSourceObservation(environment, record, native)).toBe('recorded');
+    expect(db.query('SELECT count(*) AS count FROM native_unit_run_sources').get()).toEqual({ count: 1 });
+  } finally {
+    db.close();
+  }
+});
 
 function runSeparateCli(
   argv: string[],

@@ -32,20 +32,10 @@ async function publish(
   fixture: Awaited<ReturnType<typeof hostedChaptersFixture>>,
   placements: readonly Record<string, unknown>[],
 ) {
-  const path = `/v1/hostedCatalogues/${fixture.catalogueId}`;
-  const created = await fixture.native.command('/v1/hostedCatalogues', {
-    postId: fixture.catalogueId,
-    threadId: fixture.threadId,
-    placements,
-  });
-  const released = await fixture.native.command(
-    `${path}:publish`,
-    {
-      expectedRevisionId: created.revisionId,
-      expectedPublicationId: null,
-      occurrenceIds: placements.map((placement) => placement.occurrenceId),
-    },
-    200,
+  const created = await fixture.retained.structure(placements);
+  const released = await fixture.retained.publication(
+    created.revisionId,
+    placements.map((placement) => placement.occurrenceId),
   );
   return { headId: created.revisionId as string, publicationId: released.revisionId as string };
 }
@@ -62,18 +52,11 @@ test('captures the old public manifest after a newer private draft edit', async 
       { occurrenceId: chapterId, parentId: partId, position: 0, title: 'Released chapter', kind: 'chapter', target },
     ]);
     const laterId = fixture.newOccurrenceId();
-    const revised = await fixture.native.command(
-      `/v1/hostedCatalogues/${fixture.catalogueId}:revise`,
-      {
-        expectedRevisionId: original.headId,
-        placements: [
-          { occurrenceId: partId, parentId: null, position: 0, title: 'Draft section', kind: 'part' },
-          { occurrenceId: chapterId, parentId: partId, position: 0, title: 'Draft chapter', kind: 'chapter', target },
-          { occurrenceId: laterId, parentId: null, position: 1, title: 'Never copy this', kind: 'part' },
-        ],
-      },
-      200,
-    );
+    const revised = await fixture.retained.structure([
+      { occurrenceId: partId, parentId: null, position: 0, title: 'Draft section', kind: 'part' },
+      { occurrenceId: chapterId, parentId: partId, position: 0, title: 'Draft chapter', kind: 'chapter', target },
+      { occurrenceId: laterId, parentId: null, position: 1, title: 'Never copy this', kind: 'part' },
+    ]);
     expect(revised.revisionId).not.toBe(original.headId);
 
     const deps = dependencies(fixture);
@@ -236,23 +219,10 @@ test('keeps a stale release identity after another publication becomes active', 
       { catalogueId: fixture.catalogueId, expectedPublicationId: original.publicationId },
       context(),
     );
-    const next = await fixture.native.command(
-      `/v1/hostedCatalogues/${fixture.catalogueId}:revise`,
-      {
-        expectedRevisionId: original.headId,
-        placements: [{ occurrenceId: secondId, parentId: null, position: 0, title: 'Release B', kind: 'part' }],
-      },
-      200,
-    );
-    const replacement = await fixture.native.command(
-      `/v1/hostedCatalogues/${fixture.catalogueId}:publish`,
-      {
-        expectedRevisionId: next.revisionId,
-        expectedPublicationId: original.publicationId,
-        occurrenceIds: [secondId],
-      },
-      200,
-    );
+    const next = await fixture.retained.structure([
+      { occurrenceId: secondId, parentId: null, position: 0, title: 'Release B', kind: 'part' },
+    ]);
+    const replacement = await fixture.retained.publication(next.revisionId, [secondId]);
 
     const stale = await readHostedPublicBaselineInputPage(
       deps,

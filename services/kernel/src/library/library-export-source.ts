@@ -1,14 +1,8 @@
 import { memoizedValue } from '../memoized.ts';
 import type { PoolClient } from 'pg';
-import {
-  exportSections,
-  LIBRARY_EXPORT_LIMITS,
-  sectionsForVersion,
-  type LibraryExportSectionV1,
-  type LibraryExportSectionV4,
-  type LibraryExportVersion,
-} from './library-export-format.ts';
-export { exportSections, exportSectionsV2, exportSectionsV3, exportSectionsV4 } from './library-export-format.ts';
+import { readHostedReadingExportPage } from './hosted-reading.ts';
+import { exportSections, LIBRARY_EXPORT_LIMITS, type LibraryExportSection } from './library-export-format.ts';
+export { exportSections } from './library-export-format.ts';
 
 type JournalDate = { year: number } | { year: number; month: number } | { year: number; month: number; day: number };
 type PrivacyFact =
@@ -25,7 +19,19 @@ type TimestampFact =
       zone: 'utc' | 'offset' | 'unknown';
     };
 
-type ExistingExportRecord = Record<string, unknown> & { section: LibraryExportSectionV1 };
+type ExistingExportRecord = Record<string, unknown> & {
+  section: Exclude<
+    LibraryExportSection,
+    | 'annotations'
+    | 'provenance'
+    | 'journals'
+    | 'vndbUploads'
+    | 'vndbEvidence'
+    | 'anilistUploads'
+    | 'anilistEvidence'
+    | 'hostedReading'
+  >;
+};
 export type AnnotationExportRecord = {
   section: 'annotations';
   accountId: string;
@@ -53,7 +59,7 @@ export type ProvenanceExportRecord = {
     recordedAt: string;
   };
 };
-export type JournalExportRecordV2 = {
+export type JournalExportRecord = {
   section: 'journals';
   accountId: string;
   sessionId: string;
@@ -71,14 +77,9 @@ export type JournalExportRecordV2 = {
     startDate: JournalDate | null;
     finishDate: JournalDate | null;
     reflection: string | null;
-  };
-};
-export type JournalExportRecordV3 = Omit<JournalExportRecordV2, 'journal'> & {
-  journal: JournalExportRecordV2['journal'] & {
     assessment: { meaningRevision: 1; units: number | null };
   };
 };
-export type JournalExportRecord = JournalExportRecordV2 | JournalExportRecordV3;
 export type ProviderExportRecord =
   | { section: 'vndbUploads'; upload_id: string; state: 'active' | 'cancelled'; expires_at: string }
   | {
@@ -89,12 +90,20 @@ export type ProviderExportRecord =
       row_count: number | null;
     }
   | { section: 'vndbEvidence' | 'anilistEvidence'; upload_id: string; ordinal: number; evidence: unknown };
+/** The installed owner hook supplies the exact saved checkpoint; no current body is resolved. */
+export type HostedReadingExportRecord = Omit<Awaited<ReturnType<typeof readHostedReadingExportPage>>[number], 'key'> & {
+  section: 'hostedReading';
+  target_post_id: string;
+  bodyLanguage?: string | null;
+  subject_id_reference: { id: string; href: string };
+};
 export type ExportRecord =
   | ExistingExportRecord
   | AnnotationExportRecord
   | ProvenanceExportRecord
   | JournalExportRecord
-  | ProviderExportRecord;
+  | ProviderExportRecord
+  | HostedReadingExportRecord;
 type SourceRow = Record<string, unknown> & { key: string };
 export type ExportSeek = {
   section: number;
@@ -102,23 +111,19 @@ export type ExportSeek = {
   after: string;
   rows: number;
   bytes: number;
-  sectionTotals?: [number, number][];
+  sectionTotals: [number, number][];
 };
 const ZERO = '00000000-0000-0000-0000-000000000000';
 function FETCH_ROWS() {
   return memoizedValue(FETCH_ROWS, () => LIBRARY_EXPORT_LIMITS.pageRows + 1);
 }
-function v1DirectSections() {
-  return memoizedValue(v1DirectSections, () => new Set<string>(exportSections.slice(0, 10)));
-}
-
-export const initialExportSeek = (version: LibraryExportVersion = 1): ExportSeek => ({
+export const initialExportSeek = (): ExportSeek => ({
   section: 0,
   parent: '',
   after: '',
   rows: 0,
   bytes: 0,
-  ...(version !== 1 ? { sectionTotals: sectionsForVersion(version).map(() => [0, 0] as [number, number]) } : {}),
+  sectionTotals: exportSections.map(() => [0, 0] as [number, number]),
 });
 export type ExportSourcePage = {
   records: ExportRecord[];
@@ -128,7 +133,7 @@ export type ExportSourcePage = {
 };
 
 /** Each indexed selection fetches P+1 bounded rows so a full page can seek without an empty follow-up page. */
-function queries(): Partial<Record<LibraryExportSectionV4, string>> {
+function queries(): Partial<Record<LibraryExportSection, string>> {
   return memoizedValue(queries, () => ({
     entries: `SELECT subject_id::text AS key, subject_id, requested_subject_id, incarnation_id, state,
     revision, library_profile_pin, created_at::text, updated_at::text, activity_at::text, finished_at::text
@@ -213,24 +218,11 @@ function queries(): Partial<Record<LibraryExportSectionV4, string>> {
     WHERE o.route=$1 AND o.account_id=$2
       AND (o.subject_id,o.provider,o.record_id)>((($3::jsonb)->>0)::uuid,($3::jsonb)->>1,($3::jsonb)->>2)
     ORDER BY o.subject_id,o.provider,o.record_id LIMIT ${FETCH_ROWS()}`,
-    journals: `SELECT p.session_id::text AS key,p.account_id::text AS "accountId",p.session_id::text AS "sessionId",
-    p.subject_id::text AS "subjectId",p.version_subject_id::text AS "versionSubjectId",p.state,
-    p.revision AS "progressRevision",p.library_profile_pin AS "libraryProfilePin",
-    p.started_at::text AS "startedAt",p.completed_at::text AS "completedAt",p.last_changed_at::text AS "lastChangedAt",
-    jsonb_build_object('sessionId',p.session_id::text,'revision',p.journal_revision,
-      'startDate',CASE WHEN p.journal_start_year IS NULL THEN NULL ELSE
-        jsonb_strip_nulls(jsonb_build_object('year',p.journal_start_year,'month',p.journal_start_month,'day',p.journal_start_day)) END,
-      'finishDate',CASE WHEN p.journal_finish_year IS NULL THEN NULL ELSE
-        jsonb_strip_nulls(jsonb_build_object('year',p.journal_finish_year,'month',p.journal_finish_month,'day',p.journal_finish_day)) END,
-      'reflection',p.journal_reflection) AS journal
-    FROM library.progress_session p
-    WHERE p.route=$1 AND p.account_id=$2 AND p.state<>'retired' AND p.journal_revision>0 AND p.session_id>$3::uuid
-    ORDER BY p.session_id LIMIT ${FETCH_ROWS()}`,
   }));
 }
-function journalQueryV3() {
+function journalQuery() {
   return memoizedValue(
-    journalQueryV3,
+    journalQuery,
     () => `SELECT p.session_id::text AS key,p.account_id::text AS "accountId",p.session_id::text AS "sessionId",
     p.subject_id::text AS "subjectId",p.version_subject_id::text AS "versionSubjectId",p.state,
     p.revision AS "progressRevision",p.library_profile_pin AS "libraryProfilePin",
@@ -260,39 +252,36 @@ async function bounded(client: Pick<PoolClient, 'query'>, sql: string, args: unk
   ).rows;
 }
 
-function v1Direct(section: LibraryExportSectionV4, version: LibraryExportVersion) {
-  return version === 1 ? v1DirectSections().has(section) : Object.hasOwn(queries(), section);
-}
-
 export async function readExportSourcePage(
   client: Pick<PoolClient, 'query'>,
   route: number,
   accountId: string,
   input: ExportSeek,
   capturedAt: string,
-  version: LibraryExportVersion = 1,
 ): Promise<ExportSourcePage> {
   const seek = {
     ...input,
-    ...(input.sectionTotals
-      ? { sectionTotals: input.sectionTotals.map(([rows, bytes]) => [rows, bytes] as [number, number]) }
-      : {}),
+    sectionTotals: input.sectionTotals.map(([rows, bytes]) => [rows, bytes] as [number, number]),
   };
-  const sections = sectionsForVersion(version);
-  const section = sections[seek.section] as LibraryExportSectionV4 | undefined;
+  const sections = exportSections;
+  const section = sections[seek.section] as LibraryExportSection | undefined;
   if (!section) throw new TypeError('Invalid library export section cursor');
-  const fetchRows = version === 1 ? LIBRARY_EXPORT_LIMITS.pageRows : FETCH_ROWS();
+  const fetchRows = FETCH_ROWS();
 
   let rows: { value: SourceRow | null }[];
-  if (v1Direct(section, version)) {
+  if (section === 'hostedReading') {
+    rows = (await readHostedReadingExportPage(client, route, accountId, seek.after || ZERO, FETCH_ROWS())).map(
+      (value) => ({ value }),
+    );
+  } else if (Object.hasOwn(queries(), section) || section === 'journals') {
     const sourceSql =
-      version >= 3 && section === 'journals'
-        ? journalQueryV3()
-        : version === 4 && section === 'malImports'
+      section === 'journals'
+        ? journalQuery()
+        : section === 'malImports'
           ? queries().malImports!.replace("(document->>'canceled')::boolean", 'export_cancelled')
           : queries()[section];
     if (!sourceSql) throw new TypeError('Unsupported library export section');
-    const sql = version === 1 ? sourceSql.replaceAll(`LIMIT ${FETCH_ROWS()}`, `LIMIT ${fetchRows}`) : sourceSql;
+    const sql = sourceSql;
     const after =
       seek.after ||
       (section === 'assignments'
@@ -351,23 +340,18 @@ export async function readExportSourcePage(
         ? `SELECT ordinal::text AS key,import_id AS upload_id,ordinal,export_source AS evidence
            FROM library.list_import_anilist WHERE route=$1 AND import_id=$2 AND account_id=$4
              AND ordinal>$3::integer ORDER BY ordinal LIMIT ${fetchRows}`
-        : mal && version === 4
+        : mal
           ? `SELECT ordinal::text AS key,upload_id,ordinal,evidence FROM library.list_import_mal_row
            WHERE route=$1 AND upload_id=$2 AND account_id=$4 AND ordinal>$3::integer ORDER BY ordinal LIMIT ${fetchRows}`
-          : mal
-            ? `SELECT i::text AS key,id AS upload_id,i AS ordinal,document->'rows'->i AS evidence
-           FROM library.list_import_mal CROSS JOIN LATERAL generate_series($3::integer+1,
-             least(jsonb_array_length(document->'rows')-1,$3::integer+${fetchRows})) i
-           WHERE route=$1 AND id=$2 AND account_id=$4 ORDER BY i LIMIT ${fetchRows}`
-            : section === 'units'
-              ? `SELECT unit_id AS key,session_id,unit_id,added_at::text FROM library.progress_unit
+          : section === 'units'
+            ? `SELECT unit_id AS key,session_id,unit_id,added_at::text FROM library.progress_unit
            WHERE route=$1 AND session_id=$2 AND EXISTS (SELECT 1 FROM library.progress_session p WHERE p.route=$1 AND p.account_id=$4
              AND p.session_id=$2 AND p.state <> 'retired') AND unit_id COLLATE "C">$3 COLLATE "C" ORDER BY unit_id COLLATE "C" LIMIT ${fetchRows}`
-              : section === 'history'
-                ? `SELECT change_no::text AS key,session_id,change_no,intent,recorded_at::text FROM library.progress_change
+            : section === 'history'
+              ? `SELECT change_no::text AS key,session_id,change_no,intent,recorded_at::text FROM library.progress_change
              WHERE route=$1 AND session_id=$2 AND EXISTS (SELECT 1 FROM library.progress_session p WHERE p.route=$1 AND p.account_id=$4
                AND p.session_id=$2 AND p.state <> 'retired') AND change_no>$3::integer ORDER BY change_no LIMIT ${fetchRows}`
-                : `SELECT member_id::text AS key,member_id,collection_id,subject_id,note,ordinal_key,member_revision::text,added_at::text
+              : `SELECT member_id::text AS key,member_id,collection_id,subject_id,note,ordinal_key,member_revision::text,added_at::text
              FROM library.collection_member WHERE route=$1 AND collection_id=$2 AND deletion_id IS NULL
              AND member_id>$3::uuid ORDER BY member_id LIMIT ${fetchRows}`;
     rows = await bounded(
@@ -424,8 +408,7 @@ export async function readExportSourcePage(
       data.entryIncarnationId = entry?.entryIncarnationId ?? null;
       data.libraryProfilePin = entry?.libraryProfilePin ?? null;
     }
-    if (section === 'malEvidence' || (version === 4 && section.endsWith('Evidence')))
-      data.evidence = publicEvidence(data.evidence, version === 4);
+    if (section.endsWith('Evidence')) data.evidence = publicEvidence(data.evidence);
     if (section !== 'annotations' && section !== 'provenance' && section !== 'journals') {
       for (const field of ['subject_id', 'requested_subject_id', 'version_subject_id']) {
         const value = data[field];
@@ -438,7 +421,7 @@ export async function readExportSourcePage(
     }
     const record = { section, ...data } as ExportRecord;
     const bytes = Buffer.byteLength(JSON.stringify(record), 'utf8');
-    if (version !== 1 && bytes > LIBRARY_EXPORT_LIMITS.maxRecordBytes) {
+    if (bytes > LIBRARY_EXPORT_LIMITS.maxRecordBytes) {
       oversized = true;
       break;
     }
@@ -449,13 +432,11 @@ export async function readExportSourcePage(
     records.push(record);
     pageBytes += bytes;
     seek.after = String(key);
-    if (seek.sectionTotals) {
-      const [totalRows, totalBytes] = seek.sectionTotals[seek.section]!;
-      seek.sectionTotals[seek.section] = [totalRows + 1, totalBytes + bytes];
-    }
+    const [totalRows, totalBytes] = seek.sectionTotals[seek.section]!;
+    seek.sectionTotals[seek.section] = [totalRows + 1, totalBytes + bytes];
   }
   if (records.length === rows.length && rows.length < fetchRows) {
-    if (v1Direct(section, version)) {
+    if (Object.hasOwn(queries(), section) || section === 'journals' || section === 'hostedReading') {
       seek.section++;
       seek.after = '';
     } else {
@@ -469,19 +450,18 @@ export async function readExportSourcePage(
 }
 
 /** Retained import rows exclude raw credentials and review capabilities before export. */
-function publicEvidence(value: unknown, expanded = false): unknown {
-  const privateKey = expanded
-    ? /token|password|authorization|credential|secret|capability|review.?id|command.?key|client.?id|requested.?by|receipt|authority.?grant|confirmation|recovery.?state|apply.?state/i
-    : /token|password|authorization|credential|secret|capability/i;
+function publicEvidence(value: unknown): unknown {
+  const privateKey =
+    /token|password|authorization|credential|secret|capability|review.?id|command.?key|client.?id|requested.?by|receipt|authority.?grant|confirmation|recovery.?state|apply.?state/i;
   if (Array.isArray(value))
     return value
       .filter((v) => !(v && typeof v === 'object' && 'field' in v && privateKey.test(String(v.field))))
-      .map((v) => publicEvidence(v, expanded));
+      .map((v) => publicEvidence(v));
   if (value && typeof value === 'object')
     return Object.fromEntries(
       Object.entries(value)
         .filter(([key]) => !privateKey.test(key))
-        .map(([key, v]) => [key, publicEvidence(v, expanded)]),
+        .map(([key, v]) => [key, publicEvidence(v)]),
     );
   return value;
 }

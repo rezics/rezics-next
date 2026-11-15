@@ -192,11 +192,11 @@ function block(spec: NodeSpec): NodeSpec {
       },
     };
   });
-  if (!original) return { ...spec, attrs, ...(parseDOM ? { parseDOM } : {}) };
+  if (!original) return { ...spec, attrs, ...(parseDOM === undefined ? {} : { parseDOM }) };
   return {
     ...spec,
     attrs,
-    ...(parseDOM ? { parseDOM } : {}),
+    ...(parseDOM === undefined ? {} : { parseDOM }),
     toDOM: (node) => {
       const originalOutput = original(node);
       if (!Array.isArray(originalOutput)) return originalOutput;

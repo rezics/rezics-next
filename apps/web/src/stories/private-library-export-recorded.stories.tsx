@@ -13,7 +13,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Manual routed journeys using saved V1/V4 producer HTTP responses at their captured clock. Capture and download start only on your action; delivery is simulated. These stories do not establish current native acceptance. Choose locale and viewport manually.',
+          'Manual routed journeys using saved canonical v1 producer HTTP responses at their captured clock. Capture and download start only on your action; delivery is simulated. These stories do not establish current native acceptance. Choose locale and viewport manually.',
       },
     },
   },
@@ -21,9 +21,9 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function RecordedVisit({ version = 4, failSave = false }: { version?: 1 | 4; failSave?: boolean }) {
+function RecordedVisit({ failSave = false }: { failSave?: boolean }) {
   const [runtime] = useState(() => {
-    const capture = exportRecording(version);
+    const capture = exportRecording();
     const recording = recordedExportPort(capture);
     const controller = new AbortController();
     let saves = 0;
@@ -55,12 +55,12 @@ function RecordedVisit({ version = 4, failSave = false }: { version?: 1 | 4; fai
 }
 
 export const ProviderEvidence: Story = {
-  name: 'Version 4 capture and download (producer responses)',
+  name: 'Canonical v1 capture and download (producer responses)',
   render: () => <RecordedVisit />,
 };
 
 export const SaveRetry: Story = {
-  name: 'Version 4 exact save retry (producer responses)',
+  name: 'Canonical v1 exact save retry (producer responses)',
   parameters: {
     docs: {
       description: {
@@ -70,9 +70,4 @@ export const SaveRetry: Story = {
     },
   },
   render: () => <RecordedVisit failSave />,
-};
-
-export const StoredVersion1: Story = {
-  name: 'Stored version 1 (producer responses)',
-  render: () => <RecordedVisit version={1} />,
 };

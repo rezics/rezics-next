@@ -1,18 +1,13 @@
 import { expect, test } from 'bun:test';
-import {
-  MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT,
-  MIXED_DISCOVERY_DOCUMENT_FORMAT,
-  type DiscoveryRegistry,
-} from '../../src/search/discovery.ts';
+import { DISCOVERY_DOCUMENT_FORMAT, type DiscoveryRegistry } from '../../src/search/discovery.ts';
 import {
   discoveryDocumentActions,
-  mixedCalendarDiscoveryIndexDefinition,
-  mixedDiscoveryDocumentCodec,
-  mixedDiscoveryIndexDefinition,
+  discoveryIndexDefinition,
+  hasDiscoveryDocumentFormat,
   validateDiscoveryDocument,
 } from '../../src/search/discovery-documents.ts';
 import { documentActions } from '../../src/search/document.ts';
-import { createDiscoveryIndex, readDiscoveryDocumentCodec } from '../../src/search/indices.ts';
+import { createDiscoveryIndex, requireDiscoveryIndexFormat } from '../../src/search/indices.ts';
 import { subjectPartition, type IndexedSubject } from '../../src/search/source.ts';
 import { routeOf } from '../../src/route/route.ts';
 
@@ -44,34 +39,12 @@ const route = routeOf(id)!;
 const snapshot = { partition, position: 1n, subjects: [subject] };
 const key = { owner: 'semantic' as const, kind, id, route };
 
-test('mixed calendar successor preserves precise facts and leaves old mapping and codec intact', () => {
-  const [oldMixed] = discoveryDocumentActions(
-    registry,
-    { owner: 'semantic', snapshot },
-    [key],
-    undefined,
-    'mixed-public-v1',
-  );
-  const [calendar] = discoveryDocumentActions(
-    registry,
-    { owner: 'semantic', snapshot },
-    [key],
-    undefined,
-    'mixed-calendar-v1',
-  );
-  const [expected] = documentActions(snapshot, [id], undefined, 1);
-  if (
-    oldMixed?.op !== 'index' ||
-    oldMixed.document.owner !== 'semantic' ||
-    calendar?.op !== 'index' ||
-    calendar.document.owner !== 'semantic' ||
-    expected?.op !== 'index'
-  )
-    throw new Error('Expected mixed Subject projections');
-
-  expect(oldMixed.document.document_format).toBe(MIXED_DISCOVERY_DOCUMENT_FORMAT);
-  expect(oldMixed.document.facts).toEqual([{ property: 'schema:datePublished', year: 2024, qualifiers: [] }]);
-  expect(calendar.document.document_format).toBe(MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT);
+test('canonical discovery retains precise calendar facts and rejects a damaged interval', () => {
+  const [calendar] = discoveryDocumentActions(registry, { owner: 'semantic', snapshot }, [key]);
+  const [expected] = documentActions(snapshot, [id]);
+  if (calendar?.op !== 'index' || calendar.document.owner !== 'semantic' || expected?.op !== 'index')
+    throw new Error('Expected canonical Subject projections');
+  expect(calendar.document.document_format).toBe(DISCOVERY_DOCUMENT_FORMAT);
   expect(calendar.document.facts).toEqual(expected.document.facts);
   expect(calendar.document.facts[0]).toMatchObject({ year: 2024, month: 2, day: 29 });
   expect(calendar.document.facts[0]).toHaveProperty('time_lower');
@@ -82,18 +55,16 @@ test('mixed calendar successor preserves precise facts and leaves old mapping an
   if (!fact || !('time_lower' in fact)) throw new Error('Expected an interval-backed date fact');
   fact.time_lower = 'invalid';
   expect(() => validateDiscoveryDocument(registry, damaged)).toThrow('Invalid Subject discovery fact value');
-
-  const oldMapping = mixedDiscoveryIndexDefinition();
-  const nextMapping = mixedCalendarDiscoveryIndexDefinition();
-  expect(oldMapping.mappings._meta.discovery_document_format).toBe(MIXED_DISCOVERY_DOCUMENT_FORMAT);
-  expect(nextMapping.mappings._meta.discovery_document_format).toBe(MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT);
-  expect(oldMapping.mappings.properties.facts!.properties).not.toHaveProperty('time_lower');
-  expect(nextMapping.mappings.properties.facts!.properties).toHaveProperty('time_lower', { type: 'keyword' });
-  expect(mixedDiscoveryDocumentCodec(oldMapping.mappings)).toBe('mixed-public-v1');
-  expect(mixedDiscoveryDocumentCodec(nextMapping.mappings)).toBe('mixed-calendar-v1');
+  const mapping = discoveryIndexDefinition();
+  expect(mapping.mappings._meta.discovery_document_format).toBe(1);
+  expect(mapping.mappings.properties.facts!.properties).toHaveProperty('time_lower', { type: 'keyword' });
+  expect(hasDiscoveryDocumentFormat(mapping.mappings)).toBe(true);
+  const incomplete = structuredClone(mapping.mappings);
+  delete incomplete.properties.credited_names;
+  expect(hasDiscoveryDocumentFormat(incomplete)).toBe(false);
 });
 
-test('new mixed physical generations allocate the calendar and credit successor mapping', async () => {
+test('new physical discovery generations allocate one complete canonical mapping', async () => {
   let definition: unknown;
   const index = 'test-discovery-g2';
   const search = {
@@ -108,6 +79,6 @@ test('new mixed physical generations allocate the calendar and credit successor 
   await createDiscoveryIndex(search as never, 'test-', 2, 'incarnation-2');
   if (!definition || typeof definition !== 'object' || !('mappings' in definition))
     throw new Error('Expected a versioned mixed mapping');
-  expect(mixedDiscoveryDocumentCodec(definition.mappings)).toBe('mixed-credit-v1');
-  expect(await readDiscoveryDocumentCodec(search as never, index)).toBe('mixed-credit-v1');
+  expect(hasDiscoveryDocumentFormat(definition.mappings)).toBe(true);
+  await expect(requireDiscoveryIndexFormat(search as never, index)).resolves.toBeUndefined();
 });

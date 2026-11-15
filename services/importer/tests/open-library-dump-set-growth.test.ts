@@ -98,12 +98,12 @@ test('dump-set coordinator growth is linear at 32/128/512 with partitioned membe
         files.work[i % partitions] = `${files.work[i % partitions] ?? ''}${row('work', i + 1)}`;
       for (let i = 0; i < editions; i++)
         files.edition[i % partitions] = `${files.edition[i % partitions] ?? ''}${row('edition', i + 1)}`;
-      const members: { family: 'author' | 'work' | 'edition'; path: string }[] = [];
+      const members: { family: 'author' | 'work' | 'edition'; path: string; compression: 'none' }[] = [];
       for (const family of ['author', 'work', 'edition'] as const) {
         for (let part = 0; part < partitions; part++) {
           const path = join(root, `${family}-${n}-${part}.txt`);
           await writeFile(path, files[family][part] ?? '', { mode: 0o600 });
-          members.push({ family, path });
+          members.push({ family, path, compression: 'none' });
         }
       }
       const manifest = join(root, `manifest-${n}.json`);

@@ -1,4 +1,5 @@
 import { t } from 'elysia';
+import { MAX_LANGUAGE_KEY_LENGTH, MAX_LANGUAGE_PREFERENCES_LENGTH } from '@rezics/definitions/language';
 import { MAX_DOCUMENT_BYTES } from './document-limits.ts';
 import { HOSTED_DEPTH_LIMIT, HOSTED_PLACEMENT_LIMIT, HOSTED_PAGE_LIMIT } from './hosted-chapters-limits.ts';
 
@@ -9,6 +10,12 @@ export const HostedIdSchema = t.String({
 const nullableId = t.Union([HostedIdSchema, t.Null()]);
 const digest = t.String({ pattern: '^[0-9a-f]{64}$' });
 const title = t.String({ minLength: 1, maxLength: 256 });
+export const HostedLanguageKeySchema = t.String({ minLength: 1, maxLength: MAX_LANGUAGE_KEY_LENGTH });
+export const HostedLanguagePreferenceQueryFields = {
+  language: t.Optional(HostedLanguageKeySchema),
+  preferredLanguages: t.Optional(t.String({ minLength: 1, maxLength: MAX_LANGUAGE_PREFERENCES_LENGTH })),
+};
+const selectedLanguage = t.Optional(t.Union([HostedLanguageKeySchema, t.Null()]));
 export const HostedChapterTargetSchema = t.Object(
   {
     threadId: HostedIdSchema,
@@ -24,8 +31,8 @@ const address = {
   parentId: nullableId,
   position: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
 };
-// Full replacement keeps its bounded legacy input contract; only read addresses
-// span a sealed append prefix. An exact position is never truncated or renumbered.
+// A full replacement is one bounded request, not a total-book ceiling.
+// Ordered read positions remain exact and are never truncated or renumbered.
 const replacementAddress = {
   ...address,
   position: t.Integer({ minimum: 0, maximum: HOSTED_PLACEMENT_LIMIT - 1 }),
@@ -111,68 +118,6 @@ export const HostedReplacePublishedChapterSchema = t.Object(
   },
   closed,
 );
-const HostedPublicBaselineFrontierSchema = t.Object(
-  { afterOrdinal: t.Integer({ minimum: -1, maximum: Number.MAX_SAFE_INTEGER }) },
-  closed,
-);
-const HostedBaselineCursorIdSchema = t.String({
-  pattern:
-    '^(?:00000000-0000-0000-0000-000000000000|[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$',
-});
-const HostedVersionPublicBaselineCursorSchema = t.Object(
-  {
-    phase: t.Union([t.Literal('occurrences'), t.Literal('nodes'), t.Literal('roots'), t.Literal('complete')]),
-    occurrenceAfterOrdinal: t.String({ pattern: '^(?:0|[1-9][0-9]{0,15})$' }),
-    nodeAfterKind: t.Union([t.Literal(''), t.Literal('chapters'), t.Literal('preorder'), t.Literal('siblings')]),
-    nodeAfterId: HostedBaselineCursorIdSchema,
-    rootNullDone: t.Boolean(),
-    rootAfterParentId: HostedBaselineCursorIdSchema,
-  },
-  closed,
-);
-const hostedPublicBaselineCommon = {
-  expectedRevisionId: HostedIdSchema,
-  expectedPublicationId: HostedIdSchema,
-};
-export const HostedLegacyPublicBaselineSchema = t.Union([
-  t.Object({ ...hostedPublicBaselineCommon, step: t.Literal('startBuild') }, closed),
-  t.Object(
-    { ...hostedPublicBaselineCommon, step: t.Literal('build'), frontier: HostedPublicBaselineFrontierSchema },
-    closed,
-  ),
-  t.Object(
-    { ...hostedPublicBaselineCommon, step: t.Literal('seal'), frontier: HostedPublicBaselineFrontierSchema },
-    closed,
-  ),
-  t.Object(
-    { ...hostedPublicBaselineCommon, step: t.Literal('receive'), frontier: HostedPublicBaselineFrontierSchema },
-    closed,
-  ),
-  t.Object(
-    { ...hostedPublicBaselineCommon, step: t.Literal('apply'), cursor: HostedVersionPublicBaselineCursorSchema },
-    closed,
-  ),
-  t.Object({ ...hostedPublicBaselineCommon, step: t.Literal('complete') }, closed),
-]);
-export const HostedLegacyPublicBaselineProgressSchema = t.Object(
-  {
-    catalogueId: HostedIdSchema,
-    sourcePublicationId: HostedIdSchema,
-    expectedPlacementCount: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
-    nextStep: t.Union([
-      t.Literal('build'),
-      t.Literal('seal'),
-      t.Literal('receive'),
-      t.Literal('apply'),
-      t.Literal('complete'),
-      t.Literal('done'),
-    ]),
-    buildFrontier: t.Union([HostedPublicBaselineFrontierSchema, t.Null()]),
-    sealFromFrontier: t.Union([HostedPublicBaselineFrontierSchema, t.Null()]),
-    receivingCursor: t.Union([HostedVersionPublicBaselineCursorSchema, t.Null()]),
-  },
-  closed,
-);
 export const HostedCommandSchema = t.Object({ catalogueId: HostedIdSchema, revisionId: HostedIdSchema }, closed);
 const revision = {
   catalogueId: HostedIdSchema,
@@ -190,7 +135,10 @@ const occurrence = t.Union([
     { ...address, kind: t.Literal('part'), availability: t.Literal('available'), title, target: t.Null() },
     closed,
   ),
-  t.Object({ ...address, kind: t.Literal('chapter'), availability: t.Literal('available'), title, target }, closed),
+  t.Object(
+    { ...address, kind: t.Literal('chapter'), availability: t.Literal('available'), title, target, selectedLanguage },
+    closed,
+  ),
 ]);
 export const HostedPageSchema = t.Object(
   {
@@ -200,7 +148,7 @@ export const HostedPageSchema = t.Object(
   },
   closed,
 );
-export const HostedOccurrenceMetadataSchema = t.Object({ ...revision, occurrence }, closed);
+export const HostedOccurrenceMetadataSchema = t.Object({ ...revision, occurrence, selectedLanguage }, closed);
 export const HostedResolutionSchema = t.Object(
   {
     ...revision,
@@ -225,8 +173,10 @@ const selection = {
   revisionId: t.Optional(HostedIdSchema),
   kind: t.Optional(t.Union([t.Literal('structure'), t.Literal('publication')])),
 };
+export const HostedSelectionFields = selection;
 const paging = {
   ...selection,
+  ...HostedLanguagePreferenceQueryFields,
   cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
   limit: t.Optional(t.String({ pattern: '^(?:[1-9]|1[0-9]|20)$' })),
 };

@@ -1,0 +1,81 @@
+/* Book-local display overrides preserve the admitted document and its shared renderer. */
+.book-reading-display[data-size='12'] {
+  --book-reading-size: 0.75rem;
+}
+.book-reading-display[data-size='14'] {
+  --book-reading-size: 0.875rem;
+}
+.book-reading-display[data-size='15'] {
+  --book-reading-size: 0.9375rem;
+}
+.book-reading-display[data-size='16'] {
+  --book-reading-size: 1rem;
+}
+.book-reading-display[data-size='17'] {
+  --book-reading-size: 1.0625rem;
+}
+.book-reading-display[data-size='18'] {
+  --book-reading-size: 1.125rem;
+}
+.book-reading-display[data-size='19'] {
+  --book-reading-size: 1.1875rem;
+}
+.book-reading-display[data-size='20'] {
+  --book-reading-size: 1.25rem;
+}
+.book-reading-display[data-size='22'] {
+  --book-reading-size: 1.375rem;
+}
+.book-reading-display[data-size='24'] {
+  --book-reading-size: 1.5rem;
+}
+.book-reading-display[data-size='25'] {
+  --book-reading-size: 1.5625rem;
+}
+.book-reading-display[data-size='26'] {
+  --book-reading-size: 1.625rem;
+}
+.book-reading-display[data-size='28'] {
+  --book-reading-size: 1.75rem;
+}
+.book-reading-display[data-size='30'] {
+  --book-reading-size: 1.875rem;
+}
+.book-reading-display[data-size='32'] {
+  --book-reading-size: 2rem;
+}
+.book-reading-display .post-reading-document.rezics-document {
+  font-size: var(--book-reading-size, 1.0625rem);
+}
+.book-reading-display[data-face='serif'] .post-reading-document {
+  font-family: var(--font-work-serif);
+}
+.book-reading-display[data-face='sans'] .post-reading-document {
+  font-family: var(--font-interface);
+}
+.book-reading-display[data-width='narrow'] .post-reading-body {
+  --post-prose-measure: 52ch;
+  --book-cjk-measure: 28em;
+}
+.book-reading-display[data-width='standard'] .post-reading-body {
+  --post-prose-measure: 65ch;
+  --book-cjk-measure: 36em;
+}
+.book-reading-display[data-width='wide'] .post-reading-body {
+  --post-prose-measure: 78ch;
+  --book-cjk-measure: 44em;
+}
+.book-reading-display .post-reading-document > :is(p, ul, ol, blockquote):is(:lang(zh), :lang(ja), :lang(ko)) {
+  max-width: var(--book-cjk-measure);
+}
+.book-reading-display[data-indent='true'] .post-reading-document > p {
+  text-indent: 2em;
+}
+.book-reading-display[data-spacing='none'] .post-reading-document,
+.book-reading-display[data-spacing='none'] .post-reading-document * {
+  text-autospace: no-autospace;
+}
+.book-reading-display[data-punctuation='strict'] .post-reading-document,
+.book-reading-display[data-punctuation='strict'] .post-reading-document * {
+  line-break: strict;
+}

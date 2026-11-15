@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
+import { afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test';
 import { Value } from 'typebox/value';
 import type { PoolClient, QueryResultRow } from 'pg';
 import type { HostedDependencies } from '../../src/content/hosted-chapters-model.ts';
@@ -26,10 +26,10 @@ import { observeSql } from './support/sql-observer.ts';
 
 setDefaultTimeout(360_000);
 let f: Awaited<ReturnType<typeof hostedChaptersFixture>>;
-beforeAll(async () => {
+beforeEach(async () => {
   f = await hostedChaptersFixture();
 });
-afterAll(async () => {
+afterEach(async () => {
   await f?.close();
 });
 
@@ -86,29 +86,6 @@ async function advance(locator: HostedPublicationStagingLocator, stepId = f.newO
       Date.now() + 120_000,
     ),
   );
-}
-
-async function convertDraft(path: string, expectedRevisionId: string): Promise<string> {
-  const conversionPath = `${path}:convertDraft`;
-  const capture = await f.native.command(conversionPath, { step: 'capture', expectedRevisionId }, 200);
-  const inputId = capture.inputId as string;
-  let progress = await f.native.command(conversionPath, { step: 'begin', inputId, expectedRevisionId }, 200);
-  while (progress.nextStep === 'page') {
-    progress = await f.native.command(
-      conversionPath,
-      { step: 'page', inputId, expectedRevisionId, cursor: progress.frontier },
-      200,
-    );
-  }
-  expect(progress.nextStep).toBe('seal');
-  progress = await f.native.command(conversionPath, { step: 'seal', inputId, expectedRevisionId }, 200);
-  progress = await f.native.command(conversionPath, { step: 'materialize', inputId, expectedRevisionId }, 200);
-  while (progress.nextStep === 'materializePage') {
-    progress = await f.native.command(conversionPath, { step: 'materializePage', inputId, expectedRevisionId }, 200);
-  }
-  expect(progress.nextStep).toBe('commit');
-  const committed = await f.native.command(conversionPath, { step: 'commit', inputId, expectedRevisionId }, 200);
-  return committed.revisionId as string;
 }
 
 function containsId(value: unknown, id: string): boolean {
@@ -204,18 +181,18 @@ test('prepared whole and selection pages reject changed state before storing can
 });
 
 test('selection streams past 512, replays a rolled-back step, and seals source-ordered exact candidates', async () => {
-  const { path, target, placements, created, published } = await hostedRootAppendBase(f);
+  const { target, placements } = await hostedRootAppendBase(f);
+  const created = await f.retained.structure(placements);
+  const published = await f.retained.publication(created.revisionId, [placements[511]!.occurrenceId]);
   const appendedId = f.newOccurrenceId();
-  const appended = await f.native.command(
-    `${path}:appendRootChapter`,
-    {
+  const appended = (
+    await f.retained.append({
       expectedRevisionId: created.revisionId,
       occurrenceId: appendedId,
       title: 'After the whole base',
       target,
-    },
-    200,
-  );
+    })
+  ).value;
   const locator = await begin(appended.revisionId, published.revisionId, 'selection');
   const selected = [...placements.map((placement) => placement.occurrenceId), appendedId].reverse();
   const observer = observeSql(f.native.pool);
@@ -429,13 +406,13 @@ test('whole-source staleness, missing ancestors, incomplete selection, empty sel
 test('ordered staging pages more than 512 placements and keeps sparse candidates pinned across edits and erasure', async () => {
   const book = await hostedRootAppendBase(f);
   const path = book.path;
-  const convertedRevisionId = await convertDraft(path, book.created.revisionId);
+  const initialRevisionId = book.created.revisionId;
   const partIds = book.placements.slice(0, 16).map((placement) => placement.occurrenceId);
   const nestedChapterId = f.newOccurrenceId();
   const nested = await f.native.command(
     `${path}:insertDraftPoint`,
     {
-      expectedRevisionId: convertedRevisionId,
+      expectedRevisionId: initialRevisionId,
       occurrenceId: nestedChapterId,
       parentId: partIds.at(-1),
       beforeOccurrenceId: null,

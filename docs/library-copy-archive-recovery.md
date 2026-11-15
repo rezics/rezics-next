@@ -1,12 +1,12 @@
 # Native personal archive recovery
 
-The installed owner admits the actual personal Library V1, V2, V3 and V4 artifacts and privately inspects retained holdings and
+The installed owner admits the canonical v1 personal Library artifacts and privately inspects retained holdings and
 supported progress evidence. Holdings remain evidence-only. Progress can be explicitly reviewed and applied as a
 fresh native Session through the existing Session and episode commands. This is not account restoration.
 
 Decision: recovery is per occurrence: the owner maps the source Subject to its current canonical Subject, and each
 review creates a distinct fresh Session. Validate the installed manifest's total `rows` and `recordBytes` and exact
-section inventory; V1 has no per-section counters. V2/V3/V4 require exact per-section row and byte totals. The progress flow and its supported/unsupported matrix are in
+section inventory and exact per-section row and byte totals. The progress flow and its supported/unsupported matrix are in
 [native progress recovery](library-archive-progress-recovery.md).
 
 ## Installed interface
@@ -33,7 +33,7 @@ entry, entitlement, copy, repeat-history or publication effects. Client declarat
 routes. Web activates the adjacent recovery interface only after those installed types are available; Web319 remains
 the episode checklist, Web320 the measure editor, and Web323 the export interface.
 
-The only accepted format is `https://rezics.com/formats/library-export`, versions 1, 2, 3 and 4, assembled as `{manifest,records}`
+The only accepted format is `https://rezics.com/formats/library-export`, version 1, assembled as `{manifest,records}`
 from the [installed export's final page](library-export.md). Unfinished pages, null manifests, missing sections,
 duplicate JSON names, invalid UTF-8, unsupported versions, inconsistent totals and malformed holdings are rejected.
 Expired export capture timestamps do not invalidate a previously completed local file. They never set command time.
@@ -55,19 +55,11 @@ Every holding row returns `resolution:"unresolved"`; its page returns `effectsSu
 `fullRestoration:false`. Two copies with equal Subject, note or dates remain independent rows. There is no duplicate
 search or current-copy enumeration. Archive UUIDs, pins, timestamps and revisions never authorize native effects.
 
-Decision: the copy adapter uses the shared V2 section vocabulary for V3, with coverage
-`private-library-owner-facts-v3` and journal-local `assessment:{meaningRevision:1,units:0..20|null}`;
-V4 validates the original 21-section artifact at the shared native boundary before selecting holdings and progress.
-Provider rows remain unsupported coverage, with their original totals. No completed artifact is relabeled or rebuilt
-in the browser. This decoder does not adopt journal assessments.
-
-V2/V3 require exactly the original 14 sections followed by `annotations`, `provenance`, `journals`,
-`coverage:"private-library-owner-facts-v2"` or `"private-library-owner-facts-v3"`, and `sectionTotals` with
-`{rows,recordBytes}` for every section, including empty ones. Counters must match every actual record before
-anything is persisted. Current annotation/provenance/journal envelopes are recognized but their payloads are
-discarded. Journal assessment is unsupported, has no votes or dates-to-progress effects, and enters no new store.
-Provider evidence and all other unsupported sections likewise contribute only coverage counts/bytes.
-V1 retains its original manifest and decoder, including the absence of section counters and new section claims.
+Decision: the Copy adapter uses the shared canonical Library archive decoder and manifest. It validates all 22
+sections and their exact totals before selecting holdings and progress. Provider rows and personal annotations,
+provenance and journals contribute only unsupported coverage counts/bytes. Journal assessment is not adopted by
+this journey and creates no votes or dates-to-progress effects. No completed artifact is relabelled or rebuilt
+in the browser, and no alternate manifest parser is installed.
 
 ## Bounds, lifetime and cleanup
 

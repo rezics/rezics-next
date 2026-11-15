@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import type { AccessClient } from '../../src/request/access.ts';
 import { newId } from '../../src/route/route.ts';
 import type { HostedAppendDescriptor } from '../../src/content/hosted-chapters-model.ts';
-import { hostedReadPlacementPage } from '../../src/content/hosted-chapters-store.ts';
+import { hostedReadPlacementPage } from '../../src/content/hosted-maintenance-manifest.ts';
 import { hostedCursorBinding, readHostedCursor, writeHostedCursor } from '../../src/content/hosted-chapters-cursor.ts';
 import appendPrevious from '../../src/content/hosted-append-read-previous.sql';
 

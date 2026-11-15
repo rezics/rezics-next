@@ -30,7 +30,10 @@ export type KnowledgePublicDocument = {
   publishedAt: string;
   body: DocumentSnapshot;
   references?: readonly KnowledgeReference[];
-  sha256?: string;
+  /** Digest of disclosed canonical bytes. */
+  sha256: string;
+  /** Immutable raw-source digest used by exact citations, independent of disclosure projection. */
+  sourceSha256: string;
   source?: string;
 };
 
@@ -119,10 +122,17 @@ function uuidList(value: unknown): string[] | null {
 }
 
 function decodeCanonicalDocument(canonicalBytes: string): DocumentSnapshot | null {
-  if (!base64Pattern.test(canonicalBytes) || canonicalBytes.length % 4 !== 0) return null;
+  if (
+    canonicalBytes.length > Math.ceil(2097152 / 3) * 4 ||
+    !base64Pattern.test(canonicalBytes) ||
+    canonicalBytes.length % 4 !== 0
+  )
+    return null;
   try {
     const json = JSON.parse(
-      new TextDecoder().decode(Uint8Array.from(atob(canonicalBytes), (code) => code.charCodeAt(0))),
+      new TextDecoder('utf-8', { fatal: true }).decode(
+        Uint8Array.from(atob(canonicalBytes), (code) => code.charCodeAt(0)),
+      ),
     );
     return parseDocument(json);
   } catch {
@@ -163,6 +173,7 @@ export function admitKnowledgePublicResponse(
   const licence = document.licence;
   const published = publishedAt(document.publishedAt);
   const sha256 = document.sha256;
+  const sourceSha256 = document.sourceSha256;
   const subjectIds = uuidList(document.subjectIds);
   const authorId = document.authorId;
   if (
@@ -180,6 +191,8 @@ export function admitKnowledgePublicResponse(
     !published ||
     typeof sha256 !== 'string' ||
     !sha256Pattern.test(sha256) ||
+    typeof sourceSha256 !== 'string' ||
+    !sha256Pattern.test(sourceSha256) ||
     !subjectIds ||
     (authorId !== null && !knowledgeId(authorId)) ||
     typeof document.canonicalBytes !== 'string'
@@ -204,6 +217,7 @@ export function admitKnowledgePublicResponse(
       body: parsed,
       references,
       sha256,
+      sourceSha256,
       source: new TextDecoder().decode(Uint8Array.from(atob(document.canonicalBytes), (code) => code.charCodeAt(0))),
     },
   };
@@ -221,7 +235,15 @@ export async function readKnowledgePublicDocument(
       query: request.revisionId === null ? {} : { revisionId: request.revisionId },
       fetch: publicReadFetch,
     });
-    return admitKnowledgePublicResponse(result.status, result.data, request);
+    const admitted = admitKnowledgePublicResponse(result.status, result.data, request);
+    if (admitted.state !== 'ready') return admitted;
+    const canonicalBytes = member(member(result.data, 'document'), 'canonicalBytes');
+    if (typeof canonicalBytes !== 'string') return { state: 'unavailable', status: 502 };
+    const bytes = Uint8Array.from(atob(canonicalBytes), (code) => code.charCodeAt(0));
+    if (bytes.byteLength > 2097152) return { state: 'unavailable', status: 502 };
+    const hash = await crypto.subtle.digest('SHA-256', bytes);
+    const actual = Array.from(new Uint8Array(hash), (part) => part.toString(16).padStart(2, '0')).join('');
+    return actual === admitted.document.sha256 ? admitted : { state: 'unavailable', status: 502 };
   } catch (error) {
     if (isPlatformClosedError(error)) throw error;
     return { state: 'unavailable', status: 503 };

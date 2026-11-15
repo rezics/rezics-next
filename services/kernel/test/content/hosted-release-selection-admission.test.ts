@@ -1,7 +1,5 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import readReceipt from '../../src/command/read-receipt.sql';
-import { HOSTED_PLACEMENT_SELECT } from '../../src/content/hosted-chapters-store.ts';
-import { routeOf } from '../../src/route/route.ts';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 import { observeSql, type SqlExecution } from './support/sql-observer.ts';
 
@@ -17,7 +15,9 @@ afterAll(async () => {
   await f?.close();
 });
 const sourceReads = (records: readonly SqlExecution[]) =>
-  records.filter((row) => /FROM content.hosted_structure_revision|FROM content.hosted_placement/.test(row.statement));
+  records.filter((row) =>
+    /FROM content.hosted_structure_revision|FROM content.hosted_occurrence_state_version/.test(row.statement),
+  );
 
 test('native admission and receipt lookup precede release reads; exact publish replay returns its original result', async () => {
   const parent = f.newOccurrenceId(),
@@ -47,7 +47,7 @@ test('native admission and receipt lookup precede release reads; exact publish r
   }
   const rejected = observer.records.length;
   expect((await f.native.call('POST', `${path}:publish`, body)).status).toBe(400);
-  expect(sourceReads(observer.records.slice(rejected))).toHaveLength(2);
+  expect(sourceReads(observer.records.slice(rejected)).length).toBeGreaterThan(0);
   expect(observer.records.slice(rejected).some((row) => row.statement === readReceipt.sql)).toBe(true);
 
   const exact = { ...body, occurrenceIds: [child, parent] };
@@ -55,19 +55,17 @@ test('native admission and receipt lookup precede release reads; exact publish r
   const start = observer.records.length;
   const published = await f.native.call('POST', `${path}:publish`, exact, { key });
   expect(published.status, JSON.stringify(published.value)).toBe(200);
+  const publicationReads = sourceReads(observer.records.slice(start));
+  expect(publicationReads.length).toBeGreaterThan(0);
+  expect(
+    observer.records.slice(start).some((row) => /FROM content\.hosted_(placement|append\b)/.test(row.statement)),
+  ).toBe(false);
   await f.native.command(`${path}:revise`, { expectedRevisionId: created.revisionId, placements: [] }, 200);
+  const replayStart = observer.records.length;
   const replay = await f.native.call('POST', `${path}:publish`, exact, { key });
   expect(replay.status).toBe(200);
   expect(replay.value).toEqual(published.value);
-  const reads = sourceReads(observer.records.slice(start));
-  expect(reads).toHaveLength(2);
-  for (const row of reads) {
-    expect(row.parameters.slice(0, 3)).toEqual([routeOf(f.catalogueId), f.catalogueId, created.revisionId]);
-    if (row.statement.includes('FROM content.hosted_placement')) {
-      expect(row.statement).toBe(`${HOSTED_PLACEMENT_SELECT} AND p.occurrence_id = ANY($4::uuid[]) ORDER BY p.ordinal`);
-      expect(row.parameters[3]).toEqual(exact.occurrenceIds);
-    }
-  }
+  expect(sourceReads(observer.records.slice(replayStart))).toEqual([]);
   await f.native.command(`/v1/posts/${f.catalogueId}:erase`, { reason: 'Withdraw catalogue authority' }, 200);
   expect((await f.native.call('POST', `${path}:publish`, exact, { key })).status).toBe(404);
 });

@@ -4,12 +4,14 @@ import type { ReadContext } from './model.ts';
 import { writeKnowledgeDocument } from './knowledge-commands.ts';
 import { readKnowledgePrivateDocument, readKnowledgePublicDocument } from './knowledge-reads.ts';
 import { KnowledgeNotFoundError, type KnowledgeCommandContext, type KnowledgeDependencies } from './knowledge-model.ts';
+import { contextualizeKnowledgeCopyMedia } from './knowledge-media-membership.ts';
 import {
   canonicalKnowledgeJson,
   knowledgeDigest,
   makeKnowledgeExport,
   remapKnowledgeCopy,
   type KnowledgeExport,
+  type KnowledgeProvenance,
 } from './knowledge-portable.ts';
 
 export type KnowledgeSourceSelection =
@@ -33,6 +35,7 @@ export async function exportKnowledgeDocument(
   source: KnowledgeSourceSelection | Readonly<{ representation: 'public'; documentId: string; revisionId?: string }>,
   context: ReadContext,
 ) {
+  source = structuredClone(source);
   const result =
     source.representation === 'authoring'
       ? await readKnowledgePrivateDocument(
@@ -52,15 +55,24 @@ export async function exportKnowledgeDocument(
   const document = result.value.document;
   const snapshot = parseDocument(JSON.parse(Buffer.from(document.canonicalBytes, 'base64').toString('utf8')));
   const canonical = serializeDocument(snapshot);
+  const identity = {
+    documentId: document.documentId,
+    revisionId: document.revisionId,
+    sha256: knowledgeDigest(canonical),
+  };
+  let selection: KnowledgeProvenance;
+  if (source.representation === 'public') {
+    if (!('sourceSha256' in document) || document.publicationId === null) throw new KnowledgeNotFoundError();
+    selection = {
+      ...identity,
+      representation: 'public',
+      publicationId: document.publicationId,
+      sourceSha256: document.sourceSha256,
+    };
+  } else selection = { ...identity, representation: 'authoring' };
   const envelope = makeKnowledgeExport({
     representation: source.representation,
-    selection: {
-      documentId: document.documentId,
-      revisionId: document.revisionId,
-      representation: source.representation,
-      sha256: knowledgeDigest(canonical),
-      ...(source.representation === 'public' ? { publicationId: document.publicationId! } : {}),
-    },
+    selection,
     title: document.title,
     language: document.language,
     licence: document.licence,
@@ -83,6 +95,7 @@ export async function copyKnowledgeDocument(
   input: KnowledgeCopyInput,
   context: KnowledgeCommandContext,
 ) {
+  input = structuredClone(input);
   if (actor.kind !== 'account') throw new KnowledgeNotFoundError();
   // Source is selected per command attempt before opening the destination transaction. The request pins
   // an exact revision, so a retry can never substitute a newer live publication or a hidden head.
@@ -91,7 +104,25 @@ export async function copyKnowledgeDocument(
     receiptInput: input,
     async prepare() {
       const selected = await exportKnowledgeDocument(deps, input.source, { actor, deadline: context.deadline });
-      const copied = remapKnowledgeCopy(selected.value.snapshot, selected.value.references);
+      const source = selected.value.selection;
+      const contextual = contextualizeKnowledgeCopyMedia(
+        selected.value.snapshot,
+        source.representation === 'public'
+          ? {
+              representation: 'public',
+              documentId: source.documentId,
+              revisionId: source.revisionId,
+              sourceSha256: source.sourceSha256,
+              publicationId: source.publicationId,
+            }
+          : {
+              representation: 'authoring',
+              documentId: source.documentId,
+              revisionId: source.revisionId,
+              sourceSha256: source.sha256,
+            },
+      );
+      const copied = remapKnowledgeCopy(contextual, selected.value.references);
       return {
         input: {
           title: selected.value.title,

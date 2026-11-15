@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rezics.com/definitions/catalogue/2",
+  "$id": "https://rezics.com/definitions/catalogue/1",
   "type": "object",
   "additionalProperties": false,
   "required": ["format", "kindSpec", "reduction", "directoryDigest"],
   "properties": {
     "format": {
-      "const": "https://rezics.com/definitions/catalogue/2"
+      "const": "https://rezics.com/definitions/catalogue/1"
     },
     "kindSpec": {
       "const": "https://rezics.com/definitions/kind/1"

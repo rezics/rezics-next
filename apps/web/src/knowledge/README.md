@@ -13,7 +13,12 @@ publication keep their saved-source identity distinct from unsaved writing.
 Publication reading links retain one ephemeral return coordinate in the current QueryClient lifetime. Ordinary
 clicks use the installed public route; modified clicks carry no private origin. Session or exposure replacement,
 locale change and departure to unrelated routes clear the coordinate. The return never enters a URL parameter,
-query result, persistent storage or SSR. Returning opens the original private route and requires fresh admission;
+query result, persistent storage or SSR. A retired public document visit hides its body and exact-reuse controls immediately.
+When no loader is running, it offers Read again at the current live/exact address rather than an indefinite
+preparing state. The action obtains fresh native admission; it never revives a retired response. Its callback is
+bound to the current request and monotonic session revision, so an older detached control cannot initiate a read
+under a replacement credential. Loader transitions keep the existing preparing state.
+ Returning opens the original private route and requires fresh admission;
 it supplies neither public permission nor a saved draft. A direct notebook return reads the installed notebook route.
 A link callback captured before session/exposure retirement cannot reinstall the old return coordinate. Existing
 notebook-frontier return semantics stay separate.
@@ -40,6 +45,21 @@ independently. Native authorization and all command contracts remain with their 
 
 This frontend source-only window defers typing, tests, builds, browser, visual and native acceptance to the dev
 verifier. Formatting source is independent of those acceptance claims.
+
+## Public citation identity and disclosed bytes
+
+Public documents require both digests: `sourceSha256` identifies the immutable raw revision for exact citations;
+`sha256` verifies the disclosed canonical bytes. The anonymous reader verifies those actual bounded bytes before
+showing them. Redaction may make the two digests differ; it never changes the citation to the projection digest.
+Public reference inspection returns source identity while rendering only the admitted public body. Private
+inspection keeps the raw authoring digest. Public portable selections and public provenance require both digests
+and their publication identity; authoring provenance retains its independent canonical digest without invented
+public metadata. Missing or malformed public source identity is not inferred from visible bytes.
+
+Exact reuse keeps public reading independent of its private destination. Copy refusal can mean destination
+permission or absence, so it retires the transfer controls without claiming the public source disappeared. A
+source-only export refusal may retire that source reading. Session/current-reader fences still close all old
+transfer controls and their retained bytes.
 
 ## Revision history navigation
 

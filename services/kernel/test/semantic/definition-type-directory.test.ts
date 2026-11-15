@@ -121,7 +121,7 @@ test('mounted current Type pages and descriptors span releases, survive staging 
       },
     };
     async function build(releases: Release[]) {
-      const pin = await buildCatalogue({ releases, compatibility: 'all' }, store);
+      const pin = await buildCatalogue({ releases, typeKinds: 'all' }, store);
       for (const bytes of objects.values()) {
         const artifact = parseCatalogueJson(bytes, 4194304) as any;
         const kind =

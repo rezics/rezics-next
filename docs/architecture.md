@@ -6,6 +6,16 @@ configuration. Add backend capability only when the existing abstractions cannot
 Choose the simplest design that meets the requirement. Prefer mature engines, extensions, libraries and standards.
 A custom mechanism needs evidence of the gap it fills and a comparison with the existing alternatives.
 
+Repository-owned models, contracts, formats and protocols have one canonical v1 baseline while the product remains
+unreleased. Remove superseded readers, writers, version selectors, compatibility adapters and duplicate models
+instead of preserving compatibility with versions that never shipped. Update producers, consumers and owner documents
+together. A cleanup is a model repair, not a blind renaming of version constants or loss of current behavior.
+
+When existing development state needs conversion or rebuilding, perform a bounded one-time operational migration,
+preserving records and evidence that remain useful. Do not make a permanent runtime compatibility path for that
+maintenance. Database migration history and operational evidence are not redundant model versions. Third-party
+protocols, provider APIs and standards retain their defined versions. The legacy reference stays read-only.
+
 Every synchronous operation or resumable step addresses a bounded neighbourhood. State its anchors, examined keys,
 expansion limits and indexed cost. Bound reads, writes, authorization, validation, projections and cleanup. A response
 limit does not bound a scan, sort, join, history walk or dependency fanout.

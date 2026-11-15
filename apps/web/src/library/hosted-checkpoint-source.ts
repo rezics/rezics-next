@@ -1,6 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
 import type { Locale } from '../paraglide/runtime.js';
+import { canonicalLanguageKey } from '@rezics/definitions/language';
 
 export const HOSTED_CHECKPOINT_LIMIT = 20;
 export const HOSTED_CHECKPOINT_PREDECESSORS = 8;
@@ -12,10 +13,16 @@ const id = v.pipe(v.string(), v.regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-
 const digest = v.pipe(v.string(), v.regex(/^[0-9a-f]{64}$/));
 const cursor = v.pipe(v.string(), v.minLength(1), v.maxLength(4096));
 const revision = v.pipe(v.string(), v.regex(/^[1-9][0-9]{0,18}$/));
+const bodyLanguage = v.pipe(
+  v.string(),
+  v.check((value) => canonicalLanguageKey(value) === value),
+);
 const address = v.strictObject({
   catalogueId: id,
   publicationRevisionId: id,
   occurrenceId: id,
+  bodyLanguage: v.optional(bodyLanguage),
+  targetPostId: id,
   targetRevisionId: id,
   targetSha256: digest,
   documentPosition: v.nullable(
@@ -33,6 +40,7 @@ const metadata = v.variant('availability', [
     position: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
     kind: v.literal('chapter'),
     title: v.pipe(v.string(), v.minLength(1), v.maxLength(256)),
+    bodyLanguage: v.optional(bodyLanguage),
     target: v.strictObject({ threadId: id, postId: id, revisionId: id, sha256: digest }),
   }),
   v.strictObject({
@@ -70,6 +78,10 @@ export type HostedCheckpointItem =
       catalogueId: string;
       publicationRevisionId: string;
       occurrenceId: string;
+      bodyLanguage?: string;
+      targetPostId: string;
+      targetRevisionId: string;
+      targetSha256: string;
     };
 export type HostedCheckpointResult =
   | { state: 'loaded'; items: HostedCheckpointItem[]; nextCursor: string | null }
@@ -85,7 +97,16 @@ export type HostedCheckpointRead = (
 export type HostedCheckpointHref = (
   catalogueId: string,
   locale: Locale,
-  search: { subject: string; release: string; occurrence: string; view: 'chapter' },
+  search: {
+    subject: string;
+    release: string;
+    occurrence: string;
+    bodyLanguage?: string;
+    bodyPost: string;
+    bodyRevision: string;
+    bodySha256: string;
+    view: 'chapter';
+  },
 ) => string;
 
 /** Withheld metadata drops address operands too: presentation cannot accidentally create an open action. */
@@ -99,7 +120,12 @@ export function presentHostedCheckpoints(data: unknown): HostedCheckpointResult 
     if (metadata.availability === 'unavailable') {
       items.push({ availability: 'unavailable', subjectId: row.subjectId, revision: row.revision });
     } else {
-      if (metadata.target.revisionId !== address.targetRevisionId || metadata.target.sha256 !== address.targetSha256)
+      if (
+        (address.bodyLanguage !== undefined && metadata.bodyLanguage !== address.bodyLanguage) ||
+        metadata.target.postId !== address.targetPostId ||
+        metadata.target.revisionId !== address.targetRevisionId ||
+        metadata.target.sha256 !== address.targetSha256
+      )
         return { state: 'unavailable' };
       items.push({
         availability: 'available',
@@ -109,6 +135,10 @@ export function presentHostedCheckpoints(data: unknown): HostedCheckpointResult 
         catalogueId: address.catalogueId,
         publicationRevisionId: address.publicationRevisionId,
         occurrenceId: address.occurrenceId,
+        ...(address.bodyLanguage === undefined ? {} : { bodyLanguage: address.bodyLanguage }),
+        targetPostId: address.targetPostId,
+        targetRevisionId: address.targetRevisionId,
+        targetSha256: address.targetSha256,
       });
     }
   }
@@ -124,6 +154,10 @@ export function hostedCheckpointHref(
     subject: item.subjectId,
     release: item.publicationRevisionId,
     occurrence: item.occurrenceId,
+    ...(item.bodyLanguage === undefined ? {} : { bodyLanguage: item.bodyLanguage }),
+    bodyPost: item.targetPostId,
+    bodyRevision: item.targetRevisionId,
+    bodySha256: item.targetSha256,
     view: 'chapter',
   });
 }

@@ -8,11 +8,10 @@ import {
   encodedBytes,
   encodedRecordBytes,
   isExportRecord,
-  sectionsForExportVersion,
+  EXPORT_SECTIONS,
   type ExportArtifact,
   type ExportManifest,
   type ExportRecord,
-  type ExportVersion,
 } from './contract';
 
 export type AssemblyFailure = { kind: 'limit' | 'invalid' };
@@ -24,31 +23,28 @@ export class ExportAssembly {
   private records = 0;
   private bytes = 0;
   private lastPageBytes = 0;
-  private version: ExportVersion | null = null;
+  private bound = false;
   private sectionTotals = new Map<string, SectionCount>();
   private artifact: ExportArtifact | null = null;
 
-  bind(version: ExportVersion): AssemblyFailure | null {
-    if (this.version !== null && this.version !== version) return { kind: 'invalid' };
-    this.version = version;
+  bind(): void {
+    this.bound = true;
     if (this.sectionTotals.size === 0) {
-      const sections = sectionsForExportVersion(version);
-      for (const section of sections) this.sectionTotals.set(section, { rows: 0, recordBytes: 0 });
+      for (const section of EXPORT_SECTIONS) this.sectionTotals.set(section, { rows: 0, recordBytes: 0 });
     }
-    return null;
   }
 
-  addPage(records: readonly ExportRecord[], version: ExportVersion): AssemblyFailure | null {
-    if (this.artifact || this.version !== version) return { kind: 'invalid' };
+  addPage(records: readonly ExportRecord[]): AssemblyFailure | null {
+    if (this.artifact || !this.bound) return { kind: 'invalid' };
     if (records.length > EXPORT_PAGE_ROWS) return { kind: 'limit' };
 
     let pageBytes = 0;
     const pageTotals = new Map<string, SectionCount>();
     for (const record of records) {
-      if (!isExportRecord(record) || !this.sectionTotals.has(record.section) || !recordMatchesVersion(record, version))
+      if (!isExportRecord(record) || !this.sectionTotals.has(record.section) || !validRecord(record))
         return { kind: 'invalid' };
       const recordBytes = encodedRecordBytes(record);
-      if (version !== 1 && recordBytes > EXPORT_ROW_BYTES) return { kind: 'limit' };
+      if (recordBytes > EXPORT_ROW_BYTES) return { kind: 'limit' };
       pageBytes += recordBytes;
       const sectionTotal = pageTotals.get(record.section) ?? { rows: 0, recordBytes: 0 };
       sectionTotal.rows += 1;
@@ -74,20 +70,14 @@ export class ExportAssembly {
 
   finalize(manifest: ExportManifest): ExportArtifact | AssemblyFailure {
     if (this.artifact) return this.artifact;
-    if (this.version !== manifest.version || manifest.rows !== this.records || manifest.recordBytes !== this.bytes)
+    if (!this.bound || manifest.rows !== this.records || manifest.recordBytes !== this.bytes)
       return { kind: 'invalid' };
 
-    if (manifest.version !== 1) {
-      const sections = manifest.sections;
-      for (const section of sections) {
-        const actual = this.sectionTotals.get(section);
-        const declared =
-          manifest.version === 4
-            ? manifest.sectionTotals[section]
-            : manifest.sectionTotals[section as keyof typeof manifest.sectionTotals];
-        if (!actual || declared.rows !== actual.rows || declared.recordBytes !== actual.recordBytes)
-          return { kind: 'invalid' };
-      }
+    for (const section of manifest.sections) {
+      const actual = this.sectionTotals.get(section);
+      const declared = manifest.sectionTotals[section];
+      if (!actual || declared.rows !== actual.rows || declared.recordBytes !== actual.recordBytes)
+        return { kind: 'invalid' };
     }
 
     const records = this.chunks.flat();
@@ -136,19 +126,17 @@ export class ExportAssembly {
     this.records = 0;
     this.bytes = 0;
     this.lastPageBytes = 0;
-    this.version = null;
+    this.bound = false;
     this.sectionTotals.clear();
     this.artifact = null;
   }
 }
 
-function recordMatchesVersion(record: ExportRecord, version: ExportVersion): boolean {
+function validRecord(record: ExportRecord): boolean {
   if (record.section !== 'journals') return true;
   const journal = record.journal;
   if (!journal || typeof journal !== 'object' || Array.isArray(journal)) return false;
   const value = journal as Record<string, unknown>;
-  const hasAssessment = Object.hasOwn(value, 'assessment');
-  if (version < 3) return !hasAssessment;
   const assessment = value.assessment;
   if (!assessment || typeof assessment !== 'object' || Array.isArray(assessment)) return false;
   const details = assessment as Record<string, unknown>;

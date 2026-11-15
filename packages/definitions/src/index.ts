@@ -2,10 +2,18 @@
 export * from './portable.ts';
 export * from './publication-workspace.ts';
 export { publicationLimits, PUBLICATION_LIMITS } from './publication-construction.ts';
-export { chooseLabel, languageRanges } from './language.ts';
+export {
+  chooseLabel,
+  languageRanges,
+  canonicalLanguageKey,
+  parseLanguagePreferences,
+  MAX_LANGUAGE_KEY_LENGTH,
+  MAX_LANGUAGE_PREFERENCES,
+  MAX_LANGUAGE_PREFERENCES_LENGTH,
+} from './language.ts';
 export {
   buildCatalogue,
-  compatibilityKind,
+  exactTypeKind,
   lookupCatalogueKind,
   parseKindDeclaration,
   readCatalogueArtifact,

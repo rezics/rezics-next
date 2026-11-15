@@ -23,11 +23,13 @@ import { authorizedRealmMedia, realmMediaVariants } from './realm-media-read.ts'
 import { AccessWorkUnavailableError, type AccessWorkAccounting } from '../access/work.ts';
 import { coverPreparedAccessWork } from './cover-prepared-access-work.ts';
 import { COVER_MEDIA_WORK_DEPENDENCY, mediaEligibilityCallbacks } from './media-eligibility-access-work.ts';
+import { prepareKnowledgeMediaRead, type KnowledgeMediaSelection } from './knowledge-media.ts';
 
 type Row = NonNullable<Awaited<ReturnType<typeof read.run>>>;
 type RealmHeadRow = NonNullable<Awaited<ReturnType<typeof realmHead.run>>>;
 export type DownloadContext = Readonly<{
   deadline: number;
+  knowledge?: KnowledgeMediaSelection;
   routeKey?: Uint8Array;
   /** Trusted caller forwarding only; never reconstructed from an HTTP timestamp. */
   time?: AuthoritativeTime;
@@ -184,6 +186,7 @@ async function authorizeDownload(
       !initial ||
       !usable(initial) ||
       routeOf(initial.container_id) !== r ||
+      (context.knowledge !== undefined && initial.purpose !== 'knowledge-image') ||
       (expected !== undefined && signature(initial) !== signature(expected))
     )
       return null;
@@ -251,9 +254,41 @@ async function authorizeDownload(
     } else if (
       initial.state !== 'available' ||
       initial.variant_key === null ||
-      (initial.purpose === 'post-image' && initial.claimed_at === null)
+      ((initial.purpose === 'post-image' || initial.purpose === 'knowledge-image') && initial.claimed_at === null)
     )
       return null;
+
+    if (initial.purpose === 'knowledge-image') {
+      const source = await prepareKnowledgeMediaRead(
+        dependencies, actor, mediaId, initial.container_id, context.knowledge, original, context.deadline,
+      );
+      if (!source) return null;
+      const resource = { route: r, id: mediaId };
+      const media = await accessCheck(dependencies.access, actor, 'media:read', {
+        ...resource,
+        eligibility: createResourcePublicEligibility({
+          resource,
+          action: 'media:read',
+          async prepare() { return { media: signature(initial) }; },
+          async verify({ client }) {
+            const current = await point(client, mediaId, slot);
+            if (!current || !usable(current) || signature(current) !== signature(initial))
+              throw new GrantDeniedError();
+            // A failed source is a hard restriction, including for existing media grants.
+            return source.verify(client);
+          },
+        }),
+      }, { pool: dependencies.pool, deadline: context.deadline });
+      if (!(await source.current())) return null;
+      const current = await snapshot(r, async (client) => {
+        const row = await point(client, mediaId, slot);
+        if (!row || !usable(row) || signature(row) !== signature(initial)) return null;
+        await source.verify(client);
+        return (await media(client)) ? row : null;
+      });
+      if (!current || !(await source.current())) return null;
+      return authorizedDecision(current, mediaId, variant, source.publiclyVisible, context.deadline);
+    }
 
     // A cover inherits its declared subject; candidate visibility belongs to the
     // semantic response. The tuple fence is read at its independent source home.

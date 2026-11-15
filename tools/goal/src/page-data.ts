@@ -343,7 +343,7 @@ export function pageDataSeedStatus(
     const handoff = value as Record<string, unknown>;
     if (
       Object.keys(handoff).length !== 5 ||
-      handoff.version !== 2 ||
+      handoff.version !== 1 ||
       handoff.state !== 'publication-incomplete' ||
       handoff.artifact !== expectedArtifact ||
       typeof handoff.artifactSha256 !== 'string' ||

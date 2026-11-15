@@ -5,8 +5,15 @@ import { runWorkerCommand, READ_ONLY_WORKER_COMMANDS } from './worker-commands.t
 import { parseWorkerCommandArguments, type ParsedWorkerCommandArguments } from './command-arguments.ts';
 import { installPrivate } from './shared-dependencies.ts';
 import { HOST_START_KINDS, installService, reportServices, type HostStartKind } from './service.ts';
-import { MAINTENANCE_JOBS, runMaintenance, runResidentVerifier, type MaintenanceJob } from './maintenance.ts';
+import {
+  MAINTENANCE_JOBS,
+  maintenanceStage,
+  runMaintenance,
+  runResidentVerifier,
+  type MaintenanceJob,
+} from './maintenance.ts';
 import { runPublicationCommand } from './publication-command.ts';
+import { runNativeUnitCommand } from './native-unit-command.ts';
 
 const workerCommands = [
   'dispatch',
@@ -34,6 +41,7 @@ const integrationCommands = [
   'inbox',
   'backlog',
   'publication',
+  'unit',
   '_manager-host',
   '_host-start',
 ];
@@ -47,6 +55,7 @@ export const SWEEP_FREE_COMMANDS = new Set([
   'backlog',
   'manager',
   'publication',
+  'unit',
   'urgent',
   'amend',
   'typing-recover',
@@ -123,16 +132,20 @@ export async function run(
     return 2;
   }
   let runtime: Runtime | IntegrationRuntime | undefined;
+  let runtimeStage = 'runtime creation';
   // Only the train itself and land drain the train in this process; everything else, the host included, hands it
   // off, so a promotion never holds a command or the manager socket.
   const trainMode = ['land', 'train'].includes(command) ? 'inline' : 'detached';
   let parsedWorkerArguments: ParsedWorkerCommandArguments | undefined;
   try {
     if (workerCommands.includes(command)) parsedWorkerArguments = parseWorkerCommandArguments(command, args);
-    runtime = await factory({
-      trainMode,
-      ...(command === '_manager-host' ? { hostLoop: true } : {}),
-    });
+    const create = () =>
+      factory({
+        trainMode,
+        ...(command === '_manager-host' ? { hostLoop: true } : {}),
+      });
+    runtime = await (command === 'maintenance' ? maintenanceStage('runtime', create) : create());
+    runtimeStage = `${command}${args[0] ? ` ${args[0]}` : ''}`;
     if (command === 'service') {
       if (args.length !== 1) throw new Error('usage: goal service run-verifier');
       return await runResidentVerifier(runtime);
@@ -175,9 +188,15 @@ export async function run(
       if (!('settings' in runtime)) throw new Error('Publication commands require the configured Goal runtime');
       return await runPublicationCommand(args, runtime);
     }
+    if (command === 'unit') {
+      if (!('settings' in runtime)) throw new Error('Native unit commands require the configured Goal runtime');
+      return await runNativeUnitCommand(args, runtime);
+    }
     return await runIntegration([command, ...args], runtime);
   } catch (error) {
-    console.error(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
+    if (error instanceof Error && error.name === 'SQLiteError')
+      console.error(`goal ${command} stage=${runtimeStage} database=${runtime?.db.filename ?? 'initializing'}:`, error);
+    else console.error(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
     return 1;
   } finally {
     runtime?.db.close();

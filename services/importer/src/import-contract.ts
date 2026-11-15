@@ -19,6 +19,10 @@ type GeneratedClearValue = Readonly<Parameters<SourceStatisticsClient['$clear'][
 type GeneratedStatisticList = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['subjects']>['source-statistics']['get']>>['data']
 >;
+type GeneratedSourceObservationRead = NonNullable<
+  Awaited<ReturnType<SourceStatisticsClient['observations']['get']>>['data']
+>;
+export type ImportSourceObservationHead = GeneratedSourceObservationRead['head'];
 type GeneratedPublicFigure = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['subjects']>['figure']['get']>>['data']
 >;
@@ -84,6 +88,10 @@ export interface ImportTransport {
     input: { subjectId: string },
     signal?: AbortSignal,
   ): Promise<readonly ImportSourceStatisticFigure[]>;
+  readSourceObservationHead?(
+    input: { subjectId: string },
+    signal?: AbortSignal,
+  ): Promise<ImportSourceObservationHead>;
   readPublicFigure?(input: { subjectId: string }, signal?: AbortSignal): Promise<ImportPublicFigure>;
   readSourceClassifications?(
     input: { subjectId: string; associations: readonly ClassificationAssociation[] },
@@ -133,28 +141,8 @@ export type ImportConversion<Extra extends object = {}> = ConvertedRecord<BatchC
   sourceStatisticClear?: ImportSourceStatisticClear;
 } & Extra;
 
-export type StagingMemberIdentity = Readonly<{
-  index: number;
-  family: 'author' | 'work' | 'edition' | null;
-  compression: 'none' | 'gzip' | 'zstd';
-  sha256: string;
-  bytes: number;
-}>;
-
-export type StagingCaptureIdentity = Readonly<{
-  sha256: string;
-  bytes: number;
-  sourceAlias: string;
-  sourceKind: SourceId;
-  converterRevision: string;
-  decoderId: string;
-  checkpointVersion: number;
-  disappearanceThreshold: number;
-  decodeBudget?: number;
-  inputKind?: 'file' | 'dump-set';
-  manifestVersion?: 1 | 2;
-  members?: readonly StagingMemberIdentity[];
-}>;
+export type { StagingCaptureIdentity, StagingMemberIdentity } from './staging-checkpoint.ts';
+import type { StagingCaptureIdentity } from './staging-checkpoint.ts';
 
 export type StagingCheckpointRequest = Readonly<{
   action: 'acquire' | 'resume';

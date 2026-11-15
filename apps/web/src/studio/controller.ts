@@ -302,6 +302,11 @@ export class StudioController {
       this.saveAttempt || this.createAttempt || this.nativeCreateAttempt || this.organizeAttempt || this.publishAttempt,
     );
   canOrganize = (): boolean => Boolean(this.bookPort && this.state.structure?.canOrganize);
+  canBindChapterLanguage = (): boolean => this.canOrganize() && this.bookPort?.canBindChapterLanguage?.() === true;
+  createBookSourceConsent = (document: ExactDocument, signal: AbortSignal) =>
+    this.current() && this.bookPort?.createSourceConsent
+      ? this.bookPort.createSourceConsent(document, signal)
+      : Promise.resolve({ ok: false as const, error: failure('unavailable') });
   private async run<T>(
     operation: StudioOperation,
     action: (signal: AbortSignal) => Promise<StudioResult<T>>,

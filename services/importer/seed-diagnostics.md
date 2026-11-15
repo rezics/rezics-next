@@ -57,7 +57,16 @@ check with the written artifact path and bounded omission count, while preservin
 retains its original error and `result-write` phase; neither outcome implies that omitted claims were published.
 
 Decision: after that post-write refusal, the development seed CLI emits one versioned `Cross-media seed artifact
-handoff` JSON line with the exact artifact path, SHA-256 of the written bytes and omission count. It keeps the strict
+handoff` JSON line with canonical `version: 1`, `state: "publication-incomplete"`, the exact artifact path,
+SHA-256 of the written bytes and omission count. Existing artifact bytes and retained diagnostic logs are not
+rewritten, and changing this envelope never replays completed seed writes. It keeps the strict
 nonzero exit and ordinary bounded diagnostic. The page-data runner admits only this handoff for its expected result
 path and verifies the current bounded regular file against the digest; source failures, development-showcase
 incompleteness and old or edited result files remain stops.
+
+
+Seed journals use one current local schema. A fresh action journal includes nullable native result IDs; the cover
+journal stores each exact response digest beside its original source JSON. The cross-media graph includes its
+sealed command and retraction payload fields. Normal open never adds missing columns, renames old tables or
+rehashes historical rows. A retained older schema requires explicit bounded maintenance after its original
+receipts, command bodies, keys and source evidence have been preserved; it is refused before journal data changes.

@@ -36,7 +36,7 @@ test('a sweep expires on policy budget, reports skipped steps and releases its l
     expect(await runMaintenance('all', runtime)).toBe(1);
     expect(performance.now() - start).toBeLessThan(1000);
     expect(errors.join('\n')).toContain('budget exhausted (30ms)');
-    expect(errors.join('\n')).toContain('maintenance detect:');
+    expect(errors.join('\n')).toContain('maintenance reap:');
     let detected = false;
     runtime.deliverReminders = async () => {
       detected = true;
@@ -47,6 +47,103 @@ test('a sweep expires on policy budget, reports skipped steps and releases its l
   } finally {
     console.error = original;
     db.close();
+    dir.close();
+  }
+});
+
+test.each(['reap', 'flow'] as const)(
+  'scheduled reminders and hourly report run before slow %s exhausts the shared budget',
+  async (slow) => {
+    const dir = temporaryDirectory();
+    const db = openDb(join(dir.path, 'goal.sqlite'));
+    const store = new WorkerStore(db);
+    const events: string[] = [];
+    const errors: string[] = [];
+    const originalError = console.error;
+    console.error = (...args) => errors.push(args.map(String).join(' '));
+    const report = join(dir.path, 'report.json');
+    const scripts = join(dir.path, 'tools/goal/scripts');
+    mkdirSync(scripts, { recursive: true });
+    writeFileSync(
+      join(scripts, 'efficiency-report.ts'),
+      `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(report)}, JSON.stringify(process.argv.slice(2)));`,
+    );
+    const settings = {
+      stateDirectory: dir.path,
+      mainCheckout: dir.path,
+      worktreeRoot: join(dir.path, 'worktrees'),
+      policy: readControlPolicy({ maintenance: { budgetMs: 200 } }),
+    } as Settings;
+    const bootstrap = store.bootstrapMaintenanceProcesses.bind(store);
+    store.bootstrapMaintenanceProcesses = (limit) => {
+      events.push('reap');
+      expect(existsSync(report)).toBe(true);
+      // Model a synchronous historical scan, which also delays the abort timer itself.
+      Bun.sleepSync(220);
+      return bootstrap(limit);
+    };
+    const runtime = {
+      stateDirectory: dir.path,
+      mainCheckout: dir.path,
+      settings,
+      store,
+      hourlyEfficiencyReport: { enabled: true },
+      deliverReminders: async () => {
+        events.push('reminders');
+        return 0;
+      },
+      evaluateFlow: async () => {
+        events.push('flow');
+        expect(existsSync(report)).toBe(true);
+        if (slow === 'flow') await new Promise(() => {});
+      },
+    } as unknown as Runtime;
+    try {
+      const start = performance.now();
+      expect(await runMaintenance('all', runtime)).toBe(slow === 'reap' ? 0 : 1);
+      expect(performance.now() - start).toBeLessThan(1000);
+      expect(events).toEqual(slow === 'flow' ? ['reminders', 'flow'] : ['reminders', 'flow', 'reap']);
+      expect(JSON.parse(readFileSync(report, 'utf8')).slice(0, 3)).toEqual(['--send', '--scheduled', '--bucket']);
+      expect(errors.join('\n')).toContain(slow === 'reap' ? 'maintenance reap: pending' : 'budget exhausted (200ms)');
+      // The timed-out pass released the existing lease; the next timer may continue normal duties.
+      expect(await runMaintenance('detect', runtime)).toBe(0);
+    } finally {
+      console.error = originalError;
+      db.close();
+      dir.close();
+    }
+  },
+);
+
+test('a reaper yield persists completed process candidates and retains later work', async () => {
+  const dir = temporaryDirectory();
+  const candidates = ['first', 'later'].map((taskId, index) => ({
+    ticket: index + 1,
+    taskId,
+    attempt: 1,
+    worktree: join(dir.path, taskId),
+    process: { pid: 2_147_483_647, start: 'dead', boot: 'dead', group: 2_147_483_647 },
+  }));
+  const completed: string[] = [];
+  const store = {
+    bootstrapMaintenanceProcesses: () => ({ examined: 0, complete: true }),
+    reapMaintenanceCandidates: () => candidates,
+    completeMaintenanceCandidates: (rows: typeof candidates) => completed.push(...rows.map((row) => row.taskId)),
+  } as unknown as WorkerStore;
+  const runtime = {
+    stateDirectory: dir.path,
+    settings: { policy: readControlPolicy({ maintenance: { budgetMs: 400 } }) },
+    store,
+  } as unknown as Runtime;
+  try {
+    expect(
+      await runMaintenance('reap', runtime, (unit) => {
+        if (unit === 'process-group-termination') Bun.sleepSync(120);
+      }),
+    ).toBe(0);
+    expect(completed).toEqual(['first']);
+    expect(candidates.map((row) => row.taskId).filter((id) => !completed.includes(id))).toEqual(['later']);
+  } finally {
     dir.close();
   }
 });

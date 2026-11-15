@@ -11,7 +11,8 @@ import { completedUtcHour } from './efficiency-report-time.ts';
 import { MAINTENANCE_BOOTSTRAP_PAGE_SIZE, MAINTENANCE_CANDIDATE_BATCH_SIZE } from './store.ts';
 import { removeFinishedWorktree, type LifetimeRuntime } from './worktree-lifetime.ts';
 
-export const MAINTENANCE_JOBS = ['reap', 'alarm', 'detect', 'regenerate'] as const;
+// Deliver scheduled duties before historical cleanup can consume this pass's shared budget.
+export const MAINTENANCE_JOBS = ['detect', 'alarm', 'reap', 'regenerate'] as const;
 export type MaintenanceJob = (typeof MAINTENANCE_JOBS)[number];
 export type MaintenanceWorkUnit =
   | 'reap-worktree-existence'
@@ -44,6 +45,21 @@ export async function maintenanceCommand(argv: string[], cwd: string, signal: Ab
   });
 }
 
+/** Stage boundaries distinguish runtime startup, collection and cleanup without another scheduler. */
+export async function maintenanceStage<T>(name: string, action: () => T | Promise<T>): Promise<T> {
+  const started = Date.now();
+  const cpu = process.cpuUsage();
+  console.error(`maintenance stage=${name} event=start`);
+  try {
+    return await action();
+  } finally {
+    const used = process.cpuUsage(cpu);
+    console.error(
+      `maintenance stage=${name} event=finish wallMs=${Date.now() - started} cpuMs=${Math.round((used.user + used.system) / 1000)}`,
+    );
+  }
+}
+
 /** The periodic sweep excludes generators; explicit regeneration runs as a separate, bounded process. */
 export async function runMaintenance(
   job: MaintenanceJob | 'all',
@@ -57,18 +73,24 @@ export async function runMaintenance(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(new Error(`Maintenance budget exhausted (${budget}ms)`)), budget);
   const signal = controller.signal;
+  const checkBudget = () => {
+    // Synchronous history scans can delay the timer; do not start another operation after the deadline.
+    if (!signal.aborted && Date.now() >= deadlineMs)
+      controller.abort(new Error(`Maintenance budget exhausted (${budget}ms)`));
+    signal.throwIfAborted();
+  };
   let lease;
   let failed = false;
   const step = async (name: string, action: () => Promise<unknown>) => {
     let cancel: () => void = () => {};
     try {
-      signal.throwIfAborted();
+      checkBudget();
       await Promise.race([
         new Promise<never>((_, reject) => {
           cancel = () => reject(signal.reason);
           signal.addEventListener('abort', cancel, { once: true });
         }),
-        action(),
+        maintenanceStage(name, action),
       ]);
     } catch (error) {
       failed = true;
@@ -90,57 +112,82 @@ export async function runMaintenance(
     for (const name of job === 'all' ? MAINTENANCE_JOBS.filter((name) => name !== 'regenerate') : [job]) {
       await step(name, async () => {
         switch (name) {
-          case 'reap':
+          case 'reap': {
+            const reapDeadlineMs = Math.min(deadlineMs, Date.now() + Math.max(1, Math.floor(budget / 4)));
             // The process index is backfilled in fixed pages, then task writers keep its queue current.
             const processBackfill = runtime.store.bootstrapMaintenanceProcesses(MAINTENANCE_BOOTSTRAP_PAGE_SIZE);
             for (let index = 0; index < processBackfill.examined; index++)
               observe?.('maintenance-backfill-attempt-row');
+            if (Date.now() >= reapDeadlineMs) {
+              console.error('maintenance reap: pending (process backfill yielded at cleanup deadline)');
+              break;
+            }
             const candidates = runtime.store.reapMaintenanceCandidates(MAINTENANCE_CANDIDATE_BATCH_SIZE);
             const completed: typeof candidates = [];
-            for (const candidate of candidates) {
-              signal.throwIfAborted();
-              try {
-                observe?.('reap-worktree-existence');
-                // The worktree is the custody boundary: retain the candidate until deletion makes reaping eligible.
-                if (existsSync(candidate.worktree)) continue;
-                observe?.('process-group-termination');
-                await terminateProcessGroup(candidate.process, 1000, undefined, () =>
-                  observe?.('process-directory-entry'),
-                ).catch((error: unknown) => {
-                  // A reused PID means the recorded worker is gone; there is nothing of this attempt left to reap.
-                  if (error instanceof Error && error.message === REUSED_PID_REFUSAL) return;
-                  throw error;
-                });
-                completed.push(candidate);
-              } catch (error) {
-                failed = true;
-                console.error(`maintenance reap ${candidate.taskId}:${candidate.attempt}:`, error);
+            let examined = 0;
+            try {
+              for (const candidate of candidates) {
+                if (signal.aborted || Date.now() >= reapDeadlineMs) break;
+                examined++;
+                try {
+                  observe?.('reap-worktree-existence');
+                  // The worktree is the custody boundary: retain the candidate until deletion makes reaping eligible.
+                  if (existsSync(candidate.worktree)) continue;
+                  observe?.('process-group-termination');
+                  await terminateProcessGroup(candidate.process, 1000, undefined, () =>
+                    observe?.('process-directory-entry'),
+                  ).catch((error: unknown) => {
+                    // A reused PID means the recorded worker is gone; there is nothing of this attempt left to reap.
+                    if (error instanceof Error && error.message === REUSED_PID_REFUSAL) return;
+                    throw error;
+                  });
+                  completed.push(candidate);
+                } catch (error) {
+                  failed = true;
+                  console.error(`maintenance reap ${candidate.taskId}:${candidate.attempt}:`, error);
+                }
               }
+            } finally {
+              // Persist progress even when a later candidate yields or fails.
+              runtime.store.completeMaintenanceCandidates(completed);
             }
-            runtime.store.completeMaintenanceCandidates(completed);
+            if (examined < candidates.length || Date.now() >= reapDeadlineMs) {
+              console.error(
+                `maintenance reap: pending (${completed.length} process candidates completed before cleanup deadline)`,
+              );
+              break;
+            }
             await removeFinishedWorktree(runtime.settings, runtime.store, lifetimeRuntime, undefined, {
-              deadlineMs,
+              deadlineMs: reapDeadlineMs,
               signal,
             });
+            if (runtime.store.hasPendingWorktreeCandidates())
+              console.error(
+                'maintenance reap: pending (durable worktree candidates remain for the next scheduled pass)',
+              );
             break;
+          }
           case 'detect':
             await runtime.deliverReminders?.();
             break;
           case 'alarm':
-            await step('alarm flow', async () => runtime.evaluateFlow?.());
+            // Flow evaluation may scan legacy history. It must not delay the scheduled report.
             if (runtime.hourlyEfficiencyReport?.enabled)
-              await maintenanceCommand(
-                [
-                  process.execPath,
-                  join(runtime.mainCheckout, 'tools/goal/scripts/efficiency-report.ts'),
-                  '--send',
-                  '--scheduled',
-                  '--bucket',
-                  completedUtcHour(Date.now()).start,
-                ],
-                runtime.mainCheckout,
-                signal,
+              await step('alarm report', () =>
+                maintenanceCommand(
+                  [
+                    process.execPath,
+                    join(runtime.mainCheckout, 'tools/goal/scripts/efficiency-report.ts'),
+                    '--send',
+                    '--scheduled',
+                    '--bucket',
+                    completedUtcHour(Date.now()).start,
+                  ],
+                  runtime.mainCheckout,
+                  signal,
+                ),
               );
+            await step('alarm flow', async () => runtime.evaluateFlow?.());
             break;
           case 'regenerate':
             await maintenanceCommand([process.execPath, import.meta.filename], runtime.mainCheckout, signal);

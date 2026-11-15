@@ -69,20 +69,10 @@ async function publish(
   fixture: Awaited<ReturnType<typeof hostedChaptersFixture>>,
   placements: readonly Record<string, unknown>[],
 ) {
-  const path = `/v1/hostedCatalogues/${fixture.catalogueId}`;
-  const created = await fixture.native.command('/v1/hostedCatalogues', {
-    postId: fixture.catalogueId,
-    threadId: fixture.threadId,
-    placements,
-  });
-  const released = await fixture.native.command(
-    `${path}:publish`,
-    {
-      expectedRevisionId: created.revisionId,
-      expectedPublicationId: null,
-      occurrenceIds: placements.map((placement) => placement.occurrenceId),
-    },
-    200,
+  const created = await fixture.retained.structure(placements);
+  const released = await fixture.retained.publication(
+    created.revisionId,
+    placements.map((placement) => placement.occurrenceId),
   );
   return { headId: created.revisionId as string, publicationId: released.revisionId as string };
 }
@@ -163,11 +153,7 @@ test('receives a sealed legacy publication in replayable pages for its first poi
         target: publicTarget,
       },
     ];
-    const revised = await fixture.native.command(
-      `/v1/hostedCatalogues/${fixture.catalogueId}:revise`,
-      { expectedRevisionId: original.headId, placements: draftPlacements },
-      200,
-    );
+    const revised = await fixture.retained.structure(draftPlacements);
 
     const deps = dependencies(fixture);
     const captured = await captureHostedPublicBaselineInput(
@@ -288,6 +274,7 @@ test('receives a sealed legacy publication in replayable pages for its first poi
       target: publicTarget,
     };
     const pointRevisionId = fixture.newOccurrenceId();
+    await fixture.retained.adoptPublication(original.publicationId, baseline.snapshot);
     const point = await transaction(fixture, (tx) =>
       commitHostedVersionPublicationPoint(tx, {
         catalogueId: fixture.catalogueId,
@@ -306,7 +293,6 @@ test('receives a sealed legacy publication in replayable pages for its first poi
           before: anchor,
           changedPlacements: [selected],
         },
-        preparedBaseline: baseline,
       }),
     );
     expect(point.plan.insertions[0]).toMatchObject({

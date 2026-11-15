@@ -14,7 +14,7 @@ import {
   STAGING_INCOMPATIBLE,
   STAGING_OLD_UNSUPPORTED,
   STAGING_SEALED_RESUME,
-  captureIdentity,
+  captureFileIdentity,
   evaluateResume,
   extendPrefixDigest,
   emptyPrefixDigest,
@@ -49,8 +49,9 @@ function olLine(id: number, title: string) {
   return `/type/work\t${key}\t1\t2020-01-01T00:00:00.000000\t${json}\n`;
 }
 
-function identityOf(bytes: string, extra: Partial<Parameters<typeof captureIdentity>[0]> = {}) {
-  return captureIdentity({
+function identityOf(bytes: string, extra: Partial<Parameters<typeof captureFileIdentity>[0]> = {}) {
+  return captureFileIdentity({
+    compression: 'none',
     sha256: createHash('sha256').update(bytes).digest('hex'),
     bytes: Buffer.byteLength(bytes),
     sourceAlias: 'wikidata',
@@ -439,11 +440,12 @@ test('empty input seals, truncated suffix stays recoverable, and acquire refuses
 
 test('checkpoint rolling digest extends per ordinal and rejects a missing cursor', () => {
   const first = extendPrefixDigest(emptyPrefixDigest(), {
+    memberIndex: 0,
     ordinal: 1,
     recordKey: 'Q1',
     digest: 'a'.repeat(64),
   });
-  const second = extendPrefixDigest(first, { ordinal: 2, recordKey: 'Q2', digest: 'b'.repeat(64) });
+  const second = extendPrefixDigest(first, { memberIndex: 0, ordinal: 2, recordKey: 'Q2', digest: 'b'.repeat(64) });
   expect(first).not.toBe(second);
   const missing = evaluateResume(null, identityOf('[]\n'), {
     status: 'staging',

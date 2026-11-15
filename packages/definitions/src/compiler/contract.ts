@@ -38,7 +38,7 @@ export type CatalogueSourceInput = {
 export type CatalogueBuildInput = Readonly<{
   releases: Iterable<unknown>;
   declarations?: Iterable<unknown>;
-  compatibility?: 'all' | Iterable<DefinitionTypePin>;
+  typeKinds?: 'all' | Iterable<DefinitionTypePin>;
 }>;
 
 export type BundledCatalogueSources = CatalogueSourceInput & {
@@ -84,5 +84,5 @@ export type CompilerApplication = {
     reader: CatalogueArtifactReader,
   ): Promise<{ status: 'not-found' | 'found' }>;
   readCatalogueArtifact(reader: CatalogueArtifactReader, digest: string, maximum: number): Promise<unknown>;
-  compatibilityKind(release: Release, digest: string, typeId: string): KindDeclarationV1;
+  exactTypeKind(release: Release, digest: string, typeId: string): KindDeclarationV1;
 };

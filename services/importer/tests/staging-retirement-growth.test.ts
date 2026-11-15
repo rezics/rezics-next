@@ -8,7 +8,7 @@ import {
   type CountedValues,
 } from '../../kernel/test/support/growth-counters.ts';
 import { ImportSession } from '../src/import-session.ts';
-import { captureIdentity } from '../src/staging-checkpoint.ts';
+import { captureFileIdentity } from '../src/staging-checkpoint.ts';
 import {
   applyStagingRetirementOnDatabase,
   buildStagingRetirementPlan,
@@ -109,7 +109,8 @@ test('staging retirement review, apply and restart stay indexed as selected rows
           Array.from({ length: scale }, (_, i) => `U${i}`),
           2_000_000,
         );
-        const identity = captureIdentity({
+        const identity = captureFileIdentity({
+          compression: 'none',
           sha256: (3_000_000 + scale).toString(16).padStart(64, '0'),
           bytes: scale,
           sourceAlias: source,
@@ -124,7 +125,7 @@ test('staging retirement review, apply and restart stay indexed as selected rows
           const key = `Q${i}`;
           const digest = (4_000_000 + i).toString(16).padStart(64, '0');
           writer.stage(capture, staged(source, key, digest));
-          writer.commitStagingRecord(capture, { ordinal: i + 1, recordKey: key, digest });
+          writer.commitStagingRecord(capture, { memberIndex: 0, ordinal: i + 1, recordKey: key, digest });
         }
       } finally {
         writer.close();
@@ -218,7 +219,8 @@ test('staging retirement review, apply and restart stay indexed as selected rows
           expect(writer.seal(run, { complete: true }).status).toBe('ready');
           expect(writer.abandon(run)).toBe('abandoned');
         }
-        const identity = captureIdentity({
+        const identity = captureFileIdentity({
+          compression: 'none',
           sha256: 'ab'.repeat(32),
           bytes: 8,
           sourceAlias: source,
@@ -229,7 +231,7 @@ test('staging retirement review, apply and restart stay indexed as selected rows
         const capture = writer.beginCheckpointed(source, identity);
         if (capture === 'busy') throw new Error('busy');
         writer.stage(capture, staged(source, 'Q0', 'cd'.repeat(32)));
-        writer.commitStagingRecord(capture, { ordinal: 1, recordKey: 'Q0', digest: 'cd'.repeat(32) });
+        writer.commitStagingRecord(capture, { memberIndex: 0, ordinal: 1, recordKey: 'Q0', digest: 'cd'.repeat(32) });
         writer.database.exec('ANALYZE');
         const probe = createSqliteProbe(writer.database, { growingTables: RUN_TABLES });
         const catalog = retentionCatalog(writer.database);

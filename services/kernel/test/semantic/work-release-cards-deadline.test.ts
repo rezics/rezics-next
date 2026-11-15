@@ -44,7 +44,7 @@ const fixturePromise = createReleasedDiscoveryFixture({
                   reject(new Error('A retired card snapshot cannot dispatch its field query'));
                   return;
                 }
-                Reflect.apply(query, client, [input, values]).then(
+                query(input, values).then(
                   (result) => {
                     completeSlowFieldQuery?.();
                     resolve(result);
@@ -58,7 +58,7 @@ const fixturePromise = createReleasedDiscoveryFixture({
             }) as unknown as ReturnType<PoolClient['query']>;
           }
         }
-        return Reflect.apply(query, client, [input, values]) as ReturnType<PoolClient['query']>;
+        return query(input, values) as ReturnType<PoolClient['query']>;
       }) as PoolClient['query'];
 
       client.release = ((error?: Error) => {

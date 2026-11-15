@@ -3,6 +3,7 @@ import * as v from 'valibot';
 import type { StudioFailure, StudioResult } from './contract';
 import {
   hostedCommand,
+  hostedBindLanguage,
   type HostedPublicationPointNative,
   type HostedDraftPointNative,
   type HostedRootAppendNative,
@@ -128,6 +129,7 @@ export function createHostedBookNative(
       )
         return unavailable();
       const placements: HostedPlacement[] = [];
+      const defaultLanguages: Record<string, string | null> = {};
       const ids = new Set<string>();
       const cursors = new Set<string>();
       let cursor: string | null = null;
@@ -160,6 +162,8 @@ export function createHostedBookNative(
             );
           if (ids.has(item.occurrenceId) || placements.length >= 512) return unavailable();
           ids.add(item.occurrenceId);
+          if (item.kind === 'chapter' && item.selectedLanguage !== undefined)
+            defaultLanguages[item.occurrenceId] = item.selectedLanguage;
           const address = {
             occurrenceId: item.occurrenceId,
             parentId: item.parentId,
@@ -179,7 +183,7 @@ export function createHostedBookNative(
         }
       } while (cursor !== null);
       if (signal.aborted) return unavailable();
-      const book = { revision, placements };
+      const book = { revision, placements, defaultLanguages };
       // The common tree model checks parents, dense sibling positions and depth. Comparing
       // its preorder also rejects a stream that reopens an already completed subtree.
       const structure = hostedBookStructure(book);
@@ -389,6 +393,17 @@ export function createHostedBookNative(
       if (!body.success || !v.is(hostedKey, key)) return failure(400, true);
       return command(body.output.postId, 'structure', null, signal, () =>
         client.hostedCatalogues.post(body.output, commandOptions(signal, key)),
+      );
+    },
+    async bindLanguage(catalogueId, occurrenceId, input, key, signal) {
+      const body = v.safeParse(hostedBindLanguage, input);
+      if (!body.success || !v.is(hostedId, catalogueId) || !v.is(hostedId, occurrenceId) || !v.is(hostedKey, key))
+        return failure(400, true);
+      return command(catalogueId, 'structure', null, signal, () =>
+        client
+          .hostedCatalogues({ id: catalogueId })
+          .occurrences({ occurrenceId })
+          .$bindLanguage.post(body.output, commandOptions(signal, key)),
       );
     },
     async revise(catalogueId, input, key, signal) {

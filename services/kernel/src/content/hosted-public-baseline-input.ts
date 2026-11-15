@@ -165,8 +165,10 @@ async function requirePublication(
 ): Promise<void> {
   const revision = (
     await client.query<{ present: number }>(
-      `SELECT 1 AS present FROM content.hosted_structure_revision
-       WHERE route=$1 AND catalogue_id=$2 AND revision_id=$3 AND kind='publication'`,
+      `SELECT 1 AS present FROM content.hosted_structure_revision revision
+       WHERE revision.route=$1 AND revision.catalogue_id=$2 AND revision.revision_id=$3 AND revision.kind='publication'
+         AND NOT EXISTS(SELECT 1 FROM content.hosted_version_revision selected
+           WHERE selected.route=revision.route AND selected.catalogue_id=revision.catalogue_id AND selected.revision_id=revision.revision_id)`,
       [route, catalogueId, publicationId],
     )
   ).rows[0];

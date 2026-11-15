@@ -79,8 +79,6 @@ export type Seal = {
   diagnostic: string;
 };
 type Kind = 'new' | 'changed' | 'unchanged' | 'vanished';
-/** Keyset pages of durable classified kinds; inspect never scans these rows. */
-export const CLASSIFIED_KIND_PAGE = 100;
 type Source = {
   source: string;
   sequence: number;
@@ -106,16 +104,14 @@ type Generation = {
   changed: number;
   prepared: number;
   cursor: string;
-  skipped?: number;
-  kind_new?: number;
-  kind_changed?: number;
-  kind_unchanged?: number;
-  kind_vanished?: number;
-  kind_backfill_cursor?: string;
-  kind_backfill_done?: number;
-  diagnostics_recorded?: number;
-  diagnostic_records?: number;
-  diagnostic_entries?: number;
+  skipped: number;
+  kind_new: number;
+  kind_changed: number;
+  kind_unchanged: number;
+  kind_vanished: number;
+  diagnostics_recorded: number;
+  diagnostic_records: number;
+  diagnostic_entries: number;
 };
 type Entry = {
   source: string;
@@ -195,6 +191,14 @@ const REQUIRED_EXISTING_COLUMNS: Record<(typeof RUN_TABLES)[number], readonly st
     'changed',
     'prepared',
     'cursor',
+    'skipped',
+    'kind_new',
+    'kind_changed',
+    'kind_unchanged',
+    'kind_vanished',
+    'diagnostics_recorded',
+    'diagnostic_records',
+    'diagnostic_entries',
   ],
   run_entries: [
     'source',
@@ -210,6 +214,7 @@ const REQUIRED_EXISTING_COLUMNS: Record<(typeof RUN_TABLES)[number], readonly st
     'pending',
     'remaining',
     'cover_pending',
+    'reference_signature',
   ],
   run_members: ['source', 'record_key', 'active', 'seen', 'row_json'],
   run_acknowledged: ['source', 'record_key', 'row_json', 'projection_json'],
@@ -269,8 +274,10 @@ const REQUIRED_EXISTING_COLUMNS: Record<(typeof RUN_TABLES)[number], readonly st
     'committed_ordinal',
     'skipped',
     'rolling_digest',
+    'identity_json',
+    'completed_members',
   ],
-  run_staging_prefix: ['source', 'run_id', 'ordinal', 'record_key', 'digest'],
+  run_staging_prefix: ['source', 'run_id', 'ordinal', 'record_key', 'digest', 'member_index'],
   run_retention_work: [
     'plan_id',
     'source',
@@ -503,14 +510,6 @@ function kindIncrements(kind: Kind): readonly [number, number, number, number] {
     kind === 'vanished' ? 1 : 0,
   ];
 }
-function countedKindTotal(row: {
-  kind_new?: number | null;
-  kind_changed?: number | null;
-  kind_unchanged?: number | null;
-  kind_vanished?: number | null;
-}): number {
-  return (row.kind_new ?? 0) + (row.kind_changed ?? 0) + (row.kind_unchanged ?? 0) + (row.kind_vanished ?? 0);
-}
 function boundedJson(value: unknown, cap = 65536, commandBodies?: string[]): string {
   // Serialize data descriptors directly so neither accessors nor toJSON can run.
   let budget = cap;
@@ -663,21 +662,11 @@ export class RunStore<Projection = BatchStatement[]> {
       create?: boolean;
       /** Open a retained file without creating tables; resume uses this after inode admission. */
       existing?: boolean;
-      /** Classified-kind recovery page; production uses 100. */
-      kindBackfillPageSize?: number;
-      /** Stop after this many recovery pages so tests can retain a partial cursor. */
-      kindBackfillMaxPages?: number;
     } = {},
   ) {
     if (options.projectionMode !== undefined && options.projectionMode !== 'source-record') fail();
     if (options.existing !== undefined && options.existing !== true) fail();
     if (options.existing && options.create === true) fail();
-    if (options.kindBackfillPageSize !== undefined) pageLimit(options.kindBackfillPageSize);
-    if (
-      options.kindBackfillMaxPages !== undefined &&
-      (!Number.isInteger(options.kindBackfillMaxPages) || options.kindBackfillMaxPages < 1)
-    )
-      fail();
     this.projectionMode = options.projectionMode;
     const db =
       typeof path === 'string'
@@ -688,18 +677,11 @@ export class RunStore<Projection = BatchStatement[]> {
       this.database.exec('PRAGMA journal_mode=WAL');
       this.database.exec('PRAGMA busy_timeout=5000');
       this.database.exec('PRAGMA synchronous=NORMAL');
-      if (options.existing) {
-        this.database.exec(`CREATE TABLE IF NOT EXISTS run_classification_heads (
-          source TEXT NOT NULL, subject_id TEXT NOT NULL, association_key TEXT NOT NULL,
-          digest TEXT NOT NULL, head_json TEXT NOT NULL,
-          PRIMARY KEY(source, subject_id, association_key)) WITHOUT ROWID`);
-        this.ensureAcquisitionModeColumn();
+      const retained = this.database
+        .query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='run_sources'")
+        .get();
+      if (options.existing || retained) {
         assertExistingRunSchema(this.database);
-        this.ensureClassifiedKindColumns();
-        this.recoverClassifiedKindCountersUntil(
-          options.kindBackfillMaxPages,
-          options.kindBackfillPageSize ?? CLASSIFIED_KIND_PAGE,
-        );
         return;
       }
       // Schema initialization happens once per connection, never in a run operation.
@@ -717,32 +699,17 @@ export class RunStore<Projection = BatchStatement[]> {
         cursor TEXT NOT NULL DEFAULT '', skipped INTEGER NOT NULL DEFAULT 0,
         kind_new INTEGER NOT NULL DEFAULT 0, kind_changed INTEGER NOT NULL DEFAULT 0,
         kind_unchanged INTEGER NOT NULL DEFAULT 0, kind_vanished INTEGER NOT NULL DEFAULT 0,
-        kind_backfill_cursor TEXT NOT NULL DEFAULT '', kind_backfill_done INTEGER NOT NULL DEFAULT 0,
+        diagnostics_recorded INTEGER NOT NULL DEFAULT 0, diagnostic_records INTEGER NOT NULL DEFAULT 0,
+        diagnostic_entries INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY(source,id)) WITHOUT ROWID`);
-      // Additive migration leaves existing run journals and immutable prepared work intact.
-      this.ensureAcquisitionModeColumn();
-      const generationColumns = this.all<{ name: string }>('PRAGMA table_info(run_generations)');
-      if (!generationColumns.some(({ name }) => name === 'skipped'))
-        this.database.exec('ALTER TABLE run_generations ADD COLUMN skipped INTEGER NOT NULL DEFAULT 0');
-      this.ensureClassifiedKindColumns();
-      if (!generationColumns.some(({ name }) => name === 'diagnostics_recorded'))
-        this.database.exec('ALTER TABLE run_generations ADD COLUMN diagnostics_recorded INTEGER NOT NULL DEFAULT 0');
-      if (!generationColumns.some(({ name }) => name === 'diagnostic_records'))
-        this.database.exec('ALTER TABLE run_generations ADD COLUMN diagnostic_records INTEGER NOT NULL DEFAULT 0');
-      if (!generationColumns.some(({ name }) => name === 'diagnostic_entries'))
-        this.database.exec('ALTER TABLE run_generations ADD COLUMN diagnostic_entries INTEGER NOT NULL DEFAULT 0');
       this.database.exec(`CREATE TABLE IF NOT EXISTS run_entries (
         source TEXT NOT NULL, run_id TEXT NOT NULL, record_key TEXT NOT NULL,
         row_json TEXT NOT NULL, projection_json TEXT NOT NULL, kind TEXT,
         resolved INTEGER NOT NULL DEFAULT 0, bytes TEXT, keys_json TEXT NOT NULL DEFAULT '[]',
         omissions_json TEXT NOT NULL DEFAULT '[]', pending INTEGER NOT NULL DEFAULT 0,
         remaining INTEGER NOT NULL DEFAULT 0, cover_pending INTEGER NOT NULL DEFAULT 0,
+        reference_signature TEXT,
         PRIMARY KEY(source,run_id,record_key)) WITHOUT ROWID`);
-      const entryColumns = this.database.query('PRAGMA table_info(run_entries)').all() as { name: string }[];
-      if (!entryColumns.some((column) => column.name === 'cover_pending'))
-        this.database.exec('ALTER TABLE run_entries ADD COLUMN cover_pending INTEGER NOT NULL DEFAULT 0');
-      if (!entryColumns.some((column) => column.name === 'reference_signature'))
-        this.database.exec('ALTER TABLE run_entries ADD COLUMN reference_signature TEXT');
       this.database.exec(`CREATE INDEX IF NOT EXISTS run_pending ON run_entries(source,run_id,pending,record_key)`);
       this.database.exec(
         'CREATE INDEX IF NOT EXISTS run_cover_pending ON run_entries(source,run_id,cover_pending,record_key)',
@@ -806,27 +773,17 @@ export class RunStore<Projection = BatchStatement[]> {
         digest TEXT NOT NULL, head_json TEXT NOT NULL,
         PRIMARY KEY(source, subject_id, association_key)) WITHOUT ROWID`);
       this.database.exec(`CREATE TABLE IF NOT EXISTS run_staging_checkpoints (
-        source TEXT NOT NULL, run_id TEXT NOT NULL, version INTEGER NOT NULL,
+        source TEXT NOT NULL, run_id TEXT NOT NULL, version INTEGER NOT NULL CHECK(version=1),
         sha256 TEXT NOT NULL, bytes INTEGER NOT NULL, source_alias TEXT NOT NULL,
         source_kind TEXT NOT NULL, converter_revision TEXT NOT NULL, decoder_id TEXT NOT NULL,
         disappearance_threshold REAL NOT NULL, committed_ordinal INTEGER NOT NULL,
         skipped INTEGER NOT NULL, rolling_digest TEXT NOT NULL,
-        identity_json TEXT, completed_members INTEGER NOT NULL DEFAULT 0,
+        identity_json TEXT NOT NULL, completed_members INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY(source, run_id)) WITHOUT ROWID`);
       this.database.exec(`CREATE TABLE IF NOT EXISTS run_staging_prefix (
         source TEXT NOT NULL, run_id TEXT NOT NULL, ordinal INTEGER NOT NULL,
-        record_key TEXT NOT NULL, digest TEXT NOT NULL, member_index INTEGER NOT NULL DEFAULT 0,
+        record_key TEXT NOT NULL, digest TEXT NOT NULL, member_index INTEGER NOT NULL,
         PRIMARY KEY(source, run_id, ordinal)) WITHOUT ROWID`);
-      const checkpointColumns = this.all<{ name: string }>('PRAGMA table_info(run_staging_checkpoints)');
-      if (checkpointColumns.length && !checkpointColumns.some(({ name }) => name === 'identity_json'))
-        this.database.exec('ALTER TABLE run_staging_checkpoints ADD COLUMN identity_json TEXT');
-      if (checkpointColumns.length && !checkpointColumns.some(({ name }) => name === 'completed_members'))
-        this.database.exec(
-          'ALTER TABLE run_staging_checkpoints ADD COLUMN completed_members INTEGER NOT NULL DEFAULT 0',
-        );
-      const prefixColumns = this.all<{ name: string }>('PRAGMA table_info(run_staging_prefix)');
-      if (prefixColumns.length && !prefixColumns.some(({ name }) => name === 'member_index'))
-        this.database.exec('ALTER TABLE run_staging_prefix ADD COLUMN member_index INTEGER NOT NULL DEFAULT 0');
       this.database.exec('CREATE INDEX IF NOT EXISTS run_generation_seq ON run_generations(source, seq)');
       this.database.exec(`CREATE TABLE IF NOT EXISTS run_retention_work (
         plan_id TEXT PRIMARY KEY,
@@ -852,10 +809,7 @@ export class RunStore<Projection = BatchStatement[]> {
         record_revision TEXT NOT NULL, digest TEXT NOT NULL, converter_revision TEXT NOT NULL,
         PRIMARY KEY(source, run_id, record_key)) WITHOUT ROWID`);
       this.database.exec(SOURCE_DESTINATION_DDL);
-      this.recoverClassifiedKindCountersUntil(
-        options.kindBackfillMaxPages,
-        options.kindBackfillPageSize ?? CLASSIFIED_KIND_PAGE,
-      );
+      assertExistingRunSchema(this.database);
     } catch (error) {
       db.close();
       throw error;
@@ -887,123 +841,6 @@ export class RunStore<Projection = BatchStatement[]> {
   }
   private write(sql: string, ...args: SQLQueryBindings[]) {
     return this.query(sql).run(...args);
-  }
-  private ensureAcquisitionModeColumn(): void {
-    const table = this.get<{ name: string }>(
-      "SELECT name FROM sqlite_schema WHERE type='table' AND name='run_generations'",
-    );
-    if (!table) return;
-    const names = new Set(this.all<{ name: string }>('PRAGMA table_info(run_generations)').map(({ name }) => name));
-    if (!names.has('acquisition_mode'))
-      this.database.exec("ALTER TABLE run_generations ADD COLUMN acquisition_mode TEXT NOT NULL DEFAULT 'complete'");
-  }
-  private ensureClassifiedKindColumns(): void {
-    const names = new Set(this.all<{ name: string }>('PRAGMA table_info(run_generations)').map(({ name }) => name));
-    if (!names.has('kind_new')) {
-      this.database.exec('ALTER TABLE run_generations ADD COLUMN kind_new INTEGER NOT NULL DEFAULT 0');
-      this.database.exec('ALTER TABLE run_generations ADD COLUMN kind_changed INTEGER NOT NULL DEFAULT 0');
-      this.database.exec('ALTER TABLE run_generations ADD COLUMN kind_unchanged INTEGER NOT NULL DEFAULT 0');
-      this.database.exec('ALTER TABLE run_generations ADD COLUMN kind_vanished INTEGER NOT NULL DEFAULT 0');
-    }
-    if (!names.has('kind_backfill_cursor'))
-      this.database.exec("ALTER TABLE run_generations ADD COLUMN kind_backfill_cursor TEXT NOT NULL DEFAULT ''");
-    if (!names.has('kind_backfill_done'))
-      this.database.exec('ALTER TABLE run_generations ADD COLUMN kind_backfill_done INTEGER NOT NULL DEFAULT 0');
-  }
-  private recoverClassifiedKindCountersUntil(maxPages: number | undefined, pageSize: number): void {
-    let pages = 0;
-    const limit = maxPages ?? Number.POSITIVE_INFINITY;
-    while (pages < limit && this.recoverClassifiedKindCounters(pageSize) === 'more') pages++;
-  }
-  /**
-   * Rebuild stored kind_* counters from durable journal decisions. One keyset page, one
-   * generation; inspect remains a point read of the integers this writes.
-   */
-  recoverClassifiedKindCounters(pageCap = CLASSIFIED_KIND_PAGE): 'complete' | 'more' {
-    pageLimit(pageCap);
-    return this.transaction(() => {
-      const pending = this.get<{
-        source: string;
-        id: string;
-        classified: number;
-        kind_new: number;
-        kind_changed: number;
-        kind_unchanged: number;
-        kind_vanished: number;
-        kind_backfill_cursor: string;
-        kind_backfill_done: number;
-      }>(
-        `SELECT source,id,classified,kind_new,kind_changed,kind_unchanged,kind_vanished,
-          kind_backfill_cursor,kind_backfill_done
-        FROM run_generations WHERE kind_backfill_done=0 ORDER BY source,id LIMIT 1`,
-      );
-      if (!pending) return 'complete';
-      const counted = countedKindTotal(pending);
-      if (counted > pending.classified)
-        throw new Error('Malformed journal row: classified kind counters exceed classified records');
-      if (pending.classified === 0 || (counted === pending.classified && pending.kind_backfill_cursor === '')) {
-        this.write(
-          'UPDATE run_generations SET kind_backfill_done=1 WHERE source=? AND id=?',
-          pending.source,
-          pending.id,
-        );
-        return 'more';
-      }
-      if (pending.kind_backfill_cursor === '' && counted !== 0) {
-        this.write(
-          `UPDATE run_generations SET kind_new=0,kind_changed=0,kind_unchanged=0,kind_vanished=0
-          WHERE source=? AND id=? AND kind_backfill_cursor='' AND kind_backfill_done=0`,
-          pending.source,
-          pending.id,
-        );
-      }
-      const rows = this.all<{ record_key: string; kind: unknown }>(
-        `SELECT record_key,kind FROM run_entries
-        WHERE source=? AND run_id=? AND kind IS NOT NULL AND record_key>?
-        ORDER BY record_key LIMIT ?`,
-        pending.source,
-        pending.id,
-        pending.kind_backfill_cursor,
-        pageCap,
-      );
-      if (!rows.length) {
-        if (pending.kind_backfill_cursor === '')
-          throw new Error('Classified generation has no durable kind decisions to recover');
-        this.write(
-          'UPDATE run_generations SET kind_backfill_done=1 WHERE source=? AND id=?',
-          pending.source,
-          pending.id,
-        );
-        return 'more';
-      }
-      let addedNew = 0;
-      let addedChanged = 0;
-      let addedUnchanged = 0;
-      let addedVanished = 0;
-      for (const row of rows) {
-        if (!isKind(row.kind)) throw new Error('Malformed journal row: classified kind is not admitted');
-        const [nextNew, nextChanged, nextUnchanged, nextVanished] = kindIncrements(row.kind);
-        addedNew += nextNew;
-        addedChanged += nextChanged;
-        addedUnchanged += nextUnchanged;
-        addedVanished += nextVanished;
-      }
-      const done = rows.length < pageCap ? 1 : 0;
-      this.write(
-        `UPDATE run_generations SET kind_new=kind_new+?,kind_changed=kind_changed+?,
-        kind_unchanged=kind_unchanged+?,kind_vanished=kind_vanished+?,
-        kind_backfill_cursor=?,kind_backfill_done=? WHERE source=? AND id=?`,
-        addedNew,
-        addedChanged,
-        addedUnchanged,
-        addedVanished,
-        rows[rows.length - 1]!.record_key,
-        done,
-        pending.source,
-        pending.id,
-      );
-      return 'more';
-    });
   }
   private transaction<T>(fn: () => T): T {
     // Inside ImportSession.atomic the enclosing transaction owns the commit.
@@ -1122,8 +959,8 @@ export class RunStore<Projection = BatchStatement[]> {
       );
       this.write(
         `INSERT INTO run_generations(
-          source,id,seq,lease,status,acquisition_mode,threshold,prior,kind_backfill_done)
-        VALUES(?,?,?,?,?,?,?,?,1)`,
+          source,id,seq,lease,status,acquisition_mode,threshold,prior)
+        VALUES(?,?,?,?,?,?,?,?)`,
         source,
         run.id,
         seq,
@@ -1182,7 +1019,7 @@ export class RunStore<Projection = BatchStatement[]> {
       committed_ordinal: number;
       skipped: number;
       rolling_digest: string;
-      identity_json: string | null;
+      identity_json: string;
       completed_members: number;
     }>(
       `SELECT version,sha256,bytes,source_alias,source_kind,converter_revision,decoder_id,
@@ -1204,7 +1041,7 @@ export class RunStore<Projection = BatchStatement[]> {
       committedOrdinal: row.committed_ordinal,
       skipped: row.skipped,
       rollingDigest: row.rolling_digest,
-      completedMembers: row.completed_members ?? 0,
+      completedMembers: row.completed_members,
       identityJson: row.identity_json,
     });
   }
@@ -1236,7 +1073,7 @@ export class RunStore<Projection = BatchStatement[]> {
       run.id,
       ordinal,
     );
-    return row ? { ordinal, recordKey: row.record_key, digest: row.digest, memberIndex: row.member_index ?? 0 } : null;
+    return row ? { ordinal, recordKey: row.record_key, digest: row.digest, memberIndex: row.member_index } : null;
   }
   stagedIdentity(run: Run, recordKey: string): { digest: string; projection: string } | null {
     validateRun(run);
@@ -1257,7 +1094,7 @@ export class RunStore<Projection = BatchStatement[]> {
     keyId(record.recordKey);
     identifier(record.digest, 64, /^[a-f0-9]{64}$/u);
     if (!Number.isSafeInteger(record.ordinal) || record.ordinal < 1) fail();
-    const memberIndex = record.memberIndex ?? 0;
+    const memberIndex = record.memberIndex;
     if (!Number.isSafeInteger(memberIndex) || memberIndex < 0) fail();
     if (skippedDelta !== 0 && skippedDelta !== 1) fail();
     return this.transaction(() => {
@@ -1265,7 +1102,7 @@ export class RunStore<Projection = BatchStatement[]> {
       const current = this.stagingCheckpoint(run.source, run.id);
       if (!current) throw new Error('Staging checkpoint is missing');
       if (record.ordinal !== current.committedOrdinal + 1) throw new Error('Staging checkpoint ordinal jumped');
-      const rolling = extendPrefixDigest(current.rollingDigest, record, current.version);
+      const rolling = extendPrefixDigest(current.rollingDigest, record);
       this.write(
         'INSERT INTO run_staging_prefix(source,run_id,ordinal,record_key,digest,member_index) VALUES(?,?,?,?,?,?)',
         run.source,
@@ -1331,20 +1168,20 @@ export class RunStore<Projection = BatchStatement[]> {
    */
   peekActive(source: string): { run: Run; status: string; skipped: number } | null {
     sourceId(source);
-    const active = this.get<{ id: string; lease: string; status: string; skipped: number | null }>(
+    const active = this.get<{ id: string; lease: string; status: string; skipped: number }>(
       `SELECT g.id,g.lease,g.status,g.skipped FROM run_sources AS s
       JOIN run_generations AS g ON g.source=s.source AND g.id=s.lease_run
       WHERE s.source=? AND s.lease_run IS NOT NULL`,
       source,
     );
     return active
-      ? { run: { source, id: active.id, lease: active.lease }, status: active.status, skipped: active.skipped ?? 0 }
+      ? { run: { source, id: active.id, lease: active.lease }, status: active.status, skipped: active.skipped }
       : null;
   }
   /** Exact identity lookup for the bounded count sealed with this acquisition. */
   skipped(run: Run): number {
     const g = this.generation(run, true);
-    return g.skipped ?? 0;
+    return g.skipped;
   }
   pageStaged(run: Run, options: { after?: string; limit: number }): Staged<Projection>[] {
     exact(options, ['limit'], ['after']);
@@ -2247,33 +2084,20 @@ export class RunStore<Projection = BatchStatement[]> {
           run.id,
           key,
         );
-        const cursor = g.kind_backfill_cursor ?? '';
-        const countLive = g.kind_backfill_done === 1 || (cursor !== '' && key <= cursor);
-        if (countLive) {
-          const [addNew, addChanged, addUnchanged, addVanished] = kindIncrements(e.kind);
-          this.write(
-            `UPDATE run_generations SET classified=classified+1,changed=changed+?,prepared=prepared+?,
-            kind_new=kind_new+?,kind_changed=kind_changed+?,kind_unchanged=kind_unchanged+?,kind_vanished=kind_vanished+?
-            WHERE source=? AND id=?`,
-            snapshotChanged ? 1 : 0,
-            keys.length ? 1 : 0,
-            addNew,
-            addChanged,
-            addUnchanged,
-            addVanished,
-            run.source,
-            run.id,
-          );
-        } else {
-          this.write(
-            `UPDATE run_generations SET classified=classified+1,changed=changed+?,prepared=prepared+?
-            WHERE source=? AND id=?`,
-            snapshotChanged ? 1 : 0,
-            keys.length ? 1 : 0,
-            run.source,
-            run.id,
-          );
-        }
+        const [addNew, addChanged, addUnchanged, addVanished] = kindIncrements(e.kind);
+        this.write(
+          `UPDATE run_generations SET classified=classified+1,changed=changed+?,prepared=prepared+?,
+          kind_new=kind_new+?,kind_changed=kind_changed+?,kind_unchanged=kind_unchanged+?,kind_vanished=kind_vanished+?
+          WHERE source=? AND id=?`,
+          snapshotChanged ? 1 : 0,
+          keys.length ? 1 : 0,
+          addNew,
+          addChanged,
+          addUnchanged,
+          addVanished,
+          run.source,
+          run.id,
+        );
       }
       const saved: Omission[] = JSON.parse(e.omissions_json);
       for (const omission of omissions) {

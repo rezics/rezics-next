@@ -924,7 +924,9 @@ test('source-only recovery waits for check custody and preserves the unused gran
     const receive = () =>
       recoverWorkerTyping(h.tasks, { enqueue: (value) => landing.push(value) }, retained.ref, actor);
     const grant = recoveryProof(await receive());
-    const grantPath = join(budget, 'typing-recovery', `${grant.env[TYPING_RECOVERY_ENV]}.json`);
+    const token = grant.env[TYPING_RECOVERY_ENV];
+    if (token === undefined) throw new Error('Typing recovery grant did not include its token');
+    const grantPath = join(budget, 'typing-recovery', `${token}.json`);
     const grantBytes = readFileSync(grantPath, 'utf8');
     expect(JSON.parse(grantBytes)).toMatchObject({ command });
     expect(
@@ -936,7 +938,7 @@ test('source-only recovery waits for check custody and preserves the unused gran
         attempt: 1,
         attemptCheckIds: h.store.attempt(retained.ref).checks ?? [],
         command,
-        token: grant.env[TYPING_RECOVERY_ENV],
+        token,
       }),
     ).toMatchObject({
       authorization: 'authenticated',

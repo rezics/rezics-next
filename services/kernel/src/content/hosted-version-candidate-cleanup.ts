@@ -8,6 +8,7 @@ import deleteOccurrences from './hosted-version-candidate-cleanup-occurrences.sq
 import candidatePins from './hosted-version-candidate-cleanup-pins.sql';
 import deleteSiblingRoots from './hosted-version-candidate-cleanup-sibling-roots.sql';
 import deleteSnapshots from './hosted-version-candidate-cleanup-snapshots.sql';
+import { cleanupHostedLanguageCandidate } from './hosted-language-candidate-cleanup.ts';
 
 export const HOSTED_VERSION_CANDIDATE_CLEANUP_STEP_LIMIT = 100;
 
@@ -635,6 +636,9 @@ async function advanceCleanup(
     while (phase !== 'done' && deletedRows < HOSTED_VERSION_CANDIDATE_CLEANUP_STEP_LIMIT) {
       const remaining = HOSTED_VERSION_CANDIDATE_CLEANUP_STEP_LIMIT - deletedRows;
       if (phase === 'generation') {
+        const languages = await cleanupHostedLanguageCandidate(client, locator, remaining);
+        deletedRows += languages.deletedRows;
+        if (!languages.complete || deletedRows === HOSTED_VERSION_CANDIDATE_CLEANUP_STEP_LIMIT) break;
         deletedRows += await deleteGeneration(client, route, locator, row, stage.mode);
         phase = 'done';
         cursor = null;

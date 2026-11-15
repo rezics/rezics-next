@@ -36,11 +36,12 @@ test('mounted provider observations refresh independently, preserve zero means a
   const vndb = value('v17');
   const bangumi = { ...value('123'), sourceAlias: 'bangumi-feed' };
   const nativeBefore = await fixture.database.admin.query('SELECT count(*)::int AS n FROM rating.vote');
-  expect(await result(await write(id, 'vndb', vndb))).toEqual({ source: 'vndb', ...vndb });
+  const vndbEnvelope = { source: 'vndb', ...vndb, observation: { kind: 'unversioned', digest: sourceObservation(id, 'vndb', vndb).digest } };
+  expect(await result(await write(id, 'vndb', vndb))).toEqual(vndbEnvelope);
   const digest = sourceObservation(id, 'bangumi', bangumi).digest;
   const initial = { source: 'bangumi', ...bangumi, observation: { kind: 'unversioned', digest } };
   expect(await result(await write(id, 'bangumi', bangumi))).toEqual(initial);
-  expect(await list(id)).toEqual([initial, { source: 'vndb', ...vndb }]);
+  expect(await list(id)).toEqual([initial, vndbEnvelope]);
   const identical = await write(id, 'bangumi', bangumi);
   expect(await result(identical)).toEqual(initial);
   await result(await write(id, 'bangumi', { ...bangumi, mean: 8 }), 409);
@@ -50,7 +51,7 @@ test('mounted provider observations refresh independently, preserve zero means a
   await result(await write(id, 'bangumi', { ...bangumi, mean: 9, expectedObservation: digest }), 409);
   const next = { ...bangumi, mean: 7.5, count: 22, asOf: '2026-10-21' };
   const refreshed = await result(await write(id, 'bangumi', next));
-  expect(await list(id)).toEqual([refreshed, { source: 'vndb', ...vndb }]);
+  expect(await list(id)).toEqual([refreshed, vndbEnvelope]);
   await result(await write(id, 'bangumi', bangumi), 409);
   await result(
     await clear(id, 'bangumi', {
@@ -64,7 +65,7 @@ test('mounted provider observations refresh independently, preserve zero means a
   // A different record or alias cannot select a winner or clear the current binding.
   await result(await write(id, 'bangumi', { ...next, sourceRecordId: '124', asOf: '2026-10-22' }), 409);
   await result(await clear(id, 'bangumi', { sourceRecordId: '123', count: 0, asOf: '2026-10-22' }), 204);
-  expect(await list(id)).toEqual([refreshed, { source: 'vndb', ...vndb }]);
+  expect(await list(id)).toEqual([refreshed, vndbEnvelope]);
   const empty = {
     sourceAlias: bangumi.sourceAlias,
     sourceRecordId: '123',
@@ -74,13 +75,13 @@ test('mounted provider observations refresh independently, preserve zero means a
   };
   await result(await clear(id, 'bangumi', empty), 204);
   await result(await clear(id, 'bangumi', empty), 204);
-  expect(await list(id)).toEqual([{ source: 'vndb', ...vndb }]);
+  expect(await list(id)).toEqual([vndbEnvelope]);
   await result(await write(id, 'bangumi', bangumi), 409);
   await result(await write(id, 'bangumi', next), 409);
   const repaired = { ...next, mean: 9, expectedObservation: sourceObservation(id, 'bangumi', empty).digest };
   const repair = await result(await write(id, 'bangumi', repaired));
   expect(repair.mean).toBe(9);
-  expect((await list(id))[1]).toEqual({ source: 'vndb', ...vndb });
+  expect((await list(id))[1]).toEqual(vndbEnvelope);
   const heads = await fixture.database.admin.query(
     'SELECT source FROM rating.source_statistic_head WHERE route=$1 AND subject_id=$2 ORDER BY source',
     [routeOf(id), id],

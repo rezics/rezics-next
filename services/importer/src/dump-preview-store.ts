@@ -94,22 +94,40 @@ function validRecordKey(value: string): void {
     throw new PreviewStoreFailure('Record key must be an exact native source record key.', 2);
 }
 
-function parseInputFamilies(value: unknown): readonly PreviewInputFamily[] {
-  if (value === null || value === undefined || value === '') return [];
-  if (typeof value !== 'string') return [];
+/** Stored preview metadata uses the current input contract; null means no retained family selection. */
+export function previewInputSelection(
+  row: Readonly<Record<string, unknown>>,
+): Pick<PreviewPlan, 'inputKind' | 'inputFamilies'> {
+  if (row.input_kind !== 'dump' && row.input_kind !== 'dump-set')
+    throw new PreviewStoreFailure('Preview plan input kind is missing or unsupported.', 2);
+  if (row.input_selection === null) return { inputKind: row.input_kind, inputFamilies: [] };
+  if (typeof row.input_selection !== 'string')
+    throw new PreviewStoreFailure('Preview plan input selection is missing or malformed.', 2);
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(value) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.flatMap((item) => {
-      if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
-      const family = Reflect.get(item, 'family');
-      const compression = Reflect.get(item, 'compression');
-      if (typeof family !== 'string' || typeof compression !== 'string') return [];
-      return [{ family, compression }];
-    });
+    parsed = JSON.parse(row.input_selection);
   } catch {
-    return [];
+    throw new PreviewStoreFailure('Preview plan input selection is malformed.', 2);
   }
+  if (!Array.isArray(parsed)) throw new PreviewStoreFailure('Preview plan input selection is malformed.', 2);
+  const inputFamilies: PreviewInputFamily[] = [];
+  for (const item of parsed) {
+    if (!item || typeof item !== 'object' || Array.isArray(item))
+      throw new PreviewStoreFailure('Preview plan input selection is malformed.', 2);
+    const keys = Object.keys(item);
+    const family = Reflect.get(item, 'family');
+    const compression = Reflect.get(item, 'compression');
+    if (
+      keys.length !== 2 ||
+      !keys.includes('family') ||
+      !keys.includes('compression') ||
+      typeof family !== 'string' ||
+      typeof compression !== 'string'
+    )
+      throw new PreviewStoreFailure('Preview plan input selection is malformed.', 2);
+    inputFamilies.push({ family, compression });
+  }
+  return { inputKind: row.input_kind, inputFamilies };
 }
 
 function cursorEncode(value: Record<string, unknown>): string {
@@ -159,6 +177,12 @@ export class DumpPreviewStore {
       throw new PreviewStoreFailure('Preview storage ceiling is invalid.', 2);
     this.database = typeof path === 'string' ? new Database(path, { create: true, strict: true }) : path;
     try {
+      const columns = this.database.query('PRAGMA table_info(preview_plans)').all() as { name: string }[];
+      if (
+        columns.length &&
+        ['input_kind', 'input_selection'].some((name) => !columns.some((column) => column.name === name))
+      )
+        throw new PreviewStoreFailure('Unsupported preview plan schema: current input metadata is missing.', 2);
       this.database.exec('PRAGMA journal_mode = WAL');
       this.database.exec('PRAGMA busy_timeout = 5000');
       this.database.exec('PRAGMA synchronous = NORMAL');
@@ -184,19 +208,9 @@ export class DumpPreviewStore {
         prior INTEGER NOT NULL,
         survivors INTEGER NOT NULL,
         stored_bytes INTEGER NOT NULL,
-        input_kind TEXT NOT NULL DEFAULT 'dump',
+        input_kind TEXT NOT NULL CHECK (input_kind IN ('dump','dump-set')),
         input_selection TEXT
       ) WITHOUT ROWID`);
-      try {
-        this.database.exec(`ALTER TABLE preview_plans ADD COLUMN input_kind TEXT NOT NULL DEFAULT 'dump'`);
-      } catch {
-        // Column already exists on newly created tables.
-      }
-      try {
-        this.database.exec(`ALTER TABLE preview_plans ADD COLUMN input_selection TEXT`);
-      } catch {
-        // Column already exists on newly created tables.
-      }
       this.database.exec(`CREATE TABLE IF NOT EXISTS preview_records (
         preview_id TEXT NOT NULL,
         source TEXT NOT NULL,
@@ -438,8 +452,7 @@ export class DumpPreviewStore {
       sourceKind: String(row.source_kind),
       converterRevision: String(row.converter_revision),
       dumpPath: String(row.dump_path),
-      inputKind: row.input_kind === 'dump-set' ? 'dump-set' : 'dump',
-      inputFamilies: parseInputFamilies(row.input_selection),
+      ...previewInputSelection(row),
       viewKind: row.view_kind as PreviewViewKind,
       baselineId: row.baseline_id === null ? null : String(row.baseline_id),
       baselinePresent: Number(row.baseline_present),

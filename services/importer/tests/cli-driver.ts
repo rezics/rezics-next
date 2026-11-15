@@ -8,6 +8,7 @@ import { runImportCli, type ImportCliObserver } from '../src/cli.ts';
 import type { ImportProgressSink } from '../src/import-progress.ts';
 import { createSqliteProbe } from './support/sqlite-growth.ts';
 import type { CliDriver, Command, Execution, Options, Source } from '../../../specs/imports-cli-driver.ts';
+import { sourceObservationFixture } from './transport-driver.ts';
 
 const GROWING_TABLES = [
   ...RUN_TABLES,
@@ -205,6 +206,7 @@ export async function createImportCliDriver(options: Options): Promise<CliDriver
   let closed = false;
   let issuedTokens = 0;
   const observedCommands = new Map<string, { source: string; external_id: string; op: Command['op'] }>();
+  const observations = sourceObservationFixture();
   const active = new Set<Promise<unknown>>();
 
   const invoke = async (argv: string[], boundaries: Parameters<CliDriver['invoke']>[1] = {}): Promise<Execution> => {
@@ -317,7 +319,13 @@ export async function createImportCliDriver(options: Options): Promise<CliDriver
       const captured = await boundedRequest(request);
       const authorization = request.headers.get('authorization');
       requests.push({ url: request.url, authorization, bytes: captured.bytes });
-      if (request.method === 'PUT' && /^\/v1\/subjects\/[0-9a-f-]{36}\/source-statistics\/vndb$/.test(url.pathname)) {
+      const observationRoute = /^\/v1\/subjects\/([0-9a-f-]{36})\/source-statistics\/vndb\/observations$/.exec(url.pathname);
+      if (request.method === 'GET' && observationRoute)
+        return Response.json(observations.inspect(observationRoute[1]!));
+      if (
+        (request.method === 'PUT' && /^\/v1\/subjects\/[0-9a-f-]{36}\/source-statistics\/vndb$/.test(url.pathname)) ||
+        (request.method === 'POST' && /^\/v1\/subjects\/[0-9a-f-]{36}\/source-statistics\/vndb:clear$/.test(url.pathname))
+      ) {
         let body: unknown;
         try {
           body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(captured.body));
@@ -329,8 +337,12 @@ export async function createImportCliDriver(options: Options): Promise<CliDriver
           body !== null &&
           !Array.isArray(body) &&
           (request.headers.get('idempotency-key')?.length ?? 0) > 0
-        )
-          return Response.json({ source: 'vndb', ...(body as Record<string, unknown>) });
+        ) {
+          observations.observe(url.pathname.split('/')[3]!, body as never);
+          return request.method === 'POST'
+            ? new Response(null, { status: 204 })
+            : Response.json({ source: 'vndb', ...(body as Record<string, unknown>) });
+        }
         return new Response('', { status: 400 });
       }
       if (url.pathname === '/v1/subjects:batchWrite') {

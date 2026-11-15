@@ -1,17 +1,14 @@
 import { expect, setDefaultTimeout, test } from 'bun:test';
 import { appendHostedRootChapter, type HostedCommandDependencies } from '../../src/content/hosted-chapters-commands.ts';
 import { listHostedAuthorOutline, resolveHostedOccurrence } from '../../src/content/hosted-chapters-reads.ts';
-import { HOSTED_APPEND_DESCRIPTOR_SELECT } from '../../src/content/hosted-chapters-append.ts';
-import { HOSTED_PLACEMENT_SELECT } from '../../src/content/hosted-chapters-store.ts';
-import appendRelease from '../../src/content/hosted-append-release-selected.sql';
+import readOccurrence from '../../src/content/hosted-version-read-occurrence.sql';
 import readChain from '../../src/content/read-chain.sql';
-import { routeOf } from '../../src/route/route.ts';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 import { observeSql } from './support/sql-observer.ts';
 
 setDefaultTimeout(180_000);
 
-test('mixed publication reads selected pinned members only and keeps immutable releases and exact replay', async () => {
+test('ordered publication reads selected pinned members only and keeps immutable releases and exact replay', async () => {
   const f = await hostedChaptersFixture();
   const observer = observeSql(f.native.pool);
   try {
@@ -54,7 +51,7 @@ test('mixed publication reads selected pinned members only and keeps immutable r
         ],
       })
     ).revisionId as string;
-    const legacy = (
+    const initialPublication = (
       await f.native.command(
         `${path}:publish`,
         {
@@ -65,7 +62,13 @@ test('mixed publication reads selected pinned members only and keeps immutable r
         200,
       )
     ).revisionId as string;
-    const oldLink = await resolveHostedOccurrence(deps, f.catalogueId, root, { revisionId: legacy }, context);
+    const oldLink = await resolveHostedOccurrence(
+      deps,
+      f.catalogueId,
+      root,
+      { revisionId: initialPublication },
+      context,
+    );
     await f.native.command(`/v1/posts/${hidden.firstPost.id}:erase`, { reason: 'Unselected private chapter' }, 200);
     // Attachment admission must retain this old exact revision after the Post head changes.
     expect((await f.native.revise(source.firstPost, {})).status).toBe(200);
@@ -87,28 +90,21 @@ test('mixed publication reads selected pinned members only and keeps immutable r
     const pinned = await append(base, appended);
     const input = {
       expectedRevisionId: pinned,
-      expectedPublicationId: legacy,
+      expectedPublicationId: initialPublication,
       occurrenceIds: [appended, root, child, part],
     };
-    const baseSql = `${HOSTED_PLACEMENT_SELECT} AND p.occurrence_id = ANY($4::uuid[]) ORDER BY p.ordinal`;
     const sourceReads = (start: number) =>
-      observer.records
-        .slice(start)
-        .filter((row) => /FROM content.hosted_(placement|append\b|append_descriptor\b)/.test(row.statement));
+      observer.records.slice(start).filter((row) => row.statement === readOccurrence.sql);
     const assertSelectedReads = (start: number, ids: string[]) => {
       const reads = sourceReads(start);
-      expect(reads.map((row) => row.statement)).toEqual([HOSTED_APPEND_DESCRIPTOR_SELECT, baseSql, appendRelease.sql]);
-      expect(reads[0]!.parameters).toEqual([routeOf(f.catalogueId), f.catalogueId, pinned]);
-      expect(reads[1]!.parameters).toEqual([routeOf(f.catalogueId), f.catalogueId, base, ids]);
-      const values = reads[2]!.parameters;
-      for (const [name, value] of Object.entries({
-        route: routeOf(f.catalogueId),
-        catalogue_id: f.catalogueId,
-        stream_id: base,
-        occurrence_ids: ids,
-        high_water: '0',
-      }))
-        expect(values[appendRelease.params.indexOf(name)]).toEqual(value);
+      expect(reads.length).toBeGreaterThan(0);
+      expect(reads.every((row) => row.parameters[3] !== omitted)).toBe(true);
+      expect(ids).not.toContain(omitted);
+      expect(
+        observer.records
+          .slice(start)
+          .some((row) => /FROM content\.hosted_(placement|append\b|append_descriptor\b)/.test(row.statement)),
+      ).toBe(false);
       const nativeReads = observer.records.slice(start).filter((row) => row.statement === readChain.sql);
       expect(nativeReads.length).toBeGreaterThan(0);
       expect(nativeReads.every((row) => row.parameters[readChain.params.indexOf('include_body')] === false)).toBe(true);
@@ -144,7 +140,7 @@ test('mixed publication reads selected pinned members only and keeps immutable r
     ]);
     const exact = await resolveHostedOccurrence(deps, f.catalogueId, appended, { revisionId: releaseId }, context);
     const head = await append(pinned, later);
-    // A physically present later stream row is unknown to the pinned source, even before stale-head CAS.
+    // A later ordered occurrence is absent from the pinned source, even before stale-head CAS.
     for (const ids of [[later], [appended, appended], [child], [f.newOccurrenceId()]]) {
       const before = observer.records.length;
       expect((await f.native.call('POST', `${path}:publish`, { ...input, occurrenceIds: ids })).status).toBe(400);
@@ -166,14 +162,14 @@ test('mixed publication reads selected pinned members only and keeps immutable r
     expect(sourceReads(withdrawal)).toEqual([]);
     const retry = observer.records.length;
     expect(await f.native.call('POST', `${path}:publish`, input, { key })).toEqual(published);
-    assertSelectedReads(retry, input.occurrenceIds);
+    expect(sourceReads(retry)).toEqual([]);
     expect((await f.native.call('GET', `${path}/children`)).value.items).toEqual([]);
     expect(
       (await resolveHostedOccurrence(deps, f.catalogueId, appended, { revisionId: releaseId }, context)).value,
     ).toEqual(exact.value);
-    expect((await resolveHostedOccurrence(deps, f.catalogueId, root, { revisionId: legacy }, context)).value).toEqual(
-      oldLink.value,
-    );
+    expect(
+      (await resolveHostedOccurrence(deps, f.catalogueId, root, { revisionId: initialPublication }, context)).value,
+    ).toEqual(oldLink.value);
   } finally {
     await observer.close();
     await f.close();

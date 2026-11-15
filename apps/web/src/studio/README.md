@@ -893,6 +893,26 @@ foreign/stale refusal, same-account replacement, late responses and dirty editor
 remain unchanged. Source validation formats changed files and runs one affected Web typecheck; native, browser,
 Storybook, ordinary acceptance, root and growth checks remain deferred.
 
+## Chapter body-language associations
+
+A chapter's organization menu opens one central language-association form. It consumes the current clean saved
+selection or the existing Versions inspector's admitted historical exact revision; account draft browsing and
+Post editing keep their existing owners. Authors enter the published language/title, inspect exact source details
+and explicitly attach. The canonical default can declare a language only with its unchanged exact target; other
+bodies remain alternatives. No Post ID entry, new picker, body copy or Post write is added.
+
+The Book organizer sends the association through its existing CAS, idempotency and uncertain-command pipeline.
+Unknown recovery retains the original version, language, title, default choice and key; native failure preserves
+saved Posts. The form also composes the existing exact source-permission control as a separate explicit action.
+Its prepared viewer, CSRF boundary, Post-author consent, uncertain replay and revocation stay with the source owner;
+Book ownership and a language association grant no source authority. Permission work retires with source/viewer
+replacement and does not publish the standalone Post. Binding waits while that consent command is unresolved.
+Unsent fields join the organization canvas's departure guard. A stale Book requires reopening its
+current draft. The native owner still validates target authority, the current head and every frozen publication.
+Native create, revise and direct publication use the canonical ordered representation. Studio exposes no mutable-draft
+or public-baseline conversion controls. Ordinary bounded selected-publication preparation, progress and activation
+remain explicit author actions; every published selection retains its exact frozen structure and body revisions.
+
 ## Shared release review language
 
 Decision: Book and article release review uses distinct `studio_release_*` messages in all eight launch locales,
@@ -945,42 +965,29 @@ affected Web typecheck after commit; ordinary acceptance, native, browser, Story
 
 ## Hosted Book author-to-reader witness
 
-Decision: keep the private author and prepublished reader journals independent; compare and preview saved revisions,
-organize and select exact draft occurrences through mounted Studio, recover and seal the selected candidate, retain
-its immutable activation operands, and use supplied catalogue titles with the existing fallback. Ordinary Studio
-binds Content's mounted activation operations through the generated KernelClient. The verifier resumes the retained
-author journal from those operands; the point-publication control remains a separate outcome.
+The existing Auth/native stack hosts an author journal and an independent prepublished control. The author journal
+saves private canonical and actual French Posts in mounted Studio, compares saved versions, previews them, and
+creates/reorders/nests chapter occurrences. The central language form separately grants exact Book-scoped source
+consent and binds the selected English default and French alternative; standalone Posts remain private.
 
-The private author journal creates deterministic drafts through generated native setup, saves and compares exact
-Post revisions in the mounted Studio, previews the saved chapter, and creates, reorders, moves and nests chapter
-occurrences through current controls. It then confirms the current draft and absent release, selects one exact root
-chapter, reloads through its selected-stage locator, freezes the single occurrence, advances and seals a private
-candidate. The retained journal ends at that sealed candidate; the ordinary route continues through explicit
-activation checks and activation. The journal retains the catalogue, native owner and epoch, source head,
-absent expected release, stage ID, selected occurrence and exact Post/revision/digest as immutable operands. It does
-not call the old batch publication route or claim that the sealed candidate is public. A later private Post revision
-and structure move verify that the current draft still names the candidate's original exact source. The private
-author's activation receipt, anonymous release bytes, member progress and stable reader link remain deferred
-acceptance; the transport binding does not establish those observations.
+Selected publication preparation retains its native stage locator, sparse windows, exact source head and excluded
+chapter assertions. Real mounted authority checks and explicit activation publish that selected frozen TOC with its
+language targets. Later private source edits and draft moves leave both published exact bodies unchanged. Native
+canonical-byte readback and the mounted anonymous reader prove French choice, Automatic, unchanged interface
+locale, exact links and Back/Forward. A member saves/resumes the French checkpoint and follows Continue; its exact
+Post/revision/digest/language stay bound, and its block offset is not applied to English.
 
-The independent control begins with its native one-chapter release, then uses mounted Studio to save another exact
-version of that private Post, add a second draft occurrence, issue exact source permission during point review, and
-explicitly publish that occurrence. The journal checks that permission alone leaves the current release unchanged,
-then checks the exact published bytes and direct-Post privacy. A different member discovers the supplied Book title,
-reads the original exact chapter, saves and resumes a Library checkpoint, and opens the old release/occurrence link
-after a later move and withdrawal. This control demonstrates the installed point-consent and reader paths; it does
-not complete the private author's initial activation acceptance.
+The prepublished journal separately proves point source consent, later selected versions, moved links, Library
+checkpoint readback and withdrawal. It cannot substitute for an unreached author activation or language stage.
+Every required failed or unreached journal stage fails the suite. The single entrypoint remains
+`bun apps/web/scripts/check.ts --host tests/native/hosted-book-journey.host.test.ts`; its fixture owns setup and cleanup,
+without another seed, stack or publisher. Source assertions are not observed native/browser acceptance.
 
-Legacy parity comparison: at `legacy-final` revision `95167ceab7173dc1c5fb0ee70568c5c95f1dba8d`, chapter history
-and comparison, ordered nested Book contents, reading progress and resume already existed. The mounted witness pins
-those same user behaviors. Legacy reader links addressed a Book and node without explicit release and occurrence
-coordinates; the current canonical reader carries both, and the independent control has an assertion for its frozen
-old link after a move. That source comparison and assertion are recorded here; the current mounted result remains
-unverified until the controller run.
-
-The command and stage report are documented in the native test
-[README](../../tests/native/README.md#hosted-book-author-to-reader-journey). The candidate controller runs the mounted
-witness once after integration; it is deferred during the worker source pass.
+The read-only earlier app at `95167ceab7173dc1c5fb0ee70568c5c95f1dba8d` supplies the Book author/reader parity floor.
+Frozen whole-selection publication, independently selected exact body languages and stable occurrence links after
+moves are intended improvements whose actual execution remains required; implementation and illustrative fixtures
+alone cannot establish them. The native [journey runbook](../../tests/native/README.md#hosted-book-author-to-reader-journey)
+owns invocation evidence.
 
 ## Private Book release preparation
 
@@ -995,7 +1002,7 @@ replacement aborts the visit and discards late replies. Activation remains a sep
 Sources read before design: Content's [Authoring and release and Prepared Book publication](../../../../services/kernel/src/content/hosted-chapters.md),
 `hosted-publication-preparation-routes.ts`, `hosted-publication-preparation-schemas.ts`, the focused native HTTP test
 `hosted-publication-preparation-http.test.ts`, architecture's [Release selection and retention](../../../../docs/architecture.md#release-selection-and-retention),
-`routes/studio.tsx`, `hosted-legacy-baseline-native.ts`, and `hosted-publication-point.ts`.
+`routes/studio.tsx`, `hosted-release-preparation-native.ts`, and `hosted-publication-point.ts`.
 
 Decision: one focused state/transport proof covers retry, remount and stale authority, with only the named interrupted
 desktop and expired narrow stories. Preparation uses the generated KernelClient catalogue and stage operations.

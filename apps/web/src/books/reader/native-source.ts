@@ -1,4 +1,7 @@
 import { readNativeHostedBook, type HostedBookViewer } from './native-read';
+import { readNativeHostedBookLanguages } from './native-languages';
+import type { BookLanguageSource } from './languages';
+import { getLocale } from '../../paraglide/runtime.js';
 import { nativeBookRequestWithinBounds } from './native-mapper';
 import {
   bookPageMatches,
@@ -31,8 +34,65 @@ export type NativeHostedBookAdmissionSource = Readonly<{
 }>;
 
 /** Bind the existing reader port to private server functions, without a browser Content transport or cache. */
-export function createNativeHostedBookSource(admission: NativeHostedBookAdmissionSource): HostedBookSource {
+export function createNativeHostedBookSource(
+  admission: NativeHostedBookAdmissionSource,
+  locale: string = getLocale(),
+): HostedBookSource {
+  async function languageRead(
+    address: import('./source').BookChapterAddress,
+    locale: string,
+    operation: import('./native-languages').HostedBookLanguageInput['operation'],
+    signal: AbortSignal,
+  ) {
+    const observed = admission.getSnapshot();
+    const current = () => !signal.aborted && admission.getSnapshot() === observed;
+    if (!current() || observed.state !== 'current' || !samePublication(address.publication, observed.publication))
+      return { state: 'unavailable' as const };
+    try {
+      const result = await readNativeHostedBookLanguages({
+        data: {
+          address,
+          locale,
+          operation,
+          viewer: observed.viewer,
+          currentReleaseRevisionId: observed.currentReleaseRevisionId,
+          currentStructureRevisionId: observed.currentStructureRevisionId,
+        },
+        signal,
+      });
+      return current() ? result : { state: 'unavailable' as const };
+    } catch {
+      return { state: 'unavailable' as const };
+    }
+  }
+  const languages: BookLanguageSource = {
+    async list(address, cursor, signal) {
+      const result = await languageRead(address, locale, { kind: 'list', cursor }, signal);
+      return result.state !== 'ready'
+        ? result
+        : 'choices' in result.value
+          ? { state: 'ready', value: result.value }
+          : { state: 'unavailable' };
+    },
+    async select(address, preference, signal) {
+      const result = await languageRead(
+        address,
+        'en',
+        {
+          kind: 'select',
+          preference: { language: preference.language, preferredLanguages: [...preference.preferredLanguages] },
+        },
+        signal,
+      );
+      return result.state !== 'ready'
+        ? result
+        : 'address' in result.value
+          ? { state: 'ready', value: result.value }
+          : { state: 'unavailable' };
+    },
+  };
   return {
+    languages,
     getSnapshot: (): BookSourceObservation => admission.getSnapshot(),
     subscribe: (retired) => admission.subscribe(retired),
     async read(request, signal) {

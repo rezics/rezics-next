@@ -1,3 +1,4 @@
+import { readCreditIndexSnapshot } from '../../../src/search/credit-index.ts';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
@@ -41,7 +42,7 @@ export async function assertNativeGenerationCoverage(options: {
 }) {
   const { pool, search, index, source, keys } = options;
   const physical = await readSearchWriterPhysicalTarget(search, index);
-  const calendar = await readSubjectCalendarMappingFormatForIndex(search, index);
+  await readSubjectCalendarMappingFormatForIndex(search, index);
   const listing = subjectListingSource(pool);
   const expected = new Set<string>();
   const observedHeads: (SubjectSourceRevisionHead | undefined)[] = Array.from({ length: 4096 });
@@ -57,14 +58,10 @@ export async function assertNativeGenerationCoverage(options: {
       if (observedHeads[partition]) assert.deepEqual(head, observedHeads[partition]);
       else observedHeads[partition] = head;
       if (page.ids.length) {
-        const snapshot = await source.read(partition, page.ids);
+        const snapshot = await readCreditIndexSnapshot(source, partition, page.ids);
         validateIndexObservation(snapshot, partition, page.ids, page.position);
         const counts = await listing.read(partition, page.ids);
-        const actions = await prepareBoundedSortKeys(
-          search,
-          index,
-          documentActions(snapshot, page.ids, counts, calendar ?? undefined),
-        );
+        const actions = await prepareBoundedSortKeys(search, index, documentActions(snapshot, page.ids, counts));
         const copies = (
           await pool.query<{
             original_id: string;

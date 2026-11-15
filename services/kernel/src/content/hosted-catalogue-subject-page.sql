@@ -42,10 +42,13 @@ WHERE c.publication_id IS NOT NULL
   AND p.visibility = 'published'
   AND EXISTS (
     SELECT 1
-    FROM content.hosted_placement hp
-    WHERE hp.route = c.route
-      AND hp.catalogue_id = c.catalogue_id
-      AND hp.revision_id = c.publication_id
+    FROM content.hosted_version_revision publication
+    JOIN content.hosted_tree_snapshot_version snapshot
+      ON snapshot.route=publication.route AND snapshot.catalogue_id=publication.catalogue_id
+     AND snapshot.generation_id=publication.generation_id AND snapshot.sequence=publication.sequence
+    WHERE publication.route=c.route AND publication.catalogue_id=c.catalogue_id
+      AND publication.revision_id=c.publication_id AND publication.revision_kind='publication'
+      AND publication.generation_kind='candidate' AND snapshot.placement_count>0
   )
   AND (NOT input.has_after OR c.catalogue_id > input.after_id)
 ORDER BY c.catalogue_id

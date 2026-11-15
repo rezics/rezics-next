@@ -19,7 +19,7 @@ const primaryClass = buttonVariants({ variant: 'default' });
 const secondaryClass = buttonVariants({ variant: 'outline' });
 const focusClass = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const unknownStateValue = '__library_unknown_received_state__';
-const removeStateValue = 'remove';
+const removeStateValue = '__library_remove_received_state__';
 
 export type EntryStateBasis = {
   subjectId: string;

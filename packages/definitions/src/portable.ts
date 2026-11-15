@@ -7,7 +7,15 @@ export type {
 } from './released-relation-direction.ts';
 import schema from '../schema/release.json';
 import type { LibraryProfile, LibraryProfileReference } from './library-profile.ts';
-export { chooseLabel, languageRanges } from './language.ts';
+export {
+  chooseLabel,
+  languageRanges,
+  canonicalLanguageKey,
+  parseLanguagePreferences,
+  MAX_LANGUAGE_KEY_LENGTH,
+  MAX_LANGUAGE_PREFERENCES,
+  MAX_LANGUAGE_PREFERENCES_LENGTH,
+} from './language.ts';
 
 export type {
   LibraryLabels,

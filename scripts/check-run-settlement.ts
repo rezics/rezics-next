@@ -47,6 +47,8 @@ const PHYSICAL_RUN = /^[a-zA-Z0-9-]{1,96}$/;
 const CHECK_RUN_CUSTODY_OBSERVATION_MAX = 16;
 
 export type CheckRunInvocationBinding = {
+  /** Shared native units observe an immutable committed checkpoint while local writing continues. */
+  sourceMode?: 'committed';
   sourceRevision: string;
   indexTree: string;
   sourceSha256: string;
@@ -340,7 +342,7 @@ function boundedCount(value: unknown, label: string, maximum = Number.MAX_SAFE_I
 }
 
 export function validateCheckRunInvocationBinding(value: unknown): CheckRunInvocationBinding {
-  const item = closedObject(
+  const item = closedObjectWithOptional(
     value,
     [
       'sourceRevision',
@@ -355,8 +357,11 @@ export function validateCheckRunInvocationBinding(value: unknown): CheckRunInvoc
       'preparationCommandsSha256',
       'returnsSha256',
     ],
+    ['sourceMode'],
     'invocation binding',
   );
+  if (item.sourceMode !== undefined && item.sourceMode !== 'committed')
+    throw new Error('check-run-settlement: invalid source capture mode');
   if (typeof item.sourceRevision !== 'string' || !REVISION.test(item.sourceRevision))
     throw new Error('check-run-settlement: invalid candidate revision');
   if (typeof item.indexTree !== 'string' || !REVISION.test(item.indexTree))
@@ -374,6 +379,7 @@ export function validateCheckRunInvocationBinding(value: unknown): CheckRunInvoc
   )
     throw new Error('check-run-settlement: cwd must be workspace-relative');
   return {
+    ...(item.sourceMode === 'committed' ? { sourceMode: 'committed' as const } : {}),
     sourceRevision: item.sourceRevision,
     indexTree: item.indexTree,
     sourceSha256: boundedHash(item.sourceSha256, 'candidate source hash'),

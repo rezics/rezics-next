@@ -532,6 +532,11 @@ export class InspectionStore {
         'changed',
         'prepared',
         'cursor',
+        'skipped',
+        'kind_new',
+        'kind_changed',
+        'kind_unchanged',
+        'kind_vanished',
       ],
       run_entries: [
         'source',
@@ -750,19 +755,9 @@ export class InspectionStore {
     signal?: AbortSignal,
   ): NonNullable<InspectionDocument['generation']> {
     if (signal?.aborted) throw new InspectionFailure('Inspection was cancelled.', 130);
-    const generationColumns = new Set(
-      this.database
-        .query('PRAGMA table_info(run_generations)')
-        .all()
-        .map((row) => (row as { name: string }).name),
-    );
-    const skipped = generationColumns.has('skipped') ? 'skipped' : 'NULL AS skipped';
-    const kinds = generationColumns.has('kind_new')
-      ? 'kind_new,kind_changed,kind_unchanged,kind_vanished'
-      : 'NULL AS kind_new,NULL AS kind_changed,NULL AS kind_unchanged,NULL AS kind_vanished';
     const row = this.database
       .query(
-        `SELECT id,seq,status,threshold,prior,supplied,survivors,invalid,classified,resolved,expected,prepared,${skipped},${kinds}
+        `SELECT id,seq,status,threshold,prior,supplied,survivors,invalid,classified,resolved,expected,prepared,skipped,kind_new,kind_changed,kind_unchanged,kind_vanished
         FROM run_generations WHERE source=? AND id=?`,
       )
       .get(source, id) as GenerationRow | null;
@@ -839,7 +834,7 @@ export class InspectionStore {
         ? {
             committedOrdinal: checkpoint.committedOrdinal,
             completedMembers: checkpoint.completedMembers,
-            memberCount: checkpoint.identity.members?.length ?? 1,
+            memberCount: checkpoint.identity.members.length,
             bytes: checkpoint.identity.bytes,
             sha256: checkpoint.identity.sha256,
             sourceKind: checkpoint.identity.sourceKind,
@@ -855,17 +850,10 @@ export class InspectionStore {
       .query('SELECT 1 AS found FROM sqlite_schema WHERE type=? AND name=?')
       .get('table', 'run_staging_checkpoints') as { found: number } | null;
     if (!present) return null;
-    const columns = new Set(
-      this.database
-        .query('PRAGMA table_info(run_staging_checkpoints)')
-        .all()
-        .map((entry) => (entry as { name: string }).name),
-    );
-    const extras = columns.has('identity_json') ? ',identity_json,completed_members' : '';
     const row = this.database
       .query(
         `SELECT version,sha256,bytes,source_alias,source_kind,converter_revision,decoder_id,
-          disappearance_threshold,committed_ordinal,skipped,rolling_digest${extras}
+          disappearance_threshold,committed_ordinal,skipped,rolling_digest,identity_json,completed_members
         FROM run_staging_checkpoints WHERE source=? AND run_id=?`,
       )
       .get(source, id) as {
@@ -880,8 +868,8 @@ export class InspectionStore {
       committed_ordinal: number;
       skipped: number;
       rolling_digest: string;
-      identity_json?: string | null;
-      completed_members?: number;
+      identity_json: string;
+      completed_members: number;
     } | null;
     if (!row) return null;
     try {
@@ -897,8 +885,8 @@ export class InspectionStore {
         committedOrdinal: row.committed_ordinal,
         skipped: row.skipped,
         rollingDigest: row.rolling_digest,
-        completedMembers: row.completed_members ?? 0,
-        identityJson: row.identity_json ?? null,
+        completedMembers: row.completed_members,
+        identityJson: row.identity_json,
       });
     } catch {
       return null;

@@ -34,7 +34,7 @@ import {
   type DefinitionTypePin,
   type CatalogueArtifactReader,
   type CatalogueArtifactStore,
-  type CatalogueRootV2,
+  type CatalogueRootV1,
   type CatalogueNodeV1,
   type CatalogueEntry,
   type CatalogueRange,
@@ -90,16 +90,11 @@ async function put(store: CatalogueArtifactStore, value: unknown): Promise<strin
 function makePin(rootDigest: string): KindCataloguePin {
   return { format: CATALOGUE_FORMAT, rootDigest, kindSpec: KIND_FORMAT, reduction: KIND_REDUCTION };
 }
-export function compatibilityKind(
-  release: Release,
-  digest: string,
-  typeId: string,
-  host: CompilerHost,
-): KindDeclarationV1 {
+export function exactTypeKind(release: Release, digest: string, typeId: string, host: CompilerHost): KindDeclarationV1 {
   assertCatalogueDigest(digest);
   assertKindId(typeId);
   const type = Object.hasOwn(release.types, typeId) ? release.types[typeId] : undefined;
-  if (!type) catalogueFail('missing', `Missing compatibility Type ${typeId} in ${digest}`);
+  if (!type) catalogueFail('missing', `Missing exact Type ${typeId} in ${digest}`);
   return parseKindDeclaration(
     {
       format: KIND_FORMAT,
@@ -141,17 +136,17 @@ export async function buildCatalogue(
     add({ key: declarationKey(declaration.id), kind: 'declaration', digest });
   }
   const pins =
-    input.compatibility === 'all'
+    input.typeKinds === 'all'
       ? (function* () {
           for (const [releaseDigest, release] of releases)
             for (const typeId of Object.keys(release.types)) yield { releaseDigest, typeId };
         })()
-      : (input.compatibility ?? []);
+      : (input.typeKinds ?? []);
   for (const pin of pins) {
     // The closed declaration parser below also validates both exact pin fields.
     const release = releases.get(pin.releaseDigest);
-    if (!release) catalogueFail('missing', `Missing compatibility release ${pin.releaseDigest}`);
-    const declaration = compatibilityKind(release, pin.releaseDigest, pin.typeId, host);
+    if (!release) catalogueFail('missing', `Missing Type Kind release ${pin.releaseDigest}`);
+    const declaration = exactTypeKind(release, pin.releaseDigest, pin.typeId, host);
     const digest = await put(store, declaration);
     add({ key: declarationKey(declaration.id), kind: 'declaration', digest });
   }
@@ -189,7 +184,7 @@ export async function buildCatalogue(
     if (next.length >= level.length) catalogueFail('invalid', 'Directory range keys cannot fit a branching node');
     level = next;
   }
-  const root: CatalogueRootV2 = {
+  const root: CatalogueRootV1 = {
     format: CATALOGUE_FORMAT,
     kindSpec: KIND_FORMAT,
     reduction: KIND_REDUCTION,
@@ -200,7 +195,7 @@ export async function buildCatalogue(
   return pin;
 }
 
-async function rootFor(pin: KindCataloguePin, reader: CatalogueArtifactReader): Promise<CatalogueRootV2> {
+async function rootFor(pin: KindCataloguePin, reader: CatalogueArtifactReader): Promise<CatalogueRootV1> {
   const admitted = parseCataloguePin(pin);
   return parseCatalogueRoot(await readCatalogueArtifact(reader, admitted.rootDigest, CATALOGUE_LIMITS.nodeBytes));
 }
@@ -217,7 +212,7 @@ async function nodeFor(
 }
 /** Descend only the addressed path. Each step parses <=256 entries/256KiB; no global map, sort or scan. */
 async function findEntry(
-  root: CatalogueRootV2,
+  root: CatalogueRootV1,
   key: string,
   reader: CatalogueArtifactReader,
 ): Promise<CatalogueEntry | undefined> {

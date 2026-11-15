@@ -79,6 +79,7 @@ export type BookPlacement = Readonly<{
   occurrenceId: string;
   parentOccurrenceId: string | null;
   title: string;
+  defaultLanguage?: string;
   target: { kind: 'part' } | { kind: 'chapter'; document: ExactDocument };
 }>;
 export type BookStructure = Readonly<{
@@ -99,6 +100,14 @@ export type BookStructureChange =
   | { kind: 'move'; occurrenceId: string; parentOccurrenceId: string | null; beforeOccurrenceId: string | null }
   | { kind: 'rename'; occurrenceId: string; title: string }
   | { kind: 'pin'; occurrenceId: string; document: ExactDocument }
+  | {
+      kind: 'bind-language';
+      occurrenceId: string;
+      language: string;
+      title: string;
+      document: ExactDocument;
+      makeDefault: boolean;
+    }
   /** Remove only this occurrence subtree; never erase Posts or mutate previous manifests. */
   | { kind: 'remove'; occurrenceId: string };
 
@@ -239,6 +248,11 @@ export interface StudioPort {
   ): Promise<StudioResult<StudioPage<PublicationRecord>>>;
 }
 export interface BookOrganizerPort {
+  canBindChapterLanguage?(): boolean;
+  createSourceConsent?(
+    document: ExactDocument,
+    signal: AbortSignal,
+  ): Promise<StudioResult<import('./hosted-source-consent').HostedSourceConsentVisit>>;
   /** Return a fresh complete bounded structure; reject stale structure revisions atomically. */
   change(
     input: { catalogueId: string; expectedRevision: string; change: BookStructureChange; idempotencyKey: string },

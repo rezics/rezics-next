@@ -1,6 +1,7 @@
 import { expect, setDefaultTimeout, test } from 'bun:test';
 import { routeOf } from '../../src/route/route.ts';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
+import { withDelayedHostedAttachment } from './support/delayed-hosted-attachment.ts';
 
 setDefaultTimeout(180_000);
 
@@ -102,7 +103,9 @@ test('mounted draft updates preserve occurrence identity, history, counts, and p
       target: revisedTarget,
     };
     const firstKey = crypto.randomUUID();
-    const updated = await f.native.call('POST', updatePath, chapterInput, { key: firstKey });
+    const updated = await withDelayedHostedAttachment(revisedTarget.postId, () =>
+      f.native.call('POST', updatePath, chapterInput, { key: firstKey }),
+    );
     expect(updated.status, JSON.stringify(updated.value)).toBe(200);
     head = updated.value.revisionId;
 

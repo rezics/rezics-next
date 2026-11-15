@@ -34,7 +34,6 @@ test('a valid source statistic without a histogram binds SQL null before executi
       attribution: 'VNDB',
       transaction_id: '00000000-0000-4000-8000-000000000002',
       observation_digest: 'a'.repeat(64),
-      expose_observation: false,
     });
     expect(rows).toEqual([]);
     expect(executions).toBe(1);

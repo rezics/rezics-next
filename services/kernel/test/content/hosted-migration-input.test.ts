@@ -1,6 +1,6 @@
 import { expect, setDefaultTimeout, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
-import { appendHostedRootChapter, type HostedCommandDependencies } from '../../src/content/hosted-chapters-commands.ts';
+import { type HostedCommandDependencies } from '../../src/content/hosted-chapters-commands.ts';
 import {
   captureHostedMigrationInput,
   advanceHostedMigrationInput,
@@ -35,13 +35,7 @@ async function createStructure(
   fixture: Awaited<ReturnType<typeof hostedChaptersFixture>>,
   placements: readonly unknown[],
 ) {
-  return (
-    await fixture.native.command('/v1/hostedCatalogues', {
-      postId: fixture.catalogueId,
-      threadId: fixture.threadId,
-      placements,
-    })
-  ).revisionId as string;
+  return (await fixture.retained.structure(placements)).revisionId as string;
 }
 
 async function referenceCount(fixture: Awaited<ReturnType<typeof hostedChaptersFixture>>, inputId: string) {
@@ -99,18 +93,12 @@ test('captures a legacy snapshot, replays its committed interval, and never foll
     expect(first.coverage).toEqual({ visited: '2', expected: '3', complete: false });
 
     const appendedId = fixture.newOccurrenceId();
-    const appended = await appendHostedRootChapter(
-      deps,
-      actor,
-      fixture.catalogueId,
-      {
-        expectedRevisionId: base,
-        occurrenceId: appendedId,
-        title: 'After capture',
-        target,
-      },
-      context(),
-    );
+    const appended = await fixture.retained.append({
+      expectedRevisionId: base,
+      occurrenceId: appendedId,
+      title: 'After capture',
+      target,
+    });
     expect(appended.value.revisionId).not.toBe(base);
 
     const replay = await advanceHostedMigrationInput(
@@ -303,18 +291,12 @@ test('traverses a sealed prefix beyond 512 in bounded pages and excludes later o
     const actor = fixture.native.author.actor;
     for (let offset = 0; offset < 4; offset++) {
       const occurrenceId = fixture.newOccurrenceId();
-      const appended = await appendHostedRootChapter(
-        deps,
-        actor,
-        fixture.catalogueId,
-        {
-          expectedRevisionId: head,
-          occurrenceId,
-          title: `Prefix ${offset}`,
-          target,
-        },
-        context(),
-      );
+      const appended = await fixture.retained.append({
+        expectedRevisionId: head,
+        occurrenceId,
+        title: `Prefix ${offset}`,
+        target,
+      });
       head = appended.value.revisionId;
       prefixIds.push(occurrenceId);
     }
@@ -327,18 +309,12 @@ test('traverses a sealed prefix beyond 512 in bounded pages and excludes later o
     expect(captured.value.source).toMatchObject({ kind: 'prefix', highWater: '3', expectedPlacementCount: '516' });
 
     const laterId = fixture.newOccurrenceId();
-    await appendHostedRootChapter(
-      deps,
-      actor,
-      fixture.catalogueId,
-      {
-        expectedRevisionId: head,
-        occurrenceId: laterId,
-        title: 'Later offset',
-        target,
-      },
-      context(),
-    );
+    await fixture.retained.append({
+      expectedRevisionId: head,
+      occurrenceId: laterId,
+      title: 'Later offset',
+      target,
+    });
 
     let frontier = captured.value.frontier;
     let visited = 0;

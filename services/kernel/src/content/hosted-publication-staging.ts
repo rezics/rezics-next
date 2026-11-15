@@ -9,6 +9,10 @@ import {
 } from './hosted-chapters-attachments.ts';
 import type { HostedChapterTarget, HostedDependencies, OrderedHostedPlacement } from './hosted-chapters-model.ts';
 import {
+  prepareHostedPublicationLanguageTargets,
+  applyHostedPublicationLanguageTargets,
+} from './hosted-publication-language-targets.ts';
+import {
   pageHostedPublicationOrderedSource,
   readHostedPublicationOrderedSourcePoints,
   resolveHostedPublicationOrderedSource,
@@ -73,6 +77,7 @@ type StageRow = QueryResultRow & {
   duplicate_input_count: string;
   unknown_input_count: string;
   target_observation_count: string;
+  language_occurrence_count: string;
   source_frontier: string;
   source_exhausted: boolean;
   closure_frontier: string;
@@ -93,6 +98,7 @@ type SourceRow = QueryResultRow & {
   post_id: string | null;
   target_revision_id: string | null;
   sha256: string | null;
+  body_languages?: import('./hosted-chapters-model.ts').HostedChapterLanguages | null;
 };
 type InputRow = QueryResultRow & { input_position: string; occurrence_id: string };
 type TargetIdentityRow = QueryResultRow & {
@@ -116,6 +122,7 @@ export type HostedPublicationAdvancePhase =
   | 'closure'
   | 'candidate_begin'
   | 'candidate_page'
+  | 'language_targets'
   | 'exhausted'
   | 'terminal';
 export type HostedPublicationAdvanceReceipt = Readonly<{
@@ -151,6 +158,7 @@ type StepCandidate = Readonly<{
   kind: 'part' | 'chapter';
   title: string | null;
   target: HostedChapterTarget | null;
+  bodyLanguages?: import('./hosted-chapters-model.ts').HostedChapterLanguages;
 }>;
 type SourcePage = Readonly<{ rows: readonly SourceRow[]; exhausted: boolean }>;
 type SelectionSettlement = Readonly<{
@@ -178,6 +186,7 @@ export type HostedPublicationStagingAdvancePreparation = Readonly<{
   targetKeys: readonly string[];
   observations: readonly HostedChapterAttachmentObservation[];
   targetUnavailable: boolean;
+  languageTargets?: import('./hosted-publication-language-targets.ts').HostedPublicationLanguagePreparation | null;
 }>;
 type OutputTargetCursor = Readonly<{
   threadId: string;
@@ -194,7 +203,7 @@ const STAGE_SELECT = `
     source_ordered_sequence::text,status,input_version::text,
     input_count::text,input_frozen_version::text,input_frontier::text,
     settled_input_count::text,candidate_count::text,duplicate_input_count::text,
-    unknown_input_count::text,target_observation_count::text,source_frontier::text,
+    unknown_input_count::text,target_observation_count::text,language_occurrence_count::text,source_frontier::text,
     source_exhausted,closure_frontier::text,closure_checked_count::text,
     closure_missing_count::text,failure,
     to_char(expires_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS expires_at,
@@ -437,6 +446,7 @@ function orderedSourceRow(placement: OrderedHostedPlacement): SourceRow {
     post_id: target?.postId ?? null,
     target_revision_id: target?.revisionId ?? null,
     sha256: target?.sha256 ?? null,
+    body_languages: placement.kind === 'chapter' ? (placement.bodyLanguages ?? null) : null,
   };
 }
 
@@ -819,10 +829,14 @@ export async function prepareHostedPublicationStagingAdvance(
         pageFingerprint: plan ? stagingPlanFingerprint(plan) : null,
         candidates: plan?.failure ? [] : plan ? plan.candidates : [],
         targetKeys,
+        languageTargets: stage.status === 'ready' && BigInt(stage.language_occurrence_count) > 0n,
       };
     })
   ).value;
   if (!preview) return null;
+  const languageTargets = preview.languageTargets
+    ? await prepareHostedPublicationLanguageTargets(deps, actor, locator, deadline)
+    : null;
 
   let observations: readonly HostedChapterAttachmentObservation[] = [];
   let targetUnavailable = false;
@@ -848,6 +862,7 @@ export async function prepareHostedPublicationStagingAdvance(
       ),
     ),
     targetUnavailable,
+    languageTargets,
   });
 }
 
@@ -1332,6 +1347,7 @@ function toCandidate(row: SourceRow): StepCandidate {
       revisionId: row.target_revision_id,
       sha256: row.sha256,
     },
+    ...(row.body_languages == null ? {} : { bodyLanguages: row.body_languages }),
   };
 }
 function toPlacement(candidate: StepCandidate): OrderedHostedPlacement {
@@ -1346,7 +1362,12 @@ function toPlacement(candidate: StepCandidate): OrderedHostedPlacement {
     title: candidate.title!,
   };
   if (candidate.kind === 'part') return { ...common, kind: 'part' };
-  return { ...common, kind: 'chapter', target: candidate.target! };
+  return {
+    ...common,
+    kind: 'chapter',
+    target: candidate.target!,
+    ...(candidate.bodyLanguages === undefined ? {} : { bodyLanguages: candidate.bodyLanguages }),
+  };
 }
 function targetKey(target: HostedChapterTarget): string {
   return `${target.threadId}/${target.postId}/${target.revisionId}/${target.sha256}`;
@@ -1421,7 +1442,7 @@ async function insertTargetObservations(
   client: AccessClient,
   stage: StageRow,
   observations: readonly HostedChapterAttachmentObservation[],
-): Promise<void> {
+): Promise<number> {
   const observationRows = observations.map(({ target, authorId, licence }) => ({
     thread_id: target.threadId,
     post_id: target.postId,
@@ -1431,15 +1452,18 @@ async function insertTargetObservations(
     licence,
   }));
   if (observationRows.length) {
-    await client.query(
+    const inserted = await client.query(
       `INSERT INTO content.hosted_publication_staging_target
          (route,catalogue_id,stage_id,thread_id,post_id,target_revision_id,body_sha256,author_account_id,licence)
        SELECT $1,$2,$3,x.thread_id,x.post_id,x.target_revision_id,decode(x.sha256,'hex'),x.author_account_id,x.licence
        FROM jsonb_to_recordset($4::jsonb)
-         AS x(thread_id uuid,post_id uuid,target_revision_id uuid,sha256 text,author_account_id uuid,licence text)`,
+         AS x(thread_id uuid,post_id uuid,target_revision_id uuid,sha256 text,author_account_id uuid,licence text)
+       ON CONFLICT DO NOTHING RETURNING thread_id`,
       [stage.route, stage.catalogue_id, stage.stage_id, JSON.stringify(observationRows)],
     );
+    return inserted.rows.length;
   }
+  return 0;
 }
 
 async function storePreparedTargetObservations(
@@ -1486,18 +1510,44 @@ async function insertCandidates(
     post_id: candidate.target?.postId ?? null,
     target_revision_id: candidate.target?.revisionId ?? null,
     sha256: candidate.target?.sha256 ?? null,
+    body_languages: candidate.bodyLanguages ?? null,
   }));
   await client.query(
     `INSERT INTO content.hosted_publication_staging_candidate
        (route,catalogue_id,stage_id,source_order,occurrence_id,parent_id,position,source_segment,kind,
-        thread_id,post_id,target_revision_id,body_sha256)
+        thread_id,post_id,target_revision_id,body_sha256,body_languages)
      SELECT $1,$2,$3,x.source_order,x.occurrence_id,x.parent_id,x.position,x.source_segment,x.kind,
-       x.thread_id,x.post_id,x.target_revision_id,decode(x.sha256,'hex')
+       x.thread_id,x.post_id,x.target_revision_id,decode(x.sha256,'hex'),x.body_languages
      FROM jsonb_to_recordset($4::jsonb) AS x(
        source_order bigint,occurrence_id uuid,parent_id uuid,position bigint,source_segment text,kind text,
-       thread_id uuid,post_id uuid,target_revision_id uuid,sha256 text
+       thread_id uuid,post_id uuid,target_revision_id uuid,sha256 text,body_languages jsonb
      )`,
     [stage.route, stage.catalogue_id, stage.stage_id, JSON.stringify(rows)],
+  );
+  const languageCount = candidates.filter((candidate) => candidate.bodyLanguages !== undefined).length;
+  if (languageCount)
+    await client.query(
+      `UPDATE content.hosted_publication_staging
+    SET language_occurrence_count=language_occurrence_count+$4 WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+      [stage.route, stage.catalogue_id, stage.stage_id, languageCount],
+    );
+}
+
+export async function advanceHostedPublicationLanguageTargets(
+  client: AccessClient,
+  actorInput: Actor,
+  locator: HostedPublicationStagingLocator,
+  preparation: HostedPublicationStagingAdvancePreparation,
+) {
+  const stage = await lockStage(client, locator);
+  assertActorBinding(stage, accountActor(actorInput));
+  if (stage.status !== 'ready') throw stagingConflict('Language targets require complete source coverage');
+  if (BigInt(stage.language_occurrence_count) === 0n) return { changed: false, complete: true, processed: 0 };
+  const prepared = preparation.languageTargets;
+  if (!prepared || prepared.locator.catalogueId !== locator.catalogueId || prepared.locator.stageId !== locator.stageId)
+    throw stagingConflict('Language target preparation is unavailable');
+  return applyHostedPublicationLanguageTargets(client, prepared, (observations) =>
+    insertTargetObservations(client, stage, observations),
   );
 }
 
@@ -1516,6 +1566,13 @@ export async function sealHostedPublicationStaging(
   if (live.status === 'expired') throw new HostedPublicationStagingExpiredError();
   if (live.status === 'sealed') return { replayed: true, seal: await readSeal(client, live) };
   if (live.status !== 'ready') throw stagingConflict('Source coverage and selection closure are not complete');
+  if (BigInt(live.language_occurrence_count) > 0n) {
+    const languageProgress = await client.query<{ complete: boolean }>(
+      `SELECT complete FROM content.hosted_publication_language_progress WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+      [live.route, live.catalogue_id, live.stage_id],
+    );
+    if (!languageProgress.rows[0]?.complete) throw stagingConflict('Language target coverage is incomplete');
+  }
   if (live.mode === 'whole' && (!live.source_exhausted || live.failure !== null))
     throw stagingConflict('Whole-source input has not reached raw exhaustion');
   if (
@@ -1655,7 +1712,11 @@ export async function readHostedPublicationStagingCandidates(
         row.sha256 !== source.sha256
       )
         throw stagingConflict('Staged candidate no longer matches its pinned ordered source');
-      return { ...row, title: placement.title };
+      return {
+        ...row,
+        title: placement.title,
+        body_languages: placement.kind === 'chapter' ? (placement.bodyLanguages ?? null) : null,
+      };
     });
   }
   const more = rows.length > limit;
@@ -1670,6 +1731,9 @@ export async function readHostedPublicationStagingCandidates(
       kind: candidate.kind,
       title: candidate.title,
       target: candidate.target,
+      ...(candidate.bodyLanguages === undefined
+        ? {}
+        : { bodyLanguages: { ...candidate.bodyLanguages, namespaceId: locator.stageId } }),
     };
   });
   return { items, next: more ? items.at(-1)!.sourceOrder : null };
@@ -1798,7 +1862,12 @@ export async function readHostedPublicationStagingActivationTargets(
          WHERE c.route=$1 AND c.catalogue_id=$2 AND c.stage_id=$3 AND c.kind='chapter'
            AND c.thread_id=t.thread_id AND c.post_id=t.post_id
            AND c.target_revision_id=t.target_revision_id AND c.body_sha256=t.body_sha256
-         ORDER BY c.occurrence_id
+         UNION ALL
+         SELECT language.occurrence_id FROM content.hosted_publication_language_target language
+         WHERE language.route=$1 AND language.catalogue_id=$2 AND language.stage_id=$3
+           AND language.thread_id=t.thread_id AND language.post_id=t.post_id
+           AND language.target_revision_id=t.target_revision_id AND language.body_sha256=t.body_sha256
+         ORDER BY occurrence_id
          LIMIT 1
        ) candidate ON true
        ORDER BY t.thread_id,t.post_id,t.target_revision_id,t.body_sha256

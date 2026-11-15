@@ -11,12 +11,9 @@ import type { ReleaseGroupingRequest } from './release-search-grouping.ts';
 import type { ReleaseSearchCandidateCut } from './release-search-native-stream.ts';
 
 const RETENTION_MS = 15 * 60_000;
-const CLEAN_WORK_LIMIT = 500;
 const CLEAN_POSITION_LIMIT = 500;
 const CLEAN_NODE_LIMIT = 500;
 const CLEAN_EXECUTION_LIMIT = 100;
-const LEGACY_POSITION_BATCH = 32;
-const LEGACY_WORK_BATCH = 256;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SUBJECT_ID = UUID;
 
@@ -33,12 +30,8 @@ export type ReleaseSearchRelevanceLocation = Readonly<{
 }>;
 
 export interface ReleaseSearchRelevanceState {
-  /** Creates a new retained lineage. Inline IDs are inserted into its first membership root. */
-  start(
-    binding: ReleaseSearchRelevanceBinding,
-    now: number,
-    initialWorks?: readonly string[],
-  ): Promise<ReleaseSearchRelevanceLocation>;
+  /** Creates a new retained lineage with one empty immutable membership root. */
+  start(binding: ReleaseSearchRelevanceBinding, now: number): Promise<ReleaseSearchRelevanceLocation>;
   /** Renews a valid cursor's private state before reading it. */
   resume(binding: ReleaseSearchRelevanceBinding, location: ReleaseSearchRelevanceLocation, now: number): Promise<void>;
   /** Looks up only this native page's candidate works in the cursor's immutable membership root. */
@@ -61,13 +54,6 @@ export interface ReleaseSearchRelevanceState {
 export class ReleaseSearchRelevanceStateExpired extends Error {
   constructor() {
     super('release_relevance_state_expired');
-  }
-}
-
-/** A retained pre-trie cursor needs another bounded preparation slice before it can emit candidates. */
-export class ReleaseSearchRelevanceStatePreparing extends Error {
-  constructor() {
-    super('release_relevance_state_preparing');
   }
 }
 
@@ -211,32 +197,14 @@ export function createReleaseSearchRelevanceState(input: {
   }
 
   async function clean(now: Date): Promise<void> {
-    // Each call drains a fixed number of legacy deltas, positions, trie nodes and executions.
+    // Each call drains fixed batches of expired positions, trie nodes and executions.
     // No traversal or retained membership prefix is expanded during cleanup.
-    await query(
-      `WITH doomed AS (
-         SELECT w.execution_id, w.position_id, w.work_id
-         FROM search.release_relevance_work w
-         JOIN search.release_relevance_execution e ON e.id = w.execution_id
-         WHERE e.expires_at <= $1
-         ORDER BY e.expires_at, w.execution_id, w.position_id, w.work_id
-         LIMIT ${CLEAN_WORK_LIMIT}
-       )
-       DELETE FROM search.release_relevance_work w
-       USING doomed d
-       WHERE (w.execution_id, w.position_id, w.work_id) = (d.execution_id, d.position_id, d.work_id)`,
-      [now],
-    );
     await query(
       `WITH doomed AS (
          SELECT p.execution_id, p.id
          FROM search.release_relevance_position p
          JOIN search.release_relevance_execution e ON e.id = p.execution_id
          WHERE e.expires_at <= $1
-           AND NOT EXISTS (
-             SELECT 1 FROM search.release_relevance_work w
-             WHERE w.execution_id = p.execution_id AND w.position_id = p.id
-           )
          ORDER BY e.expires_at, p.execution_id, p.id
          LIMIT ${CLEAN_POSITION_LIMIT}
        )
@@ -254,10 +222,6 @@ export function createReleaseSearchRelevanceState(input: {
            AND NOT EXISTS (
              SELECT 1 FROM search.release_relevance_position p
              WHERE p.execution_id = n.execution_id AND p.membership_root = n.id
-           )
-           AND NOT EXISTS (
-             SELECT 1 FROM search.release_relevance_membership_build b
-             WHERE b.execution_id = n.execution_id AND b.membership_root = n.id
            )
          ORDER BY e.expires_at, n.execution_id, n.id
          LIMIT ${CLEAN_NODE_LIMIT}
@@ -291,16 +255,14 @@ export function createReleaseSearchRelevanceState(input: {
   async function start(
     requestBinding: ReleaseSearchRelevanceBinding,
     currentTime: number,
-    initialWorks: readonly string[] = [],
   ): Promise<ReleaseSearchRelevanceLocation> {
     remaining();
     const identity = bound(requestBinding);
     const time = timestamp(currentTime);
-    const seed = workIds(initialWorks);
     await clean(time.now);
     const location = { execution: randomUUID(), node: randomUUID() };
     const rootBranch = sha256('release-relevance-root-v1');
-    const digest = worksDigest(seed);
+    const digest = worksDigest([]);
     const rows = await query<{ execution_id: string; id: string }>(
       `WITH execution AS (
          INSERT INTO search.release_relevance_execution
@@ -308,7 +270,7 @@ export function createReleaseSearchRelevanceState(input: {
          VALUES ($1, $3, $4, $5, $6, $7)
          RETURNING id
        ), membership AS MATERIALIZED (
-         SELECT e.id, search.release_relevance_membership_add_many(e.id, NULL, $10::text[]) AS root_id
+         SELECT e.id, search.release_relevance_membership_add_many(e.id, NULL, ARRAY[]::text[]) AS root_id
          FROM execution e
        ), root AS (
          INSERT INTO search.release_relevance_position
@@ -316,12 +278,6 @@ export function createReleaseSearchRelevanceState(input: {
          SELECT e.id, $2, NULL, $8, $9, m.root_id
          FROM execution e JOIN membership m ON m.id = e.id
          RETURNING execution_id, id
-       ), seeded AS (
-         INSERT INTO search.release_relevance_work (execution_id, position_id, work_id)
-         SELECT r.execution_id, r.id, seed.work_id
-         FROM root r CROSS JOIN unnest($10::text[]) AS seed(work_id)
-         ON CONFLICT DO NOTHING
-         RETURNING work_id
        )
        SELECT execution_id, id FROM root`,
       [
@@ -334,7 +290,6 @@ export function createReleaseSearchRelevanceState(input: {
         time.expiresAt,
         rootBranch,
         digest,
-        seed,
       ],
     );
     if (rows.length !== 1 || rows[0]?.execution_id !== location.execution || rows[0]?.id !== location.node)
@@ -412,25 +367,8 @@ export function createReleaseSearchRelevanceState(input: {
       ],
     );
     if (retained.length !== 1) throw new ReleaseSearchRelevanceStateExpired();
-    let root = retained[0]!.membership_root;
-    if (root === null) {
-      const progress = await query<{ ready: boolean }>(
-        `SELECT search.release_relevance_membership_build_batch($1, $2, $3, $4, $5) AS ready`,
-        [location.execution, location.node, LEGACY_POSITION_BATCH, LEGACY_WORK_BATCH, time.now],
-      );
-      if (!progress.length) throw new ReleaseSearchRelevanceStateExpired();
-      if (!progress[0]!.ready) throw new ReleaseSearchRelevanceStatePreparing();
-      const migrated = await query<{ membership_root: string | null }>(
-        `SELECT p.membership_root
-         FROM search.release_relevance_execution e
-         JOIN search.release_relevance_position p ON p.execution_id = e.id
-         WHERE e.id = $1 AND p.id = $2 AND e.expires_at > $3`,
-        [location.execution, location.node, time.now],
-      );
-      if (migrated.length !== 1) throw new ReleaseSearchRelevanceStateExpired();
-      root = migrated[0]!.membership_root;
-      if (root === null) throw new Error('Release relevance membership build completed without a root');
-    }
+    const root = retained[0]!.membership_root;
+    if (root === null) throw new ReleaseSearchRelevanceStateExpired();
     if (!candidates.length) return new Set();
     const rows = await query<{ work_id: string }>(
       `SELECT candidate.work_id
@@ -460,7 +398,6 @@ export function createReleaseSearchRelevanceState(input: {
       execution_id: string;
       id: string;
       work_digest: string;
-      membership_ready: boolean;
     }>(
       `SELECT * FROM search.release_relevance_advance(
          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::text[]
@@ -483,7 +420,6 @@ export function createReleaseSearchRelevanceState(input: {
     const row = rows[0];
     if (!row || rows.length !== 1 || row.execution_id !== location.execution)
       throw new ReleaseSearchRelevanceStateExpired();
-    if (!row.membership_ready) throw new ReleaseSearchRelevanceStatePreparing();
     if (row.work_digest !== digest) throw new ReleaseSearchRelevanceStateConflict();
     return { execution: row.execution_id, node: row.id };
   }

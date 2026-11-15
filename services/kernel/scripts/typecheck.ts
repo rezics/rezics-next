@@ -46,17 +46,23 @@ function returnedPaths(
   // returning this cache would recursively include entries from unrelated databases/runs.
   const paths: string[] = emitClient ? [KERNEL_CLIENT_OUTPUT.transport] : [];
   if (emitOpenApi) paths.push('contracts/openapi.json');
-  if (emitSchema === 'core') paths.push('services/kernel/db/schema.sql');
-  if (
-    emitSchema !== undefined &&
-    /^[a-z][a-z0-9_]*$/.test(emitSchema) &&
-    emitSchema !== 'migrations' &&
-    isDirectory(resolve(directory, 'db', emitSchema, 'migrations'))
-  ) {
-    const schema = workspacePath(resolve(directory, 'db', emitSchema, 'schema.sql'));
-    if (schema !== undefined) paths.push(schema);
-  }
+  for (const module of schemaModules(emitSchema))
+    paths.push(module === 'core' ? 'services/kernel/db/schema.sql' : `services/kernel/db/${module}/schema.sql`);
   return paths;
+}
+
+function schemaModules(selection: string | undefined): string[] {
+  if (selection === undefined) return [];
+  return [...new Set(selection.split(','))].map((module) => {
+    if (
+      module !== 'core' &&
+      (!/^[a-z][a-z0-9_]*$/.test(module) ||
+        module === 'migrations' ||
+        !isDirectory(resolve(directory, 'db', module, 'migrations')))
+    )
+      throw new Error(`Unknown schema module: ${module}`);
+    return module;
+  });
 }
 
 function isDirectory(path: string): boolean {
@@ -88,6 +94,7 @@ async function typecheck(
   emitSchema?: string,
   emitOpenApi = false,
   prepareSqlAnalysis: typeof prepareReyloAnalysisCache = prepareReyloAnalysisCache,
+  generationOnly = false,
 ): Promise<number> {
   const incremental = localCompilerStateArgs(env);
   const analysis = await withCommandPhase('sql-analysis', () => prepareSqlAnalysis(env), env);
@@ -111,17 +118,21 @@ async function typecheck(
           const emitted = await compilerCommand('client-emit', ['bun', 'scripts/client.ts'], compilerEnv);
           if (emitted !== 0) return emitted;
         }
-        const tsc = await withCommandPhase(
-          'typecheck',
-          () =>
-            compilerCommand(
-              'tsc',
-              ['tsc', '--noEmit', ...incremental, '--runExternalCode', '-p', 'tsconfig.json'],
-              typecheckEnv,
-            ),
-          env,
-        );
-        if (tsc !== 0) return tsc;
+        // Artifact publication checks production API roots in client.ts. Full project typing also
+        // includes tests and operator scripts, and remains a separate command when generating only.
+        if (!generationOnly) {
+          const tsc = await withCommandPhase(
+            'typecheck',
+            () =>
+              compilerCommand(
+                'tsc',
+                ['tsc', '--noEmit', ...incremental, '--runExternalCode', '-p', 'tsconfig.json'],
+                typecheckEnv,
+              ),
+            env,
+          );
+          if (tsc !== 0) return tsc;
+        }
         const constructed = await compilerCommand('construct', ['bun', 'run', 'construct'], compilerEnv);
         if (constructed !== 0) return constructed;
         if (emitOpenApi) {
@@ -142,10 +153,13 @@ async function typecheck(
     await withCommandPhase(
       'sql-schema',
       async () => {
-        const path = emitSchema === 'core' ? 'db/schema.sql' : `db/${emitSchema}/schema.sql`;
-        const dump = schemaDumps(env.DATABASE_URL!, directory)[path];
-        if (dump === undefined) throw new Error(`Unknown schema module: ${emitSchema}`);
-        await Bun.write(resolve(directory, path), dump);
+        const dumps = schemaDumps(env.DATABASE_URL!, directory);
+        for (const module of schemaModules(emitSchema)) {
+          const path = module === 'core' ? 'db/schema.sql' : `db/${module}/schema.sql`;
+          const dump = dumps[path];
+          if (dump === undefined) throw new Error(`Unknown schema module: ${module}`);
+          await Bun.write(resolve(directory, path), dump);
+        }
       },
       env,
     );
@@ -169,16 +183,21 @@ export async function runKernelTypecheck(
     prepareSqlAnalysis?: typeof prepareReyloAnalysisCache;
     withThrowawayDatabase?: typeof withThrowawayDatabase;
     outputTree?: typeof withKernelClientOutput;
+    assertCompilerDatabaseReady?: typeof assertCompilerDatabaseReady;
   } = {},
   args: readonly string[] = process.argv.slice(2),
 ): Promise<number> {
   env = compilerEnvironment(env, args);
   const emitClient = args.includes('--emit-client');
   const emitOpenApi = args.includes('--emit-openapi');
+  const generationOnly = args.includes('--generate-only');
+  if (generationOnly && !emitClient) throw new Error('Generation-only mode requires --emit-client');
   const emitSchema = args.find((arg) => arg.startsWith('--emit-schema='))?.slice('--emit-schema='.length);
+  schemaModules(emitSchema);
   const runCommands = dependencies.typecheck ?? typecheck;
   const withDatabase = dependencies.withThrowawayDatabase ?? withThrowawayDatabase;
-  const label = 'kernel typecheck';
+  const checkDatabaseReady = dependencies.assertCompilerDatabaseReady ?? assertCompilerDatabaseReady;
+  const label = generationOnly ? 'kernel generation' : 'kernel typecheck';
   let databasePhase = 'database-setup';
   let compilerResult: number | undefined;
   const compile = async (databaseEnv: NodeJS.ProcessEnv) => {
@@ -190,7 +209,7 @@ export async function runKernelTypecheck(
       const readiness = await compilerInfrastructurePhase(label, 'database-readiness', () =>
         withCommandPhase(
           'database-readiness',
-          () => assertCompilerDatabaseReady(container, compilerEnv.DATABASE_URL!),
+          () => checkDatabaseReady(container, compilerEnv.DATABASE_URL!),
           compilerEnv,
         ),
       );
@@ -201,13 +220,13 @@ export async function runKernelTypecheck(
       }
     }
     const result = await compilerInfrastructurePhase(label, 'compiler', () =>
-      runCommands(compilerEnv, emitClient, emitSchema, emitOpenApi, dependencies.prepareSqlAnalysis),
+      runCommands(compilerEnv, emitClient, emitSchema, emitOpenApi, dependencies.prepareSqlAnalysis, generationOnly),
     );
     if (result !== 0 && container && compilerEnv.DATABASE_URL) {
       try {
         await withCommandPhase(
           'database-readiness',
-          () => assertCompilerDatabaseReady(container, compilerEnv.DATABASE_URL!),
+          () => checkDatabaseReady(container, compilerEnv.DATABASE_URL!),
           compilerEnv,
         );
       } catch (error) {
@@ -225,6 +244,7 @@ export async function runKernelTypecheck(
     'scripts/typecheck.ts',
     ...(emitClient ? ['--emit-client'] : []),
     ...(emitOpenApi ? ['--emit-openapi'] : []),
+    ...(generationOnly ? ['--generate-only'] : []),
     ...(emitSchema === undefined ? [] : [`--emit-schema=${emitSchema}`]),
     ...config,
   ];
@@ -233,7 +253,7 @@ export async function runKernelTypecheck(
     : await compilerInfrastructurePhase(label, 'placement', () =>
         placeCompilerRun(
           {
-            label: 'kernel typecheck',
+            label,
             root: repository,
             cwd: directory,
             command: remoteCommand,
@@ -246,7 +266,7 @@ export async function runKernelTypecheck(
         ),
       );
   if (placed !== null) return compilerPlacementResult(label, placed);
-  writeCommandObservation('kernel typecheck', commandObservation(remoteCommand, repository, env), env);
+  writeCommandObservation(label, commandObservation(remoteCommand, repository, env), env);
   // The compiler database applies the same migrations as derived generation, in admitted custody only.
   validateKernelMigrationVersions(directory, new Date());
   // The analysis cache is prepared by typecheck itself, with its own phases, so the seam must not prepare it again.

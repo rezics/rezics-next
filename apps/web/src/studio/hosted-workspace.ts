@@ -1,3 +1,5 @@
+import type { HistoricalReaderSource } from '../threads/historical-reader-provenance';
+import type { SourceConsentTransport } from './hosted-source-consent';
 import type {
   StudioInput,
   StudioPort,
@@ -127,6 +129,7 @@ export async function openHostedStudio(
     isCurrent: () => boolean;
     native?: HostedBookNative;
     owner?: HostedOwnedBook;
+    sourceConsent?: { source: HistoricalReaderSource; csrfToken: string; native?: SourceConsentTransport };
     /** Defaults to the anonymous native catalogue metadata reader, never the owner-only reader. */
     admitPublicRelease?: HostedReleaseReaderAdmission;
   },
@@ -155,7 +158,21 @@ export async function openHostedStudio(
   )
     return hostedFailure('stale', 'The book changed while it was opening. Reopen the book.');
   const viewer = owner.value.viewer;
-  const book = new HostedBookAdapter(native, current, options.resolveTarget);
+  const book = new HostedBookAdapter(
+    native,
+    current,
+    options.resolveTarget,
+    options.sourceConsent
+      ? {
+          source: options.sourceConsent.source,
+          csrfToken: options.sourceConsent.csrfToken,
+          viewer,
+          native:
+            options.sourceConsent.native ??
+            (await import('./hosted-source-consent-actions')).hostedSourceConsentTransport,
+        }
+      : undefined,
+  );
   const loaded = await book.load(options.catalogueId, signal, selected.headRevisionId);
   if (!loaded.ok) return loaded;
   if (!current() || signal.aborted) return ended();

@@ -11,7 +11,7 @@ import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { KernelClock } from '../clock.ts';
 import { LIBRARY_ARCHIVE_LIMITS, LIBRARY_ARCHIVE_RECOVERY_LIMITS } from './library-archive.ts';
-import { sectionsForVersion } from './library-export-format.ts';
+import { exportSections } from './library-export-format.ts';
 import { exportAuthorityTypes } from './library-export.ts';
 import { createLibraryArchiveCollectionRecovery } from './library-archive-collection-recovery.ts';
 
@@ -41,6 +41,7 @@ const exportSection = t.Union([
   t.Literal('vndbEvidence'),
   t.Literal('anilistUploads'),
   t.Literal('anilistEvidence'),
+  t.Literal('hostedReading'),
 ]);
 const manifestV1 = t.Object(
   {
@@ -71,28 +72,22 @@ const manifestV1 = t.Object(
 );
 function manifestSchema() {
   return memoizedValue(manifestSchema, () =>
-    t.Union([
-      manifestV1,
-      ...([2, 3, 4] as const).map((version) =>
-        t.Object(
-          {
-            ...manifestV1.properties,
-            version: t.Literal(version),
-            coverage: t.Literal(`private-library-owner-facts-v${version}`),
-            sectionTotals: t.Object(
-              Object.fromEntries(
-                sectionsForVersion(version).map((section) => [
-                  section,
-                  t.Object({ rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) }, closed),
-                ]),
-              ),
-              closed,
-            ),
-          },
+    t.Object(
+      {
+        ...manifestV1.properties,
+        coverage: t.Literal('private-library-owner-facts-v1'),
+        sectionTotals: t.Object(
+          Object.fromEntries(
+            exportSections.map((section) => [
+              section,
+              t.Object({ rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) }, closed),
+            ]),
+          ),
           closed,
         ),
-      ),
-    ]),
+      },
+      closed,
+    ),
   );
 }
 const presentationReview = t.Object(

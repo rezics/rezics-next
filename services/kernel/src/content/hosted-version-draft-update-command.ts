@@ -67,9 +67,9 @@ export async function updateHostedDraftPoint(
   const authorization: CommandAuthorization = {
     ...base,
     async prepare(attempt) {
-      const evidence = await base.prepare!(attempt);
       await validateHostedChapterAttachments(deps, attachment(input), { actor, deadline: context.deadline });
-      return evidence;
+      // Attachment reads may outlast the short Access evidence lifetime.
+      return base.prepare!(attempt);
     },
   };
   const commandOptions = {

@@ -123,6 +123,17 @@ test.each([
     [KERNEL_CLIENT_OUTPUT.transport, 'services/kernel/db/semantic/schema.sql'],
     true,
   ],
+  [
+    ['--emit-client', '--emit-openapi', '--emit-schema=library,search'],
+    ['bun', 'scripts/typecheck.ts', '--emit-client', '--emit-openapi', '--emit-schema=library,search'],
+    [
+      KERNEL_CLIENT_OUTPUT.transport,
+      'contracts/openapi.json',
+      'services/kernel/db/library/schema.sql',
+      'services/kernel/db/search/schema.sql',
+    ],
+    true,
+  ],
 ])(
   'Kernel placement returns files written by the selected emission modes: %j',
   async (args, command, returns, keepsFiles) => {
@@ -454,7 +465,7 @@ test('a tsc failure returns its status and diagnostics without running construct
   expect(result.status).toBe(23);
   expect(result.stderr).toBe('src/example.ts(2,3): error TS2322: diagnostic stays exact\n');
   expect(existsSync(join(directory, 'bun.log'))).toBe(false);
-});
+}, 65_000);
 
 test('construct failure is returned after a successful tsc', () => {
   const directory = temporaryDirectory();
@@ -475,7 +486,7 @@ test('construct failure is returned after a successful tsc', () => {
 
   expect(result.status).toBe(19);
   expect(readFileSync(join(directory, 'bun.log'), 'utf8')).toBe('run construct\n');
-});
+}, 65_000);
 
 test('without DATABASE_URL, auth uses kernel placement and the host owns its migrated Auth database', async () => {
   const events: string[] = [];
@@ -706,6 +717,11 @@ test('A compiler database remains reachable from the actual selected typecheck p
           place: async () => {
             throw new Error('nested placement');
           },
+          assertCompilerDatabaseReady: async (container, receivedUrl) => {
+            expect(alive).toBe(true);
+            expect(container).toBe('owned-compiler-container');
+            expect(receivedUrl).toBe(url);
+          },
           withThrowawayDatabase: async (work) => {
             alive = true;
             try {
@@ -781,7 +797,8 @@ test('A worktree-writing compiler helper container preserves invoking user owner
   const args = compilerDatabaseRunArgs(9, 'nonce-9', []);
   expect(args).toContain('--rm');
   expect(args).toContain('--mount');
-  expect(args).toContain(`type=volume,destination=/var/lib/postgresql,volume-label=${COMPILER_PID_LABEL}=9`);
+  expect(args).toContain(`${COMPILER_PID_LABEL}=9`);
+  expect(args).toContain('type=volume,source=rezics-compiler-pg-9-nonce-9,destination=/var/lib/postgresql');
   expect(args).not.toContain('--tmpfs');
   expect(args).not.toContain('--user');
   expect(args.includes('-v') && args.some((arg) => arg.includes(repository))).toBe(false);

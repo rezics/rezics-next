@@ -80,7 +80,6 @@ import {
   STAGING_UNSUPPORTED_INPUT,
   captureDumpSetIdentity,
   captureFileIdentity,
-  captureIdentity,
 } from './staging-checkpoint.ts';
 import {
   admitImportCliConfig,
@@ -461,26 +460,16 @@ async function executeOrdinaryImport(
             decodeBudget: config.compression === 'zstd' ? (config.decodeBudget ?? DEFAULT_DECODED_ZSTD_BYTES) : 0,
           });
         } else {
-          capture =
-            config.compression === 'none'
-              ? captureIdentity({
-                  sha256: fingerprint.sha256,
-                  bytes: fingerprint.bytes,
-                  sourceAlias: config.sourceAlias ?? config.source,
-                  sourceKind: config.source,
-                  converterRevision: registration.converter_revision,
-                  disappearanceThreshold: config.disappearanceThreshold ?? 0.2,
-                })
-              : captureFileIdentity({
-                  sha256: fingerprint.sha256,
-                  bytes: fingerprint.bytes,
-                  sourceAlias: config.sourceAlias ?? config.source,
-                  sourceKind: config.source,
-                  converterRevision: registration.converter_revision,
-                  disappearanceThreshold: config.disappearanceThreshold ?? 0.2,
-                  compression: config.compression,
-                  decodeBudget: decodeBudgetLimit(config.decodeBudget),
-                });
+          capture = captureFileIdentity({
+            sha256: fingerprint.sha256,
+            bytes: fingerprint.bytes,
+            sourceAlias: config.sourceAlias ?? config.source,
+            sourceKind: config.source,
+            converterRevision: registration.converter_revision,
+            disappearanceThreshold: config.disappearanceThreshold ?? 0.2,
+            compression: config.compression,
+            decodeBudget: config.compression === 'none' ? 0 : decodeBudgetLimit(config.decodeBudget),
+          });
         }
       }
     }
@@ -678,6 +667,9 @@ async function executeOrdinaryImport(
     readSourceStatistics: (
       input: Parameters<ReturnType<ImportCliHost['createTransport']>['readSourceStatistics']>[0],
     ) => track(() => liveTransport().readSourceStatistics(input, signal)),
+    readSourceObservationHead: (
+      input: Parameters<ReturnType<ImportCliHost['createTransport']>['readSourceObservationHead']>[0],
+    ) => track(() => liveTransport().readSourceObservationHead(input, signal)),
     readPublicFigure: (input: Parameters<ReturnType<ImportCliHost['createTransport']>['readPublicFigure']>[0]) =>
       track(() => liveTransport().readPublicFigure(input, signal)),
     readSourceClassifications: (

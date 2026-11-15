@@ -832,9 +832,6 @@ export function createSearchWriterGuard(options: {
   pool: Pool;
   search: OpenSearch;
   index: string;
-  calendarFormat?: 1;
-  /** Matches the immutable physical generation mapping; legacy targets keep the ordinary writer shape. */
-  creditFormat?: 1;
   consumer: string;
   source: SubjectSource;
   listing: SubjectListingSource;
@@ -844,12 +841,8 @@ export function createSearchWriterGuard(options: {
   const generation = Number(match?.[1]);
   if (!Number.isSafeInteger(generation) || generation < 1) throw new TypeError('Invalid physical generation');
   const indexObservation = async (partition: number, ids: readonly string[]) => {
-    const creditFormat = options.creditFormat;
-    const snapshot =
-      creditFormat === 1
-        ? await readCreditIndexSnapshot(options.source, partition, ids)
-        : await options.source.read(partition, ids);
-    return { snapshot, creditFormat };
+    const snapshot = await readCreditIndexSnapshot(options.source, partition, ids);
+    return { snapshot };
   };
   const point = (partition: number, epoch: number, transactionId: string | null, position: string | null) =>
     transactionId === null ? null : { partition, epoch, transactionId, position: BigInt(position!) };
@@ -1502,7 +1495,7 @@ export function createSearchWriterGuard(options: {
       let row = await readWriter();
       if (row?.repair_locator !== repairLocator) {
         // Ordinary current Source, counts and serializer; never splice a stale engine document.
-        const { snapshot, creditFormat } = await indexObservation(partition, [subject]);
+        const { snapshot } = await indexObservation(partition, [subject]);
         const subjects = validateIndexObservation(snapshot, partition, [subject], obligation);
         const sourceSubject = subjects.get(subject);
         const counts =
@@ -1512,7 +1505,7 @@ export function createSearchWriterGuard(options: {
         const actions = await prepareBoundedSortKeys(
           options.search,
           options.index,
-          documentActions(snapshot, [subject], counts, options.calendarFormat, creditFormat ?? undefined),
+          documentActions(snapshot, [subject], counts),
         );
         const action = actions[0];
         if (!action || action.version < obligation || action.version > BigInt(Number.MAX_SAFE_INTEGER))
@@ -1753,7 +1746,7 @@ export function createSearchWriterGuard(options: {
         });
       };
       try {
-        const { snapshot, creditFormat } = await indexObservation(partition, ids);
+        const { snapshot } = await indexObservation(partition, ids);
         const floor = receipt.position > obligation ? receipt.position : obligation;
         const subjects = validateIndexObservation(snapshot, partition, ids, floor);
         const visible = ids.filter((id) => {
@@ -1764,7 +1757,7 @@ export function createSearchWriterGuard(options: {
         const actions = await prepareBoundedSortKeys(
           options.search,
           options.index,
-          documentActions(snapshot, ids, counts, options.calendarFormat, creditFormat ?? undefined),
+          documentActions(snapshot, ids, counts),
         );
         const current = await readSearchWriterPhysicalTarget(options.search, options.index);
         if (current.incarnation !== incarnation || current.writeAlias !== writeAlias)
@@ -1807,18 +1800,14 @@ export function createSearchWriterGuard(options: {
   generationReaders.set(guard, async (partition, input, obligation) => {
     const ids = keys(partition, input);
     const target = await readSearchWriterPhysicalTarget(options.search, options.index);
-    const { snapshot, creditFormat } = await indexObservation(partition, ids);
+    const { snapshot } = await indexObservation(partition, ids);
     const subjects = validateIndexObservation(snapshot, partition, ids, obligation);
     const visible = ids.filter((id) => {
       const subject = subjects.get(id);
       return subject?.visibility === 'visible' && subject.redirect === null;
     });
     const counts = visible.length ? await options.listing.read(partition, visible) : undefined;
-    const actions = await prepareBoundedSortKeys(
-      options.search,
-      options.index,
-      documentActions(snapshot, ids, counts, options.calendarFormat, creditFormat ?? undefined),
-    );
+    const actions = await prepareBoundedSortKeys(options.search, options.index, documentActions(snapshot, ids, counts));
     const versions = await withReadTransaction(options.pool, async (tx) => {
       const owner = await readPartition(tx, partition);
       if (!owner || owner.writeState !== 'active' || owner.position !== snapshot.position) return null;

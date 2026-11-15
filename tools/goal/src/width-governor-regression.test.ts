@@ -1,10 +1,60 @@
 import { expect, test } from 'bun:test';
 import { agentReportingEvidence } from './agents.ts';
-import { openDb } from './db.ts';
+import { migrate, openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { WorkerStore } from './store.ts';
 import { temporaryDirectory } from './test-support.ts';
-import { formatWidthSnapshot, readWidthSnapshot, sweepWidthGovernor } from './width-governor.ts';
+import {
+  formatWidthSnapshot,
+  readWidthSnapshot,
+  sweepWidthGovernor,
+  widthGovernorMigrations,
+} from './width-governor.ts';
+
+test('width baseline retains delivery history without a resident floor model', () => {
+  const db = openDb(':memory:');
+  try {
+    migrate(db, widthGovernorMigrations);
+    db.exec("INSERT INTO width_governor_deliveries VALUES ('content', 1, 'supermanager', 'before')");
+    db.exec("INSERT INTO width_governor_receiver_deliveries VALUES ('content', 1, 'supermanager', 'before')");
+    migrate(db, widthGovernorMigrations);
+    expect(widthGovernorMigrations.map((step) => step.version)).toEqual([1]);
+    expect(db.query('SELECT delivered_at FROM width_governor_receiver_deliveries').get()).toEqual({
+      delivered_at: 'before',
+    });
+    expect(
+      db.query("SELECT name FROM sqlite_master WHERE type='table' AND name='width_resident_episodes'").get(),
+    ).toBeNull();
+  } finally {
+    db.close();
+  }
+});
+
+test('the resident has no automatic source-writing floor', async () => {
+  const temporary = temporaryDirectory();
+  const db = openDb(`${temporary.path}/width.sqlite`);
+  try {
+    new WorkerStore(db);
+    db.exec('CREATE TABLE manager_sessions(id TEXT PRIMARY KEY, state TEXT NOT NULL)');
+    db.query('INSERT INTO manager_sessions VALUES (?, ?)').run(
+      'supermanager',
+      JSON.stringify({
+        id: 'supermanager',
+        kind: 'resident-supermanager',
+        provider: 'codex',
+        status: 'running',
+        goals: [],
+      }),
+    );
+    const inbox = new SqliteManagerInbox(db, temporary.path);
+    const result = await sweepWidthGovernor(db, inbox, Date.UTC(2026, 10, 15, 0), { stateDirectory: temporary.path });
+    expect(result.snapshot.system.sourceWriters).toBe(0);
+    expect(inbox.pending('supermanager')).toEqual([]);
+  } finally {
+    db.close();
+    temporary.close();
+  }
+});
 
 test('reporting distinguishes Codex, other known agents, and absent or unrecognized provider evidence', () => {
   expect(agentReportingEvidence('codex')).toEqual({ codex: true, unknown: false });

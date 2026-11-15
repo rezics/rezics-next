@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { formatModuleMap, loadManifest } from '../../../scripts/architecture-map.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
@@ -633,97 +633,7 @@ export function renderCheckProtocol(
   return loadCondition(promptDirectory, check, view, policy).text;
 }
 
-type ManagerGoalDocument = {
-  goal: string;
-  path: string;
-  outcome?: string;
-  scope?: string;
-};
-
-function firstGoalParagraph(markdown: string, heading: 'Outcome' | 'Scope'): string | undefined {
-  const lines = markdown.split(/\r?\n/);
-  const start = lines.findIndex((line) => new RegExp(`^##\\s+${heading}\\s*$`, 'i').test(line));
-  if (start < 0) return undefined;
-  const paragraph: string[] = [];
-  for (const line of lines.slice(start + 1)) {
-    if (/^#{1,6}\s+/.test(line)) break;
-    if (!line.trim()) {
-      if (paragraph.length) break;
-      continue;
-    }
-    paragraph.push(line.trim());
-  }
-  const text = paragraph.join(' ').replace(/\s+/g, ' ').trim();
-  return text || undefined;
-}
-
-/** Extract concise opening paragraphs from each owner document; full contracts stay linked for on-demand access. */
-function readGoalDocuments(cwd: string, goals: readonly string[]): ManagerGoalDocument[] {
-  return goals.map((goal) => {
-    const path = `docs/goals/${goal}.md`;
-    const absolutePath = join(cwd, path);
-    if (!existsSync(absolutePath)) return { goal, path };
-    const markdown = readFileSync(absolutePath, 'utf8');
-    const outcome = firstGoalParagraph(markdown, 'Outcome');
-    const scope = firstGoalParagraph(markdown, 'Scope');
-    return {
-      goal,
-      path,
-      ...(outcome !== undefined ? { outcome } : {}),
-      ...(scope !== undefined ? { scope } : {}),
-    };
-  });
-}
-
-type ManagerContinuation = { path: string; text: string };
-
-/** Read each owned Goal continuation plus a distinct renewal continuation at most once. */
-function readManagerContinuations(
-  cwd: string,
-  goals: readonly string[],
-  continuationFile?: string,
-): ManagerContinuation[] {
-  const paths = [
-    ...goals.map((goal) => join(cwd, '.temp', 'goal', goal, 'CONTINUATION.md')),
-    ...(continuationFile ? [continuationFile] : []),
-  ];
-  const seen = new Set<string>();
-  const continuations: ManagerContinuation[] = [];
-  for (const path of paths) {
-    const absolutePath = resolve(cwd, path);
-    if (seen.has(absolutePath)) continue;
-    seen.add(absolutePath);
-    if (!existsSync(absolutePath)) continue;
-    const text = readFileSync(absolutePath, 'utf8');
-    if (text.trim()) continuations.push({ path: relative(cwd, absolutePath).replaceAll('\\', '/'), text });
-  }
-  return continuations;
-}
-
-function renderManagerGoalDocument(
-  document: ManagerGoalDocument,
-  includeOutcome: boolean,
-  includeScope: boolean,
-): string {
-  const links = [
-    `[full Goal document](${document.path})`,
-    `[scope](${document.path}#scope)`,
-    `[ownership](${document.path}#ownership)`,
-    `[Done when](${document.path}#done-when)`,
-    `[acceptance](${document.path}#acceptance)`,
-  ].join(' · ');
-  return [
-    `### Goal: ${document.goal}`,
-    `- Owner details: ${links}. Read them on demand for full cases, ownership, requirements and decisions.`,
-    includeOutcome && document.outcome ? `- Objective: ${document.outcome}` : '',
-    includeScope && document.scope ? `- Opening scope: ${document.scope}` : '',
-    '- Next: follow the configured brief and this Goal’s current continuation.',
-  ]
-    .filter(Boolean)
-    .join('\n');
-}
-
-export function renderManagerOpening(input: {
+export function renderSupermanagerOpening(input: {
   spec: {
     id: string;
     goal: string;
@@ -740,49 +650,24 @@ export function renderManagerOpening(input: {
 }): { prompt: string; roleBytes: number; openingBytes: number; manifest: PromptBudgetManifest } {
   const policy = input.policy ?? defaultPolicy;
   const directory = input.promptDirectory ?? DEFAULT_PROMPT_DIRECTORY;
-  const roleFile = readTemplate(join(directory, 'manager.md'));
+  const roleFile = readTemplate(join(directory, 'supermanager.md'));
   const goals = input.spec.goals?.length ? input.spec.goals : [input.spec.goal];
-  const continuationPath = goals.map((goal) => join('.temp', 'goal', goal, 'CONTINUATION.md')).join(', ');
   const view: PromptView = {
     id: input.spec.id,
     goal: goals.join(', '),
-    backlogPath: input.backlogPath,
     command: input.command,
-    continuationRef: input.continuationFile ? `the continuation ${input.continuationFile}` : 'continuation',
-    continuationPath,
-    continuationCharacters: policy.manager.continuationCharacters.toLocaleString('en-US'),
-    stoppedLimit:
-      policy.backlog.stoppedTaskLimitMs === 3_600_000 ? 'an hour' : `${policy.backlog.stoppedTaskLimitMs} ms`,
-    idleRule:
-      input.spec.engine === 'codex'
-        ? 'When no new inbox event or concrete result needs action, finish with a normal response and no tool call; native Goal continues after tool use. Do not read or wait on inbox, sleep, or poll workers/checks to look for work. The controller resumes this thread on the next inbox event.'
-        : `When no decision is pending, run ${input.command} inbox wait ${input.spec.id} in the background and end the turn.`,
   };
   const roleText = collapse(fillTemplate(roleFile.text, view, policy));
-  const documents = readGoalDocuments(input.spec.cwd, goals);
-  const continuations = readManagerContinuations(input.spec.cwd, goals, input.continuationFile);
-  const selections = documents.map(() => ({ outcome: false, scope: false }));
-  const renderPrompt = () =>
-    [
-      roleText,
-      ...documents.map((document, index) =>
-        renderManagerGoalDocument(document, selections[index]!.outcome, selections[index]!.scope),
-      ),
-      input.spec.brief ? `## Configured manager brief\n${input.spec.brief}` : '',
-      ...continuations.map(({ path, text }) => `## Current continuation: ${path}\n${text}`),
-    ]
-      .filter(Boolean)
-      .join('\n\n');
-  let prompt = renderPrompt();
-  for (const field of ['scope', 'outcome'] as const) {
-    for (const [index, document] of documents.entries()) {
-      if (!document[field]) continue;
-      selections[index]![field] = true;
-      const candidate = renderPrompt();
-      if (bytes(candidate) <= policy.prompt.managerOpeningBytes) prompt = candidate;
-      else selections[index]![field] = false;
-    }
-  }
+  const continuation = input.continuationFile
+    ? readFileSync(resolve(input.spec.cwd, input.continuationFile), 'utf8')
+    : '';
+  const prompt = [
+    roleText,
+    input.spec.brief ? `## Resident brief\n${input.spec.brief}` : '',
+    continuation.trim() ? `## Resident continuation: ${input.continuationFile}\n${continuation}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
   const roleBytes = bytes(roleText);
   const openingBytes = bytes(prompt);
   const layers = { role: roleBytes, opening: openingBytes };
@@ -796,6 +681,65 @@ export function renderManagerOpening(input: {
     overBudget: (Object.keys(layers) as ('role' | 'opening')[]).filter((layer) => layers[layer] > budgets[layer]),
   };
   return { prompt, roleBytes, openingBytes, manifest };
+}
+
+/** Historical managed-session callers must not acquire a resident or execution-unit role. */
+export function renderManagerOpening(
+  _input: Parameters<typeof renderSupermanagerOpening>[0],
+): ReturnType<typeof renderSupermanagerOpening> {
+  throw new Error('Managed manager launches are retired; use unit register for an execution unit');
+}
+
+export type NativeRoleOpeningInput = {
+  goal?: string | undefined;
+  brief: string;
+  cwd: string;
+  worktree?: string | undefined;
+  command?: string | undefined;
+  policy?: ControlPolicy | undefined;
+  promptDirectory?: string | undefined;
+};
+
+function renderNativeRoleOpening(role: 'unit' | 'goal-author', input: NativeRoleOpeningInput) {
+  const policy = input.policy ?? defaultPolicy;
+  const directory = input.promptDirectory ?? DEFAULT_PROMPT_DIRECTORY;
+  const roleText = collapse(
+    fillTemplate(
+      readTemplate(join(directory, `${role}.md`)).text,
+      {
+        goal: input.goal ?? 'the assigned outcome',
+        worktree: input.worktree ?? input.cwd,
+        command: input.command ?? 'bun tools/goal/src/cli.ts',
+      },
+      policy,
+    ),
+  );
+  const prompt = [
+    roleText,
+    input.goal ? `Owner contract: [Goal scope and acceptance](docs/goals/${input.goal}.md).` : '',
+    `## Assigned brief\n${input.brief}`,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+  const roleBytes = bytes(roleText);
+  const openingBytes = bytes(prompt);
+  const layers = { role: roleBytes, opening: openingBytes };
+  const budgets = { role: policy.prompt.managerRoleBytes, opening: policy.prompt.managerOpeningBytes };
+  const manifest: PromptBudgetManifest = {
+    layers,
+    budgets,
+    overBudget: (['role', 'opening'] as const).filter((layer) => layers[layer] > budgets[layer]),
+  };
+  return { prompt, roleBytes, openingBytes, manifest };
+}
+
+export function renderUnitOpening(input: NativeRoleOpeningInput) {
+  if (!input.goal?.trim()) throw new Error('An execution unit requires an assigned Goal');
+  return renderNativeRoleOpening('unit', input);
+}
+
+export function renderGoalAuthorOpening(input: NativeRoleOpeningInput) {
+  return renderNativeRoleOpening('goal-author', input);
 }
 
 export function applyRenderedPrompt(

@@ -1,4 +1,5 @@
 import type { HostedReadingAddress, HostedReadingResume } from '../library/contract/hosted-reading.ts';
+import { canonicalLanguageKey } from '@rezics/definitions/language';
 import {
   HOSTED_READING_POSITION_BLOCK_MAX,
   HOSTED_READING_POSITION_OFFSET_MAX,
@@ -34,7 +35,9 @@ export function hostedReadingSelectionShape(selection: HostedReadingAddress): bo
     typeof selection.catalogueId === 'string' &&
     typeof selection.publicationRevisionId === 'string' &&
     typeof selection.occurrenceId === 'string' &&
+    typeof selection.targetPostId === 'string' &&
     typeof selection.targetRevisionId === 'string' &&
+    (selection.bodyLanguage === undefined || canonicalLanguageKey(selection.bodyLanguage) === selection.bodyLanguage) &&
     digest(selection.targetSha256) &&
     hostedReadingPositionIsBounded(selection.documentPosition)
   );

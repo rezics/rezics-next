@@ -3,13 +3,13 @@ import type { Database } from 'bun:sqlite';
 import { join } from 'node:path';
 import { formatLifecycleMetrics } from './report.ts';
 import { openDb } from './db.ts';
-import { WIDTH_BUCKET_MS, readWidthSnapshot, sweepWidthGovernor, type WidthSnapshotOptions } from './width-governor.ts';
+import { readWidthSnapshot, sweepWidthGovernor, type WidthSnapshotOptions } from './width-governor.ts';
 import { INBOX_DEDUPE_WINDOW_MS, SqliteManagerInbox } from './inbox.ts';
 import { emitHourlyLifecycleMetrics, lifecycleMetrics, readHourlyLifecycleMetrics } from './lifecycle-metrics.ts';
 import { processIdentity, type ProcessIdentity } from './process.ts';
 import { WorkerStore } from './store.ts';
 import { temporaryDirectory } from './test-support.ts';
-import { readControlPolicy } from './policy.ts';
+import { defaultPolicy, readControlPolicy } from './policy.ts';
 
 const opened: { db: Database; closeDirectory(): void }[] = [];
 
@@ -150,11 +150,11 @@ test('a low-width active Goal receives accurate, durable wakeable counts once pe
   await sweepWidthGovernor(f.db, f.inbox, at + 5 * 60_000, options);
   expect(f.inbox.pending('goal-a')).toHaveLength(1);
   // The next bucket's identical text within the hour folds into the first row instead of waking the manager again.
-  await sweepWidthGovernor(f.db, f.inbox, at + WIDTH_BUCKET_MS, options);
+  await sweepWidthGovernor(f.db, f.inbox, at + defaultPolicy.width.bucketMs, options);
   expect(f.inbox.pending('goal-a')).toHaveLength(1);
   expect(f.inbox.pending('goal-a')[0]?.deliveries).toBe(2);
   f.clock.now += INBOX_DEDUPE_WINDOW_MS;
-  await sweepWidthGovernor(f.db, f.inbox, at + 5 * WIDTH_BUCKET_MS, options);
+  await sweepWidthGovernor(f.db, f.inbox, at + 5 * defaultPolicy.width.bucketMs, options);
   expect(f.inbox.pending('goal-a')).toHaveLength(2);
 });
 
@@ -231,7 +231,7 @@ test('concurrent sweeps wake controller-parked managers and keep protected manag
   await sweepWidthGovernor(restartedDb, restartedInbox, at + 60_000, lowOptions);
   expect(low.inbox.pending('low-goal')).toHaveLength(1);
   low.clock.now += INBOX_DEDUPE_WINDOW_MS;
-  await sweepWidthGovernor(restartedDb, restartedInbox, at + WIDTH_BUCKET_MS, lowOptions);
+  await sweepWidthGovernor(restartedDb, restartedInbox, at + defaultPolicy.width.bucketMs, lowOptions);
   expect(low.inbox.pending('low-goal')).toHaveLength(2);
 });
 

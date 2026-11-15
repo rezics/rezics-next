@@ -1,7 +1,13 @@
 import { memoizedValue } from '../../memoized.ts';
 import { createTypeDirectory, TYPE_DIRECTORY_LOCALES } from '../definition-type-directory.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
-import { CatalogueArtifactError, type KindDeclarationV1 } from '@rezics/definitions';
+import {
+  CatalogueArtifactError,
+  CATALOGUE_FORMAT,
+  KIND_FORMAT,
+  KIND_REDUCTION,
+  type KindDeclarationV1,
+} from '@rezics/definitions';
 import {
   cataloguePin,
   type NativeDefinitionCatalogue,
@@ -190,10 +196,10 @@ function definitionProblem(error: unknown): never {
 
 const cataloguePinSchema = t.Object(
   {
-    format: t.Literal('https://rezics.com/definitions/catalogue/2'),
+    format: t.Literal(CATALOGUE_FORMAT),
     rootDigest: t.String(),
-    kindSpec: t.Literal('https://rezics.com/definitions/kind/1'),
-    reduction: t.Literal('https://rezics.com/definitions/kind-reduction/1'),
+    kindSpec: t.Literal(KIND_FORMAT),
+    reduction: t.Literal(KIND_REDUCTION),
   },
   { additionalProperties: false },
 );

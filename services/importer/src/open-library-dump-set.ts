@@ -1,13 +1,10 @@
 import { dirname, isAbsolute, resolve as resolvePath } from 'node:path';
-import type { DumpCompression } from './compressed-dump.ts';
 import { DumpInputError, type DumpInputFailureIdentity, openRegularFile } from './dump-input.ts';
 import type { OpenLibraryDumpFamily } from './dumps.ts';
 
 export type { OpenLibraryDumpFamily };
 
 export const OPEN_LIBRARY_DUMP_SET_VERSION = 1;
-export const OPEN_LIBRARY_DUMP_SET_FORMAT_VERSIONS = [1, 2] as const;
-export type OpenLibraryDumpSetFormatVersion = (typeof OPEN_LIBRARY_DUMP_SET_FORMAT_VERSIONS)[number];
 export const OPEN_LIBRARY_DUMP_SET_MAX_MEMBERS = 64;
 export const OPEN_LIBRARY_DUMP_SET_MAX_MANIFEST_BYTES = 65536;
 export const OPEN_LIBRARY_DUMP_SET_MAX_PATH_BYTES = 4096;
@@ -19,11 +16,11 @@ export type OpenLibraryDumpSetMember = Readonly<{
   index: number;
   family: OpenLibraryDumpFamily;
   path: string;
-  compression: DumpCompression;
+  compression: 'none' | 'gzip';
 }>;
 
 export type OpenLibraryDumpSetAdmission = Readonly<{
-  version: OpenLibraryDumpSetFormatVersion;
+  version: typeof OPEN_LIBRARY_DUMP_SET_VERSION;
   sourceKind: 'openlibrary';
   manifestPath: string;
   members: readonly OpenLibraryDumpSetMember[];
@@ -240,9 +237,8 @@ async function assertAvailableMember(path: string, index: number): Promise<void>
 }
 
 /**
- * Admit a version-1 or version-2 local Open Library dump-set manifest and check
- * every member is an available regular file. Version 1 is family/path only and
- * means uncompressed members. Version 2 requires explicit per-member none/gzip.
+ * Admit the canonical v1 local Open Library dump-set manifest and check every
+ * member is an available regular file with explicit none/gzip compression.
  * Relative member paths resolve from the manifest directory. Admission does not
  * read member bodies or treat path/mtime as identity.
  */
@@ -287,8 +283,7 @@ export async function admitOpenLibraryDumpSet(
   const keys = ownKeys(document);
   if (keys.length !== 3 || !keys.includes('version') || !keys.includes('source') || !keys.includes('members'))
     fail('manifest');
-  if (document.version !== 1 && document.version !== 2) fail('version');
-  const version: OpenLibraryDumpSetFormatVersion = document.version === 2 ? 2 : 1;
+  if (document.version !== OPEN_LIBRARY_DUMP_SET_VERSION) fail('version');
   if (document.source !== 'openlibrary' || sourceKind !== 'openlibrary') fail('source');
   if (!Array.isArray(document.members) || document.members.length === 0) fail('manifest');
   if (document.members.length > OPEN_LIBRARY_DUMP_SET_MAX_MEMBERS) fail('manifest');
@@ -304,10 +299,7 @@ export async function admitOpenLibraryDumpSet(
     const family = Reflect.get(entry, 'family');
     const path = Reflect.get(entry, 'path');
     const compressionValue = Reflect.get(entry, 'compression');
-    if (version === 1) {
-      if (memberKeys.length !== 2 || !memberKeys.includes('family') || !memberKeys.includes('path'))
-        fail('manifest', index);
-    } else if (
+    if (
       memberKeys.length !== 3 ||
       !memberKeys.includes('family') ||
       !memberKeys.includes('path') ||
@@ -317,11 +309,8 @@ export async function admitOpenLibraryDumpSet(
     if (!isFamily(family)) fail('family', index);
     if (typeof path !== 'string' || !path.trim() || pathBytes(path) > OPEN_LIBRARY_DUMP_SET_MAX_PATH_BYTES)
       fail('path', index);
-    let compression: DumpCompression = 'none';
-    if (version === 2) {
-      if (compressionValue !== 'none' && compressionValue !== 'gzip') fail('compression', index);
-      compression = compressionValue;
-    }
+    if (compressionValue !== 'none' && compressionValue !== 'gzip') fail('compression', index);
+    const compression = compressionValue;
     rejectUrlOrExpansion(path);
     const resolved = isAbsolute(path) ? resolvePath(path) : resolvePath(origin, path);
     if (sameResolved(resolved, resolvedManifest)) fail('reserved-path', index);
@@ -337,7 +326,7 @@ export async function admitOpenLibraryDumpSet(
   for (const family of FAMILIES) if (!seenFamilies.has(family)) fail('family');
   for (const member of members) await assertAvailableMember(member.path, member.index);
   return {
-    version,
+    version: OPEN_LIBRARY_DUMP_SET_VERSION,
     sourceKind: 'openlibrary',
     manifestPath: resolvedManifest,
     members,

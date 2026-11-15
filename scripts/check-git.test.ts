@@ -92,6 +92,7 @@ test('native check Git custody retains the candidate and base as shallow history
   const artifacts = join(root, 'artifacts');
   mkdirSync(artifacts);
   const manifest = await stageCheckGit(linked, artifacts);
+  expect(JSON.parse(readFileSync(manifest, 'utf8')).format).toBe('rezics-native-git-snapshot-v1');
   const transferred = join(root, 'transferred');
   cpSync(artifacts, transferred, { recursive: true });
   const copiedManifest = join(transferred, manifest.slice(artifacts.length + 1));
@@ -141,15 +142,18 @@ test('native check Git custody gives concurrent physical runs independent mutabl
   expect(readFileSync(join(targets[1]!, 'tracked.txt'), 'utf8')).toBe('committed\n');
 }, 30000);
 
-test('native check Git custody rejects a corrupt manifest before publishing a usable repository', async () => {
+test('native check Git custody rejects retired and corrupt manifests before publishing a usable repository', async () => {
   const root = sandbox();
   const { source } = repository(root);
   const artifacts = join(root, 'artifacts');
   mkdirSync(artifacts);
   const manifest = await stageCheckGit(source, artifacts);
-  writeFileSync(manifest, 'corrupt incomplete snapshot\n');
+  const snapshot = JSON.parse(readFileSync(manifest, 'utf8'));
   const checkout = join(root, 'remote');
   copyWorkingFiles(source, checkout);
+  writeFileSync(manifest, JSON.stringify({ ...snapshot, format: 'rezics-native-git-snapshot-v2' }));
+  await expect(restoreCheckGit(manifest, checkout)).rejects.toThrow('snapshot manifest is invalid');
+  writeFileSync(manifest, 'corrupt incomplete snapshot\n');
   await expect(restoreCheckGit(manifest, checkout)).rejects.toThrow();
   expect(readFileSync(join(checkout, 'tracked.txt'), 'utf8')).toBe('committed\n');
   expect(existsSync(join(checkout, '.git'))).toBe(false);
@@ -172,7 +176,7 @@ function fetchPublication(publication: CheckGitPublication, checkout: string, st
 
 test('a fetch owns the run lock before ref mutation and removes its pathname under the store lock', () => {
   const publication: CheckGitPublication = {
-    format: 'rezics-native-git-snapshot-v2',
+    format: 'rezics-native-git-snapshot-v1',
     objectFormat: 'sha1',
     head: 'a'.repeat(40),
     indexTree: 'b'.repeat(40),
@@ -180,6 +184,11 @@ test('a fetch owns the run lock before ref mutation and removes its pathname und
     shallow: 'd'.repeat(40),
     remote: { ref: 'refs/checks/lock-scope', commit: 'e'.repeat(40) },
   };
+  const retired = { ...publication };
+  Reflect.set(retired, 'format', 'rezics-native-git-snapshot-v2');
+  expect(() => fetchCheckGitScript(retired, '/tmp/lock-scope', '/tmp/check-git.git')).toThrow(
+    'invalid published snapshot',
+  );
   const script = fetchCheckGitScript(publication, '/tmp/lock-scope', '/tmp/check-git.git');
   const lockFile = "lock='/tmp/check-git.git.lock'";
   const pinFile = "preparing='/tmp/check-git.git.preparing/lock-scope'";

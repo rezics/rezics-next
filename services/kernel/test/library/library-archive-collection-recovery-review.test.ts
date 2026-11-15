@@ -97,7 +97,7 @@ beforeAll(async () => {
     );
     cursor = page.next;
   }
-  // Project the installed producer's native rows into the recovery consumer's V1 envelope.
+  // Retain the canonical producer inventory and per-section accounting.
   const manifest = {
     ...libraryExportManifest({
       export_id: capture.exportId,
@@ -105,6 +105,18 @@ beforeAll(async () => {
       expires_at: new Date(now + 900_000).toISOString(),
     }),
     fullExport: false,
+    sectionTotals: Object.fromEntries(
+      exportSections.map((section) => {
+        const rows = records.filter((record) => record.section === section);
+        return [
+          section,
+          {
+            rows: rows.length,
+            recordBytes: rows.reduce((n, record) => n + Buffer.byteLength(JSON.stringify(record)), 0),
+          },
+        ];
+      }),
+    ),
     rows: records.length,
     recordBytes: records.reduce((n, record) => n + Buffer.byteLength(JSON.stringify(record)), 0),
   };

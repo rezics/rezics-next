@@ -1635,7 +1635,7 @@ export function SubjectPage({
                               <LiteraryOverviewDestinations
                                 anchor
                                 readingType={
-                                  literarySubject.type !== 'schema:Book' && page.catalogue?.state === 'released'
+                                  page.catalogue?.state === 'released'
                                     ? literarySubject.type
                                     : undefined
                                 }

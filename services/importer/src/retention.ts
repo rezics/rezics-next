@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 import { ImportSession, importOwnerIsBusy, type ImportOwnership } from './import-session.ts';
 import { InspectionFailure, InspectionStore } from './inspection-store.ts';
 import { RetentionFailure } from './retention-errors.ts';
+import { hasVndbTableRunMetadata } from './vndb-tables.ts';
 
 export const RETENTION_PLAN_KIND = 'rezics-importer-generation-retention';
 export const RETENTION_PLAN_VERSION = 1;
@@ -244,7 +245,16 @@ function tableExists(database: Database, name: string): boolean {
   return !!database.query('SELECT 1 AS found FROM sqlite_schema WHERE type=? AND name=?').get('table', name);
 }
 
+function requireVndbMetadata(database: Database): void {
+  if (tableExists(database, 'vndb_table_runs') && !hasVndbTableRunMetadata(database))
+    throw new RetentionFailure(
+      'Unsupported importer state schema: VNDB materialization metadata is missing.',
+      'incompatible',
+    );
+}
+
 export function retentionCatalog(database: Database): RetentionCatalog {
+  requireVndbMetadata(database);
   return {
     tables: new Set(
       (
@@ -326,6 +336,7 @@ function unknownPerRunTables(database: Database): string[] {
 }
 
 function requireKnownSchema(database: Database): string[] {
+  requireVndbMetadata(database);
   for (const table of REQUIRED_TABLES) {
     if (!tableExists(database, table))
       throw new RetentionFailure(`Unsupported importer state schema: table ${table} is missing.`, 'incompatible');
@@ -1229,12 +1240,9 @@ function runPhasePage(
     }
     case 'vndb_runs': {
       if (!tables.has('vndb_table_runs')) return { cursor, done: true, deleted: 0 };
-      const columns = database.query('PRAGMA table_info(vndb_table_runs)').all() as { name: string }[];
-      const linked = columns.some((column) => column.name === 'materialized_generation')
-        ? (database
-            .query(`SELECT run_id FROM vndb_table_runs WHERE source=? AND materialized_generation=?`)
-            .all(source, runId) as { run_id: string }[])
-        : [];
+      const linked = database
+        .query(`SELECT run_id FROM vndb_table_runs WHERE source=? AND materialized_generation=?`)
+        .all(source, runId) as { run_id: string }[];
       const ids = [runId, ...linked.map((row) => row.run_id)];
       let extra = 0;
       if (tables.has('vndb_acquisition_checkpoints'))

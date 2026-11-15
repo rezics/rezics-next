@@ -68,6 +68,9 @@ import {
   type OutputTreeBinding,
 } from './check-output-tree.ts';
 import { environmentCommandIsSafe, performanceHosts } from './check-placement.ts';
+import { nativeUnitContext } from '../tools/goal/src/native-unit-context.ts';
+import { observeNativeUnitContext } from '../tools/goal/src/native-units.ts';
+import { recordNativeUnitSourceObservation } from '../tools/goal/src/native-unit-provenance.ts';
 import {
   acceptCheckRunPhysicalCleanup,
   allocateCheckRunPhysical,
@@ -522,6 +525,7 @@ export async function prepareCandidateSnapshot(
   scratchParent?: string,
   excludedInputs: readonly string[] = [],
   allocation?: { workspace: string; scratch: string },
+  mode: 'working' | 'committed' = 'working',
 ): Promise<CandidateSnapshot> {
   const declarations = [...excludedInputs];
   excludedInputs = outputTreeInputExclusions(excludedInputs);
@@ -530,16 +534,21 @@ export async function prepareCandidateSnapshot(
   if (repositoryRoot !== root)
     throw new CheckRunUnavailable(`check-run: --workspace must be the candidate Git root (received ${root})`);
   const head = git(root, ['rev-parse', '--verify', 'HEAD^{commit}']);
-  if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(sourceRevision) || head !== sourceRevision)
+  const revisionMatches =
+    mode === 'committed'
+      ? Bun.spawnSync(['git', '-C', root, 'merge-base', '--is-ancestor', sourceRevision, head]).exitCode === 0
+      : head === sourceRevision;
+  if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(sourceRevision) || !revisionMatches)
     throw new CheckRunUnavailable(
       `check-run: source revision mismatch (requested ${sourceRevision}, candidate ${head})`,
     );
-  assertCandidateInputs(root, excludedInputs);
-  const files = workspaceFiles(root);
+  if (mode === 'working') assertCandidateInputs(root, excludedInputs);
+  const callerFiles = workspaceFiles(root);
+  let files = mode === 'working' ? callerFiles : [];
   const preservesSource = (path: string) =>
     !path.startsWith('.temp/') &&
     path !== '.temp' &&
-    (path === KERNEL_CLIENT_OUTPUT.root || files.some((file) => file === path || file.startsWith(`${path}/`)));
+    (path === KERNEL_CLIENT_OUTPUT.root || callerFiles.some((file) => file === path || file.startsWith(`${path}/`)));
   const priorOutputs = captureArtifactPublicationState(root, declarations);
   assertArtifactPublicationState(root, priorOutputs);
   // Transient proof must disappear before an accepted attempt can fail setup or transport.
@@ -551,9 +560,10 @@ export async function prepareCandidateSnapshot(
     ...entry,
     source: preservesSource(entry.path),
   }));
-  const beforeFingerprint = await inputFingerprint(root, files, excludedInputs);
-  const indexTree = candidateIndexTree(root, head);
-  const baseFiles = gitList(root, ['ls-tree', '-rz', '--name-only', head]);
+  const beforeFingerprint = mode === 'working' ? await inputFingerprint(root, files, excludedInputs) : null;
+  const indexTree =
+    mode === 'working' ? candidateIndexTree(root, head) : git(root, ['rev-parse', `${sourceRevision}^{tree}`]);
+  const baseFiles = gitList(root, ['ls-tree', '-rz', '--name-only', sourceRevision]);
   const scratchBase = scratchParent ?? join(root, '.temp');
   mkdirSync(scratchBase, { recursive: true, mode: 0o700 });
   const scratch = allocation
@@ -573,7 +583,7 @@ export async function prepareCandidateSnapshot(
   let worktreeRegistered = false;
   try {
     const add = Bun.spawnSync(
-      ['git', '-c', 'core.hooksPath=/dev/null', '-C', root, 'worktree', 'add', '--detach', frozen, head],
+      ['git', '-c', 'core.hooksPath=/dev/null', '-C', root, 'worktree', 'add', '--detach', frozen, sourceRevision],
       { cwd: root, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', timeout: 60_000 },
     );
     if (add.exitCode !== 0)
@@ -581,10 +591,11 @@ export async function prepareCandidateSnapshot(
         `check-run: candidate worktree preparation failed: ${add.stderr.toString().trim()}`,
       );
     worktreeRegistered = true;
+    if (mode === 'committed') files = workspaceFiles(frozen);
     const selected = new Set(files);
     for (const tracked of baseFiles) if (!selected.has(tracked)) removeCandidateFile(frozen, tracked);
     for (const excluded of excludedInputs) removeCandidateFile(frozen, excluded);
-    for (const file of files) {
+    for (const file of mode === 'working' ? files : []) {
       if (excludedInputs.some((excluded) => file === excluded || file.startsWith(`${excluded}/`))) continue;
       await copyFrozenInput(root, frozen, file);
     }
@@ -601,9 +612,10 @@ export async function prepareCandidateSnapshot(
         `check-run: candidate index snapshot could not be prepared: ${readTree.stderr.toString().trim()}`,
       );
     if (!existsSync(frozenIndex)) throw new CheckRunUnavailable('check-run: frozen native index is missing');
-    const afterFingerprint = await inputFingerprint(root, files, excludedInputs);
+    assertCandidateInputs(frozen, excludedInputs);
+    const afterFingerprint = mode === 'working' ? await inputFingerprint(root, files, excludedInputs) : null;
     const frozenFingerprint = await inputFingerprint(frozen, workspaceFiles(frozen), excludedInputs);
-    if (beforeFingerprint !== afterFingerprint || beforeFingerprint !== frozenFingerprint)
+    if (mode === 'working' && (beforeFingerprint !== afterFingerprint || beforeFingerprint !== frozenFingerprint))
       throw new CheckRunUnavailable('check-run: candidate source changed while preparing its frozen snapshot');
     assertArtifactPublicationState(root, callerOutputs);
     writeFileSync(
@@ -1695,8 +1707,11 @@ async function prepareFinalRun(
   snapshotAllocation?: { workspace: string; scratch: string },
 ): Promise<PreparedFinalRun> {
   const candidateRoot = absoluteDirectory(args.workspace, '--workspace');
-  if (candidateRoot === trustedRoot)
-    throw new CheckRunUnavailable('check-run: trusted driver root and candidate workspace must be separate');
+  if (candidateRoot === trustedRoot) {
+    const unit = observeNativeUnitContext(readEnvironmentFile(args.envFile, candidateRoot));
+    if (!unit || realpathSync(unit.worktree) !== realpathSync(candidateRoot))
+      throw new CheckRunUnavailable('check-run: trusted driver root and candidate workspace must be separate');
+  }
   if (!isAbsolute(args.hosts)) throw new Error('--hosts must name an absolute JSON file');
   const hostsFile = resolve(args.hosts);
   const hostsStats = lstatSync(hostsFile);
@@ -1722,6 +1737,9 @@ async function prepareFinalRun(
     throw new CheckRunUnavailable('check-run: original env prefix changes remote runtime or placement authority');
   const sourceRevision = args.sourceRevision;
   const originalEnvironment = readEnvironmentFile(args.envFile, candidateRoot);
+  const unit = nativeUnitContext(originalEnvironment);
+  if (unit && unit.sourceRevision !== sourceRevision)
+    throw new CheckRunUnavailable('check-run: native unit source revision differs from its registered checkpoint');
   const frozenArgs = [...args.command];
   const receiptChannel = includeReceiptChannel ? parseReceiptChannel(processEnvironment) : undefined;
   if (receiptChannel && !receiptChannel.invocationId)
@@ -1735,6 +1753,7 @@ async function prepareFinalRun(
     join(trustedRoot, '.temp'),
     returns,
     snapshotAllocation,
+    unit ? 'committed' : 'working',
   );
   try {
     const overlay = resolveEnvironmentFileSettings(originalEnvironment, candidateRoot, snapshot.workspace, cwd);
@@ -1760,6 +1779,7 @@ async function prepareFinalRun(
       )
       .digest('hex');
     const binding: CheckRunInvocationBinding = {
+      ...(unit ? { sourceMode: 'committed' as const } : {}),
       sourceRevision,
       indexTree: snapshot.indexTree,
       sourceSha256: snapshot.sourceHash,
@@ -1811,8 +1831,11 @@ async function runCheckLegacy(
 ): Promise<number> {
   const trustedRoot = resolve(import.meta.dir, '..');
   const candidateRoot = absoluteDirectory(args.workspace, '--workspace');
-  if (resolve(candidateRoot) === trustedRoot)
-    throw new CheckRunUnavailable('check-run: trusted driver root and candidate workspace must be separate');
+  if (resolve(candidateRoot) === trustedRoot) {
+    const unit = observeNativeUnitContext(readEnvironmentFile(args.envFile, candidateRoot));
+    if (!unit || realpathSync(unit.worktree) !== realpathSync(candidateRoot))
+      throw new CheckRunUnavailable('check-run: trusted driver root and candidate workspace must be separate');
+  }
   if (!isAbsolute(args.hosts)) throw new Error('--hosts must name an absolute JSON file');
   const hostsFile = resolve(args.hosts);
   if (!existsSync(hostsFile) || !lstatSync(hostsFile).isFile())
@@ -1838,6 +1861,7 @@ async function runCheckLegacy(
     throw new CheckRunUnavailable('check-run: original env prefix changes remote runtime or placement authority');
   const sourceRevision = args.sourceRevision;
   const originalEnvironment = readEnvironmentFile(args.envFile, candidateRoot);
+  const unit = nativeUnitContext(originalEnvironment);
   const frozenArgs = [...args.command];
   const cancellation: ExecutionCancellation | undefined = executionCancellationFromEnvironment(processEnvironment);
   const receiptChannel = parseReceiptChannel(processEnvironment);
@@ -1845,7 +1869,14 @@ async function runCheckLegacy(
   if (requestedPriority !== undefined && requestedPriority !== 'landing' && requestedPriority !== 'critical')
     throw new CheckRunUnavailable('check-run: invalid REMOTE_CHECK_PRIORITY');
   if (signal.aborted) return 130;
-  const snapshot = await prepareCandidateSnapshot(candidateRoot, sourceRevision, join(trustedRoot, '.temp'), returns);
+  const snapshot = await prepareCandidateSnapshot(
+    candidateRoot,
+    sourceRevision,
+    join(trustedRoot, '.temp'),
+    returns,
+    undefined,
+    unit ? 'committed' : 'working',
+  );
   const receiptNonce = receiptChannel?.nonce;
   const writeReceipt = dependencies.receiptWriter ?? receiptChannel?.write;
   let receivedReceipt: RemotePhysicalRunReceipt | undefined;
@@ -1952,8 +1983,9 @@ async function runCheckLegacy(
             validateSource: async () => {
               const ignore = postRestoreSourceExclusions(returns);
               if (
+                (!unit || hasOutputTreeReturn(returns)) &&
                 (await inputFingerprint(snapshot.workspace, snapshot.inputFiles, ignore)) !==
-                (await inputFingerprint(candidateRoot, snapshot.inputFiles, ignore))
+                  (await inputFingerprint(candidateRoot, snapshot.inputFiles, ignore))
               )
                 throw new CheckRunUnavailable('check-run: source changed before return publication');
             },
@@ -2004,7 +2036,7 @@ async function runCheckLegacy(
       const ignore = postRestoreSourceExclusions(returns);
       const frozenFingerprint = await inputFingerprint(snapshot.workspace, snapshot.inputFiles, ignore);
       const currentFingerprint = await inputFingerprint(candidateRoot, snapshot.inputFiles, ignore);
-      if (frozenFingerprint !== currentFingerprint)
+      if ((!unit || hasOutputTreeReturn(returns)) && frozenFingerprint !== currentFingerprint)
         throw new CheckRunUnavailable('check-run: candidate inputs changed while the remote run was active');
       if (!hasOutputTreeReturn(returns) && frozenFingerprint !== snapshot.sourceHash)
         throw new CheckRunUnavailable('check-run: frozen candidate inputs changed while the remote run was active');
@@ -2527,8 +2559,9 @@ async function runCheckWithFinalSettlement(
             preparedInputs.status !== 'verified' ||
             preparedInputs.sourceSha256 !== snapshot.sourceHash ||
             runFailure ||
-            (await inputFingerprint(snapshot.workspace, snapshot.inputFiles, ignore)) !==
-              (await inputFingerprint(candidateRoot, snapshot.inputFiles, ignore))
+            ((!binding.sourceMode || hasOutputTreeReturn(returns)) &&
+              (await inputFingerprint(snapshot.workspace, snapshot.inputFiles, ignore)) !==
+                (await inputFingerprint(candidateRoot, snapshot.inputFiles, ignore)))
           )
             throw new CheckRunUnavailable('check-run: source or physical custody changed before publication');
         },
@@ -2566,14 +2599,20 @@ async function runCheckWithFinalSettlement(
     const frozenFingerprint = await inputFingerprint(snapshot.workspace, snapshot.inputFiles, ignore);
     const candidateFingerprint = await inputFingerprint(candidateRoot, snapshot.inputFiles, ignore);
     if (
-      frozenFingerprint !== candidateFingerprint ||
+      ((!binding.sourceMode || hasOutputTreeReturn(returns)) && frozenFingerprint !== candidateFingerprint) ||
       (!hasOutputTreeReturn(returns) && frozenFingerprint !== snapshot.sourceHash)
     ) {
       sourceState = 'changed';
       runFailure ??= new CheckRunUnavailable(
         'check-run: candidate or frozen source changed while the remote run was active',
       );
-    } else sourceState = 'verified';
+    } else {
+      sourceState = 'verified';
+      if (binding.sourceMode && frozenFingerprint !== candidateFingerprint)
+        process.stderr.write(
+          `check-run: captured revision ${binding.sourceRevision} source ${snapshot.sourceHash} completed; current candidate advanced and remains unverified.\n`,
+        );
+    }
   } catch (error) {
     sourceState = 'unknown';
     runFailure ??= error;
@@ -2669,6 +2708,12 @@ async function runCheckWithFinalSettlement(
         deliverySha256,
         writer ? 'delivered' : 'not-required',
         stateOptions,
+      );
+      recordNativeUnitSourceObservation(
+        prepared.originalEnvironment,
+        finalRecord,
+        receivedReceipt,
+        prepared.requestedPriority,
       );
     } catch (error) {
       runFailure ??= error;
@@ -2832,7 +2877,7 @@ async function validatePreparedAuthorities(
   if (
     !isAbsolute(state.hostsFile) ||
     !isAbsolute(state.args.envFile) ||
-    state.candidateRoot === trustedRoot ||
+    (state.candidateRoot === trustedRoot && !observeNativeUnitContext(state.originalEnvironment)) ||
     !record.snapshot ||
     !record.candidateWorkspace
   )
@@ -2855,7 +2900,10 @@ async function validatePreparedAuthorities(
     throw new CheckRunUnavailable('check-run: host configuration changed after preparation');
   if (closureHash !== record.binding.producerClosureSha256)
     throw new CheckRunUnavailable('check-run: trusted producer closure changed after preparation');
-  if (currentFingerprint !== record.binding.sourceSha256 || frozenFingerprint !== record.binding.sourceSha256)
+  if (
+    (!record.binding.sourceMode && currentFingerprint !== record.binding.sourceSha256) ||
+    frozenFingerprint !== record.binding.sourceSha256
+  )
     throw new CheckRunUnavailable('check-run: candidate or frozen input changed after preparation');
   const currentEnvironment = readEnvironmentFile(state.args.envFile, state.candidateRoot);
   const semanticEnvironmentSha256 = createHash('sha256')
@@ -3229,7 +3277,10 @@ export async function reconcileRegisteredCheckRun(
 
       let local: ReturnedOutputResult | undefined;
       let returnFailure: unknown;
-      if (candidateSourceBefore && frozenSourceBefore) {
+      if (
+        (candidateSourceBefore || (record.binding.sourceMode && !hasOutputTreeReturn(record.returns))) &&
+        frozenSourceBefore
+      ) {
         try {
           const stage = join(record.snapshot.scratch, 'reconciled-returns');
           rmSync(stage, { recursive: true, force: true });
@@ -3264,8 +3315,9 @@ export async function reconcileRegisteredCheckRun(
                 const ignore = postRestoreSourceExclusions(record.returns);
                 if (
                   remote.preparedInputs?.sourceSha256 !== record.binding.sourceSha256 ||
-                  (await inputFingerprint(record.snapshot!.workspace, record.snapshot!.inputFiles, ignore)) !==
-                    (await inputFingerprint(candidateRoot, record.snapshot!.inputFiles, ignore))
+                  ((!record.binding.sourceMode || hasOutputTreeReturn(record.returns)) &&
+                    (await inputFingerprint(record.snapshot!.workspace, record.snapshot!.inputFiles, ignore)) !==
+                      (await inputFingerprint(candidateRoot, record.snapshot!.inputFiles, ignore)))
                 )
                   throw new CheckRunUnavailable('check-run: reconciled tree lacks matching physical prepared custody');
               },
@@ -3295,7 +3347,7 @@ export async function reconcileRegisteredCheckRun(
         const frozenNow = await inputFingerprint(record.snapshot.workspace, record.snapshot.inputFiles, ignore);
         const candidateNow = await inputFingerprint(candidateRoot, record.snapshot.inputFiles, ignore);
         source =
-          frozenNow === candidateNow &&
+          (frozenNow === candidateNow || (record.binding.sourceMode && !hasOutputTreeReturn(record.returns))) &&
           (hasOutputTreeReturn(record.returns) || frozenNow === record.snapshot.sourceSha256)
             ? 'verified'
             : 'changed';

@@ -38,9 +38,9 @@ async function writeSet(
     version: 1,
     source: 'openlibrary',
     members: [
-      { family: 'author', path: 'authors.txt' },
-      { family: 'work', path: 'works.txt' },
-      { family: 'edition', path: 'editions.txt' },
+      { family: 'author', path: 'authors.txt', compression: 'none' },
+      { family: 'work', path: 'works.txt', compression: 'none' },
+      { family: 'edition', path: 'editions.txt', compression: 'none' },
     ],
     ...extra,
   };
@@ -55,6 +55,7 @@ test('admits a version-1 manifest with all three families and resolves relative 
     const path = await writeSet(root, {});
     const admitted = await admitOpenLibraryDumpSet(path);
     expect(admitted.sourceKind).toBe('openlibrary');
+    expect(admitted.members.map((member) => member.compression)).toEqual(['none', 'none', 'none']);
     expect(admitted.members.map((member) => member.family)).toEqual(['author', 'work', 'edition']);
     expect(admitted.members.map((member) => member.path)).toEqual([
       join(root, 'authors.txt'),
@@ -82,43 +83,25 @@ const rejections: [string, (root: string) => Promise<void>][] = [
     'unsupported version',
     async (root) => {
       await writeSet(root, {});
-      await writeFile(join(root, 'manifest.json'), JSON.stringify({ version: 3, source: 'openlibrary', members: [] }));
+      await writeFile(join(root, 'manifest.json'), JSON.stringify({ version: 2, source: 'openlibrary', members: [] }));
     },
   ],
   [
-    'version-1 member with compression field',
+    'member omitting explicit compression',
     async (root) => {
-      await writeSet(root, {});
-      await writeFile(
-        join(root, 'manifest.json'),
-        JSON.stringify({
-          version: 1,
-          source: 'openlibrary',
-          members: [
-            { family: 'author', path: 'authors.txt', compression: 'none' },
-            { family: 'work', path: 'works.txt' },
-            { family: 'edition', path: 'editions.txt' },
-          ],
-        }),
-      );
+      const path = await writeSet(root, {});
+      const original = JSON.parse(await Bun.file(path).text());
+      delete original.members[0].compression;
+      await writeFile(path, JSON.stringify(original));
     },
   ],
   [
-    'version-2 member omitting compression',
+    'unsupported member compression',
     async (root) => {
-      await writeSet(root, {});
-      await writeFile(
-        join(root, 'manifest.json'),
-        JSON.stringify({
-          version: 2,
-          source: 'openlibrary',
-          members: [
-            { family: 'author', path: 'authors.txt' },
-            { family: 'work', path: 'works.txt', compression: 'none' },
-            { family: 'edition', path: 'editions.txt', compression: 'gzip' },
-          ],
-        }),
-      );
+      const path = await writeSet(root, {});
+      const original = JSON.parse(await Bun.file(path).text());
+      original.members[0].compression = 'zstd';
+      await writeFile(path, JSON.stringify(original));
     },
   ],
   [
@@ -127,7 +110,7 @@ const rejections: [string, (root: string) => Promise<void>][] = [
       await writeSet(root, {});
       await writeFile(
         join(root, 'manifest.json'),
-        '{"version":1,"version":1,"source":"openlibrary","members":[{"family":"author","path":"authors.txt"},{"family":"work","path":"works.txt"},{"family":"edition","path":"editions.txt"}]}',
+        '{"version":1,"version":1,"source":"openlibrary","members":[{"family":"author","path":"authors.txt","compression":"none"},{"family":"work","path":"works.txt","compression":"none"},{"family":"edition","path":"editions.txt","compression":"none"}]}',
       );
     },
   ],
@@ -142,8 +125,8 @@ const rejections: [string, (root: string) => Promise<void>][] = [
           version: 1,
           source: 'openlibrary',
           members: [
-            { family: 'work', path: 'works.txt' },
-            { family: 'edition', path: 'editions.txt' },
+            { family: 'work', path: 'works.txt', compression: 'none' },
+            { family: 'edition', path: 'editions.txt', compression: 'none' },
           ],
         }),
       );
@@ -159,9 +142,9 @@ const rejections: [string, (root: string) => Promise<void>][] = [
           version: 1,
           source: 'openlibrary',
           members: [
-            { family: 'author', path: 'authors.txt' },
-            { family: 'work', path: 'works.txt' },
-            { family: 'edition', path: 'works.txt' },
+            { family: 'author', path: 'authors.txt', compression: 'none' },
+            { family: 'work', path: 'works.txt', compression: 'none' },
+            { family: 'edition', path: 'works.txt', compression: 'none' },
           ],
         }),
       );
@@ -177,9 +160,9 @@ const rejections: [string, (root: string) => Promise<void>][] = [
           version: 1,
           source: 'openlibrary',
           members: [
-            { family: 'author', path: 'https://example.invalid/authors.txt' },
-            { family: 'work', path: 'works.txt' },
-            { family: 'edition', path: 'editions.txt' },
+            { family: 'author', path: 'https://example.invalid/authors.txt', compression: 'none' },
+            { family: 'work', path: 'works.txt', compression: 'none' },
+            { family: 'edition', path: 'editions.txt', compression: 'none' },
           ],
         }),
       );
@@ -232,7 +215,7 @@ test('member ceiling is 64 and is not pre-allocated', async () => {
   expect(OPEN_LIBRARY_DUMP_SET_MAX_MEMBERS).toBe(64);
 });
 
-test('admits a version-2 manifest with explicit per-member none and gzip', async () => {
+test('admits the canonical v1 manifest with explicit per-member none and gzip', async () => {
   const root = await directory();
   try {
     await writeSet(root, {});
@@ -240,7 +223,7 @@ test('admits a version-2 manifest with explicit per-member none and gzip', async
     await writeFile(
       join(root, 'manifest.json'),
       JSON.stringify({
-        version: 2,
+        version: 1,
         source: 'openlibrary',
         members: [
           { family: 'author', path: 'authors.txt.gz', compression: 'gzip' },
@@ -250,7 +233,7 @@ test('admits a version-2 manifest with explicit per-member none and gzip', async
       }),
     );
     const admitted = await admitOpenLibraryDumpSet(join(root, 'manifest.json'));
-    expect(admitted.version).toBe(2);
+    expect(admitted.version).toBe(1);
     expect(admitted.members.map((member) => member.compression)).toEqual(['gzip', 'none', 'gzip']);
   } finally {
     await rm(root, { recursive: true, force: true });

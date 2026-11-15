@@ -62,7 +62,28 @@ Decision: a waiter for a staged same-run dependency owned by another active reco
 
 ## Command line, metadata and recovery
 
-Run `bun services/importer/src/cli.ts` with `--source`, `--dump`, `--state`, `--api`, `--account-key`, `--account`, `--client` and `--auth`. `--help` needs no credentials, SQLite or network. `--dump -` reads plain stdin. Compression is explicit: gzip for Open Library/Wikidata, zstd for VNDB/Wikidata; it is never inferred from names. zstd requires one local regular file and trusted executable. Decoded input defaults to 256 GiB with at most one-window overshoot. gzip is refused for VNDB/Bangumi and zstd for Bangumi/Open Library before credentials or state; dump-set members remain none/gzip.
+Run `bun services/importer/src/cli.ts` with `--source`, `--dump`, `--state`, `--api`, `--account-key`, `--account`, `--client` and `--auth`. `--help` needs no credentials, SQLite or network. `--dump -` reads plain stdin. Compression is explicit: gzip for Open Library/Wikidata, zstd for VNDB/Wikidata; it is never inferred from names. zstd requires one local regular file and trusted executable. Decoded input defaults to 256 GiB with at most one-window overshoot. gzip is refused for VNDB/Bangumi and zstd for Bangumi/Open Library before credentials or state; canonical v1 dump-set members require explicit `none`/`gzip`.
+
+An Open Library `--dump-set` names one local JSON manifest, with all author/work/edition families and at most 64
+explicit regular-file members. Compression is mandatory per member and never inferred from a filename:
+
+```json
+{
+  "version": 1,
+  "source": "openlibrary",
+  "members": [
+    {"family": "author", "path": "authors.txt.gz", "compression": "gzip"},
+    {"family": "work", "path": "works.txt", "compression": "none"},
+    {"family": "edition", "path": "editions.txt.gz", "compression": "gzip"}
+  ]
+}
+```
+
+Relative paths resolve beside the manifest. Admission caps the manifest at 64 KiB and each path at 4,096 UTF-8
+bytes; reserved paths, duplicates, URLs, expansions and symlink/special-file members are refused before capture.
+The ordinary import and preview paths share this admission and read each member sequentially with the existing
+whole-set decode budget, exact original-byte member digests, file-change checks and cancellation cleanup.
+
 
 Single-source and batch CLI share one Import application. The process entry binds clock, fetch, stdin, progress,
 identity and factories once per attempt. Batch uses the same single-source executor, and nested jobs keep the
@@ -76,9 +97,19 @@ Decision: Legacy-history fixtures review and declare their selected API origin t
 
 Decision: Every ordinary Bangumi alias admits pinned five-column PersonDetail TSV (`/type/person`, `person:N`, `unversioned`, cache ETag, JSON), retaining Person identity when careers disappear. Identity, type and the 64 KiB response cap are validated before Auth. ETags remain cache metadata. `--bangumi-person-career-bindings-file` supplies a finite JSON profile with `schemeId`, `schemeUri` (`https://rezics.com/schemes/bangumi/careers`) and up to seven `{code,id}` Concepts. These IDs are lookup hints: the existing mapper requires current native Scheme/Concept facts and released P106, with at most eight current reads per Person, including unchanged source refreshes. Missing bindings omit careers alone; unavailable reads retain the complete baseline for retry. Imports remain proposals pending independent acceptance and adoption.
 
-Decision: Ordinary four-provider CLI and native cases consume the current registered converter exports; inspection explains classified new/changed/vanished records and pending pages without a generation-wide COUNT. Stored `kind_*` counters advance at classify; inspect reads those integers and never COUNT journal entries. Reopen backfills already-classified journals that still have `kind_backfill_done=0` (the additive DEFAULT 0 after `f430e4150d`) in keyset pages of 100, advancing cursor and counters in one transaction per page. New generations set `kind_backfill_done=1` and increment at classify. Live classify during an unfinished backfill increments only keys at or before the stored cursor; later keys wait for their page. Seal retires staging-prefix rows by exact (source, run, ordinal) in pages of 100. Auth registration, media readiness and VNDB archive-delivery stalls name the producer phase that was actually reached (`stalledPhase` / `at phase`), not a hardcoded expected sequence. Decision: consume 674a511c through these Operator sections; keep one Cost table with prefix-100 seal and classified-kind recovery. Focused inspect-cli and startup-phase cases pin backfill and reached-phase names; VNDB table admission, CLI checkpoint resume and three-scale grouping keep their assertions with explicit deadlines past bun’s 5s default. Native CLI/startup stay integration.
+Decision: Ordinary four-provider CLI and native cases consume the current registered converter exports; inspection explains classified new/changed/vanished records and pending pages without a generation-wide COUNT. Stored `kind_*` counters advance at classify; inspect reads those integers and never COUNT journal entries. Each current classification atomically increments its stored kind counter once; reopen and inspection do not reconstruct journal counts. Fresh schema includes skipped and diagnostic counters, acquisition mode, deferred-cover state and nullable reference signatures directly. Existing development state requires explicit one-time conversion before normal use. Seal retires staging-prefix rows by exact (source, run, ordinal) in pages of 100. Auth registration, media readiness and VNDB archive-delivery stalls name the producer phase that was actually reached (`stalledPhase` / `at phase`), not a hardcoded expected sequence. Cost retains bounded prefix-100 seal and stored classification counts. Focused inspect-cli and startup-phase cases describe persistence and reached-phase names; VNDB table admission, CLI checkpoint resume and three-scale grouping keep their assertions with explicit deadlines past bun’s 5s default. Native CLI/startup stay integration.
 
 Preview, capture comparison, inspection, disappearance review, diagnostics, resume, retention, staging retirement, backup and snapshot validation operate on bounded exact generations or pages. Diagnostics do not publish or rewrite. Interrupted unsealed acquisition is discarded. Optional checkpoints hash and resume the same bytes for large Bangumi, Open Library, Wikidata and VNDB COPY inputs. Sealed work resumes from its journal; a rejected source is not silently replaced.
+
+Checkpointed staging uses one canonical v1 shape for plain, gzip, zstd and ordered Open Library dump-set input.
+Every identity records explicit input kind, ordered members with original-byte digests and compression, and its
+whole decoded-byte budget. A plain file has one `none` member and budget zero because no decoder is applied;
+compressed files and dump sets retain the configured positive budget. File and member paths are not identities.
+The SQLite checkpoint always stores its complete input identity and completed-member count; every prefix row
+includes its member index, and the rolling digest binds ordinal, member index, record key and converted digest.
+CLI, inspection and retirement read that same shape. Existing development checkpoints need the coordinated
+one-time conversion before this reader is used; generation IDs, sealed requests and completed writes stay intact.
+
 
 Built-in descriptors provide each provider's record URL, attribution and metadata terms. Only a complete validated sealed generation sends metadata through the public source-record API under current `subject:batch_write` authority and its exact source tuple. Descriptor size is at most 8 KiB; a run has at most one intent per bound record, or two when an unresolved intent precedes a change. Each coordinator attempt allows at most eight invocations and each HTTP call at most five. The immutable request/result journal uses no expected revision for first write and the last returned revision thereafter; response-loss replay uses the original bytes and key.
 

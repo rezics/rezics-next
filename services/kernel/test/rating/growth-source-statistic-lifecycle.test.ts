@@ -8,6 +8,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { partitionOf } from '../../src/route/route.ts';
+import { sourceObservation } from '../../src/rating/source-provider.ts';
 import { assertGrowthAccessPaths, checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
 const scales = [256, 1024, 4096] as const;
@@ -74,27 +75,56 @@ async function request(
 
 let app: ReturnType<typeof createKernel>;
 
+async function seedStatistics(db: GrowthDatabase, rows: readonly { subjectId: string; sourceRecordId: string }[]) {
+  const observations = rows.map(({ subjectId, sourceRecordId }) => ({
+    subjectId,
+    ...sourceObservation(subjectId, 'vndb', statisticValue(sourceRecordId)),
+  }));
+  await db.admin.query(
+    `WITH input AS MATERIALIZED (
+       SELECT $1::integer AS route, (entry->>'subjectId')::uuid AS subject_id,
+              entry->>'digest' AS digest, entry->'payload' AS payload
+       FROM jsonb_array_elements($2::jsonb) AS entry
+     ), observations AS (
+       INSERT INTO rating.source_statistic_observation
+         (route, subject_id, source, digest, source_alias, source_record_id, as_of, payload,
+          transaction_id, payload_version, local_order, seek_order)
+       SELECT route, subject_id, 'vndb', digest, 'vndb', payload->>'sourceRecordId',
+              (payload->>'asOf')::date, payload, subject_id, 1, NULL, 1 FROM input
+       ON CONFLICT (route, subject_id, source, digest) DO NOTHING
+     ), heads AS (
+       INSERT INTO rating.source_statistic_head
+         (route, subject_id, source, digest, last_order, last_seek_order)
+       SELECT route, subject_id, 'vndb', digest, 0, 1 FROM input
+       ON CONFLICT (route, subject_id, source) DO UPDATE SET digest=EXCLUDED.digest
+     )
+     INSERT INTO rating.source_statistic
+       (route, subject_id, source, source_alias, source_record_id, scale_min, scale_max, mean, count, as_of,
+        licence, attribution, transaction_id, observation_digest)
+     SELECT route, subject_id, 'vndb', 'vndb', payload->>'sourceRecordId', 0, 10, 8.5, 1234,
+            (payload->>'asOf')::date, payload->>'licence', payload->>'attribution', subject_id, digest FROM input
+     ON CONFLICT (route, subject_id, source) DO UPDATE SET source_alias=EXCLUDED.source_alias,
+       source_record_id=EXCLUDED.source_record_id,
+       scale_min=EXCLUDED.scale_min, scale_max=EXCLUDED.scale_max, mean=EXCLUDED.mean, count=EXCLUDED.count,
+       as_of=EXCLUDED.as_of, licence=EXCLUDED.licence, attribution=EXCLUDED.attribution,
+       transaction_id=EXCLUDED.transaction_id, observation_digest=EXCLUDED.observation_digest`,
+    [sourceRoute, JSON.stringify(observations)],
+  );
+}
+
 async function seedProbe(db: GrowthDatabase, scale: number, repetition: number): Promise<void> {
   const subjectId = probeSubject(scale, repetition);
-  const readRecordId = `growth-live-read-${scale}-${repetition}`;
   await db.admin.query(
     `INSERT INTO semantic.subject (route, subject_id, type, recorded_transaction_id)
      VALUES ($1,$2,'schema:Book',$2)
      ON CONFLICT (route, subject_id) DO NOTHING`,
     [sourceRoute, subjectId],
   );
-  await db.admin.query(
-    `INSERT INTO rating.source_statistic
-       (route, subject_id, source, source_alias, source_record_id, scale_min, scale_max, mean, count, as_of,
-        licence, attribution, transaction_id)
-     VALUES ($1,$2,'vndb','vndb',$3,0,10,8.5,1234,'2026-10-01','CC BY 4.0','VNDB users',$2)
-     ON CONFLICT (route, subject_id, source) DO UPDATE SET source_alias=EXCLUDED.source_alias,
-       source_record_id=EXCLUDED.source_record_id,
-       scale_min=EXCLUDED.scale_min, scale_max=EXCLUDED.scale_max, mean=EXCLUDED.mean, count=EXCLUDED.count,
-       as_of=EXCLUDED.as_of, licence=EXCLUDED.licence, attribution=EXCLUDED.attribution,
-       transaction_id=EXCLUDED.transaction_id`,
-    [sourceRoute, subjectId, readRecordId],
-  );
+  await seedStatistics(db, [{ subjectId, sourceRecordId: `growth-live-read-${scale}-${repetition}` }]);
+}
+
+function expectedStatistic(subjectId: string, value: ReturnType<typeof statisticValue> & { sourceAlias?: string }) {
+  return { source: 'vndb', ...value, observation: { kind: 'unversioned', digest: sourceObservation(subjectId, 'vndb', value).digest } };
 }
 
 async function exercise(subjectId: string, scale: number, repetition: number) {
@@ -105,12 +135,15 @@ async function exercise(subjectId: string, scale: number, repetition: number) {
 
   const sourceRecordId = `growth-live-write-${scale}-${repetition}`;
   const value = statisticValue(sourceRecordId);
-  const put = await request('PUT', `${path(subjectId)}/vndb`, { body: value, key: randomUUID() });
+  const put = await request('PUT', `${path(subjectId)}/vndb`, {
+    body: { ...value, expectedObservation: sourceObservation(subjectId, 'vndb', statisticValue(readRecordId)).digest },
+    key: randomUUID(),
+  });
   expect(put.status).toBe(200);
-  expect(await put.json()).toEqual({ source: 'vndb', ...value });
+  expect(await put.json()).toEqual(expectedStatistic(subjectId, value));
 
   const clear = await request('POST', clearPath(subjectId), {
-    body: { sourceRecordId, count: 0, asOf: value.asOf },
+    body: { sourceRecordId, count: 0, asOf: value.asOf, expectedObservation: sourceObservation(subjectId, 'vndb', value).digest },
     key: randomUUID(),
   });
   expect(clear.status).toBe(204);
@@ -119,16 +152,18 @@ async function exercise(subjectId: string, scale: number, repetition: number) {
 }
 
 async function exerciseWithAliases(subjectId: string, scale: number, repetition: number) {
-  const legacy = await exercise(subjectId, scale, repetition);
+  const initial = await exercise(subjectId, scale, repetition);
   const sourceRecordId = `growth-alias-${scale}-${repetition}`;
   const value = { ...statisticValue(sourceRecordId), sourceAlias: 'feed-two' };
   const key = randomUUID();
-  const put = await request('PUT', `${path(subjectId)}/vndb`, { body: value, key });
+  const previousClear = { sourceRecordId: `growth-live-write-${scale}-${repetition}`, count: 0, asOf: value.asOf };
+  const command = { ...value, expectedObservation: sourceObservation(subjectId, 'vndb', previousClear).digest };
+  const put = await request('PUT', `${path(subjectId)}/vndb`, { body: command, key });
   expect(put.status).toBe(200);
-  expect(await put.json()).toEqual({ source: 'vndb', ...value });
+  expect(await put.json()).toEqual(expectedStatistic(subjectId, value));
   const read = await request('GET', path(subjectId));
   expect(read.status).toBe(200);
-  expect(await read.json()).toEqual([{ source: 'vndb', ...value }]);
+  expect(await read.json()).toEqual([expectedStatistic(subjectId, value)]);
   const stale = await request('POST', clearPath(subjectId), {
     body: { sourceRecordId, sourceAlias: 'feed-one', count: 0, asOf: value.asOf },
     key: randomUUID(),
@@ -136,17 +171,17 @@ async function exerciseWithAliases(subjectId: string, scale: number, repetition:
   expect(stale.status).toBe(204);
   const retained = await request('GET', path(subjectId));
   expect(retained.status).toBe(200);
-  expect(await retained.json()).toEqual([{ source: 'vndb', ...value }]);
-  const replay = await request('PUT', `${path(subjectId)}/vndb`, { body: value, key });
+  expect(await retained.json()).toEqual([expectedStatistic(subjectId, value)]);
+  const replay = await request('PUT', `${path(subjectId)}/vndb`, { body: command, key });
   expect(replay.status).toBe(200);
-  expect(await replay.json()).toEqual({ source: 'vndb', ...value });
+  expect(await replay.json()).toEqual(expectedStatistic(subjectId, value));
   const cleared = await request('POST', clearPath(subjectId), {
-    body: { sourceRecordId, sourceAlias: value.sourceAlias, count: 0, asOf: value.asOf },
+    body: { sourceRecordId, sourceAlias: value.sourceAlias, count: 0, asOf: value.asOf, expectedObservation: sourceObservation(subjectId, 'vndb', value).digest },
     key: randomUUID(),
   });
   expect(cleared.status).toBe(204);
   return {
-    ...legacy,
+    ...initial,
     aliasPut: put.status,
     aliasRead: read.status,
     staleClear: stale.status,
@@ -167,19 +202,10 @@ async function seedStatisticHistory(db: GrowthDatabase, scale: number, previous:
      SELECT $1, subject_id, 'schema:Book', subject_id FROM history`,
     [sourceRoute, unrelatedIds],
   );
-  await db.admin.query(
-    `WITH history AS (
-       SELECT n, ('00000000-0000-7000-8000-' || lpad(to_hex($1::integer),4,'0') ||
-                  lpad(to_hex(2_000_000+n),8,'0'))::uuid AS subject_id
-       FROM unnest($2::integer[]) AS n
-     )
-     INSERT INTO rating.source_statistic
-       (route, subject_id, source, source_alias, source_record_id, scale_min, scale_max, mean, count, as_of,
-        licence, attribution, transaction_id)
-     SELECT $1, subject_id, 'vndb', 'vndb', 'growth-unrelated-' || n, 0, 10, 8.5, 1234, '2026-10-01',
-            'CC BY 4.0', 'VNDB users', subject_id FROM history`,
-    [sourceRoute, unrelatedIds],
-  );
+  await seedStatistics(db, unrelatedIds.map((n) => ({
+    subjectId: id(sourceRoute, 2_000_000 + n),
+    sourceRecordId: `growth-unrelated-${n}`,
+  })));
 
   const fenceIds = unrelatedIds.map((n) => `growth-fence-history-${n}`);
   const fenceRoutes = fenceIds.map((externalId) => tupleRoute(routeKey, 'vndb', externalId));

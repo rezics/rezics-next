@@ -1,8 +1,9 @@
+import { retainedHostedData } from './support/hosted-retained-data.ts';
 import { expect, setDefaultTimeout, test } from 'bun:test';
 import { clearErasedPostRevisions } from '../../src/content/erased-post-cleanup.ts';
 import { appendHostedRootChapter, type HostedCommandDependencies } from '../../src/content/hosted-chapters-commands.ts';
 import { hostedAppendDescriptor } from '../../src/content/hosted-chapters-append.ts';
-import { hostedReadPlacement } from '../../src/content/hosted-chapters-store.ts';
+import { hostedReadPlacement } from '../../src/content/hosted-maintenance-manifest.ts';
 import {
   pageHostedLifecycleRevisions,
   redactHostedLifecyclePlacements,
@@ -31,14 +32,10 @@ async function book(prefixLength = 2) {
       chapter = f.newOccurrenceId();
     const path = `/v1/hostedCatalogues/${f.catalogueId}`;
     const base = (
-      await f.native.command('/v1/hostedCatalogues', {
-        postId: f.catalogueId,
-        threadId: f.threadId,
-        placements: [
-          { occurrenceId: part, parentId: null, position: 0, title: 'Private empty part', kind: 'part' },
-          { occurrenceId: chapter, parentId: null, position: 1, title: 'Base chapter', kind: 'chapter', target },
-        ],
-      })
+      await f.retained.structure([
+        { occurrenceId: part, parentId: null, position: 0, title: 'Private empty part', kind: 'part' },
+        { occurrenceId: chapter, parentId: null, position: 1, title: 'Base chapter', kind: 'chapter', target },
+      ])
     ).revisionId as string;
     const deps: HostedCommandDependencies = {
       pool: f.native.pool,
@@ -67,26 +64,11 @@ async function book(prefixLength = 2) {
               title: `Prefix ${i}`,
               target,
             };
-      head = (
-        await appendHostedRootChapter(deps, f.native.author.actor, f.catalogueId, input, {
-          ...context(i === 0 ? firstKey : undefined),
-          requestId: crypto.randomUUID(),
-        })
-      ).value.revisionId;
+      head = (await f.retained.append(input)).value.revisionId;
       appended.push(input.occurrenceId);
       drafts.push(head);
     }
-    const release = (
-      await f.native.command(
-        `${path}:publish`,
-        {
-          expectedRevisionId: head,
-          expectedPublicationId: null,
-          occurrenceIds: [chapter, appended[0]],
-        },
-        200,
-      )
-    ).revisionId as string;
+    const release = (await f.retained.publication(head, [chapter, appended[0]])).revisionId as string;
     const anchor = { catalogueId: f.catalogueId, authorAccountId: f.native.author.actor.accountId };
     const route = routeOf(f.catalogueId)!;
     const rows = async (table: string) =>
@@ -138,14 +120,7 @@ test('eligible Post purge resumes bounded private-title pages and retains shared
     const descriptor = await hostedAppendDescriptor(pool, f.catalogueId, pinned);
     const originalPrefix = await hostedReadPlacement(pool, f.catalogueId, pinned, f.appended[0]!, descriptor);
     const release = await f.manifest();
-    await f.native.command(
-      `${f.path}:revise`,
-      {
-        expectedRevisionId: pinned,
-        placements: [],
-      },
-      200,
-    );
+    await f.retained.structure([]);
     expect(await hostedReadPlacement(pool, f.catalogueId, pinned, f.appended[0]!, descriptor)).toEqual(originalPrefix);
     expect(await hostedAppendDescriptor(pool, f.catalogueId, first)).toMatchObject({
       baseRevisionId: f.base,
@@ -206,20 +181,20 @@ test('eligible Post purge resumes bounded private-title pages and retains shared
 
     const unrelated = await f.native.thread();
     const unrelatedOccurrence = f.newOccurrenceId();
-    const unrelatedCatalogue = await f.native.command('/v1/hostedCatalogues', {
-      postId: unrelated.firstPost.id,
+    const unrelatedCatalogue = await retainedHostedData({
+      native: f.native,
+      catalogueId: unrelated.firstPost.id,
       threadId: unrelated.id,
-      placements: [
-        {
-          occurrenceId: unrelatedOccurrence,
-          parentId: null,
-          position: 0,
-          title: 'Unrelated private title',
-          kind: 'chapter',
-          target: f.target,
-        },
-      ],
-    });
+    }).structure([
+      {
+        occurrenceId: unrelatedOccurrence,
+        parentId: null,
+        position: 0,
+        title: 'Unrelated private title',
+        kind: 'chapter',
+        target: f.target,
+      },
+    ]);
     const due = () => new Date(Date.now() + 31 * 86400000);
     let crashed = false;
     const crashAfterFirstStreamPage = async <T>(name: string, action: () => Promise<T>): Promise<T> => {
@@ -356,13 +331,9 @@ test('retained-published account authority freezes 100-row pages, replay and a l
     const lateRoute = routeOf(late.firstPost.id)!;
     const lateOccurrence = newId(lateRoute);
     const lateBase = (
-      await f.native.command('/v1/hostedCatalogues', {
-        postId: late.firstPost.id,
-        threadId: late.id,
-        placements: [
-          { occurrenceId: lateOccurrence, parentId: null, position: 0, title: 'Late private', kind: 'part' },
-        ],
-      })
+      await retainedHostedData({ native: f.native, catalogueId: late.firstPost.id, threadId: late.id }).structure([
+        { occurrenceId: lateOccurrence, parentId: null, position: 0, title: 'Late private', kind: 'part' },
+      ])
     ).revisionId as string;
     const lateAnchor = { ...f.anchor, catalogueId: late.firstPost.id };
     const runtime = accountDeletionRuntime(f.native.system);

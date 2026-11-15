@@ -1,4 +1,9 @@
 import { normalizeDocument, type DocumentNode, type DocumentSnapshot } from '@rezics/document';
+import {
+  knowledgeMediaSource,
+  parseKnowledgeMediaSource,
+  type KnowledgeMediaSelection,
+} from '@rezics/definitions/knowledge-media';
 import { prepareEditionSubjectIdentities } from './edition-subject.ts';
 import { snapshot } from './reads.ts';
 import { routeOf } from '../route/route.ts';
@@ -7,6 +12,7 @@ import type { ReadContext } from './model.ts';
 import { knowledgeSubjectTargets, type KnowledgeDependencies } from './knowledge-model.ts';
 import {
   KNOWLEDGE_REFERENCE_DEFINITION,
+  knowledgeProvenanceOrNull,
   type KnowledgeReference,
   type KnowledgeReferenceTarget,
   type KnowledgeProvenance,
@@ -17,6 +23,7 @@ async function referenceVisible(
   deps: KnowledgeDependencies,
   target: KnowledgeReferenceTarget | null,
   context: ReadContext,
+  expectedPublicationId?: string,
 ): Promise<boolean> {
   if (target === null) return false;
   if (target.kind === 'subject') {
@@ -32,6 +39,7 @@ async function referenceVisible(
   const publication = selected.value;
   if (
     !publication ||
+    (expectedPublicationId !== undefined && publication.publication_id !== expectedPublicationId) ||
     (target.kind === 'revision' &&
       (publication.revision_id !== target.revisionId ||
         publication.publication_sha256.toString('hex') !== target.sha256 ||
@@ -59,6 +67,7 @@ export async function projectKnowledgePublicBody(
   snapshot: DocumentSnapshot,
   references: readonly KnowledgeReference[],
   deadline: number,
+  mediaContext?: KnowledgeMediaSelection,
 ): Promise<Readonly<{ snapshot: DocumentSnapshot; references: readonly KnowledgeReference[] }>> {
   const context = { actor: { kind: 'anonymous' as const }, deadline };
   const permitted: KnowledgeReference[] = [];
@@ -71,6 +80,58 @@ export async function projectKnowledgePublicBody(
   const available = new Set(
     permitted.filter((reference) => reference.target !== null).map((reference) => reference.id),
   );
+  const ownMediaContext = mediaContext === undefined ? undefined : structuredClone(mediaContext);
+  const mediaLocations = new Map<string, { mediaId: string; selection: KnowledgeMediaSelection }>();
+  const mediaLocation = (node: DocumentNode) => {
+    const parsed = parseKnowledgeMediaSource(node.attrs?.src);
+    const selection = parsed?.selection ?? ownMediaContext;
+    return parsed && selection?.representation === 'public'
+      ? { mediaId: parsed.mediaId, selection, source: knowledgeMediaSource(parsed.mediaId, selection) }
+      : null;
+  };
+  const collectMedia = (node: DocumentNode): void => {
+    if (node.type === 'image' || node.type === 'media') {
+      const location = mediaLocation(node);
+      if (location && mediaLocations.size < 32) mediaLocations.set(location.source, location);
+    }
+    for (const child of node.content ?? []) collectMedia(child);
+  };
+  collectMedia(snapshot.doc);
+  const mediaGroups = new Map<string, { selection: KnowledgeMediaSelection; ids: Set<string> }>();
+  for (const { mediaId, selection } of mediaLocations.values()) {
+    const key = JSON.stringify([
+      selection.representation,
+      selection.documentId,
+      selection.revisionId,
+      selection.sourceSha256,
+      selection.publicationId,
+    ]);
+    let group = mediaGroups.get(key);
+    if (!group) {
+      group = { selection, ids: new Set() };
+      mediaGroups.set(key, group);
+    }
+    group.ids.add(mediaId);
+  }
+  const availableMedia = new Set<string>();
+  const groups = [...mediaGroups.values()];
+  if (groups.length) {
+    const { readKnowledgeMediaAvailability } = await import('./knowledge-media.ts');
+    // A document has at most 32 managed source entries; release every source checkout between windows.
+    for (let start = 0; start < groups.length; start += 4)
+      await Promise.all(
+        groups.slice(start, start + 4).map(async (group) => {
+          const ids = await readKnowledgeMediaAvailability(
+            deps,
+            context.actor,
+            [...group.ids],
+            group.selection,
+            deadline,
+          );
+          for (const id of ids) availableMedia.add(knowledgeMediaSource(id, group.selection));
+        }),
+      );
+  }
   const rewrite = (node: DocumentNode): DocumentNode => {
     if (
       (node.type === 'extensionBlock' || node.type === 'extensionInline') &&
@@ -79,13 +140,16 @@ export async function projectKnowledgePublicBody(
       const referenceId = (node.attrs!.payload as { referenceId: string }).referenceId;
       if (!available.has(referenceId)) return { ...node, attrs: { ...node.attrs, fallback: 'Unavailable reference' } };
     }
-    // Knowledge has no media claim destination. Do not turn a stored locator or signed URL into public authority.
-    if (node.type === 'image' || node.type === 'media')
+    if (node.type === 'image' || node.type === 'media') {
+      const location = mediaLocation(node);
+      if (location && availableMedia.has(location.source))
+        return { ...node, attrs: { ...node.attrs, src: location.source } };
       return {
         type: 'paragraph',
         attrs: { id: node.attrs!.id! },
         content: [{ type: 'text', text: 'Unavailable media' }],
       };
+    }
     return { ...node, ...(node.content ? { content: node.content.map(rewrite) } : {}) };
   };
   return { snapshot: normalizeDocument({ ...snapshot, doc: rewrite(snapshot.doc) }), references: permitted };
@@ -97,15 +161,34 @@ export async function projectKnowledgePublicProvenance(
   provenance: KnowledgeProvenance | null,
   deadline: number,
 ): Promise<KnowledgeProvenance | null> {
+  provenance = knowledgeProvenanceOrNull(provenance);
   if (provenance?.representation !== 'public') return null;
   const context = { actor: { kind: 'anonymous' as const }, deadline };
-  if (!(await referenceVisible(deps, { kind: 'document', documentId: provenance.documentId }, context))) return null;
-  const route = routeOf(provenance.documentId)!;
+  const route = routeOf(provenance.documentId);
+  if (route === null) return null;
   const selected = await snapshot(deps, provenance.documentId, context, (tx) =>
     knowledgePublicSelection(tx, route, provenance.documentId, provenance.revisionId),
   );
-  return selected.value?.revision_id === provenance.revisionId &&
-    selected.value.publication_id === provenance.publicationId
+  if (
+    selected.value?.revision_id !== provenance.revisionId ||
+    selected.value.publication_id !== provenance.publicationId ||
+    selected.value.publication_sha256.toString('hex') !== provenance.sourceSha256
+  )
+    return null;
+  // The exported representation digest may differ from the immutable source digest.
+  // Currentness and Subject eligibility belong to this exact selected revision,
+  // never the source's newer live revision.
+  return (await referenceVisible(
+    deps,
+    {
+      kind: 'revision',
+      documentId: provenance.documentId,
+      revisionId: provenance.revisionId,
+      sha256: provenance.sourceSha256,
+    },
+    context,
+    provenance.publicationId,
+  ))
     ? provenance
     : null;
 }
