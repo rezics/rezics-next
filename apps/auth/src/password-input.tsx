@@ -1,21 +1,24 @@
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@rezics/ui/shadcn/input-group';
 import { Eye, EyeOff } from 'lucide-react';
-import { useState, type ComponentProps } from 'react';
+import { useId, useState, type ComponentProps } from 'react';
 import { useHydrated } from './button';
 import { m } from './paraglide/messages.js';
 
 export function PasswordInput(props: Omit<ComponentProps<'input'>, 'type'>) {
   const [visible, setVisible] = useState(false);
   const hydrated = useHydrated();
+  const generatedId = useId();
+  const id = props.id ? props.id : generatedId;
   return (
     <InputGroup>
-      <InputGroupInput {...props} type={visible ? 'text' : 'password'} />
+      <InputGroupInput {...props} id={id} type={visible ? 'text' : 'password'} />
       <InputGroupAddon align="inline-end">
         <InputGroupButton
+          type="button"
           size="icon-sm"
           aria-label={visible ? m.auth_security_hide_password() : m.auth_security_show_password()}
           aria-pressed={visible}
-          aria-controls={props.id}
+          aria-controls={id}
           disabled={!hydrated || props.disabled}
           onClick={() => setVisible((value) => !value)}
         >
