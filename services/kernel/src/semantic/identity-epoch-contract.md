@@ -1685,14 +1685,15 @@ current command's mutation XID binds the actual Source write; another job, unit,
 cannot consume it. Same-unit replay uses its actual retained native effect rather than withdrawing again.
 A later same-job unit of that original re-binds the withdrawn point's mutation XID in its own command before
 Source SQL or mapping publication writes. Once the source phase has withdrawn the point, that re-bind consumes
-the committed exact-key custody row and the prior same-job source effect's mapping commit and stored source
-image. It does not re-apply the active dirty-head or redirect-immediate predicate: that source effect advances
-the dirty revision and redirect while custody and the installed original keep the withdrawn enrollment,
-registration, install and source-revision image. Active initial withdrawal still requires the current dirty
-head, redirect and every native receipt. Same-home reuse proves that prior effect without consulting custody.
-Publication may then advance terminal, control group, control partition and source revision; completion
-checks the held pre-publication custody and the current command effect, not those new mapping control fields.
-The re-bind retires the binding again before commit.
+the committed exact-key custody row and the prior source effect stamped `source` for this original, its mapping
+commit and stored image. The deleted plan payload, withdrawn state and any other job image are not that proof;
+an unstamped row fails closed. It does not re-apply the active dirty-head or redirect-immediate predicate:
+that source effect advances the dirty revision and redirect while custody and the installed original keep the
+withdrawn enrollment, registration, install and source-revision image. Active initial withdrawal still requires
+the current dirty head, redirect and every native receipt. Same-home reuse proves that stamped effect without
+consulting custody. Publication may then advance terminal, control group, control partition and source revision;
+completion checks the held pre-publication custody and the current command effect, not those new mapping control
+fields. The re-bind retires the binding again before commit.
 
 The existing mapping publication/source handoff must retire only that distinguishable same-job point binding
 and leave the Source withdrawn for existing output-closure enrollment. It does not manufacture an active ACK,
@@ -1714,17 +1715,17 @@ A retained unchanged birth may use its existing exact-head path before conversio
 discarding a converted or changed source.
 
 A mapping source effect can change its gate and source while the input generation remains pinned. Its transient
-payload is deleted after the next control acknowledgement, before output publication. Effect existence, a closed
-hold, origin, IDs, clocks or a typed creation event cannot replace proof of the current source image.
+payload is deleted after the next control acknowledgement and is not later proof. Effect existence, a closed
+hold, origin, IDs, clocks, withdrawn state or a typed creation event cannot replace the stored source image.
 
-The existing `identity_epoch_mapping_effect` row therefore retains nullable `source_image_version` and a 32-byte
-`source_image_digest`. The only current version is 1. NULL is unproved; no old row is reconstructed or backfilled.
-Each local mapping plan has at most one actual Source destination. After its source writes and native mapping
-commit recorder, the same command client captures the server-computed image. The image is bound to the exact
-home, job, job epoch, unit, scope, plan, frame transaction and actual mapping native commit. The guard permits
-only one NULL-to-version-1 fill in the creator transaction, computing the digest itself rather than accepting image
-data. Replay cannot overwrite it. Deferred validation rechecks the final source image and Core commit fence,
-so a later callback cannot commit a stale image. Gate-free effects retain NULL.
+The effect row retains nullable `source_image_version`, a 32-byte `source_image_digest`, and nullable
+`source_original` and `source_action`. Version 1 is current. NULL stays unproved; nothing backfills an old row.
+The source command's image fill is the only writer of `source_action='source'` and that fence's original.
+Mapping, link and restore leave the stamp NULL. The guard allows one null-to-filled update in the creator
+transaction and rejects an insert-time or later stamp. It checks the same-frame Source payload before computing
+the digest and retaining the stamp. Later units address that stamp by the indexed job and original. Replay must repeat the same
+original and action. Deferred validation rechecks the image, the stamp against the single fence destination,
+and the Core commit. The stamp is outside the image hash. Gate-free effects retain NULL.
 
 `identity_epoch_source_image_v1` defines the complete domain-separated image for capture and comparison.
 Its dependencies are explicit:
@@ -1754,9 +1755,9 @@ Any later image dependency change, including a gate version change with an equal
 uncurrent. Unsupported or unproved states retain the ordinary unavailable/bootstrap path.
 
 This image grants no new retained-page ACK, discard, counter refund, generation reopening or guard exception.
-An older retained conversion still needs its existing receiving and disposal proofs. Existing payload cleanup
-leaves the image on the effect row; existing effect retention, native minimization and erasure-role obligations
-also cover its added bytes. Capture/validation use bounded indexed frame, gate and source points, rejecting a
+An older retained conversion still needs its existing receiving and disposal proofs. Payload cleanup leaves the
+image and source stamp on the effect row; existing retention, minimization and erasure-role obligations cover
+its added bytes. Capture/validation use bounded indexed frame, gate and source points, rejecting a
 multi-row frame at two rows. SQL, points, bytes, indexes, FK/trigger work and physical storage remain counted in
 the original work frame and deadline. There is no new job, table, allowance, retry, larger page or pool.
 

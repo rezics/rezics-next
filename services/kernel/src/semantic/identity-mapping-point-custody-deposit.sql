@@ -42,8 +42,6 @@ WITH args AS MATERIALIZED (
     AND coalesce(r.target,m.original)=m.closure_immediate)
    OR (m.closure_state='withdrawn' AND EXISTS (
     SELECT 1 FROM semantic.identity_epoch_mapping_effect prior
-    JOIN semantic.identity_epoch_mapping_payload payload
-     ON payload.partition_no=prior.partition_no AND payload.job_id=prior.job_id AND payload.unit=prior.unit
     JOIN semantic.identity_epoch_native_commit prior_commit
      ON prior_commit.partition_no=prior.partition_no AND prior_commit.transaction_id=prior.transaction_id
      AND prior_commit.purpose='mapping' AND prior_commit.xmin=prior.xmin
@@ -51,8 +49,7 @@ WITH args AS MATERIALIZED (
     WHERE prior.partition_no=p.partition_no AND prior.job_id=i.job AND prior.job_epoch=i.job_epoch
      AND prior.scope_digest=i.scope_digest
      AND prior.source_image_version=1 AND octet_length(prior.source_image_digest)=32
-     AND payload.result->>'action'='source'
-     AND (payload.result->'change'->>'original')::uuid=m.original
+     AND prior.source_action='source' AND prior.source_original=m.original
    )))
   AND m.closure_successor_ticket IS NULL AND m.closure_successor_original IS NULL
   AND m.closure_ticket_reservation IS NULL AND m.closure_source_reservation IS NULL

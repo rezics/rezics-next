@@ -1318,6 +1318,18 @@ END; $$;
 CREATE FUNCTION semantic.capture_identity_epoch_source_image(p_home integer, p_job uuid, p_epoch bigint, p_unit integer, p_scope text, p_frame uuid) RETURNS bytea
     LANGUAGE plpgsql
     AS $$
+BEGIN
+ RETURN semantic.capture_identity_epoch_source_image(p_home,p_job,p_epoch,p_unit,p_scope,p_frame,NULL::uuid,NULL::text);
+END; $$;
+
+
+--
+-- Name: capture_identity_epoch_source_image(integer, uuid, bigint, integer, text, uuid, uuid, text); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_identity_epoch_source_image(p_home integer, p_job uuid, p_epoch bigint, p_unit integer, p_scope text, p_frame uuid, p_original uuid, p_action text) RETURNS bytea
+    LANGUAGE plpgsql
+    AS $$
 DECLARE saved record;destinations uuid[];image bytea;
 BEGIN
  SELECT e.*,e.xmin::text AS creator_xid INTO saved
@@ -1328,23 +1340,37 @@ BEGIN
   OR saved.transaction_id IS DISTINCT FROM p_frame THEN
   RAISE EXCEPTION 'Native source image requires its exact effect frame' USING ERRCODE='23514';
  END IF;
+ IF (p_original IS NULL) IS DISTINCT FROM (p_action IS NULL)
+  OR (p_action IS NOT NULL AND p_action IS DISTINCT FROM 'source') THEN
+  RAISE EXCEPTION 'Native source effect stamp does not match its frame' USING ERRCODE='23514';
+ END IF;
  SELECT array_agg(f.destination) INTO destinations FROM (
   SELECT destination FROM semantic.identity_epoch_mapping_fence
   WHERE route/16=p_home AND transaction_id=p_frame AND job_id=p_job AND job_epoch=p_epoch
   ORDER BY route,destination LIMIT 2
  ) f;
- IF destinations IS NULL THEN RETURN NULL; END IF;
+ IF destinations IS NULL THEN
+  IF p_original IS NOT NULL OR p_action IS NOT NULL THEN
+   RAISE EXCEPTION 'Native source effect stamp does not match its frame' USING ERRCODE='23514';
+  END IF;
+  RETURN NULL;
+ END IF;
  IF cardinality(destinations)<>1 THEN
   RAISE EXCEPTION 'Native source image requires one source gate' USING ERRCODE='23514';
  END IF;
+ IF p_action IS NOT NULL AND p_original IS DISTINCT FROM destinations[1] THEN
+  RAISE EXCEPTION 'Native source effect stamp does not match its frame' USING ERRCODE='23514';
+ END IF;
  IF saved.source_image_version IS NOT NULL THEN
   image:=semantic.identity_epoch_source_image_v1(p_home,destinations[1],p_frame);
-  IF saved.source_image_version<>1 OR image IS NULL OR image IS DISTINCT FROM saved.source_image_digest THEN
+  IF saved.source_image_version<>1 OR image IS NULL OR image IS DISTINCT FROM saved.source_image_digest
+   OR saved.source_original IS DISTINCT FROM p_original OR saved.source_action IS DISTINCT FROM p_action THEN
    RAISE EXCEPTION 'Native source image replay changed' USING ERRCODE='23514';
   END IF;
   RETURN image;
  END IF;
- UPDATE semantic.identity_epoch_mapping_effect SET source_image_version=1
+ UPDATE semantic.identity_epoch_mapping_effect
+  SET source_image_version=1,source_original=p_original,source_action=p_action
  WHERE partition_no=p_home AND job_id=p_job AND unit=p_unit
  RETURNING source_image_digest INTO image;
  RETURN image;
@@ -2199,7 +2225,8 @@ CREATE FUNCTION semantic.guard_identity_epoch_mapping_source_image() RETURNS tri
 DECLARE creator text;destinations uuid[];image bytea;
 BEGIN
  IF TG_OP='INSERT' THEN
-  IF NEW.source_image_version IS NOT NULL OR NEW.source_image_digest IS NOT NULL THEN
+  IF NEW.source_image_version IS NOT NULL OR NEW.source_image_digest IS NOT NULL
+   OR NEW.source_original IS NOT NULL OR NEW.source_action IS NOT NULL THEN
    RAISE EXCEPTION 'Native source image must be captured after source writes' USING ERRCODE='23514';
   END IF;
   RETURN NEW;
@@ -2209,8 +2236,11 @@ BEGIN
  END IF;
  IF OLD.source_image_version IS NOT NULL OR OLD.source_image_digest IS NOT NULL
   OR NEW.source_image_version IS DISTINCT FROM 1::smallint OR NEW.source_image_digest IS NOT NULL
-  OR (to_jsonb(NEW)-ARRAY['source_image_version','source_image_digest'])
-    IS DISTINCT FROM (to_jsonb(OLD)-ARRAY['source_image_version','source_image_digest']) THEN
+  OR OLD.source_original IS NOT NULL OR OLD.source_action IS NOT NULL
+  OR (NEW.source_original IS NULL) IS DISTINCT FROM (NEW.source_action IS NULL)
+  OR (NEW.source_action IS NOT NULL AND NEW.source_action IS DISTINCT FROM 'source')
+  OR (to_jsonb(NEW)-ARRAY['source_image_version','source_image_digest','source_original','source_action'])
+    IS DISTINCT FROM (to_jsonb(OLD)-ARRAY['source_image_version','source_image_digest','source_original','source_action']) THEN
   RAISE EXCEPTION 'Identity mapping effects are immutable' USING ERRCODE='23514';
  END IF;
  SELECT e.xmin::text INTO creator FROM semantic.identity_epoch_mapping_effect e
@@ -2226,6 +2256,16 @@ BEGIN
  ) f;
  IF cardinality(destinations) IS DISTINCT FROM 1 THEN
   RAISE EXCEPTION 'Native source image requires one source gate' USING ERRCODE='23514';
+ END IF;
+ IF NEW.source_action IS NOT NULL AND (
+  NEW.source_original IS DISTINCT FROM destinations[1] OR NOT EXISTS (
+   SELECT 1 FROM semantic.identity_epoch_mapping_payload payload
+   WHERE (payload.partition_no,payload.job_id,payload.unit)=(OLD.partition_no,OLD.job_id,OLD.unit)
+    AND payload.xmin::text=creator AND payload.result->>'action'='source'
+    AND payload.result->'change'->>'original'=NEW.source_original::text
+  )
+ ) THEN
+  RAISE EXCEPTION 'Native source effect stamp does not match its frame' USING ERRCODE='23514';
  END IF;
  image:=semantic.identity_epoch_source_image_v1(OLD.partition_no,destinations[1],OLD.transaction_id);
  IF image IS NULL THEN
@@ -4382,6 +4422,11 @@ BEGIN
  IF cardinality(destinations) IS DISTINCT FROM 1 THEN
   RAISE EXCEPTION 'Native source image commit frame changed' USING ERRCODE='23514';
  END IF;
+ IF (NEW.source_original IS NULL) IS DISTINCT FROM (NEW.source_action IS NULL)
+  OR (NEW.source_action IS NOT NULL AND (NEW.source_action IS DISTINCT FROM 'source'
+   OR NEW.source_original IS DISTINCT FROM destinations[1])) THEN
+  RAISE EXCEPTION 'Native source effect stamp does not match its frame' USING ERRCODE='23514';
+ END IF;
  image:=semantic.identity_epoch_source_image_v1(NEW.partition_no,destinations[1],NEW.transaction_id);
  IF NEW.source_image_version IS DISTINCT FROM 1::smallint OR image IS NULL
   OR image IS DISTINCT FROM NEW.source_image_digest THEN
@@ -6369,7 +6414,10 @@ CREATE TABLE semantic.identity_epoch_mapping_effect (
     erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     source_image_version smallint,
     source_image_digest bytea,
-    CONSTRAINT identity_epoch_mapping_source_image_shape CHECK ((((source_image_version IS NULL) AND (source_image_digest IS NULL)) OR ((source_image_version IS NOT NULL) AND (source_image_version = 1) AND (source_image_digest IS NOT NULL) AND (octet_length(source_image_digest) = 32))))
+    source_original uuid,
+    source_action text,
+    CONSTRAINT identity_epoch_mapping_source_image_shape CHECK ((((source_image_version IS NULL) AND (source_image_digest IS NULL)) OR ((source_image_version IS NOT NULL) AND (source_image_version = 1) AND (source_image_digest IS NOT NULL) AND (octet_length(source_image_digest) = 32)))),
+    CONSTRAINT identity_epoch_mapping_source_effect_stamp CHECK ((((source_original IS NULL) AND (source_action IS NULL)) OR ((NOT (source_action IS DISTINCT FROM 'source'::text)) AND (source_original IS NOT NULL) AND (partition_no = (((get_byte(uuid_send(source_original), 10) * 256) + get_byte(uuid_send(source_original), 11)) / 16)))))
 );
 
 
@@ -12174,6 +12222,13 @@ CREATE UNIQUE INDEX identity_epoch_mapping_effect_erasure_key ON semantic.identi
 --
 
 CREATE INDEX identity_epoch_mapping_effect_native_frame ON semantic.identity_epoch_mapping_effect USING btree (partition_no, transaction_id);
+
+
+--
+-- Name: identity_epoch_mapping_effect_source_point; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_mapping_effect_source_point ON semantic.identity_epoch_mapping_effect USING btree (partition_no, job_id, source_original, unit DESC) WHERE (source_action = 'source'::text);
 
 
 --
