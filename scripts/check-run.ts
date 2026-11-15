@@ -98,6 +98,7 @@ import {
   checkRunSettlementStateDirectory,
   createCheckRunFinalSettlement,
   createCheckRunNativeTerminalMessage,
+  discardCheckRunFailedSnapshot,
   discardCheckRunPreparedExecution,
   discardCheckRunPreparationIntent,
   encodeCheckRunFinalSettlement,
@@ -869,6 +870,51 @@ function assertExactSnapshotWorktree(record: CheckRunInvocationRecord): void {
     throw new CheckRunUnavailable(
       'check-run: exact frozen worktree revision or source identity differs from its record',
     );
+}
+
+/** Retire only the failed original snapshot after the caller explicitly abandons return recovery. */
+export async function discardRegisteredCheckRunFailedSnapshot(
+  invocationId: string,
+  nonce: string,
+  abandonReturns: boolean,
+  stateOptions: CheckRunStateOptions = {},
+): Promise<CheckRunInvocationRecord> {
+  const initial = await getCheckRunStatus(invocationId, stateOptions);
+  if (!initial.physical || !initial.native || !initial.finalCustody)
+    throw new CheckRunUnavailable('check-run: failed snapshot has no original physical/native/final identity');
+  return discardCheckRunFailedSnapshot(
+    invocationId,
+    nonce,
+    {
+      abandonReturns,
+      bindingSha256: checkRunBindingHash(initial.binding),
+      physical: initial.physical,
+      native: initial.native,
+      finalSha256: initial.finalCustody.originalFinalSha256,
+    },
+    async (record) => {
+      const snapshot = record.snapshot!;
+      const candidate = record.candidateWorkspace!;
+      assertExactSnapshotWorktree(record);
+      const before = [lstatSync(snapshot.scratch), lstatSync(snapshot.workspace)];
+      if (
+        (await inputFingerprint(
+          snapshot.workspace,
+          workspaceFiles(snapshot.workspace),
+          outputTreeInputExclusions(record.returns),
+        )) !== record.binding.sourceSha256
+      )
+        throw new CheckRunUnavailable('check-run: retained failed snapshot source identity changed');
+      assertExactSnapshotWorktree(record);
+      const current = [lstatSync(snapshot.scratch), lstatSync(snapshot.workspace)];
+      if (current.some((info, index) => info.dev !== before[index]!.dev || info.ino !== before[index]!.ino))
+        throw new CheckRunUnavailable('check-run: retained failed snapshot directory ownership changed');
+      cleanupWorktree(candidate, snapshot.workspace, snapshot.scratch);
+      if (existsSync(snapshot.workspace) || existsSync(snapshot.scratch))
+        throw new CheckRunUnavailable('check-run: failed snapshot removal was not verified');
+    },
+    stateOptions,
+  );
 }
 
 /** Bounded, resumable inventory and release pass for check-run snapshots. */
