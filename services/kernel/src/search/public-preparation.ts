@@ -209,7 +209,14 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     if (activated.status === 'unavailable') reportUnavailable('activate', state.generation, activated);
     else unavailable.delete('activate');
     if (activated.status === 'activated') return advance(null);
-    return advance(activated.status === 'preparing' ? { ...state, phase: 'native' } : state, 1000);
+    if (activated.status === 'preparing')
+      return advance(
+        { ...state, phase: activated.next === 'activate' ? 'activate' : 'native' },
+        activated.advanced ? 0 : 1000,
+      );
+    // An unready activation can have durably restarted reconciliation. The subsequent step
+    // will resolve its native phase, including a retained fence or ambiguous alias intent.
+    return advance({ ...state, phase: 'native' }, 1000);
   }
 
   return {

@@ -1,7 +1,17 @@
 import { SEARCH_IDENTITY_WRITER_CHUNK } from './writer-limits.ts';
 import type { Pool } from 'pg';
 import type { AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
-import { drainGenerationPublicationProofCopy, hasRetainedWriterPublicationCopies } from './publication-proof-copy.ts';
+import {
+  drainGenerationPublicationProofCopy,
+  hasRetainedWriterPublicationCopies,
+  nextWriterPublicationHome,
+} from './publication-proof-copy.ts';
+import {
+  advanceWriterPublicationAdmission,
+  lockPublicationFence,
+  lockWriterPublicationAdmission,
+  readPublicationFence,
+} from './publication-admission.ts';
 import type { PublicFilterConsumer } from '../semantic/public-filter-source-contract.ts';
 import type {
   PublicFilterConsumerContext,
@@ -404,12 +414,9 @@ export function createDiscoveryRepairWriter(options: {
     receipt: IdentityNativeReceipt,
     physical: { incarnation: string; writeAlias: string },
   ) {
-    await tx.query('SELECT pg_advisory_xact_lock_shared(hashtextextended($1,741))', [index]);
-    const publication = await tx.query(
-      'SELECT publication_fence FROM search.identity_writer_gate WHERE partition_no=0 AND physical_target=$1',
-      [index],
-    );
-    if (publication.rows[0]?.publication_fence) throw unavailable('Mixed generation is fenced for native publication');
+    await lockWriterPublicationAdmission(tx, index);
+    const publication = await tx.query(readPublicationFence, [index]);
+    if (publication.rowCount) throw unavailable('Mixed generation is fenced for native publication');
     const parameters = [receipt.partition, index, consumer, physical.incarnation, receipt.epoch, physical.writeAlias];
     const existing = await tx.query(gateSql.sql, parameters);
     const row =
@@ -751,7 +758,12 @@ export type SearchWriterPublicationGuard = SearchWriterGuard &
       fence: SearchWriterPublicationFence,
       context: PublicFilterConsumerContext,
     ): Promise<
-      | { status: 'draining' | 'drained'; fence: SearchWriterPublicationFence; cost: SearchPublicFilterCost }
+      | {
+          status: 'draining' | 'drained';
+          fence: SearchWriterPublicationFence;
+          cost: SearchPublicFilterCost;
+          advanced?: boolean;
+        }
       | PublicFilterConsumerUnavailable
     >;
     adoptPublication(
@@ -980,22 +992,10 @@ export function createSearchWriterGuard(options: {
       };
     }
   }
-  async function publicationLock(tx: CommandTransaction, exclusive: boolean) {
-    // Same lock in native admission and publication, including first absence of the home-zero gate.
-    await tx.query(
-      exclusive
-        ? 'SELECT pg_advisory_xact_lock(hashtextextended($1,741))'
-        : 'SELECT pg_advisory_xact_lock_shared(hashtextextended($1,741))',
-      [options.index],
-    );
-  }
   async function publicationAdmission(tx: CommandTransaction) {
-    await publicationLock(tx, false);
-    const result = await tx.query(
-      'SELECT publication_fence FROM search.identity_writer_gate WHERE partition_no=0 AND physical_target=$1',
-      [options.index],
-    );
-    if (result.rows[0]?.publication_fence) throw unavailable('Search generation is fenced for native publication');
+    await lockWriterPublicationAdmission(tx, options.index);
+    const result = await tx.query(readPublicationFence, [options.index]);
+    if (result.rowCount) throw unavailable('Search generation is fenced for native publication');
   }
   async function publicationJob(
     tx: CommandTransaction,
@@ -1146,6 +1146,79 @@ export function createSearchWriterGuard(options: {
       clearTimeout(timer);
     }
   }
+  async function drainPublicationHome(
+    input: SearchWriterPublicationFence,
+    context: PublicFilterConsumerContext,
+    cost: PublicationCost,
+    before: PublicationRow,
+    home: number,
+  ) {
+    // Core retains checkout, commit and rollback custody for the home command.
+    const result = await runCommand(options.pool, { partition: home, deadline: context.deadline }, async (tx, command) => {
+      publicationDeadline(context);
+      const receipt = await native(tx, command.transactionId);
+      publicationDeadline(context);
+      await lockWriterPublicationAdmission(tx, options.index);
+      publicationDeadline(context);
+      const retained = await publicationRetained(tx, input, context);
+      if (retained.publication_revision !== before.publication_revision) return pendingPublication();
+      const copies = publicationQueries(tx, context);
+      const proofDrained = await drainGenerationPublicationProofCopy(copies, home, options.index, input.job);
+      publicationDeadline(context);
+      const copiesPending = await hasRetainedWriterPublicationCopies(copies, home, options.index, input.job);
+      publicationDeadline(context);
+      const page = (
+        await tx.query<{
+          copies: {
+            original_id: string;
+            dispatch_state: string;
+            writer_token: string | null;
+            incarnation: string;
+            owner_epoch: number;
+          }[];
+          more: boolean;
+        }>(
+          `WITH page AS MATERIALIZED (
+           SELECT original_id,dispatch_state,writer_token,incarnation,owner_epoch FROM search.identity_writer
+           WHERE partition_no=$1 AND physical_target=$2 AND ($3::uuid IS NULL OR original_id>$3)
+           ORDER BY original_id LIMIT 32 FOR UPDATE
+         ) SELECT COALESCE(jsonb_agg(to_jsonb(page) ORDER BY original_id),'[]') AS copies,
+           EXISTS(SELECT 1 FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2
+             AND original_id>COALESCE((SELECT max(original_id::text)::uuid FROM page),$3::uuid)
+             LIMIT 1) AS more FROM page`,
+          [home, options.index, before.publication_after],
+        )
+      ).rows[0]!;
+      cost.inputKeys += page.copies.length + Number(page.more);
+      publicationDeadline(context);
+      if (
+        page.copies.some(
+          (row) => row.incarnation !== input.consumer.incarnation || row.owner_epoch !== receipt.epoch,
+        )
+      )
+        return pendingPublication();
+      const revocable = page.copies
+        .filter((row) => row.writer_token && row.dispatch_state === 'enrolled')
+        .map((row) => row.original_id);
+      cost.resultWrites += revocable.length;
+      if (revocable.length)
+        await tx.query(
+          `UPDATE search.identity_writer SET writer_token=NULL,dispatch_state='cancelled',settled_transaction_id=$4,
+         settled_position=$5 WHERE partition_no=$1 AND physical_target=$2 AND original_id=ANY($3::uuid[])
+         AND dispatch_state='enrolled'`,
+          [home, options.index, revocable, receipt.transactionId, receipt.position.toString()],
+        );
+      publicationDeadline(context);
+      const progress = {
+        after: page.more ? page.copies.at(-1)!.original_id : null,
+        changed: revocable.length > 0 || proofDrained,
+        uncertain:
+          copiesPending || page.copies.some((row) => row.writer_token && row.dispatch_state === 'dispatched'),
+      };
+      return progress.changed ? { value: progress, events: changed() } : noEffect(progress);
+    });
+    return result.value;
+  }
   const publication: Omit<SearchWriterPublicationGuard, 'write'> = {
     fencePublication(request, context) {
       const input = structuredClone(request);
@@ -1160,7 +1233,7 @@ export function createSearchWriterGuard(options: {
             cost.frontierWrites++;
             const receipt = await native(tx, command.transactionId);
             publicationDeadline(context);
-            await publicationLock(tx, true);
+            await tx.query(lockPublicationFence, [options.index]);
             publicationDeadline(context);
             await publicationJob(tx, input, context);
             await gate(publicationQueries(tx, context), receipt, target.incarnation, target.writeAlias);
@@ -1179,6 +1252,7 @@ export function createSearchWriterGuard(options: {
             )
               return noEffect(row.publication_fence);
             if (row.publication_fence) return pendingPublication();
+            await advanceWriterPublicationAdmission(tx, options.index);
             const token = crypto.randomUUID();
             await tx.query(
               `UPDATE search.identity_writer_gate SET publication_job=$2,publication_consumer=$3,
@@ -1202,9 +1276,21 @@ export function createSearchWriterGuard(options: {
       const input = structuredClone(value);
       return publicationCall(context, async (cost, context) => {
         await publicationPhysical(input, context);
-        const before = await withReadTransaction(
+        const { before, home } = await withReadTransaction(
           options.pool,
-          (tx) => publicationRetained(tx, input, context),
+          async (tx) => {
+            const before = await publicationRetained(tx, input, context);
+            const from = before.publication_home;
+            // Replays within a writer page must stay in that home. Across homes the exact
+            // held fence makes occupancy monotone; the final revision check also detects
+            // release or replacement while this read was in flight.
+            if (before.publication_after !== null || from === 4096) return { before, home: from };
+            cost.inputKeys += 2; // At most one head from each target-leading index.
+            return {
+              before,
+              home: await nextWriterPublicationHome(publicationQueries(tx, context), from, options.index),
+            };
+          },
           context.deadline,
         );
         publicationDeadline(context);
@@ -1212,101 +1298,37 @@ export function createSearchWriterGuard(options: {
           await publicationSource(input, context, cost);
           return { status: 'drained' as const, fence: input, cost };
         }
-        const home = before.publication_home;
-        const homeOptions = { partition: home, deadline: context.deadline };
-        // Core retains checkout/COMMIT/ROLLBACK custody. Do not race a command or substitute its Pool.
-        const result = await runCommand(options.pool, homeOptions, async (tx, command) => {
-          publicationDeadline(context);
-          const receipt = await native(tx, command.transactionId);
-          publicationDeadline(context);
-          await publicationLock(tx, false);
-          publicationDeadline(context);
-          const retained = await publicationRetained(tx, input, context);
-          if (retained.publication_revision !== before.publication_revision) return pendingPublication();
-          const copies = publicationQueries(tx, context);
-          const proofDrained = await drainGenerationPublicationProofCopy(copies, home, options.index, input.job);
-          publicationDeadline(context);
-          const copiesPending = await hasRetainedWriterPublicationCopies(copies, home, options.index, input.job);
-          publicationDeadline(context);
-          const page = (
-            await tx.query<{
-              copies: {
-                original_id: string;
-                dispatch_state: string;
-                writer_token: string | null;
-                incarnation: string;
-                owner_epoch: number;
-              }[];
-              more: boolean;
-            }>(
-              `WITH page AS MATERIALIZED (
-               SELECT original_id,dispatch_state,writer_token,incarnation,owner_epoch FROM search.identity_writer
-               WHERE partition_no=$1 AND physical_target=$2 AND ($3::uuid IS NULL OR original_id>$3)
-               ORDER BY original_id LIMIT 32 FOR UPDATE
-             ) SELECT COALESCE(jsonb_agg(to_jsonb(page) ORDER BY original_id),'[]') AS copies,
-               EXISTS(SELECT 1 FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2
-                 AND original_id>COALESCE((SELECT max(original_id::text)::uuid FROM page),$3::uuid)
-                 LIMIT 1) AS more FROM page`,
-              [home, options.index, before.publication_after],
-            )
-          ).rows[0]!;
-          cost.inputKeys += page.copies.length + Number(page.more);
-          publicationDeadline(context);
-          if (
-            page.copies.some(
-              (row) => row.incarnation !== input.consumer.incarnation || row.owner_epoch !== receipt.epoch,
-            )
-          )
-            return pendingPublication();
-          const revocable = page.copies
-            .filter((row) => row.writer_token && row.dispatch_state === 'enrolled')
-            .map((row) => row.original_id);
-          cost.resultWrites += revocable.length;
-          if (revocable.length)
-            await tx.query(
-              `UPDATE search.identity_writer SET writer_token=NULL,dispatch_state='cancelled',settled_transaction_id=$4,
-             settled_position=$5 WHERE partition_no=$1 AND physical_target=$2 AND original_id=ANY($3::uuid[])
-             AND dispatch_state='enrolled'`,
-              [home, options.index, revocable, receipt.transactionId, receipt.position.toString()],
-            );
-          publicationDeadline(context);
-          const progress = {
-            page,
-            uncertain:
-              copiesPending || page.copies.some((row) => row.writer_token && row.dispatch_state === 'dispatched'),
-          };
-          return revocable.length || proofDrained ? { value: progress, events: changed() } : noEffect(progress);
-        });
+        const progress = home === 4096 ? null : await drainPublicationHome(input, context, cost, before, home);
         publicationDeadline(context);
-        const { page, uncertain } = result.value;
-        await runCommand(options.pool, { partition: 0, deadline: context.deadline }, async (tx, command) => {
-          publicationDeadline(context);
-          await native(tx, command.transactionId);
-          publicationDeadline(context);
-          await publicationLock(tx, true);
-          publicationDeadline(context);
-          const row = await publicationRetained(tx, input, context);
-          if (row.publication_revision !== before.publication_revision) return pendingPublication();
-          if (uncertain) return noEffect(null);
-          cost.frontierWrites++;
-          await tx.query(
-            `UPDATE search.identity_writer_gate SET publication_home=$3,publication_after=$4,
-            publication_revision=publication_revision+1 WHERE partition_no=0 AND physical_target=$1 AND publication_fence=$2`,
-            [
-              options.index,
-              input.fence,
-              page.more ? home : home + 1,
-              page.more ? page.copies.at(-1)!.original_id : null,
-            ],
-          );
-          publicationDeadline(context);
-          return { value: null, events: changed() };
-        });
+        const nextHome = home === 4096 || progress?.uncertain || progress?.after ? home : home + 1;
+        const after = progress?.uncertain ? before.publication_after : progress?.after ?? null;
+        const moved = nextHome !== before.publication_home || after !== before.publication_after;
+        if (moved) {
+          await runCommand(options.pool, { partition: 0, deadline: context.deadline }, async (tx, command) => {
+            publicationDeadline(context);
+            await native(tx, command.transactionId);
+            publicationDeadline(context);
+            await tx.query(lockPublicationFence, [options.index]);
+            publicationDeadline(context);
+            const row = await publicationRetained(tx, input, context);
+            if (row.publication_revision !== before.publication_revision) return pendingPublication();
+            cost.frontierWrites++;
+            await tx.query(
+              `UPDATE search.identity_writer_gate SET publication_home=$3,publication_after=$4,
+              publication_revision=publication_revision+1
+              WHERE partition_no=0 AND physical_target=$1 AND publication_fence=$2`,
+              [options.index, input.fence, nextHome, after],
+            );
+            publicationDeadline(context);
+            return { value: null, events: changed() };
+          });
+        }
         await publicationPhysical(input, context);
         return {
           status: 'draining' as const,
           fence: input,
           cost,
+          advanced: moved || progress?.changed === true,
         };
       });
     },
@@ -1334,7 +1356,7 @@ export function createSearchWriterGuard(options: {
           cost.frontierWrites++;
           await native(tx, command.transactionId);
           publicationDeadline(context);
-          await publicationLock(tx, true);
+          await tx.query(lockPublicationFence, [options.index]);
           publicationDeadline(context);
           const job = await publicationJob(tx, input, context);
           const row = (
@@ -1362,6 +1384,7 @@ export function createSearchWriterGuard(options: {
           // Erasure never switches an alias. A fully drained gate can also be safely aborted
           // when a current Source page changes, before repairing the replacement page.
           if (job.barrier ? row!.publication_home !== 4096 : job.phase === 'intent') return pendingPublication();
+          await advanceWriterPublicationAdmission(tx, options.index);
           await tx.query(
             `UPDATE search.identity_writer_gate SET publication_released_fence=publication_fence,publication_fence=NULL,
             publication_revision=publication_revision+1 WHERE partition_no=0 AND physical_target=$1`,
@@ -1870,6 +1893,7 @@ export async function fenceSearchIdentityWriter(
       original: options.original,
     });
     const receipt = await native(tx, context.transactionId);
+    await lockWriterPublicationAdmission(tx, options.index);
     const previous = (
       await tx.query(
         `SELECT * FROM search.identity_writer
@@ -1893,6 +1917,8 @@ export async function fenceSearchIdentityWriter(
         throw unavailable('Search writer is closed for another native identity job');
       return noEffect(decode(previous));
     }
+    if (!previous && (await tx.query(readPublicationFence, [options.index])).rowCount)
+      throw unavailable('Search generation is fenced for native publication');
     const written = await tx.query(fence.sql, [
       partition,
       options.index,

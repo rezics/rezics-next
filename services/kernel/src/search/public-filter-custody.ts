@@ -1,3 +1,4 @@
+import { lockPublicationAdmission, readPublicationFence } from './publication-admission.ts';
 import { tree, encode, decode, requireValue } from './public-filter-codec.ts';
 import { hasExactPublicFilterMeaning } from './public-filter-meaning.ts';
 import { canonicalDiscoveryCatalogue, publicFilterCatalogue } from './discovery-catalogue.ts';
@@ -1055,7 +1056,7 @@ export function createPublicFilterCustody(
     expiresAt: number,
     prepared: unknown,
     meter: Meter,
-    db: Pool | PoolClient = pool,
+    db: PoolClient,
     preparedKey?: Readonly<{ build: string; generation: bigint }>,
   ) {
     const inserted = await sql(
@@ -1065,7 +1066,7 @@ export function createPublicFilterCustody(
         (partition_no,observation,registration,queried,covered,expires_at,state,prepared_rows,prepared_build,prepared_generation)
       SELECT r.partition_no,$3,r.id,$4,$5,$6,'open',$7,$11,$12
       FROM search.public_filter_registration r JOIN search.public_filter_target t USING (partition_no,physical_target)
-      WHERE (r.partition_no,r.id)=($1,$2) AND r.state='active' AND t.incarnation=$8 FOR SHARE OF r FOR UPDATE OF t RETURNING partition_no,observation), owned AS (INSERT INTO search.public_filter_pit SELECT partition_no,observation,$9,$10,'owned' FROM retained WHERE $10::text IS NOT NULL) SELECT observation FROM retained`,
+      WHERE (r.partition_no,r.id)=($1,$2) AND r.state='active' AND t.incarnation=$8 FOR SHARE OF r,t RETURNING partition_no,observation), owned AS (INSERT INTO search.public_filter_pit SELECT partition_no,observation,$9,$10,'owned' FROM retained WHERE $10::text IS NOT NULL) SELECT observation FROM retained`,
       [
         value.partition,
         value.id,
@@ -1084,21 +1085,17 @@ export function createPublicFilterCustody(
     if (!inserted.rowCount) throw new Failure('binding_mismatch');
     return { status: 'retained' as const, queried: q, cost: meter };
   }
+  async function lockCopyAdmission(client: PoolClient, meter: Meter, target: string) {
+    await sql(client, meter, lockPublicationAdmission, [target]);
+    return sql(client, meter, readPublicationFence, [target]);
+  }
   async function admitPreparationWrite(
     client: PoolClient,
     meter: Meter,
     input: Readonly<{ registration: CustodyRegistration; consumer: PublicFilterConsumer }>,
   ) {
-    await sql(client, meter, 'SELECT pg_advisory_xact_lock_shared(hashtextextended($1,741))', [
-      input.consumer.physicalTarget,
-    ]);
-    const fenced = await sql(
-      client,
-      meter,
-      'SELECT 1 FROM search.identity_writer_gate WHERE partition_no=0 AND physical_target=$1 AND publication_fence IS NOT NULL LIMIT 1',
-      [input.consumer.physicalTarget],
-    );
-    if (fenced.rowCount) throw new Failure('binding_mismatch');
+    if ((await lockCopyAdmission(client, meter, input.consumer.physicalTarget)).rowCount)
+      throw new Failure('binding_mismatch');
     const active = await sql(
       client,
       meter,
@@ -1141,6 +1138,20 @@ export function createPublicFilterCustody(
         };
         const retained = await retainedDefinition(pool, meter, definition);
         await transaction(meter, async (client) => {
+          if ((await lockCopyAdmission(client, meter, consumer.physicalTarget)).rowCount) {
+            // An exact registration replay needs no new target or copy and cannot change incarnation.
+            const existing = await sql(
+              client,
+              meter,
+              `SELECT 1 FROM search.public_filter_registration r
+               JOIN search.public_filter_target t USING (partition_no,physical_target)
+               WHERE (r.partition_no,r.id,r.physical_target) = ($1,$2,$3)
+                 AND t.incarnation=$4 AND r.consumer=$5 AND r.definition=$6 AND r.state='active'`,
+              [identity.partition, identity.id, consumer.physicalTarget, incarnation, encode(consumer), retained],
+            );
+            if (!existing.rowCount) throw new Failure('binding_mismatch');
+            return;
+          }
           await sql(
             client,
             meter,
@@ -1180,21 +1191,25 @@ export function createPublicFilterCustody(
           if (opened._shards.failed) throw new Failure('observation_lost');
           if ((await native(search, meter, context, consumer.physicalTarget)) !== consumer.incarnation)
             throw new Failure('binding_mismatch');
-          return await retain(
-            input.registration,
-            {
-              consumer,
-              snapshot: {
-                kind: 'pit',
-                observation: `${input.registration.partition}:${randomUUID()}`,
-                pit: opened.pit_id,
+          return await transaction(meter, async (client) => {
+            await admitPreparationWrite(client, meter, { registration: input.registration, consumer });
+            return retain(
+              input.registration,
+              {
+                consumer,
+                snapshot: {
+                  kind: 'pit',
+                  observation: `${input.registration.partition}:${randomUUID()}`,
+                  pit: opened.pit_id,
+                },
               },
-            },
-            input.covered,
-            openedAt + input.keepAliveMs,
-            null,
-            meter,
-          );
+              input.covered,
+              openedAt + input.keepAliveMs,
+              null,
+              meter,
+              client,
+            );
+          });
         } catch (error) {
           await deletePit(opened.pit_id, search, context, meter);
           throw error;
@@ -1210,6 +1225,7 @@ export function createPublicFilterCustody(
       return run(context, async (meter) => {
         const consumer = await registered(input.registration, meter);
         return transaction(meter, async (client) => {
+          await admitPreparationWrite(client, meter, { registration: input.registration, consumer });
           const saved = await sql(
             client,
             meter,
@@ -1403,6 +1419,7 @@ export function createPublicFilterCustody(
       return run(context, async (meter) => {
         const consumer = await registered(input.registration, meter);
         return transaction(meter, async (client) => {
+          await admitPreparationWrite(client, meter, { registration: input.registration, consumer });
           const key = preparationKey(input.registration, input.build, input.generation);
           const prepared = await sql(
             client,
@@ -1621,7 +1638,7 @@ export function createPublicFilterCustody(
       return run(context, (meter, context) =>
         transaction(meter, async (client) => {
           // Serialize reader enrollment with the ordinary publication admission fence.
-          await sql(client, meter, 'SELECT pg_advisory_xact_lock_shared(hashtextextended($1,741))', [
+          await sql(client, meter, lockPublicationAdmission, [
             input.consumer.physicalTarget,
           ]);
           const token = randomUUID();

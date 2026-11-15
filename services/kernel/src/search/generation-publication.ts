@@ -86,7 +86,13 @@ export type SearchGenerationPublication = Readonly<{
     context: PublicFilterConsumerContext,
   ): Promise<
     | { status: 'activated'; consumer: PublicFilterConsumer; cost: SearchPublicFilterCost }
-    | { status: 'preparing'; job: GenerationPublicationJob; cost: SearchPublicFilterCost }
+    | {
+        status: 'preparing';
+        job: GenerationPublicationJob;
+        cost: SearchPublicFilterCost;
+        next?: 'step' | 'activate';
+        advanced?: boolean;
+      }
     | PublicFilterConsumerUnavailable
   >;
   close(): Promise<void>;
@@ -117,6 +123,7 @@ const cost = (): Meter => ({
   frontierWrites: 0,
 });
 const PAGE = 50;
+const SUBJECT_VALIDATION_HOMES = 256;
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 const same = isDeepStrictEqual;
@@ -487,7 +494,7 @@ export function createSearchGenerationPublication(
       if (!job.observation) job.observation = completion.publication.queried.snapshot.observation;
       await save(client, job, meter);
     }
-    return completion.status === 'complete';
+    return { complete: completion.status === 'complete', advanced: completion.advanced === true };
   }
 
   function jobPin(job: Job): GenerationPublicationPin | null {
@@ -1112,28 +1119,45 @@ export function createSearchGenerationPublication(
         job.home = 0;
       }
     } else {
-      const rows = await client.query<Home>(
-        `SELECT partition_no AS partition,epoch,position::text,account_revision::text,claim_revision::text
-        FROM search.generation_publication_home WHERE partition_no >= $1 AND partition_no < $2 AND job=$3 AND pass=$4 ORDER BY partition_no`,
-        [job.home, Math.min(4096, job.home + PAGE), job.job, job.pass],
+      const validationHomes = job.family === 'subjects' ? SUBJECT_VALIDATION_HOMES : PAGE;
+      const end = Math.min(4096, job.home + validationHomes);
+      const compared = await client.query<
+        Home & { current_epoch: number | null; current_position: string | null; write_state: string | null }
+      >(
+        `SELECT h.partition_no AS partition,h.epoch,h.position::text,h.account_revision::text,h.claim_revision::text,
+                p.epoch AS current_epoch,p.position::text AS current_position,p.write_state
+           FROM search.generation_publication_home h
+           LEFT JOIN core.partition p ON p.partition_no=h.partition_no
+          WHERE h.partition_no >= $1 AND h.partition_no < $2 AND h.job=$3 AND h.pass=$4
+          ORDER BY h.partition_no`,
+        [job.home, end, job.job, job.pass],
       );
-      if (rows.rows.length !== Math.min(PAGE, 4096 - job.home)) throw new Pending('routing_incomplete');
-      for (const row of rows.rows) {
-        meter.inputKeys++;
-        if (!same(row, await head(row.partition, context))) {
-          await client.query('DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2', [
-            row.partition,
-            job.job,
-          ]);
-          job.phase = 'subject';
-          job.home = row.partition;
-          job.after_id = null;
-          job.after_route = null;
-          await save(client, job, meter);
-          throw new Pending('source_pending');
-        }
+      meter.inputKeys += compared.rows.length;
+      if (compared.rows.length !== end - job.home) throw new Pending('routing_incomplete');
+      for (const { current_epoch, current_position, write_state, ...row } of compared.rows) {
+        if (write_state !== 'active') throw new Pending('routing_incomplete');
+        // The subject pass compares every native home in one statement snapshot. Mixed
+        // publication additionally needs the Account owner's current reduction witness.
+        const matches =
+          job.family === 'subjects'
+            ? row.epoch === current_epoch &&
+              row.position === current_position &&
+              row.account_revision === '0' &&
+              row.claim_revision === '0'
+            : same(row, await head(row.partition, context));
+        if (matches) continue;
+        await client.query('DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2', [
+          row.partition,
+          job.job,
+        ]);
+        job.phase = 'subject';
+        job.home = row.partition;
+        job.after_id = null;
+        job.after_route = null;
+        await save(client, job, meter);
+        throw new Pending('source_pending');
       }
-      job.home += rows.rows.length;
+      job.home = end;
       if (job.home === 4096) job.phase = 'reconciled';
     }
     await native(job.consumer, context);
@@ -1335,17 +1359,25 @@ export function createSearchGenerationPublication(
     activate(input, context) {
       return run(context, (meter) =>
         locked(input, context, meter, async (job, client) => {
-          const preparing = () => ({ status: 'preparing' as const, job: reference(job), cost: meter });
+          const preparing = (next: 'activate' | 'step', advanced = false) => ({
+            status: 'preparing' as const,
+            job: reference(job),
+            next,
+            advanced,
+            cost: meter,
+          });
           if (job.phase === 'active') {
             if ((await aliasTarget(job, context, meter)) !== job.physical_target) throw new Pending('source_pending');
             await release(job, context, meter);
             await save(client, job, meter);
             return { status: 'activated' as const, consumer: job.consumer, cost: meter };
           }
-          if (job.phase !== 'reconciled' && job.phase !== 'fencing' && job.phase !== 'intent') return preparing();
+          if (job.phase !== 'reconciled' && job.phase !== 'fencing' && job.phase !== 'intent')
+            return preparing('step', true);
           guardAvailable();
           if (!job.fence) {
-            if (!(await completeSource(job, client, context, meter))) return preparing();
+            const sourceCompletion = await completeSource(job, client, context, meter);
+            if (!sourceCompletion.complete) return preparing('activate', sourceCompletion.advanced);
             await installFence(job, client, context, meter);
           }
           try {
@@ -1354,7 +1386,7 @@ export function createSearchGenerationPublication(
               add(meter, result.cost);
               if ('reason' in result) throw new Pending(result.reason);
               if (!same(result.fence, fence(job))) throw new Pending('incarnation_changed');
-              if (result.status === 'draining') return preparing();
+              if (result.status === 'draining') return preparing('activate', result.advanced);
               await held(job, context, meter);
               // Revisit the real finite key population under the continuously held writer/copy barrier.
               job.fenced_pass = true;
@@ -1364,7 +1396,7 @@ export function createSearchGenerationPublication(
               job.after_id = null;
               job.after_route = null;
               await save(client, job, meter);
-              return preparing();
+              return preparing('step', true);
             }
             await held(job, context, meter);
             const queried = await adopt(job, context, meter, true);
