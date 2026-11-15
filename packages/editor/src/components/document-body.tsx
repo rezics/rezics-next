@@ -18,8 +18,15 @@ import { documentExtensions } from './document-extensions.ts';
 import { safeDocumentUrl } from './document-url.ts';
 import { safeAlignment, safeHeadingLevel } from './document-style.ts';
 import { NativeCheckbox } from '@rezics/ui/native-checkbox';
-import { DocumentImageView, DocumentMediaView, documentImageOccurrence, documentMediaOccurrence, imageOccurrenceKey,
-  type DocumentImageRenderer, type DocumentMediaRenderer } from './document-media.tsx';
+import {
+  DocumentImageView,
+  DocumentMediaView,
+  documentImageOccurrence,
+  documentMediaOccurrence,
+  imageOccurrenceKey,
+  type DocumentImageRenderer,
+  type DocumentMediaRenderer,
+} from './document-media.tsx';
 
 export { safeDocumentUrl } from './document-url.ts';
 
@@ -44,7 +51,8 @@ function authoredBlockAttributes(node: DocumentNode): AuthoredBlockAttributes {
     ...(['paragraph', 'heading'].includes(name ?? '') && safeAlignment(node.attrs?.textAlign)
       ? { style: { textAlign: safeAlignment(node.attrs?.textAlign) } }
       : ['tableCell', 'tableHeader'].includes(name ?? '') && safeAlignment(node.attrs?.align)
-        ? { style: { textAlign: safeAlignment(node.attrs?.align) } } : {}),
+        ? { style: { textAlign: safeAlignment(node.attrs?.align) } }
+        : {}),
   };
 }
 
@@ -324,12 +332,27 @@ export function DocumentBody({
         horizontalRule: ({ node }: any) => <hr {...authoredBlockAttributes(node)} />,
         image: ({ node }: any) => {
           const image = documentImageOccurrence(node);
-          return <div {...authoredBlockAttributes(node)}><DocumentImageView key={`${visitId}:${imageOccurrenceKey(image)}`}
-            image={image} {...(renderImage ? { renderImage } : {})} unavailable={resolved.imageUnavailable}
-            reveal={resolved.revealImage} /></div>;
+          return (
+            <div {...authoredBlockAttributes(node)}>
+              <DocumentImageView
+                key={`${visitId}:${imageOccurrenceKey(image)}`}
+                image={image}
+                {...(renderImage ? { renderImage } : {})}
+                unavailable={resolved.imageUnavailable}
+                reveal={resolved.revealImage}
+              />
+            </div>
+          );
         },
-        media: ({ node }: any) => <div {...authoredBlockAttributes(node)}><DocumentMediaView
-          media={documentMediaOccurrence(node)} {...(renderMedia ? { renderMedia } : {})} unavailable={resolved.mediaUnavailable} /></div>,
+        media: ({ node }: any) => (
+          <div {...authoredBlockAttributes(node)}>
+            <DocumentMediaView
+              media={documentMediaOccurrence(node)}
+              {...(renderMedia ? { renderMedia } : {})}
+              unavailable={resolved.mediaUnavailable}
+            />
+          </div>
+        ),
         taskItem: ({ node, children }: any) => (
           <li {...authoredBlockAttributes(node)}>
             <NativeCheckbox checked={node.attrs?.checked ?? false} disabled aria-label={resolved.taskStatus} />
@@ -344,7 +367,14 @@ export function DocumentBody({
           }
           const defaultContent = (
             <pre {...authoredBlockAttributes(node)}>
-              <code data-language={node.attrs?.language ?? undefined} data-document-code-language={node.attrs?.language == null ? undefined : JSON.stringify(node.attrs.language)}>{children}</code>
+              <code
+                data-language={node.attrs?.language ?? undefined}
+                data-document-code-language={
+                  node.attrs?.language == null ? undefined : JSON.stringify(node.attrs.language)
+                }
+              >
+                {children}
+              </code>
             </pre>
           );
           return renderCodeBlock
