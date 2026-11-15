@@ -849,7 +849,7 @@ export const InlineLifetimeJourney: Story = {
     await userEvent.keyboard('{Control>}k{/Control}');
     address = await canvas.findByRole('textbox', { name: 'URL' });
     await userEvent.type(address, 'https://retired-draft.example');
-    const retainedApply = reactCallback(address, 'onKeyDown');
+    const retainedApply = reactCallback(address.closest('[data-slot="editor-link-field"]')!, 'onKeyDown');
     await traceClick(canvas.getByRole('button', { name: 'Replace with selection target' }));
     const enter = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true });
     let stoppedRetiredApply = false;
