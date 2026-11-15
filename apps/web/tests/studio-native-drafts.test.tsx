@@ -19,7 +19,7 @@ import type {
 import { installPostReadingDom } from './post-reading-dom';
 
 const dom = installPostReadingDom();
-const { createRoot } = await import('react-dom/client');
+const { mountAuthoringFixture } = await import('./helpers/authoring-mount');
 const { getByRole, getByText, queryByRole, waitFor } = await import('@testing-library/dom');
 const { StudioWorkspace } = await import('../src/studio/workspace');
 const { m } = await import('../src/paraglide/messages.js');
@@ -273,38 +273,44 @@ const structuredHtml =
   '<h2>First structured heading</h2><p>A <strong>formatted</strong> opening with a <a href="https://example.org/source">source</a>.</p><ul><li><p>First point</p></li><li><p>Second point</p></li></ul><table><tbody><tr><th><p>Column</p></th></tr><tr><td><p>Preserved cell</p></td></tr></tbody></table><pre><code>const draft = "unsaved";</code></pre>';
 
 async function mountComposer(fixture = port(), initialInput = input()) {
-  const host = document.createElement('div');
-  document.body.append(host);
-  const root = createRoot(host);
   const risks: boolean[] = [];
   let activeInput = initialInput;
   let activePort = fixture.value;
-  const render = async () => {
-    await act(async () =>
-      root.render(
-        createElement(StudioWorkspace, {
-          input: activeInput,
-          port: activePort,
-          onDepartureRiskChange: (risk) => risks.push(risk),
-        }),
-      ),
-    );
-  };
-  await render();
-  expect(queryByRole(host, 'form', { name: m.studio_account_create() })).toBeNull();
+  const content = () =>
+    createElement(StudioWorkspace, {
+      input: activeInput,
+      port: activePort,
+      onDepartureRiskChange: (risk) => risks.push(risk),
+    });
+  const mounted = await mountAuthoringFixture(content());
+  const { host } = mounted;
+  const render = () => mounted.render(content());
   const enter = async () => {
-    await act(async () =>
-      getByRole(host, 'button', { name: workbenchCopy[getLocale()].newDraft, exact: true }).click(),
-    );
+    await act(async () => {
+      const control = getByRole(host, 'button', { name: workbenchCopy[getLocale()].newDraft, exact: true });
+      control.focus();
+      control.click();
+    });
   };
-  await enter();
+  try {
+    expect(queryByRole(host, 'form', { name: m.studio_account_create() })).toBeNull();
+    await enter();
+  } catch (error) {
+    try {
+      await mounted.close();
+    } finally {
+      throw error;
+    }
+  }
   const form = () => getByRole(host, 'form', { name: m.studio_account_create() });
   const field = (name: string) => getByRole(form(), 'textbox', { name, exact: true });
   const button = (name: string) => getByRole(form(), 'button', { name, exact: true }) as HTMLButtonElement;
   const change = async (name: string, value: string) => {
     await act(async () => {
-      Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')!.set!.call(field(name), value);
-      field(name).dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+      const control = field(name);
+      control.focus();
+      Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')!.set!.call(control, value);
+      control.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     });
   };
   const paste = async (html: string, editor = field(m.studio_account_body())) => {
@@ -315,6 +321,18 @@ async function mountComposer(fixture = port(), initialInput = input()) {
       editor.dispatchEvent(new dom.window.ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData }));
     });
   };
+  const insertText = async (text: string, element = field(m.studio_account_body())) => {
+    // Use the mounted EditorView text path to exercise the pending snapshot publisher, not clipboard admission.
+    const { editor } = element as HTMLElement & {
+      editor: {
+        view: {
+          state: { tr: { insertText: (text: string) => unknown } };
+          dispatch: (transaction: unknown) => void;
+        };
+      };
+    };
+    await act(async () => editor.view.dispatch(editor.view.state.tr.insertText(text)));
+  };
   return {
     host,
     enter,
@@ -323,15 +341,25 @@ async function mountComposer(fixture = port(), initialInput = input()) {
     button,
     change,
     paste,
+    insertText,
     risks,
     click: async (name: string) => {
-      await act(async () => button(name).click());
+      await act(async () => {
+        const control = button(name);
+        control.focus();
+        control.click();
+      });
     },
     fill: async () => {
       await change(m.studio_account_board(), boardId);
       await change(m.studio_account_title(), 'Structured before save');
       await paste(structuredHtml);
-      await waitFor(() => expect(button(m.studio_account_create()).disabled).toBe(false));
+      await waitFor(() => {
+        expect(field(m.studio_account_body()).querySelector('h2')?.textContent).toBe('First structured heading');
+        expect(field(m.studio_account_body()).querySelector('td')?.textContent).toBe('Preserved cell');
+        expect(button(m.studio_workspace_preview()).disabled).toBe(false);
+        expect(button(m.studio_account_create()).disabled).toBe(false);
+      });
     },
     replace: async (nextInput: StudioInput, nextPort = fixture.value) => {
       activeInput = nextInput;
@@ -339,10 +367,7 @@ async function mountComposer(fixture = port(), initialInput = input()) {
       await render();
       await enter();
     },
-    close: async () => {
-      await act(async () => root.unmount());
-      host.remove();
-    },
+    close: mounted.close,
   };
 }
 
@@ -449,7 +474,7 @@ test('pending and invalid editor snapshots cannot preview or submit a stale body
     await v.fill();
     const editor = v.field(m.studio_account_body());
     await v.click(m.studio_workspace_preview());
-    await v.paste(`<p>${'x'.repeat(2 * 1024 * 1024)}</p>`, editor);
+    await v.insertText('x'.repeat(2 * 1024 * 1024), editor);
     expect(v.form().querySelector('[data-slot="post-reading-body"]')).toBeNull();
     expect(v.button(m.studio_account_create()).disabled).toBe(true);
     expect(v.button(m.studio_workspace_preview()).disabled).toBe(true);

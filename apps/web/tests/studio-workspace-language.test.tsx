@@ -12,7 +12,7 @@ import type { HostedBookStartBinding } from '../src/studio/hosted-book-start';
 import { installPostReadingDom } from './post-reading-dom';
 
 const dom = installPostReadingDom();
-const { createRoot } = await import('react-dom/client');
+const { mountAuthoringFixture } = await import('./helpers/authoring-mount');
 const { getByRole, queryByRole, waitFor } = await import('@testing-library/dom');
 const { fromPlainText } = await import('@rezics/document');
 const { editionDocumentDigest } = await import('../src/content-editions/edition-model');
@@ -180,10 +180,8 @@ async function fixture(kind: StudioInput['profile']['kind'] = 'articles', editab
 }
 
 async function mount(f: Awaited<ReturnType<typeof fixture>>, input = f.input, bookStart?: HostedBookStartBinding) {
-  const host = document.createElement('div');
-  document.body.append(host);
-  const root = createRoot(host);
-  await act(async () => root.render(<StudioWorkspace input={input} port={f.port} bookStart={bookStart} />));
+  const mounted = await mountAuthoringFixture(<StudioWorkspace input={input} port={f.port} bookStart={bookStart} />);
+  const { host } = mounted;
   const button = (name: string) => getByRole(host, 'button', { name, exact: true }) as HTMLButtonElement;
   return {
     host,
@@ -205,10 +203,7 @@ async function mount(f: Awaited<ReturnType<typeof fixture>>, input = f.input, bo
         node.dispatchEvent(new window.Event('input', { bubbles: true }));
       });
     },
-    close: async () => {
-      await act(async () => root.unmount());
-      host.remove();
-    },
+    close: mounted.close,
   };
 }
 

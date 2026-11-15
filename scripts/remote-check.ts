@@ -1956,7 +1956,7 @@ for run in ${ROOT}/runs/*; do
         continue
       fi
       run_directory=$run
-      ${cleanupCommands(false)}
+      ${cleanupCommands(false, 'stale-run')}
       echo "remote-check: stopped stale run $run_id (alive file age $age s)" >&2
     else
       continue
@@ -1967,7 +1967,7 @@ for run in ${ROOT}/runs/*; do
     run_id=\${run##*/}
     run_slice=rezics-check-$(printf '%s' "$run_id" | tr '-' '_').slice
     run_directory=$run
-    ${cleanupCommands()}
+    ${cleanupCommands(true, 'stale-run')}
   fi
 done
 for unit in $(systemctl list-units --all --type=slice --plain --no-legend 'rezics-check-*.slice' 2>/dev/null | awk '{print $1}'); do
@@ -2083,7 +2083,7 @@ cleanup_orphan() {
     if [ -e "$run_directory/command-started" ]; then
       echo "remote-check: preserving started run $run_id for stale-run cleanup" >&2
     else
-      ${cleanupCommands()}
+      ${cleanupCommands(true, 'lease-orphan')}
     fi
   fi
   for slot in $reserved_slots; do rm -f -- "${ROOT}/slots/$slot.memory"; done
@@ -2103,7 +2103,7 @@ function runSlice(id: string): string {
 
 // A run can still be refreshing its base before entering systemd. Stop its identity-recorded host monitor first;
 // that monitor reaps its tree before any lease/orphan cleanup advertises free capacity.
-const supervisorStopProgram = String.raw`import json,os,signal,sys,time
+export const supervisorStopProgram = String.raw`import fcntl,json,os,signal,sys,time
 from pathlib import Path
 try:
     record=json.loads((Path(sys.argv[1])/'.remote-check-supervisor').read_text())
@@ -2115,11 +2115,66 @@ def current(pid,started):
         return fields[19]==started and fields[0] not in ['Z','X']
     except FileNotFoundError:
         return False
+def retain_stop_intent(action):
+    # Observational only: bounded/nonblocking telemetry must never prevent the already-owned stop.
+    descriptor=None
+    try:
+        root=Path(sys.argv[1])
+        reason=sys.argv[2]
+        if reason not in ['lease-orphan','stale-run','controller-cleanup','controller-stop']:
+            raise ValueError('unknown stop reason')
+        if root.parent.name!='runs' or root.parent.parent!=Path('${ROOT}') or root.name!=record['run']:
+            raise ValueError('stop telemetry path identity differs')
+        fields=Path('/proc/'+str(record['pid'])+'/stat').read_text().rsplit(')',1)[1].split()
+        if (fields[19]!=record['started'] or int(fields[2])!=record['group'] or
+                Path('/proc/'+str(record['pid'])).stat().st_uid!=record['uid']):
+            raise ValueError('stop telemetry supervisor identity differs')
+        actor=Path('/proc/self/stat').read_text().rsplit(')',1)[1].split()
+        phase='unknown'
+        if (root/'command-started').exists(): phase='command'
+        else:
+            try:
+                with (root/'.temp/check-host/preparation-progress.json').open() as source:
+                    progress=json.loads(source.read(1025))
+                value=progress.get('phase')
+                if isinstance(value,str) and 1<=len(value)<=64 and all(c in 'abcdefghijklmnopqrstuvwxyz-' for c in value):
+                    phase=value
+            except (OSError,ValueError,AttributeError): pass
+        value={'schema':1,'host':record['host'],'run':record['run'],
+               'boot':Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+               'supervisor':{'pid':record['pid'],'start':record['started'],'group':record['group']},
+               'actor':{'pid':os.getpid(),'start':actor[19]},'signal':15,'reason':reason,'action':action,
+               'monoNs':time.monotonic_ns(),'phase':phase}
+        line=(json.dumps(value,sort_keys=True,separators=(',',':'))+'\n').encode()
+        if len(line)>2048: raise ValueError('stop telemetry entry exceeds bound')
+        retained=root.parent.parent/'receipts'/record['run']
+        retained.mkdir(parents=True,exist_ok=True)
+        descriptor=os.open(retained/'supervisor-stop-intents.jsonl',os.O_RDWR|os.O_CREAT|os.O_APPEND|os.O_NOFOLLOW,0o600)
+        fcntl.flock(descriptor,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        info=os.fstat(descriptor)
+        if info.st_uid!=os.getuid() or info.st_size+len(line)>16384:
+            raise ValueError('stop telemetry file exceeds bound or has foreign ownership')
+        existing=os.pread(descriptor,16384,0)
+        if len(existing.splitlines())>=16: raise ValueError('stop telemetry record bound reached')
+        os.write(descriptor,line)
+    except Exception:
+        try: os.write(2,b'remote-check: stop-intent telemetry unavailable\n')
+        except OSError: pass
+    finally:
+        if descriptor is not None:
+            try: os.close(descriptor)
+            except OSError: pass
+
 pid=record['pid']; started=record['started']
 if not current(pid,started): sys.exit(0)
+if len(sys.argv)>3 and sys.argv[3]=='record-only':
+    retain_stop_intent('systemctl-stop')
+    sys.exit(0)
 try:
     descriptor=os.pidfd_open(pid)
-    if current(pid,started): signal.pidfd_send_signal(descriptor,signal.SIGTERM)
+    if current(pid,started):
+        retain_stop_intent('supervisor-term')
+        signal.pidfd_send_signal(descriptor,signal.SIGTERM)
     os.close(descriptor)
 except ProcessLookupError:
     sys.exit(0)
@@ -2130,8 +2185,8 @@ while current(pid,started):
     time.sleep(.02)
 `;
 
-function stopSupervisor(directory: string): string {
-  return `python3 -c ${quote(supervisorStopProgram)} ${directory}`;
+function stopSupervisor(directory: string, reason: 'lease-orphan' | 'stale-run' | 'controller-cleanup' | 'controller-stop', recordOnly = false): string {
+  return `python3 -c ${quote(supervisorStopProgram)} ${directory} ${quote(reason)}${recordOnly ? ' record-only' : ''}`;
 }
 
 const supervisorActiveProgram = String.raw`import json,sys
@@ -2321,7 +2376,7 @@ function stopOwnedCheckUnitShell(): string {
 }
 
 /** Both normal cleanup and the stale-directory sweep reconcile only Docker resources labelled for this run. */
-function cleanupCommands(removeDirectory = true): string {
+function cleanupCommands(removeDirectory = true, reason: 'lease-orphan' | 'stale-run' | 'controller-cleanup' = 'controller-cleanup'): string {
   const settleResources = `settle_owned_docker_resources() {
   attempt=0
   while [ "$attempt" -lt 3 ]; do
@@ -2354,7 +2409,7 @@ function cleanupCommands(removeDirectory = true): string {
 ${stopOwnedCheckUnitShell()}
 if [ -e "$run_directory/command-started" ] && [ ! -f "$run_directory/.remote-check-supervisor" ]; then echo 'cleanup: started run supervisor custody unavailable' >&2; exit 1; fi
 [ "$run_directory" = ${quote(`${ROOT}/runs/`)}"$run_id" ] || exit 1
-${stopSupervisor('"$run_directory"')} || exit 1
+${stopSupervisor('"$run_directory"', reason)} || exit 1
 stop_owned_check_unit "rezics-check-$run_id.scope" || exit $?
 command -v docker >/dev/null 2>&1 || { echo 'cleanup: Docker control is unavailable' >&2; exit 1; }
 ${settleResources}
@@ -2369,7 +2424,7 @@ printf 'CLEANED %s\\n' "$run_id"`;
 ${stopOwnedCheckUnitShell()}
 if [ -e "$run_directory/command-started" ] && [ ! -f "$run_directory/.remote-check-supervisor" ]; then echo 'cleanup: started run supervisor custody unavailable' >&2; exit 1; fi
 ${settleResources}
-${stopSupervisor('"$run_directory"')} || exit 1
+${stopSupervisor('"$run_directory"', reason)} || exit 1
 stop_owned_check_unit "rezics-check-$run_id.scope" || exit $?
 command -v docker >/dev/null 2>&1 || { echo 'cleanup: Docker control is unavailable' >&2; exit 1; }
 settle_owned_docker_resources || exit 1
@@ -5538,10 +5593,11 @@ run_directory=${quote(directory)}
 ${cleanupCommands()}`;
 }
 
-function stopRunScript(id: string): string {
+export function stopRunScript(id: string): string {
   const slice = quote(runSlice(id));
-  return `systemctl stop ${slice} >/dev/null 2>&1 || true
-${stopSupervisor(quote(`${ROOT}/runs/${id}`))} || exit 1
+  return `${stopSupervisor(quote(`${ROOT}/runs/${id}`), 'controller-stop', true)} || true
+systemctl stop ${slice} >/dev/null 2>&1 || true
+${stopSupervisor(quote(`${ROOT}/runs/${id}`), 'controller-stop')} || exit 1
 if systemctl is-active --quiet ${slice}; then exit 1; fi
 printf 'STOPPED\\n'`;
 }
