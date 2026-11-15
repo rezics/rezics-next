@@ -3070,7 +3070,7 @@ CREATE TABLE content.hosted_publication_staging_candidate (
     CONSTRAINT hosted_publication_staging_candidate_kind_check CHECK ((kind = ANY (ARRAY['part'::text, 'chapter'::text]))),
     CONSTRAINT hosted_publication_staging_candidate_position_check CHECK (("position" >= 0)),
     CONSTRAINT hosted_publication_staging_candidate_source_order_check CHECK ((source_order >= 0)),
-    CONSTRAINT hosted_publication_staging_candidate_source_segment_check CHECK ((source_segment = ANY (ARRAY['snapshot'::text, 'base'::text, 'append'::text])))
+    CONSTRAINT hosted_publication_staging_candidate_source_segment_check CHECK ((source_segment = ANY (ARRAY['snapshot'::text, 'base'::text, 'append'::text, 'ordered'::text])))
 );
 
 
