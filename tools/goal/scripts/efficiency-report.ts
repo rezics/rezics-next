@@ -1,5 +1,8 @@
 #!/usr/bin/env bun
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { openDb } from '../src/db.ts';
 import { completedUtcHour, parseUtcHour, previousUtcHours, type UtcHour } from '../src/efficiency-report-time.ts';
 import { sendHourlyEfficiencyReport } from '../src/efficiency-report-delivery.ts';
@@ -44,6 +47,12 @@ function parseArguments(args: string[]): Arguments {
 
 async function main(args: string[]): Promise<void> {
   const parsed = parseArguments(args);
+  if (parsed.scheduled) {
+    const databaseModule = fileURLToPath(new URL('../src/db.ts', import.meta.url));
+    const databaseSourceSha256 = createHash('sha256').update(readFileSync(databaseModule)).digest('hex');
+    console.error(`hourly-report runtime=${JSON.stringify({ pid: process.pid, cwd: process.cwd(),
+      executable: process.execPath, reporter: import.meta.filename, databaseModule, databaseSourceSha256 })}`);
+  }
   const observeStage: ReportStageObserver | undefined = parsed.scheduled
     ? (stage, event, wallMs, cpuMs) =>
         console.error(`hourly-report stage=${stage} event=${event} wallMs=${wallMs} cpuMs=${cpuMs}`)

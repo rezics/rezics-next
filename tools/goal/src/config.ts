@@ -539,10 +539,10 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
         // Preserve the ordinary audit path and its diagnostics if the optional marker cannot be read.
       }
       const template = join(import.meta.dir, '../templates/daily-step-audit.md');
-      // The host tick checks for an open audit every minute: read only unsettled tasks, not every task body.
+      // Discover open audits only after the durable daily claim says this tick can need work.
       dispatchDailyStepAudit(
         db,
-        store.tasksInStates(['ready', 'held', 'running', 'landing', 'verified']),
+        () => store.tasksInStates(['ready', 'held', 'running', 'landing', 'verified']),
         () => tasks.dispatch(template),
         new Date(),
         (summary) => inbox.deliver({ managerId: settings.integration.supermanager, kind: 'environment', summary }),

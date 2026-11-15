@@ -2495,6 +2495,10 @@ bun tools/goal/src/cli.ts unit context <unit>
 bun tools/goal/src/cli.ts unit run <unit> [-- <focused-check-argv>]
 ```
 
+Cold unit worktrees need their own root `bun install --frozen-lockfile` with the installed pinned Bun, followed by
+their own `node_modules/.bin` first in PATH, before scheduled post-integration native checks. Kernel's Bun preload
+resolves before host placement; this dependency setup is not a source-integration gate or permission to bypass admission.
+
 The Goal file's front matter names explicit `acceptance.command` arguments and `acceptance.requires` as the applicable
 subset of `native`, `browser` and `root`. `unit context` returns `{cwd,environment,command}`; `unit run` executes the
 registered acceptance by default, or a focused check chosen within the adopted Goal, in that context. Named checks
