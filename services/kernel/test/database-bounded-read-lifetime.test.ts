@@ -327,6 +327,7 @@ test('manual BEGIN and START TRANSACTION retain custody through non-query callba
 
     const failure = await visit.catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(BoundedReadDeadlineError);
+    if (!(failure instanceof BoundedReadDeadlineError)) throw failure;
     expect(await released.promise).toBe(failure);
     expect(statements).toEqual([begin]);
     resume.resolve();
@@ -560,6 +561,7 @@ test('late native transaction responses cannot rehabilitate a discarded checkout
 
     const failure = await visit.catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(BoundedReadDeadlineError);
+    if (!(failure instanceof BoundedReadDeadlineError)) throw failure;
     expect(await released.promise).toBe(failure);
     if (failed) native.reject(Object.assign(new Error('late server error'), { code: '40001', severity: 'ERROR' }));
     else native.resolve(queryResult([]));

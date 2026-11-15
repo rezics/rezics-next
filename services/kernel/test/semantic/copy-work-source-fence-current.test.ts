@@ -6,6 +6,12 @@ import { sourceTuple } from '../../src/semantic/fences.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { citedValue, createListPresentationFixture, listRouteKey } from './support/list-presentation-fixture.ts';
 
+function citedCopyWork(work: string) {
+  const statement = citedValue(COPY_WORK_PROPERTY, work);
+  if (!statement.references) throw new Error('Imported copy-work proposals require references');
+  return { ...statement, references: statement.references };
+}
+
 function sourceOnOtherHomes(edition: string, work: string): Source {
   const excludedHomes = new Set([partitionOf(routeOf(edition)!), partitionOf(routeOf(work)!)]);
   for (let attempt = 0; attempt < 128; attempt++) {
@@ -36,7 +42,7 @@ test('native cross-home copy-work witness expires on takedown and replacement me
       key: randomUUID(),
       source,
       subject: edition,
-      statement: citedValue(COPY_WORK_PROPERTY, work),
+      statement: citedCopyWork(work),
     });
     await f.adopt(edition, COPY_WORK_PROPERTY, [proposal.candidate as string]);
 
@@ -66,7 +72,7 @@ test('native cross-home copy-work witness expires on takedown and replacement me
       key: randomUUID(),
       source: replacement,
       subject: edition,
-      statement: citedValue(COPY_WORK_PROPERTY, work),
+      statement: citedCopyWork(work),
     });
     const expectedHead = (
       await f.pool.query<{ revision: number }>(

@@ -116,8 +116,10 @@ test('certifies native term support and rejects a missing or mismatched origin',
   });
   const withoutLanguage = { ...entry, labels: { en: 'Name' }, originalLanguage: null };
   const result = bindSemanticTitleProvenanceRows([withoutLanguage], [native], () => 1);
-  expect(result?.[0]?.labels.en.origin).toEqual({ kind: 'native' });
-  expect(result?.[0]?.labels.en.support).toEqual({ kind: 'term', revision: 5, slot, sequence: 1 });
+  const bound = result?.[0]?.labels.en;
+  if (!bound) throw new Error('Expected certified native English term support');
+  expect(bound.origin).toEqual({ kind: 'native' });
+  expect(bound.support).toEqual({ kind: 'term', revision: 5, slot, sequence: 1 });
   expect(
     bindSemanticTitleProvenanceRows(
       [withoutLanguage],
