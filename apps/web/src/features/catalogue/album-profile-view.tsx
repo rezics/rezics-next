@@ -41,6 +41,9 @@ import {
 import { SubjectTermsEntry } from './subject-terms-entry';
 import { AuthoringDepartureProvider, useAuthoringDeparture } from '../../threads/authoring-departure';
 
+const albumActionClass =
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 [overflow-wrap:anywhere] md:pointer-fine:min-h-8';
+
 export type AlbumEditors = {
   facts: FactsTransport;
   review: (property: string, session?: string) => CandidateTransport;
@@ -135,7 +138,7 @@ function AlbumProfileLive({
     }
   };
   return (
-    <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6">
+    <article className="mx-auto w-full min-w-0 max-w-4xl space-y-6 px-4 py-8 sm:px-6 [overflow-wrap:anywhere]">
       <header className="space-y-3">
         <PageHeading ref={heading} tabIndex={-1} className="font-sans">
           {id ? m.album_edit({}, o) : m.album_title({}, o)}
@@ -176,7 +179,9 @@ function AlbumProfileLive({
             <EditorFailure reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'} locale={locale} />
           )}
           {(id || !retainedRelease.current) && (
-            <Button onClick={() => void retryInitial()}>{m.correction_retry({}, o)}</Button>
+            <Button className={albumActionClass} onClick={() => void retryInitial()}>
+              {m.correction_retry({}, o)}
+            </Button>
           )}
         </div>
       )}
@@ -184,7 +189,9 @@ function AlbumProfileLive({
         <div ref={failureBoundary} tabIndex={-1} className="space-y-3">
           <p role="status">{m.album_missing({}, o)}</p>
           {!id && !retainedRelease.current && (
-            <Button onClick={() => void retryInitial()}>{m.correction_reload({}, o)}</Button>
+            <Button className={albumActionClass} onClick={() => void retryInitial()}>
+              {m.correction_reload({}, o)}
+            </Button>
           )}
         </div>
       )}
@@ -303,6 +310,7 @@ function AlbumCorrections({
       <Button
         type="button"
         variant="outline"
+        className={albumActionClass}
         disabled={loading}
         onClick={(event) => {
           beginClassificationKeyboardRecovery(event);
@@ -456,13 +464,16 @@ function AlbumCorrectionWorkspaceLive({
           <p className="text-sm font-medium">{m.specialist_identity_scope({}, o)}</p>
           <p className="text-muted-foreground">{m.album_grain({}, o)}</p>
           <p className="text-sm text-muted-foreground">{m.album_scope({}, o)}</p>
-          <div className="flex min-w-0 flex-wrap gap-3 [&>a]:h-auto [&>a]:max-w-full [&>a]:whitespace-normal [&>a]:break-words [&>a]:[overflow-wrap:anywhere]">
+          <nav
+            className="flex min-w-0 max-w-full flex-wrap items-start gap-3 [&>a]:h-auto [&>a]:min-h-11 [&>a]:min-w-11 [&>a]:max-w-full [&>a]:whitespace-normal [&>a]:break-words [&>a]:py-2 [&>a]:[overflow-wrap:anywhere] md:pointer-fine:[&>a]:min-h-8 md:pointer-fine:[&>a]:py-1"
+            aria-label={m.facts_other_editors({}, o)}
+          >
             <a className={buttonVariants({ variant: 'outline' })} href={href}>
               {m.candidate_view_public({}, o)}
             </a>
             <SubjectTermsEntry id={subject!.id} label={title} locale={locale} />
             <DefinitionGuideLink locale={locale} address={{ type: subject!.type, returnTo: `${href}/album` }} />
-          </div>
+          </nav>
           <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3">
             <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
               {m.specialist_identity_names({}, o)}
