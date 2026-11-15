@@ -13,6 +13,7 @@ export function FollowingReference({
   current: () => boolean;
 }) {
   const [feedback, setFeedback] = useState<'copied' | 'failed' | null>(null);
+  const [busy, setBusy] = useState(false);
   const pending = useRef(false);
   return (
     <div className="min-w-0 space-y-1">
@@ -22,10 +23,13 @@ export function FollowingReference({
         <Button
           className="min-h-11"
           variant="outline"
+          aria-busy={busy}
           aria-label={m.following_reading_copy_reference({ label })}
+          disabled={busy}
           onClick={async () => {
             if (!current() || pending.current) return;
             pending.current = true;
+            setBusy(true);
             setFeedback(null);
             try {
               await navigator.clipboard.writeText(value);
@@ -34,6 +38,7 @@ export function FollowingReference({
               if (current()) setFeedback('failed');
             } finally {
               pending.current = false;
+              setBusy(false);
             }
           }}
         >
