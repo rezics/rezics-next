@@ -1,3 +1,4 @@
+-- migrate:up
 -- Stable, account-free evidence for the exact successor already installed by ordinary native disposition.
 CREATE FUNCTION library.frozen_public_output_successor(rte integer, cid uuid, gen uuid)
 RETURNS TABLE(hold_id uuid, activation_position bigint)
