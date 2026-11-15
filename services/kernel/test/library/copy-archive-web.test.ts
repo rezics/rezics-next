@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { compileCatalogue } from '@rezics/definitions/compile';
 import {
@@ -32,6 +32,7 @@ let port: Port;
 let interrupt = false,
   loseResponse = false;
 const originals: { key: string; command: string }[] = [];
+const journeys = new Set<ProgressRecoveryJourney>();
 function ok<T>(reply: Reply<T>): T {
   expect(reply.kind).toBe('ok');
   if (reply.kind !== 'ok') throw new Error(JSON.stringify(reply));
@@ -240,6 +241,17 @@ afterAll(async () => {
   await work?.close();
   await f?.close();
 });
+afterEach(async () => {
+  interrupt = false;
+  loseResponse = false;
+  for (const journey of journeys) {
+    if (!journey.snapshot().upload) continue;
+    await journey.cancel();
+    await journey.remove();
+    expect(journey.snapshot().upload).toBeNull();
+  }
+  journeys.clear();
+});
 
 async function independent() {
   // Compare actual independent owner facts, including empty journals/publications, without assuming UI summaries.
@@ -266,6 +278,7 @@ async function independent() {
 }
 async function journey() {
   const value = new ProgressRecoveryJourney(port, entryKey(), () => true);
+  journeys.add(value);
   await value.upload(new File([artifact], 'completed-v2.json'));
   return value;
 }
