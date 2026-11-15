@@ -27,6 +27,7 @@ import transition from './native-public-output-transition.sql';
 import consume from './native-public-output-consume.sql';
 import fence from './native-public-output-fence.sql';
 import retained from './native-public-output-retained.sql';
+import frozenLock from './native-public-output-frozen-lock.sql';
 
 export const NATIVE_PUBLIC_OUTPUT_PAGE_LIMIT = 100;
 export const PUBLIC_OUTPUT_PARTITION_SIZE_SQL =
@@ -414,6 +415,15 @@ function retainedStatement() {
     ),
   );
 }
+function frozenLockStatement() {
+  return memoizedValue(frozenLockStatement, () =>
+    statement('frozen-lock', frozenLock, captureBinds, { present: 1 }, {
+      nativeRows: 24,
+      nativePoints: 5,
+      relationBytes: 64,
+    }),
+  );
+}
 function bindStatement() {
   return memoizedValue(bindStatement, () =>
     statement(
@@ -688,6 +698,7 @@ function staticStatements() {
       xminStatement(),
       provenanceStatement(),
       retainedStatement(),
+      frozenLockStatement(),
       bindStatement(),
       receivingStatement(),
       holdPredecessorStatement(),
@@ -862,6 +873,13 @@ export function NATIVE_PUBLIC_OUTPUT_JOURNEYS() {
         holdPredecessorStatement().bound,
       ),
       revalidate: sumBounds(ownerStatement().bound, bindingLockStatement().bound, committedProof(), currentTuple(true)),
+      frozenRead: sumBounds(
+        ownerStatement().bound,
+        bindingLockStatement().bound,
+        committedProof(),
+        retainedStatement().bound,
+        frozenLockStatement().bound,
+      ),
       transfer: sumBounds(
         bindingStatement().bound,
         ownerStatement().bound,
@@ -902,6 +920,7 @@ export function NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING() {
       NATIVE_PUBLIC_OUTPUT_JOURNEYS().lock,
       NATIVE_PUBLIC_OUTPUT_JOURNEYS().bindNew,
       NATIVE_PUBLIC_OUTPUT_JOURNEYS().revalidate,
+      NATIVE_PUBLIC_OUTPUT_JOURNEYS().frozenRead,
       NATIVE_PUBLIC_OUTPUT_JOURNEYS().transfer,
       NATIVE_PUBLIC_OUTPUT_JOURNEYS().release,
       NATIVE_PUBLIC_OUTPUT_JOURNEYS().retention,

@@ -55,6 +55,7 @@ import transitionSQL from './native-public-output-transition.sql';
 import consumeSQL from './native-public-output-consume.sql';
 import fenceSQL from './native-public-output-fence.sql';
 import retainedSQL from './native-public-output-retained.sql';
+import frozenLockSQL from './native-public-output-frozen-lock.sql';
 
 type Client = Pick<PoolClient, 'query'>;
 type OutputContext = PublicOutputCommandContext<Pool, AuthoritativeTime>;
@@ -539,6 +540,31 @@ async function revalidateNativePublicCollectionOutputHold(
 }
 
 /** Semantic supplies the real persisted-record lock; the caller evidence is still revalidated here. */
+/** Structural read of the terminal owner's last selected public output. */
+async function lockNativeFrozenCollectionOutput(
+  tx: CommandTransaction,
+  binding: NativePublicOutputBinding,
+  context: OutputContext,
+) {
+  return frame(context, async (work) => {
+    const selected = decodeBinding(json(binding));
+    const id = selected.tuple.identity;
+    const current = command(tx, context, partitionOf(id.route));
+    if (current.basis !== null) return refusal(work);
+    const client = nativePublicOutputClient(tx, work, context.deadline);
+    const original = await owner(client, id.route, id.collectionId);
+    if (!original || original.epoch !== id.ownerEpoch || original.incarnation !== id.incarnation)
+      return refusal(work, 'changed');
+    const stored = await load(client, selected.accepted.partition, selected.captureId, true);
+    if (!stored || !open(stored) || !isDeepStrictEqual(stored.binding, selected) || !(await committed(client, stored)))
+      return refusal(work);
+    const key = [current.partition, selected.captureId];
+    if (!(await client.query(frozenLockSQL.sql, key)).rows.length) return refusal(work, 'changed');
+    if (!(await client.query(retainedSQL.sql, key)).rows.length) return refusal(work, 'changed');
+    return { status: 'locked' as const, binding: stored.binding, work: work.receipt() };
+  });
+}
+
 async function disposition(
   tx: CommandTransaction,
   selection: PublicOutputDispositionSelection,
@@ -744,6 +770,7 @@ export function createNativePublicOutputCustody(
       bindAndHoldNativePublicCollectionOutput(tx, selection, context, capabilities.observe),
     revalidateNativePublicCollectionOutputHold: (tx, binding, context) =>
       revalidateNativePublicCollectionOutputHold(tx, binding, context, capabilities.observe),
+    lockNativeFrozenCollectionOutput,
     transferNativePublicCollectionOutputHold: (tx, selection, context) =>
       transferNativePublicCollectionOutputHold(tx, selection, context, capabilities.lockDisposition),
     releaseNativePublicCollectionOutputHold: (tx, selection, context) =>
