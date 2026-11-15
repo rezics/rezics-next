@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createKernel } from '../../src/http/kernel.ts';
 import { createSemanticTitleInputsAdapter } from '../../src/semantic/adapters/title-inputs.ts';
+import { readLiveCopyLineage } from '../../src/access/live-copy-lineage.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createSemanticDriver, type SemanticOutcomeDriver } from './outcome-driver.ts';
 
@@ -189,7 +190,7 @@ test('native identity birth, control-home changes and redirects retire title cur
   expect(observed.entries[0]).toMatchObject({ subjectId: redirected, sourceId: redirectRow.rows[0]!.terminal });
 });
 
-test('native lifecycle and owner-tuple writes retire the complete title basis', async () => {
+test('native lifecycle writes retire title basis and lineage fences stop observation', async () => {
   const owner = await driver.fixtures.person('title-input-lifecycle');
   await driver.fixtures.grantAccount(owner, ['subject:create', 'statement:propose'], driver.globalContext);
   const created = await driver.fixtures.send(
@@ -235,22 +236,38 @@ test('native lifecycle and owner-tuple writes retire the complete title basis', 
   expect(await currentBasis()).not.toBe(beforeDelete);
 
   const home = 4095;
-  const originalOwner = await driver.fixtures.pool.query<{ node: string }>(
-    'SELECT node FROM core.partition WHERE partition_no=$1',
-    [home],
-  );
-  expect(originalOwner.rows).toHaveLength(1);
-  const originalNode = originalOwner.rows[0]!.node;
+  const lineage = await readLiveCopyLineage(driver.fixtures.pool, home);
   const beforeOwnerChange = await currentBasis();
-  await driver.fixtures.pool.query('UPDATE core.partition SET node=$2 WHERE partition_no=$1', [
-    home,
-    `${originalNode}-title-input-test`,
-  ]);
+  await expect(
+    driver.fixtures.pool.query('UPDATE core.partition SET node=$2 WHERE partition_no=$1', [
+      home,
+      `${lineage.node}-title-input-test`,
+    ]),
+  ).rejects.toMatchObject({ code: '23514' });
+  expect(await readLiveCopyLineage(driver.fixtures.pool, home)).toEqual(lineage);
+  expect(await currentBasis()).toBe(beforeOwnerChange);
+
+  const fenced = await driver.fixtures.pool.query(
+    `UPDATE core.partition SET write_state='fenced'
+     WHERE partition_no=$1 AND node=$2 AND epoch=$3 AND write_state='active' RETURNING partition_no`,
+    [home, lineage.node, lineage.epoch],
+  );
   try {
-    expect(await currentBasis()).not.toBe(beforeOwnerChange);
+    expect(fenced.rowCount).toBe(1);
+    const observed = await createSemanticTitleInputsAdapter(driver.fixtures.pool).observe({
+      subjects: [],
+      deadline: Date.now() + 10_000,
+    });
+    expect(observed).toEqual({ status: 'unavailable' });
   } finally {
-    await driver.fixtures.pool.query('UPDATE core.partition SET node=$2 WHERE partition_no=$1', [home, originalNode]);
+    const restored = await driver.fixtures.pool.query(
+      `UPDATE core.partition SET write_state='active'
+       WHERE partition_no=$1 AND node=$2 AND epoch=$3 AND write_state='fenced' RETURNING partition_no`,
+      [home, lineage.node, lineage.epoch],
+    );
+    expect(restored.rowCount).toBe(1);
   }
+  expect(await readLiveCopyLineage(driver.fixtures.pool, home)).toEqual(lineage);
   expect(await currentBasis()).toBe(beforeOwnerChange);
 });
 

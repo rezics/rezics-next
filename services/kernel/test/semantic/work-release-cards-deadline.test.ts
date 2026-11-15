@@ -30,7 +30,8 @@ const fixturePromise = createReleasedDiscoveryFixture({
         apply(query, receiver, args) {
           const input = args[0];
           const text = typeof input === 'string' ? input : input?.text;
-          if (observeSelectedFieldQueries && slowFieldClient) postSlowFieldQueryCount += 1;
+          // Other pool clients may continue background work while this snapshot expires.
+          if (observeSelectedFieldQueries && client === slowFieldClient) postSlowFieldQueryCount += 1;
           if (
             observeSelectedFieldQueries &&
             (text === selectedFacts.sql || text === selectedFacts['~standard'].query.text)
