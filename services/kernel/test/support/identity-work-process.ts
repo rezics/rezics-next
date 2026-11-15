@@ -14,6 +14,9 @@ export type IdentityWorkProcessConfig = {
   searchPrefix: string;
   executorId: string;
   openSearchUrl?: string | undefined;
+  workModules?: readonly string[];
+  effectsRelay?: boolean;
+  receiptKeys?: string;
 };
 
 /** Starts the production kernel work executor in a child process (identity-work-child.ts). The parent keeps its

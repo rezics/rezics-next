@@ -6,6 +6,9 @@ import { composeWork } from '../../src/work/registry.ts';
 import { KERNEL_WORK_MODULES } from './default-work-modules.ts';
 import { configureTestReceiptKeys, testReceiptKeys } from './receipt-keys.ts';
 import { workerTestEnv } from './worker-env.ts';
+import { readReceiptKeyRing } from '../../src/command/receipt-key.ts';
+import { effectsRelay } from '../../src/events/effects.ts';
+import { relayConcurrencyForPool, startRelays } from '../../src/events/relays.ts';
 
 // The kernel's production work executor, run in its own process so the parent test process can own another DBOS
 // host (Auth) without two launched executors sharing one process. Configuration arrives on stdin, never as argv.
@@ -18,21 +21,29 @@ composeWorkApplication();
 const pool = new Pool({ connectionString: input.databaseUrl, max: 32 });
 let client: Awaited<ReturnType<typeof createWorkClient>> | undefined;
 let work: Awaited<ReturnType<typeof composeWork>> | undefined;
+let relays: ReturnType<typeof startRelays> | undefined;
 
 async function release(): Promise<void> {
   try {
-    await work?.shutdown();
+    await relays?.stop();
   } finally {
     try {
-      await client?.close();
+      await work?.shutdown();
     } finally {
-      await pool.end();
+      try {
+        await client?.close();
+      } finally {
+        await pool.end();
+      }
     }
   }
 }
 
 try {
-  configureTestReceiptKeys(pool);
+  const receiptKeys = input.receiptKeys === undefined
+    ? testReceiptKeys()
+    : readReceiptKeyRing({ ...process.env, KERNEL_RECEIPT_KEYS: input.receiptKeys });
+  configureTestReceiptKeys(pool, receiptKeys);
   client = await createWorkClient(input.databaseUrl, pool);
   const openSearchUrl =
     typeof input.openSearchUrl === 'string' && input.openSearchUrl.length > 0
@@ -42,7 +53,12 @@ try {
     typeof input.executorId === 'string' && input.executorId.length > 0
       ? input.executorId
       : `identity-work-${process.pid}`;
-  work = await composeWork(KERNEL_WORK_MODULES, {
+  const modules = input.workModules === undefined ? KERNEL_WORK_MODULES : input.workModules.map((name: string) => {
+    const module = KERNEL_WORK_MODULES.find((candidate) => candidate.name === name);
+    if (!module) throw new Error(`Unknown native work module: ${name}`);
+    return module;
+  });
+  work = await composeWork(modules, {
     databaseUrl: input.databaseUrl,
     pool,
     client,
@@ -53,9 +69,11 @@ try {
       KERNEL_EXECUTOR_ID: executorId,
       ...(openSearchUrl === undefined ? {} : { OPENSEARCH_URL: openSearchUrl }),
     }),
-    receiptKeys: testReceiptKeys(),
+    receiptKeys,
   });
   await work.launch();
+  if (input.effectsRelay === true)
+    relays = startRelays(pool, [effectsRelay(pool, work.effects)], { concurrency: relayConcurrencyForPool(pool) });
 } catch (error) {
   try {
     await release();
