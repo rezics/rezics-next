@@ -1039,13 +1039,13 @@ export const InlineLifetimeJourney: Story = {
     await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(JSON.stringify(evidence.latest)).toContain('000000000111'));
 
-    // The phone sheet owns its deferred focus callback for this visit; a replacement retires it before it runs.
+    // Dismissing the block menu queues a return to its opener. Replacing the document retires that opener.
     await traceClick(canvas.getByRole('button', { name: 'Use touch toolbar' }));
     await traceClick(canvas.getByRole('button', { name: 'Replace with touch target' }));
     touchToolbar = within(await canvas.findByRole('toolbar', { name: 'Formatting toolbar' }));
     await traceClick(touchToolbar.getByRole('button', { name: /^Blocks\b/ }));
     const dialog = await page.findByRole('dialog', { name: 'Blocks' });
-    const finalFocus = reactCallback(dialog, 'finalFocus');
+    const blockSearch = within(dialog).getByRole('combobox', { name: 'Find a block' });
     const frames: FrameRequestCallback[] = [];
     const requestFrame = window.requestAnimationFrame;
     window.requestAnimationFrame = ((callback: FrameRequestCallback) => {
@@ -1053,10 +1053,11 @@ export const InlineLifetimeJourney: Story = {
       return frames.length;
     }) as typeof window.requestAnimationFrame;
     try {
-      finalFocus();
+      blockSearch.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     } finally {
       window.requestAnimationFrame = requestFrame;
     }
+    expect(frames.length).toBeGreaterThan(0);
     const replacementControl = canvas.getByRole('button', { name: 'Replace with fresh document', hidden: true });
     reactCallback(replacementControl, 'onClick')();
     await waitFor(() => expect(canvas.getByRole('textbox', { name: 'Post' })).toHaveTextContent('Fresh document'));
