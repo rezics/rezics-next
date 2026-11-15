@@ -27,7 +27,7 @@ test.each([
   }
 });
 
-test('native Web imports the standalone writer without loading the kernel check runner', () => {
+test('the standalone writer has only filesystem and path dependencies and Web resolves that narrow module', () => {
   const scanner = new Bun.Transpiler({ loader: 'ts', target: 'bun' });
   const writer = resolve(kernel, 'scripts/reylo-project.ts');
   const imports = scanner.scanImports(readFileSync(writer, 'utf8')).map(({ path }) => path);
@@ -36,5 +36,5 @@ test('native Web imports the standalone writer without loading the kernel check 
   const stack = resolve(kernel, '../../apps/web/tests/native/stack.ts');
   const stackImports = scanner.scanImports(readFileSync(stack, 'utf8')).map(({ path }) => path);
   expect(stackImports).toContain('../../../../services/kernel/scripts/reylo-project.ts');
-  expect(stackImports).not.toContain('../../../../services/kernel/scripts/check.ts');
+  expect(scanner.scan(readFileSync(writer, 'utf8')).exports).toEqual(['writeReyloProject']);
 });
