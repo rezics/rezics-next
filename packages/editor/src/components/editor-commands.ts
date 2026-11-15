@@ -8,6 +8,7 @@ import { editorCommandsForPresentation } from './editor-command-preferences.ts';
 import { compactHistory } from './editor-compact-transaction.ts';
 import { clearEditorFindHighlights } from './editor-find.tsx';
 import { runCompactEditorChain } from './editor-compact-commands.ts';
+import { captureLink } from './editor-link.tsx';
 
 export interface EditorCommand {
   id: string;
@@ -84,6 +85,7 @@ export const markCommands: readonly EditorCommand[] = [
     id: 'link',
     label: 'link',
     mark: 'link',
+    available: (editor) => captureLink(editor) !== null,
     active: (editor) => editor.isActive('link'),
     run: (_editor, openLink) => openLink(),
   },

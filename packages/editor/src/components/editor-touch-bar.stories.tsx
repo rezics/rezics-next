@@ -287,14 +287,15 @@ export const UndoRedo: Story = {
     expect(retiredInput(view, staleInput)).toBe(false);
     expect(textbox.textContent).toBe('History');
     await waitFor(() => expect(history.latest.current).toEqual(original));
-    const blocksButton = toolbar.getByRole('button', { name: 'Blocks' });
+    // BlockMenu deliberately remounts its trigger when document/selection targets retire. Query the live control.
+    const blocksButton = () => toolbar.getByRole('button', { name: 'Blocks' });
     const tabEntries = () =>
       [...toolbarElement.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')].filter(
         (button) => button.tabIndex === 0,
       );
     const runToolbar = async (name: string) => {
-      const target = toolbar.getByRole('button', { name });
       await userEvent.keyboard('{Alt>}{F10}{/Alt}{Home}');
+      const target = toolbar.getByRole('button', { name });
       const enabled = [...toolbarElement.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
       const index = enabled.indexOf(target as HTMLButtonElement);
       expect(index).toBeGreaterThanOrEqual(0);
@@ -303,8 +304,8 @@ export const UndoRedo: Story = {
       await userEvent.keyboard('{Enter}');
     };
     await userEvent.keyboard('{Alt>}{F10}{/Alt}');
-    expect(blocksButton).toHaveFocus();
-    expect(tabEntries()).toEqual([blocksButton]);
+    expect(blocksButton()).toHaveFocus();
+    await waitFor(() => expect(tabEntries()).toEqual([blocksButton()]));
     await runToolbar('Undo');
     await waitFor(() => expect(plainText(history.latest.current)).toBe(''));
     expect(textbox).toHaveFocus();
@@ -312,10 +313,10 @@ export const UndoRedo: Story = {
       expect(undo).toBeDisabled();
       expect(redo).toBeEnabled();
     });
-    expect(tabEntries()).toEqual([blocksButton]);
+    await waitFor(() => expect(tabEntries()).toEqual([blocksButton()]));
     await userEvent.keyboard('{Alt>}{F10}{/Alt}');
-    expect(blocksButton).toHaveFocus();
-    expect(tabEntries()).toEqual([blocksButton]);
+    expect(blocksButton()).toHaveFocus();
+    await waitFor(() => expect(tabEntries()).toEqual([blocksButton()]));
     await runToolbar('Redo');
     await waitFor(() => expect(plainText(history.latest.current)).toBe('History'));
     expect(textbox).toHaveFocus();
@@ -323,7 +324,7 @@ export const UndoRedo: Story = {
       expect(undo).toBeEnabled();
       expect(redo).toBeDisabled();
     });
-    expect(tabEntries()).toEqual([blocksButton]);
+    await waitFor(() => expect(tabEntries()).toEqual([blocksButton()]));
     await userEvent.keyboard('{Shift>}{Home}{/Shift}');
     await runToolbar('Bold');
     await waitFor(() =>
