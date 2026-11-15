@@ -108,6 +108,19 @@ describe('shared progress and journal rules', () => {
     });
   });
 
+  test('unknown journal keys are rejected and reflection stays exact inside both caps', () => {
+    expect(parseProgressSessionJournalPatch({ revision: 2, '': true })).toEqual({ ok: false, field: '' });
+    const exact = ` ${'a'.repeat(1_998)} `;
+    expect(parseProgressSessionJournalPatch({ revision: 2, reflection: exact })).toEqual({
+      ok: true,
+      value: { revision: 2, reflection: exact },
+    });
+    expect(parseProgressSessionJournalPatch({ revision: 2, reflection: 'a'.repeat(8_000) })).toEqual({
+      ok: false,
+      field: 'reflection',
+    });
+  });
+
   test('profiled decimals stay exact; independent measures and totals never imply completion', () => {
     const rules = { minimum: '0.001', maximum: '999999999999.999999', precision: 6 };
     expect(acceptsProfileDecimal(rules, '999999999999.999999')).toBe(true);

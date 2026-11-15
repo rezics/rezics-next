@@ -39,7 +39,7 @@ export function parseProgressSessionJournalPatch(input: unknown): JournalPatchOu
   const unexpected = Object.keys(source)
     .filter((key) => !allowed.has(key))
     .sort()[0];
-  if (unexpected) return { ok: false, field: unexpected };
+  if (unexpected !== undefined) return { ok: false, field: unexpected };
   const revision = source.revision;
   if (!Number.isSafeInteger(revision) || (revision as number) < 0 || (revision as number) >= 2_147_483_647)
     return { ok: false, field: 'revision' };
@@ -65,6 +65,9 @@ export function parseProgressSessionJournalPatch(input: unknown): JournalPatchOu
     const reflection = source.reflection;
     if (reflection === null) patch.reflection = null;
     else if (typeof reflection === 'string') {
+      // Each code point occupies at most two UTF-16 units. Bound decoding and allocation first.
+      if (reflection.length > 2 * MAX_JOURNAL_REFLECTION_CHARACTERS)
+        return { ok: false, field: 'reflection' };
       if (!reflection.isWellFormed() || reflection.includes('\u0000')) return { ok: false, field: 'reflection' };
       if (Array.from(reflection).length > MAX_JOURNAL_REFLECTION_CHARACTERS) return { ok: false, field: 'reflection' };
       if (new TextEncoder().encode(reflection).byteLength > MAX_JOURNAL_REFLECTION_BYTES)
