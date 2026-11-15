@@ -13,6 +13,7 @@ import { routeOf, partitionOf } from '../route/route.ts';
 import { readAccountDiscoveryWitness } from './native-bindings.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
 import type { PublicFilterConsumer } from '../semantic/index.ts';
+import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts';
 import type {
   SearchNativePublicationCompletionReader,
   SearchPublicFilterCost,
@@ -818,10 +819,18 @@ export function createSearchGenerationPublication(
           if (!(error instanceof GenerationReconciliationMismatch)) throw error;
         }
       }
-      if (job.fenced_pass) throw new Pending('source_pending');
-      // Repairs use the sole native writer. Its enrollment/settlement changes the native head;
-      // replay the affected home before adopting any new frontier or reconciliation witness.
-      await writerGuard.write(partition, ids, position);
+      // Ordinary write() settles identity_writer. Subject population consumes that
+      // settlement; dual enroll fails writer_token IS NULL and kills the relay.
+      if (job.fenced_pass || job.phase === 'subject') throw new Pending('source_pending');
+      // Engine extras still repair through the ordinary writer. Enrollment advances the
+      // native head; replay the home before adopting a new frontier or witness.
+      try {
+        await writerGuard.write(partition, ids, position);
+      } catch (error) {
+        if (error instanceof IdentityEpochStoreError && error.code === 'identity_epoch_unavailable')
+          throw new Pending('source_pending');
+        throw error;
+      }
       meter.resultWrites += ids.length;
       throw new Pending('source_pending');
     }
