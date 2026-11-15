@@ -386,7 +386,9 @@ async function waitForNativeSearch(
   }
   let workerOutput: string;
   try {
-    workerOutput = await currentNativeLifecycle().run(
+    const lifecycle = currentNativeLifecycle();
+    if (!lifecycle) throw new Error('Catalogue Search diagnostics require an active native lifecycle');
+    workerOutput = await lifecycle.run(
       'read catalogue Search worker diagnostics',
       5_000,
       () => stack.workerLogs(),
