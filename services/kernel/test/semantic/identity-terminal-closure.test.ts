@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { runCommand } from '../../src/command/command.ts';
+import { CommandCommitUncertainError, runCommand } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { IDENTITY_EPOCH_PROGRESS } from '../../src/semantic/events.ts';
@@ -157,6 +157,8 @@ test('registered owner deletion is refused before terminal enrollment without lo
     );
     const before = (await owner()).rows;
     expect(before).toHaveLength(1);
+    // Observe the real unbootstrapped source through the enforced native home before attempting owner deletion.
+    expect((await readIdentityMappings(db.pool, [a]))[0]?.state).not.toBe('mapped');
     // Registered live-copy lineage keeps topology present before Semantic acquires closure custody.
     await expect(db.admin.query('DELETE FROM core.partition WHERE partition_no=$1', [home(b)])).rejects.toMatchObject({
       code: '23503',
@@ -248,23 +250,58 @@ for (const boundary of [
       const [a, , terminal] = ids as [string, string, string];
       await db.install();
       const lost = new Error(`test loses committed ${boundary} result`);
-      await expect(
-        atBoundary(
-          db,
-          boundary,
-          'after-commit',
-          async () => {
-            throw lost;
-          },
-          async () => {
-            for (let round = 0; round < 128; round++)
-              for (const partition of [...new Set([...ids].reverse().map(home))])
-                await stepIdentityEpochBootstrap(db.pool, partition);
-          },
-          undefined,
-          boundary === 'export' ? undefined : a,
-        ),
-      ).rejects.toThrow(lost.message);
+      let injections = 0;
+      const failure = await atBoundary(
+        db,
+        boundary,
+        'after-commit',
+        async () => {
+          injections++;
+          throw lost;
+        },
+        async () => {
+          for (let round = 0; round < 128; round++)
+            for (const partition of [...new Set([...ids].reverse().map(home))])
+              await stepIdentityEpochBootstrap(db.pool, partition);
+        },
+        undefined,
+        boundary === 'export' ? undefined : a,
+      ).catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(CommandCommitUncertainError);
+      if (!(failure instanceof CommandCommitUncertainError)) throw failure;
+      expect(failure.cause).toBe(lost);
+      expect(injections).toBe(1);
+      const committed = await db.admin.query<{
+        partition_no: number; transaction_id: string; epoch: number; position: string; purpose: string;
+        effect_committed: boolean;
+      }>(
+        `SELECT n.partition_no,n.transaction_id::text,n.epoch,n.position::text,n.purpose,
+          CASE
+            WHEN $2::text='export' THEN EXISTS (
+              SELECT 1 FROM semantic.identity_epoch_bootstrap_page b
+              WHERE b.partition_no=n.partition_no AND b.transaction_id=n.transaction_id AND b.xmin=n.xmin)
+            WHEN $2::text IN ('hold','install','ack') THEN EXISTS (
+              SELECT 1 FROM semantic.identity_epoch_mapping m
+              WHERE m.route BETWEEN n.partition_no*16 AND n.partition_no*16+15
+                AND m.original=$3 AND m.xmin=n.xmin AND CASE $2::text
+                  WHEN 'hold' THEN m.closure_hold_transaction=n.transaction_id
+                  WHEN 'install' THEN m.closure_install_transaction=n.transaction_id
+                  WHEN 'ack' THEN m.closure_ack_transaction=n.transaction_id END)
+            WHEN $2::text IN ('receive','promote') THEN EXISTS (
+              SELECT 1 FROM semantic.identity_epoch_original o
+              WHERE o.partition_no=n.partition_no AND o.original=$3 AND o.xmin=n.xmin
+                AND CASE $2::text
+                  WHEN 'receive' THEN o.closure_registration_transaction=n.transaction_id
+                  WHEN 'promote' THEN o.closure_state='installed' AND o.closure_install_transaction IS NOT NULL END)
+            ELSE false END AS effect_committed
+         FROM semantic.identity_epoch_native_commit n JOIN core.partition p
+           ON (p.partition_no,p.epoch,p.position)=(n.partition_no,n.epoch,n.position)
+         WHERE n.partition_no=$1 AND n.purpose='bootstrap'`,
+        [failure.partition, boundary, a],
+      );
+      expect(committed.rows).toHaveLength(1);
+      const native = committed.rows[0]!;
+      expect(native.effect_committed).toBe(true);
       const before = (
         await db.admin.query('SELECT closure_enrollment FROM semantic.identity_epoch_mapping WHERE original=$1', [a])
       ).rows[0];
@@ -273,6 +310,20 @@ for (const boundary of [
         await db.admin.query('SELECT closure_enrollment FROM semantic.identity_epoch_mapping WHERE original=$1', [a])
       ).rows[0]!;
       if (before) expect(after.closure_enrollment).toBe(before.closure_enrollment);
+      await stepIdentityEpochBootstrap(db.pool, home(a));
+      expect((await readIdentityMappings(db.pool, [a]))[0]).toMatchObject({ state: 'mapped', original: a, terminal });
+      expect((await db.admin.query(
+        'SELECT closure_enrollment FROM semantic.identity_epoch_mapping WHERE original=$1', [a],
+      )).rows).toEqual([after]);
+      expect((await db.admin.query(
+        `SELECT partition_no,transaction_id::text,epoch,position::text,purpose
+         FROM semantic.identity_epoch_native_commit WHERE partition_no=$1 AND transaction_id=$2`,
+        [native.partition_no, native.transaction_id],
+      )).rows).toEqual([{
+        partition_no: native.partition_no, transaction_id: native.transaction_id,
+        epoch: native.epoch, position: native.position, purpose: native.purpose,
+      }]);
+      expect(injections).toBe(1);
       expect(
         (
           await db.admin.query(
