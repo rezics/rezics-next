@@ -38,6 +38,7 @@ export type BoundedReadLifetimeOptions = Readonly<{
 
 type Checkout = <T>(work: (client: PoolClient) => Promise<T>) => Promise<T>;
 type Discard = (client: PoolClient, error: Error) => void;
+const deferredReadDiscards = new WeakMap<PoolClient, (error: Error) => void>();
 
 function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error('Bounded database read connection became uncertain');
@@ -169,6 +170,7 @@ export function withBoundedReadLifetime<T>(
   let transaction: 'none' | 'open' = 'none';
   let hasFailure = false;
   let firstFailure: unknown;
+  let deferredDiscard: Error | undefined;
 
   const retire = () => {
     if (retired) return;
@@ -182,12 +184,21 @@ export function withBoundedReadLifetime<T>(
       firstFailure = error;
     }
   };
+  const markForDiscard = (error: Error) => {
+    if (!connection) return;
+    const parentDiscard = deferredReadDiscards.get(connection);
+    if (parentDiscard) parentDiscard(error);
+    else discardConnection(connection, error);
+  };
+  const deferDiscard = (error: Error) => {
+    if (!retired) deferredDiscard ??= error;
+  };
   const discard = (error: unknown) => {
     if (uncertain) return;
     uncertain = true;
     uncertainty = error;
     retire();
-    if (connection) discardConnection(connection, asError(error));
+    markForDiscard(asError(error));
   };
   const retiredError = () => new RetiredReadClientError();
 
@@ -197,6 +208,11 @@ export function withBoundedReadLifetime<T>(
     before(deadline, deadlineError);
 
     const client = Object.create(raw) as PoolClient;
+    // The lease can request disposal, but the checkout owner releases after cleanup.
+    client.release = (error) => {
+      if (error) deferDiscard(asError(error));
+    };
+    deferredReadDiscards.set(client, deferDiscard);
     client.query = ((input: NativeReadQueryConfig | string, valuesOrCallback?: unknown, callbackArgument?: unknown) => {
       const callback = typeof valuesOrCallback === 'function' ? valuesOrCallback : callbackArgument;
       const completeWithCallback = (completion: Promise<unknown>) => {
@@ -339,6 +355,7 @@ export function withBoundedReadLifetime<T>(
       throw firstFailure;
     } finally {
       retire();
+      if (deferredDiscard && !uncertain) markForDiscard(deferredDiscard);
     }
   });
 

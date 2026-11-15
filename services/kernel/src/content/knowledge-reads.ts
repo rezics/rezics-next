@@ -119,20 +119,21 @@ export async function readKnowledgePublicDocument(
   selection: Readonly<{ revisionId?: string }>,
   context: ReadContext,
 ) {
+  const revisionId = selection.revisionId;
+  const readContext = { actor: context.actor, deadline: context.deadline };
   const sourceRoute = route(documentId);
-  if (selection.revisionId !== undefined && route(selection.revisionId) !== sourceRoute)
-    throw new KnowledgeNotFoundError();
-  const initial = await snapshot(deps, documentId, context, (client) =>
-    knowledgePublicSelection(client, sourceRoute, documentId, selection.revisionId),
+  if (revisionId !== undefined && route(revisionId) !== sourceRoute) throw new KnowledgeNotFoundError();
+  const initial = await snapshot(deps, documentId, readContext, (client) =>
+    knowledgePublicSelection(client, sourceRoute, documentId, revisionId),
   );
   const selected = initial.value;
-  if (!selected || (selection.revisionId !== undefined && selection.revisionId !== selected.revision_id))
+  if (!selected || (revisionId !== undefined && revisionId !== selected.revision_id))
     throw new KnowledgeNotFoundError();
   const subjects = knowledgeSubjectTargets(selected.subject_id, selected.subject_ids);
 
   const prepareSubjects = await prepareEditionSubjectIdentities(deps, subjects, {
     actor: { kind: 'anonymous' },
-    deadline: context.deadline,
+    deadline: readContext.deadline,
   });
   const visible = async () => {
     const identities = await prepareSubjects();
@@ -140,7 +141,7 @@ export async function readKnowledgePublicDocument(
   };
   if (!(await visible())) throw new KnowledgeNotFoundError();
 
-  const final = await snapshot(deps, documentId, context, async (client) => {
+  const final = await snapshot(deps, documentId, readContext, async (client) => {
     const row = await knowledgePublicRow(client, sourceRoute, documentId, selected.publication_id);
     if (
       !row ||
@@ -149,8 +150,8 @@ export async function readKnowledgePublicDocument(
       row.revision_id !== selected.revision_id ||
       row.subject_id !== selected.subject_id ||
       !row.publication_sha256.equals(selected.publication_sha256) ||
-      (selection.revisionId === undefined && row.current_publication_id !== selected.publication_id) ||
-      (selection.revisionId !== undefined && selection.revisionId !== row.revision_id)
+      (revisionId === undefined && row.current_publication_id !== selected.publication_id) ||
+      (revisionId !== undefined && revisionId !== row.revision_id)
     )
       return null;
     currentBytesAreSound(row);
@@ -161,7 +162,7 @@ export async function readKnowledgePublicDocument(
     deps,
     parseDocument(JSON.parse(final.value.canonical_bytes.toString('utf8'))),
     final.value.reference_manifest,
-    context.deadline,
+    readContext.deadline,
     {
       representation: 'public',
       documentId,
@@ -171,9 +172,9 @@ export async function readKnowledgePublicDocument(
     },
   );
   const canonical = serializeDocument(projection.snapshot);
-  const provenance = await projectKnowledgePublicProvenance(deps, final.value.copy_provenance, context.deadline);
-  const current = await snapshot(deps, documentId, context, (client) =>
-    knowledgePublicSelection(client, sourceRoute, documentId, selection.revisionId),
+  const provenance = await projectKnowledgePublicProvenance(deps, final.value.copy_provenance, readContext.deadline);
+  const current = await snapshot(deps, documentId, readContext, (client) =>
+    knowledgePublicSelection(client, sourceRoute, documentId, revisionId),
   );
   if (
     current.value?.publication_id !== selected.publication_id ||
@@ -211,11 +212,12 @@ export async function readKnowledgePrivateDocument(
   context: ReadContext,
   revisionId?: string,
 ) {
+  const readContext = { actor: context.actor, deadline: context.deadline };
   const sourceRoute = route(documentId);
   if (
     (revisionId !== undefined && route(revisionId) !== sourceRoute) ||
-    context.actor.kind !== 'account' ||
-    context.actor.accountId !== accountId ||
+    readContext.actor.kind !== 'account' ||
+    readContext.actor.accountId !== accountId ||
     route(accountId) !== sourceRoute ||
     route(notebookId) !== sourceRoute
   )
@@ -223,12 +225,12 @@ export async function readKnowledgePrivateDocument(
 
   const check = await accessCheck(
     deps.access,
-    context.actor,
+    readContext.actor,
     'account:read',
     { route: sourceRoute, id: accountId },
-    { pool: deps.pool, deadline: context.deadline },
+    { pool: deps.pool, deadline: readContext.deadline },
   );
-  const result = await snapshot(deps, documentId, context, async (client) => {
+  const result = await snapshot(deps, documentId, readContext, async (client) => {
     if (!(await check(client))) return null;
     const row = await knowledgePrivateRow(client, sourceRoute, notebookId, documentId, revisionId ?? null);
     if (!row || row.owner_account_id !== accountId) return null;
@@ -257,14 +259,17 @@ export async function readKnowledgeOwnedNotebooks(
   query: KnowledgePageInput,
   context: ReadContext,
 ) {
+  const request = { limit: query.limit ?? KNOWLEDGE_PAGE_LIMIT, cursor: query.cursor };
+  const readContext = { actor: context.actor, deadline: context.deadline };
   const sourceRoute = route(accountId);
-  const limit = query.limit ?? KNOWLEDGE_PAGE_LIMIT;
-  if (context.actor.kind !== 'account' || context.actor.accountId !== accountId) throw new KnowledgeNotFoundError();
+  const limit = request.limit;
+  if (readContext.actor.kind !== 'account' || readContext.actor.accountId !== accountId)
+    throw new KnowledgeNotFoundError();
   const binding = knowledgeCursorBinding('GET /v1/accounts/:accountId/knowledge/notebooks', accountId, {
     limit,
     route: sourceRoute,
   });
-  const cursor = await readCursor(deps, binding, query.cursor);
+  const cursor = await readCursor(deps, binding, request.cursor);
   if (
     cursor &&
     (cursor.after.length !== 2 ||
@@ -277,12 +282,12 @@ export async function readKnowledgeOwnedNotebooks(
   const after = cursor?.after as readonly string[] | undefined;
   const check = await accessCheck(
     deps.access,
-    context.actor,
+    readContext.actor,
     'account:read',
     { route: sourceRoute, id: accountId },
-    { pool: deps.pool, deadline: context.deadline },
+    { pool: deps.pool, deadline: readContext.deadline },
   );
-  const result = await snapshot(deps, accountId, context, async (client) => {
+  const result = await snapshot(deps, accountId, readContext, async (client) => {
     if (!(await check(client))) return null;
     const rows = await knowledgeOwnedNotebookPage(
       client,
@@ -334,23 +339,29 @@ export async function readKnowledgeOutline(
   query: KnowledgeOutlinePageInput,
   context: ReadContext,
 ) {
+  const page = {
+    limit: query.limit ?? KNOWLEDGE_PAGE_LIMIT,
+    cursor: query.cursor,
+    parentPlacementId: query.parentPlacementId,
+  };
+  const readContext = { actor: context.actor, deadline: context.deadline };
   const sourceRoute = route(notebookId);
   const accountRoute = route(accountId);
   if (
-    context.actor.kind !== 'account' ||
-    context.actor.accountId !== accountId ||
+    readContext.actor.kind !== 'account' ||
+    readContext.actor.accountId !== accountId ||
     accountRoute !== sourceRoute ||
-    (query.parentPlacementId !== undefined && route(query.parentPlacementId) !== sourceRoute)
+    (page.parentPlacementId !== undefined && route(page.parentPlacementId) !== sourceRoute)
   )
     throw new KnowledgeNotFoundError();
-  const parentId = query.parentPlacementId ?? null;
-  const limit = query.limit ?? KNOWLEDGE_PAGE_LIMIT;
+  const parentId = page.parentPlacementId ?? null;
+  const limit = page.limit;
   const binding = knowledgeCursorBinding(
     'GET /v1/accounts/:accountId/knowledge/notebooks/:notebookId/outline',
     accountId,
     { limit, notebookId, parentPlacementId: parentId },
   );
-  const cursor = await readCursor(deps, binding, query.cursor);
+  const cursor = await readCursor(deps, binding, page.cursor);
   if (
     cursor &&
     (cursor.after.length !== 3 ||
@@ -362,12 +373,12 @@ export async function readKnowledgeOutline(
   const after = cursor?.after as readonly string[] | undefined;
   const check = await accessCheck(
     deps.access,
-    context.actor,
+    readContext.actor,
     'account:read',
     { route: sourceRoute, id: accountId },
-    { pool: deps.pool, deadline: context.deadline },
+    { pool: deps.pool, deadline: readContext.deadline },
   );
-  const result = await snapshot(deps, notebookId, context, async (client) => {
+  const result = await snapshot(deps, notebookId, readContext, async (client) => {
     if (!(await check(client))) return null;
     const notebook = await knowledgeNotebookSelection(client, sourceRoute, notebookId);
     if (!notebook || notebook.owner_account_id !== accountId) return null;
@@ -457,24 +468,30 @@ export async function readKnowledgeHistoricalOutline(
   query: KnowledgeOutlinePageInput,
   context: ReadContext,
 ) {
+  const page = {
+    limit: query.limit ?? KNOWLEDGE_PAGE_LIMIT,
+    cursor: query.cursor,
+    parentPlacementId: query.parentPlacementId,
+  };
+  const readContext = { actor: context.actor, deadline: context.deadline };
   const sourceRoute = route(notebookId);
   const accountRoute = route(accountId);
   if (
-    context.actor.kind !== 'account' ||
-    context.actor.accountId !== accountId ||
+    readContext.actor.kind !== 'account' ||
+    readContext.actor.accountId !== accountId ||
     accountRoute !== sourceRoute ||
     route(revisionId) !== sourceRoute ||
-    (query.parentPlacementId !== undefined && route(query.parentPlacementId) !== sourceRoute)
+    (page.parentPlacementId !== undefined && route(page.parentPlacementId) !== sourceRoute)
   )
     throw new KnowledgeNotFoundError();
-  const parentId = query.parentPlacementId ?? null;
-  const limit = query.limit ?? KNOWLEDGE_PAGE_LIMIT;
+  const parentId = page.parentPlacementId ?? null;
+  const limit = page.limit;
   const binding = knowledgeCursorBinding(
     'GET /v1/accounts/:accountId/knowledge/notebooks/:notebookId/outline@revision',
     accountId,
     { limit, notebookId, parentPlacementId: parentId, revisionId },
   );
-  const cursor = await readCursor(deps, binding, query.cursor);
+  const cursor = await readCursor(deps, binding, page.cursor);
   if (
     cursor &&
     (cursor.after.length !== 2 ||
@@ -485,12 +502,12 @@ export async function readKnowledgeHistoricalOutline(
   const after = cursor?.after as readonly string[] | undefined;
   const check = await accessCheck(
     deps.access,
-    context.actor,
+    readContext.actor,
     'account:read',
     { route: sourceRoute, id: accountId },
-    { pool: deps.pool, deadline: context.deadline },
+    { pool: deps.pool, deadline: readContext.deadline },
   );
-  const result = await snapshot(deps, notebookId, context, async (client) => {
+  const result = await snapshot(deps, notebookId, readContext, async (client) => {
     if (!(await check(client))) return null;
     const notebook = await knowledgeNotebookSelection(client, sourceRoute, notebookId);
     if (!notebook || notebook.owner_account_id !== accountId) return null;
@@ -593,26 +610,28 @@ export async function readKnowledgeStructureHistory(
   query: KnowledgeStructureHistoryInput,
   context: ReadContext,
 ) {
+  const page = { limit: query.limit ?? KNOWLEDGE_PAGE_LIMIT, cursor: query.cursor };
+  const readContext = { actor: context.actor, deadline: context.deadline };
   const sourceRoute = route(notebookId);
-  if (context.actor.kind !== 'account' || context.actor.accountId !== accountId || route(accountId) !== sourceRoute)
+  if (readContext.actor.kind !== 'account' || readContext.actor.accountId !== accountId || route(accountId) !== sourceRoute)
     throw new KnowledgeNotFoundError();
-  const limit = query.limit ?? KNOWLEDGE_PAGE_LIMIT;
+  const limit = page.limit;
   const binding = knowledgeCursorBinding(
     'GET /v1/accounts/:accountId/knowledge/notebooks/:notebookId/history',
     accountId,
     { limit, notebookId },
   );
-  const cursor = await readCursor(deps, binding, query.cursor);
+  const cursor = await readCursor(deps, binding, page.cursor);
   if (cursor && (cursor.after.length !== 1 || !validStructureRevisionNumber(cursor.after[0]))) invalidCursor();
   const after = cursor?.after[0];
   const check = await accessCheck(
     deps.access,
-    context.actor,
+    readContext.actor,
     'account:read',
     { route: sourceRoute, id: accountId },
-    { pool: deps.pool, deadline: context.deadline },
+    { pool: deps.pool, deadline: readContext.deadline },
   );
-  const result = await snapshot(deps, notebookId, context, async (client) => {
+  const result = await snapshot(deps, notebookId, readContext, async (client) => {
     if (!(await check(client))) return null;
     const notebook = await knowledgeNotebookSelection(client, sourceRoute, notebookId);
     if (!notebook || notebook.owner_account_id !== accountId) return null;
@@ -760,23 +779,26 @@ async function exactPrivateRevisions(
   limit: number,
   context: ReadContext,
 ): Promise<Anchored<PrivateRevisionSelection<PrivateRevisionHistoryRow | PrivateRevisionBodyRow>>> {
+  const selectedRevisionIds = revisionIds === null ? null : [...revisionIds];
+  const selectedAfter = after === null ? null : { createdAt: after.createdAt, revisionId: after.revisionId };
+  const readContext = { actor: context.actor, deadline: context.deadline };
   const sourceRoute = route(documentId);
   if (
-    context.actor.kind !== 'account' ||
-    context.actor.accountId !== accountId ||
+    readContext.actor.kind !== 'account' ||
+    readContext.actor.accountId !== accountId ||
     route(accountId) !== sourceRoute ||
     route(notebookId) !== sourceRoute ||
-    revisionIds?.some((revisionId) => route(revisionId) !== sourceRoute)
+    selectedRevisionIds?.some((revisionId) => route(revisionId) !== sourceRoute)
   )
     throw new KnowledgeNotFoundError();
   const check = await accessCheck(
     deps.access,
-    context.actor,
+    readContext.actor,
     'account:read',
     { route: sourceRoute, id: accountId },
-    { pool: deps.pool, deadline: context.deadline },
+    { pool: deps.pool, deadline: readContext.deadline },
   );
-  return snapshot(deps, documentId, context, async (client) => {
+  return snapshot(deps, documentId, readContext, async (client) => {
     if (!(await check(client))) return null;
     const identity = await client.query<{ subject_id: string; placement_id: string }>(
       `SELECT notebook.subject_id,placement.placement_id
@@ -802,23 +824,24 @@ async function exactPrivateRevisions(
     )
       return null;
 
-    const revisions = revisionIds
-      ? await client.query<PrivateRevisionBodyRow>(
-          `SELECT document_id,revision_id,title,language,canonical_bytes,body_sha256,licence,subject_ids,
-                  reference_manifest,copy_provenance
-           FROM content.knowledge_revision
-           WHERE route=$1 AND document_id=$2 AND revision_id=ANY($3::uuid[])`,
-          [sourceRoute, documentId, revisionIds],
-        )
-      : await client.query<PrivateRevisionHistoryRow>(
-          `SELECT document_id,revision_id,title,language,body_sha256,licence,created_at,
-                  to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_key
-           FROM content.knowledge_revision
-           WHERE route=$1 AND document_id=$2
-             AND ($3::timestamptz IS NULL OR (created_at,revision_id) < ($3::timestamptz,$4::uuid))
-           ORDER BY created_at DESC,revision_id DESC LIMIT $5`,
-          [sourceRoute, documentId, after?.createdAt ?? null, after?.revisionId ?? null, limit],
-        );
+    const revisions =
+      selectedRevisionIds !== null
+        ? await client.query<PrivateRevisionBodyRow>(
+            `SELECT document_id,revision_id,title,language,canonical_bytes,body_sha256,licence,subject_ids,
+                    reference_manifest,copy_provenance
+             FROM content.knowledge_revision
+             WHERE route=$1 AND document_id=$2 AND revision_id=ANY($3::uuid[])`,
+            [sourceRoute, documentId, selectedRevisionIds],
+          )
+        : await client.query<PrivateRevisionHistoryRow>(
+            `SELECT document_id,revision_id,title,language,body_sha256,licence,created_at,
+                    to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_key
+             FROM content.knowledge_revision
+             WHERE route=$1 AND document_id=$2
+               AND ($3::timestamptz IS NULL OR (created_at,revision_id) < ($3::timestamptz,$4::uuid))
+             ORDER BY created_at DESC,revision_id DESC LIMIT $5`,
+            [sourceRoute, documentId, selectedAfter?.createdAt ?? null, selectedAfter?.revisionId ?? null, limit],
+          );
     return { subjectId: selected.subject_id, revisions: revisions.rows };
   });
 }
@@ -860,15 +883,17 @@ export async function readKnowledgeDocumentHistory(
   query: KnowledgePageInput,
   context: ReadContext,
 ) {
+  const request = { limit: query.limit ?? KNOWLEDGE_PAGE_LIMIT, cursor: query.cursor };
+  const readContext = { actor: context.actor, deadline: context.deadline };
   const sourceRoute = route(documentId);
   if (route(accountId) !== sourceRoute || route(notebookId) !== sourceRoute) throw new KnowledgeNotFoundError();
-  const limit = query.limit ?? KNOWLEDGE_PAGE_LIMIT;
+  const limit = request.limit;
   const binding = knowledgeCursorBinding(
     'GET /v1/accounts/:accountId/knowledge/notebooks/:notebookId/documents/:documentId/history',
     accountId,
     { documentId, limit, notebookId },
   );
-  const cursor = await readCursor(deps, binding, query.cursor);
+  const cursor = await readCursor(deps, binding, request.cursor);
   if (
     cursor &&
     (cursor.after.length !== 2 ||
@@ -886,10 +911,10 @@ export async function readKnowledgeDocumentHistory(
     null,
     after ? { createdAt: after[0]!, revisionId: after[1]! } : null,
     limit + 1,
-    context,
+    readContext,
   );
   if (!first.value) throw new KnowledgeNotFoundError();
-  const verifySubjects = await verifyKnowledgeSubjects(deps, first.value.subjectId, [], context);
+  const verifySubjects = await verifyKnowledgeSubjects(deps, first.value.subjectId, [], readContext);
   const second = await exactPrivateRevisions(
     deps,
     accountId,
@@ -898,7 +923,7 @@ export async function readKnowledgeDocumentHistory(
     null,
     after ? { createdAt: after[0]!, revisionId: after[1]! } : null,
     limit + 1,
-    context,
+    readContext,
   );
   if (!second.value || !(await verifySubjects())) throw new KnowledgeNotFoundError();
   if (cursor && (cursor.epoch !== first.anchor.epoch || cursor.epoch !== second.anchor.epoch))
@@ -941,18 +966,38 @@ export async function readKnowledgeDocumentCompare(
   revisionIds: readonly [string, string],
   context: ReadContext,
 ) {
-  if (revisionIds[0] === revisionIds[1]) throw new KnowledgeInvalidInputError();
-  const first = await exactPrivateRevisions(deps, accountId, notebookId, documentId, revisionIds, null, 2, context);
+  const selectedRevisionIds: readonly [string, string] = [revisionIds[0], revisionIds[1]];
+  const readContext = { actor: context.actor, deadline: context.deadline };
+  if (selectedRevisionIds[0] === selectedRevisionIds[1]) throw new KnowledgeInvalidInputError();
+  const first = await exactPrivateRevisions(
+    deps,
+    accountId,
+    notebookId,
+    documentId,
+    selectedRevisionIds,
+    null,
+    2,
+    readContext,
+  );
   if (!first.value || first.value.revisions.length !== 2) throw new KnowledgeNotFoundError();
   const byId = new Map(first.value.revisions.map((row) => [row.revision_id, row]));
-  const left = byId.get(revisionIds[0]);
-  const right = byId.get(revisionIds[1]);
+  const left = byId.get(selectedRevisionIds[0]);
+  const right = byId.get(selectedRevisionIds[1]);
   if (!left || !right) throw new KnowledgeNotFoundError();
-  const verifySubjects = await verifyKnowledgeSubjects(deps, first.value.subjectId, [left, right], context);
+  const verifySubjects = await verifyKnowledgeSubjects(deps, first.value.subjectId, [left, right], readContext);
   revisionBytesAreSound(left);
   revisionBytesAreSound(right);
 
-  const second = await exactPrivateRevisions(deps, accountId, notebookId, documentId, revisionIds, null, 2, context);
+  const second = await exactPrivateRevisions(
+    deps,
+    accountId,
+    notebookId,
+    documentId,
+    selectedRevisionIds,
+    null,
+    2,
+    readContext,
+  );
   if (!second.value || !(await verifySubjects())) throw new KnowledgeNotFoundError();
   if (first.anchor.epoch !== second.anchor.epoch) throw new KnowledgeStaleCursorError();
   return {
