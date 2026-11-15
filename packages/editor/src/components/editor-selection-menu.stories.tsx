@@ -158,10 +158,12 @@ export const KeyboardReach: Story = {
     const menu = within(await screen.findByRole('listbox', { name: 'Turn into' }));
     const query = screen.getByRole('combobox', { name: 'Find a block' });
     await waitFor(() => expect(query).toHaveFocus());
-    await userEvent.keyboard('{ArrowDown}');
-    await waitFor(() =>
-      expect(query).toHaveAttribute('aria-activedescendant', menu.getByRole('option', { name: 'Heading 1' }).id),
-    );
+    const choices = menu.getAllByRole('option').filter((option) => option.getAttribute('aria-disabled') !== 'true');
+    const heading = menu.getByRole('option', { name: 'Heading 1' });
+    await userEvent.keyboard('{Home}');
+    for (let step = 0; step < choices.indexOf(heading); step++) await userEvent.keyboard('{ArrowDown}');
+    await waitFor(() => expect(query).toHaveAttribute('aria-activedescendant', heading.id));
+    expect(heading).toHaveAttribute('aria-selected', 'true');
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(textbox).toHaveFocus());
     expect(window.getSelection()?.toString()).toBe('Selected words');

@@ -68,7 +68,7 @@ test('native public Source configuration and immutable meaning/read definition r
       text: undefined,
     };
     const result = await binding.resolve({ source, meaning: f.meaning, capture }, readContext());
-    expect(result.status).toBe('resolved');
+    expect(result.status, result.status === 'resolved' ? undefined : JSON.stringify(result)).toBe('resolved');
     if (result.status !== 'resolved') throw new Error(`Native Source binding ${result.reason}`);
     expect(result.definition.source.epoch).toBeGreaterThan(0);
     expect(result.definition.source.configuration.length).toBeGreaterThan(0);

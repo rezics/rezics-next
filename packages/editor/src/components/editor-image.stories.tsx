@@ -46,7 +46,14 @@ function demo(profile: 'blocks' | 'text' = 'blocks', delayed = false) {
             }
           />
         ) : null}
-        <button type="button" onClick={() => setShown(false)}>
+        <button
+          type="button"
+          onClick={(event) => {
+            const target = event.currentTarget;
+            setShown(false);
+            requestAnimationFrame(() => target.focus());
+          }}
+        >
           Remove editor
         </button>
         {profile === 'text' ? (
@@ -181,9 +188,11 @@ export const AltText: Story = {
     expect(canvas.getByRole('button', { name: 'Image properties' })).toHaveFocus();
     expect(images(altText.latest.current)[0]?.attrs?.alt).toBe('A ridge above the clouds at dawn');
 
+    const removeEditor = canvas.getByRole('button', { name: 'Remove editor' });
     await userEvent.keyboard('{Enter}');
-    await userEvent.click(canvas.getByRole('button', { name: 'Remove editor' }));
-    expect(canvas.getByRole('button', { name: 'Remove editor' })).toHaveFocus();
+    // A host/controller replacement can arrive while the document is inert behind its properties modal.
+    removeEditor.click();
+    await waitFor(() => expect(removeEditor).toHaveFocus());
     expect(altText.calls).toHaveLength(1);
   },
 };
@@ -434,18 +443,21 @@ export const UploadImage: Story = {
     uploadLifetime.reset();
     const canvas = within(canvasElement);
     const page = within(canvasElement.ownerDocument.body);
+    const disableEditor = canvas.getByRole('button', { name: 'Disable editor' });
+    const makeReadOnly = canvas.getByRole('button', { name: 'Make read only' });
 
     await lifetimeCaret(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Image' }));
     await page.findByRole('dialog', { name: 'Insert image' });
-    await userEvent.click(canvas.getByRole('button', { name: 'Disable editor' }));
-    expect(page.queryByRole('dialog', { name: 'Insert image' })).toBeNull();
+    // Invoke the host/controller, rather than querying an intentionally inert background while modal.
+    disableEditor.click();
+    await waitFor(() => expect(page.queryByRole('dialog', { name: 'Insert image' })).toBeNull());
     await userEvent.click(canvas.getByRole('button', { name: 'Enable editor' }));
     await lifetimeCaret(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Image' }));
     await page.findByRole('dialog', { name: 'Insert image' });
-    await userEvent.click(canvas.getByRole('button', { name: 'Make read only' }));
-    expect(page.queryByRole('dialog', { name: 'Insert image' })).toBeNull();
+    makeReadOnly.click();
+    await waitFor(() => expect(page.queryByRole('dialog', { name: 'Insert image' })).toBeNull());
     await userEvent.click(canvas.getByRole('button', { name: 'Allow editing' }));
 
     let textbox = await chooseLifetimeFile(canvasElement, 'button.png', 'Button description');

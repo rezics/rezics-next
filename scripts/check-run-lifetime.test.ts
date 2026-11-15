@@ -867,8 +867,9 @@ test('Original lifetime custody survives lost reference clear rejected evidence 
   });
   expect(recovered.final).toEqual(original);
   expect(recovered.finalCustody?.reconciliation).toBe('settled');
+  expect(recovered.finalCustody?.privateFiles).toBe('settled');
   expect(recovered.finalCustody?.delivery).toBe('pending');
-  expect(recovered.finalCustody?.aggregate).toBe('unknown');
+  expect(recovered.finalCustody?.aggregate).toBe('pending');
   expect(recovered.snapshotCustody).toBe('removed');
   expect(recovered.phase).toBe('unknown');
 
@@ -1575,8 +1576,8 @@ async function failedSnapshotFixture(
         status: 'unavailable',
         sourceSha256: null,
         manifestSha256: null,
-        fileCount: null,
-        totalBytes: null,
+        fileCount: 0,
+        totalBytes: 0,
       },
       returns: {
         status: 'missing',

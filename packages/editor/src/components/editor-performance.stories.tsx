@@ -588,8 +588,10 @@ async function journey(canvasElement: HTMLElement) {
     expect(pending.get()).toBe(expectedBookmark.resolve(editor.state.doc).from);
     const expectedRedo = editor.state.doc;
     const model = EditorState.create({ doc: beforeBulk, schema: editor.schema }).tr;
-    if (run.kind === 'dense') model.delete(externalPosition, externalPosition + 1);
-    else model.insertText('!', externalPosition);
+    // Stock native history merges the adjacent dense replacements into a full-run ReplaceStep. Its Undo
+    // restores that original matched run, including this foreign-deleted character; Redo reapplies the deletion.
+    // The small stock/compact differential regression pins the complete delete + markup + metadata sequence.
+    if (run.kind !== 'dense') model.insertText('!', externalPosition);
     model.setNodeMarkup(firstBody, undefined, { ...model.doc.nodeAt(firstBody)!.attrs, id: retainedId });
     const expectedUndo = model.doc;
     expect(undoDepth(editor.state)).toBeGreaterThan(0);
@@ -645,7 +647,11 @@ async function journey(canvasElement: HTMLElement) {
       redoDriverMs,
       redoKeyToDocumentTransactionMs: redoDispatchMs,
       redoDriverStartToTwoFramesMs: redoTwoFramesMs,
-      externalEditPreserved: true,
+      nativeHistoryMatched: true,
+      externalTextEditOutcome:
+        run.kind === 'dense'
+          ? 'Native merged Undo restores the deleted matched character; Redo reapplies the deletion'
+          : 'Unmatched insertion remains through Undo and Redo',
       idsMarksAndOpaquePayloadPreserved: true,
       liveBookmarkPreserved: true,
       trustedKeyEventsObserved: inputSamples.filter((sample) => sample.trusted).length,

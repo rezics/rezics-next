@@ -95,6 +95,7 @@ const block = (name: string, tag: string, extra: Attribute = {}, parseHTML: TagP
     name,
     ...(nestedOnly ? {} : { group: 'block' }),
     content,
+    ...(name === 'heading' ? { defining: true } : {}),
     ...(name === 'codeBlock' ? { marks: '' } : {}),
     atom: isLeaf,
     draggable: isDraggable,
