@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ChevronDown, Minus, Plus } from 'lucide-react';
 import { m } from '../../paraglide/messages.js';
@@ -47,15 +47,19 @@ export function parseBookDisplay(value: string | null): BookDisplay {
 export function useBookDisplay() {
   const [display, setDisplay] = useState<BookDisplay>(() => ({ ...defaultBookDisplay }));
   const [storageAvailable, setStorageAvailable] = useState(true);
+  const current = useRef(display);
   useEffect(() => {
     try {
-      setDisplay(parseBookDisplay(window.localStorage.getItem(bookDisplayStorageKey)));
+      const loaded = parseBookDisplay(window.localStorage.getItem(bookDisplayStorageKey));
+      current.current = loaded;
+      setDisplay(loaded);
     } catch {
       setStorageAvailable(false);
     }
   }, []);
   const change = (patch: Partial<BookDisplay>) => {
-    const next = { ...display, ...patch };
+    const next = { ...current.current, ...patch };
+    current.current = next;
     setDisplay(next);
     try {
       window.localStorage.setItem(bookDisplayStorageKey, JSON.stringify({ version: 1, ...next }));
@@ -88,7 +92,7 @@ export function BookDisplaySettings({ display, change, storageAvailable, locale 
             variant={display[key] === value ? 'secondary' : 'outline'}
             className={control}
             aria-pressed={display[key] === value}
-            onClick={() => change({ ...display, [key]: value })}
+            onClick={() => change({ [key]: value })}
           >
             {title}
           </Button>
