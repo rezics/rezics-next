@@ -10,11 +10,12 @@ import {
   confirmCollectionBulk,
   pageCollectionBulkManifest,
   previewCollectionBulk,
+  type CollectionBulkIntent,
   type CollectionBulkTarget,
 } from '../../src/library/collection-bulk-store.ts';
 import { executeCollectionAddTarget } from '../../src/library/collection-bulk-add.ts';
 import { executeCollectionRemoveTarget } from '../../src/library/collection-bulk-remove.ts';
-import type { BulkAdmission, BulkDependencies, TargetCommand } from '../../src/library/bulk-contract.ts';
+import type { BulkDependencies, TargetCommand } from '../../src/library/bulk-contract.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import {
@@ -37,7 +38,7 @@ afterAll(async () => {
 
 async function capture(
   actor: AccountActor,
-  request: BulkAdmission,
+  request: CollectionBulkIntent,
   targets: readonly CollectionBulkTarget[],
 ): Promise<{ command: TargetCommand; dependencies: BulkDependencies }> {
   const route = routeOf(actor.accountId)!;
@@ -222,7 +223,7 @@ test('remote add and remove receipts retain verified actor and curator roles wit
     {
       action: 'add_to_collection',
       collectionId: collection.id,
-      selection: { kind: 'explicit', targets: [{ subjectId }] },
+      selection: { kind: 'explicit' },
     },
     [target],
   );
@@ -245,7 +246,7 @@ test('remote add and remove receipts retain verified actor and curator roles wit
     {
       action: 'remove_from_collection',
       collectionId: collection.id,
-      selection: { kind: 'occurrences', memberIds: [member.memberId] },
+      selection: { kind: 'occurrences' },
     },
     [
       {
@@ -285,7 +286,7 @@ test('a sealed curator locator fence rolls back the remote target receipt and Co
     {
       action: 'add_to_collection',
       collectionId: collection.id,
-      selection: { kind: 'explicit', targets: [{ subjectId }] },
+      selection: { kind: 'explicit' },
     },
     [
       {
@@ -361,7 +362,7 @@ test('source erasure after capture prevents remote add and removal receipts and 
     {
       action: 'add_to_collection',
       collectionId: collection.id,
-      selection: { kind: 'explicit', targets: [{ subjectId: addSubjectId }] },
+      selection: { kind: 'explicit' },
     },
     [
       {
@@ -378,7 +379,7 @@ test('source erasure after capture prevents remote add and removal receipts and 
     {
       action: 'remove_from_collection',
       collectionId: collection.id,
-      selection: { kind: 'occurrences', memberIds: [member.memberId] },
+      selection: { kind: 'occurrences' },
     },
     [
       {
