@@ -6,7 +6,6 @@ import {
   currentCommandResources,
   currentCommandReceipt,
   runCommand,
-  withSingleCommandAttempt,
   DEFAULT_REQUEST_DEADLINE_MS,
   type CommandTransaction,
   type CommandBasis,
@@ -102,8 +101,8 @@ export async function admitIdentityTerminalCapture(
 }
 
 /** Two explicit phases: authenticated source discovery, released native drain,
- * then a newly authorized source attempt consuming that exact drain. Contention
- * remains unavailable; this adds no executor retry or module backoff loop.
+ * then a newly authorized source attempt consuming that exact drain. Core owns
+ * contention policy, including any enclosing single-attempt maintenance scope.
  */
 type PrincipalOptions = Parameters<typeof runCommand>[1];
 type LegacyOptions = {
@@ -137,12 +136,10 @@ export async function runIdentityTerminalCommand<T>(
     drained: new Map(),
   };
   const attempt = () => {
-    return scopes.run(scope, () =>
-      withSingleCommandAttempt(() => {
-        const selected = { ...options, deadline: scope.deadline };
-        return 'principal' in selected ? runCommand(pool, selected, body) : runCommand(pool, selected, body);
-      }),
-    );
+    return scopes.run(scope, () => {
+      const selected = { ...options, deadline: scope.deadline };
+      return 'principal' in selected ? runCommand(pool, selected, body) : runCommand(pool, selected, body);
+    });
   };
   try {
     return await attempt();
