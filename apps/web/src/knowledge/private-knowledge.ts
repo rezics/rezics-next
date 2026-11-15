@@ -30,6 +30,7 @@ export type KnowledgePrivateRead =
 
 export type KnowledgePrivateFailure =
   | { state: 'denied'; status: 401 | 403 }
+  | { state: 'invalid'; status: 400 | 422 }
   | { state: 'not-found'; status: 404 }
   | { state: 'conflict'; status: 412 }
   | { state: 'unavailable'; status: number }
@@ -201,6 +202,7 @@ function privateReadFailure(status: number): KnowledgePrivateRead {
 }
 
 function commandFailure(status: number): KnowledgePrivateFailure {
+  if (status === 400 || status === 422) return { state: 'invalid', status };
   if (status === 401 || status === 403) return { state: 'denied', status };
   if (status === 404) return { state: 'not-found', status: 404 };
   if (status === 412) return { state: 'conflict', status: 412 };

@@ -289,31 +289,49 @@ async function refreshKnowledgeSubtreeHeights(
   }
 }
 
-async function siblingAtPosition(
+type KnowledgeSibling = Readonly<{
+  placement_id: string;
+  document_id: string;
+  parent_id: string | null;
+  position: string;
+}>;
+
+async function knowledgeSiblings(
   tx: import('../command/command.ts').CommandTransaction,
   route: number,
   notebookId: string,
   parentId: string | null,
-  movingPlacementId: string,
-  beforePlacementId: string | null,
-  beforePosition: bigint | null,
-): Promise<Readonly<{ placement_id: string; position: string }> | null> {
-  const result = await tx.query<{ placement_id: string; position: string }>(
-    `SELECT placement_id,position::text AS position FROM content.knowledge_placement
-     WHERE route=$1 AND notebook_id=$2 AND parent_id IS NOT DISTINCT FROM $3
-       AND placement_id<>$4 AND ($5::numeric IS NULL OR (position,placement_id) < ($5,$6))
-     ORDER BY position DESC,placement_id DESC LIMIT 1`,
-    [route, notebookId, parentId, movingPlacementId, beforePosition?.toString() ?? null, beforePlacementId],
+  input: Readonly<{
+    omit?: string;
+    anchor?: { position: string; placementId: string };
+    direction: 'before' | 'from' | 'after';
+    limit: number;
+  }>,
+): Promise<readonly KnowledgeSibling[]> {
+  const values: (number | string)[] = [route, notebookId];
+  const parent = parentId === null ? 'placement.parent_id IS NULL' : `placement.parent_id=$${values.push(parentId)}`;
+  const omission = input.omit ? `AND placement.placement_id<>$${values.push(input.omit)}` : '';
+  const operator = input.direction === 'before' ? '<' : input.direction === 'from' ? '>=' : '>';
+  const anchor = input.anchor
+    ? `AND (placement.position,placement.placement_id) ${operator} ($${values.push(input.anchor.position)}::numeric,$${values.push(input.anchor.placementId)}::uuid)`
+    : '';
+  const order = input.direction === 'before' ? 'DESC' : 'ASC';
+  const result = await tx.query<KnowledgeSibling>(
+    `SELECT placement.placement_id,placement.document_id,placement.parent_id,placement.position::text AS position
+     FROM content.knowledge_placement placement
+     WHERE placement.route=$1 AND placement.notebook_id=$2 AND ${parent} ${omission} ${anchor}
+     ORDER BY placement.position ${order},placement.placement_id ${order}
+     LIMIT $${values.push(input.limit)}`,
+    values,
   );
-  return result.rows[0] ?? null;
+  return result.rows;
 }
 
 async function rebalanceKnowledgeSiblings(
   tx: import('../command/command.ts').CommandTransaction,
   route: number,
   notebookId: string,
-  parentId: string | null,
-  moving: KnowledgePlacementState,
+  moving: Readonly<Omit<KnowledgeSibling, 'position'> & { position: string | null }>,
   destinationParentId: string | null,
   beforePlacementId: string | null,
   beforePosition: bigint | null,
@@ -321,37 +339,20 @@ async function rebalanceKnowledgeSiblings(
   // Reuse the existing change budget on either side of the insertion. Each side
   // needs one unselected boundary row, even when the whole budget is spent there.
   const siblingLimit = KNOWLEDGE_REBALANCE_SIDE_LIMIT * 2;
-  const parameters = [
-    route,
-    notebookId,
-    parentId,
-    moving.placement_id,
-    beforePosition?.toString() ?? null,
-    beforePlacementId,
-  ];
-  const [leftResult, rightResult] = await Promise.all([
-    tx.query<{ placement_id: string; document_id: string; parent_id: string | null; position: string }>(
-      `SELECT placement_id,document_id,parent_id,position::text AS position FROM content.knowledge_placement
-       WHERE route=$1 AND notebook_id=$2 AND parent_id IS NOT DISTINCT FROM $3
-         AND placement_id<>$4 AND ($5::numeric IS NULL OR (position,placement_id) < ($5,$6))
-       ORDER BY position DESC,placement_id DESC LIMIT $7`,
-      [...parameters, siblingLimit + 1],
-    ),
-    beforePosition === null
-      ? Promise.resolve({
-          rows: [] as { placement_id: string; document_id: string; parent_id: string | null; position: string }[],
-        })
-      : tx.query<{ placement_id: string; document_id: string; parent_id: string | null; position: string }>(
-          `SELECT placement_id,document_id,parent_id,position::text AS position FROM content.knowledge_placement
-           WHERE route=$1 AND notebook_id=$2 AND parent_id IS NOT DISTINCT FROM $3
-             AND placement_id<>$4 AND (position,placement_id) >= ($5,$6)
-           ORDER BY position,placement_id LIMIT $7`,
-          [...parameters, siblingLimit + 1],
-        ),
+  const anchor =
+    beforePosition === null || beforePlacementId === null
+      ? undefined
+      : { position: beforePosition.toString(), placementId: beforePlacementId };
+  const page = { omit: moving.placement_id, limit: siblingLimit + 1 };
+  const [leftRows, rightRows] = await Promise.all([
+    knowledgeSiblings(tx, route, notebookId, destinationParentId, {
+      ...page,
+      direction: 'before',
+      ...(anchor ? { anchor } : {}),
+    }),
+    anchor ? knowledgeSiblings(tx, route, notebookId, destinationParentId, { ...page, direction: 'from', anchor }) : [],
   ]);
 
-  const leftRows = leftResult.rows;
-  const rightRows = rightResult.rows;
   if (beforePlacementId !== null && rightRows[0]?.placement_id !== beforePlacementId)
     throw new KnowledgeNotFoundError();
   const leftPositions = leftRows.map((row) => BigInt(row.position));
@@ -399,10 +400,15 @@ async function rebalanceKnowledgeSiblings(
         placementId: moving.placement_id,
         documentId: moving.document_id,
         oldParentId: moving.parent_id,
-        oldPosition: BigInt(moving.position),
+        oldPosition: moving.position === null ? null : BigInt(moving.position),
         parentId: destinationParentId,
         position,
-        action: moving.parent_id === destinationParentId ? 'placement_reordered' : 'placement_moved',
+        action:
+          moving.position === null
+            ? 'placement_added'
+            : moving.parent_id === destinationParentId
+              ? 'placement_reordered'
+              : 'placement_moved',
       });
       continue;
     }
@@ -555,15 +561,7 @@ export async function writeKnowledgeDocument(
     undefined,
     parentPlacementId === null ? [] : [parentPlacementId],
   );
-  const options = commandOptions(
-    actor,
-    route,
-    context,
-    kind,
-    notebookId,
-    receiptInput,
-    destinationAuthorization,
-  );
+  const options = commandOptions(actor, route, context, kind, notebookId, receiptInput, destinationAuthorization);
   const replay = await preflightCommandReceipt<KnowledgeWrittenDocument>(deps.pool, options);
   if (replay) return replay;
   let document: StoredBody;
@@ -597,8 +595,7 @@ export async function writeKnowledgeDocument(
       );
       const notebook = current.rows[0];
       if (!notebook || notebook.owner_account_id !== ownerId) throw new KnowledgeNotFoundError();
-      if (notebook.structure_revision_id !== expectedStructureRevisionId)
-        throw new RevisionPreconditionError();
+      if (notebook.structure_revision_id !== expectedStructureRevisionId) throw new RevisionPreconditionError();
       const parentId = parentPlacementId;
       let parentPath: readonly Readonly<{ placement_id: string; parent_id: string | null }>[] = [];
       if (parentId !== null) {
@@ -617,13 +614,32 @@ export async function writeKnowledgeDocument(
       }
       const currentRevisionNumber = BigInt(notebook.structure_revision_number);
       const nextRevisionNumber = currentRevisionNumber + 1n;
-      const nextPosition = await tx.query<{ position: string }>(
-        `SELECT COALESCE(MAX(position)+$4::numeric,0)::text AS position
-         FROM content.knowledge_placement
-         WHERE route=$1 AND notebook_id=$2 AND parent_id IS NOT DISTINCT FROM $3`,
-        [route, notebookId, parentId, KNOWLEDGE_ORDER_GAP.toString()],
-      );
-      const position = BigInt(nextPosition.rows[0]!.position);
+      const [last] = await knowledgeSiblings(tx, route, notebookId, parentId, { direction: 'before', limit: 1 });
+      const nextPosition = last ? BigInt(last.position) + KNOWLEDGE_ORDER_GAP : 0n;
+      const changes =
+        nextPosition > MAX_KNOWLEDGE_POSITION
+          ? await rebalanceKnowledgeSiblings(
+              tx,
+              route,
+              notebookId,
+              { placement_id: placementId, document_id: documentId, parent_id: null, position: null },
+              parentId,
+              null,
+              null,
+            )
+          : [
+              {
+                placementId,
+                documentId,
+                oldParentId: null,
+                oldPosition: null,
+                parentId,
+                position: nextPosition,
+                action: 'placement_added' as const,
+              },
+            ];
+      const added = changes.find((change) => change.placementId === placementId);
+      if (!added) throw new Error('Knowledge insertion did not produce its placement');
       await tx.query(
         `INSERT INTO content.knowledge_document(route,document_id,notebook_id,head_revision_id,created_transaction_id,created_at)
          VALUES ($1,$2,$3,$4,$5,$6)`,
@@ -654,7 +670,7 @@ export async function writeKnowledgeDocument(
       await tx.query(
         `INSERT INTO content.knowledge_placement(route,notebook_id,placement_id,document_id,parent_id,position)
          VALUES ($1,$2,$3,$4,$5,$6)`,
-        [route, notebookId, placementId, documentId, parentId, position.toString()],
+        [route, notebookId, placementId, documentId, parentId, added.position.toString()],
       );
       await saveKnowledgeStructureRevision(
         tx,
@@ -666,24 +682,33 @@ export async function writeKnowledgeDocument(
         time,
         'placement_added',
       );
-      const currentRoot = await knowledgeStructureRoot(tx, route, notebookId, parentId, currentRevisionNumber);
-      const rootPageId = await insertKnowledgeOrderEntry(tx, route, notebookId, currentRoot, {
-        placementId,
-        documentId,
-        parentId,
-        position,
-      });
+      let rootPageId = await knowledgeStructureRoot(tx, route, notebookId, parentId, currentRevisionNumber);
+      for (const change of changes) {
+        if (change.oldPosition === null) continue;
+        const removed = await removeKnowledgeOrderEntry(tx, route, notebookId, rootPageId, {
+          placementId: change.placementId,
+          position: change.oldPosition,
+        });
+        if (!removed.removed) throw new Error('Knowledge insertion could not find its previous ordered placement');
+        rootPageId = removed.rootPageId;
+      }
+      for (const change of changes) {
+        rootPageId = await insertKnowledgeOrderEntry(tx, route, notebookId, rootPageId, {
+          placementId: change.placementId,
+          documentId: change.documentId,
+          parentId,
+          position: change.position,
+        });
+        if (change.oldPosition !== null)
+          await tx.query(
+            `UPDATE content.knowledge_placement SET position=$4
+             WHERE route=$1 AND notebook_id=$2 AND placement_id=$3`,
+            [route, notebookId, change.placementId, change.position.toString()],
+          );
+        await saveKnowledgeStructureChange(tx, route, notebookId, nextRevisionNumber, change);
+      }
       await saveKnowledgeStructureRoot(tx, route, notebookId, parentId, nextRevisionNumber, rootPageId);
       await saveKnowledgeStructureRoot(tx, route, notebookId, placementId, nextRevisionNumber, null);
-      await saveKnowledgeStructureChange(tx, route, notebookId, nextRevisionNumber, {
-        placementId,
-        documentId,
-        oldParentId: null,
-        oldPosition: null,
-        parentId,
-        position,
-        action: 'placement_added',
-      });
       await refreshKnowledgeSubtreeHeights(tx, route, notebookId, [parentPath]);
       await tx.query(
         `UPDATE content.knowledge_notebook SET structure_revision_id=$3,structure_revision_number=$4
@@ -829,14 +854,12 @@ export async function moveKnowledgePlacement(
 
       const sameParent = moving.parent_id === input.destinationParentPlacementId;
       if (sameParent) {
-        const next = await tx.query<{ placement_id: string }>(
-          `SELECT placement_id FROM content.knowledge_placement
-           WHERE route=$1 AND notebook_id=$2 AND parent_id IS NOT DISTINCT FROM $3
-             AND (position,placement_id) > ($4,$5)
-           ORDER BY position,placement_id LIMIT 1`,
-          [route, notebookId, moving.parent_id, moving.position, placementId],
-        );
-        const currentNext = next.rows[0]?.placement_id ?? null;
+        const [next] = await knowledgeSiblings(tx, route, notebookId, moving.parent_id, {
+          direction: 'after',
+          anchor: { position: moving.position, placementId },
+          limit: 1,
+        });
+        const currentNext = next?.placement_id ?? null;
         if (currentNext === input.beforePlacementId)
           return noEffect({ notebookId, placementId, structureRevisionId: notebook.structure_revision_id });
       }
@@ -844,15 +867,14 @@ export async function moveKnowledgePlacement(
       const currentRevisionNumber = BigInt(notebook.structure_revision_number);
       const nextRevisionNumber = currentRevisionNumber + 1n;
       const currentPosition = BigInt(moving.position);
-      const left = await siblingAtPosition(
-        tx,
-        route,
-        notebookId,
-        input.destinationParentPlacementId,
-        placementId,
-        input.beforePlacementId,
-        beforePosition,
-      );
+      const [left] = await knowledgeSiblings(tx, route, notebookId, input.destinationParentPlacementId, {
+        direction: 'before',
+        omit: placementId,
+        ...(beforePosition === null || input.beforePlacementId === null
+          ? {}
+          : { anchor: { position: beforePosition.toString(), placementId: input.beforePlacementId } }),
+        limit: 1,
+      });
       const leftPosition = left ? BigInt(left.position) : null;
       let nextPosition: bigint | null = null;
       if (beforePosition === null) {
@@ -871,7 +893,6 @@ export async function moveKnowledgePlacement(
           tx,
           route,
           notebookId,
-          input.destinationParentPlacementId,
           moving,
           input.destinationParentPlacementId,
           input.beforePlacementId,
