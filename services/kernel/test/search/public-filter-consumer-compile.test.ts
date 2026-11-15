@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { RELEASE_FORMAT, releaseDigest, type Release } from '@rezics/definitions';
 import { compilePublicFilterConsumerCapture } from '../../src/search/public-filter-consumer.ts';
 import { parseText } from '../../src/search/text.ts';
+import { createSearchSourceBindingAdapter } from '../../src/search/source-binding-adapter.ts';
 
 test('negative qualified alternatives retain qualifier keys independently of containing overflow properties', () => {
   const property = (name: string, qualifiers: string[] = []) => ({
@@ -34,6 +35,7 @@ test('negative qualified alternatives retain qualifier keys independently of con
     },
   };
   const id = '018f0000-0000-7000-8000-00a000000009';
+  const meaning = { release, digest: releaseDigest(release) };
   const compiled = compilePublicFilterConsumerCapture(
     {
       filterDocument: {
@@ -54,7 +56,7 @@ test('negative qualified alternatives retain qualifier keys independently of con
       sort: 'collections',
       size: 20,
     },
-    { release, digest: releaseDigest(release), type: 'schema:Book' },
+    meaning,
   );
   expect(compiled.dependencyKeys).toContainEqual({ kind: 'property', property: 'rezics:role' });
   expect(compiled.dependencyKeys).toContainEqual({ kind: 'property', property: 'schema:author' });
@@ -63,4 +65,6 @@ test('negative qualified alternatives retain qualifier keys independently of con
     expect(compiled.dependencyKeys).toContainEqual({ kind: 'order', order });
   expect(compiled.filterLeaves.find((leaf) => leaf.facet === 'statement')?.negated).toBe(true);
   expect(compiled.capture.overflowProperties).toEqual(['schema:author']);
+  const boundKeys = createSearchSourceBindingAdapter().deriveDependencyKeys(meaning, compiled.capture);
+  for (const key of compiled.dependencyKeys) expect(boundKeys).toContainEqual(key);
 });

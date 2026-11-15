@@ -19,6 +19,7 @@ import { validateSearchAfter } from './query-payload.ts';
 import { validatePublicSuggestionInput } from './public-suggestion-input.ts';
 import { compileText } from './text.ts';
 import { hasExactPublicFilterMeaning } from './public-filter-meaning.ts';
+import { publicFilterCaptureDependencies } from './public-filter-capture-dependencies.ts';
 
 function captureKeys(meaning: PublicFilterProjectionMeaning, input: SourceBindingCaptureInput) {
   if (!hasExactPublicFilterMeaning(meaning))
@@ -78,19 +79,9 @@ function searchKeys(
       throw new TypeError('Compiled capture differs from its retained input');
   }
   const keys: PublicFilterDependencyKey[] = [
-    { kind: 'order', order: input.sort },
-    { kind: 'type' },
+    ...publicFilterCaptureDependencies(input, filter?.leaves ?? []),
     { kind: 'field', field: 'id' },
   ];
-  for (const leaf of filter?.leaves ?? []) {
-    if (leaf.facet === 'type') keys.push({ kind: 'type' });
-    else {
-      keys.push({ kind: 'property', property: leaf.property });
-      for (const qualifier of leaf.qualifiers ?? []) keys.push({ kind: 'property', property: qualifier.property });
-    }
-  }
-  if (Array.isArray(input.overflowProperties))
-    for (const property of input.overflowProperties) keys.push({ kind: 'property', property });
   if (text)
     keys.push(...(['labels', 'aliases', 'descriptions'] as const).map((field) => ({ kind: 'field' as const, field })));
   if (['name', 'collections', 'rating'].includes(input.sort))
