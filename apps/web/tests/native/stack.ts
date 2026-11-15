@@ -726,7 +726,7 @@ async function startStack(): Promise<
     reportStackProgress('Native web stack startup: preparing SQL analysis');
     // Give Reylo an owned cache and the migrated template for SQL analysis.
     runtimeDirectory = await mkdtemp(join(tmpdir(), 'native-kernel-runtime-'));
-    const { writeReyloProject } = await import('../../../../services/kernel/scripts/check.ts');
+    const { writeReyloProject } = await import('../../../../services/kernel/scripts/reylo-project.ts');
     // PostgreSQL cannot clone a template while other sessions are connected to it.
     reportStackProgress('Native web stack startup: disconnecting template sessions');
     await disconnectTemplateSessions(process.env.DATABASE_URL!);
