@@ -173,7 +173,7 @@ resource references remain rejected, without recursion. No query-time account se
   exact Subject and a current readable opening revision citing the selected question. Review threads need
   their own qualifying citation and readable target; posts/replies also need their own disclosure. Accounts,
   Collections and ordinary discussions have no membership. Private votes, scores, credits, grain and attached
-  reason targets cannot witness membership. See [feeds](feeds.md#native-question-witness-preparation) for the
+  reason targets cannot witness membership. See [feeds](feeds.md#native-review-question-witnesses) for the
   same-primary kind/Space conjunction, independent witness threads, bounded choices and sparse frontier.
   The closed parser and native resolution bridge are implemented; native population/default feed activation
   remains unfinished. Existing engine admission rejects the leaf until that branch is installed.

@@ -79,7 +79,7 @@ Private personal-list score adoption uses the released conditional question, can
 
 ### Wikidata and media
 
-Complete cited Wikidata values pass public Definitions validation. Every present timezone, before and after value is retained, including zero; absence stays absent. Quantity amount, bounds, unit and qualifiers remain exact. Unsupported, unresolved or narrowed qualification withholds the entire measurement. Unresolved keys remain cited external identifiers. The [source mapping contract](../../packages/conversion/README.md#exact-quantity-handoff) and [ordinary importer contract](../../services/importer/README.md#registered-source-vocabulary-mapping) retain source-to-native cases and route bounds.
+Complete cited Wikidata values pass public Definitions validation. Every present timezone, before and after value is retained, including zero; absence stays absent. Quantity amount, bounds, unit and qualifiers remain exact. Unsupported, unresolved or narrowed qualification withholds the entire measurement. Unresolved keys remain cited external identifiers. The [source mapping contract](../../packages/conversion/README.md#exact-quantity-handoff) and [ordinary importer contract](../../services/importer/README.md#sources-mapping-and-writes) retain source-to-native cases and route bounds.
 
 Media is separate from metadata and a 202 is only a reservation. Rights-holder and via-source credit are required; metadata licences do not grant image rights. Content re-encodes available images, serves only current variants and enforces takedown. Unavailable, rejected or fenced media is not success; pending and unknown outcomes retain exact evidence and unresolved commands for bounded recovery.
 

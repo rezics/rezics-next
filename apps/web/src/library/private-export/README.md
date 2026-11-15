@@ -1,7 +1,7 @@
 # Web private Library export consumer guide
 
 Web owns the signed-in `/library/export` visit. Commerce owns the capture, its source fence, authorization, expiry,
-limits and native record meanings. The [native contract](../../../../docs/library-export.md) is authoritative for those
+limits and native record meanings. The [native contract](../../../../../docs/library-export.md) is authoritative for those
 details.
 
 Decision: new captures use version 4; stored version 1, 2 and 3 captures keep their original sections, record shapes,

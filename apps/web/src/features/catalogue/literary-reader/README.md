@@ -3,7 +3,7 @@
 The ordinary page mounts released Book, BookSeries and bf:Instance identities and their actual released descendants.
 It consumes the existing Subject, disclosed related summaries, current native descriptor and directed relation
 windows. A member remains its supplied Type and statement; no count, title or numbering string creates volumes,
-editions, integer positions or progress. The owning contract is [Subject pages](../../../../../docs/subject-pages.md#read-a-literary-work).
+editions, integer positions or progress. The owning contract is [Subject pages](../../../../../../docs/subject-pages.md#read-a-literary-work).
 
 The native descriptor's existing literary admission supplies Type ancestry, property labels and direction results.
 

@@ -27,7 +27,7 @@ Current native source is `services/kernel/src/access/gates/`:
   binding calls that exact route independently of OpenAPI discovery. It validates the closed response, safe viewer
   context, action advice, ordered unique groups and common timestamp. `invalid_cursor`, denied and unavailable reads
   remain distinct; Start again drops only the opaque cursor and keeps the visit and page limit. The native contract is owned by
-  [platform gates](../../../../../../services/kernel/src/access/gates/README.md#current-management-configuration).
+  [platform gates](../../../../../services/kernel/src/access/gates/README.md#current-management-configuration).
 - The separate generated OpenAPI response remains viewer-filtered operation discovery and may supply only partial
   visible-group context. It is optional for this page and cannot establish management, open or close authority.
   Native action advice comes only from the management response's independent checks against each installed command

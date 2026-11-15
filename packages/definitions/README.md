@@ -825,7 +825,7 @@ Source conventions:
   Quantities alone permit minimum and maximum bounds. Amounts and optional
   `lowerBound` and `upperBound` are signed decimal strings; bounds enclose
   the amount and obey the property's limits. `exact: true` forbids both bounds
-  through the [exact quantity variant](#exact-quantities). APIs preserve those strings.
+  through the [exact quantity variant](#public-classification-and-genuine-measurements). APIs preserve those strings.
   `qualifiers` is a space-separated string of existing slot names.
 - Patterns are allowed only on `string`, `external-id`, and `monolingualtext`.
   Every source pattern must compile with JavaScript's `u` flag, contain at most
