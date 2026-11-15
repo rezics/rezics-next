@@ -40,7 +40,7 @@ type ArchiveTestManifest = {
 type ArchiveTestRecord = { section: string; [key: string]: unknown };
 type ArchiveTestArtifact = { manifest: ArchiveTestManifest; records: ArchiveTestRecord[] };
 type ArchiveInspectionRow = { resolution: string };
-type ArchiveOccurrence = { evidence: { subject_id: string; amount: string } };
+type ArchiveOccurrence = { evidence: { subject_id: string; amount: string | null } };
 type ArchiveProgressMeasure = { unit: string; amount: string; total: string };
 let f: NativeProfileFixture, owner: Awaited<ReturnType<NativeProfileFixture['identity']>>, other: typeof owner;
 let artifact: ArchiveTestArtifact;
@@ -418,12 +418,21 @@ test('actual installed export retains independent holdings, all pins and exact d
 });
 
 test('installed final manifest, counts, envelopes and admission bounds are mandatory', () => {
+  const holding = (a: ArchiveTestArtifact) => {
+    const row = a.records.find((record) => record.section === 'holdings');
+    if (!row) throw new Error('Missing exported holding');
+    return row;
+  };
   const reject = (change: (a: ArchiveTestArtifact) => void, recount = false) => {
     const a = structuredClone(artifact);
     change(a);
     if (recount) {
       a.manifest.rows = a.records.length;
       a.manifest.recordBytes = a.records.reduce((n, r) => n + bytes(r).length, 0);
+      a.manifest.sectionTotals = Object.fromEntries(a.manifest.sections.map((section) => {
+        const rows = a.records.filter((row) => row.section === section);
+        return [section, { rows: rows.length, recordBytes: rows.reduce((n, row) => n + bytes(row).length, 0) }];
+      }));
     }
     refusesArchive(bytes(a), 'invalid_request');
   };
@@ -441,16 +450,16 @@ test('installed final manifest, counts, envelopes and admission bounds are manda
     a.manifest.sections = a.manifest.sections.filter((section) => section !== 'holdings');
   });
   reject((a) => {
-    a.records[0]!.acquired_on = '2020-02';
+    holding(a).acquired_on = '2020-02';
   }, true);
   reject((a) => {
-    a.records[0]!.acquired_on = '2021-02-29';
+    holding(a).acquired_on = '2021-02-29';
   }, true);
   reject((a) => {
-    delete a.records[0]!.disposed_on;
+    delete holding(a).disposed_on;
   }, true);
   reject((a) => {
-    a.records[0]!.note = 'x'.repeat(1001);
+    holding(a).note = 'x'.repeat(1001);
   }, true);
   reject((a) => {
     const session = a.records.find((record) => record.section === 'sessions');
