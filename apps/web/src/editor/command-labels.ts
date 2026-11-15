@@ -1,6 +1,8 @@
 import { editorCommandIds, type EditorPreferenceCommand } from '@rezics/editor/preferences';
 import { localizedBehaviorLabels, localizedTableLabels } from './behavior-labels';
 import { localizedEditorWorkbench } from './labels';
+import { localizedFormattingLabels } from './formatting-labels';
+import { localizedMediaLabels } from './media-labels';
 import { m } from '../paraglide/messages.js';
 
 /** Settings exposes the portable command vocabulary using the same localized action labels as the workbench. */
@@ -9,6 +11,8 @@ export function localizedEditorCommands() {
   const names = {
     ...localizedBehaviorLabels(),
     ...localizedTableLabels(),
+    ...localizedFormattingLabels(),
+    ...localizedMediaLabels(),
     paragraph: m.editor_paragraph(),
     heading1: m.editor_heading_1(),
     heading2: m.editor_heading_2(),

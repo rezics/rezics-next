@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { editorCommandIds } from '@rezics/editor/preferences';
 import { DEFAULT_NOTIFICATIONS } from '../../src/access/notification-kinds.ts';
 import { withReadingPreferencePage, type AccountPreferences } from '../../src/access/preferences.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
@@ -107,6 +108,7 @@ test('editor preferences share native version, no-op, receipt and reset semantic
   expect(initial.value.editor).toEqual({});
   const editor = {
     typeface: 'serif',
+    customFont: 'Writer 😀',
     textSize: 20,
     lineSpacing: 1.8,
     writingWidth: 80,
@@ -117,7 +119,7 @@ test('editor preferences share native version, no-op, receipt and reset semantic
     pasteMode: 'plain',
     pinnedCommands: ['bold', 'table'],
     hiddenCommands: ['image'],
-    commandOrder: ['table', 'bold'],
+    commandOrder: [...editorCommandIds],
     keyboardBindings: { bold: 'Mod-Shift-j' },
   };
   const key = Bun.randomUUIDv7();
@@ -147,6 +149,8 @@ test('editor preferences share native version, no-op, receipt and reset semantic
   expect((await call(person.accountId, undefined, { expectedVersion: 3, editor })).response.status).toBe(401);
   expect((await call(person.accountId, other.bearer, { expectedVersion: 3, editor })).response.status).toBe(403);
   for (const invalid of [
+    { customFont: '\ud800' },
+    { customFont: '\udc00' },
     { textSize: 99 },
     { unknown: true },
     { pinnedCommands: ['bold', 'bold'] },

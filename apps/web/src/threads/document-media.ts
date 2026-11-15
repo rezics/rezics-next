@@ -22,7 +22,8 @@ export type DocumentMediaRead =
   | { kind: 'ready'; images: ReadonlyMap<string, DocumentImagePresentation> }
   | { kind: 'unavailable' };
 
-export const DOCUMENT_MEDIA_LIMIT = 32;
+import { DOCUMENT_MEDIA_LIMIT } from './document-media-limit';
+export { DOCUMENT_MEDIA_LIMIT } from './document-media-limit';
 const id = v.pipe(v.string(), v.length(36), v.regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/));
 const dimension = v.pipe(v.number(), v.integer(), v.minValue(1));
 const coordinate = v.pipe(v.number(), v.minValue(0), v.maxValue(1));

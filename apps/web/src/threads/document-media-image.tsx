@@ -3,6 +3,7 @@ import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
 import type { DocumentImagePresentation } from './document-media';
 import { DocumentImageInspector } from './document-image-inspector';
+import type { DocumentImageOccurrence } from '@rezics/editor/reader';
 
 type DocumentImageProps = {
   image: DocumentImagePresentation | null;
@@ -12,6 +13,7 @@ type DocumentImageProps = {
   mediaId?: string;
   /** Callers without a mounted disclosed-reader lifetime can leave inspection disabled. */
   inspectable?: boolean;
+  occurrence?: DocumentImageOccurrence;
 };
 
 /** Render only delivered derivative facts. The existing Worker route independently authorizes the bytes. */
@@ -22,7 +24,7 @@ export function NativeDocumentImage(props: DocumentImageProps) {
   return <DocumentImageDisclosure key={identity} {...props} />;
 }
 
-function DocumentImageDisclosure({ image, alt, locale, mediaId, inspectable = true }: DocumentImageProps) {
+function DocumentImageDisclosure({ image, alt, locale, mediaId, occurrence, inspectable = true }: DocumentImageProps) {
   const [phase, setPhase] = useState<'initial' | 'ready' | 'failed' | 'retrying'>('initial');
   const figure = useRef<HTMLElement | null>(null);
   const current = useRef<HTMLImageElement | null>(null);
@@ -102,8 +104,13 @@ function DocumentImageDisclosure({ image, alt, locale, mediaId, inspectable = tr
             src={coverSrc(image.id, fallback.format, fallback.width)}
             srcSet={srcSet(webp.length ? webp : avif)}
             sizes={sizes}
-            width={fallback.width}
-            height={fallback.height}
+            width={occurrence?.width ?? fallback.width}
+            height={occurrence?.height ?? fallback.height}
+            title={occurrence?.title ?? undefined}
+            style={{
+              ...(occurrence?.width ? { width: occurrence.width } : {}),
+              ...(occurrence?.height ? { height: occurrence.height } : {}),
+            }}
             alt={alt}
             loading={recovering ? 'eager' : 'lazy'}
             decoding="async"

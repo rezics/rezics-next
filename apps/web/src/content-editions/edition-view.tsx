@@ -127,8 +127,13 @@ export function ContentEditionReader({
           <DocumentBody
             document={published.body}
             locale={locale}
-            renderImage={({ mediaId, alt }) => (
-              <NativeDocumentImage image={images.get(mediaId) ?? null} alt={alt} locale={locale} />
+            renderImage={(occurrence) => (
+              <NativeDocumentImage
+                image={images.get(occurrence.mediaId) ?? null}
+                occurrence={occurrence}
+                alt={occurrence.alt}
+                locale={locale}
+              />
             )}
           />
           <footer className="space-y-4 border-t border-border pt-6 text-sm text-muted-foreground">

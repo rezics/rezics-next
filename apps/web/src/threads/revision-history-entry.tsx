@@ -116,10 +116,11 @@ function RevisionInspector({
           document={revision.body}
           mentions={mentions}
           locale={locale}
-          renderImage={({ mediaId, alt }) => (
+          renderImage={(occurrence) => (
             <NativeDocumentImage
-              image={revisionDocumentImage(documentMedia, revision, mediaId)}
-              alt={alt}
+              image={revisionDocumentImage(documentMedia, revision, occurrence.mediaId)}
+              occurrence={occurrence}
+              alt={occurrence.alt}
               locale={locale}
             />
           )}

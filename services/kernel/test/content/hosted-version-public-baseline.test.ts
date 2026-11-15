@@ -1,7 +1,11 @@
 import { expect, setDefaultTimeout, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import type { HostedCommandDependencies } from '../../src/content/hosted-chapters-commands.ts';
-import type { HostedChapterTarget, OrderedHostedPlacement } from '../../src/content/hosted-chapters-model.ts';
+import type {
+  HostedChapterTarget,
+  HostedPlacement,
+  OrderedHostedPlacement,
+} from '../../src/content/hosted-chapters-model.ts';
 import {
   captureHostedPublicBaselineInput,
   readHostedPublicBaselineInputPage,
@@ -67,7 +71,7 @@ async function transaction<T>(
 
 async function publish(
   fixture: Awaited<ReturnType<typeof hostedChaptersFixture>>,
-  placements: readonly Record<string, unknown>[],
+  placements: readonly HostedPlacement[],
 ) {
   const created = await fixture.retained.structure(placements);
   const released = await fixture.retained.publication(
@@ -110,7 +114,7 @@ test('receives a sealed legacy publication in replayable pages for its first poi
     const visibleChildId = fixture.newOccurrenceId();
     const topLevelIds = Array.from({ length: 19 }, () => fixture.newOccurrenceId());
     const unavailableId = fixture.newOccurrenceId();
-    const placements: Record<string, unknown>[] = [
+    const placements: HostedPlacement[] = [
       { occurrenceId: partId, parentId: null, position: 0, title: 'Public section', kind: 'part' },
       {
         occurrenceId: visibleChildId,
@@ -125,7 +129,7 @@ test('receives a sealed legacy publication in replayable pages for its first poi
         parentId: null,
         position: index + 1,
         title: `Public chapter ${index}`,
-        kind: 'chapter',
+        kind: 'chapter' as const,
         target: publicTarget,
       })),
       {

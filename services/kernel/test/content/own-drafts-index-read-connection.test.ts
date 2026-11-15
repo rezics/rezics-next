@@ -48,13 +48,14 @@ test('draft read commits its repeatable-read snapshot and preserves query accoun
       },
       connection: (dispatch) => dispatch(),
     },
-    () =>
-      expect(
+    async () => {
+      await expect(
         visit(
           poolFor(async () => current.client),
           Date.now() + 1000,
         ),
-      ).resolves.toBe('current source'),
+      ).resolves.toBe('current source');
+    },
   );
   expect(current.statements).toEqual([begin, 'SELECT source', 'COMMIT']);
   expect(statements).toEqual(current.statements);

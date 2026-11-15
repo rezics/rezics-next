@@ -1,6 +1,9 @@
 import { expect, test } from 'bun:test';
 import {
   editorPreferenceDefaults,
+  editorCommandIds,
+  editorPreferenceLimits,
+  editorPreferenceJSONBUpperBytes,
   editorPreferencesEqual,
   editorShortcutIssue,
   normalizeEditorShortcut,
@@ -9,6 +12,28 @@ import {
   validateEditorPreferences,
   validateEditorPreferencePatch,
 } from '../src/preferences.ts';
+
+test('the complete command catalogue can be ordered and stays within native JSONB storage bounds', () => {
+  expect(editorCommandIds.length).toBeGreaterThan(64);
+  expect(
+    validateEditorPreferences({
+      commandOrder: [...editorCommandIds],
+      pinnedCommands: [...editorCommandIds],
+      hiddenCommands: [...editorCommandIds],
+    }),
+  ).toBe(true);
+  expect(editorPreferenceLimits.commands).toBe(editorCommandIds.length);
+  expect(editorPreferenceJSONBUpperBytes).toBeLessThanOrEqual(editorPreferenceLimits.storageBytes);
+  expect(normalizeEditorShortcut('Ctrl-Meta-Alt-Shift-ArrowRight')).toBe('Ctrl-Meta-Alt-Shift-ArrowRight');
+});
+
+test('font preferences retain valid Unicode and reject JSONB-invalid surrogate strings without normalization', () => {
+  expect(validateEditorPreferences({ customFont: 'Noto 😀 漢字' })).toBe(true);
+  for (const customFont of ['\ud800', '\udc00', 'before\ud800after', 'font\u0000name']) {
+    expect(validateEditorPreferences({ customFont })).toBe(false);
+    expect(validateEditorPreferencePatch({ customFont })).toBe(false);
+  }
+});
 
 test('preference equality ignores JSON object key order but retains ordered commands and sparse overrides', () => {
   const first = {

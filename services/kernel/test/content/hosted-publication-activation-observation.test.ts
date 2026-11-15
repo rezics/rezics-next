@@ -148,7 +148,7 @@ test('target observations run outside command checkout and stale pages cannot ad
   }));
   const revised = await f.native.command(`${path}:revise`, { expectedRevisionId: initial.revisionId, placements }, 200);
   const deps = dependencies(f.native.pool);
-  for (const { target } of ranked) {
+  for (const target of ranked) {
     const context = commandContext();
     await nativeRequest(f.native.author, deps, context, (actor, request) =>
       issueRevisionDisclosure(deps, actor, { catalogueId, target }, request),
@@ -157,7 +157,7 @@ test('target observations run outside command checkout and stale pages cannot ad
   const stageId = await prepareCandidate(catalogueId, path, revised.revisionId, release.revisionId);
   await startActivation(deps, catalogueId, stageId);
 
-  const pageEndTarget = ranked[18]!.target;
+  const pageEndTarget = ranked[18]!;
   const observe = activationEligibility.observeHostedPublicationActivationTarget;
   let arrivals = 0;
   let bothPrepared!: () => void;

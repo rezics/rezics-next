@@ -3,6 +3,7 @@ import type { DocumentProfile } from '@rezics/document';
 import type { Transaction } from '@tiptap/pm/state';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { editorSnapshot } from './rich-text-editor-snapshot.ts';
+import { registerEditorImagePreview, pruneEditorImagePreviews } from './editor-media-runtime.ts';
 
 /** src is an opaque media id; resolving it to a URL belongs to the document renderer. */
 export type UploadedImage = { src: string; width?: number; height?: number };
@@ -138,6 +139,7 @@ export function editorUploads(
         if (node.type.name === 'image' && node.attrs.id === entry.id) present = true;
       });
       if (!inserted || !present) throw new Error('Image insertion rejected');
+      if (!existing) registerEditorImagePreview(editor, entry.id, image.src, entry.file);
       entry.phase = 'stored';
       if (!current()) return;
       publish();
@@ -180,10 +182,13 @@ export function editorUploads(
     },
     snapshot(document: ProseMirrorNode) {
       if (!active()) return;
+      const present = new Set<string>();
       document.descendants((node) => {
+        if (node.type.name === 'image') present.add(node.attrs.id);
         const entry = entries.get(node.attrs.id);
         if (node.type.name === 'image' && entry?.phase === 'stored') remove(entry);
       });
+      pruneEditorImagePreviews(editor, present);
       report();
     },
     retry(id: string) {

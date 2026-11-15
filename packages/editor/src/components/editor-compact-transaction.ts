@@ -1,11 +1,14 @@
 import { AddMarkStep, RemoveMarkStep, ReplaceStep, StepResult, type Mappable, type Step } from '@tiptap/pm/transform';
-import { Node, type ResolvedPos } from '@tiptap/pm/model';
+import { Node, type Mark, type MarkType, type ResolvedPos } from '@tiptap/pm/model';
 import { Transaction, type Command, type EditorState } from '@tiptap/pm/state';
 import { buildTextDocument, TextDocumentIndex, type ClosedTextEdit } from './editor-text-document.ts';
 import { maxSnapshotBytes } from './rich-text-editor-snapshot.ts';
 import { indexedNativeMapping, withNativeMappingIndex } from './editor-native-mapping.ts';
+import { cloneFormattingStep, FormattingPrefix, nativeFormattingStep } from './editor-formatting-prefix.ts';
+import { editorSnapshot } from './rich-text-editor-snapshot.ts';
+import { collectNativeMarkRemoval } from './editor-native-marks.ts';
 
-type Prefix = { segment: Segment; count: number };
+type Prefix = { segment: Segment | FormattingPrefix; count: number };
 type Segment = {
   base: Node;
   index: TextDocumentIndex;
@@ -29,6 +32,7 @@ const textReplayBatches = new WeakSet<Transaction>();
 const ownedSteps = new WeakSet<Step>();
 const metrics = new WeakMap<Transaction, Metrics>();
 const nativeMaybeStep = Transaction.prototype.maybeStep;
+const nativeAddMark = Transaction.prototype.addMark;
 // Pinned PM 1.4.4 SPI: use the native recorder so its selection/marks flags remain maintained by PM.
 const nativeAddStep = (
   Transaction.prototype as unknown as {
@@ -41,28 +45,35 @@ const nativeResolveNoCache = (
   }
 ).resolveNoCache;
 
-function mapOwnedStep(this: ReplaceStep, mapping: Mappable): ReplaceStep | null {
-  const mapped = ReplaceStep.prototype.map.call(this, indexedNativeMapping(mapping));
+function mapOwnedStep(this: Step, mapping: Mappable): Step | null {
+  const mapped = (Object.getPrototypeOf(this) as Step).map.call(this, indexedNativeMapping(mapping));
   return mapped ? ownStep(mapped) : null;
 }
 
-function mergeOwnedStep(this: ReplaceStep, other: Step): Step | null {
-  const merged = ReplaceStep.prototype.merge.call(this, other);
-  return merged instanceof ReplaceStep ? ownStep(merged) : merged;
+function mergeOwnedStep(this: Step, other: Step): Step | null {
+  const merged = (Object.getPrototypeOf(this) as Step).merge.call(this, other);
+  return merged ? ownStep(merged) : null;
 }
 
-function ownStep(step: ReplaceStep): ReplaceStep {
+function ownStep<T extends Step>(step: T): T {
+  if (ownedSteps.has(step)) return step;
   Object.defineProperties(step, { map: { value: mapOwnedStep }, merge: { value: mergeOwnedStep } });
   ownedSteps.add(step);
   return step;
+}
+
+function unmodifiedStep(step: Step): boolean {
+  return (
+    ownedSteps.has(step) ||
+    !['apply', 'invert', 'getMap', 'map', 'merge', 'toJSON'].some((key) => Object.hasOwn(step, key))
+  );
 }
 
 function nativeTextStep(step: Step): step is ReplaceStep {
   return (
     Object.getPrototypeOf(step) === ReplaceStep.prototype &&
     !(step as Step & { structure?: boolean }).structure &&
-    (ownedSteps.has(step) ||
-      !['apply', 'invert', 'getMap', 'map', 'merge', 'toJSON'].some((key) => Object.hasOwn(step, key)))
+    unmodifiedStep(step)
   );
 }
 
@@ -127,6 +138,7 @@ export function compactTransaction(state: EditorState): Transaction {
   let observed: { logical: Node; real: Node } | null = { logical, real: state.doc };
   let recording = false;
   let segment: Segment | null = null;
+  let formatting: FormattingPrefix | null = null;
   let proof = true;
 
   const materialize = (node: Node): Node => {
@@ -139,9 +151,13 @@ export function compactTransaction(state: EditorState): Transaction {
     }
     const prefix = prefixes.get(node);
     if (!prefix) return node;
-    const edits = prefix.segment.edits.slice(0, prefix.count);
-    if (prefix.segment.direction === 'down') edits.reverse();
-    const real = buildTextDocument(prefix.segment.base, edits, maxSnapshotBytes);
+    let real: Node;
+    if (prefix.segment instanceof FormattingPrefix) real = prefix.segment.document(prefix.count);
+    else {
+      const edits = prefix.segment.edits.slice(0, prefix.count);
+      if (prefix.segment.direction === 'down') edits.reverse();
+      real = buildTextDocument(prefix.segment.base, edits, maxSnapshotBytes);
+    }
     stats.materializations++;
     cache.set(node, real);
     if (cache.size > 2) cache.delete(cache.keys().next().value!);
@@ -160,7 +176,7 @@ export function compactTransaction(state: EditorState): Transaction {
       logical = value;
     },
   });
-  const prefixNode = (owner: Segment, count: number): Node => {
+  const prefixNode = (owner: Segment | FormattingPrefix, count: number): Node => {
     const node = Object.create(Node.prototype) as Node;
     Object.defineProperties(node, {
       type: { value: owner.base.type, enumerable: true },
@@ -179,6 +195,7 @@ export function compactTransaction(state: EditorState): Transaction {
   const ordinary = (step: Step): StepResult => {
     publicDoc();
     segment = null;
+    formatting = null;
     const count = transaction.steps.length;
     const result = nativeMaybeStep.call(transaction, step);
     if (transaction.steps.length !== count) {
@@ -194,6 +211,37 @@ export function compactTransaction(state: EditorState): Transaction {
   };
   Object.defineProperty(transaction, 'maybeStep', {
     value(step: Step): StepResult {
+      if (nativeFormattingStep(step, state.schema) && unmodifiedStep(step)) {
+        if (!formatting) {
+          formatting = new FormattingPrefix(publicDoc());
+          segment = null;
+        }
+        const inverse = formatting.append(step, unmodifiedStep);
+        if (!inverse) return ordinary(step);
+        const before = logical;
+        const native = ownStep(cloneFormattingStep(step, state.schema));
+        const cached = ownStep(inverse);
+        Object.defineProperty(native, 'invert', {
+          value(doc: Node) {
+            if (doc === before) {
+              stats.cachedInversions++;
+              return cached;
+            }
+            return (Object.getPrototypeOf(this) as Step).invert.call(this, doc);
+          },
+        });
+        const after = prefixNode(formatting, formatting.steps.length);
+        recording = true;
+        try {
+          nativeAddStep.call(transaction, native, after);
+        } finally {
+          recording = false;
+        }
+        stats.fastSteps++;
+        if (proof) trusted.add(transaction);
+        return StepResult.ok(after);
+      }
+      formatting = null;
       if (!nativeTextStep(step)) return ordinary(step);
       if (!segment) {
         const base = publicDoc();
@@ -250,12 +298,54 @@ export function compactTransaction(state: EditorState): Transaction {
       return StepResult.ok(after);
     },
   });
+  const markSource = (from: number, to: number): Pick<Node, 'nodesBetween'> => {
+    if (!formatting) {
+      formatting = new FormattingPrefix(publicDoc());
+      segment = null;
+    }
+    return formatting.markSource(from, to) ?? publicDoc();
+  };
+  Object.defineProperties(transaction, {
+    addMark: {
+      value(from: number, to: number, mark: Mark) {
+        const recorder = {
+          doc: markSource(from, to),
+          step: (step: Step) => {
+            transaction.step(step);
+            return recorder;
+          },
+        };
+        nativeAddMark.call(recorder as unknown as Transaction, from, to, mark);
+        return transaction;
+      },
+    },
+    removeMark: {
+      value(from: number, to: number, mark?: Mark | MarkType | null) {
+        collectNativeMarkRemoval(markSource(from, to), from, to, mark, (step) => transaction.step(step));
+        return transaction;
+      },
+    },
+  });
   return transaction;
 }
 
 /** Native history reads the same plugin state; only construction of its owned transaction changes. */
 export function compactHistoryState(state: EditorState): EditorState {
   return Object.create(state, { tr: { get: () => compactTransaction(state) } }) as EditorState;
+}
+
+/** Owned authored formatting producer; no caller-supplied identity token or document builder. */
+export function compactIdentityTransaction(state: EditorState, steps: readonly Step[]): Transaction | null {
+  const transaction = compactTransaction(state);
+  for (const step of steps) transaction.step(step);
+  const result = transaction.doc;
+  try {
+    editorSnapshot(result, state.schema.nodes.image ? 'blocks' : 'text');
+  } catch {
+    return null;
+  }
+  if (result.eq(state.doc)) return state.tr;
+  return transaction.setSelection(transaction.selection).setStoredMarks(state.storedMarks);
 }
 
 export function compactHistory(

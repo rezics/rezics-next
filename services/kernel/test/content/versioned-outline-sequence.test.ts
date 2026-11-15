@@ -293,13 +293,13 @@ test('ordinary and weighted selections share child frontiers without scanning la
     const access = batchWorkspace(snapshot, batches);
     const select = chapterOnly ? selectVersionedOutlineSequenceChapters : selectVersionedOutlineSequenceNodes;
     expect((await select(access, requests)).map((node) => node?.id ?? null)).toEqual([
-      values[0],
-      values[1],
-      values.at(-1),
-      values[1],
+      values[0]!,
+      values[1]!,
+      values.at(-1)!,
+      values[1]!,
       null,
       null,
-      chapterOnly ? null : emptyParts.ids[0],
+      chapterOnly ? null : emptyParts.ids[0]!,
       null,
     ]);
     expect(batches[0]).toEqual([seeded.rootId!, emptyParts.rootId!]);
@@ -331,7 +331,7 @@ test('boundary selections retain exact historical roots and split physical front
   const next = commit(seeded.nodes, edit);
   const boundaries = [0n, 2046n].map((rank) => ({ rootId: moved.rootId, rank }));
   expect((await selectVersionedOutlineSequenceNodes(batchWorkspace(next), boundaries)).map((node) => node!.id)).toEqual(
-    [seeded.ids[3], seeded.ids[2]],
+    [seeded.ids[3]!, seeded.ids[2]!],
   );
   expect(
     (
@@ -340,7 +340,7 @@ test('boundary selections retain exact historical roots and split physical front
         boundaries.map(({ rank }) => ({ rootId: seeded.rootId, rank })),
       )
     ).map((node) => node!.id),
-  ).toEqual([seeded.ids[0], seeded.ids[2046]]);
+  ).toEqual([seeded.ids[0]!, seeded.ids[2046]!]);
   expect(
     (await selectVersionedOutlineSequenceChapters(batchWorkspace(next), [{ rootId: moved.rootId, rank: 0n }]))[0]?.id,
   ).toBe(seeded.ids[3]);

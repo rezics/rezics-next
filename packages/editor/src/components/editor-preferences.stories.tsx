@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import type { EditorPreferences } from '../preferences.ts';
+import { editorCommandIds } from '../preferences.ts';
 import { EditorPreferencesPanel } from './editor-preferences.tsx';
 
 function SettingsDemo() {
@@ -83,5 +84,24 @@ export const ShortcutConflict: Story = {
     await userEvent.tab();
     await expect(canvas.getByRole('alert')).toHaveTextContent('This shortcut is already assigned to Bold.');
     await expect(shortcut).toHaveAttribute('aria-invalid', 'true');
+  },
+};
+
+function CompleteCatalogueDemo() {
+  const [value, setValue] = useState<EditorPreferences>({});
+  return (
+    <div className="mx-auto flex max-w-xl flex-col gap-4 p-4">
+      <EditorPreferencesPanel value={value} onChange={setValue} scope="device" />
+      <output aria-label="Ordered command count">{value.commandOrder?.length ?? 0}</output>
+    </div>
+  );
+}
+export const CompleteCatalogueOrder: Story = {
+  render: () => <CompleteCatalogueDemo />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.type(canvas.getByRole('searchbox', { name: 'Search editor preferences' }), 'Media Properties');
+    await userEvent.click(canvas.getByRole('button', { name: 'Move up: Media Properties' }));
+    await expect(canvas.getByLabelText('Ordered command count')).toHaveTextContent(String(editorCommandIds.length));
   },
 };
