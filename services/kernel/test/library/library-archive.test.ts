@@ -244,6 +244,15 @@ test('duplicate native rows and names cannot select repeated effects or guess la
   expect(decode(archive([named(label, 'Weekend'), named(randomUUID(), 'weekend')])).records).toHaveLength(2);
 });
 
+test('equal unit ID text stays independent across native fact families', () => {
+  const sessionId = randomUUID(), unitId = randomUUID();
+  const local = { section: 'units', session_id: sessionId, unit_id: unitId, unit_kind: 'local', added_at: at } as ArchiveRecord;
+  const episode = { ...local, unit_kind: 'episode' } as ArchiveRecord;
+  expect(decode(archiveFacts([local, episode])).records).toEqual([local, episode]);
+  refuses(archiveFacts([local, { ...local }]), 'duplicate_record');
+  refuses(archiveFacts([{ ...episode, unit_id: 'opaque-unit' }]), 'invalid_record');
+});
+
 test('native references and required shapes are validated without admitting stored authority', () => {
   refuses(archive([{ ...entry(first), subject_id_reference: reference(second) }]), 'invalid_record');
   refuses(archive([{ ...entry(first), revision: '7' }]), 'invalid_record');

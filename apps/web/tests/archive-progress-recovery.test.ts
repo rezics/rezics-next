@@ -26,6 +26,7 @@ const review: Review = {
     amount: '0',
     additionalMeasures: [],
     completedUnitCount: 0,
+    episodeCompletedCount: 0,
     state: 'active',
     sourceRevision: 2,
     versionSubjectId: null,

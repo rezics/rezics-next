@@ -134,6 +134,12 @@ export function RecoveryReview({ review, operands }: { review: Review; operands:
               : m.library_archive_present_profile_unsupported()}
           </p>
         </Fact>
+        <Fact title={m.library_archive_progress_local_count()}>{review.historical.completedUnitCount}</Fact>
+        <Fact title={m.library_archive_progress_episode_count()}>
+          {review.historical.episodeCompletedCount === undefined
+            ? m.library_archive_progress_count_unknown()
+            : review.historical.episodeCompletedCount}
+        </Fact>
         <Fact title={m.library_archive_present_session_state()}>
           <p>{progressStateLabel(review.historical.state)}</p>
           <p className="text-sm text-muted-foreground">{m.library_archive_present_state_help()}</p>
@@ -170,7 +176,11 @@ export function RecoveryReview({ review, operands }: { review: Review; operands:
       {review.current.mode === 'completed_units' || review.completedUnits.length ? (
         <section className="space-y-3" aria-label={m.library_archive_progress_units()}>
           <h3 className="font-semibold">{m.library_archive_progress_units()}</h3>
-          <p>{m.library_archive_progress_unit_help({ count: review.historical.completedUnitCount })}</p>
+          <p>
+            {review.historical.episodeCompletedCount === undefined
+              ? m.library_archive_progress_count_unknown()
+              : m.library_archive_progress_unit_help({ count: review.historical.episodeCompletedCount })}
+          </p>
           <ol className="space-y-2">
             {review.completedUnits.map((unit, index) => (
               <li key={unit.unitId} className="rounded-md border p-3">

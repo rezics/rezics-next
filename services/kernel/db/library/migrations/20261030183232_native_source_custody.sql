@@ -68,7 +68,7 @@ BEGIN
     r := item.route;
     IF TG_TABLE_NAME IN ('collection','collection_member') THEN
       k := 'collection'; owner := item.collection_id;
-    ELSIF TG_TABLE_NAME IN ('progress_unit','progress_change') THEN
+    ELSIF TG_TABLE_NAME IN ('progress_unit','progress_episode','progress_change') THEN
       k := 'account';
       SELECT account_id INTO owner FROM library.progress_session
         WHERE route=r AND session_id=item.session_id;

@@ -204,6 +204,48 @@ afterAll(async () => {
   await workClient?.close();
   await db?.close();
 });
+test('local and Episode unit facts retain equal IDs and independent counters under the capture fence', async () => {
+  const unitIds = subjectIds.filter((_, index) => index !== 5);
+  const unitId = unitIds[0]!;
+  let captured: { exportId: string; first: string } | undefined;
+  try {
+    await sql`INSERT INTO library.progress_unit(route,session_id,unit_id,added_at) SELECT ${route},${sparse},u,'2020-02-03 04:05:06.123456+00' FROM unnest(${unitIds}::text[]) u`;
+    await sql`INSERT INTO library.progress_episode(route,session_id,episode_subject_id,added_at) SELECT ${route},${sparse},u,'2021-03-04 05:06:07.654321+00' FROM unnest(${unitIds}::uuid[]) u`;
+    await sql`UPDATE library.progress_session SET completed_unit_count=19,episode_completed_count=17 WHERE route=${route} AND session_id=${sparse}`;
+    captured = await capture();
+    const records: ArchiveRecord[] = [];
+    let next: string | null = captured.first;
+    let manifest: unknown;
+    while (next) {
+      const page = await get(`/v1/libraryExports/${captured.exportId}/pages?cursor=${encodeURIComponent(next)}`);
+      records.push(...page.records);
+      next = page.next;
+      if (page.manifest) manifest = page.manifest;
+    }
+    const artifact = Buffer.from(JSON.stringify({ manifest, records }));
+    const decoded = decodeLibraryArchive(artifact);
+    expect(decoded.records).toEqual(records);
+    const units = decoded.records.filter((row) => row.section === 'units' && row.session_id === sparse);
+    expect(units).toHaveLength(36);
+    expect(new Set(units.map((row) => JSON.stringify([row.unit_kind, row.unit_id]))).size).toBe(36);
+    const matching = units.filter((row) => row.unit_id === unitId);
+    expect(matching).toHaveLength(2);
+    expect(matching.map((row) => row.unit_kind)).toEqual(['local', 'episode']);
+    expect(matching.map((row) => row.unit_id)).toEqual([unitId, unitId]);
+    expect(decoded.records.find((row) => row.session_id === sparse && row.section === 'sessions'))
+      .toMatchObject({ completed_unit_count: 19, episode_completed_count: 17 });
+    await sql`UPDATE library.progress_episode SET added_at=added_at+interval '1 second' WHERE route=${route} AND session_id=${sparse} AND episode_subject_id=${unitId}`;
+    expect(await get(`/v1/libraryExports/${captured.exportId}`)).toMatchObject({ state: 'stale', first: null });
+    expect(await get(`/v1/libraryExports/${captured.exportId}/pages?cursor=${encodeURIComponent(captured.first)}`))
+      .toMatchObject({ state: 'stale', records: [], manifest: null });
+  } finally {
+    if (captured) expect((await request('DELETE', `/v1/libraryExports/${captured.exportId}`)).status).toBe(204);
+    await sql`DELETE FROM library.progress_unit WHERE route=${route} AND session_id=${sparse} AND unit_id=ANY(${unitIds}::text[])`;
+    await sql`DELETE FROM library.progress_episode WHERE route=${route} AND session_id=${sparse} AND episode_subject_id=ANY(${unitIds}::uuid[])`;
+    await sql`UPDATE library.progress_session SET completed_unit_count=2,episode_completed_count=0 WHERE route=${route} AND session_id=${sparse}`;
+  }
+});
+
 test('native owner export streams independent persisted facts, preserves dates, and retries original identity', async () => {
   expect((await request('POST', '/v1/libraryExports', 'anonymous')).status).toBe(401);
   const original = await capture(key);

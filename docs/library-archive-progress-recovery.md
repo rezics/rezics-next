@@ -34,8 +34,8 @@ to itself; an old source ID or reference is evidence, not permission to redirect
 
 Typed kernel/client declarations expose CopyArchiveProgressPage, CopyArchiveProgressUnitPage,
 CopyArchiveProgressReview, CopyArchiveProgressApplication and CopyArchiveProgressResult. Web can bind these
-methods after their installed declarations are present. Web319 remains the only episode checklist, Web320 the
-measure editor and Web323 the export interface. This contract adds no DTO adapter or checklist surface.
+methods after their installed declarations are present. The existing episode checklist, measure editor and
+export interface retain their owners. This contract adds no DTO adapter or checklist surface.
 
 ## Supported and unsupported facts
 
@@ -45,8 +45,8 @@ measure editor and Web323 the export interface. This contract adds no DTO adapte
 | Primary scalar amount/total                | Owner selects a current profile unit. Current profile rules validate total and amount independently; exact decimal text is passed through the existing native create/record commands. Missing amount remains absent and zero remains zero.                                                                                                       |
 | Additional scalar measures                 | Each archived measure is reviewed independently against its selected current unit. Valid measures are created and recorded under the shared current Session revision. Unknown source units, absent fields, rejected amounts/totals and unmapped measures stay visible as unsupported evidence; they do not invalidate another supported measure. |
 | Cursor locator/position                    | Current cursor_position unit must be admitted. A present locator and position are applied together through the native record command; absent or incomplete values are not filled in.                                                                                                                                                             |
-| Completed unit identities                  | Only exact selected IDs under the occurrence are eligible. The current profile must admit completed_units/episode; the existing direct current schema:isPartOf membership seam decides each ID. Detached, inaccessible, malformed and unselected IDs are not added.                                                                              |
-| Completed-unit count                       | Preserved for review. A count never expands a range or creates identities. When fewer supported IDs exist than the count, only admitted IDs are applied and the review reports the unsupported remainder.                                                                                                                                        |
+| Completed unit identities                  | Only exact selected IDs explicitly recorded as canonical Episode facts under the occurrence are eligible. Local IDs, even UUID-shaped values, and unspecified origins remain unsupported evidence. The current profile must admit completed_units/episode; the existing direct current schema:isPartOf membership seam decides each ID. Detached, inaccessible, malformed and unselected IDs are not added.                                                                              |
+| Completed-unit count                       | Both the local and canonical Episode counters are preserved independently for review. Only the Episode counter describes this recovery path; an absent counter stays unknown. A count never expands a range or creates identities. When fewer supported IDs exist than the count, only admitted IDs are applied and the review reports the unsupported remainder.                                                                                                                                        |
 | State                                      | Archived active stays active. completed and abandoned use the actual native terminal transition after supported values. Retired or unknown states have no recovery plan.                                                                                                                                                                         |
 | Historical dates                           | Source start, finish and last-change timestamps remain separately visible and are listed as unsupported. Native Session and transition times use their current command times.                                                                                                                                                                    |
 | Version Subject, revision, pin and history | The old version Subject is displayed as unsupported mapping. Archived IDs, profile pins and revisions never authorize or choose commands. Exported progress History is not restored. No existing Session is corrected, retired or reopened.                                                                                                      |
@@ -60,6 +60,11 @@ claim complete historical recovery.
 Canonical manifest validation and per-section byte accounting belong to the
 [bounded copy adapter](library-copy-archive-recovery.md). Annotations, provenance, journals and provider evidence
 remain unsupported coverage here; only Session/unit records enter the existing progress evidence table.
+Equal unit ID text from different native fact families is retained by archive ordinal and origin, without
+coalescing the facts. Only explicitly identified Episode facts enter membership review; the receiver still proves
+exact current direct membership independently. Scalar/cursor recovery retains a separate canonical Episode fact
+set as unsupported rather than converting it into an amount or a manual completed-unit count.
+
 Recovery uses persisted original native operands, key and checkpoint contracts. No archive evidence changes review
 epochs, acknowledgement, current profile/Subject admission or partial outcomes.
 
@@ -103,7 +108,7 @@ archive/review/application evidence does not undo a native Session already accep
 | command retention | 8 KiB canonical JSON operands per application; at most 4,096 applications per upload                                                                                                                                              |
 | lifetime/cleanup  | 7-day expiry is eligibility, not timed physical deletion; each removal or terminal-erasure call deletes at most 100 indexed child rows, then a separate empty-root delete; the helper's returned `removed` count is children only |
 
-Parsing is O(U+N) under the byte/depth/record limits. Review uses one selected-occurrence lookup, at most I selected
+Parsing is O(U+N) under the byte/depth/record limits. Review uses one selected-occurrence lookup, at most 3I origin-distinguished selected
 unit rows, one current Subject/profile observation and final currentness fence, plus at most I bounded direct
 membership reads. It never scans retained owner history or arbitrary catalogue graphs.
 

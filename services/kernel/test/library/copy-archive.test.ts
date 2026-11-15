@@ -389,6 +389,9 @@ test('actual installed export retains independent holdings, all pins and exact d
   );
   expect(primary.evidence.additional_measures?.every((measure) => measure.amount === '4.125000')).toBe(true);
   const units = parsed.progress.filter((row) => row.evidence.section === 'units');
+  expect(units.every((row) => row.evidence.section === 'units' && row.evidence.unit_kind === 'episode')).toBe(true);
+  expect(parsed.progress.find((row) => row.sourceSessionId === archivedUnits.sessionId && row.evidence.section === 'sessions'))
+    .toMatchObject({ evidence: { completed_unit_count: 0, episode_completed_count: 2 } });
   expect(units.map((row) => row.evidence.section === 'units' && row.evidence.unit_id).sort()).toEqual(
     [archivedUnits.detachedId, archivedUnits.memberId].sort(),
   );

@@ -24,7 +24,7 @@ BEGIN
       IF TG_TABLE_NAME='collection' THEN
         attributed := item.curator_account_id;
       END IF;
-    ELSIF TG_TABLE_NAME IN ('progress_unit','progress_change') THEN
+    ELSIF TG_TABLE_NAME IN ('progress_unit','progress_episode','progress_change') THEN
       k := 'account';
       SELECT account_id INTO owner FROM library.progress_session
         WHERE route=r AND session_id=item.session_id;
