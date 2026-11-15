@@ -97,12 +97,11 @@ export async function postPublicationFixture() {
             board_id: string;
             visibility: string;
             availability: string;
-          }>({
-            text: `SELECT thread_id,first_post_id,board_id,visibility,availability
+          }>(
+            `SELECT thread_id,first_post_id,board_id,visibility,availability
                  FROM content.thread WHERE route=$1 AND thread_id=$2`,
-            values: [target.route, target.id],
-            query_timeout: 5000,
-          })
+            [target.route, target.id],
+          )
         ).rows;
         const boardId =
           stored[0]?.board_id ??
@@ -111,11 +110,10 @@ export async function postPublicationFixture() {
             : null);
         const boards = boardId
           ? (
-              await pool.query<{ realm_id: string | null }>({
-                text: 'SELECT realm_id FROM content.board WHERE route=$1 AND board_id=$2',
-                values: [routeOf(boardId), boardId],
-                query_timeout: 5000,
-              })
+              await pool.query<{ realm_id: string | null }>(
+                'SELECT realm_id FROM content.board WHERE route=$1 AND board_id=$2',
+                [routeOf(boardId), boardId],
+              )
             ).rows
           : [];
         const paths: { kind: string; path: string }[] = [{ kind: 'thread', path: `/v1/threads/${target.id}` }];
