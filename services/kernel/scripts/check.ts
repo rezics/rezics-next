@@ -690,7 +690,8 @@ function asFailureMessage(error: unknown): string {
 }
 
 /**
- * Typecheck, lint and format always run to completion for product failures, then every selected test file runs.
+ * Default mode completes typecheck, lint and format for product failures before selected tests. Tests-only mode
+ * keeps native setup, selected tests and product-policy failures while leaving compiler and quality unverified.
  * One final failure lists owned/global compiler diagnostics, lint/format and other product failures and the exact
  * failed files. Infrastructure (compiler exit without diagnostics, spawn failure, after-quality/test setup) stops at
  * that stage and keeps any product failures already collected visible.
