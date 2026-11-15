@@ -2,7 +2,6 @@ import { useContext, type ReactNode } from 'react';
 import type { OverviewValue, Section } from './overview';
 import { OverviewContext } from './overview-context';
 import { PageReadState } from './page-read-state';
-import { subjectViewHref } from '../../subject/load-subject';
 import { m } from '../../paraglide/messages.js';
 import { formatCount, type Count } from '../count';
 import { linkClass, linkColor } from './shared';
@@ -20,25 +19,7 @@ export function useOverview(id: unknown): { value: OverviewValue; section: Secti
   return { value, section: value.sections.get(typeof id === 'string' ? id : '') };
 }
 
-export function viewHref(value: OverviewValue, view: string, property?: string): string | null {
-  if (
-    value.agentBase !== undefined &&
-    property === undefined &&
-    (view === 'posts' || view === 'reviews' || view === 'collections')
-  )
-    return `${value.agentBase}/${view}`;
-  const href = value.subject
-    ? subjectViewHref(
-        { id: value.subject, label: value.subjectLabel || value.unlabelled },
-        value.locale,
-        view,
-        property === undefined ? '' : `?property=${encodeURIComponent(property)}`,
-      )
-    : null;
-  const realm = value.realm ?? (value.context?.population.kind === 'realm' ? value.context.population.id : undefined);
-  if (!href || !realm) return href;
-  return `${href}${href.includes('?') ? '&' : '?'}realm=${encodeURIComponent(realm)}`;
-}
+export { viewHref } from './overview-context';
 
 /** A preview section: a heading with its count, then the body, then a link to the full view when there is more. */
 export function Preview({
