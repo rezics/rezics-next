@@ -479,8 +479,41 @@ async function resolveCanonicalSubject(
   return resolved.subjectId;
 }
 
-async function verifyArchiveObservationGuard(
+async function verifyPersonalProfileGuard(
   dependencies: Dependencies,
+  account: AccountActor,
+  at: AuthoritativeTime,
+  subjectId: string,
+  guard: PersonalEntryArchiveObservationGuard['profileGuard'],
+  missing: () => Error = () => new LibraryNotFoundError(),
+): Promise<void> {
+  if (guard.subjectId !== subjectId) throw new LibraryConflictError();
+  const observation = await readLibraryProfileSourceObservation(
+    {
+      pool: dependencies.pool,
+      access: dependencies.access,
+      actor: account,
+      at,
+      deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
+    },
+    subjectId,
+  );
+  if (!observation) throw missing();
+  const { source, anchor } = observation;
+  if (source?.kind !== 'supported') throw new ProblemError('unsupported_library_profile');
+  if (
+    source.subjectId !== subjectId ||
+    anchor.identityEpoch.toString() !== guard.identityEpoch ||
+    anchor.acceptingType !== guard.acceptingType ||
+    anchor.requestedSubjectId !== guard.requestedSubjectId ||
+    canonicalize({ ...anchor.component, position: anchor.component.position.toString() }) !==
+      canonicalize(guard.component) ||
+    canonicalize(source.pin) !== canonicalize(guard.pin)
+  )
+    throw new LibraryConflictError();
+}
+
+async function verifyArchiveObservationGuard(
   tx: QueryClient,
   account: AccountActor,
   at: AuthoritativeTime,
@@ -558,29 +591,6 @@ async function verifyArchiveObservationGuard(
     !choicesMatchInput ||
     canonicalize(item.nativeOperands) !== canonicalize(requestInput) ||
     createHash('sha256').update(item.recordJson).digest('hex') !== guard.sourceFingerprint
-  )
-    throw new LibraryConflictError();
-
-  const observation = await readLibraryProfileSourceObservation(
-    {
-      pool: dependencies.pool,
-      access: dependencies.access,
-      actor: account,
-      at,
-      deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
-    },
-    subjectId,
-  );
-  if (!observation) throw new LibraryNotFoundError();
-  const { source, anchor } = observation;
-  if (source?.kind !== 'supported') throw new ProblemError('unsupported_library_profile');
-  if (
-    source.subjectId !== subjectId ||
-    anchor.identityEpoch.toString() !== guard.profileGuard.identityEpoch ||
-    anchor.acceptingType !== guard.profileGuard.acceptingType ||
-    anchor.requestedSubjectId !== guard.profileGuard.requestedSubjectId ||
-    canonicalize(anchor.component) !== canonicalize(guard.profileGuard.component) ||
-    canonicalize(source.pin) !== canonicalize(guard.profileGuard.pin)
   )
     throw new LibraryConflictError();
 }
@@ -706,8 +716,14 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
         input: entryPersonalAnnotationRequestInput(subjectId, input, admission?.input),
         async prepare(attempt) {
           try {
+            const currentSubject = await resolveCanonicalSubject(dependencies, account, subjectId, attempt.time);
+            const profileGuard = parsed.entryGuard?.profileGuard;
+            if (profileGuard)
+              await verifyPersonalProfileGuard(dependencies, account, attempt.time, currentSubject, profileGuard, () =>
+                new ProblemError('unsupported_library_profile'),
+              );
             return {
-              subjectId: await resolveCanonicalSubject(dependencies, account, subjectId, attempt.time),
+              subjectId: currentSubject,
               admit: await admission?.prepare(attempt.time),
             };
           } catch (error) {
@@ -783,30 +799,6 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
             currentEntry.revision !== parsed.entryGuard.currentRevision
           )
             throw new LibraryConflictError();
-          const profileGuard = parsed.entryGuard.profileGuard;
-          if (profileGuard) {
-            const observation = await readLibraryProfileSourceObservation(
-              {
-                pool,
-                access,
-                actor: account,
-                at: command.time,
-                deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
-              },
-              profileGuard.subjectId,
-            );
-            if (!observation || observation.source?.kind !== 'supported')
-              throw new ProblemError('unsupported_library_profile');
-            if (
-              observation.source.subjectId !== prepared.subjectId ||
-              observation.anchor.identityEpoch.toString() !== profileGuard.identityEpoch ||
-              observation.anchor.acceptingType !== profileGuard.acceptingType ||
-              observation.anchor.requestedSubjectId !== profileGuard.requestedSubjectId ||
-              canonicalize(observation.anchor.component) !== canonicalize(profileGuard.component) ||
-              canonicalize(observation.source.pin) !== canonicalize(profileGuard.pin)
-            )
-              throw new LibraryConflictError();
-          }
         } else {
           // Existing entries serialize annotation no-op checks with other addressed writes.
           await tx.query(
@@ -919,8 +911,12 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
         input: requestInput,
         async prepare(attempt) {
           try {
+            const currentSubject = await resolveCanonicalSubject(dependencies, account, subjectId, attempt.time);
+            const profileGuard = archiveGuard?.profileGuard;
+            if (profileGuard)
+              await verifyPersonalProfileGuard(dependencies, account, attempt.time, currentSubject, profileGuard);
             return {
-              subjectId: await resolveCanonicalSubject(dependencies, account, subjectId, attempt.time),
+              subjectId: currentSubject,
               admit: await admission?.prepare(attempt.time),
             };
           } catch (error) {
@@ -935,7 +931,6 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
         const time = authoritativeTimeValue(command.time);
         if (archiveGuard)
           await verifyArchiveObservationGuard(
-            dependencies,
             tx,
             account,
             command.time,
@@ -1051,8 +1046,12 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
         input: requestInput,
         async prepare(attempt) {
           try {
+            const currentSubject = await resolveCanonicalSubject(dependencies, account, subjectId, attempt.time);
+            const profileGuard = archiveGuard?.profileGuard;
+            if (profileGuard)
+              await verifyPersonalProfileGuard(dependencies, account, attempt.time, currentSubject, profileGuard);
             return {
-              subjectId: await resolveCanonicalSubject(dependencies, account, subjectId, attempt.time),
+              subjectId: currentSubject,
               admit: await admission?.prepare(attempt.time),
             };
           } catch (error) {
@@ -1066,7 +1065,6 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
         const route = requireRoute(account.accountId);
         if (archiveGuard)
           await verifyArchiveObservationGuard(
-            dependencies,
             tx,
             account,
             command.time,

@@ -295,6 +295,7 @@ beforeAll(async () => {
     const relation = body.subject.statements['schema:isPartOf'][0];
     if (!isRecord(relation) || typeof relation.id !== 'string')
       throw new Error('Episode response is missing its membership statement');
+    await f.awaitCurrentIdentity(body.subject.id);
     return { id: body.subject.id, relationId: relation.id };
   };
   const member = await createEpisode('Archive member'),

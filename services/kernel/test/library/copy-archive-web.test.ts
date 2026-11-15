@@ -135,7 +135,9 @@ beforeAll(async () => {
         'schema:isPartOf': [{ property: { id: 'schema:isPartOf' }, value: { type: 'value', content: subjectId } }],
       },
     });
-    return item.subject as { id: string; statements: Record<string, { id: string }[]> };
+    const subject = item.subject as { id: string; statements: Record<string, { id: string }[]> };
+    await f.awaitCurrentIdentity(subject.id);
+    return subject;
   };
   const member = await episode('Member'),
     detached = await episode('Detached');
