@@ -11,8 +11,6 @@ let fixture: Awaited<ReturnType<typeof createSourceStatisticIsolationFixture>>;
 beforeAll(async () => {
   fixture = await createSourceStatisticIsolationFixture();
   await fixture.grantImporter(fixture.actors.importer);
-  // Model the old database's transitional nullable column in this isolated DB.
-  await fixture.database.pool.query('ALTER TABLE rating.source_statistic_observation ALTER COLUMN seek_order DROP NOT NULL');
   await prepareSourceObservationMaterialization(fixture.database.pool);
 }, 180_000);
 afterAll(async () => { await fixture?.close(); });
@@ -57,6 +55,9 @@ async function facts(id: string) {
 }
 async function legacyHistory(unknownCount: number) {
   const id = await fixture.createSubject();
+  // Legacy conversion is offline. Deploy the canonical reader only after the
+  // final NOT NULL shape is restored; its compiled schema must stay authoritative.
+  await fixture.database.pool.query('ALTER TABLE rating.source_statistic_observation ALTER COLUMN seek_order DROP NOT NULL');
   const rows = Array.from({ length: unknownCount + 3 }, (_, index) => {
     const payload = index === unknownCount + 2 ? {
       sourceAlias: value.sourceAlias, sourceRecordId: String(10000 + index), count: 0, asOf: '2026-11-02',
@@ -95,9 +96,14 @@ test('a slot exceeding 256 observations resumes committed bounded steps without 
   )).rows[0]!;
   expect(saved.cursor_digest).toBe(first.cursor!.digest);
   expect(saved.processed).toBe('256');
-  await json(await fixture.request('GET', path(id) + '/observations', { actor: fixture.actors.importer }), 503);
+  const partial = (await fixture.database.pool.query(
+    `SELECT last_seek_order::text FROM rating.source_statistic_head
+     WHERE route=$1 AND subject_id=$2 AND source='bangumi'`, [key(id).route, id],
+  )).rows[0];
+  expect(partial.last_seek_order).toBe('0');
   const finished = await complete(id);
   expect(finished).toMatchObject({ done: true, observations: '303' });
+  await fixture.database.pool.query('ALTER TABLE rating.source_statistic_observation ALTER COLUMN seek_order SET NOT NULL');
   expect(await facts(id)).toEqual(before);
   const current = await inspect(id, '?history=true');
   expect(current.head.state).toBe('cleared');
@@ -132,6 +138,7 @@ test('erasure during a partial conversion removes progress without recreating th
   await expect(materializeSourceObservations(fixture.database.pool,key(id))).rejects.toThrow('original head changed');
   await resetSourceObservationMaterialization(fixture.database.pool,key(id));
   expect(await complete(id)).toMatchObject({ done: true,head: null });
+  await fixture.database.pool.query('ALTER TABLE rating.source_statistic_observation ALTER COLUMN seek_order SET NOT NULL');
   expect((await inspect(id)).head.state).toBe('empty');
   expect(await facts(id)).toEqual([]);
 });
