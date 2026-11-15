@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { waitForFocus } from '../../../ui/src/test/focus.ts';
 import { RichTextEditor } from './rich-text-editor.tsx';
+import { editorBrowserInput } from '../test/browser-input.ts';
 
 function demo(linked = false) {
   const initial = structuredClone(fromPlainText('A useful resource'));
@@ -123,7 +124,7 @@ export const EditAndRemoveLink: Story = {
     const text = canvas.getByRole('textbox', { name: 'Post' }).querySelector('a')!.firstChild!;
     window.getSelection()?.collapse(text, 1);
     document.dispatchEvent(new Event('selectionchange'));
-    const open = await canvas.findByRole('link', { name: 'Open link' });
+    const open = await canvas.findByRole('link', { name: 'Open link: https://example.com/original' });
     expect(open).toHaveAttribute('href', 'https://example.com/original');
     await userEvent.click(canvas.getByRole('button', { name: 'Edit link' }));
     const address = await canvas.findByRole('textbox', { name: 'URL' });
@@ -379,6 +380,8 @@ const inlineLifetime = inlineJourney();
 export const InlineLifetimeJourney: Story = {
   render: () => <inlineLifetime.Demo />,
   async play({ canvasElement }) {
+    const { events: userEvent } = await editorBrowserInput();
+    console.info('Editor inline lifetime: starting authored link journey');
     const canvas = within(canvasElement);
     const page = within(canvasElement.ownerDocument.body);
     const evidence = inlineLifetime.evidence;

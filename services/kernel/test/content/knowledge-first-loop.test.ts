@@ -175,8 +175,11 @@ test('one notebook keeps sibling documents private while its exact selected revi
   );
   expect(events.rows.map(({ type, subject }) => [type, subject])).toEqual([
     ['com.rezics.content.knowledge.notebook.created.v1', notebook.notebookId],
+    ['com.rezics.content.knowledge.structure.changed.v1', notebook.notebookId],
     ['com.rezics.content.knowledge.document.created.v1', selectedV1.documentId],
+    ['com.rezics.content.knowledge.structure.changed.v1', notebook.notebookId],
     ['com.rezics.content.knowledge.document.created.v1', sibling.documentId],
+    ['com.rezics.content.knowledge.structure.changed.v1', notebook.notebookId],
     ['com.rezics.content.knowledge.document.revised.v1', selectedV1.documentId],
     ['com.rezics.content.knowledge.publication.changed.v1', selectedV1.documentId],
     ['com.rezics.content.knowledge.publication.changed.v1', selectedV1.documentId],
@@ -186,19 +189,35 @@ test('one notebook keeps sibling documents private while its exact selected revi
     subjectId: subject.id,
     structureRevisionId: notebook.structureRevisionId,
   });
-  expect(events.rows[1]!.data).toEqual({
+  expect(events.rows[2]!.data).toEqual({
     notebookId: notebook.notebookId,
     documentId: selectedV1.documentId,
     placementId: selectedV1.placementId,
     revisionId: selectedV1.revisionId,
     structureRevisionId: selectedV1.structureRevisionId,
   });
-  expect(events.rows[3]!.data).toEqual({
+  expect([events.rows[1], events.rows[3], events.rows[5]].map((event) => event!.data)).toEqual([
+    {
+      notebookId: notebook.notebookId,
+      structureRevisionId: notebook.structureRevisionId,
+      revisionNumber: '1',
+      action: 'notebook_created',
+      placementId: null,
+    },
+    ...[selectedV1, sibling].map((document, index) => ({
+      notebookId: notebook.notebookId,
+      structureRevisionId: document.structureRevisionId,
+      revisionNumber: String(index + 2),
+      action: 'placement_added',
+      placementId: document.placementId,
+    })),
+  ]);
+  expect(events.rows[6]!.data).toEqual({
     documentId: selectedV1.documentId,
     previousRevisionId: selectedV1.revisionId,
     revisionId: selectedV2.revisionId,
   });
-  expect(events.rows.slice(4).map((event) => event.data.action)).toEqual(['selected', 'withdrawn']);
+  expect(events.rows.slice(7).map((event) => event.data.action)).toEqual(['selected', 'withdrawn']);
   expect(JSON.stringify(events.rows)).not.toContain('Private sibling');
 
   const receipts = await fixture.pool.query<{ command_kind: string; count: number }>(

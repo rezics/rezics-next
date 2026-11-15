@@ -78,6 +78,16 @@ const preferenceReceipt = (accountId: string, key: string) =>
     ],
   );
 
+const preferenceHistoryCounts = async (accountId: string) =>
+  (
+    await db.admin.query<{ receipts: number; events: number }>(
+      `SELECT count(*) FILTER (WHERE artifact_type='command-receipt/v1')::int AS receipts,
+              count(*) FILTER (WHERE artifact_type='outbox-event/v1')::int AS events
+       FROM core.history_locator WHERE account_route=$1 AND account_id=$2`,
+      [routeOf(accountId), accountId],
+    )
+  ).rows[0]!;
+
 beforeAll(async () => {
   scopes.push('account:read', 'account:update');
   db = await openGrowthDatabase();
@@ -131,8 +141,23 @@ test('editor preferences share native version, no-op, receipt and reset semantic
   expect((await call(person.accountId, person.bearer)).value).toEqual(saved.value);
   expect((await call(person.accountId, person.bearer, body, key)).value).toEqual(saved.value);
   const events = await preferenceEventCount(person.accountId);
-  const equal = await call(person.accountId, person.bearer, { expectedVersion: 1, editor });
+  const history = await preferenceHistoryCounts(person.accountId);
+  const equalKey = Bun.randomUUIDv7();
+  const equalBody = { expectedVersion: 1, editor };
+  const equal = await call(person.accountId, person.bearer, equalBody, equalKey);
+  expect(equal.response.status).toBe(200);
+  expect(equal.value).toEqual(saved.value);
   expect(equal.value.version).toBe(1);
+  const equalHistory = await preferenceHistoryCounts(person.accountId);
+  expect(equalHistory).toEqual({ receipts: history.receipts + 1, events: history.events });
+  const equalReplay = await call(person.accountId, person.bearer, equalBody, equalKey);
+  expect(equalReplay.response.status).toBe(200);
+  expect(equalReplay.value).toEqual(equal.value);
+  expect(equalReplay.response.headers.get('rezics-session-token')).toBe(
+    equal.response.headers.get('rezics-session-token'),
+  );
+  expect((await preferenceReceipt(person.accountId, equalKey)).rows).toHaveLength(1);
+  expect(await preferenceHistoryCounts(person.accountId)).toEqual(equalHistory);
   expect(await preferenceEventCount(person.accountId)).toBe(events);
   expect((await call(person.accountId, person.bearer, { expectedVersion: 0, editor: null })).response.status).toBe(409);
   const memberReset = await call(person.accountId, person.bearer, {
@@ -179,8 +204,17 @@ test('default and equal settings return durable eventless exact retries', async 
     { expectedVersion: 0, notifications: DEFAULT_NOTIFICATIONS },
   ]) {
     const key = Bun.randomUUIDv7();
+    const beforeHistory = await preferenceHistoryCounts(owner.accountId);
     const same = await call(owner.accountId, owner.bearer, patch, key);
+    expect(await preferenceHistoryCounts(owner.accountId)).toEqual({
+      receipts: beforeHistory.receipts + 1,
+      events: beforeHistory.events,
+    });
     const replay = await call(owner.accountId, owner.bearer, patch, key);
+    expect(await preferenceHistoryCounts(owner.accountId)).toEqual({
+      receipts: beforeHistory.receipts + 1,
+      events: beforeHistory.events,
+    });
     expect(same.response.status).toBe(200);
     expect(same.value).toEqual(read.value);
     expect(same.response.headers.get('rezics-session-token')).toBeTruthy();

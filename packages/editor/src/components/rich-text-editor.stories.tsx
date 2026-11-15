@@ -230,7 +230,7 @@ export const PasteSanitized: Story = {
     const clipboard = new DataTransfer();
     clipboard.setData(
       'text/html',
-      '<p onclick="run()" style="color:red">Safe <a href="javascript:run()">unsafe link</a> <a href="https://example.com">site</a></p><script>attack()</script><style>.secret{color:red}</style>',
+      '<p onclick="run()" style="color:#991b1b;background-color:#ffffff">Safe <a href="javascript:run()">unsafe link</a> <a href="https://example.com">site</a></p><script>attack()</script><style>.secret{color:red}</style>',
     );
     clipboard.setData('text/plain', 'Safe unsafe link site');
     await userEvent.paste(clipboard);

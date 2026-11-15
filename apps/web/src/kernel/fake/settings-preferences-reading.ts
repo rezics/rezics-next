@@ -1,3 +1,4 @@
+import { editorPreferencesEqual, mergeEditorPreferences } from '@rezics/editor/preferences';
 import type { FakeRoute } from '../fake-modules';
 import recording from '../recorded/settings-preferences.json';
 import {
@@ -12,8 +13,12 @@ import { readingAdviceFor, type ReadingIO } from '../../settings/reading-prefere
 export type ReadingScenario = 'default' | 'delayed' | 'lost' | 'conflict' | 'unavailable' | 'closed' | 'denied';
 
 /** Interface-only account preference responses, including historical receipts and an independent current version. */
-export function readingFixture(scenario: ReadingScenario = 'default') {
+export function readingFixture(
+  scenario: ReadingScenario = 'default',
+  namespaces: Pick<ReadingPreferences, 'editor' | 'shelf'> = {},
+) {
   const initial: ReadingPreferences = {
+    ...structuredClone(namespaces),
     spoilerLevel: 0,
     suitability: 'blur',
     version: 0,
@@ -42,6 +47,7 @@ export function readingFixture(scenario: ReadingScenario = 'default') {
           : { ok: false, reason: 'invalid', failure: { status: 422 } };
       if (scenario === 'conflict' && calls.length === 1) {
         current = {
+          ...current,
           spoilerLevel: 2,
           suitability: 'show',
           version: current.version + 1,
@@ -52,12 +58,22 @@ export function readingFixture(scenario: ReadingScenario = 'default') {
       if (scenario === 'delayed') await delay;
       if (input.expectedVersion !== current.version)
         return { ok: false, reason: 'conflict', failure: { status: 409, code: 'conflict' } };
+      const editor =
+        input.editor === undefined ? current.editor : mergeEditorPreferences(current.editor ?? {}, input.editor);
+      if (editor === null) return { ok: false, reason: 'invalid', failure: { status: 422 } };
       const next: ReadingPreferences = {
+        ...current,
+        ...(editor === undefined ? {} : { editor }),
         spoilerLevel: input.spoilerLevel ?? current.spoilerLevel,
         suitability: input.suitability ?? current.suitability,
         version: current.version,
       };
-      if (next.spoilerLevel !== current.spoilerLevel || next.suitability !== current.suitability) next.version++;
+      if (
+        next.spoilerLevel !== current.spoilerLevel ||
+        next.suitability !== current.suitability ||
+        !editorPreferencesEqual(next.editor ?? {}, current.editor ?? {})
+      )
+        next.version++;
       next.advice = readingAdviceFor(next);
       current = next;
       receipts.set(input.idempotencyKey, { input: JSON.stringify(input), preferences: { ...current } });
@@ -107,7 +123,7 @@ export function readingFixture(scenario: ReadingScenario = 'default') {
       return finish;
     },
     current: () => ({ ...current, notifications: { ...notifications } }),
-    concurrent: (values: Partial<Pick<ReadingPreferences, 'spoilerLevel' | 'suitability'>> = {}) => {
+    concurrent: (values: Partial<Pick<ReadingPreferences, 'spoilerLevel' | 'suitability' | 'editor'>> = {}) => {
       current = { ...current, ...values, version: current.version + 1 };
       current.advice = readingAdviceFor(current);
       notifications = { ...recording.notifications, reply: false, mention: true };

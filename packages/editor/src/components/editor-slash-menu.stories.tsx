@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { RichTextEditorLabels } from './editor-labels.ts';
 import { RichTextEditor } from './rich-text-editor.tsx';
+import { editorBrowserInput } from '../test/browser-input.ts';
 
 function demo(
   profile: DocumentProfile = 'blocks',
@@ -89,6 +90,7 @@ const scrolling = demo();
 export const FilterCommands: Story = {
   render: () => <filtered.Demo />,
   async play({ canvasElement }) {
+    const { events: userEvent } = await editorBrowserInput();
     const { canvas, textbox, menu } = await openMenu(canvasElement, '/');
     expect(menu.getByRole('option', { name: 'Heading 1' })).toBeVisible();
     expect(menu.getByRole('option', { name: 'Zweitschrift' })).toBeVisible();
@@ -104,6 +106,10 @@ export const FilterCommands: Story = {
     await waitFor(() => expect(menu.getAllByRole('option').map((option) => option.textContent)).toEqual(['Table']));
     expect(textbox).toHaveFocus();
     await userEvent.keyboard('{Tab}');
+    const tableDialog = within(
+      await within(canvasElement.ownerDocument.body).findByRole('dialog', { name: 'Insert table' }),
+    );
+    await userEvent.click(tableDialog.getByRole('button', { name: 'Insert table' }));
     await waitFor(() => expect(checked(filtered.latest.current)?.type).toBe('table'));
     expect(canvas.queryByRole('listbox')).toBeNull();
     expect(textbox).not.toHaveTextContent('/');
@@ -117,13 +123,16 @@ export const FilterCommands: Story = {
 export const KeyboardChoose: Story = {
   render: () => <keyboard.Demo />,
   async play({ canvasElement }) {
+    const { events: userEvent } = await editorBrowserInput();
     const { canvas, textbox, menu } = await openMenu(canvasElement, '/');
     const list = canvas.getByRole('listbox', { name: 'Insert block' });
     expect(textbox).toHaveFocus();
     expect(textbox).toHaveAttribute('aria-expanded', 'true');
     expect(textbox).toHaveAttribute('aria-controls', list.id);
-    await userEvent.keyboard('{ArrowDown}');
+    const choices = menu.getAllByRole('option');
     const heading = menu.getByRole('option', { name: 'Heading 2' });
+    await waitFor(() => expect(textbox).toHaveAttribute('aria-activedescendant', choices[0]!.id));
+    for (let index = 0; index < choices.indexOf(heading); index++) await userEvent.keyboard('{ArrowDown}');
     await waitFor(() => expect(textbox).toHaveAttribute('aria-activedescendant', heading.id));
     expect(heading).toHaveAttribute('aria-selected', 'true');
     expect(menu.getByRole('option', { name: 'Heading 1' })).toHaveAttribute('aria-selected', 'false');
@@ -213,7 +222,7 @@ export const FollowsScrolledCaret: Story = {
     const initialMenu = menu.getBoundingClientRect();
     expectWithinViewport(menu);
 
-    host.scrollTop = 32;
+    host.scrollTop += 32;
     await waitFor(() => {
       const caret = caretRect(textbox);
       const rect = menu.getBoundingClientRect();

@@ -173,7 +173,7 @@ export function SelectionMenu({
                       onFocus={() => {
                         if (menuIsCurrent()) setTabStop('turnInto');
                       }}
-                      onPointerDown={(event) => event.preventDefault()}
+                      onMouseDown={(event) => event.preventDefault()}
                     >
                       {labels.turnInto}
                       <ChevronDown aria-hidden="true" />

@@ -17,7 +17,7 @@ function demo(profile: 'blocks' | 'text' = 'blocks', delayed = false) {
   const upload: ImageUploader = (file, signal) =>
     new Promise((resolve, reject) => {
       calls.push({ file, signal, resolve, reject: () => reject(new Error('Offline')) });
-      if (!delayed) resolve({ src: 'media-landscape', width: 640, height: 480 });
+      if (!delayed) resolve({ src: 'media-landscape', width: 120, height: 90 });
     });
   function Demo() {
     const [value, setValue] = useState(initial);
@@ -80,7 +80,7 @@ async function choose(canvasElement: HTMLElement, alt = '') {
   const canvas = within(canvasElement);
   await caret(canvasElement);
   await userEvent.click(canvas.getByRole('button', { name: 'Image' }));
-  const panel = within(await canvas.findByRole('dialog', { name: 'Image' }));
+  const panel = within(await within(canvasElement.ownerDocument.body).findByRole('dialog', { name: 'Image' }));
   await userEvent.upload(panel.getByLabelText('Choose image file'), file());
   if (alt) await userEvent.type(panel.getByRole('textbox', { name: 'Alt text' }), alt);
   await userEvent.click(panel.getByRole('button', { name: 'Insert image' }));
@@ -137,7 +137,13 @@ export const AltText: Story = {
   async play({ canvasElement }) {
     const canvas = await choose(canvasElement, 'Original description');
     const page = within(canvasElement.ownerDocument.body);
-    await canvas.findByRole('img', { name: 'Original description' });
+    const loaded = (await canvas.findByRole('img', { name: 'Original description' })) as HTMLImageElement;
+    await waitFor(() => {
+      expect(loaded.complete && loaded.naturalWidth > 0).toBe(true);
+      const rectangle = loaded.getBoundingClientRect();
+      expect(rectangle.width).toBeCloseTo(120, 0);
+      expect(rectangle.height).toBeCloseTo(90, 0);
+    });
     await userEvent.click(canvas.getByRole('button', { name: 'Image properties' }));
     const field = page.getByRole('textbox', { name: 'Alt text' });
     expect(field).toHaveValue('Original description');
@@ -408,7 +414,7 @@ async function chooseLifetimeFile(canvasElement: HTMLElement, name: string, alt:
   } else {
     await userEvent.click(canvas.getByRole('button', { name: 'Image' }));
   }
-  const panel = within(await canvas.findByRole('dialog', { name: 'Image' }));
+  const panel = within(await within(canvasElement.ownerDocument.body).findByRole('dialog', { name: 'Image' }));
   await userEvent.upload(panel.getByLabelText('Choose image file'), file(name));
   if (alt) await userEvent.type(panel.getByRole('textbox', { name: 'Alt text' }), alt);
   await userEvent.click(panel.getByRole('button', { name: 'Insert image' }));
@@ -427,18 +433,19 @@ export const UploadImage: Story = {
   async play({ canvasElement }) {
     uploadLifetime.reset();
     const canvas = within(canvasElement);
+    const page = within(canvasElement.ownerDocument.body);
 
     await lifetimeCaret(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Image' }));
-    await canvas.findByRole('dialog', { name: 'Image' });
+    await page.findByRole('dialog', { name: 'Image' });
     await userEvent.click(canvas.getByRole('button', { name: 'Disable editor' }));
-    expect(canvas.queryByRole('dialog', { name: 'Image' })).toBeNull();
+    expect(page.queryByRole('dialog', { name: 'Image' })).toBeNull();
     await userEvent.click(canvas.getByRole('button', { name: 'Enable editor' }));
     await lifetimeCaret(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Image' }));
-    await canvas.findByRole('dialog', { name: 'Image' });
+    await page.findByRole('dialog', { name: 'Image' });
     await userEvent.click(canvas.getByRole('button', { name: 'Make read only' }));
-    expect(canvas.queryByRole('dialog', { name: 'Image' })).toBeNull();
+    expect(page.queryByRole('dialog', { name: 'Image' })).toBeNull();
     await userEvent.click(canvas.getByRole('button', { name: 'Allow editing' }));
 
     let textbox = await chooseLifetimeFile(canvasElement, 'button.png', 'Button description');
