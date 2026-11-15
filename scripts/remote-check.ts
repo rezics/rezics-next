@@ -1960,8 +1960,12 @@ def hold_lease():
                 except Exception: pass
     for item in captured:
         try:
-            path=LEASE_ROOT/'slots'/(item['name']+'.memory');info=path.stat()
-            if (info.st_dev,info.st_ino)!=(item['memoryDevice'],item['memoryInode']):
+            path=LEASE_ROOT/'slots'/(item['name']+'.memory');info=path.lstat()
+            lock=LEASE_ROOT/'slots'/(item['name']+'.lock');lock_info=lock.lstat();held=os.fstat(item['fd'])
+            if (path.is_symlink() or lock.is_symlink() or
+                    (lock_info.st_dev,lock_info.st_ino)!=(item['device'],item['inode']) or
+                    (held.st_dev,held.st_ino)!=(item['device'],item['inode']) or
+                    (info.st_dev,info.st_ino)!=(item['memoryDevice'],item['memoryInode'])):
                 lease_note('reservation path replaced; foreign memory record retained');code=75;continue
             path.unlink()
         except FileNotFoundError: pass
@@ -8641,7 +8645,7 @@ async function stopPreparedRun(prepared: PreparedRun): Promise<void> {
           prepared.host.address,
           stopRunScript(prepared.id),
         ],
-        { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' },
+        { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', env: process.env },
       );
       const [code, output] = await boundedTextChild(
         child,

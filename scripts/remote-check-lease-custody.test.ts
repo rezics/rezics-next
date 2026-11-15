@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { cleanupScript, leaseCustodyCheckScript, leaseHolderProgram, slotScript, supervisorStopProgram } from './remote-check.ts';
 
@@ -208,5 +208,19 @@ test('stale sweep and ordinary client-final cleanup preserve kernel-proved live 
     expect(f.proof().status).toBe(0);
     await f.holder.stdin.end(); writeFileSync(join(f.directory, 'finish'), ''); await f.owner.exited;
     expect(await f.holder.exited, await f.stderr).toBe(0);
+  } finally { await f.close(); }
+});
+
+
+test('terminal release does not unlink a symlink installed over the original byte record while waiting', async () => {
+  const f = await fixture();
+  try {
+    await f.holder.stdin.end(); await Bun.sleep(50);
+    const memory = join(f.hostRoot, 'slots/0.memory');
+    renameSync(memory, memory+'.original'); symlinkSync(memory+'.original', memory);
+    writeFileSync(join(f.directory, 'finish'), ''); await f.owner.exited;
+    expect(await f.holder.exited, await f.stderr).toBe(75);
+    expect(existsSync(memory)).toBe(true);
+    expect(readFileSync(memory, 'utf8')).toBe('4294967296\n');
   } finally { await f.close(); }
 });
