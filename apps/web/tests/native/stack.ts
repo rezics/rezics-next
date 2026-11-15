@@ -30,6 +30,7 @@ import {
 } from './lifecycle.ts';
 import type { WorkClient } from '../../../../services/kernel/src/work/client.ts';
 import type { OpenSearch } from '../../../../services/kernel/src/search/opensearch.ts';
+import type { ReyloAnalysisPreparation } from '../../../../services/kernel/scripts/reylo-cache.ts';
 
 export type NativeCredentials = { authorization: string; cookie?: string };
 export type NativeKernelRequest = {
@@ -132,6 +133,7 @@ type WebProcess = {
 
 const webRoot = resolve(import.meta.dir, '../..');
 const repositoryRoot = resolve(webRoot, '../..');
+const kernelRoot = resolve(repositoryRoot, 'services/kernel');
 const nativeWebsiteHost = 'web.native.rezics.com';
 const nativeAuthTestIssuer = process.env.NATIVE_AUTH_TEST_ISSUER;
 
@@ -540,6 +542,74 @@ async function startOwnedPostgres(): Promise<{
   return socketDirectory ? { container, databaseUrl, socketDirectory } : { container, databaseUrl };
 }
 
+/** Published owned template: stable `/rezics` on dialable TCP, with no socket host. */
+function ownedTcpTemplateUrl(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (
+    url.protocol !== 'postgres:' ||
+    url.username !== 'rezics' ||
+    url.hostname !== '127.0.0.1' ||
+    url.pathname !== '/rezics'
+  )
+    return false;
+  const entries = [...url.searchParams.entries()];
+  return entries.length === 1 && entries[0]![0] === 'sslmode' && entries[0]![1] === 'disable';
+}
+
+/**
+ * Reuse the host analysis for this process's migrated TCP template.
+ * Returns undefined when the shared producer cannot handle the input; schema and generation failures propagate.
+ */
+async function adoptOwnedKernelAnalysisCache(
+  container: string | undefined,
+  socketDirectory: string | undefined,
+  incomingDatabaseUrl: string | undefined,
+): Promise<ReyloAnalysisPreparation | undefined> {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (
+    incomingDatabaseUrl !== undefined ||
+    !container ||
+    socketDirectory ||
+    !databaseUrl ||
+    !ownedTcpTemplateUrl(databaseUrl)
+  )
+    return undefined;
+  const { schemaDumps } = await import('../../../../services/kernel/scripts/database.ts');
+  const { prepareReyloAnalysisCache } = await import('../../../../services/kernel/scripts/reylo-cache.ts');
+  const previousContainer = process.env.KERNEL_DATABASE_CONTAINER;
+  process.env.KERNEL_DATABASE_CONTAINER = container;
+  let dumps: Record<string, string>;
+  try {
+    dumps = schemaDumps(databaseUrl, kernelRoot);
+  } finally {
+    if (previousContainer === undefined) delete process.env.KERNEL_DATABASE_CONTAINER;
+    else process.env.KERNEL_DATABASE_CONTAINER = previousContainer;
+  }
+  const environment: NodeJS.ProcessEnv = {
+    ...process.env,
+    DATABASE_URL: databaseUrl,
+    KERNEL_DATABASE_CONTAINER: container,
+  };
+  delete environment.REYLO_CONFIG;
+  const analysis = await prepareReyloAnalysisCache(environment, {
+    workspace: kernelRoot,
+    schemaWorkspace: kernelRoot,
+    schemaDumps: () => dumps,
+    allowDirectDatabase: true,
+    requireAnalysis: true,
+  });
+  if (!analysis.available || !analysis.environment.REYLO_CONFIG) {
+    analysis.dispose();
+    return undefined;
+  }
+  return analysis;
+}
+
 async function startStack(): Promise<
   Omit<NativeWebStack, 'kernel' | 'request' | 'routeAuthPages'> & {
     routeAuthPages(origin?: string): Promise<string>;
@@ -565,6 +635,7 @@ async function startStack(): Promise<
   let postgresSocketDirectory: string | undefined;
   let postgresSocketProxy: OwnedPostgresSocketProxy | undefined;
   let runtimeDirectory: string | undefined;
+  let analysisCache: { dispose(): void } | undefined;
   let consentServer: { env: Record<string, string>; close(): Promise<void> } | undefined;
   let closeAuth: (() => Promise<void>) | undefined;
   let closePageWorkflows: (() => Promise<void>) | undefined;
@@ -572,6 +643,7 @@ async function startStack(): Promise<
   let search: OpenSearch | undefined;
   const searchPrefix = `native-web-${randomBytes(12).toString('hex')}-`;
   const originalDatabaseUrl = process.env.DATABASE_URL;
+  const originalReyloConfig = process.env.REYLO_CONFIG;
   let stopped: Promise<void> | undefined;
   let peakMemory = process.memoryUsage().rss;
   let memory: NativeMemoryObservation | null = null;
@@ -686,6 +758,10 @@ async function startStack(): Promise<
       console.info('Native web stack cleanup: closing kernel fixture');
       await attempt(() => driver?.close());
       console.info('Native web stack cleanup: kernel fixture closed');
+      await attempt(() => {
+        analysisCache?.dispose();
+        analysisCache = undefined;
+      });
       if (runtimeDirectory) await attempt(() => rm(runtimeDirectory!, { recursive: true, force: true }));
       if (postgresSocketProxy) {
         await attempt(() => postgresSocketProxy!.close());
@@ -704,6 +780,8 @@ async function startStack(): Promise<
       }
       if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL;
       else process.env.DATABASE_URL = originalDatabaseUrl;
+      if (originalReyloConfig === undefined) delete process.env.REYLO_CONFIG;
+      else process.env.REYLO_CONFIG = originalReyloConfig;
       if (errors.length) throw new AggregateError(errors, 'Native web stack cleanup failed');
       console.info('Native web stack cleanup: complete');
     })());
@@ -733,54 +811,68 @@ async function startStack(): Promise<
       reportStackProgress('Native web stack startup: PostgreSQL migration complete');
     }
     reportStackProgress('Native web stack startup: preparing SQL analysis');
-    // Give Reylo an owned cache and the migrated template for SQL analysis.
-    runtimeDirectory = await mkdtemp(join(tmpdir(), 'native-kernel-runtime-'));
-    const { writeReyloProject } = await import('../../../../services/kernel/scripts/reylo-project.ts');
-    // PostgreSQL cannot clone a template while other sessions are connected to it.
-    reportStackProgress('Native web stack startup: disconnecting template sessions');
-    await disconnectTemplateSessions(process.env.DATABASE_URL!);
-    const source = new URL(process.env.DATABASE_URL!);
-    const template = decodeURIComponent(source.pathname.slice(1));
-    const analysisDatabase = `native_web_analysis_${randomBytes(16).toString('hex')}`;
-    const adminUrl = new URL(source);
-    adminUrl.pathname = '/postgres';
-    const admin = new Pool({
-      connectionString: adminUrl.href,
-      max: 1,
-      connectionTimeoutMillis: 1500,
-      statement_timeout: 15_000,
-    });
-    try {
-      // Inform the supervisor before allocation, so even failed setup is cleaned.
-      process.send?.({ analysisDatabase } satisfies HostReply);
-      const created = await settledWithin(
-        admin
-          .query(`CREATE DATABASE "${analysisDatabase}" TEMPLATE "${template.replaceAll('"', '""')}"`)
-          .then(() => true as const),
-        20_000,
+    const sharedAnalysis = await adoptOwnedKernelAnalysisCache(
+      postgresContainer,
+      postgresSocketDirectory,
+      originalDatabaseUrl,
+    );
+    if (sharedAnalysis?.environment.REYLO_CONFIG) {
+      analysisCache = sharedAnalysis;
+      process.env.REYLO_CONFIG = sharedAnalysis.environment.REYLO_CONFIG;
+      const { analyzedFiles, totalFiles, writtenEntries } = sharedAnalysis;
+      reportStackProgress(
+        `Native web stack startup: SQL analysis cache ready ${analyzedFiles}/${totalFiles}, entries ${writtenEntries}`,
       );
-      if (created !== true) throw new Error('CREATE DATABASE for SQL analysis exceeded 20000ms');
-    } finally {
-      const ended = await settledWithin(
-        admin.end().then(() => true as const),
-        1_000,
-      );
-      if (ended !== true) throw new Error('SQL analysis admin pool end exceeded 1000ms');
-    }
-    reportStackProgress('Native web stack startup: SQL analysis database cloned');
-    sampleMemory('analysis-ready');
-    const socketHost = source.searchParams.get('host');
-    let analysisUrl: string;
-    if (socketHost?.startsWith('/')) {
-      reportStackProgress('Native web stack startup: proxying SQL analysis through loopback');
-      // Child process: Reylo's sqlModuleSync blocks this host in Atomics.wait.
-      postgresSocketProxy = await listenOwnedPostgresSocketProxy(socketHost);
-      analysisUrl = isolatedReyloPostgresUrl(postgresSocketProxy.port, analysisDatabase);
     } else {
-      analysisUrl = process.env.DATABASE_URL!.replace(/\/rezics(?=\?|$)/, `/${analysisDatabase}`);
+      // Socket and external databases keep an isolated live copy. Its name is not a host-cache key.
+      runtimeDirectory = await mkdtemp(join(tmpdir(), 'native-kernel-runtime-'));
+      const { writeReyloProject } = await import('../../../../services/kernel/scripts/reylo-project.ts');
+      // PostgreSQL cannot clone a template while other sessions are connected to it.
+      reportStackProgress('Native web stack startup: disconnecting template sessions');
+      await disconnectTemplateSessions(process.env.DATABASE_URL!);
+      const source = new URL(process.env.DATABASE_URL!);
+      const template = decodeURIComponent(source.pathname.slice(1));
+      const analysisDatabase = `native_web_analysis_${randomBytes(16).toString('hex')}`;
+      const adminUrl = new URL(source);
+      adminUrl.pathname = '/postgres';
+      const admin = new Pool({
+        connectionString: adminUrl.href,
+        max: 1,
+        connectionTimeoutMillis: 1500,
+        statement_timeout: 15_000,
+      });
+      try {
+        // Inform the supervisor before allocation, so even failed setup is cleaned.
+        process.send?.({ analysisDatabase } satisfies HostReply);
+        const created = await settledWithin(
+          admin
+            .query(`CREATE DATABASE "${analysisDatabase}" TEMPLATE "${template.replaceAll('"', '""')}"`)
+            .then(() => true as const),
+          20_000,
+        );
+        if (created !== true) throw new Error('CREATE DATABASE for SQL analysis exceeded 20000ms');
+      } finally {
+        const ended = await settledWithin(
+          admin.end().then(() => true as const),
+          1_000,
+        );
+        if (ended !== true) throw new Error('SQL analysis admin pool end exceeded 1000ms');
+      }
+      reportStackProgress('Native web stack startup: SQL analysis database cloned');
+      const socketHost = source.searchParams.get('host');
+      let analysisUrl: string;
+      if (socketHost?.startsWith('/')) {
+        reportStackProgress('Native web stack startup: proxying SQL analysis through loopback');
+        // Child process: Reylo's sqlModuleSync blocks this host in Atomics.wait.
+        postgresSocketProxy = await listenOwnedPostgresSocketProxy(socketHost);
+        analysisUrl = isolatedReyloPostgresUrl(postgresSocketProxy.port, analysisDatabase);
+      } else {
+        analysisUrl = process.env.DATABASE_URL!.replace(/\/rezics(?=\?|$)/, `/${analysisDatabase}`);
+      }
+      if (analysisUrl === process.env.DATABASE_URL) throw new Error('Native SQL analysis needs its own database copy');
+      process.env.REYLO_CONFIG = writeReyloProject(runtimeDirectory, analysisUrl);
     }
-    if (analysisUrl === process.env.DATABASE_URL) throw new Error('Native SQL analysis needs its own database copy');
-    process.env.REYLO_CONFIG = writeReyloProject(runtimeDirectory, analysisUrl);
+    sampleMemory('analysis-ready');
     process.env.KERNEL_POOL_ACQUIRE_TIMEOUT_MS ??= '2000';
     await import('../../../../services/kernel/test/support/fixture-event-types.ts');
     const { workerTestEnv } = await import('../../../../services/kernel/test/support/worker-env.ts');
@@ -1045,6 +1137,7 @@ async function startStack(): Promise<
       }),
       DATABASE_URL: driver.fixtures.runtime.databaseUrl,
       KERNEL_EXECUTOR_ID: `native-web-${randomBytes(8).toString('hex')}`,
+      ...(process.env.REYLO_CONFIG ? { REYLO_CONFIG: process.env.REYLO_CONFIG } : {}),
     };
     reportStackProgress('Native web stack startup: starting durable-work worker');
     durableWorker = await startDurableWorker(workerEnv);
