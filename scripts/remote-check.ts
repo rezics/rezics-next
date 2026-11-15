@@ -2158,8 +2158,8 @@ def retain_stop_intent(action):
         if len(existing.splitlines())>=16: raise ValueError('stop telemetry record bound reached')
         os.write(descriptor,line)
     except Exception:
-        try: print('remote-check: stop-intent telemetry unavailable',file=sys.stderr)
-        except Exception: pass
+        try: os.write(2,b'remote-check: stop-intent telemetry unavailable\n')
+        except OSError: pass
     finally:
         if descriptor is not None:
             try: os.close(descriptor)
