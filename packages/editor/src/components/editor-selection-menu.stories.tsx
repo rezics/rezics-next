@@ -105,11 +105,13 @@ export const BlockCommands: Story = {
     ]) {
       await userEvent.click(await canvas.findByRole('button', { name: 'Turn into' }));
       // The menu is a shadcn dropdown, which renders in a portal on the page rather than inside the story canvas.
-      const menu = within(await screen.findByRole('menu', { name: 'Turn into' }));
-      expect(menu.getAllByRole('menuitemradio', { checked: true })).toHaveLength(1);
-      await userEvent.click(menu.getByRole('menuitemradio', { name }));
+      const menu = within(await screen.findByRole('listbox', { name: 'Turn into' }));
+      expect(
+        menu.getAllByRole('option').filter((option) => option.getAttribute('data-checked') === 'true'),
+      ).toHaveLength(1);
+      await userEvent.click(menu.getByRole('option', { name }));
       // The next round must not find this menu while it leaves.
-      await dismissed('menu');
+      await dismissed('listbox');
       await waitFor(() => expect(checked(blocks.latest.current)?.type).toBe(type));
       if (type === 'heading' || type === 'paragraph' || type === 'codeBlock')
         expect(checked(blocks.latest.current)?.attrs?.id).toBe(id);
@@ -124,12 +126,12 @@ export const ProfileCommands: Story = {
     const canvas = await select(canvasElement);
     expect(await canvas.findByRole('toolbar', { name: 'Format text' })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Turn into' }));
-    const menu = within(await screen.findByRole('menu', { name: 'Turn into' }));
-    expect(menu.queryByRole('menuitemradio', { name: /table|image/i })).toBeNull();
+    const menu = within(await screen.findByRole('listbox', { name: 'Turn into' }));
+    expect(menu.queryByRole('option', { name: /table|image/i })).toBeNull();
     expect(canvas.queryByRole('button', { name: /table|image/i })).toBeNull();
-    await userEvent.click(menu.getByRole('menuitemradio', { name: 'Heading 1' }));
+    await userEvent.click(menu.getByRole('option', { name: 'Heading 1' }));
     // The settled story must not hold a leaving menu, whose focus guards fail the accessibility check.
-    await dismissed('menu');
+    await dismissed('listbox');
     await waitFor(() => expect(checked(profiles.latest.current)?.type).toBe('heading'));
     expect(profiles.latest.current.profile).toBe('text');
   },
@@ -154,10 +156,13 @@ export const KeyboardReach: Story = {
     // Applying a mark returns focus to the editor on a later frame; a shortcut sent before then is lost.
     await waitForFocus(textbox);
     await userEvent.keyboard('{Alt>}{F10}{/Alt}{End}{Enter}');
-    const menu = within(await screen.findByRole('menu', { name: 'Turn into' }));
-    await waitFor(() => expect(menu.getByRole('menuitemradio', { name: 'Paragraph' })).toHaveFocus());
+    const menu = within(await screen.findByRole('listbox', { name: 'Turn into' }));
+    const query = screen.getByRole('combobox', { name: 'Search blocks' });
+    await waitFor(() => expect(query).toHaveFocus());
     await userEvent.keyboard('{ArrowDown}');
-    expect(menu.getByRole('menuitemradio', { name: 'Heading 1' })).toHaveFocus();
+    await waitFor(() =>
+      expect(query).toHaveAttribute('aria-activedescendant', menu.getByRole('option', { name: 'Heading 1' }).id),
+    );
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(textbox).toHaveFocus());
     expect(window.getSelection()?.toString()).toBe('Selected words');

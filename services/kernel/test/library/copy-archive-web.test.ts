@@ -177,6 +177,7 @@ beforeAll(async () => {
   }
   expect(manifest).toMatchObject({ version: 1 });
   artifact = JSON.stringify({ manifest, records });
+  expect(await response('DELETE', `/v1/libraryExports/${capture.exportId}`)).toMatchObject({ state: 'cancelled' });
   work = await createWorkClient(f.pool.options.connectionString!, f.pool);
   const service = createCopyArchive({
     pool: f.pool,
@@ -245,17 +246,21 @@ async function independent() {
   const capture = await response('POST', '/v1/libraryExports');
   let cursor = capture.first;
   const facts: unknown[] = [];
-  while (cursor) {
-    const page = await response(
-      'GET',
-      `/v1/libraryExports/${capture.exportId}/pages?cursor=${encodeURIComponent(cursor)}`,
-    );
-    facts.push(
-      ...page.records.filter((row: { section: string }) =>
-        ['entries', 'holdings', 'journals', 'annotations', 'provenance'].includes(row.section),
-      ),
-    );
-    cursor = page.next;
+  try {
+    while (cursor) {
+      const page = await response(
+        'GET',
+        `/v1/libraryExports/${capture.exportId}/pages?cursor=${encodeURIComponent(cursor)}`,
+      );
+      facts.push(
+        ...page.records.filter((row: { section: string }) =>
+          ['entries', 'holdings', 'journals', 'annotations', 'provenance'].includes(row.section),
+        ),
+      );
+      cursor = page.next;
+    }
+  } finally {
+    expect(await response('DELETE', `/v1/libraryExports/${capture.exportId}`)).toMatchObject({ state: 'cancelled' });
   }
   return facts;
 }
@@ -328,8 +333,8 @@ test('mounted generated journey pages a completed export and creates distinct eq
   expect(j.snapshot().review!.unsupported.length).toBeGreaterThan(0);
   await j.confirm(j.snapshot().review!.reviewId);
   const unitResult = j.snapshot().result!;
-  expect(unitResult.progressSession!.completedUnitCount).toBe(1);
-  expect(unitResult.completedEpisodes).not.toBeNull();
+  expect(unitResult.progressSession!.completedUnitCount).toBe(0);
+  expect(unitResult.completedEpisodes!.episodes.filter((episode) => episode.completed)).toHaveLength(1);
   const read = await response(
     'GET',
     `/v1/progressSessions/${unitResult.progressSession!.id}/episodes?ids=${memberId},${detachedId}`,

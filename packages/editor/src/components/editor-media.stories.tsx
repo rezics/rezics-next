@@ -13,6 +13,7 @@ import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import { RichTextEditor } from './rich-text-editor.tsx';
 import { DocumentBody } from './document-body.tsx';
 import type { DocumentImageRenderer } from './document-media.tsx';
+import { editorMediaRuntime } from './editor-media-runtime.ts';
 
 const asset = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120"><rect width="240" height="120" fill="#426a93"/><circle cx="175" cy="38" r="18" fill="#e2b875"/><path d="M0 120L70 35L140 120L180 80L240 120" fill="#264831"/></svg>')}`;
 const payload = { data: [{ value: '漢字', future: [null, false, 4] }], unknown: { retained: '<literal>' } };
@@ -175,7 +176,7 @@ export const ImageProperties: Story = {
     await userEvent.clear(dialog.getByRole('spinbutton', { name: 'Width (px)' }));
     await userEvent.type(dialog.getByRole('spinbutton', { name: 'Width (px)' }), '200');
     await userEvent.clear(dialog.getByRole('spinbutton', { name: 'Height (px)' }));
-    await userEvent.type(dialog.getByRole('spinbutton', { name: 'Height (px)' }), '100');
+    await userEvent.type(dialog.getByRole('spinbutton', { name: 'Height (px)' }), '70');
     await userEvent.keyboard('{Enter}');
     await waitFor(() =>
       expect(nodes(properties.latest.current, 'image')[0]!.attrs).toMatchObject({
@@ -184,14 +185,27 @@ export const ImageProperties: Story = {
         alt: 'Edited landscape',
         title: 'Authored title',
         width: 200,
-        height: 100,
+        height: 70,
       }),
     );
     expect(canvas.getByRole('status', { name: 'Saved chapters' })).toHaveTextContent('0');
     const edited = within(textbox).getByRole('img', { name: 'Edited landscape' });
     expect(edited).toHaveAttribute('width', '200');
-    expect(edited).toHaveAttribute('height', '100');
+    expect(edited).toHaveAttribute('height', '70');
     expect(edited).toHaveAttribute('title', 'Authored title');
+    await waitFor(() => {
+      expect((edited as HTMLImageElement).naturalWidth).toBeGreaterThan(0);
+      expect(edited.getBoundingClientRect().width).toBeCloseTo(200, 1);
+      expect(edited.getBoundingClientRect().height).toBeCloseTo(70, 1);
+    });
+    const readingImage = await within(canvas.getByRole('region', { name: 'Reading preview' })).findByRole('img', {
+      name: 'Edited landscape',
+    });
+    await waitFor(() => {
+      expect((readingImage as HTMLImageElement).naturalWidth).toBeGreaterThan(0);
+      expect(readingImage.getBoundingClientRect().width).toBeCloseTo(200, 1);
+      expect(readingImage.getBoundingClientRect().height).toBeCloseTo(70, 1);
+    });
     await userEvent.click(within(textbox).getByRole('button', { name: 'Reveal image — Concealed landscape' }));
     expect(await within(textbox).findByRole('img', { name: 'Concealed landscape' })).toHaveAttribute('width', '240');
     expect(
@@ -227,7 +241,9 @@ export const MediaVisitRetirement: Story = {
     await userEvent.type(dialog.getByRole('textbox', { name: 'Alt text' }), 'Retired draft');
     const staleApply = dialog.getByRole('button', { name: 'Apply' });
     const editor = (textbox as HTMLElement & { editor: Editor }).editor;
+    const generation = editorMediaRuntime(editor).generation;
     retirement.controls.retire();
+    await waitFor(() => expect(editorMediaRuntime(editor).generation).toBeGreaterThan(generation));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Image properties' })).toBeNull());
     staleApply.click();
     expect(nodes(retirement.latest.current, 'image')[0]!.attrs!.alt).toBe('Visible landscape');

@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { browserFailureDetails } from './helpers/browser-results.ts';
 
 const root = join(import.meta.dir, '..');
 const stories = ['src/components/editor-touch-bar.stories.tsx'];
@@ -17,7 +18,7 @@ test('the rich-text editor keeps touch formatting focused and shares toolbar, ke
       stderr: 'pipe',
       env: { ...process.env, CI: '1' },
     });
-    const [stdout, stderr] = await Promise.all([
+    const [stdout, stderr, code] = await Promise.all([
       new Response(run.stdout).text(),
       new Response(run.stderr).text(),
       run.exited,
@@ -32,6 +33,7 @@ test('the rich-text editor keeps touch formatting focused and shares toolbar, ke
         `${assertion.title}: ${assertion.status} ${assertion.failureMessages[0]?.split('\n')[0] ?? ''}`.trim(),
       )
       .sort();
+    expect(code, browserFailureDetails(result) || `${stdout.slice(-2000)}\n${stderr.slice(-4000)}`).toBe(0);
     expect(outcomes).toEqual([
       'Block Sheet: passed',
       'Format Selection: passed',

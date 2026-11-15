@@ -289,4 +289,19 @@ if (import.meta.main) {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, content);
   }
+  let totalUtf8Bytes = 0;
+  let largestMember = { path: '', utf8Bytes: 0 };
+  for (const entries of [declarations, runtime])
+    for (const [path, content] of entries) {
+      const utf8Bytes = Buffer.byteLength(content);
+      totalUtf8Bytes += utf8Bytes;
+      if (utf8Bytes > largestMember.utf8Bytes) largestMember = { path, utf8Bytes };
+    }
+  console.log(
+    `Kernel client output inventory: ${JSON.stringify({
+      members: declarations.size + runtime.size,
+      totalUtf8Bytes,
+      largestMember: { ...largestMember, path: largestMember.path.slice(0, 1024) },
+    })}`,
+  );
 }

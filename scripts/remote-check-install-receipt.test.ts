@@ -251,7 +251,6 @@ test('optional telemetry never changes prepared-source evidence and cannot repla
   expect(existsSync(invalid.path)).toBe(false);
 });
 
-
 test('host pressure gate partitions observed wait reasons and its unchanged v1 receipt reaches the real consumer', () => {
   const root = fixture();
   const program = String.raw`import ast,json,sys
@@ -288,7 +287,9 @@ assert ns['PREPARATION_IO_NEXT']==2.75
 print(json.dumps(phases))
 `;
   const measured = spawnSync('python3', ['-c', program, root], {
-    input: JSON.stringify(dependencyPreparationProgram), encoding: 'utf8', timeout: 5000,
+    input: JSON.stringify(dependencyPreparationProgram),
+    encoding: 'utf8',
+    timeout: 5000,
   });
   expect(measured.status, measured.stderr).toBe(0);
   const phases = JSON.parse(measured.stdout);

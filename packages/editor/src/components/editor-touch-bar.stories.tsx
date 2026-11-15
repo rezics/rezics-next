@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { RichTextEditorLabels } from './editor-labels.ts';
 import { RichTextEditor } from './rich-text-editor.tsx';
+import { editorBrowserInput } from '../test/browser-input.ts';
 
 function demo(
   profile: DocumentProfile = 'blocks',
@@ -150,7 +151,7 @@ export const BlockSheet: Story = {
     await userEvent.click(toolbar.getByRole('button', { name: 'Blocks' }));
     const page = within(canvasElement.ownerDocument.body);
     const dialog = within(await page.findByRole('dialog', { name: 'Blocks' }));
-    await userEvent.click(dialog.getByRole('button', { name: 'Heading 2' }));
+    await userEvent.click(dialog.getByRole('option', { name: 'Heading 2' }));
     await waitFor(() => expect(checked(blocks.latest.current)?.type).toBe('heading'));
     expect(checked(blocks.latest.current)?.attrs?.level).toBe(2);
     await waitFor(() => expect(textbox).toHaveFocus());
@@ -160,6 +161,7 @@ export const BlockSheet: Story = {
 export const UndoRedo: Story = {
   render: () => <history.Demo />,
   async play({ canvasElement }) {
+    const { events: userEvent } = await editorBrowserInput();
     const canvas = within(canvasElement);
     const textbox = canvas.getByRole('textbox', { name: 'Post' });
     const toolbarElement = await canvas.findByRole('toolbar', { name: 'Formatting toolbar' });
@@ -189,7 +191,7 @@ export const UndoRedo: Story = {
       const event = key.startsWith('history')
         ? new InputEvent('beforeinput', { inputType: key, bubbles: true, cancelable: true, ...init })
         : new KeyboardEvent('keydown', { key, ctrlKey: true, bubbles: true, cancelable: true, ...init });
-      expect(textbox.dispatchEvent(event)).toBe(!handled);
+      expect(textbox.dispatchEvent(event), `${key} handled=${handled} init=${JSON.stringify(init)}`).toBe(!handled);
       await waitFor(() => {
         expect(textbox.textContent).toBe(expected);
         expect((undo as HTMLButtonElement).disabled).toBe(undoDepth(view.state) === 0);
@@ -274,13 +276,14 @@ export const UndoRedo: Story = {
     expect(textbox.textContent).toBe('History');
     await waitFor(() => expect(history.latest.current).toEqual(original));
     const bold = toolbar.getByRole('button', { name: 'Bold' });
+    const blocksButton = toolbar.getByRole('button', { name: 'Blocks' });
     const tabEntries = () =>
       [...toolbarElement.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')].filter(
         (button) => button.tabIndex === 0,
       );
-    await userEvent.tab();
-    expect(bold).toHaveFocus();
-    expect(tabEntries()).toEqual([bold]);
+    await userEvent.keyboard('{Alt>}{F10}{/Alt}');
+    expect(blocksButton).toHaveFocus();
+    expect(tabEntries()).toEqual([blocksButton]);
     await userEvent.keyboard('{End}{ArrowLeft}{Enter}');
     await waitFor(() => expect(plainText(history.latest.current)).toBe(''));
     expect(textbox).toHaveFocus();
@@ -288,10 +291,10 @@ export const UndoRedo: Story = {
       expect(undo).toBeDisabled();
       expect(redo).toBeEnabled();
     });
-    expect(tabEntries()).toEqual([bold]);
-    await userEvent.tab();
-    expect(bold).toHaveFocus();
-    expect(tabEntries()).toEqual([bold]);
+    expect(tabEntries()).toEqual([blocksButton]);
+    await userEvent.keyboard('{Alt>}{F10}{/Alt}');
+    expect(blocksButton).toHaveFocus();
+    expect(tabEntries()).toEqual([blocksButton]);
     await userEvent.keyboard('{End}{ArrowLeft}{Enter}');
     await waitFor(() => expect(plainText(history.latest.current)).toBe('History'));
     expect(textbox).toHaveFocus();
@@ -299,22 +302,21 @@ export const UndoRedo: Story = {
       expect(undo).toBeEnabled();
       expect(redo).toBeDisabled();
     });
-    expect(tabEntries()).toEqual([bold]);
+    expect(tabEntries()).toEqual([blocksButton]);
     await userEvent.keyboard('{Shift>}{Home}{/Shift}');
-    await userEvent.tab();
+    await userEvent.keyboard('{Alt>}{F10}{/Alt}{ArrowRight}');
     expect(bold).toHaveFocus();
     await userEvent.keyboard('{Enter}');
     await waitFor(() =>
       expect(checked(history.latest.current)?.content?.[0]?.marks?.some((mark) => mark.type === 'bold')).toBe(true),
     );
     expect(plainText(history.latest.current)).toBe('History');
-    await userEvent.tab();
-    await userEvent.keyboard('{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{Enter}');
+    await userEvent.keyboard('{Alt>}{F10}{/Alt}{Home}{Enter}');
     const page = within(canvasElement.ownerDocument.body);
     const dialog = within(await page.findByRole('dialog', { name: 'Blocks' }));
-    const heading2 = dialog.getByRole('button', { name: 'Heading 2' });
-    for (let attempt = 0; attempt < 8 && !heading2.matches(':focus'); attempt += 1) await userEvent.tab();
-    expect(heading2).toHaveFocus();
+    const query = dialog.getByRole('combobox', { name: 'Search blocks' });
+    await userEvent.type(query, 'Heading 2');
+    await waitFor(() => expect(dialog.getByRole('option', { name: 'Heading 2' })).toBeVisible());
     await userEvent.keyboard('{Enter}');
     await waitFor(() => {
       const block = checked(history.latest.current);
@@ -337,12 +339,16 @@ export const UndoRedo: Story = {
 export const ToolbarKeyboard: Story = {
   render: () => <keyboard.Demo />,
   async play({ canvasElement }) {
+    const { events: userEvent } = await editorBrowserInput();
     const { canvas, textbox } = await selectText(canvasElement);
     const toolbar = within(await canvas.findByRole('toolbar', { name: 'Formatting toolbar' }));
-    await userEvent.tab();
+    await userEvent.keyboard('{Alt>}{F10}{/Alt}');
+    const blocksButton = toolbar.getByRole('button', { name: 'Blocks' });
     const bold = toolbar.getByRole('button', { name: 'Bold' });
+    expect(blocksButton).toHaveFocus();
+    expect(toolbar.getAllByRole('button').filter((button) => button.tabIndex === 0)).toEqual([blocksButton]);
+    await userEvent.keyboard('{ArrowRight}');
     expect(bold).toHaveFocus();
-    expect(toolbar.getAllByRole('button').filter((button) => button.tabIndex === 0)).toEqual([bold]);
     const italic = toolbar.getByRole('button', { name: 'Italic' });
     await userEvent.keyboard('{ArrowRight}');
     await waitFor(() => expect(italic).toHaveFocus());
@@ -351,7 +357,7 @@ export const ToolbarKeyboard: Story = {
     await userEvent.keyboard('{End}');
     await waitFor(() => expect(toolbar.getByRole('button', { name: 'Hide keyboard' })).toHaveFocus());
     await userEvent.keyboard('{Home}');
-    await waitFor(() => expect(bold).toHaveFocus());
+    await waitFor(() => expect(blocksButton).toHaveFocus());
     expect(textbox).toBeInTheDocument();
   },
 };
@@ -364,9 +370,9 @@ export const ProfileCommands: Story = {
     await userEvent.click(toolbar.getByRole('button', { name: 'Blocks' }));
     const page = within(canvasElement.ownerDocument.body);
     const dialog = within(await page.findByRole('dialog', { name: 'Blocks' }));
-    expect(dialog.queryByRole('button', { name: 'Image' })).toBeNull();
-    expect(dialog.queryByRole('button', { name: 'Table' })).toBeNull();
-    await waitFor(() => expect(dialog.getByRole('button', { name: 'Heading 1' })).toBeVisible());
+    expect(dialog.queryByRole('option', { name: 'Image' })).toBeNull();
+    expect(dialog.queryByRole('option', { name: 'Table' })).toBeNull();
+    await waitFor(() => expect(dialog.getByRole('option', { name: 'Heading 1' })).toBeVisible());
   },
 };
 

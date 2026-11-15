@@ -24,7 +24,7 @@ import {
   knowledgeViewports,
 } from './knowledge-document-fixtures';
 import { m } from '../paraglide/messages.js';
-import { locales, setLocale, type Locale } from '../paraglide/runtime.js';
+import { getLocale, locales, setLocale, type Locale } from '../paraglide/runtime.js';
 
 const notebookId = '0192f3a0-6c1e-7b2a-9d4e-000000000010';
 const nextRevisionId = '0192f3a0-6c1e-7b2a-9d4e-000000000011';
@@ -104,7 +104,7 @@ function scenarioOperations(scenario: string): KnowledgePrivateOperations {
   };
 }
 
-function KnowledgePrivateExample({ scenario, locale = 'en' }: { scenario: string; locale?: Locale }) {
+function KnowledgePrivateExample({ scenario, locale = getLocale() }: { scenario: string; locale?: Locale }) {
   const [client] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } }),
   );
@@ -145,7 +145,7 @@ const meta = {
   title: 'Knowledge/Private document',
   id: 'pages-knowledge-private-document',
   component: KnowledgePrivateExample,
-  args: { scenario: 'create', locale: 'en' },
+  args: { scenario: 'create' },
   argTypes: { scenario: { control: false }, locale: { options: locales, control: 'select' } },
   parameters: {
     layout: 'fullscreen',

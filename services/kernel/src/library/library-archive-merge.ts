@@ -859,6 +859,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
           provider: parsed.value.provider,
           recordId: parsed.value.recordId,
           action: decision.action,
+          ...(decision.action === 'correct' ? { revision: decision.revision } : {}),
           fields: choices,
           visibility: 'private',
         };

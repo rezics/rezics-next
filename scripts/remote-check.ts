@@ -834,15 +834,32 @@ export function parseRemotePreparationAbortEvidence(
     return null;
   if (item.diagnostics !== undefined) {
     const detail = item.diagnostics;
-    if (!exactKeys(detail, ['signal', 'stalledPhase', 'phaseElapsedMs', 'ownedProcesses', 'logTail']) ||
-        ![1, 2, 15].includes(Number(detail.signal)) || typeof detail.signal !== 'number' ||
-        typeof detail.stalledPhase !== 'string' || !/^[a-z-]{1,64}$/.test(detail.stalledPhase) ||
-        !(detail.phaseElapsedMs === null || (Number.isSafeInteger(detail.phaseElapsedMs) && Number(detail.phaseElapsedMs) >= 0)) ||
-        typeof detail.logTail !== 'string' || Buffer.byteLength(detail.logTail) > 8192 ||
-        !Array.isArray(detail.ownedProcesses) || detail.ownedProcesses.length > 16 ||
-        !detail.ownedProcesses.every((entry) => exactKeys(entry, ['pid', 'state', 'wait']) &&
-          Number.isSafeInteger(entry.pid) && Number(entry.pid) > 0 && typeof entry.state === 'string' &&
-          /^[A-Za-z]$/.test(entry.state) && typeof entry.wait === 'string' && entry.wait.length <= 128)) return null;
+    if (
+      !exactKeys(detail, ['signal', 'stalledPhase', 'phaseElapsedMs', 'ownedProcesses', 'logTail']) ||
+      ![1, 2, 15].includes(Number(detail.signal)) ||
+      typeof detail.signal !== 'number' ||
+      typeof detail.stalledPhase !== 'string' ||
+      !/^[a-z-]{1,64}$/.test(detail.stalledPhase) ||
+      !(
+        detail.phaseElapsedMs === null ||
+        (Number.isSafeInteger(detail.phaseElapsedMs) && Number(detail.phaseElapsedMs) >= 0)
+      ) ||
+      typeof detail.logTail !== 'string' ||
+      Buffer.byteLength(detail.logTail) > 8192 ||
+      !Array.isArray(detail.ownedProcesses) ||
+      detail.ownedProcesses.length > 16 ||
+      !detail.ownedProcesses.every(
+        (entry) =>
+          exactKeys(entry, ['pid', 'state', 'wait']) &&
+          Number.isSafeInteger(entry.pid) &&
+          Number(entry.pid) > 0 &&
+          typeof entry.state === 'string' &&
+          /^[A-Za-z]$/.test(entry.state) &&
+          typeof entry.wait === 'string' &&
+          entry.wait.length <= 128,
+      )
+    )
+      return null;
   }
   const resources = item.resources;
   const supervisor = resources.supervisor;
@@ -2385,6 +2402,7 @@ import sys
 import tempfile
 import time
 import uuid
+${installReceiptContractPython}
 
 CONTROL_ROOT_FILES=set(${REMOTE_CHECK_PRODUCER_CONTROL_FILES_JSON})
 CONTROL_ROOT_DIRECTORIES=set(${REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES_JSON})
@@ -4496,7 +4514,8 @@ class Resources:
                 self.identity = (stat.st_dev, stat.st_ino)
                 self.receipt['cgroup'] = {'path': group if not RESOURCE_CGROUP_OVERRIDE else str(path),
                     'device': stat.st_dev, 'inode': stat.st_ino, 'invocation': invocation}
-                durable(self.root / 'physical-resources.json', json.dumps(self.receipt, sort_keys=True))
+                durable(self.root.parent.parent / 'receipts' / self.receipt['run'] / 'physical-resources.json',
+                        json.dumps(self.receipt, sort_keys=True))
                 return
             except (OSError, ValueError, StopIteration, subprocess.TimeoutExpired):
                 return
@@ -5683,7 +5702,7 @@ try:
         live=(fields[19]==marker['started'] and fields[0] not in ['Z','X'] and
               int(fields[2])==marker.get('group') and process.stat().st_uid==marker.get('uid'))
     if live:
-        resource=json.loads((root/'physical-resources.json').read_text())
+        resource=json.loads((root.parent.parent/'receipts'/${JSON.stringify(run)}/'physical-resources.json').read_text())
         cgroup=resource['cgroup']; info=group.stat()
         if (resource.get('schema')!=1 or resource.get('host')!=${JSON.stringify(host)} or resource.get('run')!=${JSON.stringify(run)} or
                 resource.get('boot')!=Path('/proc/sys/kernel/random/boot_id').read_text().strip() or
@@ -5695,7 +5714,7 @@ try:
         print('PREPARING')
     elif not (root/'.preparation-started').exists():
         # Missing command markers alone are insufficient: retain exact boot/owner evidence and reject results.
-        resource=json.loads((root/'physical-resources.json').read_text())
+        resource=json.loads((root.parent.parent/'receipts'/${JSON.stringify(run)}/'physical-resources.json').read_text())
         if (resource.get('schema')!=1 or resource.get('host')!=${JSON.stringify(host)} or resource.get('run')!=${JSON.stringify(run)} or
                 resource.get('boot')!=Path('/proc/sys/kernel/random/boot_id').read_text().strip() or
                 resource['supervisor']!={'pid':marker['pid'],'start':marker['started'],'group':marker['group']} or
@@ -5766,7 +5785,13 @@ export function parseRemoteCommandStatus(
   const parsed = /^(?:0|[1-9]\d{0,2})$/.test(recorded) ? Number(recorded) : Number.NaN;
   const invalid =
     status.code !== 0 ||
-    (!Number.isInteger(parsed) && recorded !== 'NOT_STARTED' && recorded !== 'STARTED' && recorded !== 'CLEANING' && recorded !== 'PREPARATION_ABORTED' && recorded !== 'PREPARING' && recorded !== 'UNKNOWN') ||
+    (!Number.isInteger(parsed) &&
+      recorded !== 'NOT_STARTED' &&
+      recorded !== 'STARTED' &&
+      recorded !== 'CLEANING' &&
+      recorded !== 'PREPARATION_ABORTED' &&
+      recorded !== 'PREPARING' &&
+      recorded !== 'UNKNOWN') ||
     parsed > 255;
   if (invalid)
     throw new RemoteTransportError(host.name, 'remote command', status.code || REMOTE_TRANSPORT_FAILURE, false);
@@ -8986,7 +9011,9 @@ async function runLeased(
     const heartbeatMs = options.livenessIntervalMs ?? DEFAULT_LIVENESS_INTERVAL_MS;
     const heartbeatChildren = new Set<ReturnType<typeof Bun.spawn>>();
     let resolveRetainedAbort!: (value: 'preparation-aborted') => void;
-    const retainedAbortResult = new Promise<'preparation-aborted'>((resolve) => { resolveRetainedAbort = resolve; });
+    const retainedAbortResult = new Promise<'preparation-aborted'>((resolve) => {
+      resolveRetainedAbort = resolve;
+    });
     const observeCommandStart = async () => {
       if (heartbeatChildren.size !== 0 || signal.aborted) return;
       let child: ReturnType<typeof Bun.spawn> | undefined;
@@ -9143,14 +9170,21 @@ async function runLeased(
       primaryFailure ??= error;
     }
     if (retainedAbortObserved) {
-      const recovered = await reconcileRemoteRunOwned({
-        hosts: [host], physical: { host: host.name, run: id }, workspace: options.workspace,
-        allowedHosts: [host.name],
-      }, signal);
+      const recovered = await reconcileRemoteRunOwned(
+        {
+          hosts: [host],
+          physical: { host: host.name, run: id },
+          workspace: options.workspace,
+          allowedHosts: [host.name],
+        },
+        signal,
+      );
       preparationAbort = recovered.preparationAbort;
       if (!remotePreparationAbortSettlementReady(recovered, { host: host.name, run: id }))
         throw new Error('remote-check: retained preparation abort cleanup is unverified');
-      console.error(`remote-check: retained infrastructure preparation abort on ${host.name} run=${id}; tests never started`);
+      console.error(
+        `remote-check: retained infrastructure preparation abort on ${host.name} run=${id}; tests never started`,
+      );
       primaryFailure ??= new Error('remote-check: infrastructure preparation aborted before command start');
     } else {
       let lifetimeFailure: RunLifetimeFailure | null = null;
@@ -9190,7 +9224,12 @@ async function runLeased(
           options,
           signal,
           preparedInputs && preparedInputs.sourceSha256 === options.expectedSourceSha256
-            ? { host: native.host, run: native.run, exitCode: native.exitCode, sourceSha256: preparedInputs.sourceSha256 }
+            ? {
+                host: native.host,
+                run: native.run,
+                exitCode: native.exitCode,
+                sourceSha256: preparedInputs.sourceSha256,
+              }
             : undefined,
         );
       } catch (error) {

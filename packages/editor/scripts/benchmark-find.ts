@@ -24,6 +24,7 @@ const cases: readonly Case[] = [
   { characters: 100_000, spaced: false },
   { characters: 100_000, spaced: true },
   { characters: 1_900_000, spaced: true },
+  { characters: 1_900_000, spaced: false },
 ];
 const report = (value: object) => process.stdout.write(`${JSON.stringify(value)}\n`);
 const round = (milliseconds: number) => Math.round(milliseconds * 100) / 100;

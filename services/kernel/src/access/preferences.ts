@@ -465,7 +465,6 @@ export function createPreferenceCommands(config: { pool: Pool; access: Access; c
           },
         },
         async (tx) => {
-          await declareCommandHistory(tx, 'access.account.preferences', preferenceSubjectScope(route, input.accountId));
           const current = await readAccountPreferences(tx, input.accountId);
           if (current.version !== input.expectedVersion) throw new ProblemError('conflict');
           const shelf = input.shelf === undefined ? current.shelf : mergeShelf(current.shelf, input.shelf);
@@ -493,6 +492,11 @@ export function createPreferenceCommands(config: { pool: Pool; access: Access; c
             canonical(next.shelf) !== canonical(current.shelf) ||
             canonical(next.editor) !== canonical(current.editor) ||
             canonical(next.notifications) !== canonical(current.notifications);
+          const history = preferenceSubjectScope(route, input.accountId);
+          await declareCommandHistory(tx, 'access.account.preferences', {
+            response: history.response,
+            events: hasChanges ? history.events : [],
+          });
           if (!hasChanges) return noEffect(next);
           const changed = await set.run(tx, {
             route,

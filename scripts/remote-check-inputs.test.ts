@@ -251,10 +251,16 @@ test('direct Kernel client emission is source-pinned before producer launch', as
     const assignmentEnd = generated.indexOf('\n# systemd 259 ', assignmentStart);
     expect(assignmentStart).toBeGreaterThanOrEqual(0);
     expect(assignmentEnd).toBeGreaterThan(assignmentStart);
-    const decoded = spawnSync('sh', ['-c', generated.slice(assignmentStart, assignmentEnd) + '\nprintf "%s" "$systemd_script"'], { encoding: 'utf8' });
+    const decoded = spawnSync(
+      'sh',
+      ['-c', generated.slice(assignmentStart, assignmentEnd) + '\nprintf "%s" "$systemd_script"'],
+      { encoding: 'utf8' },
+    );
     expect(decoded.status, decoded.stderr).toBe(0);
     const receipt = decoded.stdout.indexOf('prepared input evidence unavailable');
-    const commandStart = decoded.stdout.split('\n').find((line) => line.trimStart().startsWith('touch ') && line.includes('/command-started'));
+    const commandStart = decoded.stdout
+      .split('\n')
+      .find((line) => line.trimStart().startsWith('touch ') && line.includes('/command-started'));
     expect(receipt).toBeGreaterThanOrEqual(0);
     expect(commandStart).toBeDefined();
     expect(receipt).toBeLessThan(decoded.stdout.indexOf(commandStart!));
@@ -331,14 +337,24 @@ test('current install producer receipts roundtrip through prepared input verific
     const fixture = createFixture();
     try {
       addPreparedControls(fixture, state);
-      const producer = spawnSync('python3', ['-c', String.raw`
+      const producer = spawnSync(
+        'python3',
+        [
+          '-c',
+          String.raw`
 import json,sys
 namespace={}
 exec(sys.stdin.read().split('attempt_started = time.monotonic()',1)[0],namespace)
 host,run,state=sys.argv[1:4]
 print(json.dumps(namespace['make_install_receipt'](host,run,state,None if state=='hit' else 'miss',
     'c'*64,[],[],None if state=='hit' else 1.113,{'cache-io-pressure-wait':260.388,'artifact-restore':6.432})))
-`, fixture.host, fixture.run, state], { input: dependencyPreparationProgram, encoding: 'utf8' });
+`,
+          fixture.host,
+          fixture.run,
+          state,
+        ],
+        { input: dependencyPreparationProgram, encoding: 'utf8' },
+      );
       expect(producer.status, producer.stderr).toBe(0);
       const produced = JSON.parse(producer.stdout);
       expect(produced.installerSeconds).toBe(state === 'hit' ? null : 1.113);
@@ -353,7 +369,9 @@ print(json.dumps(namespace['make_install_receipt'](host,run,state,None if state=
       const malformed = runPrepared(fixture, join(fixture.root, '.temp', 'malformed-timing'));
       expect(malformed.status).not.toBe(0);
       expect(malformed.stderr).toContain('producer install receipt timing is malformed');
-    } finally { cleanup(fixture); }
+    } finally {
+      cleanup(fixture);
+    }
   }
 });
 
