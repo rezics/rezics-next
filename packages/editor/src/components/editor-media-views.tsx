@@ -103,6 +103,7 @@ function MediaView({ node, editor, getPos, selected, fallback }: NodeViewProps &
   const mounted = useRef(false);
   const current = () => mounted.current && runtime.generation === generation && ports.isCurrent();
   const canPresent = () => runtime.generation === generation && ports.isCurrent();
+  const editingCurrent = editing && target.current !== null && currentMediaPosition(target.current, current) !== null;
   useLayoutEffect(() => {
     mounted.current = true;
     return () => {
@@ -136,7 +137,7 @@ function MediaView({ node, editor, getPos, selected, fallback }: NodeViewProps &
     };
   });
   useLayoutEffect(() => {
-    if (editing && target.current && currentMediaPosition(target.current, current) === null) {
+    if (editing && !editingCurrent) {
       target.current = null;
       returning.current = null;
       setEditing(false);
@@ -206,6 +207,10 @@ function MediaView({ node, editor, getPos, selected, fallback }: NodeViewProps &
           title={occurrence.title ?? undefined}
           width={occurrence.width ?? undefined}
           height={occurrence.height ?? undefined}
+          style={{
+            ...(occurrence.width ? { width: occurrence.width } : {}),
+            ...(occurrence.height ? { height: occurrence.height } : {}),
+          }}
           className="block h-auto max-w-full"
           onError={() => {
             if (current() && runtime.previews.get(occurrence.id)?.url === local.url) setFailedPreview(local.url);
@@ -246,7 +251,7 @@ function MediaView({ node, editor, getPos, selected, fallback }: NodeViewProps &
         )}
       </div>
       {editor.isEditable ? (
-        editing ? (
+        editingCurrent ? (
           <ResponsiveDialog
             open
             title={label(image ? 'imageProperties' : 'mediaProperties')}

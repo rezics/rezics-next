@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
-import { DocumentBody } from '@rezics/editor/reader';
+import { DocumentBody, type DocumentImageOccurrence } from '@rezics/editor/reader';
 
 const root = join(import.meta.dir, '..');
 const stories = 'src/components/document-body.stories.tsx';
@@ -92,10 +92,10 @@ test('DocumentBody preserves common attributes through default output and defaul
       attrs: { language, ...attrs },
       content: [{ type: 'text', text: 'same code' }],
     }) satisfies DocumentNode;
-  const table = (caption: string, id: string, lang: string, dir: string) =>
+  const table = (text: string, id: string, lang: string, dir: string) =>
     ({
       type: 'table',
-      attrs: { caption, id, lang, dir },
+      attrs: { id, lang, dir },
       content: [
         {
           type: 'tableRow',
@@ -103,7 +103,7 @@ test('DocumentBody preserves common attributes through default output and defaul
             {
               type: 'tableHeader',
               attrs: { id: `${id}-header`, lang, dir },
-              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'same cell' }] }],
+              content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
             },
           ],
         },
@@ -117,7 +117,7 @@ test('DocumentBody preserves common attributes through default output and defaul
     table('Second table', 'table-two', 'fr', 'ltr'),
   ]);
   const codeOccurrences: { occurrence: number; id: unknown; language: unknown }[] = [];
-  const tableOccurrences: { occurrence: number; id: unknown; caption: unknown }[] = [];
+  const tableOccurrences: { occurrence: number; id: unknown; lang: unknown; dir: unknown }[] = [];
   const plain = renderToStaticMarkup(createElement(DocumentBody, { document }));
   const withCallbacks = renderToStaticMarkup(
     createElement(DocumentBody, {
@@ -127,7 +127,7 @@ test('DocumentBody preserves common attributes through default output and defaul
         return defaultContent;
       },
       renderTable: (node, _children, defaultContent, occurrence) => {
-        tableOccurrences.push({ occurrence, id: node.attrs?.id, caption: node.attrs?.caption });
+        tableOccurrences.push({ occurrence, id: node.attrs?.id, lang: node.attrs?.lang, dir: node.attrs?.dir });
         return defaultContent;
       },
     }),
@@ -136,29 +136,33 @@ test('DocumentBody preserves common attributes through default output and defaul
   expect(codeOccurrences).toEqual([
     { occurrence: 0, id: 'code-one', language: 'typescript' },
     { occurrence: 1, id: 'code-two', language: 'typescript' },
-    { occurrence: 2, id: undefined, language: 'typescript' },
+    { occurrence: 2, id: null, language: 'typescript' },
   ]);
   expect(tableOccurrences).toEqual([
-    { occurrence: 0, id: 'table-one', caption: 'First table' },
-    { occurrence: 1, id: 'table-two', caption: 'Second table' },
+    { occurrence: 0, id: 'table-one', lang: 'ar', dir: 'rtl' },
+    { occurrence: 1, id: 'table-two', lang: 'fr', dir: 'ltr' },
   ]);
   expect(withCallbacks).toBe(plain);
   expect(plain).toContain('<pre data-block-id="code-one" lang="ar" dir="rtl">');
   expect(plain).toContain('<pre data-block-id="code-two" lang="fr" dir="ltr">');
-  expect(plain).toContain('<pre><code data-language="typescript">same code</code></pre>');
+  expect(plain).toContain(
+    '<pre><code data-language="typescript" data-document-code-language="&quot;typescript&quot;">same code</code></pre>',
+  );
   expect(plain.match(/data-block-id="code-one"/g) ?? []).toHaveLength(1);
   expect(plain.match(/data-block-id="code-two"/g) ?? []).toHaveLength(1);
   expect(plain).toContain('data-block-id="table-one" lang="ar" dir="rtl"');
   expect(plain).toContain('data-block-id="table-one-header" lang="ar" dir="rtl"');
   expect(plain).toContain('data-block-id="table-two" lang="fr" dir="ltr"');
   expect(plain).toContain('data-block-id="table-two-header" lang="fr" dir="ltr"');
+  expect(plain).toContain('>First table</p>');
+  expect(plain).toContain('>Second table</p>');
 });
 
 test('custom block mappings preserve common attributes and accessible document affordances', () => {
   const document = snapshot([
     {
       type: 'image',
-      attrs: { src: 'private-image', variant: 'medium', alt: 'A mountain', id: 'image-anchor', lang: 'ar', dir: 'rtl' },
+      attrs: { src: 'private-image', alt: 'A mountain', id: 'image-anchor', lang: 'ar', dir: 'rtl' },
     },
     { type: 'image', attrs: { src: 'another-private-image', alt: '' } },
     {
@@ -188,12 +192,12 @@ test('custom block mappings preserve common attributes and accessible document a
     },
     {
       type: 'extensionBlock',
-      attrs: { definition: 'unknown-block', fallback: null, id: 'extension-anchor', lang: 'zh-Hant', dir: 'ltr' },
+      attrs: { definition: 'unknown-block', fallback: '', id: 'extension-anchor', lang: 'zh-Hant', dir: 'ltr' },
     },
     {
       type: 'paragraph',
       content: [
-        { type: 'extensionInline', attrs: { definition: 'unknown-inline', fallback: null, id: 'inline-anchor' } },
+        { type: 'extensionInline', attrs: { definition: 'unknown-inline', fallback: '', id: 'inline-anchor' } },
         { type: 'text', text: 'The ending', marks: [{ type: 'spoiler' }] },
       ],
     },
@@ -217,8 +221,11 @@ test('custom block mappings preserve common attributes and accessible document a
   expect(html).toContain('data-block-id="image-anchor" lang="ar" dir="rtl"');
   expect(html).toContain('Image indisponible — A mountain');
   expect(html).toContain('role="img" aria-label="Image indisponible"');
-  expect(html).toContain('<figure data-block-id="media-anchor" lang="ja" dir="ltr">');
-  expect(html).toContain('<figcaption>An authored caption</figcaption>');
+  expect(html).toContain(
+    '<div data-block-id="media-anchor" lang="ja" dir="ltr"><figure data-slot="document-media-occurrence" data-occurrence-id="media-anchor"',
+  );
+  expect(html).toMatch(/<figcaption\b[^>]*>An authored caption<\/figcaption>/);
+  expect(html).toContain('aria-label="Media unavailable"');
   expect(html).toContain('<li data-block-id="task-anchor" lang="ar" dir="rtl">');
   expect(html).toContain('aria-label="État de la tâche"');
   expect(html).toContain('checked=""');
@@ -242,8 +249,18 @@ test('caller renderers keep authored common attributes on replacement output', (
     },
     {
       type: 'table',
-      attrs: { id: 'custom-table', lang: 'fr', dir: 'ltr', caption: 'Custom table' },
-      content: [{ type: 'tableRow', content: [{ type: 'tableCell', content: [{ type: 'paragraph' }] }] }],
+      attrs: { id: 'custom-table', lang: 'fr', dir: 'ltr' },
+      content: [
+        {
+          type: 'tableRow',
+          content: [
+            {
+              type: 'tableCell',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Custom table' }] }],
+            },
+          ],
+        },
+      ],
     },
     { type: 'image', attrs: { src: 'media-id', alt: 'A mountain', id: 'custom-image', lang: 'he', dir: 'rtl' } },
   ]);
@@ -251,15 +268,18 @@ test('caller renderers keep authored common attributes on replacement output', (
     createElement(DocumentBody, {
       document,
       renderCodeBlock: (_node, children) => createElement('aside', null, children),
-      renderTable: (node) => createElement('section', null, node.attrs?.caption as string),
+      renderTable: (_node, children) =>
+        createElement('section', null, createElement('table', null, createElement('tbody', null, children))),
       renderImage: ({ mediaId }) => createElement('span', { 'data-authorized-image': mediaId }, 'Owner image'),
     }),
   );
 
   expect(html).toContain('<div data-block-id="custom-code" lang="ar" dir="rtl"><aside>same code</aside></div>');
-  expect(html).toContain('<div data-block-id="custom-table" lang="fr" dir="ltr"><section>Custom table</section></div>');
+  expect(html).toContain('<div data-block-id="custom-table" lang="fr" dir="ltr"><section><table><tbody>');
+  expect(html).toContain('<p>Custom table</p>');
+  expect(html.match(/data-block-id="custom-table"/g) ?? []).toHaveLength(1);
   expect(html).toContain(
-    '<div data-block-id="custom-image" lang="he" dir="rtl"><span data-authorized-image="media-id">Owner image</span></div>',
+    '<div data-block-id="custom-image" lang="he" dir="rtl"><div data-slot="document-image-occurrence" data-occurrence-id="custom-image" style="max-width:100%"><span data-authorized-image="media-id">Owner image</span></div></div>',
   );
   expect(html).not.toContain('/media/');
 });
@@ -283,14 +303,27 @@ test('partial document labels keep English defaults and authored extension fallb
   expect(html).toContain('aria-label="Task status"');
   expect(html).toContain('data-document-component="block">Authored block text</div>');
   expect(html).toContain('data-document-component="inline">Authored inline text</span>');
-  expect(html).toContain('data-document-component="empty"></div>');
+  expect(html).toContain('data-document-component="empty">Embedded component</div>');
 });
 
-test('a supplied image renderer is exclusive even when it returns nothing', () => {
+test('supplied image renderers receive complete occurrence facts and unresolved images retain a visible fallback', () => {
   const document = snapshot([
-    { type: 'image', attrs: { src: 'media-id', alt: 'A mountain', id: 'image-anchor', lang: 'ar', dir: 'rtl' } },
+    {
+      type: 'image',
+      attrs: {
+        src: 'media-id',
+        alt: 'A mountain',
+        id: 'image-anchor',
+        lang: 'ar',
+        dir: 'rtl',
+        title: 'An authored title',
+        width: 320,
+        height: 160,
+        conceal: false,
+      },
+    },
   ]);
-  const calls: { mediaId: string; alt: string }[] = [];
+  const calls: DocumentImageOccurrence[] = [];
   const html = renderToStaticMarkup(
     createElement(DocumentBody, {
       document,
@@ -300,12 +333,25 @@ test('a supplied image renderer is exclusive even when it returns nothing', () =
       },
     }),
   );
-  expect(calls).toEqual([{ mediaId: 'media-id', alt: 'A mountain' }]);
+  expect(calls).toEqual([
+    {
+      id: 'image-anchor',
+      src: 'media-id',
+      mediaId: 'media-id',
+      alt: 'A mountain',
+      title: 'An authored title',
+      width: 320,
+      height: 160,
+      conceal: false,
+    },
+  ]);
   expect(html).toContain(
-    '<div data-block-id="image-anchor" lang="ar" dir="rtl"><span data-authorized-image="media-id">Owner-rendered image</span></div>',
+    '<div data-block-id="image-anchor" lang="ar" dir="rtl"><div data-slot="document-image-occurrence" data-occurrence-id="image-anchor" style="max-width:100%;width:320px" title="An authored title"><span data-authorized-image="media-id">Owner-rendered image</span></div></div>',
   );
   expect(html).not.toContain('Image unavailable');
-  expect(renderToStaticMarkup(createElement(DocumentBody, { document, renderImage: () => null }))).not.toContain(
-    'Image unavailable',
-  );
+  const unavailable = renderToStaticMarkup(createElement(DocumentBody, { document, renderImage: () => null }));
+  expect(unavailable).toContain('Image unavailable — A mountain');
+  expect(unavailable).toContain('role="img" aria-label="A mountain"');
+  expect(unavailable).not.toContain('src=');
+  expect(unavailable).not.toContain('/media/');
 });

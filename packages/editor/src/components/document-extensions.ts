@@ -3,8 +3,22 @@ import type { TagParseRule, ParseRule } from '@tiptap/pm/model';
 import type { DocumentProfile } from '@rezics/document';
 import { blocksNodeNames, markAttributes, textNodeNames } from '@rezics/document';
 import { safeDocumentUrl } from './document-url.ts';
-import { componentDOMAttributes, parseComponentAttributes, imageDOMAttributes, parseImageAttributes, mediaDOMAttributes, parseMediaAttributes } from './document-component-data.ts';
-import { parseFormattingData, parseCodeLanguage, safeAlignment, safeHeadingLevel, textStyleCSS, textEmphasisCSS } from './document-style.ts';
+import {
+  componentDOMAttributes,
+  parseComponentAttributes,
+  imageDOMAttributes,
+  parseImageAttributes,
+  mediaDOMAttributes,
+  parseMediaAttributes,
+} from './document-component-data.ts';
+import {
+  parseFormattingData,
+  parseCodeLanguage,
+  safeAlignment,
+  safeHeadingLevel,
+  textStyleCSS,
+  textEmphasisCSS,
+} from './document-style.ts';
 
 type Attribute = Record<string, unknown>;
 
@@ -84,9 +98,18 @@ const block = (name: string, tag: string, extra: Attribute = {}, parseHTML: TagP
     ...(name === 'codeBlock' ? { marks: '' } : {}),
     atom: isLeaf,
     draggable: isDraggable,
-    ...(isLeaf ? { renderText: ({ node }: { node: import('@tiptap/pm/model').Node }) => String(
-      name === 'image' ? node.attrs.alt ?? '' : name === 'media' ? node.attrs.caption ?? '' : node.attrs.fallback ?? '',
-    ) } : {}),
+    ...(isLeaf
+      ? {
+          renderText: ({ node }: { node: import('@tiptap/pm/model').Node }) =>
+            String(
+              name === 'image'
+                ? (node.attrs.alt ?? '')
+                : name === 'media'
+                  ? (node.attrs.caption ?? '')
+                  : (node.attrs.fallback ?? ''),
+            ),
+        }
+      : {}),
     addAttributes: () => ({ ...common, ...extra }),
     parseHTML: () => parseHTML.map((rule) => ({ ...rule, preserveWhitespace: 'full' })),
     renderHTML: ({ node, HTMLAttributes }) => {
@@ -95,21 +118,55 @@ const block = (name: string, tag: string, extra: Attribute = {}, parseHTML: TagP
         ...HTMLAttributes,
         ...(isDraggable ? { draggable: 'true' } : {}),
         ...(['taskList', 'taskItem'].includes(name) ? { 'data-type': name } : {}),
-        ...(['paragraph', 'heading'].includes(name) && safeAlignment(node.attrs.textAlign) ? { style: `text-align:${safeAlignment(node.attrs.textAlign)}` } : {}),
+        ...(['paragraph', 'heading'].includes(name) && safeAlignment(node.attrs.textAlign)
+          ? { style: `text-align:${safeAlignment(node.attrs.textAlign)}` }
+          : {}),
       };
       if (name === 'table') return ['table', attributes, ['tbody', 0]];
       if (name === 'codeBlock')
-        return ['pre', attributes, ['code', node.attrs.language != null ? { 'data-language': node.attrs.language, 'data-document-code-language': JSON.stringify(node.attrs.language) } : {}, 0]];
-      if (name === 'image') return ['figure', { ...commonRendered(attributes), ...imageDOMAttributes(node.attrs) }, ['span', {}, node.attrs.alt || 'Image']];
-      if (name === 'media') return ['figure', { ...commonRendered(attributes), ...mediaDOMAttributes(node.attrs) }, ['figcaption', {}, node.attrs.caption || 'Media unavailable']];
-      if (name === 'extensionBlock') return ['div', { ...commonRendered(attributes), ...componentDOMAttributes(node.attrs) }, node.attrs.fallback || 'Embedded component unavailable'];
+        return [
+          'pre',
+          attributes,
+          [
+            'code',
+            node.attrs.language != null
+              ? {
+                  'data-language': node.attrs.language,
+                  'data-document-code-language': JSON.stringify(node.attrs.language),
+                }
+              : {},
+            0,
+          ],
+        ];
+      if (name === 'image')
+        return [
+          'figure',
+          { ...commonRendered(attributes), ...imageDOMAttributes(node.attrs) },
+          ['span', {}, node.attrs.alt || 'Image'],
+        ];
+      if (name === 'media')
+        return [
+          'figure',
+          { ...commonRendered(attributes), ...mediaDOMAttributes(node.attrs) },
+          ['figcaption', {}, node.attrs.caption || 'Media unavailable'],
+        ];
+      if (name === 'extensionBlock')
+        return [
+          'div',
+          { ...commonRendered(attributes), ...componentDOMAttributes(node.attrs) },
+          node.attrs.fallback || 'Embedded component unavailable',
+        ];
       return isLeaf ? [outputTag, attributes] : [outputTag, attributes, 0];
     },
   });
 };
 
 function commonRendered(attributes: Attribute): Attribute {
-  return Object.fromEntries(Object.entries(attributes).filter(([name]) => ['data-block-id', 'data-id', 'lang', 'dir', 'draggable'].includes(name)));
+  return Object.fromEntries(
+    Object.entries(attributes).filter(([name]) =>
+      ['data-block-id', 'data-id', 'lang', 'dir', 'draggable'].includes(name),
+    ),
+  );
 }
 
 const Doc = Node.create({ name: 'doc', topNode: true, content: '(block | footnoteDefinition)+' });
@@ -186,7 +243,9 @@ const Ruby = Node.create({
     'ruby',
     mergeAttributes(HTMLAttributes, {
       'data-ruby-position': node.attrs.position,
-      style: ['over', 'under', 'inter-character'].includes(node.attrs.position) ? `ruby-position:${node.attrs.position}` : '',
+      style: ['over', 'under', 'inter-character'].includes(node.attrs.position)
+        ? `ruby-position:${node.attrs.position}`
+        : '',
     }),
     ['span', { 'data-ruby-base': '' }, 0],
     ['rp', {}, '('],
@@ -320,15 +379,21 @@ const TextStyle = Mark.create({
     color: { default: null },
     backgroundColor: { default: null },
   }),
-  parseHTML: () => [{ tag: '[data-document-text-style], [style]', priority: 70, consuming: false,
-    getAttrs: (element) => {
-      const node = element as HTMLElement;
-      const own = parseFormattingData(node, 'text-style');
-      if (own !== undefined) return own;
-      const color = node.style.getPropertyValue('color'), backgroundColor = node.style.getPropertyValue('background-color');
-      return color || backgroundColor ? { color: color || null, backgroundColor: backgroundColor || null } : false;
+  parseHTML: () => [
+    {
+      tag: '[data-document-text-style], [style]',
+      priority: 70,
+      consuming: false,
+      getAttrs: (element) => {
+        const node = element as HTMLElement;
+        const own = parseFormattingData(node, 'text-style');
+        if (own !== undefined) return own;
+        const color = node.style.getPropertyValue('color'),
+          backgroundColor = node.style.getPropertyValue('background-color');
+        return color || backgroundColor ? { color: color || null, backgroundColor: backgroundColor || null } : false;
+      },
     },
-  }],
+  ],
   renderHTML: ({ mark: current }) => [
     'span',
     {
@@ -349,12 +414,18 @@ const TextEmphasis = Mark.create({
   }),
   parseHTML: () => [
     {
-      tag: '[data-document-text-emphasis], span[data-text-emphasis], [style]', priority: 71, consuming: false,
+      tag: '[data-document-text-emphasis], span[data-text-emphasis], [style]',
+      priority: 71,
+      consuming: false,
       getAttrs: (element) => {
         const span = element as HTMLElement;
         const own = parseFormattingData(span, 'text-emphasis');
         if (own !== undefined) return own;
-        const shape = span.dataset.textEmphasis ?? span.style.textEmphasisStyle.split(' ').find((value) => ['dot', 'sesame', 'circle', 'double-circle', 'triangle'].includes(value));
+        const shape =
+          span.dataset.textEmphasis ??
+          span.style.textEmphasisStyle
+            .split(' ')
+            .find((value) => ['dot', 'sesame', 'circle', 'double-circle', 'triangle'].includes(value));
         const fill = span.style.textEmphasisStyle.includes('open') ? 'open' : 'filled';
         const position = span.style.textEmphasisPosition.includes('under') ? 'under' : 'over';
         return ['dot', 'sesame', 'circle', 'double-circle', 'triangle'].includes(shape ?? '')
@@ -377,7 +448,10 @@ const TextEmphasis = Mark.create({
 const paragraph = block('paragraph', 'p', { textAlign: { default: null, rendered: false } }, [
   {
     tag: 'p',
-    getAttrs: (element) => ({ ...commonAttrs(element as HTMLElement), textAlign: safeAlignment((element as HTMLElement).style.textAlign) ?? null }),
+    getAttrs: (element) => ({
+      ...commonAttrs(element as HTMLElement),
+      textAlign: safeAlignment((element as HTMLElement).style.textAlign) ?? null,
+    }),
   },
 ]);
 
@@ -390,7 +464,11 @@ const heading = block(
   },
   Array.from({ length: 6 }, (_, index) => ({
     tag: `h${index + 1}`,
-    getAttrs: (element) => ({ ...commonAttrs(element as HTMLElement), level: index + 1, textAlign: safeAlignment((element as HTMLElement).style.textAlign) ?? null }),
+    getAttrs: (element) => ({
+      ...commonAttrs(element as HTMLElement),
+      level: index + 1,
+      textAlign: safeAlignment((element as HTMLElement).style.textAlign) ?? null,
+    }),
   })),
 );
 
@@ -446,7 +524,7 @@ const codeBlock = block('codeBlock', 'pre', { language: { default: null, rendere
       if (language === false) return false;
       return {
         ...commonAttrs(pre),
-        language: language === undefined ? code?.getAttribute('data-language') ?? null : language,
+        language: language === undefined ? (code?.getAttribute('data-language') ?? null) : language,
       };
     },
   },
@@ -482,10 +560,16 @@ const cellAttrs = {
   align: {
     default: null,
     parseHTML: (element: HTMLElement) => {
-      return safeAlignment(element.style.textAlign) ?? safeAlignment(element.getAttribute('align')?.trim().toLowerCase()) ?? null;
+      return (
+        safeAlignment(element.style.textAlign) ??
+        safeAlignment(element.getAttribute('align')?.trim().toLowerCase()) ??
+        null
+      );
     },
     renderHTML: (attributes: Attribute) =>
-      safeAlignment(attributes.align) ? { align: attributes.align, style: `text-align:${safeAlignment(attributes.align)}` } : {},
+      safeAlignment(attributes.align)
+        ? { align: attributes.align, style: `text-align:${safeAlignment(attributes.align)}` }
+        : {},
   },
 };
 const tableCell = block('tableCell', 'td', cellAttrs);
@@ -494,23 +578,38 @@ const image = block(
   'image',
   'img',
   {
-    src: { default: '', parseHTML: (element: HTMLElement) => element.hasAttribute('data-document-image') ? null : element.getAttribute('src') },
+    src: {
+      default: '',
+      parseHTML: (element: HTMLElement) =>
+        element.hasAttribute('data-document-image') ? null : element.getAttribute('src'),
+    },
     variant: { default: 'original', rendered: false },
-    alt: { default: null, parseHTML: (element: HTMLElement) => element.hasAttribute('data-document-image') ? null : element.getAttribute('alt') },
-    title: { default: null, parseHTML: (element: HTMLElement) => element.hasAttribute('data-document-image') ? null : element.getAttribute('title') },
+    alt: {
+      default: null,
+      parseHTML: (element: HTMLElement) =>
+        element.hasAttribute('data-document-image') ? null : element.getAttribute('alt'),
+    },
+    title: {
+      default: null,
+      parseHTML: (element: HTMLElement) =>
+        element.hasAttribute('data-document-image') ? null : element.getAttribute('title'),
+    },
     width: {
       default: null,
-      parseHTML: (element: HTMLElement) => element.hasAttribute('data-document-image') ? null : toPositiveNumber(element.getAttribute('width')),
+      parseHTML: (element: HTMLElement) =>
+        element.hasAttribute('data-document-image') ? null : toPositiveNumber(element.getAttribute('width')),
       renderHTML: (attributes: Attribute) => (attributes.width ? { width: attributes.width } : {}),
     },
     height: {
       default: null,
-      parseHTML: (element: HTMLElement) => element.hasAttribute('data-document-image') ? null : toPositiveNumber(element.getAttribute('height')),
+      parseHTML: (element: HTMLElement) =>
+        element.hasAttribute('data-document-image') ? null : toPositiveNumber(element.getAttribute('height')),
       renderHTML: (attributes: Attribute) => (attributes.height ? { height: attributes.height } : {}),
     },
     conceal: {
       default: false,
-      parseHTML: (element: HTMLElement) => element.hasAttribute('data-document-image') ? null : element.getAttribute('data-conceal') === 'true',
+      parseHTML: (element: HTMLElement) =>
+        element.hasAttribute('data-document-image') ? null : element.getAttribute('data-conceal') === 'true',
       renderHTML: (attributes: Attribute) => (attributes.conceal ? { 'data-conceal': 'true' } : {}),
     },
   },
@@ -608,10 +707,21 @@ export const documentExtensions: Extensions = [
   InlineExtension,
   FootnoteDefinition,
   FootnoteReference,
-  mark('bold', 'strong', [{ tag: 'strong' }, { tag: 'b' }, { style: 'font-weight', getAttrs: (value) => /^(?:bold|bolder|[6-9]00)$/.test(value) ? {} : false }]),
+  mark('bold', 'strong', [
+    { tag: 'strong' },
+    { tag: 'b' },
+    { style: 'font-weight', getAttrs: (value) => (/^(?:bold|bolder|[6-9]00)$/.test(value) ? {} : false) },
+  ]),
   mark('italic', 'em', [{ tag: 'em' }, { tag: 'i' }, { style: 'font-style=italic' }]),
-  mark('underline', 'u', [{ tag: 'u' }, { style: 'text-decoration-line', getAttrs: (value) => value.includes('underline') ? {} : false }]),
-  mark('strike', 's', [{ tag: 's' }, { tag: 'del' }, { style: 'text-decoration-line', getAttrs: (value) => value.includes('line-through') ? {} : false }]),
+  mark('underline', 'u', [
+    { tag: 'u' },
+    { style: 'text-decoration-line', getAttrs: (value) => (value.includes('underline') ? {} : false) },
+  ]),
+  mark('strike', 's', [
+    { tag: 's' },
+    { tag: 'del' },
+    { style: 'text-decoration-line', getAttrs: (value) => (value.includes('line-through') ? {} : false) },
+  ]),
   mark('code', 'code'),
   Mark.create({
     name: 'spoiler',

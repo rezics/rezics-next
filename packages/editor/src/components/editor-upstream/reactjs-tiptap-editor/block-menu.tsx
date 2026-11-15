@@ -17,6 +17,7 @@ import type { RichTextEditorLabels } from '../../editor-labels.ts';
 import { Menu, dismissMenuForNavigation } from '@rezics/ui/menu';
 import { CommandListItems, filterCommandGroups } from './command-list.tsx';
 import { productControlLabels } from './control-labels.ts';
+import { observeCommandActiveDescendants } from '../../editor-command-aria.ts';
 
 interface BlockMenuProps {
   editor: Editor;
@@ -50,8 +51,10 @@ function BlockMenuContent({
   const choices = filterCommandGroups(commands, labels, query).flatMap((group) => group.commands);
   useLayoutEffect(() => {
     const host = root.current;
+    const stopObserving = host ? observeCommandActiveDescendants(host) : undefined;
     latestOpenChange.current(true);
     return () => {
+      stopObserving?.();
       const document = host?.ownerDocument;
       const heldFocus = host?.contains(document?.activeElement ?? null);
       latestOpenChange.current(false);

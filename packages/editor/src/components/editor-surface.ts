@@ -209,8 +209,11 @@ export function editorExtensions(
   return [
     ...withTaskItemView(documentExtensionsForProfile(profile), options.taskStatus ?? (() => 'Task status')),
     EditorInput,
-    StructuredDocumentClipboard.configure({ profile, plainText: (editor) => editorInputSettings(editor).paste === 'plain',
-      ...(options.onInvalidContent ? { onInvalidContent: options.onInvalidContent } : {}) }),
+    StructuredDocumentClipboard.configure({
+      profile,
+      plainText: (editor) => editorInputSettings(editor).paste === 'plain',
+      ...(options.onInvalidContent ? { onInvalidContent: options.onInvalidContent } : {}),
+    }),
     ...(options.readOnly ? [] : [EditorLists]),
     ...(profile === 'blocks' && !options.readOnly
       ? [EditorTables.configure(options.onInvalidContent ? { onInvalidContent: options.onInvalidContent } : {})]

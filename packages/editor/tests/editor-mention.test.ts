@@ -1,10 +1,11 @@
 import { expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { normalizeDocument } from '@rezics/document';
 import { DocumentBody } from '../src/components/document-body.tsx';
+import { browserFailureDetails, type BrowserResults } from './helpers/browser-results.ts';
 
 const root = join(import.meta.dir, '..');
 const accountId = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
@@ -103,8 +104,10 @@ test('the mention menu debounces, aborts stale lookups, inserts account ids, pre
       new Response(run.stderr).text(),
       run.exited,
     ]);
-    expect(code, `${stdout.slice(-4000)}\n${stderr.slice(-4000)}`).toBe(0);
-    const result = JSON.parse(readFileSync(report, 'utf8'));
+    const diagnostics = `${stdout.slice(-4000)}\n${stderr.slice(-4000)}`;
+    expect(existsSync(report), diagnostics).toBe(true);
+    const result = JSON.parse(readFileSync(report, 'utf8')) as BrowserResults;
+    expect(code, browserFailureDetails(result) || diagnostics).toBe(0);
     const outcomes = result.testResults
       .flatMap((file: any) => file.assertionResults)
       .map((assertion: any) => `${assertion.title}: ${assertion.status}`)

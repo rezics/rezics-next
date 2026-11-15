@@ -8,6 +8,7 @@ import type { EditorPreferences } from '../preferences.ts';
 import { RichTextEditor } from './rich-text-editor.tsx';
 import type { EditorPreset } from './editor-workbench.tsx';
 import { waitForFocus } from '../../../ui/src/test/focus.ts';
+import { moveToEditorEnd } from '../test/browser-input.ts';
 
 const chapter = fromMarkdown('# A voyage\n\nThe sea is quiet. The sea carries our story.', 'blocks');
 
@@ -108,9 +109,8 @@ export const Settings: Story = {
     const canvas = within(canvasElement);
     const textbox = await canvas.findByRole('textbox', { name: 'Chapter draft' });
     const instance = editorFor(textbox);
-    await userEvent.click(textbox);
-    await userEvent.keyboard('{Control>}{End}{/Control}');
-    await userEvent.type(textbox, ' A new sentence.');
+    const keyboard = await moveToEditorEnd(instance, textbox);
+    await keyboard.keyboard(' A new sentence.');
     await waitFor(() => expect(textbox).toHaveTextContent('A new sentence.'));
     await userEvent.click(canvas.getByRole('button', { name: 'Editor settings' }));
     const dialog = await screen.findByRole('dialog', { name: 'Editor settings' });
@@ -127,7 +127,7 @@ export const Settings: Story = {
     expect(editorFor(textbox)).toBe(instance);
     await waitFor(() => expect(window.getComputedStyle(textbox).fontSize).toBe('20px'));
     await expect(canvas.queryByRole('toolbar', { name: 'Formatting toolbar' })).not.toBeInTheDocument();
-    await userEvent.keyboard('{Control>}z{/Control}');
+    await keyboard.keyboard('{Control>}z{/Control}');
     await waitFor(() => expect(textbox).not.toHaveTextContent('A new sentence.'));
     expect(editorFor(textbox)).toBe(instance);
   },
@@ -145,6 +145,29 @@ export const Knowledge: Story = {
     const query = within(dialog).getByRole('combobox', { name: 'Search available commands' });
     await userEvent.type(query, 'table');
     await expect(within(dialog).getByRole('option', { name: 'Table' })).toBeVisible();
+    const validTarget = () => {
+      for (const owner of dialog.querySelectorAll<HTMLElement>('[cmdk-input], [cmdk-list]')) {
+        const id = owner.getAttribute('aria-activedescendant');
+        if (!id) continue;
+        const target = dialog.ownerDocument.getElementById(id);
+        expect(target).not.toBeNull();
+        expect(dialog.contains(target)).toBe(true);
+        expect(target).toHaveAttribute('aria-selected', 'true');
+        expect(target).toBeVisible();
+      }
+    };
+    await waitFor(validTarget);
+    await userEvent.keyboard('{ArrowDown}');
+    await waitFor(() => {
+      expect(query.getAttribute('aria-activedescendant')).toBeTruthy();
+      validTarget();
+    });
+    await userEvent.clear(query);
+    await userEvent.type(query, 'unmatched-command-query');
+    await waitFor(() => expect(query).not.toHaveAttribute('aria-activedescendant'));
+    await userEvent.clear(query);
+    await userEvent.type(query, 'table');
+    await waitFor(validTarget);
   },
 };
 
@@ -178,15 +201,14 @@ export const KeyboardBindings: Story = {
     const canvas = within(canvasElement);
     const textbox = await canvas.findByRole('textbox', { name: 'Chapter draft' });
     const editor = editorFor(textbox);
-    await userEvent.click(textbox);
-    await userEvent.keyboard('{Control>}{End}{/Control}');
-    await userEvent.keyboard('{Control>}b{/Control}');
+    const keyboard = await moveToEditorEnd(editor, textbox);
+    await keyboard.keyboard('{Control>}b{/Control}');
     expect(editor.isActive('bold')).toBe(false);
-    await userEvent.keyboard('{Control>}i{/Control}');
+    await keyboard.keyboard('{Control>}i{/Control}');
     expect(editor.isActive('italic')).toBe(false);
-    await userEvent.keyboard('{Control>}{Shift>}9{/Shift}{/Control}');
+    await keyboard.keyboard('{Control>}{Shift>}9{/Shift}{/Control}');
     expect(editor.isActive('bold')).toBe(true);
-    await userEvent.type(textbox, ' Bound text.');
+    await keyboard.keyboard(' Bound text.');
     await waitFor(() => {
       let bound = false;
       editor.state.doc.descendants((node) => {
@@ -194,7 +216,7 @@ export const KeyboardBindings: Story = {
       });
       expect(bound).toBe(true);
     });
-    await userEvent.keyboard('{Control>}{Shift>}8{/Shift}{/Control}');
+    await keyboard.keyboard('{Control>}{Shift>}8{/Shift}{/Control}');
     expect(editor.isActive('bulletList')).toBe(true);
   },
 };

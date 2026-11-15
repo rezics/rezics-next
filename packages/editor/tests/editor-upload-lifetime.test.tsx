@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { browserFailureDetails } from './helpers/browser-results.ts';
 
 const root = join(import.meta.dir, '..');
 const story = 'src/components/editor-image.stories.tsx';
@@ -21,7 +22,7 @@ test('mounted rich-text image uploads stay owned by their editable document', as
         env: { ...process.env, CI: '1' },
       },
     );
-    const [stdout, stderr] = await Promise.all([
+    const [stdout, stderr, code] = await Promise.all([
       new Response(run.stdout).text(),
       new Response(run.stderr).text(),
       run.exited,
@@ -32,10 +33,12 @@ test('mounted rich-text image uploads stay owned by their editable document', as
     };
     const outcomes = result.testResults
       .flatMap((file) => file.assertionResults)
+      .filter((assertion) => assertion.status !== 'skipped')
       .map((assertion) =>
         `${assertion.title}: ${assertion.status} ${assertion.failureMessages[0]?.split('\n')[0] ?? ''}`.trim(),
       );
-    expect(outcomes, `${stdout.slice(-2000)}\n${stderr.slice(-4000)}`).toEqual(['Upload Image: passed']);
+    expect(code, browserFailureDetails(result) || `${stdout.slice(-2000)}\n${stderr.slice(-4000)}`).toBe(0);
+    expect(outcomes).toEqual(['Upload Image: passed']);
   } finally {
     rmSync(output, { recursive: true, force: true });
   }

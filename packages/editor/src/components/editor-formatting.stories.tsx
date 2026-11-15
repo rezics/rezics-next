@@ -65,14 +65,14 @@ export const AuthoredFormatting: Story = {
     document.dispatchEvent(new Event('selectionchange'));
     await userEvent.click(canvas.getByRole('button', { name: 'Text colors' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Text colors' }));
-    await userEvent.type(dialog.getByRole('textbox', { name: 'Text color' }), '#dc2626');
+    await userEvent.type(dialog.getByRole('textbox', { name: 'Text color' }), '#991b1b');
     await userEvent.type(dialog.getByRole('textbox', { name: 'Background color' }), '#fef08a');
     await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Text colors' })).not.toBeInTheDocument());
     await waitFor(() =>
       expect(
         canvas.getByRole('region', { name: 'Saved document preview' }).querySelector('[data-document-text-style]'),
-      ).toHaveStyle({ color: '#dc2626', backgroundColor: '#fef08a' }),
+      ).toHaveStyle({ color: '#991b1b', backgroundColor: '#fef08a' }),
     );
     await expect(canvas.getByLabelText('Host save count')).toHaveTextContent('0');
     await userEvent.click(canvas.getByRole('button', { name: 'Align center' }));

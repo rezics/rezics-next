@@ -117,9 +117,10 @@ export function withTaskItemView(extensions: Extensions, label: () => string): E
               control.contentEditable = 'false';
               const checkbox = document.createElement('input');
               checkbox.type = 'checkbox';
-              control.append(checkbox);
+              control.appendChild(checkbox);
               const contentDOM = document.createElement('div');
-              dom.append(control, contentDOM);
+              dom.appendChild(control);
+              dom.appendChild(contentDOM);
               const update = () => {
                 checkbox.checked = Boolean(node.attrs.checked);
                 checkbox.disabled = !editor.isEditable;

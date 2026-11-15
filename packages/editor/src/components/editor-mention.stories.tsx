@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { RichTextEditor } from './rich-text-editor.tsx';
+import { editorBrowserInput } from '../test/browser-input.ts';
 
 const accountId = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
 const handle = 'abcdefghij';
@@ -40,6 +41,7 @@ function demo(source = true) {
   return { Demo, latest, calls };
 }
 async function type(canvasElement: HTMLElement, text: string) {
+  const { events: userEvent } = await editorBrowserInput();
   const view = within(canvasElement);
   const editor = view.getByRole('textbox', { name: 'Post' });
   await userEvent.click(editor);
@@ -93,7 +95,7 @@ export const KeyboardChoose: Story = {
     const option = await view.findByRole('option', { name: `@${handle} <script>name</script>` });
     expect(editor).toHaveAttribute('role', 'combobox');
     expect(editor).toHaveAttribute('aria-expanded', 'true');
-    expect(editor).toHaveAttribute('aria-activedescendant', option.id);
+    await waitFor(() => expect(editor).toHaveAttribute('aria-activedescendant', option.id));
     await userEvent.keyboard('{ArrowDown}{Enter}');
     await waitFor(() => inserted(keyboard));
     expect(view.queryByRole('listbox')).toBeNull();

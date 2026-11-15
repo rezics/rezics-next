@@ -11,6 +11,8 @@ import {
   CommandShortcut,
 } from '@rezics/ui/shadcn/command';
 import type { EditorWorkbenchLabels } from './editor-workbench-labels.ts';
+import { useLayoutEffect, useRef } from 'react';
+import { observeCommandActiveDescendants } from './editor-command-aria.ts';
 
 export type EditorProductCommand = {
   id: string;
@@ -37,6 +39,8 @@ export function EditorCommandPalette({
   isCurrent: () => boolean;
   finalFocus: () => HTMLElement | false;
 }) {
+  const root = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => (root.current ? observeCommandActiveDescendants(root.current) : undefined), [open]);
   return (
     <ResponsiveDialog
       open={open}
@@ -48,7 +52,7 @@ export function EditorCommandPalette({
       closeLabel={labels.close}
       finalFocus={finalFocus}
     >
-      <Command label={labels.commandSearch}>
+      <Command ref={root} label={labels.commandSearch}>
         <CommandInput aria-label={labels.commandSearch} placeholder={labels.commandSearch} />
         <CommandList>
           <CommandEmpty>{labels.noCommands}</CommandEmpty>
