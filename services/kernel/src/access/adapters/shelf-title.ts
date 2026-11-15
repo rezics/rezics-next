@@ -7,7 +7,6 @@ import { routeOf } from '../../route/route.ts';
 import { prepareReadDecisions, type Access, type AccountActor } from '../check.ts';
 import { deadlineClient, within } from '../deadline.ts';
 import { requireAccessDeadline } from '../unavailable.ts';
-import type { ContentShelfTitleCurrentAccess } from '../../library/shelf-title-inputs-composition.ts';
 
 const AUTHORITY_HOME_COUNT = 4096;
 const ACTION = 'subject:read';
@@ -52,9 +51,15 @@ async function readAccessBasis(pool: Pool, deadline: number) {
 export function createNativeContentShelfTitleCurrentAccess(
   pool: Pool,
   resolveAccess: () => Access,
-): ContentShelfTitleCurrentAccess {
+) {
   return {
-    async begin({ owner, viewer, deadline }) {
+    async begin(
+      { owner, viewer, deadline }: {
+        owner: Readonly<{ route: number; accountId: string }>;
+        viewer: AccountActor;
+        deadline: number;
+      },
+    ) {
       if (
         !Number.isFinite(deadline) ||
         routeOf(owner.accountId) !== owner.route ||
@@ -84,7 +89,7 @@ export function createNativeContentShelfTitleCurrentAccess(
         return {
           status: 'current' as const,
           version: start.version,
-          async decide(subjects) {
+          async decide(subjects: readonly string[]) {
             if (
               !subjects.length ||
               subjects.length > 64 ||

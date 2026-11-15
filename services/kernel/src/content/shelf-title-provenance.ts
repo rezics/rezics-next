@@ -5,19 +5,18 @@ import { readPartitions } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readFences, type SourceFence, type SourceFenceTuple } from './source-fences.ts';
 import { SEMANTIC_TITLE_PROVENANCE_MAX_BYTES } from '../semantic/contract/index.ts';
+import type { AccountActor } from '../request/access.ts';
 import {
   createSemanticTitleProvenanceAdapter,
   type SemanticTitleFieldBinding,
   type SemanticTitleProvenance,
   type SemanticTitleProvenanceEntry,
-} from '../semantic/adapters/title-inputs-provenance.ts';
-import type { ContentShelfTitleNativeObserver } from '../library/shelf-title-inputs-composition.ts';
+} from '../semantic/adapters/index.ts';
 
 const unavailable = { status: 'unavailable' as const };
 const FENCE_BATCH_SIZE = 100;
 // An imported origin is much larger than 16 encoded bytes in Semantic's bounded result.
 // This conservative derived ceiling makes the number of fence batches finite as well.
-const MAX_FENCE_TUPLES = Math.ceil(SEMANTIC_TITLE_PROVENANCE_MAX_BYTES / 16);
 const languageTag = /^[a-z]{1,8}(?:-[a-z0-9]{1,8})*$(?![\s\S])/i;
 
 type FenceReader = (tuples: readonly SourceFenceTuple[], deadline: number) => Promise<readonly SourceFence[]>;
@@ -101,12 +100,13 @@ function exactEntries(
 }
 
 function collectTuples(entries: readonly SemanticTitleProvenanceEntry[]): SourceFenceTuple[] | undefined {
+  const maximum = Math.ceil(SEMANTIC_TITLE_PROVENANCE_MAX_BYTES / 16);
   const tuples = new Map<string, SourceFenceTuple>();
   const add = (binding: SemanticTitleFieldBinding): boolean => {
     const tuple = importedTuple(binding);
     if (tuple === undefined) return false;
     if (tuple !== null) tuples.set(tupleKey(tuple), tuple);
-    return tuples.size <= MAX_FENCE_TUPLES;
+    return tuples.size <= maximum;
   };
   for (const entry of entries) {
     for (const binding of Object.values(entry.labels)) if (!add(binding)) return undefined;
@@ -138,9 +138,15 @@ function exactFenceRows(
 export function createContentShelfTitleProvenanceObserver(
   provenance: SemanticTitleProvenance,
   readFenceBatch: FenceReader,
-): ContentShelfTitleNativeObserver {
+) {
   return {
-    async observe(input) {
+    async observe(input: {
+      owner: Readonly<{ route: number; accountId: string }>;
+      languages: readonly string[];
+      viewer: AccountActor;
+      subjects: readonly string[];
+      deadline: number;
+    }) {
       if (
         !Number.isFinite(input.deadline) ||
         !Array.isArray(input.subjects) ||
@@ -231,7 +237,7 @@ async function readNativeFenceBatch(
 export function createNativeContentShelfTitleProvenanceObserver(
   pool: Pool,
   routeKey: Uint8Array,
-): ContentShelfTitleNativeObserver {
+) {
   const provenance = createSemanticTitleProvenanceAdapter(pool, routeKey);
   return createContentShelfTitleProvenanceObserver(provenance, (tuples, deadline) =>
     readNativeFenceBatch(pool, tuples, deadline),

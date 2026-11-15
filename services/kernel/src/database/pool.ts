@@ -4,7 +4,11 @@ import { ConfigError } from '../commerce/config.ts';
 import { withBoundedReadLifetime, type BoundedReadLifetimeOptions } from './bounded-read-lifetime.ts';
 export { partitionReadClient, partitionReadClientObservation, partitionReadClients } from './read-snapshot.ts';
 export { boundedReadWindow } from './bounded-read-window.ts';
-export { BoundedReadDeadlineError, RetiredReadClientError } from './bounded-read-lifetime.ts';
+export {
+  BoundedReadDeadlineError,
+  RetiredReadClientError,
+  type NativeReadQueryConfig,
+} from './bounded-read-lifetime.ts';
 
 export const KERNEL_POOL_MAX = 10;
 const DEFAULT_ACQUIRE_TIMEOUT_MILLIS = 200;

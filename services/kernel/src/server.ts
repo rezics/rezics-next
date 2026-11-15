@@ -24,7 +24,6 @@ import {
 import { composeSemanticDomain } from './composition/semantic.ts';
 import { bindDefaultSemanticDomain } from './semantic/adapters/index.ts';
 import { composeNativeContentShelfTitleInputs } from './composition/content.ts';
-import type { ContentShelfTitleInputs } from './library/shelf-title-content-source.ts';
 import type { Access } from './request/access.ts';
 
 export { ConfigError } from './commerce/config.ts';
@@ -65,7 +64,7 @@ export type ServerConfig = {
   searchNativePorts?: SearchNativePorts;
   receiptKeys?: KeyRing;
   commerce: CommerceConfig | null;
-  content: ContentRuntime & { shelfTitleInputs?: ContentShelfTitleInputs };
+  content: ContentRuntime & { shelfTitleInputs?: ReturnType<typeof composeNativeContentShelfTitleInputs> };
   search?: SearchConfig;
   writeRate?: WriteRateLimiter;
   rateAttribution?: WriteRateStageOptions;

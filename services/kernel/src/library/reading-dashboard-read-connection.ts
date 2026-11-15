@@ -1,7 +1,6 @@
 import type { Pool, PoolClient, QueryConfig } from 'pg';
 import { within } from '../access/deadline.ts';
-import type { NativeReadQueryConfig } from '../database/bounded-read-lifetime.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { discardConnection, withConnection, type NativeReadQueryConfig } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 
 type Work<T> = (client: PoolClient) => Promise<T>;

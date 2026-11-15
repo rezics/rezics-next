@@ -1,7 +1,6 @@
 import type { Pool, PoolClient, QueryConfig } from 'pg';
 import { remaining, within } from '../access/deadline.ts';
-import type { NativeReadQueryConfig } from '../database/bounded-read-lifetime.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { discardConnection, withConnection, type NativeReadQueryConfig } from '../database/pool.ts';
 import type { AccessClient } from '../request/access.ts';
 
 export type ReadConnection = Readonly<{
