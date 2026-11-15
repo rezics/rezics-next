@@ -748,7 +748,8 @@ class FixturePath(type(Path())):
 ns['Path']=FixturePath
 ns['RESOURCE_CGROUP_ROOT']=arguments['cgroups']
 ns['owned_processes']=lambda:{os.getpid():start}
-ns['subprocess']=SimpleNamespace(run=lambda *args,**kwargs:SimpleNamespace(stdout='fixture-invocation'),TimeoutExpired=subprocess.TimeoutExpired)
+ns['subprocess']=SimpleNamespace(run=lambda *args,**kwargs:SimpleNamespace(stdout='fixture-invocation'),TimeoutExpired=subprocess.TimeoutExpired,
+    PIPE=subprocess.PIPE,DEVNULL=subprocess.DEVNULL)
 resource=ns['Resources'](host,run,root,time.monotonic())
 marker={'schema':1,'host':host,'run':run,'pid':os.getpid(),'started':start,'group':os.getpgrp(),'uid':os.getuid()}
 (root/'.remote-check-supervisor').write_text(json.dumps(marker))
