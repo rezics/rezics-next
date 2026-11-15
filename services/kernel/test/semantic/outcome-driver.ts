@@ -242,6 +242,8 @@ export type SemanticOutcomeDriver = SemanticDriver & {
     };
     /** Mounted platform.governance actions plus access:grant and gate:any. */
     governorScopes: readonly string[];
+    /** Join the owned identity worker and its output before another scenario starts. */
+    stopIdentityWorker(): Promise<void>;
     person(name: string, options?: { scopes?: readonly string[] }): Promise<Account>;
     verifiedAutomated(name: string, operator: Account): Promise<Account>;
     signIn(account: Account): Promise<HttpResponse>;
@@ -314,7 +316,24 @@ async function startDriver(
   let release: (() => void | Promise<void>) | undefined;
   let relays: ReturnType<typeof startRelays> | undefined;
   let nativeWorker: Promise<ManagedSemanticWorker> | undefined;
+  let stoppingIdentityWorker: Promise<void> | undefined;
   let completion: Promise<void> | undefined;
+  async function stopIdentityWorker(): Promise<void> {
+    if (stoppingIdentityWorker) return stoppingIdentityWorker;
+    const owned = nativeWorker;
+    if (!owned) return;
+    stoppingIdentityWorker = (async () => {
+      // Failed startup already joins its child and streams before rejecting.
+      const worker = await owned.catch(() => undefined);
+      await worker?.stop();
+      if (nativeWorker === owned) nativeWorker = undefined;
+    })();
+    try {
+      await stoppingIdentityWorker;
+    } finally {
+      stoppingIdentityWorker = undefined;
+    }
+  }
   const close = () => {
     if (completion) return completion;
     completion = (async () => {
@@ -328,11 +347,7 @@ async function startDriver(
         }
       };
       await attempt(async () => options.beforeClose?.());
-      if (nativeWorker)
-        await attempt(async () => {
-          const worker = await nativeWorker!.catch(() => undefined);
-          await worker?.stop();
-        });
+      await attempt(stopIdentityWorker);
       await attempt(async () => release?.());
       await attempt(async () => relays?.stop());
       if (runtimePool && runtimePool !== pool) await attempt(() => runtimePool!.end());
@@ -808,6 +823,7 @@ async function startDriver(
         return send(accounts[persona], method, path, body, headers, persona);
       },
       async advanceIdentityOperation(operationId) {
+        await stoppingIdentityWorker;
         if (completion) throw new Error('Semantic outcome fixture is closed');
         const worker = await (nativeWorker ??= startManagedSemanticWorker({
           databaseUrl: kernelUrl,
@@ -921,6 +937,7 @@ async function startDriver(
           authJwksUrl: required(runtimeAuth?.jwksUrl, 'Kernel did not construct Access with the Auth JWKS URL'),
         },
         governorScopes: Object.freeze([...governanceScopes]),
+        stopIdentityWorker,
         person,
         verifiedAutomated,
         signIn,
