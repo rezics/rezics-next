@@ -20,6 +20,9 @@ editor dependency or re-exports. Preference consumers may import the pure leaf w
 Run `bun run storybook` to use the existing shared UI Storybook on port 6007. Moved stories retain their titles
 and IDs. The composed published review entry is `/ui/?path=/story/editor-overview--catalogue`; it links the
 implemented editor review states. Host save, publication and native acceptance remain separately scheduled.
+Build with `bun run --cwd packages/editor storybook:build`. Publish a source-only development snapshot with
+`bun run --cwd packages/editor storybook:deploy -- --local --source-only`. Both call the existing Web scripts;
+the combined Web and `/ui/` output already includes Editor. Extra arguments are forwarded.
 Run `bun run typecheck` for types and `bun run test <file>` for a focused package test. Browser tests
 reuse UI's Storybook configuration and existing routed private-network runner; they select only editor stories.
 `bun run test:stories:slow-frames` uses the shared delayed-frame setup. UI's own suite selects only UI stories.
