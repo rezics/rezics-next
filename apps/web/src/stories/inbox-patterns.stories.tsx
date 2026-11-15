@@ -382,7 +382,7 @@ export const LongContent: Story = {
     await expect(rows).toHaveLength(illustrativeLongContent.items.length);
     for (const [index, row] of rows.entries()) {
       const item = illustrativeLongContent.items[index]!;
-      const text = row.querySelector('p')!;
+      const text = within(row).getByRole('heading', { level: 2 });
       const byline = row.querySelector('[data-notice-byline]')!;
       await expect(text.textContent).toBe(item.text);
       await expect(byline).toHaveTextContent(item.actorName!);
@@ -462,7 +462,7 @@ export const RowAnnouncements: Story = {
     await expect(rows.map((row) => row.getAttribute('data-unread'))).toEqual(['true', 'false']);
     for (const row of rows) {
       const link = within(row).getByRole('link');
-      const content = row.querySelector('p')!.textContent;
+      const content = within(row).getByRole('heading', { level: 2 }).textContent;
       const byline = row.querySelector('[data-notice-byline]')!.textContent!.replace(' · ', '. ');
       const state = row.dataset.unread === 'true' ? m.inbox_notice_unread() : m.inbox_notice_read();
       const time = row.querySelector('time')!;

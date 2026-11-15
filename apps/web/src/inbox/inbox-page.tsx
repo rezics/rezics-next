@@ -188,15 +188,15 @@ export function InboxRows({
           const chosenAction =
             onMarkSeen && (item.unread || uncertainNoticeId === item.id) ? (
               uncertainNoticeId === item.id ? (
-                <div className="space-y-1">
-                  <p role="status">
+                <div className="min-w-0 max-w-full space-y-1">
+                  <p role="status" className="wrap-anywhere">
                     {noticeFailure ? acknowledgementFailureMessage(noticeFailure) : m.inbox_notice_seen_unknown()}
                   </p>
-                  {noticeWaiting ? <p>{m.settings_retry_wait()}</p> : null}
+                  {noticeWaiting ? <p className="wrap-anywhere">{m.settings_retry_wait()}</p> : null}
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-auto min-h-11 max-w-full whitespace-normal px-3 py-2"
+                    className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere px-3 py-2"
                     data-inbox-notice-action="true"
                     disabled={
                       pendingNoticeId === item.id || loading || noticeWaiting || noticeRetryBlocked || !onRetrySeen
@@ -210,7 +210,7 @@ export function InboxRows({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-auto min-h-11 max-w-full whitespace-normal px-3 py-2"
+                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere px-3 py-2"
                   data-inbox-notice-action="true"
                   disabled={
                     acknowledgementBlocked || loading || (pendingNoticeId !== null && pendingNoticeId !== undefined)
@@ -259,19 +259,19 @@ export function InboxRows({
                   item.unread ? 'border-s-4 border-s-primary bg-muted/30' : 'border-border bg-card'
                 }`}
               >
-                <div className="min-w-0">
+                <div className="min-w-0 wrap-anywhere">
                   <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                     <div data-content-item-slot="visual" className="shrink-0">
                       {visual}
                     </div>
                     <div
                       data-content-item-slot="metadata"
-                      className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
+                      className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 [&>*]:min-w-0 [&>*]:max-w-full"
                     >
                       <span
                         data-notice-byline="true"
                         aria-hidden={href ? true : undefined}
-                        className="min-w-0 max-w-full break-words text-sm font-medium"
+                        className="min-w-0 max-w-full wrap-anywhere text-sm font-medium"
                       >
                         {actor.label}
                         <span aria-hidden="true"> · </span>
@@ -290,13 +290,13 @@ export function InboxRows({
                   </div>
                   <h2
                     data-content-item-slot="title"
-                    className="mt-3 max-w-prose break-words text-lg leading-snug font-semibold sm:text-xl"
+                    className="mt-3 max-w-prose wrap-anywhere text-lg leading-snug font-semibold sm:text-xl"
                   >
                     {href ? (
                       <a
                         href={href}
                         aria-label={primaryLinkLabel}
-                        className="rounded-sm underline decoration-border underline-offset-4 hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        className="inline-block min-h-11 min-w-11 max-w-full whitespace-normal rounded-sm underline decoration-border underline-offset-4 wrap-anywhere hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       >
                         {text}
                       </a>
@@ -305,7 +305,10 @@ export function InboxRows({
                     )}
                   </h2>
                   {explanation ? (
-                    <div data-content-item-slot="preview" className="mt-2 max-w-prose text-sm leading-relaxed">
+                    <div
+                      data-content-item-slot="preview"
+                      className="mt-2 max-w-prose wrap-anywhere text-sm leading-relaxed"
+                    >
                       <p>{explanation}</p>
                     </div>
                   ) : null}
@@ -315,14 +318,15 @@ export function InboxRows({
                       className="mt-4 max-w-prose border-s-2 border-border ps-3"
                     >
                       <p className="text-xs font-medium text-muted-foreground">{m.inbox_notice_context()}</p>
-                      <p className="mt-1 break-words text-sm leading-relaxed">{context}</p>
+                      <p className="mt-1 wrap-anywhere text-sm leading-relaxed">{context}</p>
                     </div>
                   ) : null}
                 </div>
                 <div className="flex min-w-0 flex-col items-start gap-3 border-t border-border pt-3 sm:items-end sm:border-t-0 sm:pt-0">
-                  <div data-content-item-slot="state">
+                  <div data-content-item-slot="state" className="min-w-0 max-w-full">
                     <span
-                      aria-hidden={href ? true : undefined}
+                      role={confirmedNoticeId === item.id ? 'status' : undefined}
+                      aria-hidden={href && confirmedNoticeId !== item.id ? true : undefined}
                       className={`inline-flex min-h-8 max-w-full items-center gap-2 rounded-full border px-3 py-1 text-sm font-medium ${
                         item.unread
                           ? 'border-foreground bg-foreground text-background'
@@ -337,7 +341,7 @@ export function InboxRows({
                             : 'border border-current'
                         }`}
                       />
-                      <span className="min-w-0 break-words">
+                      <span className="min-w-0 wrap-anywhere">
                         {confirmedNoticeId === item.id ? m.inbox_notice_marked_seen() : readState}
                       </span>
                     </span>
@@ -356,7 +360,7 @@ export function InboxRows({
       {page.next && onLoadMore ? (
         <Button
           variant="outline"
-          className="mt-5 h-auto min-h-11 max-w-full whitespace-normal py-2"
+          className="mt-5 h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
           onClick={onLoadMore}
           disabled={loading}
         >
@@ -1371,7 +1375,9 @@ export function ViewerInboxPage({
         <>
           {acknowledgementRecovery}
           <div className="mt-6 space-y-3">
-            <p className="text-muted-foreground">{m.inbox_read_denied()}</p>
+            <p role="status" className="text-muted-foreground">
+              {m.inbox_read_denied()}
+            </p>
             {!seenFailure ? (
               <Button
                 variant="outline"
@@ -1387,7 +1393,9 @@ export function ViewerInboxPage({
       ) : pageQuery.isPending && !readable ? (
         <>
           {acknowledgementRecovery}
-          <p className="mt-6 text-muted-foreground">{m.inbox_loading()}</p>
+          <p role="status" className="mt-6 text-muted-foreground">
+            {m.inbox_loading()}
+          </p>
         </>
       ) : (
         <>
@@ -1495,7 +1503,9 @@ export function ViewerInboxPage({
           {readable ? (
             readable.items.length === 0 && !readable.next ? (
               !failed && !pageQuery.isFetching ? (
-                <p className="mt-6 text-muted-foreground">{m.inbox_empty()}</p>
+                <p role="status" className="mt-6 text-muted-foreground">
+                  {m.inbox_empty()}
+                </p>
               ) : null
             ) : readable.items.length === 0 ? (
               <section className="mt-6 space-y-3">
