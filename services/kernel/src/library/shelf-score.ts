@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import type { KernelClock } from '../clock.ts';
+import { noEffect } from '../command/command.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { ProblemError } from '../http/problem-error.ts';
@@ -69,14 +70,26 @@ export function createShelfScorePreparation(deps: { pool: Pool; access: Access; 
         input: {},
       },
       async (tx) => {
-        const result = await tx.query<{ ready: boolean; prepared: number }>(
-          'SELECT ready,prepared FROM library.prepare_shelf_score($1::integer,$2::uuid)',
+        const result = await tx.query<{ ready: boolean; prepared: number; changed: boolean }>(
+          'SELECT ready,prepared,changed FROM library.prepare_shelf_score($1::integer,$2::uuid)',
           [requireRoute(accountId), accountId],
         );
-        const page = result.rows[0]!;
+        const page = result.rows[0];
+        if (!page || typeof page.changed !== 'boolean') throw new ProblemError('dependency_unavailable');
+        const value: ShelfScorePreparation = {
+          installation: page.ready ? 'installed' : 'pending',
+          prepared: page.prepared,
+        };
+        if (page.changed === false) return noEffect(value);
         return {
-          value: { installation: page.ready ? ('installed' as const) : ('pending' as const), prepared: page.prepared },
-          events: [],
+          value,
+          events: [
+            {
+              type: 'com.rezics.library.shelf-maintenance.advanced.v1',
+              subject: accountId,
+              data: { accountId },
+            },
+          ],
         };
       },
     );

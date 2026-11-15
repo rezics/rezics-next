@@ -1774,6 +1774,20 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     });
   }
 
+  async function originalOccurrenceCollection(root: RecoveryRoot, effect: AdmittedEffect): Promise<string> {
+    if (!effect.sourceId) throw conflict();
+    // The cleanup index binds this owner/upload/kind/source key. The original review, not a later selection,
+    // identifies the retained occurrence; missing or ambiguous custody must not dispatch a new effect.
+    const source = await deps.pool.query<{ collection_id: string }>(
+      `SELECT collection_id FROM library.collection_archive_recovery_record
+       WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
+         AND source_id=$4::uuid AND review_id=$5::uuid LIMIT 2`,
+      [root.route, root.accountId, root.uploadId, effect.sourceId, effect.reviewId],
+    );
+    if (source.rows.length !== 1 || !UUID.test(source.rows[0]!.collection_id)) throw conflict();
+    return source.rows[0]!.collection_id;
+  }
+
   async function executeEffect(
     owner: OwnerActor,
     root: RecoveryRoot,
@@ -1803,6 +1817,9 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
       return value;
     };
     const sourceId = effect.sourceId;
+    const sourceCollectionId = ['member', 'note', 'order'].includes(effect.action)
+      ? await originalOccurrenceCollection(root, effect)
+      : null;
     let checkpoint: EffectCheckpoint;
     try {
       if (effect.action === 'create') {
@@ -1856,7 +1873,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
             root.route,
             owner.accountId,
             root.uploadId,
-            collectionId,
+            sourceCollectionId,
             sourceId,
             effect.reviewId,
             member.value.id,
@@ -1879,7 +1896,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
           statement: `UPDATE library.collection_archive_recovery_record SET note_state='applied'
              WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
                AND collection_id=$4 AND source_id=$5::uuid AND review_id=$6::uuid`,
-          values: [root.route, owner.accountId, root.uploadId, collectionId, sourceId, effect.reviewId],
+          values: [root.route, owner.accountId, root.uploadId, sourceCollectionId, sourceId, effect.reviewId],
         };
       } else if (effect.action === 'order') {
         if (!sourceId) throw conflict();
@@ -1891,7 +1908,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
           statement: `UPDATE library.collection_archive_recovery_record SET order_state='applied'
              WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
                AND collection_id=$4 AND source_id=$5::uuid AND review_id=$6::uuid`,
-          values: [root.route, owner.accountId, root.uploadId, collectionId, sourceId, effect.reviewId],
+          values: [root.route, owner.accountId, root.uploadId, sourceCollectionId, sourceId, effect.reviewId],
         };
       } else {
         const collectionId = effect.operands.collectionId;
@@ -1941,7 +1958,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
               root.route,
               owner.accountId,
               root.uploadId,
-              operandString('collectionId'),
+              sourceCollectionId,
               sourceId,
               effect.reviewId,
               failure.state,
@@ -1960,7 +1977,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
               root.route,
               owner.accountId,
               root.uploadId,
-              operandString('collectionId'),
+              sourceCollectionId,
               sourceId,
               effect.reviewId,
               failure.reason,
@@ -1978,7 +1995,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
               root.route,
               owner.accountId,
               root.uploadId,
-              operandString('collectionId'),
+              sourceCollectionId,
               sourceId,
               effect.reviewId,
               failure.state,
