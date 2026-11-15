@@ -17,16 +17,16 @@ import {
 import { knowledgeMediaRetentionSelection } from '../../src/content/knowledge-media-selection.ts';
 import { advanceKnowledgeLifecycleRestorePage } from '../../src/content/knowledge-lifecycle-work.ts';
 import { accountDeletionRuntime, deletePersona } from '../support/account-deletion.ts';
-import { createContentMediaDriver, currentMediaScenario } from './media-driver.ts';
+import { createKnowledgeMediaDriver, currentMediaUploadScenario } from './media-driver.ts';
 import type { ContentCredential } from './support/system.ts';
 
 setDefaultTimeout(360_000);
 
 test('account disposition retains all selected revisions and media without private ancestry and resumes after a hold', async () => {
-  const media = await createContentMediaDriver();
+  const media = await createKnowledgeMediaDriver();
   try {
-    const { system } = currentMediaScenario();
-    const pool = system.pool;
+    const { system } = currentMediaUploadScenario();
+    const pool = system.database.pool;
     const author = system.actors.author;
     const accountId = author.actor.accountId;
     const route = routeOf(accountId)!;
