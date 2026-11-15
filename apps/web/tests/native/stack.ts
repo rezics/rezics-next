@@ -4,6 +4,7 @@ import { fork, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { request as httpsRequest } from 'node:https';
 import { existsSync } from 'node:fs';
+import { sampleNativeMemory, type NativeMemoryObservation } from './native-memory.ts';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -116,6 +117,7 @@ export type NativeWebStack = {
   flushKernelRequests(): Promise<void>;
   workerLogs(): Promise<string>;
   peakMemoryBytes(): number;
+  memoryObservation?(): NativeMemoryObservation | null;
   restartWeb(options: { publicOrigin: string; authIssuer?: string }): Promise<void>;
   stop(): Promise<void>;
 };
@@ -337,9 +339,12 @@ function errorDetails(error: unknown): string {
   return details.join('\n');
 }
 
-async function startDurableWorker(
-  environment: NodeJS.ProcessEnv,
-): Promise<{ pid?: number; logs(): string; stop(): Promise<void> }> {
+async function startDurableWorker(environment: NodeJS.ProcessEnv): Promise<{
+  pid?: number | undefined;
+  identity?: NativeProcessIdentity | undefined;
+  logs(): string;
+  stop(): Promise<void>;
+}> {
   const child = spawn(
     process.execPath,
     [
@@ -357,6 +362,7 @@ async function startDurableWorker(
       stdio: ['ignore', 'pipe', 'pipe'],
     },
   );
+  const identity = child.pid ? inspectNativeProcess(child.pid) : undefined;
   let output = '';
   let started!: () => void;
   let failed!: (error: Error) => void;
@@ -399,7 +405,7 @@ async function startDurableWorker(
     })());
   try {
     await ready;
-    return { pid: child.pid, logs: () => output, stop };
+    return { pid: child.pid, identity, logs: () => output, stop };
   } catch (error) {
     await stop();
     throw error;
@@ -545,7 +551,14 @@ async function startStack(): Promise<
   const injectedKernelFailures: NativeKernelFailureInjection[] = [];
   const createdSubjectReadFailures = new Map<string, { status: number; body: string }>();
   let pendingCreatedSubjectReadFailure: { status: number; body: string } | undefined;
-  let durableWorker: { pid?: number; logs(): string; stop(): Promise<void> } | undefined;
+  let durableWorker:
+    | {
+        pid?: number | undefined;
+        identity?: NativeProcessIdentity | undefined;
+        logs(): string;
+        stop(): Promise<void>;
+      }
+    | undefined;
   let webProcess: WebProcess | undefined;
   let driver: SemanticOutcomeDriver | undefined;
   let postgresContainer: string | undefined;
@@ -561,6 +574,8 @@ async function startStack(): Promise<
   const originalDatabaseUrl = process.env.DATABASE_URL;
   let stopped: Promise<void> | undefined;
   let peakMemory = process.memoryUsage().rss;
+  let memory: NativeMemoryObservation | null = null;
+  const hostIdentity = inspectNativeProcess(process.pid);
   const testIssuer = nativeAuthTestIssuer;
   const testWebsiteHost = process.env.NATIVE_WEB_TEST_HOST || undefined;
   const testWebsiteCertificate = process.env.NATIVE_WEB_TEST_TLS_CERT || undefined;
@@ -571,20 +586,14 @@ async function startStack(): Promise<
     (!testIssuer || testWebsiteHost !== nativeWebsiteHost || !testWebsiteCertificate || !testWebsiteKey)
   )
     throw new Error('Native website TLS requires the reserved host and the Auth test issuer');
-  const sampleMemory = () => {
-    let bytes = process.memoryUsage().rss;
-    if (webProcess?.child.pid) {
-      const result = Bun.spawnSync(['ps', '-o', 'rss=', '-g', String(webProcess.child.pid)]);
-      if (result.exitCode === 0) {
-        const residentKilobytes = result.stdout.toString().trim().split(/\s+/).map(Number).filter(Number.isFinite);
-        bytes += residentKilobytes.reduce((sum, value) => sum + value, 0) * 1024;
-      }
-    }
-    if (durableWorker?.pid) {
-      const result = Bun.spawnSync(['ps', '-o', 'rss=', '-p', String(durableWorker.pid)]);
-      if (result.exitCode === 0) bytes += Number(result.stdout.toString().trim()) * 1024;
-    }
-    peakMemory = Math.max(peakMemory, bytes);
+  const sampleMemory = (phase?: string) => {
+    memory = sampleNativeMemory([
+      { role: 'fixture-host', pid: process.pid, identity: hostIdentity },
+      { role: 'durable-worker', pid: durableWorker?.pid, identity: durableWorker?.identity },
+      { role: 'web-worker', pid: webProcess?.child.pid, identity: webProcess?.identity },
+    ]);
+    peakMemory = Math.max(peakMemory, memory.processes.observedRssBytes ?? process.memoryUsage().rss);
+    if (phase) reportStackProgress(`Native web stack memory ${phase}: ${JSON.stringify(memory)}`);
   };
   const memorySampler = setInterval(sampleMemory, 250);
   const accounts = new Map<string, Promise<{ accountId: string; bearer: string }>>();
@@ -759,6 +768,7 @@ async function startStack(): Promise<
       if (ended !== true) throw new Error('SQL analysis admin pool end exceeded 1000ms');
     }
     reportStackProgress('Native web stack startup: SQL analysis database cloned');
+    sampleMemory('analysis-ready');
     const socketHost = source.searchParams.get('host');
     let analysisUrl: string;
     if (socketHost?.startsWith('/')) {
@@ -997,6 +1007,7 @@ async function startStack(): Promise<
       },
     );
     reportStackProgress('Native web stack startup: native kernel and Auth fixtures ready');
+    sampleMemory('kernel-auth-ready');
 
     await driver.fixtures.openFeatures(['search']);
     authServer = Bun.serve({
@@ -1038,6 +1049,7 @@ async function startStack(): Promise<
     reportStackProgress('Native web stack startup: starting durable-work worker');
     durableWorker = await startDurableWorker(workerEnv);
     reportStackProgress('Native web stack startup: durable-work worker ready');
+    sampleMemory('durable-worker-ready');
 
     const sourceApp = kernel!;
     const server = Bun.serve({
@@ -1213,6 +1225,7 @@ async function startStack(): Promise<
     reportStackProgress('Native web stack startup: starting production web Worker');
     webProcess = await launch();
     reportStackProgress('Native web stack startup: production web Worker ready');
+    sampleMemory('web-worker-ready');
 
     return {
       databaseUrl: driver.fixtures.runtime.databaseUrl,
@@ -1376,6 +1389,7 @@ async function startStack(): Promise<
         sampleMemory();
         return peakMemory;
       },
+      memoryObservation: () => memory,
       async restartWeb(options) {
         await stopWeb(webProcess);
         webProcess = undefined;
@@ -1401,6 +1415,7 @@ async function startStack(): Promise<
 type Observation = {
   requests: NativeKernelRequest[];
   peakMemory: number;
+  memory: NativeMemoryObservation | null;
   webOutput: string;
 };
 type HostReply =
@@ -1635,7 +1650,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
     force: terminate,
   });
   let serial = 0;
-  let observation: Observation = { requests: [], peakMemory: 0, webOutput: '' };
+  let observation: Observation = { requests: [], peakMemory: 0, memory: null, webOutput: '' };
   let closed: Promise<void> | undefined;
   let pageBridgeRelease: (() => void) | undefined;
   let dead: Error | undefined;
@@ -1705,6 +1720,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
     if ('startupError' in reply) return fail(new Error(reply.startupError));
     observation.requests.push(...reply.observation.requests);
     observation.peakMemory = reply.observation.peakMemory;
+    observation.memory = reply.observation.memory;
     observation.webOutput = reply.observation.webOutput;
     if ('ready' in reply) return ready(reply.ready);
     const call = pending.get(reply.id);
@@ -1837,6 +1853,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
         await call('observe');
       },
       peakMemoryBytes: () => observation.peakMemory,
+      memoryObservation: () => observation.memory,
       async kernel(path, init = {}, persona) {
         lifecycle.assertOpen('send native kernel request');
         const url = new URL(path, kernelOrigin);
@@ -1947,6 +1964,7 @@ if (process.env.NATIVE_WEB_STACK_HOST === '1' && process.send) {
       const next = {
         requests: requests.slice(observedRequests),
         peakMemory: stack.peakMemoryBytes(),
+        memory: stack.memoryObservation?.() ?? null,
         webOutput: stack.webOutput(),
       };
       observedRequests = requests.length;
