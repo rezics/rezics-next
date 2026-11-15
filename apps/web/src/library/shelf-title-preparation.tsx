@@ -10,7 +10,7 @@ export class ShelfTitlePreparationSteps {
     const key = this.retryKey ?? crypto.randomUUID();
     this.retryKey = key;
     const receipt = await prepare(key);
-    this.retryKey = receipt.installation === 'pending' ? null : key;
+    this.retryKey = null;
     return receipt;
   }
 }
@@ -26,59 +26,59 @@ export function ShelfTitlePreparation({
 }) {
   const [steps] = useState(() => new ShelfTitlePreparationSteps());
   const [progress, setProgress] = useState<ShelfTitlePreparationReceipt | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [failure, setFailure] = useState<'step' | 'page' | null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
 
-  const advance = async () => {
+  async function run(action: 'prepare' | 'refresh') {
     if (busyRef.current || !isCurrent()) return;
     busyRef.current = true;
     setBusy(true);
-    setFailed(false);
-    let receipt: ShelfTitlePreparationReceipt;
+    setFailure(null);
+    let stage: 'step' | 'page' = 'page';
     try {
-      receipt = await steps.run(prepare);
+      if (action === 'prepare') {
+        stage = 'step';
+        const receipt = await steps.run(prepare);
+        if (!isCurrent()) return;
+        setProgress(receipt);
+        if (receipt.installation === 'pending') return;
+      }
+      stage = 'page';
+      await refresh();
     } catch {
-      if (isCurrent()) setFailed(true);
-      busyRef.current = false;
-      if (isCurrent()) setBusy(false);
-      return;
-    }
-    if (!isCurrent()) {
-      busyRef.current = false;
-      return;
-    }
-    setProgress(receipt);
-    try {
-      if (receipt.installation === 'installed') await refresh();
+      if (isCurrent()) setFailure(stage);
     } finally {
       busyRef.current = false;
       if (isCurrent()) setBusy(false);
     }
-  };
+  }
 
   return (
     <section aria-live="polite" className="flex min-w-0 flex-col items-start gap-3" data-shelf-title-state="preparing">
       <p role="status">
-        {failed
+        {failure === 'step'
           ? m.library_title_prepare_uncertain()
-          : progress?.installation === 'installed'
-            ? m.library_title_prepare_ready()
-            : progress
+          : failure === 'page'
+            ? m.error_message()
+            : progress?.installation === 'pending'
               ? m.library_title_prepare_progress({ prepared: progress.prepared })
               : m.library_title_order_preparing()}
       </p>
-      {progress?.installation === 'installed' ? null : (
-        <Button type="button" variant="outline" disabled={busy || !isCurrent()} onClick={advance}>
-          {busy
-            ? m.library_title_prepare_running()
-            : failed
-              ? m.library_title_prepare_retry()
-              : progress
-                ? m.library_title_prepare_next()
-                : m.library_title_prepare_start()}
+      <Button type="button" variant="outline" disabled={busy || !isCurrent()} onClick={() => void run('prepare')}>
+        {busy
+          ? m.library_title_prepare_running()
+          : failure === 'step'
+            ? m.library_title_prepare_retry()
+            : progress?.installation === 'pending'
+              ? m.library_title_prepare_next()
+              : m.library_title_prepare_start()}
+      </Button>
+      {progress?.installation === 'installed' ? (
+        <Button type="button" variant="outline" disabled={busy || !isCurrent()} onClick={() => void run('refresh')}>
+          {m.library_window_retry()}
         </Button>
-      )}
+      ) : null}
     </section>
   );
 }

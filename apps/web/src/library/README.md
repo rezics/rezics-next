@@ -142,8 +142,9 @@ Library presentation resolves explicit valid URL choices first, then the current
 the existing application defaults. Layouts use an exact absolute-IRI type scope when the address type is an IRI and
 otherwise use `all`. Settings edits `all` and individual admitted types. Grid sizes map `small`/`medium`/`large` to the current `s`/`m`/`l`
 controls. `last_activity`, `added` and `finished` map to the currently admitted native Library date orders. Saved
-`title` maps to native localized title order and uses its explicit bounded preparation step; priority order is
-selectable for a visit but is not a saved preference.
+`title` maps to native localized title order and uses its explicit bounded preparation step. An acknowledged
+step triggers the current native page read. If the page still needs preparation, the owner can start a new step
+or retry the page. Priority order is selectable for a visit but is not a saved preference.
 Saved `rating` maps losslessly to the `personalScore` address and direction for each state, including `all`, and is an
 offered Settings choice. Native preparation or Content currentness can still refuse a visit: preparation uses the
 bounded score-installation step; currentness keeps date-order recovery. Release-date and progress orders remain saved and
