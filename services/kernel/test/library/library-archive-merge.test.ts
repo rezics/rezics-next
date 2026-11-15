@@ -923,8 +923,9 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
     pool: f.pool,
     access: f.access,
     tokens: f.tokens,
-  }).listAssignments(main.actor, { labelId: created[0]!.id, subjectId: subjects[1], limit: 1 });
+  }).listAssignments(main.actor, { labelId: created[0]!.id, limit: 1 });
   expect(assignmentRows.assignments).toHaveLength(1);
+  expect(assignmentRows.assignments[0]!.subjectId).toBe(subjects[1]);
   const resultPage = await json(await send(main, 'GET', `${mergePath}/${id}/results?limit=1`));
   expect(resultPage.results).toHaveLength(1);
   await json(await send(main, 'DELETE', `${mergePath}/${id}`));

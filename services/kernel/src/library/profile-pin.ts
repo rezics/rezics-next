@@ -1,5 +1,16 @@
 import type { LibraryProfilePin } from './profile.ts';
 
+/** Pin identity is independent of JSON/JSONB property order. */
+export function sameLibraryProfilePin(left: LibraryProfilePin | null, right: LibraryProfilePin | null): boolean {
+  if (left === null || right === null) return left === right;
+  return (
+    left.provenance === right.provenance &&
+    left.releaseDigest === right.releaseDigest &&
+    left.acceptingType === right.acceptingType &&
+    left.profileId === right.profileId
+  );
+}
+
 /** Decode private stored provenance without resolving current definitions. */
 export function decodeLibraryProfilePin(value: unknown): LibraryProfilePin | null {
   if (value === null) return null;

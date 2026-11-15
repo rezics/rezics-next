@@ -1,3 +1,4 @@
+import { sameLibraryProfilePin } from './profile-pin.ts';
 import { applyJournalPatch, sameJournalValues, recordedProgressValues } from '@rezics/progress';
 import type { Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
@@ -126,11 +127,7 @@ function assertExpectedBinding(
       !source ||
       source.kind !== 'supported' ||
       source.subjectId !== expected.subjectId ||
-      // Retained review documents canonicalize JSON keys; pin identity is field identity.
-      source.pin.provenance !== expected.profilePin.provenance ||
-      source.pin.releaseDigest !== expected.profilePin.releaseDigest ||
-      source.pin.acceptingType !== expected.profilePin.acceptingType ||
-      source.pin.profileId !== expected.profilePin.profileId ||
+      !sameLibraryProfilePin(source.pin, expected.profilePin) ||
       (Object.hasOwn(expected, 'requestedSubjectId') &&
         observation.anchor.requestedSubjectId !== expected.requestedSubjectId) ||
       observation.anchor.acceptingType !== expected.acceptingType ||
@@ -213,7 +210,7 @@ export function createSessionCommands(config: Dependencies) {
       before.source.kind !== after.source.kind ||
       (before.source.kind === 'supported' &&
         after.source.kind === 'supported' &&
-        JSON.stringify(before.source.pin) !== JSON.stringify(after.source.pin))
+        !sameLibraryProfilePin(before.source.pin, after.source.pin))
     )
       throw new ProgressConflictError();
   }
@@ -456,7 +453,7 @@ export function createSessionCommands(config: Dependencies) {
         )
           throw new ProgressInvalidError('measureId');
         // A concurrent NULL-pin migration cannot let prepared legacy meaning admit a pinned value.
-        if (action === 'record' && !clearing && JSON.stringify(fact.pin) !== JSON.stringify(prepared.pin))
+        if (action === 'record' && !clearing && !sameLibraryProfilePin(fact.pin, prepared.pin))
           throw new ProgressConflictError();
         if (current.revision !== revision) throw new ProgressConflictError();
         const context = { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) };

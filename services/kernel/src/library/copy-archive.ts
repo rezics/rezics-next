@@ -1,3 +1,4 @@
+import { sameLibraryProfilePin } from './profile-pin.ts';
 import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
@@ -309,7 +310,7 @@ function sameBinding(
     before.component.partition === current.component.partition &&
     before.component.epoch === current.component.epoch &&
     before.component.position === current.component.position &&
-    JSON.stringify(before.pin) === JSON.stringify(current.pin)
+    sameLibraryProfilePin(before.pin, current.pin)
   );
 }
 
@@ -751,7 +752,7 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
       observation.source.kind !== currentObservation.source.kind ||
       (observation.source.kind === 'supported' &&
         currentObservation.source.kind === 'supported' &&
-        JSON.stringify(observation.source.pin) !== JSON.stringify(currentObservation.source.pin))
+        !sameLibraryProfilePin(observation.source.pin, currentObservation.source.pin))
     )
       throw new ProblemError('conflict');
     const binding = profileBinding(observation.anchor, observation.source),
