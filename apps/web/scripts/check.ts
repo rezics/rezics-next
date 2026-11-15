@@ -727,8 +727,15 @@ export async function main(args: string[], runtime: WebCheckRuntime = {}): Promi
   const routeEnvironment = selection ? writeWebTestSelectionContext(selection) : process.env;
   const routeCommand = selection ? ['--routed-selection'] : currentArgs;
   const workerReport = browserWorkerRequest(currentArgs)?.report;
-  const returned = workerReport ? [workspacePath(root, workerReport)] : ['apps/web/.cache/check-timings.json'];
-  if (currentArgs.includes('--prepare-only')) returned.push('apps/web/.dev.vars');
+  // Match the execution branches below: host-only modes never enter the timing lanes.
+  const hostOnly = ['--personal-host', '--auth-binding-host', '--host'].includes(currentArgs[0] ?? '');
+  const returned = hostOnly
+    ? []
+    : currentArgs.includes('--prepare-only')
+      ? ['apps/web/.dev.vars']
+      : workerReport
+        ? [workspacePath(root, workerReport)]
+        : ['apps/web/.cache/check-timings.json'];
   const routed = await (runtime.route ?? routeWebCheck)(
     {
       root,

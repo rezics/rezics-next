@@ -2375,6 +2375,21 @@ PREPARATION_IO_NEXT = 0
 PREPARATION_IO_PHASE = None
 PREPARATION_PHASE_AT = None
 PREPARATION_PHASE_SECONDS = {}
+PREPARATION_PRESSURE_SECONDS = {}
+
+
+def record_preparation_pressure_wait(evidence, elapsed):
+    # A partition of observed wait intervals, never overlapping PSI percentages or duplicate phase totals.
+    # Simultaneous triggering memory and I/O pressure has its own combined category. Below triggering
+    # thresholds, the existing paused state is a recovery hold (including its healthy hysteresis).
+    if evidence is None:
+        reason = 'state-lock'
+    else:
+        io = evidence['ioFull'] >= 10
+        memory = evidence['memoryFull'] >= 1
+        reason = 'io-memory' if io and memory else 'io' if io else 'memory' if memory else 'recovery-hold'
+    phase = 'host-pressure-wait-' + reason
+    PREPARATION_PRESSURE_SECONDS[phase] = PREPARATION_PRESSURE_SECONDS.get(phase, 0) + elapsed
 
 
 def preparation_io_gate():
@@ -2388,16 +2403,19 @@ def preparation_io_gate():
     phase = PREPARATION_IO_PHASE
     waited = False
     slots = Path(os.environ['REMOTE_CHECK_PREPARATION_CACHE']).parent / 'slots'
-    paused, _, _ = update_host_pressure(slots)
+    paused, _, evidence = update_host_pressure(slots)
     while paused:
         if not waited:
-            preparation_progress(PREPARATION_IO_ROOT, 'cache-io-pressure-wait')
+            preparation_progress(PREPARATION_IO_ROOT, 'host-pressure-wait')
             waited = True
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            raise RuntimeError('absolute preparation deadline exceeded during cache I/O wait')
+            raise RuntimeError('absolute preparation deadline exceeded during host pressure wait')
+        interval_started = time.monotonic()
         time.sleep(min(0.5, remaining))
-        paused, _, _ = update_host_pressure(slots)
+        previous_evidence = evidence
+        paused, _, evidence = update_host_pressure(slots)
+        record_preparation_pressure_wait(previous_evidence, time.monotonic() - interval_started)
     PREPARATION_IO_NEXT = time.monotonic() + 0.25
     if waited and phase is not None:
         preparation_progress(PREPARATION_IO_ROOT, phase)
@@ -4053,6 +4071,10 @@ def preparation_phase_seconds():
     result = dict(PREPARATION_PHASE_SECONDS)
     if PREPARATION_IO_PHASE is not None and PREPARATION_PHASE_AT is not None:
         result[PREPARATION_IO_PHASE] = result.get(PREPARATION_IO_PHASE, 0) + time.monotonic() - PREPARATION_PHASE_AT
+    # Replace the aggregate phase with its mutually exclusive sampled-reason partition, so consumers may
+    # sum phaseSeconds without counting the same wait twice. Progress markers retain the aggregate name.
+    result.pop('host-pressure-wait', None)
+    result.update(PREPARATION_PRESSURE_SECONDS)
     return {phase: round(elapsed, 3) for phase, elapsed in result.items()}
 
 

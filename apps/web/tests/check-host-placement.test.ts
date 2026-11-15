@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import { runHostTests } from '../scripts/check.ts';
+import { main as runWebCheck, runHostTests } from '../scripts/check.ts';
+import { resolve } from 'node:path';
 
 test('web host tests are placed with stack-run and run locally through its fallback', async () => {
   let placed: Parameters<typeof runHostTests>[1] extends (run: infer R, ...args: never[]) => unknown ? R : never;
@@ -48,4 +49,37 @@ test('a remote host test failure is returned as a check failure', async () => {
       },
     ),
   ).rejects.toThrow('host tests failed with status 17');
+});
+
+
+test('Web driver return declarations match the selected execution branch', async () => {
+  const app = resolve(import.meta.dir, '..');
+  const timings = ['apps/web/.cache/check-timings.json'];
+  const cases = [
+    { args: ['--host', 'tests/native/hosted-book-journey.host.test.ts'], returns: [] },
+    { args: ['--personal-host'], returns: [] },
+    { args: ['--auth-binding-host'], returns: [] },
+    { args: ['--prepare-only'], returns: ['apps/web/.dev.vars'] },
+    { args: ['--browser', '--report', '.temp/web-return-contract', 'tests/check-host-placement.test.ts'], returns: ['.temp/web-return-contract'] },
+    { args: ['--tests-only', 'tests/check-host-placement.test.ts'], returns: timings },
+    { args: ['--tests-only', 'tests/native/hosted-book-journey.host.test.ts'], returns: timings },
+    { args: ['--stories'], returns: timings },
+    { args: [], returns: timings },
+  ];
+  const previousExitCode = process.exitCode;
+  try {
+    for (const selection of cases) {
+      let declared: string[] | undefined;
+      await runWebCheck(selection.args, {
+        invocationDirectory: app,
+        route: async (run) => {
+          declared = run.returns;
+          return 0;
+        },
+      });
+      expect(declared).toEqual(selection.returns);
+    }
+  } finally {
+    process.exitCode = previousExitCode;
+  }
 });
