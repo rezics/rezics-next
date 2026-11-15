@@ -31,6 +31,7 @@ import { declareAgentIdentitySource } from '../../src/history/adapters/agent-ide
 import { beginSemanticRecordSourceSet } from '../../src/semantic/record-source-set.ts';
 import { writeIdentityScopeConsumerNativeCommit } from '../../src/semantic/identity-epoch-native-commit.ts';
 import { createPool } from '../../src/database/pool.ts';
+import { readLiveCopyLineage } from '../../src/access/live-copy-lineage.ts';
 import { enterCommandGate } from '../../src/command/gate.ts';
 import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
 import { observeSql, type SqlObserver } from '../content/support/sql-observer.ts';
@@ -128,9 +129,12 @@ function fixture(statements = 8, id = account) {
   };
 }
 beforeAll(async () => {
-  await admin.query("INSERT INTO core.partition(partition_no,node) VALUES($1,'local') ON CONFLICT DO NOTHING", [
-    partition,
-  ]);
+  const client = await admin.connect();
+  try {
+    expect((await readLiveCopyLineage(client, partition)).partition).toBe(partition);
+  } finally {
+    client.release();
+  }
   // Learn the actual mapped native statements, never a replacement fence or executor.
   const observer = observe();
   await runCommand(pool, { partition }, async () => response(0));
@@ -144,9 +148,11 @@ afterEach(async () => {
   await admin.query("UPDATE core.partition SET write_state='active',moved_to=NULL WHERE partition_no=$1", [partition]);
 });
 afterAll(async () => {
-  await pool.end();
-  await foreign.end();
-  await admin.end();
+  try {
+    for (const observer of observers.splice(0)) await observer.close();
+  } finally {
+    await Promise.all([pool.end(), foreign.end(), admin.end()]);
+  }
 });
 
 async function position() {

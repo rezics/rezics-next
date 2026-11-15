@@ -29,6 +29,7 @@ import {
   type CommandDispatchOwner,
 } from '../../src/command/dispatch-lifetime.ts';
 import { createPool } from '../../src/database/pool.ts';
+import { readLiveCopyLineage } from '../../src/access/live-copy-lineage.ts';
 import { newId } from '../../src/route/route.ts';
 import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
 import { declareCommandRecordSources } from '../../src/history/adapters/record-source.ts';
@@ -48,6 +49,7 @@ const begin = 'BEGIN ISOLATION LEVEL SERIALIZABLE';
 const lock = "SET LOCAL lock_timeout = '200ms'";
 const bodySQL = 'SELECT pg_backend_pid() AS pid';
 const observers: SqlObserver[] = [];
+let probeReady = false;
 const observe = () => {
   const observer = observeSql(pool);
   observers.push(observer);
@@ -121,10 +123,14 @@ function ownerFixture(statements = COMMAND_DISPATCH_ALLOWANCE.total.work.stateme
 }
 beforeAll(async () => {
   configureTestReceiptKeys(pool);
-  await admin.query(`INSERT INTO core.partition(partition_no,node) VALUES($1,'local') ON CONFLICT DO NOTHING`, [
-    partition,
-  ]);
+  const client = await admin.connect();
+  try {
+    expect((await readLiveCopyLineage(client, partition)).partition).toBe(partition);
+  } finally {
+    client.release();
+  }
   await admin.query('CREATE TABLE public.dispatch_lifetime_probe(id uuid PRIMARY KEY)');
+  probeReady = true;
   await admin.query('CREATE SEQUENCE public.dispatch_commit_abort_attempt');
   await admin.query('CREATE TABLE public.dispatch_commit_abort_probe(id uuid PRIMARY KEY, abort_code text NOT NULL)');
   await admin.query(`CREATE FUNCTION public.dispatch_commit_abort_once() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -142,16 +148,18 @@ beforeAll(async () => {
 afterEach(async () => {
   for (const observer of observers.splice(0)) await observer.close();
   await admin.query("UPDATE core.partition SET write_state='active',moved_to=NULL WHERE partition_no=$1", [partition]);
-  await admin.query('TRUNCATE public.dispatch_lifetime_probe');
+  if (probeReady) await admin.query('TRUNCATE public.dispatch_lifetime_probe');
 });
 afterAll(async () => {
-  await admin.query('DROP TABLE public.dispatch_commit_abort_probe');
-  await admin.query('DROP FUNCTION public.dispatch_commit_abort_once()');
-  await admin.query('DROP SEQUENCE public.dispatch_commit_abort_attempt');
-  await admin.query('DROP TABLE public.dispatch_lifetime_probe');
-  await pool.end();
-  await foreign.end();
-  await admin.end();
+  try {
+    for (const observer of observers.splice(0)) await observer.close();
+    await admin.query('DROP TABLE IF EXISTS public.dispatch_commit_abort_probe');
+    await admin.query('DROP FUNCTION IF EXISTS public.dispatch_commit_abort_once()');
+    await admin.query('DROP SEQUENCE IF EXISTS public.dispatch_commit_abort_attempt');
+    await admin.query('DROP TABLE IF EXISTS public.dispatch_lifetime_probe');
+  } finally {
+    await Promise.all([pool.end(), foreign.end(), admin.end()]);
+  }
 });
 
 async function snapshot() {
