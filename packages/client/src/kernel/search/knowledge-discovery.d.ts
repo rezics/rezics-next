@@ -25,10 +25,10 @@ export type KnowledgePreparation = Readonly<{
 }>;
 export type KnowledgeDiscoveryStore = Readonly<{
     /** Null means this index has not completed installation. Zero is a complete empty observation. */
-    cut(subjectId: string): Promise<string | null>;
-    page(subjectId: string, after: KnowledgeFrontier | null, limit: number): Promise<readonly KnowledgeAssociation[]>;
-    load(id: string): Promise<KnowledgePreparation | null>;
-    save(record: KnowledgePreparation, previousRevision: number | null): Promise<boolean>;
+    cut(subjectId: string, deadline?: number): Promise<string | null>;
+    page(subjectId: string, after: KnowledgeFrontier | null, limit: number, deadline?: number): Promise<readonly KnowledgeAssociation[]>;
+    load(id: string, deadline?: number): Promise<KnowledgePreparation | null>;
+    save(record: KnowledgePreparation, previousRevision: number | null, deadline?: number): Promise<boolean>;
     id(): string;
 }>;
 export type KnowledgeDiscoveryRequest = Readonly<{

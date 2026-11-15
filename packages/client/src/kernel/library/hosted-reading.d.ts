@@ -35,10 +35,12 @@ export declare function readHostedReadingExportPage(client: {
     catalogue_id: string;
     publication_revision_id: string;
     occurrence_id: string;
+    target_post_id: string;
+    bodyLanguage: string | null;
     target_revision_id: string;
     target_sha256: string;
     document_block_id: string | null;
     document_offset: number | null;
     revision: string;
-    changed_at: string | null;
+    changed_at: string;
 }[]>;

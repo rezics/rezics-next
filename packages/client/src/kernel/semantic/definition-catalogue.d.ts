@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { KIND_FORMAT, type KindCataloguePin, type PinnedKindDeclaration } from '@rezics/definitions';
+import { type KindCataloguePin, type PinnedKindDeclaration } from '@rezics/definitions';
 import { type Actor, type Access } from '../request/access.ts';
 import { type AccessWorkAccounting } from '../access/work.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -50,23 +50,4 @@ export declare function createNativeDefinitionCatalogue({ pool, access, }: Reado
     pool: Pool;
     access: Access;
 }>): NativeDefinitionCatalogue;
-/** Explicit bounded historical adapter. It never fabricates a catalogue root or changes a Release1 digest. */
-export declare function legacyReleaseKinds(pool: Pool, digest: string, ids: readonly string[]): Promise<{
-    id: string;
-    releaseDigest: string;
-    declaration: Readonly<{
-        format: typeof KIND_FORMAT;
-        id: string;
-        labels: Readonly<Record<string, string>>;
-        descriptions?: Readonly<Record<string, string>>;
-        auto: Readonly<{
-            eligible: boolean;
-            precedence: number;
-        }>;
-        condition: import("@rezics/definitions").KindConditionV1;
-        presentation: Readonly<{
-            type: import("@rezics/definitions").DefinitionTypePin;
-        }>;
-    }> | null;
-}[] | null>;
 export {};

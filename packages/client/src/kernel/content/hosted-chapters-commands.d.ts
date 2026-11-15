@@ -3,6 +3,7 @@ import { type AuthoritativeTime, type CommandAuthorization } from '../command/co
 import { type ContentCommandDependencies } from './commands.ts';
 import type { HostedPointSelectionReads, HostedPublicationPointInput } from './hosted-publication-point-selection.ts';
 import { type HostedCommandContext, type HostedCreateInput, type HostedDependencies, type HostedDraftPointInsertInput, type HostedDraftPointRemoveInput, type HostedReviseInput, type HostedPublishInput, type HostedRootAppendInput } from './hosted-chapters-model.ts';
+import { type HostedLanguageSnapshotRow } from './hosted-chapter-languages.ts';
 export type HostedCommandDependencies = HostedDependencies & ContentCommandDependencies;
 export declare function createHostedCatalogue(deps: HostedCommandDependencies, actor: Actor, input: HostedCreateInput, context: HostedCommandContext): Promise<import("../command/command.ts").CommandOutcome<Readonly<{
     catalogueId: string;
@@ -37,6 +38,7 @@ export declare function removeHostedDraftPoint(deps: HostedCommandDependencies, 
  * the returned preparation is consumed by its transaction writer. */
 export declare function prepareHostedPublicationPointCommand(deps: HostedCommandDependencies, actor: Actor, catalogueId: string, operation: HostedPublicationPointInput, reads: HostedPointSelectionReads, context: HostedCommandContext): Promise<{
     catalogueId: string;
+    namespaceId: string;
     threadId: string;
     partition: number;
     receipt: {
@@ -50,7 +52,9 @@ export declare function prepareHostedPublicationPointCommand(deps: HostedCommand
         selection: import("./hosted-publication-point-selection.ts").HostedPointSelection;
         disclosureEligibility: import("./hosted-publication-point-eligibility.ts").HostedPointDisclosureEligibility;
         final(client: import("../request/access.ts").AccessClient): Promise<void>;
-    }>;
+    }> & {
+        languageRows: readonly HostedLanguageSnapshotRow[] | null;
+    };
 }>;
 /** Publish one selected draft point after current admission and receipt preflight.
  * The exact selection is read only after a missing receipt, then all index and

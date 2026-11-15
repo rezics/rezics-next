@@ -210,6 +210,10 @@ export type CopyWorkPartitionCut = Readonly<{
     epoch: number;
     position: bigint;
 }>;
+export type CopyWorkFenceObservation = Readonly<{
+    taken: ReadonlySet<string>;
+    cuts: readonly CopyWorkPartitionCut[];
+}>;
 export type CopyWorkSourceHomeObservation = Readonly<{
     found: Map<string, CopyWorkSourceObservation>;
     tuples: SourceFenceTuple[];
@@ -233,7 +237,7 @@ export type CopyWorkDisclosureNativeReader = Readonly<{
     readIdentityMappings(deps: CopyWorkDisclosureDependencies, ids: readonly string[]): Promise<Map<string, IdentityMapping | undefined>>;
     prepareChecks(deps: CopyWorkDisclosureDependencies, ids: readonly string[]): Promise<Map<string, AccessCheck>>;
     observeHome(deps: CopyWorkDisclosureDependencies, release: Release, home: number, ids: readonly string[], checks: ReadonlyMap<string, AccessCheck>): Promise<CopyWorkSourceHomeObservation>;
-    readTakenFenceKeys(deps: CopyWorkDisclosureDependencies, tuples: readonly SourceFenceTuple[]): Promise<ReadonlySet<string>>;
+    readTakenFenceKeys(deps: CopyWorkDisclosureDependencies, tuples: readonly SourceFenceTuple[]): Promise<CopyWorkFenceObservation>;
     readSummaries(deps: CopyWorkDisclosureDependencies, ids: readonly string[], options: {
         languages: readonly string[];
     }): Promise<CopyWorkSummaryBatch>;

@@ -1,7 +1,7 @@
 export { AuthenticationError } from './authentication-error.ts';
 export { accessCheck, accessExplicitCheck, prepareReadDecisions, resourcePage, validReadDecisionActions, installPreparedAccessCheckWork, nativePreparedAccessCheckWork, } from '../access/check.ts';
 import type { AccessWorkAccounting, AccessWorkProducer } from '../access/work.ts';
-import type { ContentEditionBenefit, ContentEditionBuyerFactReader } from '../access/authenticated-benefit.ts';
+import type { AuthenticatedContentBenefit, ContentEditionBuyerFactReader, ContentPostBuyerFactReader } from '../access/authenticated-benefit.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { ResourceRoleCatalogue } from '../access/resource-roles.ts';
 import { type AuthoritativeTime, type CommandAuthorization } from '../command/command.ts';
@@ -24,7 +24,7 @@ export type Resource = {
     route: number;
     id: string;
     /** Server-only exact selector, never entitlement evidence. */
-    authenticatedBenefit?: ContentEditionBenefit;
+    authenticatedBenefit?: AuthenticatedContentBenefit;
     eligibility?: ResourceEligibility;
     /** Compatibility spelling; uses the same opaque capability and evaluator. */
     anonymousEligibility?: ResourceEligibility;
@@ -102,6 +102,9 @@ export type AccessConfig = {
     contentEditionBuyerFactReader?: ContentEditionBuyerFactReader;
     /** Commerce owns the finite footprint and actual receipt of its callback. */
     contentEditionBuyerFactWork?: AccessWorkProducer<Parameters<ContentEditionBuyerFactReader>[0], Awaited<ReturnType<ContentEditionBuyerFactReader>>>;
+    /** Trusted Commerce current Post buyer lookup; never supplied by HTTP input. */
+    contentPostBuyerFactReader?: ContentPostBuyerFactReader;
+    contentPostBuyerFactWork?: AccessWorkProducer<Parameters<ContentPostBuyerFactReader>[0], Awaited<ReturnType<ContentPostBuyerFactReader>>>;
     /** Outside a command, permission checks bind this instant. Absent uses PostgreSQL clock_timestamp(). */
     clock?: () => Date;
 };

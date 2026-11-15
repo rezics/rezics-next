@@ -138,7 +138,7 @@ export declare function createCopyArchive(deps: CopyArchiveDependencies): {
         expiresAt: string;
         fullRestoration: false;
         effectsSupported: false;
-        manifest: CopyArchiveManifest;
+        manifest: import("./library-export-format.ts").LibraryExportFinalManifest;
         coverage: ArchiveSectionCoverage[];
         holdings: number;
         rows: {

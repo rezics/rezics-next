@@ -7,6 +7,7 @@ import type { RevisionDisclosureReaderGate, RevisionDisclosureTarget } from './r
 import type { DurableOperationAnchor, InitiatorRestorer } from '../access/content-adapter.ts';
 import { type Partition } from '../partition/partition.ts';
 import type { Access, AccessClient, Actor, ReadDecisions, Resource } from '../request/access.ts';
+import { type ContentPostBenefit } from '../access/authenticated-benefit.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { Anchored, AnchoredPosition, BoardId, BoardRecord as BoardView, ErasedPlaceholder, ItemView as StoredItemView, Page, PostId, ReadContext, RevisionId, RevisionView as StoredRevisionView, ReviewVoteCitation, ThreadId, ThreadView as StoredThreadView, Visibility } from './model.ts';
 import { REACTION_KINDS } from './events.ts';
@@ -158,8 +159,8 @@ export declare function threadPostSelectionWitness(page: Page<PostEntry>): strin
 export declare class ContentNotFoundError extends Error {
     constructor();
 }
-/** All pool preparation happens outside this boundary. A failed rollback evicts
- * the connection rather than returning an open transaction to the pool. */
+/** All pool preparation happens outside this boundary. Uncertain native reads
+ * discard their connection instead of queueing cleanup behind expired I/O. */
 export declare function snapshot<T>(dependencies: Pick<ContentReadDependencies, 'pool' | 'access'>, id: string, context: Pick<RealmSubjectReadContext, 'deadline' | 'work'>, work: (client: AccessClient) => Promise<T>): Promise<Anchored<T>>;
 type BoardDisclosureFinal = Readonly<{
     boardAnchor: AnchoredPosition;
@@ -176,7 +177,7 @@ type BoardDisclosureHint = Readonly<{
 export declare function withBoardDisclosure<T>(boardId: BoardId, board: BoardView, work: () => Promise<T>, decisions?: ReadDecisions, options?: Pick<BoardDisclosureHint, 'query' | 'expectedRevisions' | 'onFinal'>): Promise<T>;
 export declare function prepareBoardPageDecisions(dependencies: ContentReadDependencies, context: ReadContext): Promise<ReadDecisions>;
 /** @internal Shared post-read resources: every domain operand uses the evaluator's principal. */
-export declare function readResource(row: Row, evidence: object, tombstone?: boolean, placeholder?: boolean, withheldReference?: boolean, bookGate?: RevisionDisclosureReaderGate, revisionPubliclyWithheld?: boolean): Resource;
+export declare function readResource(row: Row, evidence: object, tombstone?: boolean, placeholder?: boolean, withheldReference?: boolean, bookGate?: RevisionDisclosureReaderGate, revisionPubliclyWithheld?: boolean, postBenefit?: ContentPostBenefit): Resource;
 export declare function readBoard(dependencies: ContentReadDependencies, boardId: BoardId, context: ReadContext): Promise<Anchored<import('./model.ts').BoardView | null>>;
 export declare function readBoardPageCandidateSnapshot<T>(dependencies: ContentReadDependencies, boardId: BoardId, context: ReadContext, decisions: ReadDecisions, candidatePage: (client: AccessClient, partition: Partition) => Promise<T>): Promise<Readonly<{
     board: BoardView;

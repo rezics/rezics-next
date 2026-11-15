@@ -8,6 +8,8 @@ export type HostedReadingAddress = Readonly<{
     catalogueId: string;
     publicationRevisionId: string;
     occurrenceId: string;
+    bodyLanguage?: string;
+    targetPostId: string;
     targetRevisionId: string;
     targetSha256: string;
     documentPosition: HostedReadingDocumentPosition | null;
@@ -37,6 +39,7 @@ export type HostedReadingMetadata = Readonly<{
     position: number;
     kind: 'chapter';
     title: string;
+    bodyLanguage?: string;
     target: HostedReadingChapterTarget;
 }> | Readonly<{
     availability: 'unavailable';

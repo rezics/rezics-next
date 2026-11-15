@@ -3,9 +3,11 @@ import type { Actor } from '../request/access.ts';
 import type { DownloadDecision, DownloadVariant, MediaDependencies } from './media.ts';
 import read from './read-download-media.sql.d.ts';
 import { type AccessWorkAccounting } from '../access/work.ts';
+import { type KnowledgeMediaSelection } from './knowledge-media.ts';
 type Row = NonNullable<Awaited<ReturnType<typeof read.run>>>;
 export type DownloadContext = Readonly<{
     deadline: number;
+    knowledge?: KnowledgeMediaSelection;
     routeKey?: Uint8Array;
     /** Trusted caller forwarding only; never reconstructed from an HTTP timestamp. */
     time?: AuthoritativeTime;

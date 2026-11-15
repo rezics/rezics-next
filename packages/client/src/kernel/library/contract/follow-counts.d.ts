@@ -38,12 +38,14 @@ export declare class FollowCountReadRefusedError extends Error {
     readonly reason: 'authentication_required' | 'forbidden';
     constructor(reason: 'authentication_required' | 'forbidden');
 }
-/** Consumer-owned read operations. A native time stays opaque to the application and
- * is passed unchanged to every admission that uses it. No pool checkout lives here. */
-export interface FollowCountReadPorts<Time> {
+/** Consumer-owned read operations. Native caller/home witnesses and native times
+ * stay opaque to the application. Each admission releases its checkout before
+ * target or health work; the final admission must retain the initial home. */
+export interface FollowCountReadPorts<Time, Admission> {
     route(id: string): number | null;
-    authenticate(owner: LibraryAccountActor, deadline: number): Promise<Time>;
-    health(): Promise<FollowCountHealthObservation>;
+    admit(owner: LibraryAccountActor, deadline: number, expected?: Admission): Promise<Admission>;
+    time(deadline: number): Promise<Time>;
+    health(deadline: number): Promise<FollowCountHealthObservation>;
     within<T>(deadline: number, work: () => Promise<T>): Promise<T>;
     destination(target: FollowCountTarget): Promise<CountDestination>;
     subjectReadable(owner: LibraryAccountActor, id: string, time: Time): Promise<boolean>;

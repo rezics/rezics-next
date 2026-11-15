@@ -47,7 +47,7 @@ export type DefaultPublicFilterRuntime = Readonly<{
     /** Typed currentness and aggregate proofs over retained capture/query/repair. */
     privacy(operations: PublicFilterConsumerOperations): QueryPrivacyConsumer;
     /** Trusted native facet composition; omitted generation or meaning stays closed. */
-    facetProvider(): Promise<FacetDiscoveryProvider | undefined>;
+    facetProvider(context?: PublicFilterConsumerContext): Promise<FacetDiscoveryProvider | undefined>;
     close(): Promise<void>;
 }>;
 /** Trusted default composition. Neither Source nor Actor nor physical identity is injectable. */

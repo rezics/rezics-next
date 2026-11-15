@@ -1,3 +1,4 @@
+import { type EditorPreferences, type EditorPreferencePatch } from '@rezics/editor/preferences';
 import type { Pool, PoolClient } from 'pg';
 import type { Access, AccessContext, Actor } from '../request/access.ts';
 import { type NotificationKind, type Notifications, type NotificationsPatch } from './notification-kinds.ts';
@@ -54,6 +55,7 @@ export type AccountPreferences = {
     spoilerLevel: 0 | 1 | 2;
     suitability: 'blur' | 'show';
     shelf: Shelf;
+    editor: EditorPreferences;
     notifications: Notifications;
     version: number;
 };
@@ -123,6 +125,7 @@ export type PreferenceChange = {
     spoilerLevel?: 0 | 1 | 2;
     suitability?: 'blur' | 'show';
     shelf?: ShelfPatch | null;
+    editor?: EditorPreferencePatch | null;
     notifications?: NotificationsPatch | null;
 };
 /** In-memory catalogue projection. Edit and reset advice comes from the current update observation. */
@@ -169,6 +172,7 @@ export declare function createPreferenceCommands(config: {
         spoilerLevel: 0 | 1 | 2;
         suitability: "blur" | "show";
         shelf: Shelf;
+        editor: EditorPreferences;
         notifications: Notifications;
     }>>;
 };

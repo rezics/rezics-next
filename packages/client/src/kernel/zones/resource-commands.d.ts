@@ -23,7 +23,7 @@ export declare function createZoneCommands(dependencies: ZoneCommandDependencies
                 "zh-Hans"?: string;
                 "zh-Hant"?: string;
             };
-            primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
+            primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant" | null;
             visibility: "private" | "public" | "unlisted";
             appearance: {
                 density?: "comfortable" | "compact";
@@ -54,7 +54,7 @@ export declare function createZoneCommands(dependencies: ZoneCommandDependencies
                 "zh-Hans"?: string;
                 "zh-Hant"?: string;
             };
-            primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant";
+            primaryLanguage?: "de" | "en" | "es" | "fr" | "ja" | "ko" | "zh-Hans" | "zh-Hant" | null;
             visibility: "private" | "public" | "unlisted";
             appearance: {
                 density?: "comfortable" | "compact";

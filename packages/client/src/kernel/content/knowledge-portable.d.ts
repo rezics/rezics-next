@@ -40,23 +40,35 @@ export declare const KnowledgeReferencesSchema: import("typebox").TArray<import(
         blockId: import("typebox").TOptional<import("typebox").TString>;
     }>]>;
 }>>;
-export declare const KnowledgeProvenanceSchema: import("typebox").TObject<{
+export declare const KnowledgeProvenanceSchema: import("typebox").TUnion<[import("typebox").TObject<{
     documentId: import("typebox").TString;
     revisionId: import("typebox").TString;
-    representation: import("typebox").TUnion<[import("typebox").TLiteral<"authoring">, import("typebox").TLiteral<"public">]>;
     sha256: import("typebox").TString;
-    publicationId: import("typebox").TOptional<import("typebox").TString>;
-}>;
+    representation: import("typebox").TLiteral<"authoring">;
+}>, import("typebox").TObject<{
+    documentId: import("typebox").TString;
+    revisionId: import("typebox").TString;
+    sha256: import("typebox").TString;
+    representation: import("typebox").TLiteral<"public">;
+    publicationId: import("typebox").TString;
+    sourceSha256: import("typebox").TString;
+}>]>;
 export declare const KnowledgeExportSchema: import("typebox").TObject<{
     version: import("typebox").TLiteral<"knowledge-document-export-v1">;
     representation: import("typebox").TUnion<[import("typebox").TLiteral<"authoring">, import("typebox").TLiteral<"public">]>;
-    selection: import("typebox").TObject<{
+    selection: import("typebox").TUnion<[import("typebox").TObject<{
         documentId: import("typebox").TString;
         revisionId: import("typebox").TString;
-        representation: import("typebox").TUnion<[import("typebox").TLiteral<"authoring">, import("typebox").TLiteral<"public">]>;
         sha256: import("typebox").TString;
-        publicationId: import("typebox").TOptional<import("typebox").TString>;
-    }>;
+        representation: import("typebox").TLiteral<"authoring">;
+    }>, import("typebox").TObject<{
+        documentId: import("typebox").TString;
+        revisionId: import("typebox").TString;
+        sha256: import("typebox").TString;
+        representation: import("typebox").TLiteral<"public">;
+        publicationId: import("typebox").TString;
+        sourceSha256: import("typebox").TString;
+    }>]>;
     title: import("typebox").TString;
     language: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     licence: import("typebox").TString;
@@ -80,13 +92,19 @@ export declare const KnowledgeExportSchema: import("typebox").TObject<{
             blockId: import("typebox").TOptional<import("typebox").TString>;
         }>]>;
     }>>;
-    provenance: import("typebox").TUnion<[import("typebox").TObject<{
+    provenance: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TObject<{
         documentId: import("typebox").TString;
         revisionId: import("typebox").TString;
-        representation: import("typebox").TUnion<[import("typebox").TLiteral<"authoring">, import("typebox").TLiteral<"public">]>;
         sha256: import("typebox").TString;
-        publicationId: import("typebox").TOptional<import("typebox").TString>;
-    }>, import("typebox").TNull]>;
+        representation: import("typebox").TLiteral<"authoring">;
+    }>, import("typebox").TObject<{
+        documentId: import("typebox").TString;
+        revisionId: import("typebox").TString;
+        sha256: import("typebox").TString;
+        representation: import("typebox").TLiteral<"public">;
+        publicationId: import("typebox").TString;
+        sourceSha256: import("typebox").TString;
+    }>]>, import("typebox").TNull]>;
     sha256: import("typebox").TString;
 }>;
 export type KnowledgeExport = Readonly<{
@@ -105,6 +123,8 @@ export type KnowledgeExport = Readonly<{
 export declare function knowledgeDigest(bytes: string | Uint8Array): string;
 /** The same RFC 8785 encoder used by Document, applied to the exchange wrapper. */
 export declare function canonicalKnowledgeJson(value: unknown): string;
+/** Unsupported stored metadata is unavailable; it never gains guessed source identity or extra private fields. */
+export declare function knowledgeProvenanceOrNull(value: unknown): KnowledgeProvenance | null;
 export declare function visitKnowledgeNodes(node: DocumentNode, visit: (node: DocumentNode) => void): void;
 /** HTTP authoring input: reference payloads contain local identity only, never resolver caches. */
 export declare function validateKnowledgeReferences(snapshot: DocumentSnapshot, input?: unknown): readonly KnowledgeReference[];

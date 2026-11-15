@@ -22,7 +22,9 @@ export type RecordedOrderCharge = Readonly<{
 export type RecordedOrderPresentment = Omit<RecordedOrderCharge, 'amountTaxMinor'>;
 /** Closed native Content identity; a subject is never a substitute for this binding. */
 import type { ContentEditionBenefit } from '../access/authenticated-benefit.ts';
+import type { ContentPostBenefit } from '../access/authenticated-benefit.ts';
 export type { ContentEditionBenefit } from '../access/authenticated-benefit.ts';
+export type { ContentPostBenefit } from '../access/authenticated-benefit.ts';
 /** Commerce's bounded immutable delivery terms. Content supplies every source fact.
  * This DTO describes storage, not reusable permission to sell or deliver bytes.
  */
@@ -40,12 +42,24 @@ export type CapturedContentEdition = Readonly<{
     acquisition: 'one-time-account-bound';
     quantity: 1;
 }>;
+/** Immutable Post-wide terms; the routed Post/action key deliberately has no revision selector. */
+export type CapturedContentPost = Readonly<{
+    benefit: ContentPostBenefit;
+    creatorAccountId: string;
+    targetSubjectId: string;
+    saleTermsReference: 'content-post-revisions-v1';
+    delivery: 'eligible-post-revisions';
+    acquisition: 'one-time-account-bound';
+    quantity: 1;
+}>;
 export type Offer = {
     /** Absent historical metadata is unknown, never inferred from current currency facts. */
     moneyUnit?: StripeMoneyUnit | null;
     taxBehavior?: 'exclusive' | null;
     /** Null for historical subject-only rows; omission is accepted only in older receipts/fixtures. */
     contentEdition?: CapturedContentEdition | null;
+    /** Null for historical rows or fixed-edition offers. */
+    contentPost?: CapturedContentPost | null;
     id: string;
     creatorAccountId: string;
     targetSubjectId: string;
@@ -66,6 +80,8 @@ export type Order = {
     taxBehavior?: 'exclusive' | null;
     /** Null for historical subject-only rows; omission is accepted only in older receipts/fixtures. */
     contentEdition?: CapturedContentEdition | null;
+    /** Null for historical rows or fixed-edition orders. */
+    contentPost?: CapturedContentPost | null;
     id: string;
     buyerAccountId: string;
     offerId: string;
@@ -91,6 +107,8 @@ export type Order = {
 export type Entitlement = {
     /** Null for historical subject-only rows; omission is accepted only in older receipts/fixtures. */
     contentEdition?: CapturedContentEdition | null;
+    /** Null for historical rows or fixed-edition entitlements. */
+    contentPost?: CapturedContentPost | null;
     id: string;
     accountId: string;
     offerId: string;
@@ -282,6 +300,7 @@ export type PublicOfferCard = Pick<Offer, 'id' | 'targetSubjectId' | 'title' | '
     moneyUnit: StripeMoneyUnit | null;
     taxBehavior: 'exclusive' | null;
     contentEdition: ReturnType<typeof import('./benefit.ts').contentEditionTermsView>;
+    contentPost: ReturnType<typeof import('./benefit.ts').contentPostTermsView>;
 };
 export type SubjectOffersPage = {
     offers: PublicOfferCard[];

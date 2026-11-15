@@ -6,6 +6,12 @@ export type HostedCommandContext = Readonly<{
     deadline: number;
     requestId: string;
 }>;
+/** Immutable metadata version; targets and bytes remain in their ordinary Post homes. */
+export type HostedChapterLanguages = Readonly<{
+    version: string;
+    defaultLanguage: string | null;
+    namespaceId?: string;
+}>;
 export type HostedChapterTarget = Readonly<{
     threadId: string;
     postId: string;
@@ -24,6 +30,7 @@ export type HostedPlacement = PlacementBase & (Readonly<{
 }> | Readonly<{
     kind: 'chapter';
     target: HostedChapterTarget;
+    bodyLanguages?: HostedChapterLanguages;
 }>);
 export type OrderedHostedPlacement = HostedPlacement & Readonly<{
     ordinal: number;
@@ -112,10 +119,13 @@ export type HostedOccurrenceView = Readonly<{
     kind: 'chapter';
     title: string;
     target: HostedChapterTarget;
+    selectedLanguage?: string | null;
 }>);
 export type HostedReadSelection = Readonly<{
     revisionId?: string;
     kind?: 'structure' | 'publication';
+    language?: string;
+    preferredLanguages?: string;
 }>;
 /** Same-home retains its original identity; all-homes states whether the native
  * locator census and this author's outstanding source projections are complete. */

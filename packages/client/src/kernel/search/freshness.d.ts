@@ -4,11 +4,16 @@ export type Freshness = {
     behind: number;
     catchingUp: boolean;
 };
-export declare function readFreshness(pool: Pool, consumer: string): Promise<Freshness>;
+/** Absolute caller deadline; omission inherits request time or admits ten seconds at the call. */
+export type FreshnessReadContext = Readonly<{
+    deadline: number;
+}>;
+export declare function readFreshness(pool: Pool, consumer: string, context?: FreshnessReadContext): Promise<Freshness>;
 /**
  * Answers each `current()` call from a read that began after the call. At most one read runs; calls made while it runs
- * share the next read, which begins when the running one settles.
+ * share the next read, which begins after the running one retires. Every caller keeps its admission deadline;
+ * the physical read uses the latest deadline in its batch, fixed before checkout.
  */
 export declare function createFreshness(pool: Pool, consumer: string): {
-    current(): Promise<Freshness>;
+    current(context?: FreshnessReadContext): Promise<Freshness>;
 };

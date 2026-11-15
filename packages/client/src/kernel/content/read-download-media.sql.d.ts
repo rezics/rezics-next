@@ -10,7 +10,7 @@ export type Row = {
     container_id: string;
     claimed_item_id: string | null;
     uploader_id: string;
-    purpose: "post-image" | "cover" | "avatar" | "realm-icon" | "realm-banner";
+    purpose: "post-image" | "cover" | "avatar" | "realm-icon" | "realm-banner" | "knowledge-image";
     state: "reserved" | "uploaded" | "available" | "rejected";
     claimed_at: string | null;
     key: string;
@@ -73,7 +73,7 @@ declare const query: Query<{
     container_id: string;
     claimed_item_id: string | null;
     uploader_id: string;
-    purpose: "post-image" | "cover" | "avatar" | "realm-icon" | "realm-banner";
+    purpose: "post-image" | "cover" | "avatar" | "realm-icon" | "realm-banner" | "knowledge-image";
     state: "reserved" | "uploaded" | "available" | "rejected";
     claimed_at: string | null;
     key: string;
