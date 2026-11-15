@@ -81,6 +81,7 @@ export const Writing: Story = {
     await userEvent.type(search, 'sea');
     await userEvent.keyboard('{Enter}');
     await expect(canvas.getByRole('status', { name: 'Saved drafts' })).toHaveTextContent('0');
+    await userEvent.click(within(find).getByRole('button', { name: 'Replace with' }));
     await userEvent.type(within(find).getByRole('textbox', { name: 'Replace with' }), 'ocean');
     await userEvent.click(within(find).getByRole('button', { name: 'Replace all' }));
     await waitFor(() => expect(textbox).toHaveTextContent('The ocean is quiet. The ocean carries our story.'));
@@ -138,6 +139,7 @@ export const Knowledge: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await canvas.findByRole('textbox', { name: 'Chapter draft' });
+    await userEvent.click(canvas.getByText('More tools', { exact: true }));
     await expect(canvas.getByRole('group', { name: 'Annotations' })).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Block actions' })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Commands' }));
@@ -191,7 +193,8 @@ export const ReadOnly: Story = {
     const textbox = await canvas.findByRole('textbox', { name: 'Chapter draft' });
     await expect(textbox).toHaveAttribute('aria-readonly', 'true');
     await expect(canvas.queryByRole('button', { name: 'Editor settings' })).not.toBeInTheDocument();
-    await expect(canvas.getByRole('button', { name: 'Save draft' })).toBeDisabled();
+    await expect(canvas.queryByRole('button', { name: 'Save draft' })).not.toBeInTheDocument();
+    await expect(canvas.getByRole('button', { name: 'Outline and statistics' })).toBeVisible();
   },
 };
 

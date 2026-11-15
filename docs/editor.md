@@ -35,9 +35,12 @@ required to represent an admitted document. All commands derive availability fro
 capabilities. Fixed, floating and touch toolbars, slash insertion, block actions, command search and shortcuts use
 one command vocabulary and operate on the same editor, selection and undo history.
 
-On narrow screens, global actions occupy one compact row and the fixed formatting tools scroll horizontally.
-Advanced annotation, block and formatting actions remain available through command search without stacking
-additional control rows above the writing surface. Accessible names and touch targets remain intact.
+The primary toolbar holds history, the active block style, common inline formatting, lists and insertion.
+Knowledge prioritizes task lists and Compact starts with inline formatting. The primary row stays in place
+as focus and selection change. On touch, the row docks above the keyboard and keeps its space in the layout.
+Document utilities occupy a separate row, with advanced tools grouped under More tools and available in Commands.
+Selecting text opens a smaller toolbar with common marks, additional formatting and block conversion.
+The writing surface accepts clicks across its full width while the text keeps the configured line measure.
 
 Supported authoring includes headings, lists/tasks, quotations, code, links, emphasis/underline/spoilers, language
 and direction, ruby, footnotes, and admitted Blocks tables/media/components. Existing opaque components preserve
@@ -77,9 +80,10 @@ Physical rows fully covered by earlier rowspans may contain no own cells, matchi
 The complete table still requires a positive rectangular grid with an actual cell and no uncovered or overlapping
 positions. This is an additive profile acceptance change; ordinary snapshots retain their meaning.
 
-At a collapsed caret or selected unit, block actions support turn-into, move, duplicate and delete by pointer and
-keyboard. Moving preserves the full subtree's IDs; copying/duplicating assigns new IDs throughout. Deleting the
-last editable block leaves a valid empty paragraph. ID repair and movement remain in the editor's transaction
+At a collapsed caret or selection, block actions show their target and support turn-into, move, duplicate and
+delete by pointer and keyboard. A selection spanning blocks moves or duplicates its contiguous top-level range
+as a unit. Moving preserves subtree IDs. Duplicating assigns new IDs and remaps references to definitions
+duplicated in the same operation. Deleting the last editable block leaves a valid empty paragraph. ID repair and movement remain in the editor's transaction
 pipeline rather than a later destructive normalization.
 
 Ruby controls preserve base text and marks while editing its reading/position. Language/direction controls retain
@@ -88,10 +92,12 @@ BCP 47 spelling and support clearing an explicit override. Footnote controls use
 unresolved references or nested notes. Panels bind their target to the current editing visit; stale actions cannot
 change another selection, document or account.
 
-Find/replace supports next/previous matches, case and whole-word options, current/all replacement, keyboard entry
-and clear no-match feedback. Replacement is undoable and preserves marks and non-text nodes. A command palette
-provides searchable available actions and keyboard access. An outline/statistics surface reuses the existing
-writing inspection where the host supplies it; a standalone editor can expose its own local bounded projection.
+Find and outline open without shifting the writing surface. Find offers previous and next match, optional search
+filters and replacement, plus clear no-match feedback. Whole-word search uses language-aware segmentation for
+scripts commonly written without word spacing. Replacement is undoable and preserves marks and non-text nodes.
+The command palette searches available actions and shows platform shortcut labels. Outline presents expandable
+heading groups, follows the caret and reuses host inspection where supplied. Read-only visits retain document
+navigation and omit mutation controls.
 
 ### Bounded bulk text execution
 
@@ -162,8 +168,8 @@ saved, failed, conflicted and uncertain results where its existing producer supp
 the same command. Revision restore produces an explicit new draft through the host; editing and preview do not
 publish. Existing hosted-book and account-draft publication reviews remain independent.
 
-Uploads retain current visit/selection ownership, status, retry, replacement, alternative text and meaningful
-failure feedback. Multiple mounted editors have independent menus, targets, uploads, locale, editable state and
+Uploads retain the current visit and insertion position. An upload row distinguishes transfer from insertion,
+can return the author to the target and supports retry, replacement and dismissal on failure. Multiple mounted editors have independent menus, targets, uploads, locale, editable state and
 history. On retirement, late callbacks cannot mutate or focus the replacement. Controls remain keyboard reachable,
 restore focus to the owning editor, and respect touch safe areas, the virtual keyboard and RTL placement.
 

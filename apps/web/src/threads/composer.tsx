@@ -1451,6 +1451,7 @@ function PostComposerContent<T, Context = undefined>({
             onSnapshotPending={snapshotPending}
             onSnapshotError={snapshotFailed}
             label={bodyLabel}
+            preset={titleRequired ? 'writing' : 'compact'}
             {...(titleRequired ? {} : { placeholder: m.thread_reply_placeholder() })}
             {...(titleRequired ? { toolbar: 'always' as const } : {})}
             labels={labels}

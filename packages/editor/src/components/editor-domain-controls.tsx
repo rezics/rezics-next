@@ -111,6 +111,9 @@ function AnnotationDialog({
     target.selection.$from.marks().find((mark) => mark.type.name === 'language')?.attrs.dir ?? block.attrs.dir ?? '',
   );
   const [scope, setScope] = useState<'selection' | 'block'>(target.selection.empty ? 'block' : 'selection');
+  const selectionText = target.doc.textBetween(target.from, Math.min(target.to, target.from + 180), ' ', ' ');
+  const blockText = block.textBetween(0, Math.min(block.content.size, 180), ' ', ' ');
+  const targetText = panel === 'language' && scope === 'block' ? blockText : selectionText || blockText;
   const notes = footnoteDefinitions(editor);
   const nextLabel = (() => {
     let index = 1;
@@ -210,6 +213,18 @@ function AnnotationDialog({
           }
         }}
       >
+        {panel !== 'ruby' && (targetText.trim() || target.footnote) ? (
+          <div className="min-w-0 rounded-md border bg-muted/30 p-2 text-sm">
+            <p className="text-xs text-muted-foreground">
+              {target.footnote
+                ? t('footnote')
+                : t(target.selection.empty || (panel === 'language' && scope === 'block')
+                  ? 'languageBlock'
+                  : 'languageSelection')}
+            </p>
+            <bdi className="line-clamp-3 wrap-break-word">{target.footnote ?? targetText}</bdi>
+          </div>
+        ) : null}
         {panel === 'ruby' ? (
           <>
             <Field>

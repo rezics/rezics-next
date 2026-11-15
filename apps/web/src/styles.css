@@ -75,12 +75,12 @@ a:not([data-slot$='button']):is(:hover, :focus-visible) {
   overflow-y: auto;
 }
 
-.thread-reply-editor .document-editor .tiptap {
-  min-height: 1lh;
+.thread-reply-editor .tiptap {
+  min-height: calc(1lh + 1.5rem);
 }
 
-.thread-opening-editor .document-editor .tiptap {
-  min-height: 8lh;
+.thread-opening-editor .tiptap {
+  min-height: calc(8lh + 1.5rem);
 }
 
 .thread-reply-fallback,

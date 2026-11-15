@@ -53,6 +53,7 @@ export function EditorMediaPropertiesDialog({
   image,
   labels,
   draft,
+  target,
   onDraftChange,
   composing,
   touched,
@@ -62,6 +63,7 @@ export function EditorMediaPropertiesDialog({
   image: boolean;
   labels: RichTextEditorLabels;
   draft: EditorMediaPropertiesDraft;
+  target?: string | undefined;
   onDraftChange: (draft: EditorMediaPropertiesDraft) => void;
   composing: { current: boolean };
   touched: { current: { alt: boolean; title: boolean } };
@@ -122,6 +124,11 @@ export function EditorMediaPropertiesDialog({
           }
         }}
       >
+        {target ? (
+          <p className="rounded-md border bg-muted/30 p-2 text-sm text-muted-foreground">
+            <bdi className="line-clamp-2 wrap-break-word">{target}</bdi>
+          </p>
+        ) : null}
         <FieldGroup className="min-w-0 gap-3">
           {image ? (
             <>
@@ -455,6 +462,7 @@ function MediaView({ node, editor, getPos, selected, fallback }: NodeViewProps &
             image={image}
             labels={ports.labels}
             draft={draft}
+            target={(image ? occurrence.alt || occurrence.title : media.caption) || undefined}
             onDraftChange={setDraft}
             composing={composing}
             touched={touched}

@@ -263,6 +263,7 @@ export interface EditorSurfaceProps {
   dir?: 'ltr' | 'rtl' | 'auto';
   compact?: boolean;
   disabled?: boolean;
+  readOnly?: boolean;
   className?: string;
   onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
   onKeyDownCapture?: (event: KeyboardEvent<HTMLDivElement>) => void;
@@ -276,6 +277,7 @@ export function EditorSurface({
   dir,
   compact = false,
   disabled = false,
+  readOnly = false,
   className,
   onKeyDown,
   onKeyDownCapture,
@@ -284,22 +286,28 @@ export function EditorSurface({
   return createElement(
     'div',
     {
-      className: cn('min-w-0 rounded-lg border border-border bg-background', disabled && 'opacity-50', className),
+      className: cn(
+        'min-w-0 rounded-lg',
+        !readOnly && 'border border-border bg-background',
+        disabled && !readOnly && 'opacity-50',
+        className,
+      ),
       'data-slot': 'rich-text-editor',
+      'data-editor-surface': '',
       onKeyDown,
       onKeyDownCapture,
       onCompositionEnd,
     },
     createElement(
       'div',
-      { className: cn('relative px-4 py-3 sm:px-6', !compact && 'min-h-[50dvh]') },
+      { className: 'relative' },
       editor
         ? createElement(
             Prose,
             {
               measure: false,
               className: cn(
-                compact ? 'document-editor-compact' : 'document-editor',
+                readOnly ? 'document-editor-read-only' : compact ? 'document-editor-compact' : 'document-editor',
                 'caret-primary selection:bg-primary/20',
               ),
               ...(dir ? { 'data-placeholder-dir': dir } : {}),
@@ -330,7 +338,8 @@ export function editorAttributes({
     'aria-multiline': 'true',
     'aria-readonly': String(readOnly),
     'aria-disabled': String(disabled),
-    spellcheck: 'true',
+    spellcheck: String(!readOnly),
+    ...(readOnly ? { tabindex: '0' } : {}),
     ...(lang ? { lang } : {}),
     ...(dir ? { dir } : {}),
   };

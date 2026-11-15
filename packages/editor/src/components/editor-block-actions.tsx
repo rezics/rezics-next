@@ -6,7 +6,7 @@ import { identifiableNodeNames } from '@rezics/document';
 import type { Editor } from '@tiptap/core';
 import { closeHistory } from '@tiptap/pm/history';
 import { Fragment, type Node } from '@tiptap/pm/model';
-import { NodeSelection, Selection, TextSelection, type Transaction } from '@tiptap/pm/state';
+import { Selection, TextSelection, type Transaction } from '@tiptap/pm/state';
 import { useEditorState } from '@tiptap/react';
 import { Ellipsis } from 'lucide-react';
 import { useLayoutEffect, useState } from 'react';
@@ -27,89 +27,118 @@ const operationNames = [...Object.keys(listActions), ...blockActionNames] as (
   | BlockActionName
 )[];
 
-function currentBlock(editor: Editor): { node: Node; pos: number; index: number } | null {
+type BlockRange = { nodes: Node[]; from: number; to: number; first: number; last: number };
+
+function currentBlocks(editor: Editor): BlockRange | null {
   const { selection, doc } = editor.state;
-  if (selection instanceof NodeSelection && selection.$from.depth === 0)
-    return { node: selection.node, pos: selection.from, index: selection.$from.index(0) };
-  if (selection.$from.depth < 1) return null;
-  const node = selection.$from.node(1);
-  const pos = selection.$from.before(1);
-  return selection.to <= pos + node.nodeSize ? { node, pos, index: selection.$from.index(0) } : null;
+  const { $from, $to } = selection;
+  const first = $from.index(0);
+  const last = Math.max(first, $to.index(0) - ($to.depth === 0 ? 1 : 0));
+  if (last >= doc.childCount || ($from.depth === 0 && selection.empty)) return null;
+  const nodes: Node[] = [];
+  const from = $from.depth === 0 ? $from.pos : $from.before(1);
+  let to = from;
+  for (let index = first; index <= last; index += 1) {
+    const node = doc.child(index);
+    nodes.push(node);
+    to += node.nodeSize;
+  }
+  return { nodes, from, to, first, last };
 }
 
-function referencedDefinition(editor: Editor, node: Node): boolean {
-  if (node.type.name !== 'footnoteDefinition') return false;
+function leavesUnresolvedFootnote(doc: Node, block: BlockRange): boolean {
+  const removed = new Set(
+    block.nodes.filter((node) => node.type.name === 'footnoteDefinition').map((node) => node.attrs.label),
+  );
+  if (!removed.size) return false;
   let referenced = false;
-  editor.state.doc.descendants((candidate) => {
-    if (candidate.type.name === 'footnoteReference' && candidate.attrs.label === node.attrs.label) referenced = true;
-  });
+  const inspect = (node: Node) => {
+    if (referenced) return false;
+    if (node.type.name === 'footnoteReference' && removed.has(node.attrs.label)) referenced = true;
+    return !referenced;
+  };
+  if (block.from > 0) doc.nodesBetween(0, block.from, inspect);
+  if (!referenced && block.to < doc.content.size) doc.nodesBetween(block.to, doc.content.size, inspect);
   return referenced;
+}
+
+function canApplyBlockRange(editor: Editor, block: BlockRange, name: BlockActionName): boolean {
+  if (name === 'moveBlockUp') return block.first > 0;
+  if (name === 'moveBlockDown') return block.last < editor.state.doc.childCount - 1;
+  if (name === 'deleteBlock') return !leavesUnresolvedFootnote(editor.state.doc, block);
+  return true;
 }
 
 export function canRunBlockAction(editor: Editor, name: BlockActionName): boolean {
   if (editor.isDestroyed || !editor.isEditable || editor.view.composing) return false;
-  const block = currentBlock(editor);
-  if (!block) return false;
-  if (name === 'moveBlockUp') return block.index > 0;
-  if (name === 'moveBlockDown') return block.index < editor.state.doc.childCount - 1;
-  if (name === 'deleteBlock') return !referencedDefinition(editor, block.node);
-  return true;
+  const block = currentBlocks(editor);
+  return block !== null && canApplyBlockRange(editor, block, name);
 }
 
-function duplicateNode(node: Node, definitionLabel?: string): Node {
+function duplicateNode(node: Node, copiedLabels: ReadonlyMap<string, string>): Node {
+  const note = ['footnoteDefinition', 'footnoteReference'].includes(node.type.name)
+    ? copiedLabels.get(node.attrs.label)
+    : undefined;
   if (node.isText) return node;
   return node.type.create(
     {
       ...node.attrs,
       ...(identified.has(node.type.name) ? { id: crypto.randomUUID() } : {}),
-      ...(definitionLabel && node.type.name === 'footnoteDefinition' ? { label: definitionLabel } : {}),
+      ...(note ? { label: note } : {}),
     },
-    Fragment.fromArray(Array.from({ length: node.childCount }, (_, index) => duplicateNode(node.child(index)))),
+    Fragment.fromArray(Array.from({ length: node.childCount }, (_, index) => duplicateNode(node.child(index), copiedLabels))),
     node.marks,
   );
 }
 
 /** A moved unit is inserted intact; duplication assigns every identified descendant a new ID. */
 export function runBlockAction(editor: Editor, name: BlockActionName, isCurrent: () => boolean): boolean {
-  if (!isCurrent() || !canRunBlockAction(editor, name)) return false;
-  const block = currentBlock(editor)!;
+  if (!isCurrent() || editor.isDestroyed || !editor.isEditable || editor.view.composing) return false;
+  const block = currentBlocks(editor);
+  if (!block || !canApplyBlockRange(editor, block, name)) return false;
   const { doc, selection } = editor.state;
   const transaction = closeHistory(editor.state.tr);
-  let newPos = block.pos;
+  let newPos = block.from;
   if (name === 'moveBlockUp' || name === 'moveBlockDown') {
     const before = name === 'moveBlockUp';
-    const sibling = doc.child(block.index + (before ? -1 : 1));
-    const from = before ? block.pos - sibling.nodeSize : block.pos;
-    const to = before ? block.pos + block.node.nodeSize : block.pos + block.node.nodeSize + sibling.nodeSize;
-    transaction.replaceWith(from, to, Fragment.fromArray(before ? [block.node, sibling] : [sibling, block.node]));
+    const sibling = doc.child(before ? block.first - 1 : block.last + 1);
+    const from = before ? block.from - sibling.nodeSize : block.from;
+    const to = before ? block.to : block.to + sibling.nodeSize;
+    transaction.replaceWith(from, to, Fragment.fromArray(before ? [...block.nodes, sibling] : [sibling, ...block.nodes]));
     newPos += before ? -sibling.nodeSize : sibling.nodeSize;
   } else if (name === 'duplicateBlock') {
-    let label: string | undefined;
-    if (block.node.type.name === 'footnoteDefinition') {
-      const labels = new Set<string>();
+    const labels = new Set<string>();
+    if (block.nodes.some((node) => node.type.name === 'footnoteDefinition'))
       doc.forEach((node) => {
         if (node.type.name === 'footnoteDefinition') labels.add(node.attrs.label);
       });
+    const copiedLabels = new Map<string, string>();
+    for (const node of block.nodes) {
+      if (node.type.name !== 'footnoteDefinition') continue;
+      let label: string;
       let index = 1;
       do {
-        label = `${String(block.node.attrs.label).slice(0, 110)}-copy-${index++}`;
+        label = `${String(node.attrs.label).slice(0, 110)}-copy-${index++}`;
       } while (labels.has(label));
+      labels.add(label);
+      copiedLabels.set(node.attrs.label, label);
     }
-    newPos += block.node.nodeSize;
-    transaction.insert(newPos, duplicateNode(block.node, label));
+    const copies = block.nodes.map((node) => duplicateNode(node, copiedLabels));
+    newPos = block.to;
+    transaction.insert(block.to, Fragment.fromArray(copies));
   } else {
-    transaction.delete(block.pos, block.pos + block.node.nodeSize);
+    transaction.delete(block.from, block.to);
     let ordinaryBlocks = 0;
     transaction.doc.forEach((node) => {
       if (node.type.name !== 'footnoteDefinition') ordinaryBlocks++;
     });
     if (ordinaryBlocks === 0) transaction.insert(0, editor.schema.nodes.paragraph!.create({ id: crypto.randomUUID() }));
     transaction.setSelection(
-      TextSelection.near(transaction.doc.resolve(Math.min(block.pos, transaction.doc.content.size))),
+      TextSelection.near(transaction.doc.resolve(Math.min(block.from, transaction.doc.content.size))),
     );
   }
   if (name !== 'deleteBlock') {
-    const delta = newPos - block.pos;
+    const delta = newPos - block.from;
     const json = selection.toJSON();
     try {
       transaction.setSelection(
@@ -149,22 +178,33 @@ export function BlockActions({
 }) {
   const state = useEditorState({
     editor,
-    selector: ({ editor: current }) => ({
-      block: currentBlock(current)?.node.attrs.id as string | undefined,
-      can: Object.fromEntries(blockActionNames.map((name) => [name, canRunBlockAction(current, name)])) as Record<
-        BlockActionName,
-        boolean
-      >,
-      list: {
-        indentList: indentList(current, false),
-        outdentList: outdentList(current, false),
-        toggleTask: toggleTask(current, false),
-      },
-      presented: editorCommandsForPresentation(
-        operationNames.map((id) => ({ id })),
-        current,
-      ),
-    }),
+    selector: ({ editor: current }) => {
+      const block = currentBlocks(current);
+      const editable = current.isEditable && !current.view.composing;
+      const excerpt = (node: Node) => node.textBetween(0, Math.min(node.content.size, 100), ' ', ' ').trim();
+      return {
+        block: block ? String(block.nodes[0]!.attrs.id ?? block.from) : undefined,
+        target: block
+          ? {
+              first: excerpt(block.nodes[0]!),
+              last: block.nodes.length > 1 ? excerpt(block.nodes.at(-1)!) : undefined,
+              count: block.nodes.length,
+            }
+          : undefined,
+        can: Object.fromEntries(
+          blockActionNames.map((name) => [name, editable && block !== null && canApplyBlockRange(current, block, name)]),
+        ) as Record<BlockActionName, boolean>,
+        list: {
+          indentList: indentList(current, false),
+          outdentList: outdentList(current, false),
+          toggleTask: toggleTask(current, false),
+        },
+        presented: editorCommandsForPresentation(
+          operationNames.map((id) => ({ id })),
+          current,
+        ),
+      };
+    },
   });
   const [revision, setRevision] = useState(0);
   useLayoutEffect(() => {
@@ -232,6 +272,10 @@ export function BlockActions({
     })),
   ];
   const title = labels.blockActions ?? behaviorControlLabels.blockActions;
+  const target = state.target;
+  const description = target && target.count > 1
+    ? `${target.count} · ${target.first} … ${target.last ?? ''}`
+    : target?.first;
   return (
     <div data-slot="editor-block-actions">
       <Menu
@@ -244,10 +288,12 @@ export function BlockActions({
             variant="ghost"
             className="h-auto min-h-7 max-w-full whitespace-normal text-start"
             aria-label={title}
+            aria-description={description}
             onMouseDown={(event) => event.preventDefault()}
           >
             <Ellipsis aria-hidden="true" />
-            {title}
+            <span className="min-w-0">{title}</span>
+            {description ? <bdi className="max-w-36 truncate text-muted-foreground">{description}</bdi> : null}
           </Button>
         }
       />

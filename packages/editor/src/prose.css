@@ -110,13 +110,12 @@ img.ProseMirror-separator {
   outline: none;
   min-width: 0;
 }
-.rezics-document .tiptap:focus-visible {
+[data-editor-surface]:has(.tiptap:focus-visible) {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
-  border-radius: var(--radius-xs, 0.25rem);
 }
 .document-editor .tiptap {
-  min-height: 45dvh;
+  min-height: 50dvh;
 }
 .document-editor-compact .tiptap {
   min-height: 6rem;
@@ -414,9 +413,17 @@ img.ProseMirror-separator {
   line-height: var(--editor-line-spacing, 1.7);
 }
 
-.rezics-editor .ProseMirror {
-  max-width: var(--editor-writing-width, 72ch);
-  margin-inline: auto;
+[data-editor-surface] .ProseMirror {
+  --editor-gutter: 1rem;
+  inline-size: 100%;
+  padding-block: 0.75rem;
+  padding-inline: max(var(--editor-gutter), calc((100% - var(--editor-writing-width, 72ch)) / 2));
+}
+
+@media (min-width: 640px) {
+  [data-editor-surface] .ProseMirror {
+    --editor-gutter: 1.5rem;
+  }
 }
 
 .editor-find-match {
@@ -428,4 +435,16 @@ img.ProseMirror-separator {
 .editor-find-current {
   outline: 2px solid var(--primary);
   outline-offset: 1px;
+}
+
+.editor-navigation-panel {
+  position: fixed;
+  z-index: 30;
+  inset-block-start: calc(var(--shell-header-height, 0px) + max(0.75rem, env(safe-area-inset-top)));
+  inset-inline-end: 1rem;
+  max-block-size: calc(100dvh - var(--shell-header-height, 0px) - 2rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-radius: 0.5rem;
+  box-shadow: var(--shadow-md);
 }

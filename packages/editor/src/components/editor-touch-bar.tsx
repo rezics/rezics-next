@@ -4,17 +4,17 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@rezics/ui/shadcn/tooltip';
 import type { Editor } from '@tiptap/core';
 import {
-  Blocks,
+  List,
+  ListOrdered,
+  ListTodo,
+  Pilcrow,
+  Plus,
   Bold,
   ChevronDown,
   Code,
-  Eraser,
-  EyeOff,
   Italic,
   Link,
   Redo2,
-  Strikethrough,
-  Underline,
   Undo2,
 } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
@@ -32,20 +32,19 @@ import { editorCommandLabel, type RichTextEditorLabels } from './editor-labels.t
 import { BlockMenu } from './editor-upstream/reactjs-tiptap-editor/block-menu.tsx';
 import { canInsertSizedTable } from './editor-table-commands.ts';
 import { ActionButton } from './editor-upstream/reactjs-tiptap-editor/action-button.tsx';
+import { productControlLabels } from './editor-upstream/reactjs-tiptap-editor/control-labels.ts';
+import type { EditorPreset } from './editor-workbench.tsx';
 
 const icons = {
   bold: Bold,
   italic: Italic,
-  underline: Underline,
-  spoiler: EyeOff,
   link: Link,
   code: Code,
-  strike: Strikethrough,
-  clearFormatting: Eraser,
-  blocks: Blocks,
+  bulletList: List,
+  orderedList: ListOrdered,
+  taskList: ListTodo,
   undo: Undo2,
   redo: Redo2,
-  hideKeyboard: ChevronDown,
 } as const;
 
 const focusPreservingPointer = {
@@ -118,9 +117,9 @@ export function EditorTouchBar({
   onImage,
   onTable,
   upload,
-  visible,
   docked,
-  persistent,
+  touch,
+  preset,
   onFocusChange,
   onSheetOpenChange,
   isCurrent,
@@ -131,32 +130,47 @@ export function EditorTouchBar({
   onImage: () => void;
   onTable?: () => void;
   upload: boolean;
-  visible: boolean;
   docked: boolean;
-  persistent: boolean;
+  touch: boolean;
+  preset: EditorPreset;
   onFocusChange: (focused: boolean) => void;
   onSheetOpenChange: (open: boolean) => void;
   isCurrent: () => boolean;
 }) {
   const state = useCommandState(editor);
-  const [blocksOpen, setBlocksOpen] = useState(false);
-  const [tabStop, setTabStop] = useState('blocks');
+  const [tabStop, setTabStop] = useState(preset === 'compact' ? 'bold' : 'blocks');
   const bar = useRef<HTMLDivElement>(null);
-  const showBar = visible && (persistent || docked || state.empty || blocksOpen);
-  const inset = useKeyboardInset(showBar && docked);
-  const blockCommands = availableCommands(
-    [...schemaBlockCommands.filter((command) => command.id === 'paragraph'), ...insertCommands],
+  const inset = useKeyboardInset(docked);
+  const selectedBlock = state.blocks.find(({ active }) => active)?.command;
+  const blockLabel = selectedBlock ? editorCommandLabel(labels, selectedBlock.label) : labels.blocks;
+  const insertLabel = labels.blockInsert ?? productControlLabels.blockInsert;
+  const insertion = availableCommands(
+    insertCommands.filter((command) => ['image', 'table', 'horizontalRule'].includes(command.id)),
     editor,
   ).filter(
     (command) =>
       (command.id !== 'image' || upload) && (command.id !== 'table' || (onTable && canInsertSizedTable(editor))),
   );
-  const formatCommands = state.marks.map(({ command }) => command);
+  const styles = state.blocks.map(({ command }) => command);
+  const blockCommands = touch ? [...styles, ...insertion] : styles;
+  const showInsert = !touch && insertion.length > 0;
+  const formatCommands = state.marks
+    .map(({ command }) => command)
+    .filter(({ id }) => ['bold', 'italic', 'link', 'code'].includes(id));
+  const compact = preset === 'compact';
+  const listCommands = availableCommands(schemaBlockCommands, editor).filter(({ id }) =>
+    id === 'bulletList' ||
+    (!compact && id === 'orderedList') ||
+    (preset === 'knowledge' && id === 'taskList'),
+  );
   const availableTabStops = [
-    ...(blockCommands.length ? ['blocks'] : []),
+    ...(!compact && state.canUndo ? ['undo'] : []),
+    ...(!compact && state.canRedo ? ['redo'] : []),
+    ...(!compact && blockCommands.length ? ['blocks'] : []),
     ...formatCommands.map((command) => command.id),
-    ...(state.canUndo ? ['undo'] : []),
-    ...(state.canRedo ? ['redo'] : []),
+    ...listCommands.map((command) => command.id),
+    ...(compact && blockCommands.length ? ['blocks'] : []),
+    ...(showInsert ? ['insert'] : []),
     ...(docked ? ['hideKeyboard'] : []),
   ];
   const activeTabStop = availableTabStops.includes(tabStop) ? tabStop : availableTabStops[0];
@@ -165,11 +179,11 @@ export function EditorTouchBar({
   const menuIsCurrent = () => isCurrent() && selectionRevision.current === renderedSelectionRevision;
 
   const scrollCaret = useCallback(() => {
-    if (!showBar || !docked || !isCurrent()) return;
+    if (!docked || !isCurrent()) return;
     requestAnimationFrame(() => {
       if (isCurrent()) scrollSelectionAboveBar(editor, bar.current);
     });
-  }, [docked, editor, isCurrent, showBar]);
+  }, [docked, editor, isCurrent]);
 
   useLayoutEffect(scrollCaret, [scrollCaret, inset]);
 
@@ -185,7 +199,7 @@ export function EditorTouchBar({
     editor.on('selectionUpdate', selectionUpdate);
     editor.on('transaction', update);
     const viewport = window.visualViewport;
-    if (showBar && docked) {
+    if (docked) {
       viewport?.addEventListener('resize', update);
       viewport?.addEventListener('scroll', update);
     }
@@ -196,7 +210,7 @@ export function EditorTouchBar({
       viewport?.removeEventListener('resize', update);
       viewport?.removeEventListener('scroll', update);
     };
-  }, [docked, editor, isCurrent, scrollCaret, showBar]);
+  }, [docked, editor, isCurrent, scrollCaret]);
 
   function moveFocus(event: KeyboardEvent<HTMLDivElement>) {
     if (!menuIsCurrent() || event.nativeEvent.isComposing || event.keyCode === 229 || editor.view.composing) return;
@@ -254,9 +268,7 @@ export function EditorTouchBar({
         onFocus={() => {
           if (isCurrent()) setTabStop(command.id);
         }}
-      >
-        {command.active ? editorCommandLabel(labels, command.label) : null}
-      </ActionButton>
+      />
     );
   }
 
@@ -272,9 +284,48 @@ export function EditorTouchBar({
 
   if (!isCurrent()) return null;
 
+  function blockPicker(kind: 'blocks' | 'insert') {
+    const insert = kind === 'insert';
+    const title = insert ? insertLabel : labels.blocks;
+    const Icon = insert ? Plus : Pilcrow;
+    return (
+      <BlockMenu
+        editor={editor}
+        labels={labels}
+        title={title}
+        commands={insert ? insertion : blockCommands}
+        selectedBlock={insert ? undefined : selectedBlock?.id}
+        isCurrent={menuIsCurrent}
+        onSelect={runCommand}
+        onOpenChange={(open) => {
+          if (isCurrent()) onSheetOpenChange(open);
+        }}
+        trigger={
+          <Button
+            type="button"
+            variant="ghost"
+            aria-label={title}
+            aria-description={insert ? undefined : blockLabel}
+            data-editor-block-trigger
+            tabIndex={activeTabStop === kind ? 0 : -1}
+            className="min-w-0 shrink-0"
+            onFocus={() => {
+              if (isCurrent()) setTabStop(kind);
+            }}
+            {...focusPreservingPointer}
+          >
+            <Icon data-icon="inline-start" aria-hidden="true" />
+            <span className="max-w-24 truncate">{insert ? title : blockLabel}</span>
+            <ChevronDown data-icon="inline-end" aria-hidden="true" />
+          </Button>
+        }
+      />
+    );
+  }
+
   return (
     <TooltipProvider delay={600}>
-      {showBar ? (
+      <div className="mb-2 min-h-10">
         <div
           ref={bar}
           role="toolbar"
@@ -289,57 +340,29 @@ export function EditorTouchBar({
               onFocusChange(false);
           }}
           className={cn(
-            'flex items-center gap-1 bg-popover px-2 text-popover-foreground',
-            docked
-              ? 'fixed inset-x-0 z-40 border-t border-border'
-              : 'relative mb-2 min-w-0 rounded-xl border border-border',
+            'flex min-h-10 items-center bg-popover px-1.5 text-popover-foreground',
+            docked ? 'fixed inset-x-0 z-40 border-t border-border' : 'rounded-lg border border-border',
             docked && inset === 0 && 'pb-[env(safe-area-inset-bottom)]',
           )}
         >
-          <div
-            className={cn(
-              'flex min-w-0 flex-1 items-center gap-0.5 py-1',
-              docked
-                ? 'flex-nowrap overflow-x-auto overscroll-x-contain'
-                : 'flex-nowrap overflow-x-auto overscroll-x-contain md:flex-wrap',
+          <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto overscroll-x-contain py-1">
+            {compact ? null : (
+              <div className="flex shrink-0 items-center gap-0.5 border-e pe-1">
+                {commandButton(undoCommand, !state.canUndo)}
+                {commandButton(redoCommand, !state.canRedo)}
+              </div>
             )}
-          >
-            {blockCommands.length ? (
-              <BlockMenu
-                editor={editor}
-                labels={labels}
-                title={labels.blocks}
-                commands={blockCommands}
-                selectedBlock={state.blocks.find((item) => item.active)?.command.id}
-                isCurrent={menuIsCurrent}
-                onSelect={runCommand}
-                onOpenChange={(open) => {
-                  if (!isCurrent()) return;
-                  setBlocksOpen(open);
-                  onSheetOpenChange(open);
-                }}
-                trigger={
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    aria-label={labels.blocks}
-                    data-editor-block-trigger
-                    tabIndex={activeTabStop === 'blocks' ? 0 : -1}
-                    onFocus={() => {
-                      if (isCurrent()) setTabStop('blocks');
-                    }}
-                    onMouseDown={(event) => event.preventDefault()}
-                  >
-                    <Blocks aria-hidden="true" />
-                    {labels.blocks}
-                    <ChevronDown aria-hidden="true" />
-                  </Button>
-                }
-              />
+            {!compact && blockCommands.length ? blockPicker('blocks') : null}
+            <div className={cn('flex shrink-0 items-center gap-0.5', !compact && 'border-s ps-1')}>
+              {formatCommands.map((command) => commandButton(command))}
+            </div>
+            {listCommands.length ? (
+              <div className="flex shrink-0 items-center gap-0.5 border-s ps-1">
+                {listCommands.map((command) => commandButton(command))}
+              </div>
             ) : null}
-            {formatCommands.map((command) => commandButton(command))}
-            {commandButton(undoCommand, !state.canUndo)}
-            {commandButton(redoCommand, !state.canRedo)}
+            {compact && blockCommands.length ? blockPicker('blocks') : null}
+            {showInsert ? blockPicker('insert') : null}
           </div>
           {docked
             ? barControl(
@@ -364,7 +387,7 @@ export function EditorTouchBar({
               )
             : null}
         </div>
-      ) : null}
+      </div>
     </TooltipProvider>
   );
 }

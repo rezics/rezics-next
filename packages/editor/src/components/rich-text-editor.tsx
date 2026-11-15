@@ -10,7 +10,7 @@ import {
 } from '@rezics/document';
 import { Extension, type Editor as TiptapEditor, type JSONContent } from '@tiptap/core';
 import { history } from '@tiptap/pm/history';
-import { NodeSelection, Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
+import { NodeSelection, Plugin, PluginKey, TextSelection, type Transaction } from '@tiptap/pm/state';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorView } from '@tiptap/pm/view';
 import { useEditor } from '@tiptap/react';
@@ -73,6 +73,7 @@ import {
   type LinkVisitRange,
 } from './editor-link.tsx';
 import { ImageInsert, withMediaViews } from './editor-image.tsx';
+import { EditorUploadControls } from './editor-upload-controls.tsx';
 import type { DocumentImageRenderer, DocumentMediaRenderer } from './document-media.tsx';
 import { refreshEditorMediaViews, type EditorMediaPorts } from './editor-media-runtime.ts';
 import {
@@ -379,7 +380,7 @@ export function RichTextEditor({
     assertSnapshotSize(snapshot);
     return snapshot;
   }, [value]);
-  const controlledKey = snapshotKey(normalizedValue);
+  const controlledKey = useMemo(() => snapshotKey(normalizedValue), [normalizedValue]);
   const editable = !disabled && !readOnly;
   const latest = useRef({
     onChange,
@@ -733,6 +734,7 @@ export function RichTextEditor({
       ownerProfile: DocumentSnapshot['profile'],
       ownerMentionGeneration: number,
       target: TiptapEditor | null,
+      expectedEditable = true,
     ) =>
       mounted.current &&
       !renderedExternalReplacement &&
@@ -743,15 +745,19 @@ export function RichTextEditor({
       ownerMentionGeneration === committedMentionGeneration.current &&
       target !== null &&
       target === renderedEditor.current &&
-      editableRef.current &&
+      editableRef.current === expectedEditable &&
       schemaMatchesProfile &&
       !target.isDestroyed &&
-      target.isEditable,
+      target.isEditable === expectedEditable,
     [renderedEditorReplacement, renderedExternalReplacement, schemaMatchesProfile],
   );
   const isCurrent = useCallback(
     () => ownsVisit(visit, value.profile, currentMentionGeneration, editor),
     [currentMentionGeneration, editor, ownsVisit, value.profile, visit],
+  );
+  const ownsWorkbench = useCallback(
+    () => ownsVisit(visit, value.profile, currentMentionGeneration, editor, !readOnly),
+    [currentMentionGeneration, editor, ownsVisit, readOnly, value.profile, visit],
   );
   mediaAdmission.current = () =>
     mounted.current &&
@@ -1183,36 +1189,41 @@ export function RichTextEditor({
         event.getModifierState('AltGraph')
       )
         return;
-      if (!isCurrent()) return;
+      if (!ownsWorkbench()) return;
       latest.current.onKeyDown?.(event);
-      if (event.defaultPrevented || !isCurrent()) return;
+      if (event.defaultPrevented || !ownsWorkbench()) return;
       const modifier = (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey;
       if (editor?.view.hasFocus() && !editor.view.composing && workbench.current?.handleShortcut(event.nativeEvent)) {
         event.preventDefault();
         return;
       }
       if (editable && editor && event.altKey && event.key === 'F10') {
-        const tableControls = menuContainer.current?.querySelector('[data-slot="editor-table-controls"]');
-        const controls = tableControls ?? menuContainer.current;
-        const entry = [
-          ...(controls?.querySelectorAll<HTMLButtonElement>(
-            'button:not([disabled])[tabindex="0"], button:not([disabled]):not([tabindex])',
-          ) ?? []),
-        ].find((button) => button.closest('[role="toolbar"]') && button.getClientRects().length > 0);
+        const container = menuContainer.current;
+        const toolbars = ['editor-table-controls', 'editor-selection-menu', 'editor-touch-bar'];
+        const entry = toolbars
+          .flatMap((slot) => {
+            const toolbar = container?.querySelector(`[data-slot="${slot}"]`);
+            return toolbar
+              ? [...toolbar.querySelectorAll<HTMLButtonElement>(
+                  'button:not([disabled])[tabindex="0"], button:not([disabled]):not([tabindex])',
+                )]
+              : [];
+          })
+          .find((button) => button.getClientRects().length > 0);
         if (entry) {
           event.preventDefault();
           entry.focus();
           return;
         }
       }
-      if (modifier && event.key.toLowerCase() === 's' && latest.current.onSave) {
+      if (editable && modifier && event.key.toLowerCase() === 's' && latest.current.onSave) {
         event.preventDefault();
         const current = editor;
         if (current) flushRef.current(current);
         latest.current.onSave();
       }
     },
-    [editor, editable, isCurrent],
+    [editor, editable, ownsWorkbench],
   );
 
   const handleCompositionEnd = useCallback(() => {
@@ -1228,11 +1239,8 @@ export function RichTextEditor({
     if (editor && !editor.isDestroyed) refreshEditorMediaViews(editor);
   }, [editor, renderImage, renderMedia, resolvedLabels, mediaVisit]);
   const editorFocused = useEditorFocus(editor);
-  const toolbarVisible =
-    editable &&
-    toolbarMode !== 'hidden' &&
-    (toolbarMode === 'fixed' || editorFocused || toolbarFocused || touchSheetOpen);
-  const touchBarDocked = toolbarVisible && coarsePointer && (editorFocused || toolbarFocused || touchSheetOpen);
+  const showPrimaryToolbar = editable && toolbarMode !== 'hidden' && (toolbarMode !== 'floating' || coarsePointer);
+  const touchBarDocked = showPrimaryToolbar && coarsePointer && (editorFocused || toolbarFocused || touchSheetOpen);
   const imageControl =
     editor && editable && upload && availableCommands([imageCommand], editor).length > 0 ? (
       <Button
@@ -1268,9 +1276,28 @@ export function RichTextEditor({
         } as CSSProperties
       }
     >
-      {editor && editable ? (
+      {editor && showPrimaryToolbar ? (
+        <EditorTouchBar
+          key={`touch-${visit}`}
+          editor={editor}
+          labels={resolvedLabels}
+          onLink={openLink}
+          onImage={openImage}
+          onTable={openTable}
+          upload={hasUpload}
+          docked={touchBarDocked}
+          touch={coarsePointer}
+          preset={selectedPreset}
+          onFocusChange={setToolbarFocused}
+          onSheetOpenChange={(open) => {
+            if (isCurrent()) setTouchSheetOpen(open);
+          }}
+          isCurrent={isCurrent}
+        />
+      ) : null}
+      {editor && (editable || readOnly) ? (
         <EditorWorkbench
-          key={`workbench-${visit}`}
+          key={`workbench-${visit}-${editable}`}
           ref={workbench}
           editor={editor}
           labels={resolvedLabels}
@@ -1283,9 +1310,10 @@ export function RichTextEditor({
           onLink={openLink}
           onImage={openImage}
           onTable={openTable}
-          isCurrent={isCurrent}
+          isCurrent={ownsWorkbench}
           inspection={inspection}
           preset={selectedPreset}
+          readOnly={readOnly}
           onInvalidContent={rejectContent}
           toolbarHidden={toolbarMode === 'hidden'}
           preferencesPanel={{
@@ -1318,29 +1346,11 @@ export function RichTextEditor({
           }}
         />
       ) : null}
-      {editor && editable && toolbarMode !== 'hidden' && (toolbarMode !== 'floating' || coarsePointer) ? (
-        <EditorTouchBar
-          key={`touch-${visit}`}
-          editor={editor}
-          labels={resolvedLabels}
-          onLink={openLink}
-          onImage={openImage}
-          onTable={openTable}
-          upload={hasUpload}
-          visible={toolbarVisible}
-          docked={touchBarDocked}
-          persistent={toolbarMode === 'fixed'}
-          onFocusChange={setToolbarFocused}
-          onSheetOpenChange={(open) => {
-            if (isCurrent()) setTouchSheetOpen(open);
-          }}
-          isCurrent={isCurrent}
-        />
-      ) : null}
       {editor && editable && toolbarMode !== 'hidden' ? (
         <TableControls
           key={`table-${visit}`}
           editor={editor}
+          container={menuContainer}
           labels={resolvedLabels}
           labelOverrides={{ ...labels, ...tableLabels }}
           isCurrent={isCurrent}
@@ -1353,13 +1363,14 @@ export function RichTextEditor({
         {...(dir === undefined ? {} : { dir })}
         compact={compact || selectedPreset === 'compact'}
         disabled={disabled}
+        readOnly={readOnly}
         onKeyDownCapture={handleKeyDown}
         onCompositionEnd={handleCompositionEnd}
       />
-      {imageControl || actions ? (
+      {imageControl || (!readOnly && actions) ? (
         <div className="mt-3 flex w-full min-w-0 flex-wrap items-center gap-2">
           {imageControl}
-          {actions ? (
+          {!readOnly && actions ? (
             <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-2 overflow-x-auto sm:ms-auto sm:w-auto sm:flex-1 sm:justify-end">
               {actions}
             </div>
@@ -1429,6 +1440,7 @@ export function RichTextEditor({
               if (linkRange) closeLink(linkRange.id);
             }}
             container={menuContainer}
+            contextCommands={() => workbench.current?.selectionCommands() ?? []}
             visible={toolbarMode !== 'fixed' && toolbarMode !== 'hidden' && !touchBarDocked}
             isCurrent={isCurrent}
             isRangeCurrent={isCurrentLinkRange}
@@ -1453,57 +1465,44 @@ export function RichTextEditor({
           />
         </>
       ) : null}
-      {renderUpload ? (
-        uploadEntries.map((entry) => (
-          <div key={entry.id}>
-            {renderUpload(entry, {
+      {uploadEntries.length ? (
+        <div className="mt-2 grid gap-2">
+          {uploadEntries.map((entry) => {
+            const canUseEntry = () => isCurrent() && uploadEntriesRef.current.includes(entry);
+            const controls: UploadAttachmentActions = {
               retry: () => {
-                if (isCurrent()) uploads.current?.retry(entry.id);
+                if (canUseEntry()) uploads.current?.retry(entry.id);
               },
               dismiss: () => {
-                if (isCurrent()) uploads.current?.dismiss(entry.id);
+                if (canUseEntry()) uploads.current?.dismiss(entry.id);
               },
               replace: (file) => {
-                if (isCurrent()) uploads.current?.replace(entry.id, file);
+                if (canUseEntry()) uploads.current?.replace(entry.id, file);
               },
-            })}
-          </div>
-        ))
-      ) : (
-        <>
-          <div role="status" aria-label={resolvedLabels.uploading} aria-live="polite">
-            {uploadEntries
-              .filter((entry) => entry.phase !== 'failed')
-              .map((entry) => (
-                <p key={entry.id}>
-                  {resolvedLabels.uploading}: {entry.file.name}
-                </p>
-              ))}
-          </div>
-          {uploadEntries
-            .filter((entry) => entry.phase === 'failed')
-            .map((entry) => (
-              <div key={entry.id} role="alert" aria-label={resolvedLabels.uploadFailed}>
-                <p>
-                  {resolvedLabels.uploadFailed}: {entry.file.name}
-                </p>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={!editable}
-                    onClick={() => uploads.current?.retry(entry.id)}
-                  >
-                    {resolvedLabels.retryUpload}
-                  </Button>
-                  <Button type="button" variant="ghost" onClick={() => uploads.current?.dismiss(entry.id)}>
-                    {resolvedLabels.dismissUpload}
-                  </Button>
-                </div>
-              </div>
-            ))}
-        </>
-      )}
+            };
+            return renderUpload ? (
+              <div key={entry.id}>{renderUpload(entry, controls)}</div>
+            ) : (
+              <EditorUploadControls
+                key={entry.id}
+                entry={entry}
+                labels={resolvedLabels}
+                editable={editable}
+                actions={controls}
+                onLocate={() => {
+                  if (!editor || !canUseEntry() || editor.view.composing) return;
+                  const { doc } = editor.state;
+                  const position = Math.min(doc.content.size, Math.max(0, entry.tracked.get()));
+                  editor.view.dispatch(
+                    editor.state.tr.setSelection(TextSelection.near(doc.resolve(position))).scrollIntoView(),
+                  );
+                  editor.view.focus();
+                }}
+              />
+            );
+          })}
+        </div>
+      ) : null}
       {uploadMessage ? (
         <p role="status" aria-label={resolvedLabels.image}>
           {uploadMessage}

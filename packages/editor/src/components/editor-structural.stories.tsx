@@ -184,6 +184,7 @@ export const StructuralEditing: Story = {
 
     await placeEditorCaret(textbox, within(textbox).getByText('A movable quotation'));
     await waitFor(() => expect(canvas.queryByRole('toolbar', { name: 'Table' })).toBeNull());
+    await userEvent.click(canvas.getByText('More tools', { exact: true }));
     await userEvent.click(canvas.getByRole('button', { name: 'Block actions' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Duplicate block' }));
     await waitFor(() => expect(nodes(structural.latest.current, 'blockquote')).toHaveLength(2));
@@ -215,6 +216,7 @@ export const FinalBlockKeyboard: Story = {
     const canvas = within(canvasElement);
     const textbox = canvas.getByRole('textbox', { name: 'Structural document' });
     await userEvent.click(within(textbox).getByText('Only block'));
+    await userEvent.click(canvas.getByText('More tools', { exact: true }));
     const actions = canvas.getByRole('button', { name: 'Block actions' });
     actions.focus();
     await userEvent.keyboard('{Enter}');
