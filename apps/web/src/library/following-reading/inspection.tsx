@@ -138,7 +138,7 @@ export function FollowingInspection({
       <header className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm font-medium text-muted-foreground">{m.following_reading_inspection()}</p>
-          <Button className="min-h-11" variant="ghost" onClick={close}>
+          <Button variant="ghost" onClick={close}>
             {m.following_reading_close()}
           </Button>
         </div>
@@ -185,7 +185,7 @@ export function FollowingInspection({
       {isSpace &&
       (space.result.state === 'unavailable' || space.result.state === 'denied' || space.result.state === 'retired') ? (
         <Button
-          className="min-h-11"
+         
           variant="outline"
           onClick={() => {
             if (!space.current()) return;
@@ -199,10 +199,7 @@ export function FollowingInspection({
       <div className="space-y-3">
         {destination ? (
           <a
-            className={buttonVariants({
-              variant: 'default',
-              className: 'min-h-11 max-w-full whitespace-normal break-words',
-            })}
+           className={buttonVariants({ variant: 'default', className: 'h-auto min-h-7 max-w-full whitespace-normal break-words' })}
             href={destination.href}
             onClick={(event) => {
               followingDestinationClick(
@@ -226,10 +223,7 @@ export function FollowingInspection({
         ) : null}
         {actionHref && actionHref !== destination?.href ? (
           <a
-            className={buttonVariants({
-              variant: 'outline',
-              className: 'min-h-11 max-w-full whitespace-normal break-words',
-            })}
+           className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 max-w-full whitespace-normal break-words' })}
             href={actionHref}
             onClick={(event) => {
               followingDestinationClick(event, () => selection.current() && space.current(), returnFrontier);
@@ -240,7 +234,7 @@ export function FollowingInspection({
         ) : null}
       </div>
       <details className="group min-w-0 border-t border-border pt-2">
-        <summary className="min-h-11 cursor-pointer content-center py-2 text-sm font-medium text-muted-foreground outline-offset-4 focus-visible:outline-2 focus-visible:outline-ring">
+        <summary className="cursor-pointer content-center py-2 text-sm font-medium text-muted-foreground outline-offset-4 focus-visible:outline-2 focus-visible:outline-ring">
           {m.following_reading_details()}
         </summary>
         <div className="min-w-0 space-y-5 pt-3">
@@ -281,7 +275,7 @@ export function FollowingInspection({
           </dl>
         </div>
       </details>
-      <Button className="min-h-11 max-w-full whitespace-normal" variant="outline" onClick={close}>
+      <Button className="h-auto min-h-7 max-w-full whitespace-normal" variant="outline" onClick={close}>
         {m.following_reading_return_controls()}
       </Button>
     </section>

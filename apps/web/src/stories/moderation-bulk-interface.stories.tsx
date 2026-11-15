@@ -268,7 +268,7 @@ function RetiringQueue(args: ReportQueueProps) {
   const [retired, setRetired] = useState(false);
   return (
     <>
-      <Button className="h-auto min-h-11 min-w-11 whitespace-normal py-2" onClick={() => setRetired(true)}>
+      <Button className="h-auto min-h-7 whitespace-normal" onClick={() => setRetired(true)}>
         Retire fixture visit
       </Button>
       <BoardReportQueue

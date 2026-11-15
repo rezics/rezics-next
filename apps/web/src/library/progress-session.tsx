@@ -17,7 +17,7 @@ import { RelativeTime } from './logs-progress';
 import { ProgressRow } from '@rezics/ui/progress-row';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { fullDateTime } from '../threads/byline-time';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { isNotFound, Link, useLocation, useRouter } from '@tanstack/react-router';
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -73,8 +73,10 @@ import { progressSessionAddress } from './progress-address';
 import { progressHistoryRecord } from './progress-history-restore';
 import { ProgressSessionWorkspace } from './progress-session-workspace';
 
-const buttonClass =
-  'inline-flex min-h-[44px] min-w-[44px] items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const buttonClass = buttonVariants({
+  variant: 'outline',
+  className: 'h-auto min-h-7 max-w-full whitespace-normal',
+});
 
 const { Exposure } = exposure;
 const readDetail = async (data: ProgressDetailAddress, isCurrent: () => boolean) => {
@@ -452,7 +454,6 @@ export function CurrentProgressDetail({
         {viewer && allowed ? (
           <Button
             variant="outline"
-            className="min-h-11 min-w-11"
             disabled={query.isFetching}
             onClick={() => {
               if (isCurrent()) void query.refetch();
@@ -560,7 +561,7 @@ function stateLabel(state: ProgressState): string {
 const historyTextLimit = 160;
 const historyUnitLimit = 4;
 const historyDisclosureClass =
-  'min-h-11 cursor-pointer content-center rounded-md text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'cursor-pointer text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const historyPreviewClass = 'min-w-0 [&:has(>details[open])>[data-history-preview]]:hidden';
 
 function longHistoryText(value: string): boolean {
@@ -1558,7 +1559,7 @@ function SessionEditor({
               </>
             )}
             <div className="flex flex-wrap items-center gap-3 border-t border-border pt-4">
-              <Button type="submit" className="min-h-11">
+              <Button type="submit">
                 {m.library_progress_record()}
               </Button>
               <p className="text-sm text-muted-foreground">
@@ -1803,7 +1804,7 @@ function SessionEditor({
       {session.state === 'active' ? (
         <>
           {offered || sessionHasIndependentMeasures(session) ? (
-            <Button ref={taskOpenerRef} className="min-h-11" onClick={openUpdate}>
+            <Button ref={taskOpenerRef} onClick={openUpdate}>
               {m.library_progress_update()}
             </Button>
           ) : null}
@@ -1895,7 +1896,7 @@ function SessionEditor({
                   ) as never,
                 }
               : {})}
-            className="inline-flex min-h-11 items-center font-medium text-primary underline underline-offset-4"
+            className="font-medium text-primary underline underline-offset-4"
           >
             {m.library_progress_new_session()}
           </Link>
@@ -2064,7 +2065,7 @@ function ProgressRecordingMeaning({ session }: { session: ProgressSessionView })
         : m.library_progress_units_meaning();
   return (
     <details className="space-y-3 text-sm text-muted-foreground">
-      <summary className="min-h-11 cursor-pointer content-center font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+      <summary className="cursor-pointer font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
         {m.library_progress_profile_rules()}
       </summary>
       <dl className="grid gap-3 sm:grid-cols-2">

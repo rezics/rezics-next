@@ -11,6 +11,7 @@ import { ConsolidationReview } from './review';
 import { ConsolidationVisit, type ConsolidationEnvelope, type VisitOutcome } from './visit';
 import { ConsolidationSelection } from './selection';
 import { ConsolidationPanel, type ConsolidationPicked } from './consolidation-panel';
+import { Button } from '@rezics/ui/shadcn/button';
 
 const catalogueOperations = ['library_label.list'] as const;
 type Loaded = Extract<LabelShelfPageData, { state: 'loaded' }>;

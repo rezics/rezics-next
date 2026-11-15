@@ -162,7 +162,7 @@ function ReviewRow({
         <span>{kind}</span>
         {reviewedSubject ? (
           <a
-            className="inline-flex min-h-11 items-center underline underline-offset-4 [overflow-wrap:anywhere]"
+            className="underline underline-offset-4 [overflow-wrap:anywhere]"
             lang={target?.label?.language}
             href={
               subjectHrefFor?.({
@@ -230,7 +230,7 @@ function ReviewRow({
           {summary.excerpt && (!searchContext || searchContext.state === 'available') ? (
             searchContext?.state === 'available' && searchContext.spoiler ? (
               <details key={`${id}:${summary.source?.openingRevisionId}:${summary.source?.sourceVersion}:${locale}`}>
-                <summary className="inline-flex min-h-11 cursor-pointer items-center underline underline-offset-4">
+                <summary className="cursor-pointer underline underline-offset-4">
                   {m.subject_spoiler_show({}, options(locale))}
                 </summary>
                 <p lang={searchContext.language ?? undefined} className="line-clamp-3 break-words">

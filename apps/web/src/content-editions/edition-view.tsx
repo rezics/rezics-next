@@ -43,7 +43,6 @@ export function ContentEditionReader({
       <Button
         type="button"
         variant={recoverable ? 'default' : 'outline'}
-        className="min-h-11"
         disabled={retrying}
         onClick={onRetry}
       >
@@ -86,7 +85,7 @@ export function ContentEditionReader({
         {returnContext ? <p className="text-sm text-muted-foreground">{returnContext}</p> : null}
         {subject ? (
           <a
-            className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+            className="inline-flex items-center text-sm underline underline-offset-4"
             href={subjectHref(subject, locale).href}
           >
             {m.content_edition_subject()}
@@ -103,10 +102,10 @@ export function ContentEditionReader({
       {page.state === 'withdrawn' ? <p role="status">{m.content_edition_withdrawn()}</p> : null}
       {page.state === 'version-mismatch' ? <p role="alert">{m.content_edition_version_mismatch()}</p> : null}
       {page.state !== 'published' && page.state !== 'loading' ? (
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           {signIn ? (
             <a
-              className={buttonVariants({ className: 'min-h-11' })}
+              className={buttonVariants()}
               href={`/auth/sign-in?return_to=${encodeURIComponent(`/${locale}/editions/${encodeURIComponent(editionId)}`)}`}
             >
               {m.content_edition_sign_in()}
@@ -116,7 +115,6 @@ export function ContentEditionReader({
           {returnLink(
             buttonVariants({
               variant: signIn || (recoverable && onRetry) ? 'outline' : 'default',
-              className: 'min-h-11',
             }),
           )}
           {page.state === 'version-mismatch' ? retry : null}
@@ -138,13 +136,13 @@ export function ContentEditionReader({
           />
           <footer className="space-y-4 border-t border-border pt-6 text-sm text-muted-foreground">
             <p>{m.content_edition_attribution()}</p>
-            {returnLink('inline-flex min-h-11 items-center text-primary underline underline-offset-4')}
+            {returnLink('inline-flex items-center text-primary underline underline-offset-4')}
             <dl>
               <dt className="font-medium text-foreground">{m.content_edition_licence()}</dt>
               <dd>{published.metadata.licence}</dd>
             </dl>
             <details className="space-y-4">
-              <summary className="min-h-11 cursor-pointer py-3 font-medium text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
+              <summary className="cursor-pointer font-medium text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
                 {m.content_edition_details()}
               </summary>
               <dl className="grid gap-4 sm:grid-cols-2">

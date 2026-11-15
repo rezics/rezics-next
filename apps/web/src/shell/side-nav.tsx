@@ -46,7 +46,7 @@ export function SideNav({
                   href={`/${locale}${item.path}`}
                   title={item.title}
                   aria-current={current ? 'page' : undefined}
-                  className="flex min-h-11 min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-sm wrap-anywhere whitespace-normal outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-accent aria-[current=page]:font-semibold aria-[current=page]:text-primary"
+                  className="flex min-h-8 min-w-0 items-center gap-2 rounded-[calc(var(--radius-sm)+2px)] p-2 text-xs wrap-anywhere whitespace-normal outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30 aria-[current=page]:bg-accent aria-[current=page]:font-semibold aria-[current=page]:text-primary"
                 >
                   <Icon aria-hidden="true" className="size-4 shrink-0 text-sidebar-primary" />
                   <span data-community-label lang={item.titleLanguage} className="min-w-0 wrap-anywhere">
@@ -62,7 +62,7 @@ export function SideNav({
       <a
         href={`/${locale}/library/following`}
         title={m.shell_manage_following()}
-        className="mt-1 flex min-h-11 min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-sm wrap-anywhere whitespace-normal text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+        className="mt-1 flex min-h-8 min-w-0 items-center gap-2 rounded-[calc(var(--radius-sm)+2px)] p-2 text-xs wrap-anywhere whitespace-normal text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30"
       >
         <Settings2 aria-hidden="true" className="size-4 shrink-0" />
         <span data-community-label className="min-w-0 wrap-anywhere">

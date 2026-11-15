@@ -59,7 +59,7 @@ export function SpoilerGate({
           <Button
             variant="outline"
             size="sm"
-            className="min-h-11 min-w-11 whitespace-normal text-left focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-4"
+            className="whitespace-normal text-left focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-4"
           />
         }
       >

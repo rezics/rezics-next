@@ -46,11 +46,11 @@ export function ImportSourceEvidence({ preview }: { preview: SourceAdmissionPrev
       </div>
       <div>
         <dt className="font-medium">{m.library_rich_entry_source_created()}</dt>
-        <dd className="break-words">{sourcePreviewFieldText(preview.sourceCreated)}</dd>
+        <dd className="h-auto break-words">{sourcePreviewFieldText(preview.sourceCreated)}</dd>
       </div>
       <div>
         <dt className="font-medium">{m.library_rich_entry_source_updated()}</dt>
-        <dd className="break-words">{sourcePreviewFieldText(preview.sourceUpdated)}</dd>
+        <dd className="h-auto break-words">{sourcePreviewFieldText(preview.sourceUpdated)}</dd>
       </div>
     </dl>
   );
@@ -79,13 +79,12 @@ export function ImportSourceChecks({
       <Field orientation="horizontal" className="min-w-0">
         <Checkbox
           id={privacyId}
-          className="size-11 after:inset-0"
           checked={privacy}
           disabled={disabled}
           onCheckedChange={(value) => onPrivacy(value === true)}
         />
         <FieldLabel
-          className="min-h-11 min-w-0 items-center whitespace-normal [overflow-wrap:anywhere]"
+          className="h-auto min-w-0 items-center whitespace-normal [overflow-wrap:anywhere]"
           htmlFor={privacyId}
         >
           {m.library_import_source_privacy_confirm()}
@@ -94,13 +93,12 @@ export function ImportSourceChecks({
       <Field orientation="horizontal" className="min-w-0">
         <Checkbox
           id={timestampsId}
-          className="size-11 after:inset-0"
           checked={timestamps}
           disabled={disabled}
           onCheckedChange={(value) => onTimestamps(value === true)}
         />
         <FieldLabel
-          className="min-h-11 min-w-0 items-center whitespace-normal [overflow-wrap:anywhere]"
+          className="h-auto min-w-0 items-center whitespace-normal [overflow-wrap:anywhere]"
           htmlFor={timestampsId}
         >
           {m.library_import_source_timestamps_confirm()}

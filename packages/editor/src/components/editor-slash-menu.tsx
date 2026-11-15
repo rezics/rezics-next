@@ -476,7 +476,7 @@ export const SlashMenu = memo(function SlashMenu({
             setIndex(next);
           }
         }}
-        className="rounded-2xl p-1 shadow-lg ring-1 ring-foreground/5 dark:ring-foreground/10"
+        className="shadow-md ring-1 ring-foreground/10"
       >
         <CommandList label={labels.insertBlock} style={{ maxHeight: place?.maxHeight }}>
           {items.length ? (

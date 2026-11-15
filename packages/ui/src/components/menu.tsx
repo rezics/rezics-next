@@ -11,13 +11,14 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
-import { MapPinIcon } from 'lucide-react';
+import { ChevronRightIcon, MapPinIcon } from 'lucide-react';
 import * as D from '../shadcn/dropdown-menu.tsx';
 import { Popover, PopoverContent, PopoverTrigger } from '../shadcn/popover.tsx';
 import { BottomSheet } from './bottom-sheet.tsx';
 import { Button } from '../shadcn/button.tsx';
 import { Field, FieldLabel } from '../shadcn/field.tsx';
 import { RadioGroup, RadioGroupItem } from '../shadcn/radio-group.tsx';
+import { Separator } from '../shadcn/separator.tsx';
 
 export type MenuEntry =
   | {
@@ -123,7 +124,8 @@ function legacyEntries(content: ReactNode): MenuEntry[] {
 
 const entryPanelClassName = 'w-max min-w-[min(8rem,var(--available-width))] max-w-[min(24rem,var(--available-width))]';
 const entryRowClassName = 'min-w-0 whitespace-normal text-start';
-const touchEntryRowClassName = 'h-auto min-h-11 w-full min-w-0 justify-start gap-2 whitespace-normal py-2 text-start';
+/** Default-size sheet rows grow when a label wraps; one line stays at least h-7. */
+const sheetEntryClassName = 'h-auto min-h-7 w-full min-w-0 justify-start whitespace-normal text-start';
 
 function entryLinkProps(entry: Extract<MenuEntry, { type: 'link' }>) {
   return {
@@ -141,7 +143,7 @@ function EntryLabel({ label, current }: { label: string; current?: boolean }) {
         {label}
       </span>
       {current && (
-        <MapPinIcon data-slot="menu-current-indicator" aria-hidden="true" className="ms-auto size-4 shrink-0" />
+        <MapPinIcon data-slot="menu-current-indicator" aria-hidden="true" className="ms-auto shrink-0" />
       )}
     </>
   );
@@ -440,7 +442,7 @@ export function Menu({
               initialFocus
               finalFocus={false}
               onClickCapture={closeAfterNavigation}
-              className="max-h-[var(--available-height)] w-max min-w-[min(16rem,var(--available-width))] max-w-[min(32rem,var(--available-width))] overflow-x-hidden overflow-y-auto overscroll-contain rounded-2xl gap-1 p-2 text-popover-foreground ring-1 ring-foreground/5 dark:ring-foreground/10"
+              className="max-h-[var(--available-height)] w-max min-w-[min(16rem,var(--available-width))] max-w-[min(32rem,var(--available-width))] overflow-x-hidden overflow-y-auto overscroll-contain"
             >
               {content}
             </PopoverContent>
@@ -484,7 +486,7 @@ export function Menu({
           title={page?.label ?? title}
           before={
             page ? (
-              <Button variant="ghost" className="min-h-11" onClick={() => window.history.back()}>
+              <Button variant="ghost" size="sm" className="shrink-0" onClick={() => window.history.back()}>
                 ‹ {resolvedBackLabel}
               </Button>
             ) : undefined
@@ -492,13 +494,13 @@ export function Menu({
         >
           <div
             ref={physicalNavigationHost}
-            className="mt-2 flex min-w-0 max-w-full flex-col"
+            className="flex min-w-0 max-w-full flex-col"
             onClickCapture={closeAfterNavigation}
           >
             {content && entries.length === 0 && !page
               ? content
               : (page?.entries ?? entries).map((entry, index) => {
-                  if (entry.type === 'separator') return <hr key={index} className="my-2 border-border" />;
+                  if (entry.type === 'separator') return <Separator key={index} className="my-1" />;
                   if (entry.type === 'radio')
                     return (
                       <RadioGroup
@@ -512,15 +514,11 @@ export function Menu({
                         className="min-w-0 gap-0"
                       >
                         {entry.options.map((option) => (
-                          <Field key={option.value} orientation="horizontal" className="min-h-11 min-w-0 items-center">
-                            <RadioGroupItem
-                              id={`${radioName}-${index}-${option.value}`}
-                              value={option.value}
-                              className="shrink-0"
-                            />
+                          <Field key={option.value} orientation="horizontal" className="min-h-7 min-w-0 items-center px-2">
+                            <RadioGroupItem id={`${radioName}-${index}-${option.value}`} value={option.value} />
                             <FieldLabel
                               htmlFor={`${radioName}-${index}-${option.value}`}
-                              className="min-h-11 min-w-0 flex-1 items-center rounded-xl px-3 py-2 text-start hover:bg-accent"
+                              className="w-full min-w-0 text-start"
                             >
                               <EntryLabel label={option.label} />
                             </FieldLabel>
@@ -533,7 +531,7 @@ export function Menu({
                       <Button
                         key={index}
                         variant="ghost"
-                        className={touchEntryRowClassName}
+                        className={sheetEntryClassName}
                         onClick={() => {
                           setStack((value) => [...value, entry]);
                           window.history.pushState({ rezicsMenuPage: true }, '', window.location.href);
@@ -541,31 +539,36 @@ export function Menu({
                         }}
                       >
                         <EntryLabel label={entry.label} />
-                        <span aria-hidden className="shrink-0">
-                          ›
-                        </span>
+                        <ChevronRightIcon aria-hidden="true" className="shrink-0" />
                       </Button>
                     );
                   if (entry.type === 'link')
                     return (
-                      <a
+                      <Button
                         key={index}
-                        {...entryLinkProps(entry)}
-                        role="link"
-                        className={`flex items-center rounded-xl px-3 text-sm hover:bg-accent aria-disabled:cursor-default aria-disabled:opacity-50 aria-disabled:hover:bg-transparent ${touchEntryRowClassName}`}
-                        onClick={entry.disabled ? undefined : () => close()}
+                        variant="ghost"
+                        className={`${sheetEntryClassName} aria-disabled:pointer-events-none aria-disabled:opacity-50`}
+                        nativeButton={false}
+                        disabled={entry.disabled}
+                        render={
+                          <a
+                            {...entryLinkProps(entry)}
+                            role="link"
+                            onClick={entry.disabled ? undefined : () => close()}
+                          />
+                        }
                       >
                         <EntryLabel
                           label={entry.label}
                           {...(entry.current === undefined ? {} : { current: entry.current })}
                         />
-                      </a>
+                      </Button>
                     );
                   return (
                     <Button
                       key={index}
-                      variant="ghost"
-                      className={`${touchEntryRowClassName} ${entry.type === 'destructive' ? 'text-destructive hover:text-destructive' : ''}`}
+                      variant={entry.type === 'destructive' ? 'destructive' : 'ghost'}
+                      className={sheetEntryClassName}
                       disabled={entry.disabled}
                       aria-current={entry.current ? 'page' : undefined}
                       onClick={() => select(entry)}

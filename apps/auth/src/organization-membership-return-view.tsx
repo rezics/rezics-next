@@ -38,7 +38,7 @@ export function OrganizationMembershipReturnView({
         id="membership-history-heading"
         ref={heading}
         tabIndex={-1}
-        className="outline-offset-4 focus-visible:outline-2"
+        className="outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
       >
         {m.auth_members_return_heading()}
       </h2>

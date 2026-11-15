@@ -34,7 +34,7 @@ export function StatementConsentLink({
   const query = new URLSearchParams({ property: address.property, candidate: address.candidate, ...address.slot });
   return (
     <a
-      className="inline-flex min-h-11 min-w-11 max-w-full items-center py-2 whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      className="inline-flex max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       href={`${subjectHref({ id: address.id, label: label ?? '' }, locale).href}/statement-consent?${query}`}
     >
       {m.statement_consent_entry({}, { locale: locale as never })}
@@ -407,7 +407,7 @@ function StatementConsentPageLive({
         <h1 className="text-2xl font-semibold">{m.statement_consent_title({}, options)}</h1>
         <p className="text-muted-foreground">{m.statement_consent_intro({}, options)}</p>
         <a
-          className="inline-flex min-h-11 min-w-11 max-w-full items-center py-2 whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="inline-flex max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           href={subjectHref({ id: address.id, label: '' }, locale).href}
         >
           {m.sources_back({}, options)}
@@ -420,7 +420,7 @@ function StatementConsentPageLive({
       )}
       {!read && !failure && !busy && (
         <Button
-          className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="h-auto min-h-7 max-w-full self-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           onClick={(event) => void load(undefined, event, observedAtRender, actionEpochAtRender)}
         >
           {m.statement_consent_open({}, options)}
@@ -438,7 +438,7 @@ function StatementConsentPageLive({
             {uncertain && <p>{m.statement_consent_uncertain({}, options)}</p>}
             <Button
               variant="outline"
-              className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="h-auto min-h-7 max-w-full self-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               disabled={busy}
               onClick={(event) =>
                 void (uncertain
@@ -451,7 +451,7 @@ function StatementConsentPageLive({
             {!uncertain && !terminal && (
               <Button
                 variant="outline"
-                className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="h-auto min-h-7 max-w-full self-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 disabled={busy}
                 onClick={(event) => void load(undefined, event, observedAtRender, actionEpochAtRender)}
               >
@@ -486,7 +486,7 @@ function StatementConsentPageLive({
               {current.next && (
                 <Button
                   variant="outline"
-                  className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  className="h-auto min-h-7 max-w-full self-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   disabled={busy}
                   onClick={(event) =>
                     void load(
@@ -535,7 +535,7 @@ function StatementConsentPageLive({
                         <div className="flex min-w-0 flex-wrap gap-2">
                           {result?.kind !== 'disclosed' && (
                             <Button
-                              className="min-h-11 min-w-11 h-auto max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                              className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                               ref={(node) => {
                                 actionButtons.current.disclose = node;
                               }}
@@ -549,7 +549,7 @@ function StatementConsentPageLive({
                           )}
                           <Button
                             variant="outline"
-                            className="min-h-11 min-w-11 h-auto max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                            className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                             ref={(node) => {
                               actionButtons.current.retract = node;
                             }}
@@ -591,7 +591,7 @@ function StatementConsentPageLive({
                             className="min-w-0 items-start focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring"
                           >
                             <Checkbox
-                              className="size-11 after:hidden"
+                             
                               id={ownershipId}
                               checked={own}
                               disabled={busy || uncertain}
@@ -600,7 +600,7 @@ function StatementConsentPageLive({
                               }
                             />
                             <FieldLabel
-                              className="min-h-11 min-w-0 max-w-full flex-1 py-2 leading-relaxed whitespace-normal [overflow-wrap:anywhere]"
+                              className="min-w-0 max-w-full flex-1 leading-relaxed whitespace-normal [overflow-wrap:anywhere]"
                               htmlFor={ownershipId}
                             >
                               {m.statement_consent_own({}, options)}
@@ -609,7 +609,7 @@ function StatementConsentPageLive({
                           {!uncertain && (
                             <div className="flex min-w-0 flex-wrap gap-2">
                               <Button
-                                className="min-h-11 min-w-11 h-auto max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                                className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                                 disabled={busy || !own || !assertion?.identified}
                                 onClick={(event) => void change(event, confirmation, actionEpochAtRender)}
                               >
@@ -617,7 +617,7 @@ function StatementConsentPageLive({
                               </Button>
                               <Button
                                 variant="outline"
-                                className="min-h-11 min-w-11 h-auto max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                                className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                                 disabled={busy}
                                 onClick={(event) => cancelConfirmation(confirmation, actionEpochAtRender, event)}
                               >
@@ -631,7 +631,7 @@ function StatementConsentPageLive({
                     {(reload || !assertion?.identified) && (
                       <Button
                         variant="outline"
-                        className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                        className="h-auto min-h-7 max-w-full self-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                         disabled={busy}
                         onClick={(event) => void load(undefined, event, observedAtRender, actionEpochAtRender)}
                       >
@@ -655,7 +655,7 @@ function StatementConsentPageLive({
           <PublicResult value={publicRead} locale={locale} />
           <Button
             variant="outline"
-            className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="h-auto min-h-7 max-w-full self-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             disabled={busy || uncertain}
             onClick={() => void refreshPublic(observedAtRender, actionEpochAtRender)}
           >

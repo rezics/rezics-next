@@ -33,7 +33,7 @@ import { RealmAppearanceDeparture } from './realm-appearance-departure';
 import { RealmRulesAuthoringPanel } from './realm-rules-authoring/panel';
 
 const appearanceButtonClass =
-  'h-auto min-h-11 min-w-11 max-w-full shrink px-4 py-2 text-center leading-snug whitespace-normal [overflow-wrap:anywhere]';
+  'h-auto min-h-7 max-w-full shrink text-center leading-snug whitespace-normal [overflow-wrap:anywhere]';
 
 function ImagePreview({
   image,
@@ -616,7 +616,7 @@ export function RealmAppearanceSettings({
           <Input
             ref={referenceInput}
             id={ids + '-reference'}
-            className="min-h-11 w-full min-w-0"
+            className="w-full min-w-0"
             value={selection.link}
             maxLength={2048}
             aria-invalid={selection.invalid || selection.unavailable}
@@ -863,7 +863,7 @@ export function RealmAppearanceSettings({
               <Input
                 id={ids + '-' + slot + '-upload'}
                 type="file"
-                className="min-h-11 w-full min-w-0"
+                className="w-full min-w-0"
                 disabled={!selectable}
                 accept="image/avif,image/gif,image/jpeg,image/png,image/webp"
                 aria-label={appearanceLabel(slot) + ': ' + m.realm_appearance_upload()}

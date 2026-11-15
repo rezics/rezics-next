@@ -1,5 +1,6 @@
 import { useCallback, useId, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { PostReadingBody } from '../threads/post-reading-body';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -7,7 +8,7 @@ import { sameExact, type ArticleReviewSnapshot, type PublicationReview } from '.
 import type { StudioController, StudioState } from './controller';
 import { ExactVersionDetails } from './revisions';
 
-const control = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]';
+const control = 'h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]';
 
 /** Optional labels supplied for this exact review. IDs remain the command operands. */
 export type ArticlePublicationPresentation = Readonly<{
@@ -192,12 +193,11 @@ function ArticlePublicationReviewVisit({ controller, state, review, presentation
         ) : (
           <>
             <label className="studio-confirm" htmlFor={confirmationId}>
-              <input
+              <Checkbox
                 id={confirmationId}
-                type="checkbox"
                 checked={confirmed}
                 disabled={blocked}
-                onChange={(event) => setConfirmed(event.target.checked)}
+                onCheckedChange={(checked) => setConfirmed(checked)}
               />
               <span>{m.studio_account_confirm({}, options)}</span>
             </label>

@@ -141,7 +141,7 @@ export function FilteredOccurrenceRemovalReview({
         <Button
           type="button"
           variant="outline"
-          className="min-h-11"
+          size="sm"
           disabled={busy || !canPreview}
           onClick={(event) => {
             captureFocusIntent('preview', event.currentTarget);
@@ -155,7 +155,7 @@ export function FilteredOccurrenceRemovalReview({
         <Button
           type="button"
           variant="destructive"
-          className="min-h-11"
+          size="sm"
           disabled={busy || !canConfirm || !(Date.parse(operation.expiresAt) > Date.now())}
           onClick={(event) => {
             captureFocusIntent('confirm', event.currentTarget);
@@ -174,7 +174,7 @@ export function FilteredOccurrenceRemovalReview({
           <Button
             type="button"
             variant="outline"
-            className="min-h-11"
+            size="sm"
             disabled={busy || !canConfirm}
             onClick={(event) => {
               captureFocusIntent('confirm', event.currentTarget);
@@ -191,7 +191,7 @@ export function FilteredOccurrenceRemovalReview({
         <Button
           type="button"
           variant="outline"
-          className="min-h-11"
+          size="sm"
           disabled={busy}
           onClick={(event) => {
             captureFocusIntent('read', event.currentTarget);
@@ -231,7 +231,7 @@ export function FilteredOccurrenceRemovalReview({
             <Button
               type="button"
               variant="outline"
-              className="min-h-11"
+              size="sm"
               disabled={busy}
               onClick={(event) => {
                 captureFocusIntent('read', event.currentTarget);

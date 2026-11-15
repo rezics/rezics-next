@@ -1,4 +1,6 @@
 import type { SubjectRead } from '@rezics/client';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { pickText } from '@rezics/composition';
 import {
@@ -24,7 +26,7 @@ import { CandidateValue } from '../../pages/data';
 import { ProfileBoundNotes, ProfileSourceList } from '../music-reader-view';
 import type { SubjectPageData } from '../../pages/subject';
 import { boundedProfileRelations, profileRelationPages } from '../../pages/views';
-import { linkClass, linkColor, PlainLink, type PageLink } from '../../pages/shared';
+import { PlainLink, type PageLink } from '../../pages/shared';
 import {
   catalogueFileDestinationHref,
   catalogueFileSourceId,
@@ -48,9 +50,9 @@ import {
 import { useCatalogueFileReading } from './reading/current';
 
 const readerLinkClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8';
+  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
 const readerControlClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-wait disabled:opacity-60';
+  cn(buttonVariants({ variant: 'outline' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]');
 
 type Statement = SubjectRead['subject']['statements'][string][number];
 type FilePart = Statement | Statement['qualifiers'][number];
@@ -246,7 +248,7 @@ function FileValue({
     const Link = link;
     return (
       <Link
-        className={`${readerLinkClass} ${linkClass} ${linkColor}`}
+        className={readerLinkClass}
         href={href}
         {...(picked.lang ? { lang: picked.lang } : {})}
       >
@@ -367,7 +369,7 @@ function AssociationList({
       <h2
         ref={heading}
         tabIndex={-1}
-        className="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        className="text-lg font-semibold "
       >
         {m.catalogue_file_related({}, o)}
       </h2>
@@ -458,7 +460,7 @@ function AssociationList({
                     <div className="flex min-w-0 flex-col gap-2 md:items-stretch">
                       {readable && href ? (
                         <Link
-                          className={`${readerLinkClass} ${linkClass} ${linkColor} w-full justify-start md:w-auto`}
+                          className={`${readerLinkClass} w-full justify-start md:w-auto`}
                           href={href}
                           lang={related.lang ?? undefined}
                         >
@@ -648,7 +650,7 @@ function InspectionPanel({
             id="catalogue-file-inspection-heading"
             ref={heading}
             tabIndex={-1}
-            className="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="text-lg font-semibold "
           >
             {m.catalogue_file_inspection_title({}, o)}
           </h2>
@@ -675,7 +677,7 @@ function InspectionPanel({
             ref={heading}
             id="catalogue-file-inspection-heading"
             tabIndex={-1}
-            className="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="text-lg font-semibold "
           >
             {m.catalogue_file_inspection_title({}, o)}
           </h2>
@@ -730,7 +732,7 @@ function InspectionPanel({
           {destinationAllowed && destination && related ? (
             <div className="flex flex-wrap gap-2">
               <Link
-                className={`${readerLinkClass} ${linkClass} ${linkColor} w-full justify-start sm:w-auto`}
+                className={`${readerLinkClass} w-full justify-start sm:w-auto`}
                 href={destination}
                 lang={related.lang ?? undefined}
               >
@@ -1130,7 +1132,7 @@ export function CatalogueFileReader({
               </button>
               {currentHref ? (
                 <a
-                  className={`${readerControlClass} ${linkClass} ${linkColor} w-full sm:w-auto`}
+                  className={`${readerControlClass} w-full sm:w-auto`}
                   href={currentHref}
                 >
                   {m.catalogue_file_reader_open_again({}, o)}
@@ -1164,7 +1166,7 @@ export function CatalogueFileReader({
                   <h2
                     ref={(element) => setHeading(group, element)}
                     tabIndex={-1}
-                    className="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    className="text-lg font-semibold "
                   >
                     {factGroupTitle(group, visit.locale)}
                   </h2>
@@ -1338,7 +1340,7 @@ export function CatalogueFileReturnLink({
   const Link = link;
   return (
     <p data-slot="catalogue-file-reader-return">
-      <Link className={`${readerLinkClass} ${linkClass} ${linkColor}`} href={href}>
+      <Link className={readerLinkClass} href={href}>
         {m.catalogue_file_reader_return({}, options(locale))}
       </Link>
     </p>

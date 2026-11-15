@@ -254,7 +254,7 @@ function ProducerHistoryPageLive({
               }))}
               onValueChange={(value) => load(reader.replace(value ?? ''))}
             >
-              <SharedSelect.SelectTrigger id={streamId} className="min-w-0 max-w-full min-h-11">
+              <SharedSelect.SelectTrigger id={streamId} className="min-w-0 max-w-full">
                 <SharedSelect.SelectValue />
               </SharedSelect.SelectTrigger>
               <SharedSelect.SelectContent>

@@ -2,6 +2,7 @@ import { chooseSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo, useState } from 'react';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
+import { Button } from '@rezics/ui/shadcn/button';
 import { CharacterProfile } from '../features/catalogue/character-profile-view';
 import type { CharacterCommand, CharacterTransport } from '../features/catalogue/character-profile';
 import { characterProfileFixture, type CharacterScenario } from '../kernel/fake/catalogue-character-profile';
@@ -58,14 +59,9 @@ function Instance({
   }, [fixture, variant, onAttempt]);
   return (
     <section className="min-w-0">
-      <button
-        type="button"
-        className="min-h-11 px-4 underline"
-        data-fixture-retire
-        onClick={() => setAdmitted(!admitted)}
-      >
+      <Button type="button" data-fixture-retire onClick={() => setAdmitted(!admitted)}>
         {admitted ? 'Retire current reader (fixture)' : 'Restore reader (fixture)'}
-      </button>
+      </Button>
       <CandidateReaderBoundary
         address="character-create-family"
         observed={

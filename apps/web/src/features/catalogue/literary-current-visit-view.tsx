@@ -27,14 +27,14 @@ export function LiteraryCurrentVisitAdmission({
       <nav className="flex flex-wrap gap-3">
         {input.kind === 'visit' && (
           <a
-            className="inline-flex min-h-11 items-center underline focus-visible:outline-2 focus-visible:outline-ring"
+            className="inline-flex items-center underline focus-visible:outline-2 focus-visible:outline-ring"
             href={input.visit.source}
           >
             {m.literary_visit_return({}, o)}
           </a>
         )}
         <a
-          className="inline-flex min-h-11 items-center underline focus-visible:outline-2 focus-visible:outline-ring"
+          className="inline-flex items-center underline focus-visible:outline-2 focus-visible:outline-ring"
           href={globalHref}
         >
           {m.literary_visit_global({}, o)}

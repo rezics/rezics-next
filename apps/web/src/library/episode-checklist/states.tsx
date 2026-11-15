@@ -1,10 +1,9 @@
 import { m } from '../../paraglide/messages.js';
 import type { ChecklistVisitKind } from './contract';
+import { Button } from '@rezics/ui/shadcn/button';
 
-export const checklistActionClass =
-  'inline-flex min-h-11 min-w-11 max-w-full cursor-pointer items-center justify-center whitespace-normal rounded-lg border border-border px-4 py-2 text-center [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60';
-export const checklistPrimaryActionClass =
-  'inline-flex min-h-11 min-w-11 max-w-full cursor-pointer items-center justify-center whitespace-normal rounded-lg bg-primary px-4 py-2 text-center font-medium text-primary-foreground [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring hover:opacity-90 disabled:opacity-60';
+export const checklistActionClass = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+export const checklistPrimaryActionClass = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 const recoveryKinds = new Set<ChecklistVisitKind>([
   'preparing',
@@ -56,19 +55,19 @@ export function EpisodeChecklistRecovery({
         </p>
       ) : null}
       {kind === 'retry' && onRetry ? (
-        <button type="button" className={checklistActionClass} onClick={onRetry}>
+        <Button type="button" variant="outline" className={checklistActionClass} onClick={onRetry}>
           {m.library_progress_measures_retry()}
-        </button>
+        </Button>
       ) : null}
       {kind === 'ambiguous' && onRetry ? (
-        <button type="button" className={checklistActionClass} onClick={onRetry}>
+        <Button type="button" variant="outline" className={checklistActionClass} onClick={onRetry}>
           {m.library_progress_measures_retry()}
-        </button>
+        </Button>
       ) : null}
       {(kind === 'stale' || kind === 'conflict' || kind === 'unavailable' || kind === 'denied') && onRefresh ? (
-        <button type="button" className={checklistActionClass} onClick={onRefresh}>
+        <Button type="button" variant="outline" className={checklistActionClass} onClick={onRefresh}>
           {kind === 'stale' ? m.library_progress_episodes_restart() : m.library_progress_retry()}
-        </button>
+        </Button>
       ) : null}
     </section>
   );

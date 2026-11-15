@@ -13,7 +13,7 @@ const choiceLabel = (choice: BookCatalogueChoice) => choice.label || choice.type
 
 const browseClass = cn(
   buttonVariants({ variant: 'default' }),
-  'h-auto min-h-11 min-w-11 max-w-full shrink justify-center whitespace-normal [overflow-wrap:anywhere]',
+  'h-auto min-h-7 max-w-full shrink justify-center whitespace-normal [overflow-wrap:anywhere]',
 );
 
 /** Submit the exact released Type to Search's canonical route; Search admits the query. */
@@ -32,7 +32,7 @@ function BookSearch({ locale, choices }: { locale: string; choices: readonly Boo
     >
       <Field className="min-w-0 flex-1 basis-64">
         <FieldLabel htmlFor={queryId}>{m.search_heading({}, options)}</FieldLabel>
-        <Input id={queryId} name="q" type="search" className="min-h-11" />
+        <Input id={queryId} name="q" type="search" />
       </Field>
       <Field className="min-w-0 basis-52">
         <FieldLabel htmlFor={typeId}>{m.books_catalogue_kind({}, options)}</FieldLabel>
@@ -44,7 +44,7 @@ function BookSearch({ locale, choices }: { locale: string; choices: readonly Boo
             label: <span lang={choice.language ?? undefined}>{choiceLabel(choice)}</span>,
           }))}
         >
-          <SelectTrigger id={typeId} className="min-h-11 w-full">
+          <SelectTrigger id={typeId} className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -58,7 +58,7 @@ function BookSearch({ locale, choices }: { locale: string; choices: readonly Boo
           </SelectContent>
         </Select>
       </Field>
-      <Button className="min-h-11 w-full min-w-0 whitespace-normal sm:w-auto" type="submit">
+      <Button className="h-auto min-h-7 w-full min-w-0 whitespace-normal sm:w-auto" type="submit">
         {m.nav_search({}, options)}
         <span className="sr-only"> — {m.books_catalogue_new_tab({}, options)}</span>
       </Button>

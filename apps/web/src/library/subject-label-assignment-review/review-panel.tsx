@@ -1,10 +1,10 @@
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Button } from '@rezics/ui/shadcn/button';
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { m } from '../../paraglide/messages.js';
 import type { SubjectLabelReview } from './choice';
 import { LabelRelationship } from './relationship';
 
-const actionClass = `${buttonVariants({ variant: 'outline' })} h-auto min-h-[44px] min-w-0 max-w-full whitespace-normal py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`;
+const actionClass = 'h-auto min-h-7 min-w-0 max-w-full whitespace-normal';
 
 export function SubjectLabelAssignmentReview({
   review,
@@ -65,12 +65,12 @@ export function SubjectLabelAssignmentReview({
         </div>
         <div className="flex min-w-0 flex-wrap gap-2 sm:justify-end">
           {!alreadyAssigned ? applyAction : null}
-          <button type="button" className={actionClass} onClick={onEdit} data-subject-label-review-edit>
+          <Button type="button" variant="outline" className={actionClass} onClick={onEdit} data-subject-label-review-edit>
             {m.library_subject_label_review_edit()}
-          </button>
-          <button type="button" className={actionClass} onClick={onDiscard} data-subject-label-review-discard>
+          </Button>
+          <Button type="button" variant="outline" className={actionClass} onClick={onDiscard} data-subject-label-review-discard>
             {m.library_subject_label_review_discard()}
-          </button>
+          </Button>
         </div>
       </div>
     </section>

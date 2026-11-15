@@ -1,4 +1,5 @@
 import { useId, useLayoutEffect, useRef, type KeyboardEvent } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
 import { CommunityRules } from '../community/community-presentation-parts';
 import { m } from '../paraglide/messages.js';
 import {
@@ -52,7 +53,7 @@ export function CompositionRulesReader({
       id={id}
       aria-labelledby={headingId}
       onKeyDown={handleKeyDown}
-      className="min-w-0 space-y-5 rounded-2xl border border-border bg-background p-4 shadow-sm sm:p-6 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:bg-card"
+      className="min-w-0 space-y-5 rounded-xl border border-border bg-card p-4 sm:p-6 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto"
       data-slot="composition-rules-reader"
     >
       <header className="flex min-w-0 items-start justify-between gap-3">
@@ -64,13 +65,9 @@ export function CompositionRulesReader({
         >
           {m.composition_rules_reader_heading()}
         </h3>
-        <button
-          type="button"
-          className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-md border border-border px-3 text-sm font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          onClick={onClose}
-        >
+        <Button type="button" variant="outline" size="sm" onClick={onClose}>
           {m.composition_rules_reader_close()}
-        </button>
+        </Button>
       </header>
       {outline.entries.length ? (
         <nav aria-label={m.composition_rules_reader_outline()} className="min-w-0 rounded-xl bg-muted/50 p-3">
@@ -82,14 +79,16 @@ export function CompositionRulesReader({
                 className="min-w-0"
                 style={{ paddingInlineStart: `${(entry.level - 1) * 0.75}rem` }}
               >
-                <button
+                <Button
                   type="button"
+                  variant="link"
+                  size="sm"
                   data-outline-index={entry.index}
-                  className="min-h-11 max-w-full break-words text-start text-sm text-primary underline-offset-4 hover:underline [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  className="h-auto min-h-6 max-w-full whitespace-normal text-start"
                   onClick={() => navigateToHeading(entry.index)}
                 >
                   {entry.label}
-                </button>
+                </Button>
               </li>
             ))}
           </ol>

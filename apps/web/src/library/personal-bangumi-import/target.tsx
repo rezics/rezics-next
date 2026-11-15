@@ -37,7 +37,7 @@ export function BangumiTargetSearch({
         }}
       />
       <Field>
-        <FieldLabel htmlFor={id} className="min-h-11 items-center">
+        <FieldLabel htmlFor={id} className="items-center">
           {m.library_bangumi_target_id()}
         </FieldLabel>
         <Input
@@ -45,7 +45,7 @@ export function BangumiTargetSearch({
           data-bangumi-target
           value={typed}
           disabled={disabled}
-          className="min-h-11"
+         
           onChange={(event) => {
             setPicked(null);
             assign(event.target.value);

@@ -35,9 +35,9 @@ type Session = 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
 type CorrectionReloadIntent = { opener: HTMLButtonElement; scope: string; completed: boolean };
 
 const peopleActionTarget =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] md:pointer-fine:min-h-8 md:pointer-fine:min-w-0 md:pointer-fine:py-1';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 const peopleLinkTarget =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:min-w-0 md:pointer-fine:py-1';
+  'inline-flex max-w-full items-center whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 function admittedCreditProfileTypes(read: Current, handoff: CreditTargetHandoff) {
   const property = read.release.properties[handoff.propertyId];
@@ -64,47 +64,46 @@ function createdIdentity(result: Created): CreatedCreditIdentity | undefined {
 const peopleProfileSurface = [
   'min-w-0 w-full [overflow-wrap:anywhere]',
   '[&>article>header>p:first-of-type_a]:inline-flex',
-  '[&>article>header>p:first-of-type_a]:min-h-11',
-  '[&>article>header>p:first-of-type_a]:min-w-11',
+  '',
+  '',
   '[&>article>header>p:first-of-type_a]:max-w-full',
   '[&>article>header>p:first-of-type_a]:min-w-0',
   '[&>article>header>p:first-of-type_a]:items-center',
-  '[&>article>header>p:first-of-type_a]:py-2',
+  '',
   '[&>article>header>p:first-of-type_a]:[overflow-wrap:anywhere]',
   '[&>article>header>p:first-of-type_a]:focus-visible:outline-2',
   '[&>article>header>p:first-of-type_a]:focus-visible:outline-offset-2',
   '[&>article>header>p:first-of-type_a]:focus-visible:outline-ring',
-  'md:pointer-fine:[&>article>header>p:first-of-type_a]:min-h-8',
+  '[&>article>header>p:first-of-type_a]:min-h-7',
   'md:pointer-fine:[&>article>header>p:first-of-type_a]:min-w-0',
-  'md:pointer-fine:[&>article>header>p:first-of-type_a]:py-1',
-  '[&>article>nav>a]:h-auto',
-  '[&>article>nav>a]:min-h-11',
-  '[&>article>nav>a]:min-w-11',
+  '',
+  '[&>article>nav>a]:h-auto [&>article>nav>a]:min-h-7',
+  '',
+  '',
   '[&>article>nav>a]:max-w-full',
   '[&>article>nav>a]:whitespace-normal',
-  '[&>article>nav>a]:py-2',
+  '',
   '[&>article>nav>a]:[overflow-wrap:anywhere]',
-  'md:pointer-fine:[&>article>nav>a]:min-h-8',
   'md:pointer-fine:[&>article>nav>a]:min-w-0',
-  'md:pointer-fine:[&>article>nav>a]:py-1',
+  '',
 ].join(' ');
 const peopleRelationsSurface = [
   'min-w-0 max-w-full [overflow-wrap:anywhere]',
   '[&_details]:min-w-0',
   '[&_details]:max-w-full',
-  '[&_details>summary]:min-h-11',
-  '[&_details>summary]:min-w-11',
+  '',
+  '',
   '[&_details>summary]:max-w-full',
   '[&_details>summary]:cursor-pointer',
   '[&_details>summary]:whitespace-normal',
-  '[&_details>summary]:py-2',
+  '',
   '[&_details>summary]:[overflow-wrap:anywhere]',
   '[&_details>summary]:focus-visible:outline-2',
   '[&_details>summary]:focus-visible:outline-offset-2',
   '[&_details>summary]:focus-visible:outline-ring',
-  'md:pointer-fine:[&_details>summary]:min-h-8',
+  '[&_details>summary]:min-h-7',
   'md:pointer-fine:[&_details>summary]:min-w-0',
-  'md:pointer-fine:[&_details>summary]:py-1',
+  '',
 ].join(' ');
 
 function ProfileIntro({ read, locale, returnHref }: { read: Current; locale: string; returnHref?: string }) {

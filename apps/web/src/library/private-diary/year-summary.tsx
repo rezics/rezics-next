@@ -4,6 +4,7 @@ import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import type { ReportedYearRead } from './native';
 import { reportPresentation, type ReportPresentation } from './presentation';
+import { Button } from '@rezics/ui/shadcn/button';
 
 function CountsView({ presentation }: { presentation: ReportPresentation }) {
   return (
@@ -14,13 +15,13 @@ function CountsView({ presentation }: { presentation: ReportPresentation }) {
         presentation.counts.repeats,
         presentation.unknownProfile,
       ].map(({ label, value }) => (
-        <div key={label} className="min-w-0 [overflow-wrap:anywhere]">
+        <div key={label} className="h-auto min-w-0 [overflow-wrap:anywhere]">
           <dt className="text-sm">{label}</dt>
           <dd className="text-xl font-semibold">{value}</dd>
         </div>
       ))}
       {presentation.finishPrecision ? (
-        <div className="sm:col-span-3 min-w-0 text-sm [overflow-wrap:anywhere]">
+        <div className="h-auto sm:col-span-3 min-w-0 text-sm [overflow-wrap:anywhere]">
           <dt>{presentation.finishPrecision.label}</dt>
           <dd>{presentation.finishPrecision.value}</dd>
         </div>
@@ -73,7 +74,7 @@ export function ReportedYearPanel({
                   to="/library/history"
                   search={{ year, month: bucket.month, returnTo: address.returnTo }}
                   aria-current={address.month === bucket.month ? 'page' : undefined}
-                  className="inline-flex min-h-11 items-center text-start font-medium underline"
+                  className="inline-flex items-center text-start font-medium underline"
                 >
                   {monthName(bucket.month)}
                 </Link>
@@ -85,7 +86,7 @@ export function ReportedYearPanel({
                 to="/library/history"
                 search={{ year, month: 'unallocated', returnTo: address.returnTo }}
                 aria-current={address.month === 'unallocated' ? 'page' : undefined}
-                className="inline-flex min-h-11 items-center text-start font-medium underline"
+                className="inline-flex items-center text-start font-medium underline"
               >
                 {m.library_diary_year_unallocated()}
               </Link>
@@ -98,9 +99,9 @@ export function ReportedYearPanel({
       ) : (
         <>
           <p role="status">{m.library_diary_year_unavailable()}</p>
-          <button type="button" className="min-h-11 rounded-md border px-3" onClick={retry}>
+          <Button type="button" variant="outline" onClick={retry}>
             {m.library_selection_retry()}
-          </button>
+          </Button>
         </>
       )}
     </section>

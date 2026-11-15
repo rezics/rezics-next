@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useRouter } from '@tanstack/react-router';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { NativeCheckbox } from '@rezics/ui/native-checkbox';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { useCollectionOwnerCurrent } from './collection-owner-current';
@@ -158,7 +159,7 @@ function FilteredRemovalLifetime({ source, eligible, address, isCurrent = () => 
         <Button
           type="button"
           variant="outline"
-          className="min-h-11"
+          size="sm"
           disabled={!eligible || !admitted('preview')}
           onClick={(event) => start(event.currentTarget)}
         >
@@ -241,7 +242,7 @@ export function FilteredLibraryRemovalReview({
         <Button
           type="button"
           variant="outline"
-          className="min-h-11"
+          size="sm"
           disabled={!canWrite || journey.busy}
           onClick={(event) => {
             onFocusIntent('preview', event.currentTarget);
@@ -270,10 +271,8 @@ export function FilteredLibraryRemovalReview({
           </p>
           {phase === 'review' ? (
             <>
-              <label className="flex min-h-11 items-center gap-3">
-                <input
-                  type="checkbox"
-                  className="size-5"
+              <label className="flex items-center gap-3">
+                <NativeCheckbox
                   checked={acknowledged}
                   onChange={(event) => setAcknowledged(event.target.checked)}
                 />
@@ -282,7 +281,7 @@ export function FilteredLibraryRemovalReview({
               <Button
                 type="button"
                 variant="destructive"
-                className="min-h-11"
+                size="sm"
                 disabled={!canWrite || !acknowledged || journey.busy}
                 onClick={(event) => {
                   if (acknowledged) {
@@ -302,7 +301,7 @@ export function FilteredLibraryRemovalReview({
               <Button
                 type="button"
                 variant="outline"
-                className="min-h-11"
+                size="sm"
                 disabled={!canWrite || journey.busy}
                 onClick={(event) => {
                   onFocusIntent('confirm', event.currentTarget);
@@ -316,7 +315,7 @@ export function FilteredLibraryRemovalReview({
           <Button
             type="button"
             variant="outline"
-            className="min-h-11"
+            size="sm"
             disabled={!canRead || journey.busy}
             onClick={(event) => {
               onFocusIntent('read', event.currentTarget);
@@ -349,7 +348,7 @@ export function FilteredLibraryRemovalReview({
                 <Button
                   type="button"
                   variant="outline"
-                  className="min-h-11"
+                  size="sm"
                   disabled={!canRead || journey.busy}
                   onClick={(event) => {
                     onFocusIntent('read', event.currentTarget);
@@ -362,7 +361,7 @@ export function FilteredLibraryRemovalReview({
             </>
           ) : null}
           <a
-            className="inline-flex min-h-11 items-center underline"
+            className={buttonVariants({ variant: 'link', size: 'sm' })}
             href={bulkOperationUndoHref(journey.locale, operation.id)}
           >
             {m.library_filtered_entry_remove_restore()}

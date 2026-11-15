@@ -85,7 +85,7 @@ export function ExportReady({
         <p className="text-sm">{m.library_export_no_reimport()}</p>
         <dl className="space-y-3 rounded-lg border p-4 text-sm">
           {Object.entries(manifest.omissions).map(([key, value]) => (
-            <div key={key} className="space-y-1 [overflow-wrap:anywhere]">
+            <div key={key} className="h-auto space-y-1 [overflow-wrap:anywhere]">
               <dt className="font-medium">{omissionLabel(key as ExportOmissionKey)}</dt>
               <dd className="text-muted-foreground">{value}</dd>
             </div>
@@ -94,7 +94,7 @@ export function ExportReady({
       </section>
       <details className="rounded-lg border">
         <summary className={`${actionClass} cursor-pointer font-medium`}>{m.library_export_inspect_manifest()}</summary>
-        <div className="space-y-5 px-4 pb-4 text-sm [overflow-wrap:anywhere]">
+        <div className="h-auto space-y-5 px-4 pb-4 text-sm [overflow-wrap:anywhere]">
           <ul className="space-y-2">
             <li>{m.library_export_manifest_identity({ value: manifest.exportId })}</li>
             <li>{m.library_export_manifest_format({ value: manifest.format })}</li>

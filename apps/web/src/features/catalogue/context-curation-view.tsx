@@ -31,7 +31,7 @@ export function ContextComparisonView({
         <p>{review.context.kind === 'global' ? m.context_global({}, options) : m.context_community({}, options)}</p>
         <p className="text-sm text-muted-foreground">{m.context_authority({}, options)}</p>
         <a
-          className="inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal break-words py-2 underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="inline-flex max-w-full items-center whitespace-normal break-words underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           href={
             subjectHref(
               { id: read.public.subject.id, label: pageText(read.public.subject.labels, locale).text },

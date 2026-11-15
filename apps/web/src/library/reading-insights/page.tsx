@@ -5,19 +5,11 @@ import { PageHeading } from '../../shell/page-heading';
 import { insightsDiaryHref, insightsHref, insightsSearch } from './address';
 import { useInsightsReading, type InsightsReader, type InsightsState } from './current';
 import { InsightsWorkspace } from './insights-workspace';
-import {
-  AllTimePanel,
-  AssessmentsPanel,
-  InsightsPanel,
-  ProfilesPanel,
-  ProgressPanel,
-  YearPanel,
-  insightLink,
-  monthName,
-} from './panels';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
+import { AllTimePanel, AssessmentsPanel, InsightsPanel, ProfilesPanel, ProgressPanel, YearPanel, insightLink, monthName } from './panels';
 
-const control =
-  'min-h-11 rounded-lg border border-border bg-background px-4 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50';
+const control = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 export function ReadingInsightsView({
   year,
@@ -77,28 +69,27 @@ export function ReadingInsightsView({
           <label htmlFor="insights-year" className="block text-sm font-medium">
             {m.library_insights_year()}
           </label>
-          <input
+          <Input
             id="insights-year"
             name="year"
             inputMode="numeric"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             aria-invalid={invalid || state.kind === 'invalid'}
-            aria-describedby={invalid || state.kind === 'invalid' ? 'insights-year-error' : undefined}
-            className={`${control} w-28`}
+            aria-describedby={invalid || state.kind === 'invalid' ? 'insights-year-error' : undefined} className="w-28"
           />
         </div>
-        <button type="submit" className={control}>
+        <Button type="submit" variant="outline" className={control}>
           {m.library_insights_open_year()}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className={control}
+          variant="outline" className={control}
           onClick={onRefresh}
           disabled={!canRefresh || state.kind === 'loading' || year === undefined}
         >
           {m.library_insights_refresh()}
-        </button>
+        </Button>
       </form>
       {invalid || state.kind === 'invalid' ? (
         <p id="insights-year-error" role="alert">
@@ -119,7 +110,7 @@ export function ReadingInsightsView({
       ) : null}
       {state.kind === 'signed-out' || state.kind === 'retired' ? (
         <a
-          className={insightLink}
+         className={insightLink}
           href={`/auth/sign-in?return_to=${encodeURIComponent(year === undefined ? `/${locale}/library/insights` : insightsHref(year, locale))}`}
         >
           {m.account_sign_in()}
@@ -155,7 +146,7 @@ export function ReadingInsightsView({
                 <nav aria-label={m.library_insights_diary()} className="flex flex-wrap gap-x-4">
                   <a
                     href={insightsDiaryHref(value.actions.diary, locale)}
-                    className={insightLink}
+                   className={insightLink}
                     onClick={(event) => {
                       if (!current()) event.preventDefault();
                     }}
@@ -168,7 +159,7 @@ export function ReadingInsightsView({
                   ].map(({ action, label }) => (
                     <a
                       key={label}
-                      className={insightLink}
+                     className={insightLink}
                       href={insightsDiaryHref(action, locale)}
                       onClick={(event) => {
                         if (!current()) event.preventDefault();

@@ -13,6 +13,7 @@ import { readConfiguredLibraryVisit } from './actions';
 import { ConfiguredCopyPanel, configuredCopyOrigin } from './copy-panel';
 import { ConfiguredProgressPanel } from './progress-panel';
 import type { ConfiguredLibraryVisit } from './visit';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 
 type ReaderSession = ReturnType<typeof useSession>;
 
@@ -29,11 +30,9 @@ const operations = [
   'progress_session.changes',
 ] as const;
 
-const target =
-  'min-h-11 min-w-11 max-w-full cursor-pointer whitespace-normal py-2 text-center [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const quiet = `${target} inline-flex shrink-0 items-center justify-center rounded-lg border border-border px-4 hover:bg-muted disabled:opacity-60`;
-const linkClass =
-  'inline-flex min-h-11 min-w-0 max-w-full flex-wrap items-center text-sm text-primary underline-offset-4 [overflow-wrap:anywhere] hover:underline';
+const target = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const quiet = `shrink-0`;
+const linkClass = buttonVariants({ variant: 'link', className: 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]' });
 
 function ConfiguredRetry({
   message,
@@ -47,12 +46,12 @@ function ConfiguredRetry({
   const statusId = useId();
   return (
     <div className="min-w-0 space-y-2">
-      <p role="status" id={statusId} className="min-w-0 text-sm [overflow-wrap:anywhere]">
+      <p role="status" id={statusId} className="h-auto min-w-0 text-sm [overflow-wrap:anywhere]">
         {message}
       </p>
-      <button type="button" className={quiet} disabled={disabled} aria-describedby={statusId} onClick={onRetry}>
+      <Button type="button" variant="outline" className={quiet} disabled={disabled} aria-describedby={statusId} onClick={onRetry}>
         {m.library_configured_retry()}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -137,7 +136,7 @@ function VisitBody({
   if (visit.state === 'signed-out') return null;
   if (visit.state === 'refused')
     return (
-      <p role="status" className="min-w-0 text-sm [overflow-wrap:anywhere]">
+      <p role="status" className="h-auto min-w-0 text-sm [overflow-wrap:anywhere]">
         {m.library_configured_refused()}
       </p>
     );
@@ -150,7 +149,7 @@ function VisitBody({
     );
   if (visit.state === 'unsupported')
     return (
-      <p role="status" className="min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+      <p role="status" className="h-auto min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]">
         {m.library_configured_unsupported()}
       </p>
     );
@@ -172,7 +171,7 @@ function VisitBody({
   };
 
   return (
-    <div className="mt-4 min-w-0 space-y-6 border-t border-border pt-4 [overflow-wrap:anywhere]">
+    <div className="h-auto mt-4 min-w-0 space-y-6 border-t border-border pt-4 [overflow-wrap:anywhere]">
       <div className="min-w-0 space-y-2">
         <h2 className="text-lg font-medium">{m.library_configured_heading()}</h2>
         <p className="text-sm text-muted-foreground">{identityLabel(visit.identity)}</p>

@@ -10,6 +10,7 @@ import {
   MessagesSquareIcon,
 } from 'lucide-react';
 import { Cover } from '@rezics/ui/cover';
+import { Button } from '@rezics/ui/shadcn/button';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject } from '../../media/summary';
 import { m } from '../../paraglide/messages.js';
@@ -96,9 +97,8 @@ export function FeedCardContext({ item, kind, locale }: { item: FeedItem; kind: 
 }
 
 export const feedCardLinkClassName =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center gap-2 rounded-sm ' +
-  '[overflow-wrap:anywhere] text-primary underline-offset-4 hover:underline ' +
-  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'inline-flex max-w-full items-center gap-2 [overflow-wrap:anywhere] text-primary underline-offset-4 hover:underline ' +
+  'focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30';
 
 /** One supplied cover or avatar. No collage or image lookup. */
 export function FeedCardVisual({
@@ -347,9 +347,11 @@ export function FeedCardParentContext({
       {parent.excerpt ? (
         <>
           {parent.spoiler ? (
-            <button
+            <Button
               type="button"
-              className={feedCardLinkClassName}
+              variant="link"
+              size="sm"
+              className="h-auto min-h-6 max-w-full whitespace-normal"
               aria-expanded={excerptVisible}
               aria-controls={excerptVisible ? excerptId : undefined}
               disabled={!current()}
@@ -358,7 +360,7 @@ export function FeedCardParentContext({
               }}
             >
               {excerptVisible ? m.subject_spoiler_hide({}, options) : m.thread_reveal_spoiler({}, options)}
-            </button>
+            </Button>
           ) : null}
           {excerptVisible ? (
             <p

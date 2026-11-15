@@ -45,7 +45,7 @@ import {
 } from './character-profile';
 
 const actionClassName =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const labelClassName = 'min-w-0 max-w-full flex-wrap whitespace-normal [overflow-wrap:anywhere]';
 
 /** Addition intent is independent of the existing removal handoff. */
@@ -608,7 +608,7 @@ function CharacterProfileCreateLive({
                       />
                     ) : (
                       <Input
-                        className="min-h-11 min-w-0 max-w-full md:pointer-fine:min-h-8"
+                        className="min-w-0 max-w-full"
                         id={`${termsId}-${key}-${term.id}`}
                         {...feedback(`${termsId}-${key}-${term.id}`)}
                         aria-describedby={
@@ -687,7 +687,7 @@ function CharacterProfileCreateLive({
           >
             <SelectTrigger
               id={`${termsId}-initial-field`}
-              className="w-full min-h-11"
+              className="w-full"
               aria-describedby={fieldWithdrawn ? `${termsId}-field-withdrawn` : undefined}
             >
               <SelectValue />
@@ -790,7 +790,7 @@ function CharacterProfileCreateLive({
                       >
                         <SelectTrigger
                           id={`${address}-rank`}
-                          className="w-full min-h-11"
+                          className="w-full"
                           {...feedback(`${address}-rank`)}
                         >
                           <SelectValue />
@@ -898,7 +898,7 @@ function CharacterProfileCreateLive({
                   <>
                     <EditorFailure reason="stale" locale={locale} />
                     <details className="min-w-0 text-sm">
-                      <summary className="min-h-11 cursor-pointer py-2">
+                      <summary className="cursor-pointer">
                         {m.catalogue_creation_technical_details({}, o)}
                       </summary>
                       <pre className="whitespace-pre-wrap [overflow-wrap:anywhere]">
@@ -962,7 +962,7 @@ function CharacterProfileCreateLive({
                   <li key={error.id} id={error.id}>
                     {error.target ? (
                       <a
-                        className="inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                        className="inline-flex max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
                         href={`#${encodeURIComponent(error.target)}`}
                         onClick={(event) => {
                           event.preventDefault();
@@ -985,7 +985,7 @@ function CharacterProfileCreateLive({
           )}
           {!!failure.errors?.length && (
             <details className="min-w-0 text-sm">
-              <summary className="min-h-11 cursor-pointer py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
+              <summary className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
                 {m.catalogue_creation_technical_details({}, o)}
               </summary>
               <pre

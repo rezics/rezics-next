@@ -251,13 +251,13 @@ export function SettingsNavigationProvider({ children }: { children: ReactNode }
           <AlertDialogFooter className="min-w-0 flex-col-reverse sm:flex-row sm:flex-wrap">
             <AlertDialogCancel
               ref={stay}
-              className="h-auto min-h-11 min-w-0 w-full max-w-full py-2 whitespace-normal wrap-anywhere sm:w-auto"
+              className="h-auto min-w-0 w-full max-w-full whitespace-normal wrap-anywhere sm:w-auto min-h-7"
               onClick={navigation.stay}
             >
               {m.settings_profile_stay()}
             </AlertDialogCancel>
             <AlertDialogAction
-              className="h-auto min-h-11 min-w-0 w-full max-w-full py-2 whitespace-normal wrap-anywhere sm:w-auto"
+              className="h-auto min-w-0 w-full max-w-full whitespace-normal wrap-anywhere sm:w-auto min-h-7"
               onClick={navigation.leave}
             >
               {m.settings_profile_leave()}
@@ -286,7 +286,7 @@ export function ReadingNavigation({ csrfToken, children }: { csrfToken: string |
       <Button
         type="button"
         variant="outline"
-        className="h-auto min-h-11 min-w-11 w-full max-w-sm py-2 whitespace-normal wrap-anywhere"
+        className="h-auto w-full max-w-sm whitespace-normal wrap-anywhere min-h-7"
         onClick={() => window.location.reload()}
       >
         {m.settings_reload()}

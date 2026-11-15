@@ -1,3 +1,4 @@
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { collectionPageAddress } from './collection-presentation';
@@ -67,7 +68,10 @@ export function RuleEditLink({
   viewerId,
   allowed,
   resultsHref,
-  className = 'inline-flex min-h-11 min-w-0 max-w-full items-center justify-center break-words rounded-lg border border-border px-4 py-2 text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2',
+  className = buttonVariants({
+    variant: 'outline',
+    className: 'h-auto min-h-7 max-w-full whitespace-normal break-words',
+  }),
 }: {
   collection: { id: string; curatorAccountId?: string | null; membershipKind?: string; builtinKind?: string };
   viewerId: string | null;

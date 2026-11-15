@@ -222,7 +222,7 @@ function FilteredStatusForm({
             id={`${id}-state`}
             value={requestedState}
             maxLength={64}
-            className="min-h-11"
+            className="w-full"
             disabled={!!state && ['confirming', 'confirmation_uncertain', 'confirmed'].includes(state.phase)}
             aria-describedby={`${id}-help`}
             onChange={(event) => {
@@ -241,7 +241,6 @@ function FilteredStatusForm({
         <Button
           type="submit"
           variant="outline"
-          className="min-h-11"
           disabled={!write('preview') || !libraryEntryStateWrite(requestedState) || !!journey}
         >
           {m.library_filtered_status_prepare()}
@@ -270,7 +269,7 @@ function FilteredStatusForm({
             <Button
               type="button"
               variant="outline"
-              className="min-h-11"
+              size="sm"
               disabled={!write('preview') || busy}
               onClick={(event) => {
                 captureFocusIntent('preview', event.currentTarget);
@@ -291,7 +290,7 @@ function FilteredStatusForm({
         <Button
           type="button"
           variant="outline"
-          className="min-h-11"
+          size="sm"
           disabled={!canRead || busy}
           onClick={(event) => {
             captureFocusIntent('read', event.currentTarget);
@@ -312,7 +311,7 @@ function FilteredStatusForm({
             <code>{operation.id}</code>
           </p>
           <details>
-            <summary className="flex min-h-11 items-center">{m.library_filtered_status_predicate()}</summary>
+            <summary className="flex items-center">{m.library_filtered_status_predicate()}</summary>
             <pre className="whitespace-pre-wrap break-all">
               {operation.selectionSource?.filter ?? m.library_filtered_status_no_predicate()}
             </pre>
@@ -328,7 +327,7 @@ function FilteredStatusForm({
           {state?.phase === 'previewed' ? (
             <Button
               type="button"
-              className="min-h-11"
+              size="sm"
               disabled={!write('confirm') || !journey?.canConfirm || busy}
               onClick={(event) => {
                 captureFocusIntent('confirm', event.currentTarget);
@@ -344,7 +343,7 @@ function FilteredStatusForm({
               <p>{m.library_filtered_status_confirmation_uncertain()}</p>
               <Button
                 type="button"
-                className="min-h-11"
+                size="sm"
                 disabled={!write('confirm') || busy}
                 onClick={(event) => {
                   captureFocusIntent('confirm', event.currentTarget);
@@ -390,7 +389,7 @@ function FilteredStatusForm({
           <Button
             type="button"
             variant="outline"
-            className="min-h-11"
+            size="sm"
             disabled={!canRead || busy}
             onClick={(event) => {
               captureFocusIntent('read', event.currentTarget);
@@ -425,7 +424,7 @@ function FilteredStatusForm({
               {result.page.next ? (
                 <Button
                   type="button"
-                  className="min-h-11"
+                  size="sm"
                   variant="outline"
                   disabled={!canRead || busy}
                   onClick={(event) => {

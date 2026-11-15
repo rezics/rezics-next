@@ -90,7 +90,7 @@ function SavedFilterPicker({ catalogue, value, locale, canSelect, onSelect }: Pi
         />
       </Field>
       <div className="flex flex-wrap items-end gap-2">
-        <Field className="min-w-0 max-w-full">
+        <Field className="min-w-0 flex-1">
           <FieldLabel htmlFor={selectId}>
             {adding ? m.condition_saved_filter_add_label({}, options) : m.condition_saved_filter_reference({}, options)}
           </FieldLabel>
@@ -99,7 +99,7 @@ function SavedFilterPicker({ catalogue, value, locale, canSelect, onSelect }: Pi
             disabled={!catalogue.choices.length}
             onValueChange={(nextSelectValue) => setSelected(nextSelectValue ?? '')}
           >
-            <SelectTrigger id={selectId} className="max-w-full">
+            <SelectTrigger id={selectId} className="w-full min-w-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -123,7 +123,6 @@ function SavedFilterPicker({ catalogue, value, locale, canSelect, onSelect }: Pi
         <Button
           type="button"
           variant="outline"
-          size="sm"
           disabled={!selected || selected === value || !canSelect(selected)}
           onClick={() => {
             if (selected && canSelect(selected) && onSelect(selected) && adding) setSelected('');

@@ -1,10 +1,11 @@
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { createContext, useContext } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { SectionHeading } from '../../library/section-heading';
 import { CoverList } from './cover-list';
 import { OverviewContext, type Item } from './overview';
-import { pageText, linkClass, linkColor } from './shared';
+import { pageText } from './shared';
 import { typeListHref, type TypeListTarget } from './type-list-model';
 import { PageReadState } from './page-read-state';
 import { useSearchRetryWait } from '../../search/search-recovery-retry';
@@ -21,7 +22,7 @@ export const TypeListContext = createContext<{
   memberHref?: (subject: { id: string; label: string }) => string;
 }>({});
 
-const controlClass = `${linkClass} ${linkColor} inline-flex min-h-[44px] min-w-[44px] max-w-full items-center rounded-sm px-2 py-2 text-start whitespace-normal [overflow-wrap:anywhere] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`;
+const controlClass = `${buttonVariants({ variant: 'link', size: 'sm' })} h-auto min-h-6 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]`;
 
 /** Render the native window and its supplied public comparison context without hydrating its targets. */
 export function TypeList(props: Record<string, unknown>) {
@@ -204,13 +205,15 @@ export function ZoneTypeList(props: Record<string, unknown>) {
         <p role="alert" className="[overflow-wrap:anywhere]">
           {m.subject_section_failed({}, options)}{' '}
           {retryWaiting ? (
-            <button
+            <Button
               type="button"
+              variant="link"
+              size="sm"
               disabled
               className={`${controlClass} disabled:cursor-not-allowed disabled:opacity-60`}
             >
               {m.subject_section_retry({}, options)}
-            </button>
+            </Button>
           ) : (
             <a href={listHref} className={controlClass}>
               {m.subject_section_retry({}, options)}

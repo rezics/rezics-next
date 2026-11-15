@@ -17,10 +17,9 @@ import {
 } from './subject-terms-resolution';
 
 const actionClassName =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1';
-const inputClassName = 'min-h-11 md:pointer-fine:min-h-8';
+  'h-auto min-h-7 max-w-full whitespace-normal break-words text-center';
 const frameClassName = 'm-1 flex min-w-0 flex-col gap-4 p-3 sm:p-4';
-const selectClassName = 'min-w-0 max-w-full min-h-11 min-w-11 md:pointer-fine:min-h-8';
+const selectClassName = 'w-full min-w-0 max-w-full';
 
 function readout(presence: TermPresence, language: string, absent: string) {
   return (
@@ -156,7 +155,7 @@ export function TermsConflictResolution({
                     </FieldLabel>
                     {change.field === 'aliases' ? (
                       <Textarea
-                        className="min-w-0 [overflow-wrap:anywhere] focus:outline-2 focus:outline-offset-2 focus:outline-ring"
+                        className="min-w-0 [overflow-wrap:anywhere]"
                         id={controlId(`resolve-${key}`)}
                         lang={change.language}
                         value={edit.value}
@@ -167,7 +166,7 @@ export function TermsConflictResolution({
                       />
                     ) : (
                       <Input
-                        className={`${inputClassName} focus:outline-2 focus:outline-offset-2 focus:outline-ring`}
+                        className="min-w-0"
                         id={controlId(`resolve-${key}`)}
                         lang={change.language}
                         value={edit.value}

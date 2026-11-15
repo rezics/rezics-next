@@ -82,17 +82,17 @@ import {
 
 type Ready = Extract<RecipeRead, { ok: true }>;
 const recipeActionClassName =
-  'relative z-10 h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const recipeInputClassName = 'relative z-10 min-h-11 min-w-0 max-w-full';
+  'relative z-10 h-auto min-h-7 max-w-full whitespace-normal break-words focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const recipeInputClassName = 'relative z-10 min-w-0 max-w-full';
 const recipePanelClassName = 'min-w-0 space-y-5 p-4 [overflow-wrap:anywhere] sm:p-6';
 // Keep raised, wrapping controls local to the authoring or source-value surface.
 const recipePanelControlsClassName =
   'min-w-0 [overflow-wrap:anywhere] ' +
   '[&_label]:relative [&_label]:z-10 [&_label]:min-w-0 [&_label]:max-w-full [&_label]:flex-wrap ' +
-  '[&_input]:relative [&_input]:z-10 [&_input]:min-h-11 [&_input]:min-w-0 ' +
-  '[&_textarea]:relative [&_textarea]:z-10 [&_textarea]:min-h-11 [&_textarea]:min-w-0 ' +
-  '[&_a]:relative [&_a]:z-10 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:break-words ' +
-  '[&_button]:relative [&_button]:z-10 [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:break-words ' +
+  '[&_input]:relative [&_input]:z-10 [&_input]:min-w-0 ' +
+  '[&_textarea]:relative [&_textarea]:z-10 [&_textarea]:min-w-0 ' +
+  '[&_a]:relative [&_a]:z-10 [&_a]:inline-flex [&_a]:max-w-full [&_a]:items-center [&_a]:break-words ' +
+  '[&_button]:relative [&_button]:z-10 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:break-words ' +
   '[&_:is(a,button,input,select,textarea):focus-visible]:outline-2 ' +
   '[&_:is(a,button,input,select,textarea):focus-visible]:outline-offset-2 ' +
   '[&_:is(a,button,input,select,textarea):focus-visible]:outline-ring';
@@ -1233,7 +1233,7 @@ function RecipeEditorLive({
                   >
                     <SelectTrigger
                       id={`${termsId}-recipe-field`}
-                      className="w-full min-w-0 relative z-10 min-h-11 min-w-11 [&:focus-visible]:outline-2 [&:focus-visible]:outline-offset-2 [&:focus-visible]:outline-ring"
+                      className="w-full min-w-0 relative z-10 [&:focus-visible]:outline-2 [&:focus-visible]:outline-offset-2 [&:focus-visible]:outline-ring"
                       aria-describedby={withdrawnChoice ? `${termsId}-recipe-field-stale` : undefined}
                     >
                       <SelectValue />
@@ -1930,7 +1930,7 @@ function RecipeFieldLive({
               <Checkbox
                 id={`${fieldId}-original`}
                 {...recipeInvalid(corrections, `${fieldId}-original`)}
-                className="size-11 after:inset-0"
+               
                 checked={row.original ?? false}
                 onCheckedChange={(checked) => {
                   if (!canEdit() || editing.current.row.original !== row.original) return;
@@ -1938,7 +1938,7 @@ function RecipeFieldLive({
                   onOriginal(checked === true);
                 }}
               />
-              <FieldLabel className="min-h-11 items-center" htmlFor={`${fieldId}-original`}>
+              <FieldLabel className="items-center" htmlFor={`${fieldId}-original`}>
                 {m.recipe_original({}, o)}
               </FieldLabel>
             </Field>

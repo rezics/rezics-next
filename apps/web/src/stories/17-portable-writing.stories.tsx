@@ -120,10 +120,10 @@ function PreparedJourney({ long, scenario }: Props) {
         </p>
         <div className="flex flex-wrap gap-2">
           <Button
-            type="button"
-            variant="outline"
-            className="min-h-11 whitespace-normal"
-            onClick={() => {
+ type="button"
+ variant="outline"
+ className="whitespace-normal h-auto min-h-7"
+ onClick={() => {
               client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
               client.setQueryData(sessionQuery.queryKey, session);
             }}
@@ -131,10 +131,10 @@ function PreparedJourney({ long, scenario }: Props) {
             Prepared account away/back
           </Button>
           <Button
-            type="button"
-            variant="outline"
-            className="min-h-11 whitespace-normal"
-            onClick={() => setEpoch((value) => value + 1)}
+ type="button"
+ variant="outline"
+ className="whitespace-normal h-auto min-h-7"
+ onClick={() => setEpoch((value) => value + 1)}
           >
             Prepared route replacement
           </Button>

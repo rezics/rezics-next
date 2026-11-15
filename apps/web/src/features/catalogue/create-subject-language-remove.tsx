@@ -4,7 +4,7 @@ import { flushSync } from 'react-dom';
 import { m } from '../../paraglide/messages.js';
 import { useEditorLifetime } from './editor-lifetime';
 
-const actionClassName = 'h-auto min-h-11 max-w-full justify-self-start whitespace-normal';
+const actionClassName = 'h-auto min-h-7 max-w-full justify-self-start whitespace-normal';
 type RemovalChoice = { rowId: string; active: () => boolean };
 
 /** A local choice belongs to one unsent row and the reading that opened it. */

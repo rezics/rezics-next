@@ -5,26 +5,8 @@ import { useOperation } from '../../kernel/exposure';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { sourceAdmissionBlock, sourceAdmissionBody } from '../rich-private-entry/admission';
-import {
-  captureStageFocusHandoff,
-  consumeStageFocusHandoff,
-  createStageFocusTracker,
-  watchStageFocusMovement,
-  type StageFocusTracker,
-} from '../personal-import-stage-focus';
-import {
-  MAL_UPLOAD_BYTES,
-  newCommandKey,
-  sameCommand,
-  type MalApplyPage,
-  type MalCommand,
-  type MalFailure,
-  type MalOutcome,
-  type MalPage,
-  type MalPreviewRow,
-  type MalScoreReviewInput,
-  type MalUnknown,
-} from './contract';
+import { captureStageFocusHandoff, consumeStageFocusHandoff, createStageFocusTracker, watchStageFocusMovement, type StageFocusTracker } from '../personal-import-stage-focus';
+import { MAL_UPLOAD_BYTES, newCommandKey, sameCommand, type MalApplyPage, type MalCommand, type MalFailure, type MalOutcome, type MalPage, type MalPreviewRow, type MalScoreReviewInput, type MalUnknown } from './contract';
 import { MalConfirmPage, scoreConsentKey } from './confirm';
 import { MalAction } from './controls';
 import { MalDeparture } from './departure';

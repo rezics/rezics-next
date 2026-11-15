@@ -412,7 +412,6 @@ export function ProviderReviewActions({
                 </ContentItemHeading>
                 <Button
                   variant="outline"
-                  className="min-h-11"
                   disabled={
                     locked ||
                     !selected.length ||
@@ -424,7 +423,6 @@ export function ProviderReviewActions({
                 </Button>
                 <Button
                   variant="outline"
-                  className="min-h-11"
                   disabled={
                     locked ||
                     !selected.length ||
@@ -436,7 +434,6 @@ export function ProviderReviewActions({
                 </Button>
                 <Button
                   variant="ghost"
-                  className="min-h-11"
                   disabled={locked || !selected.length}
                   onClick={() => {
                     if (visit.live()) setSelection({ scope, page: pageAddress, ids: [] });
@@ -481,7 +478,7 @@ export function ProviderReviewActions({
                   }
                   actions={
                     <Field className="w-auto shrink-0">
-                      <FieldLabel className="min-h-11 min-w-11 justify-center">
+                      <FieldLabel>
                         <Checkbox
                           checked={checked}
                           disabled={
@@ -561,7 +558,6 @@ export function ProviderReviewActions({
           <AlertDialogFooter>
             <Button
               variant="outline"
-              className="min-h-11"
               onClick={() => {
                 if (visit.live()) {
                   confirmationOwner.current = null;
@@ -573,7 +569,6 @@ export function ProviderReviewActions({
               {m.provider_cancel({}, o)}
             </Button>
             <Button
-              className="min-h-11"
               disabled={disabled || busy || !confirmation || providerScopeKey(confirmation.scope) !== scope}
               onClick={() => {
                 if (visit.live() && confirmation) void execute(confirmation);
@@ -654,7 +649,6 @@ export function ProviderReviewActions({
             {attempted && failed && (
               <Button
                 variant="outline"
-                className="min-h-11"
                 disabled={disabled || busy || !sameScope}
                 onClick={() => void execute(batch)}
               >
@@ -664,7 +658,6 @@ export function ProviderReviewActions({
             {attempted && (
               <Button
                 variant="outline"
-                className="min-h-11"
                 disabled={disabled || busy || !sameScope}
                 onClick={() => void refresh(batch)}
               >
@@ -674,7 +667,6 @@ export function ProviderReviewActions({
             {attempted && !uncertain && (
               <Button
                 variant="ghost"
-                className="min-h-11"
                 disabled={busy}
                 onClick={() => {
                   if (!visit.live()) return;

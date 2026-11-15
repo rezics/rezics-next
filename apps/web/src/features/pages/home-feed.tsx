@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
 import { FeedResults, type FeedResultsResult } from '../feed/feed-results';
@@ -172,7 +172,6 @@ export function HomeFeed({
         </div>
         <nav aria-label={m.nav_home({}, options)} className="flex flex-wrap items-center gap-2">
           <Button
-            className="min-h-11"
             variant={stream === 'home' ? 'secondary' : 'ghost'}
             aria-pressed={stream === 'home'}
             disabled={busy}
@@ -182,7 +181,6 @@ export function HomeFeed({
           </Button>
           {signedIn ? (
             <Button
-              className="min-h-11"
               variant={stream === 'following' ? 'secondary' : 'ghost'}
               aria-pressed={stream === 'following'}
               disabled={busy}
@@ -228,7 +226,7 @@ export function HomeFeed({
             auth: (
               <a
                 href={`/${locale}/auth/sign-in?return_to=${encodeURIComponent(`/${locale}/`)}`}
-                className="inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className={`${buttonVariants()} h-auto min-h-7 max-w-full whitespace-normal`}
               >
                 {m.account_sign_in({}, options)}
               </a>
@@ -272,7 +270,6 @@ export function HomeFeed({
             page?.next && onNext ? (
               <Button
                 variant="outline"
-                className="min-h-11"
                 disabled={busy || !page.next}
                 onClick={() => {
                   if (busy || advancing.current || !page.next) return;
@@ -287,13 +284,12 @@ export function HomeFeed({
           emptyActions={
             <>
               {emptyContext === 'continuation' && !page?.next && onRestart ? (
-                <Button className="min-h-11" variant="outline" disabled={busy} onClick={onRestart}>
+                <Button variant="outline" disabled={busy} onClick={onRestart}>
                   {m.home_feed_restart({}, options)}
                 </Button>
               ) : null}
               {emptyContext === 'filtered' ? (
                 <Button
-                  className="min-h-11"
                   variant="outline"
                   aria-controls={filterId}
                   aria-expanded={filtersOpen}
@@ -307,12 +303,12 @@ export function HomeFeed({
               ) : null}
               <a
                 href={`/${locale}/search`}
-                className="inline-flex min-h-11 items-center justify-center rounded-lg px-4 py-2 text-sm text-primary underline underline-offset-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className={`${buttonVariants({ variant: 'link' })} h-auto min-h-7 max-w-full whitespace-normal`}
               >
                 {m.search_heading({}, options)}
               </a>
               {stream === 'following' && onSelect ? (
-                <Button className="min-h-11" variant="outline" disabled={busy} onClick={() => onSelect('home')}>
+                <Button variant="outline" disabled={busy} onClick={() => onSelect('home')}>
                   {m.home_feed_discovery({}, options)}
                 </Button>
               ) : null}

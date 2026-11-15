@@ -20,9 +20,9 @@ import {
 import { ViewHeading } from '../view-heading';
 
 const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 const linkClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'inline-flex max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const HISTORY_CAP = 8;
 const fitsRetainedAddress = (value: string) =>
   new TextEncoder().encode(value).byteLength <= MUSIC_CONTEXT_ADDRESS_BYTE_CAP;
@@ -577,7 +577,7 @@ function MusicContextReadingBound({
               >
                 <SharedSelect.SelectTrigger
                   id="music-context-stream"
-                  className="min-h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 py-2 text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  className="w-full min-w-0 px-3 text-foreground"
                 >
                   <SharedSelect.SelectValue />
                 </SharedSelect.SelectTrigger>

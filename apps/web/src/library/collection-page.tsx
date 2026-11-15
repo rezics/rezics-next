@@ -1,3 +1,4 @@
+import { cn } from '@rezics/ui/utils';
 import { CollectionLayoutSelect } from './collection-layout-select';
 import { CollectionPresentationSummary } from './showcase-collection/presentation';
 import { CollectionEditReview } from './showcase-collection/edit-review';
@@ -60,7 +61,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
 import { MetaLine } from '@rezics/ui/meta-line';
@@ -153,7 +154,6 @@ import { receiveUndoEvidence } from './bulk-operation-undo-evidence';
 import {
   CollectionMemberList,
   CollectionMetadataEditor,
-  fieldClass,
   CollectionPresentationFields,
 } from './collection-editor';
 import { CollectionAuthoringWorkspace } from './collection-authoring-workspace';
@@ -260,8 +260,7 @@ export function collectionPageHead(
 
 const visibilities = ['private', 'unlisted', 'public'] as const;
 export { fieldClass } from './collection-editor';
-export const buttonClass =
-  'inline-flex min-h-11 items-center rounded-lg border border-border px-3 text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60';
+export const buttonClass = buttonVariants({ variant: 'outline' });
 
 function visibilityLabel(visibility: CollectionVisibility): string {
   if (visibility === 'public') return m.library_visibility_public();
@@ -1982,14 +1981,15 @@ function CollectionPageLifetime({
         {conflict && ownerCurrent ? (
           <p role="alert">
             {m.library_collection_conflict()}{' '}
-            <button
-              className="text-primary underline"
+            <Button
+              variant="link"
+              className="h-auto min-h-7 px-0 whitespace-normal"
               type="button"
               disabled={pending}
               onClick={() => void reloadEditor()}
             >
               {m.library_collection_reload()}
-            </button>
+            </Button>
           </p>
         ) : null}
 
@@ -2050,19 +2050,19 @@ function CollectionPageLifetime({
                 </p>
                 <nav className="flex flex-wrap gap-2" aria-label={m.collection_workbench_heading()}>
                   <a
-                    className="inline-flex min-h-11 items-center rounded-lg border border-border px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    className={cn(buttonVariants({ variant: 'outline' }), 'h-auto min-h-7 max-w-full whitespace-normal')}
                     href="#collection-member-canvas-heading"
                   >
                     {m.library_collection_members()}
                   </a>
                   <a
-                    className="inline-flex min-h-11 items-center rounded-lg border border-border px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    className={cn(buttonVariants({ variant: 'outline' }), 'h-auto min-h-7 max-w-full whitespace-normal')}
                     href="#collection-edit-details-trigger"
                   >
                     {m.library_collection_details()}
                   </a>
                   <a
-                    className="inline-flex min-h-11 items-center rounded-lg border border-border px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    className={cn(buttonVariants({ variant: 'outline' }), 'h-auto min-h-7 max-w-full whitespace-normal')}
                     href="#collection-primary-save"
                   >
                     {m.library_collection_save()}
@@ -2091,7 +2091,7 @@ function CollectionPageLifetime({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+                  className="h-auto min-h-7 max-w-full whitespace-normal"
                   disabled={
                     pending ||
                     draftFrozen ||
@@ -2109,7 +2109,7 @@ function CollectionPageLifetime({
                 <Button
                   type="button"
                   variant="ghost"
-                  className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+                  className="h-auto min-h-7 max-w-full whitespace-normal"
                   disabled={pending || draftFrozen || transfer !== null || selectedIds.size === 0}
                   onClick={() => {
                     if (!isCurrent() || inFlight.current || saveIntent.current !== null || transfer !== null) return;
@@ -2141,7 +2141,7 @@ function CollectionPageLifetime({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-auto min-h-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere]"
+                  className="h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
                   disabled={
                     pending || draftFrozen || conflict || bulkUnavailable || selectedIds.size === 0 || transfer !== null
                   }
@@ -2163,7 +2163,7 @@ function CollectionPageLifetime({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-auto min-h-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere]"
+                  className="h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
                   disabled={
                     pending ||
                     draftFrozen ||
@@ -2185,7 +2185,7 @@ function CollectionPageLifetime({
                   open={transferToolsOpen}
                   onToggle={(event) => setTransferToolsOpen(event.currentTarget.open)}
                 >
-                  <summary className="min-h-11 cursor-pointer py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                  <summary className="cursor-pointer font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                     {m.library_collection_move_selected()}
                   </summary>
                   <div className="space-y-3 pt-3">
@@ -2202,7 +2202,7 @@ function CollectionPageLifetime({
                     <Button
                       type="button"
                       variant="outline"
-                      className="min-h-11 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
+                      className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
                       disabled={
                         pending ||
                         conflict ||
@@ -2472,7 +2472,7 @@ function CollectionPageLifetime({
                 }}
               >
                 <details className="min-w-0 border-t border-border pt-3" data-collection-presentation-settings>
-                  <summary className="min-h-11 cursor-pointer py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                  <summary className="cursor-pointer font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                     {m.collection_choice_heading()}
                   </summary>
                   <div className="pt-3">
@@ -2513,7 +2513,7 @@ function CollectionPageLifetime({
                   </div>
                 </details>
                 <details className="min-w-0 border-t border-border pt-3" data-collection-advanced-settings>
-                  <summary className="min-h-11 cursor-pointer py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                  <summary className="cursor-pointer font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                     {m.collection_workbench_secondary()}
                   </summary>
                   <div className="space-y-4 pt-3">
@@ -2569,7 +2569,7 @@ function CollectionPageLifetime({
           saveActions={
             editing && ownerCurrent ? (
               <section
-                className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3 shadow-sm xl:sticky xl:bottom-3 xl:z-20"
+                className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3 xl:sticky xl:bottom-3 xl:z-20"
                 data-collection-save
                 aria-labelledby="collection-save-heading"
               >
@@ -2578,7 +2578,7 @@ function CollectionPageLifetime({
                 </h3>
                 <Button
                   id="collection-primary-save"
-                  className="h-auto min-h-11 max-w-full min-w-0 flex-1 scroll-mt-4 whitespace-normal px-5 py-3 sm:flex-none"
+                  className="h-auto min-h-7 max-w-full min-w-0 flex-1 scroll-mt-4 whitespace-normal sm:flex-none"
                   type="submit"
                   form="collection-edit-form"
                   disabled={!hydrated || pending || conflict || transfer !== null}
@@ -2588,7 +2588,7 @@ function CollectionPageLifetime({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-auto min-h-11 max-w-full whitespace-normal py-3"
+                  className="h-auto min-h-7 max-w-full whitespace-normal"
                   disabled={pending || conflict || draftFrozen}
                   onClick={cancelEditing}
                 >
@@ -2684,13 +2684,13 @@ export function CollectionReadingTools({ actions, details }: { actions: ReactNod
   return (
     <div className="min-w-0 space-y-2 border-t border-border pt-3" data-collection-reading-tools>
       <details className="min-w-0" data-collection-reading-disclosure="actions">
-        <summary className="min-h-11 cursor-pointer py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        <summary className="cursor-pointer text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
           {m.collection_reading_bulk_actions()}
         </summary>
         <div className="min-w-0 space-y-4 pb-3 pt-2">{actions}</div>
       </details>
       <details className="min-w-0" data-collection-reading-disclosure="details">
-        <summary className="min-h-11 cursor-pointer py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        <summary className="cursor-pointer text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
           {m.collection_reading_view_details()}
         </summary>
         <div className="min-w-0 pb-3 pt-2">{details}</div>
@@ -2722,7 +2722,7 @@ export function CollectionReadActions({
           title={m.library_collection_actions()}
           backLabel={m.library_collection_cancel()}
           trigger={
-            <Button type="button" aria-label={m.library_collection_actions()} size="icon-sm" variant="ghost">
+            <Button type="button" aria-label={m.library_collection_actions()} size="icon" variant="ghost">
               <EllipsisIcon aria-hidden="true" />
             </Button>
           }

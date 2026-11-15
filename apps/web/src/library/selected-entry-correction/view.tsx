@@ -12,19 +12,13 @@ import type { ShelfMutationLease } from '../shelf-rows';
 import { AnnotationNote, AnnotationPriority } from '../rich-private-entry/annotation-review';
 import { readPrivateEntryForSubject } from '../rich-private-entry/server';
 import { SelectedCorrection } from './controller';
-import {
-  captureSelection,
-  correctionInput,
-  correctionIssues,
-  initialDraft,
-  intended,
-  annotationNoteBytes,
-  type CorrectionDraft,
-  type SelectedEntry,
-} from './contract';
+import { captureSelection, correctionInput, correctionIssues, initialDraft, intended, annotationNoteBytes, type CorrectionDraft, type SelectedEntry } from './contract';
 import { captureCorrectionSender, readSelectedCorrection, sendSelectedCorrection } from './server';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
 
-const button = 'min-h-11 max-w-full whitespace-normal rounded-md border px-3 disabled:opacity-50';
+const button = 'h-auto min-h-7 max-w-full whitespace-normal';
 export function SelectedEntryCorrection({
   entries,
   selected,
@@ -52,9 +46,9 @@ export function SelectedEntryCorrection({
   if (!admitted) return null;
   return (
     <div className="min-w-0 space-y-3">
-      <button
+      <Button
         ref={launcher}
-        className={button}
+        variant="outline" className={button}
         disabled={
           selected.length === 0 ||
           selected.length > 16 ||
@@ -78,7 +72,7 @@ export function SelectedEntryCorrection({
         }}
       >
         {m.library_selected_correction_title()}
-      </button>
+      </Button>
       {visit ? (
         <CorrectionVisit
           selection={visit.selection}
@@ -198,7 +192,7 @@ export function CorrectionVisit({
   return (
     <section
       aria-label={m.library_selected_correction_title()}
-      className="min-w-0 space-y-4 rounded-md border p-3 [overflow-wrap:anywhere]"
+      className="h-auto min-w-0 space-y-4 rounded-md border p-3 [overflow-wrap:anywhere]"
     >
       <h3 className="font-semibold">{m.library_selected_correction_title()}</h3>
       <p>{m.library_selected_correction_help({ count: selection.length })}</p>
@@ -210,24 +204,24 @@ export function CorrectionVisit({
           </div>
           {issues.note ? <p role="alert">{m.library_selected_correction_note_error()}</p> : null}
           {issues.priority ? <p role="alert">{m.library_annotation_priority_error()}</p> : null}
-          <button
-            className={button}
+          <Button
+            variant="outline" className={button}
             disabled={preparing || issues.note || issues.priority}
             onClick={() => void review()}
           >
             {m.library_annotation_review()}
-          </button>
+          </Button>
         </>
       ) : (
         <CorrectionReview controller={controller} lease={lease} />
       )}
-      <button
-        className={button}
+      <Button
+        variant="outline" className={button}
         disabled={preparing || (!!state?.command && state.command.kind !== 'create') || !!state?.busy}
         onClick={() => departure.requestDiscard(discard)}
       >
         {m.library_selected_correction_return()}
-      </button>
+      </Button>
     </section>
   );
 }
@@ -266,7 +260,7 @@ function OperationField({
           <SelectTrigger
             id={id}
             aria-labelledby={`${id}-label`}
-            className="min-h-11 w-full rounded-md border bg-background p-2"
+            className='w-full'
           >
             <SelectValue />
           </SelectTrigger>
@@ -285,9 +279,9 @@ function OperationField({
         field === 'note' ? (
           <>
             <label htmlFor={id + '-value'}>{m.library_annotation_proposed()}</label>
-            <textarea
+            <Textarea
               id={id + '-value'}
-              className="min-h-32 w-full rounded-md border bg-background p-2"
+              className='min-h-32 w-full'
               value={draft.noteValue}
               disabled={disabled}
               onChange={(event) => onChange({ ...draft, noteValue: event.target.value })}
@@ -297,9 +291,9 @@ function OperationField({
         ) : (
           <>
             <label htmlFor={id + '-value'}>{m.library_annotation_proposed()}</label>
-            <input
+            <Input
               id={id + '-value'}
-              className="min-h-11 w-full rounded-md border bg-background p-2"
+              className='w-full'
               inputMode="numeric"
               value={draft.priorityValue}
               disabled={disabled}
@@ -349,9 +343,9 @@ export function CorrectionReview({ controller, lease }: { controller: SelectedCo
         </p>
       ) : null}
       {state.command && state.command.kind !== 'create' ? (
-        <button className={button} disabled={state.busy} onClick={() => void run(() => controller.retry())}>
+        <Button variant="outline" className={button} disabled={state.busy} onClick={() => void run(() => controller.retry())}>
           {m.library_selected_correction_retry()}
-        </button>
+        </Button>
       ) : null}
       {state.command?.kind === 'create' && state.uncertain ? (
         <p role="status">{m.library_selected_correction_create_unknown()}</p>
@@ -374,28 +368,28 @@ export function CorrectionReview({ controller, lease }: { controller: SelectedCo
           ))}
           <nav aria-label={m.library_selected_correction_pages()} className="flex flex-wrap gap-2">
             {Array.from({ length: page.pageCount }, (_, number) => (
-              <button
+              <Button
                 key={number}
                 aria-current={number === page.page ? 'page' : undefined}
-                className={button}
+                variant="outline" className={button}
                 disabled={state.busy}
                 onClick={() => void controller.reopen(number)}
               >
                 {number + 1}
-              </button>
+              </Button>
             ))}
           </nav>
           <div className="flex flex-wrap gap-2">
-            <button className={button} disabled={state.busy} onClick={() => void controller.reopen()}>
+            <Button variant="outline" className={button} disabled={state.busy} onClick={() => void controller.reopen()}>
               {m.library_selected_correction_reopen()}
-            </button>
-            <button
-              className={button}
+            </Button>
+            <Button
+              variant="outline" className={button}
               disabled={state.busy || page.state !== 'open' || !!state.cancellation}
               onClick={() => void run(() => controller.cancel())}
             >
               {m.library_selected_correction_cancel()}
-            </button>
+            </Button>
           </div>
         </>
       ) : null}
@@ -471,13 +465,13 @@ function Comparison({
         <p>{m.library_subject_unavailable()}</p>
       )}
       {item.eligibility !== 'ready' ? <p>{m.library_selected_correction_fresh_review()}</p> : null}
-      <button
-        className={button}
+      <Button
+        variant="outline" className={button}
         disabled={disabled || page.state !== 'open' || item.eligibility !== 'ready' || item.outcome !== 'not-started'}
         onClick={confirm}
       >
         {m.library_selected_correction_confirm()}
-      </button>
+      </Button>
     </article>
   );
 }

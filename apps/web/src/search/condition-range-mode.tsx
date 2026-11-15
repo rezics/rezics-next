@@ -43,7 +43,7 @@ export function ConditionRangeMode({
             setPending(next);
           }}
         >
-          <SelectTrigger ref={select} id={id}>
+          <SelectTrigger ref={select} id={id} className="w-full min-w-0">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -59,7 +59,7 @@ export function ConditionRangeMode({
           ref={dialog}
           aria-labelledby={`${id}-title`}
           aria-describedby={`${id}-help`}
-          className="max-w-lg rounded-lg border border-border bg-background p-4 text-foreground shadow-xl backdrop:bg-black/50"
+          className="max-w-lg rounded-xl bg-popover p-4 text-popover-foreground ring-1 ring-foreground/10 backdrop:bg-black/50"
           onCancel={(event) => {
             event.preventDefault();
             cancel();

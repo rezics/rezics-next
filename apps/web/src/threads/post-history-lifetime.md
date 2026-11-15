@@ -173,7 +173,7 @@ Each row has a normal expand/collapse button. Up/Down and Home/End move focus be
 selecting or reading; Enter and Space use native button activation. The loaded-only select and explicit Inspect
 button can reach any returned position, while Previous/Next stop at the ends of the loaded window. Inspector
 collapse returns focus to its row only when focus was inside that inspector. It never steals focus from another
-control. Each target has a 44px minimum and labels wrap at phone width.
+control. Labels wrap at phone width.
 
 Continuation clears the selected index, destination and full inspector before requesting the new page. The
 original keyboard intent still focuses the first returned boundary (or an empty-page boundary), while pointer

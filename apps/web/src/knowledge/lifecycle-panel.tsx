@@ -4,7 +4,7 @@ import { m } from '../paraglide/messages.js';
 import { knowledgeRestoreExpired } from './lifecycle';
 import type { KnowledgeLifecycleController } from './lifecycle-controller';
 
-const control = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words px-4 py-2 leading-snug';
+const control = 'h-auto min-h-7 max-w-full whitespace-normal break-words leading-snug';
 
 export function KnowledgeLifecyclePanel({
   controller,

@@ -1,4 +1,5 @@
 import {
+import { cn } from '@rezics/ui/utils';
   useId,
   useEffect,
   useLayoutEffect,
@@ -133,7 +134,7 @@ export function GameReader({ compact = false, ...props }: Props) {
           id={id}
           ref={heading}
           tabIndex={-1}
-          className="text-xl font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="text-xl font-semibold "
         >
           {m.game_reader_overview_title({}, o)}
         </h2>
@@ -285,7 +286,7 @@ function GameWindow({
         </p>
         <button
           type="button"
-          className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+          className={cn(buttonVariants({ variant: 'outline' }), action)}
           disabled={busy}
           onClick={request(failure.reason === 'restart' ? window.start : window.retry)}
         >
@@ -369,7 +370,7 @@ function GameWindow({
                                       }
                                       className={
                                         returnState?.kind === 'current' && returnState.statement.id === statement.id
-                                          ? 'rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+                                          ? 'rounded-sm '
                                           : undefined
                                       }
                                     >
@@ -404,7 +405,7 @@ function GameWindow({
                       }
                       className="min-w-0 border-t border-border pt-3"
                     >
-                      <summary className={`${action} cursor-pointer font-medium text-primary`}>
+                      <summary className={`${action} cursor-pointer font-medium`}>
                         {groups[group.id]}
                       </summary>
                       <div className="pt-3">{content}</div>
@@ -418,7 +419,7 @@ function GameWindow({
                 data-slot="game-release-destination"
                 className="min-w-0 overflow-hidden rounded-xl border border-border bg-card"
               >
-                <summary className={`${action} cursor-pointer px-4 py-3 font-semibold text-primary`}>
+                <summary className={`${action} cursor-pointer font-semibold`}>
                   {m.subject_editions({}, o)}
                 </summary>
                 <section
@@ -442,7 +443,7 @@ function GameWindow({
                           <p>{m.game_reader_compare_unavailable({}, o)}</p>
                           <button
                             type="button"
-                            className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                            className={cn(buttonVariants({ variant: 'outline' }), action)}
                             disabled={busy}
                             onClick={request(window.retry)}
                           >
@@ -483,10 +484,14 @@ function GameWindow({
                                     {title.value}
                                   </p>
                                   <div className="flex min-w-0 flex-wrap gap-x-4 gap-y-2">
-                                    <Link href={subjectHref({ id: summary.id, label: title.value }, locale).href}>
+                                    <Link
+                                      className={linkClass}
+                                      href={subjectHref({ id: summary.id, label: title.value }, locale).href}
+                                    >
                                       {m.game_reader_open({}, o)}
                                     </Link>
                                     <Link
+                                      className={linkClass}
                                       href={subjectUrlForView(
                                         subjectHref({ id: summary.id, label: title.value }, locale),
                                         'release',
@@ -501,7 +506,7 @@ function GameWindow({
                               )}
                               <button
                                 type="button"
-                                className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                                className={cn(buttonVariants({ variant: 'outline' }), action)}
                                 onClick={(event) => {
                                   if (current())
                                     setSelected({
@@ -563,7 +568,7 @@ function GameWindow({
                       {page.next ? (
                         <button
                           type="button"
-                          className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                          className={cn(buttonVariants({ variant: 'outline' }), action)}
                           disabled={busy}
                           onClick={request(() => window.next(page.next!))}
                         >
@@ -577,14 +582,20 @@ function GameWindow({
             </>
           )}
           <details className="min-w-0 border-t border-border pt-3">
-            <summary className={`${action} cursor-pointer text-primary`}>{m.subject_sources({}, o)}</summary>
+            <summary className={`${action} cursor-pointer`}>{m.subject_sources({}, o)}</summary>
             <section className="space-y-2">
               <h3 className="font-semibold">{m.music_reader_source_evidence({}, o)}</h3>
               <p>{m.music_reader_source_editorial({}, o)}</p>
               <ul>
                 {profileSourceRecords(page.public.subject).map((source, index) => (
                   <li key={index}>
-                    {/^https?:\/\//.test(source.url) ? <Link href={source.url}>{source.name}</Link> : source.name}
+                    {/^https?:\/\//.test(source.url) ? (
+                      <Link className={linkClass} href={source.url}>
+                        {source.name}
+                      </Link>
+                    ) : (
+                      source.name
+                    )}
                     {source.attribution ? <p>{source.attribution}</p> : null}
                     {source.licence ? <p>{source.licence.id}</p> : null}
                   </li>
@@ -593,13 +604,23 @@ function GameWindow({
             </section>
           </details>
           <nav className="flex flex-wrap gap-x-4" aria-label={m.game_reader_fallback({}, o)}>
-            <Link href={subjectUrlForView(base, 'details')}>{m.game_reader_fallback({}, o)}</Link>
-            <Link href={subjectUrlForView(base, 'edit')}>{m.facts_title({}, o)}</Link>
-            {page.admitted ? <Link href={subjectUrlForView(base, 'game')}>{m.game_reader_correct({}, o)}</Link> : null}
-            <Link href={subjectUrlForView(base, 'relations')}>{m.subject_relations({}, o)}</Link>
+            <Link className={linkClass} href={subjectUrlForView(base, 'details')}>
+              {m.game_reader_fallback({}, o)}
+            </Link>
+            <Link className={linkClass} href={subjectUrlForView(base, 'edit')}>
+              {m.facts_title({}, o)}
+            </Link>
+            {page.admitted ? (
+              <Link className={linkClass} href={subjectUrlForView(base, 'game')}>
+                {m.game_reader_correct({}, o)}
+              </Link>
+            ) : null}
+            <Link className={linkClass} href={subjectUrlForView(base, 'relations')}>
+              {m.subject_relations({}, o)}
+            </Link>
           </nav>
           <details data-slot="game-reading-details" className="min-w-0 border-t border-border pt-3">
-            <summary className={`${action} cursor-pointer text-primary`}>
+            <summary className={`${action} cursor-pointer`}>
               {m.literary_reader_about_reading({}, o)}
             </summary>
             <p className="text-sm text-muted-foreground">{m.game_reader_scope({}, o)}</p>
@@ -618,7 +639,7 @@ function GameWindow({
               <nav className="flex flex-wrap gap-3" aria-label={m.subject_editions({}, o)}>
                 <button
                   type="button"
-                  className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                  className={cn(buttonVariants({ variant: 'outline' }), action)}
                   disabled={busy || !window.previous}
                   onClick={request(window.back)}
                 >
@@ -626,7 +647,7 @@ function GameWindow({
                 </button>
                 <button
                   type="button"
-                  className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                  className={cn(buttonVariants({ variant: 'outline' }), action)}
                   disabled={busy}
                   onClick={request(window.start)}
                 >
@@ -637,7 +658,7 @@ function GameWindow({
           </details>
           <button
             type="button"
-            className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+            className={cn(buttonVariants({ variant: 'outline' }), action)}
             disabled={busy}
             onClick={request(window.start)}
           >

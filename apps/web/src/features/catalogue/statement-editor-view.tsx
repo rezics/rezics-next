@@ -68,28 +68,27 @@ const julian = 'http://www.wikidata.org/entity/Q1985786';
 
 // Caller sizing keeps fields usable on phones and coarse pointers, with dense fine-pointer desktops.
 const actionClassName =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1';
-const inputClassName = 'min-w-0 min-h-11 md:pointer-fine:min-h-8';
+  'h-auto min-h-7 max-w-full whitespace-normal break-words text-center';
+const inputClassName = 'min-w-0';
 // Size shared Select triggers with their neighboring editable fields.
-const selectClassName = 'w-full min-w-0 max-w-full min-h-11 md:pointer-fine:min-h-8';
+const selectClassName = 'w-full min-w-0 max-w-full';
 const labelClassName = 'min-w-0 max-w-full flex-wrap whitespace-normal [overflow-wrap:anywhere]';
 const sectionClassName =
   'min-w-0 space-y-3 [overflow-wrap:anywhere] rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const headingClassName = 'min-w-0 text-lg font-semibold leading-snug [overflow-wrap:anywhere]';
 const linkClassName =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 rounded-sm [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8';
+  'inline-flex max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 // Scope the composed review/recovery controls here without changing the other review callers.
 const reviewControlsClassName = [
   'min-w-0 space-y-4 [overflow-wrap:anywhere]',
-  '[&_[data-slot=button]]:h-auto [&_[data-slot=button]]:min-h-11 [&_[data-slot=button]]:min-w-11',
-  '[&_[data-slot=button]]:max-w-full [&_[data-slot=button]]:whitespace-normal [&_[data-slot=button]]:py-2',
-  'md:pointer-fine:[&_[data-slot=button]]:min-h-8 md:pointer-fine:[&_[data-slot=button]]:py-1',
+  '[&_[data-slot=button]]:h-auto [&_[data-slot=button]]:min-h-7',
+  '[&_[data-slot=button]]:max-w-full [&_[data-slot=button]]:whitespace-normal',
   '[&_[data-slot=select-trigger]]:w-full [&_[data-slot=select-trigger]]:min-w-0',
-  '[&_[data-slot=select-trigger]]:min-h-11 md:pointer-fine:[&_[data-slot=select-trigger]]:min-h-8 [&_label]:min-w-0 [&_label]:flex-wrap',
+  '[&_label]:min-w-0 [&_label]:flex-wrap',
   '[&_label]:max-w-full [&_label]:whitespace-normal [&_label]:[overflow-wrap:anywhere]',
   '[&_[data-slot=button]]:[overflow-wrap:anywhere]',
-  '[&_[role=status]_a]:inline-flex [&_[role=status]_a]:min-h-11 [&_[role=status]_a]:min-w-11',
-  '[&_[role=status]_a]:max-w-full [&_[role=status]_a]:items-center md:pointer-fine:[&_[role=status]_a]:min-h-8',
+  '[&_[role=status]_a]:inline-flex',
+  '[&_[role=status]_a]:max-w-full [&_[role=status]_a]:items-center [&_[role=status]_a]:min-h-7',
 ].join(' ');
 
 export { ScalarControl };

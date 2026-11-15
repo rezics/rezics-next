@@ -10,8 +10,7 @@ Release and Quotations addresses exactly while retaining existing graph and Real
 An explicit companion return must belong to the same Subject and locale. For a non-default Context, only Release
 and Quotations destinations carrying that exact Context are admitted. Their accepted filters, position and encoded
 address remain intact. The destination rereads through its existing owner; the return is an ordinary server-rendered
-anchor and starts no Music Context request. Its localized label wraps, retains visible keyboard focus and has a
-44px minimum phone target.
+anchor and starts no Music Context request. Its localized label wraps and retains visible keyboard focus.
 
 Global graph returns retain their own graph anchor and admitted coordinates, including their own Context or Realm
 disclosure. Those coordinates confer no native Music Context authority: a graph return is admitted only for a Global

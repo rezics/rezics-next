@@ -8,6 +8,7 @@ import {
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { DocumentBody } from '../document-body';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Input } from '@rezics/ui/shadcn/input';
 import {
   useEffect,
@@ -146,7 +147,7 @@ export function EditionPublicationPanel({
         <p role="status">{m.edition_publication_sign_in()}</p>
         {session.state === 'signed-out' ? (
           <a
-            className="inline-flex min-h-11 items-center underline"
+            className="inline-flex items-center underline"
             href={`/auth/sign-in?return_to=${encodeURIComponent(`/${getLocale()}/editions/new${initialEditionId !== undefined ? `?${new URLSearchParams({ editionId: initialEditionId })}` : initialSource ? `?${new URLSearchParams(initialSource)}` : ''}`)}`}
           >
             {m.content_edition_sign_in()}
@@ -568,7 +569,7 @@ export function EditionPublication({
               {m.edition_publication_preview()}
             </h2>
             <a
-              className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+              className="inline-flex items-center text-sm underline underline-offset-4"
               href={exactRevisionHref(previewSource, locale)}
             >
               {m.edition_publication_open_revision()}
@@ -577,7 +578,7 @@ export function EditionPublication({
               {m.edition_publication_licence()}: {previewSource.licence}
             </p>
             <details className="text-xs">
-              <summary className="min-h-11 cursor-pointer py-3 text-muted-foreground">
+              <summary className="cursor-pointer text-muted-foreground">
                 {m.edition_identity_details()}
               </summary>
               <dl className="space-y-3">
@@ -633,7 +634,7 @@ export function EditionPublication({
                 ]}
                 onValueChange={(value) => controller.chooseSubject(value ?? '')}
               >
-                <SharedSelect.SelectTrigger id={subjectId} className="w-full min-h-11">
+                <SharedSelect.SelectTrigger id={subjectId} className="w-full">
                   <SharedSelect.SelectValue />
                 </SharedSelect.SelectTrigger>
                 <SharedSelect.SelectContent>
@@ -724,14 +725,13 @@ export function EditionPublication({
             </Button>
           )}
           <p className="text-sm">{m.edition_publication_edition_version({ revision: edition.editionRevision })}</p>
-          <label htmlFor={confirmId} className="flex min-h-11 items-start gap-3 text-sm">
-            <input
+          <label htmlFor={confirmId} className="flex items-start gap-3 text-sm">
+            <Checkbox
               id={confirmId}
-              type="checkbox"
-              className="mt-1 size-4 shrink-0"
+              className="mt-0.5"
               checked={confirmed}
               disabled={state.busy || !!failure || !recognized}
-              onChange={(event) => setConfirmed(event.target.checked)}
+              onCheckedChange={(checked) => setConfirmed(checked === true)}
             />
             <span>
               {recognized
@@ -763,16 +763,19 @@ export function EditionPublication({
           <p className="text-sm">{m.edition_publication_published_help()}</p>
           <EditionIdentitySummary edition={edition} />
           <EditionTechnicalDetails edition={edition} />
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <a
-              className={buttonVariants({ className: 'min-h-11' })}
+              className={buttonVariants()}
               href={localizeHref(`/creator/offers/new?editionId=${encodeURIComponent(edition.editionId)}`)}
               onClick={handoffToOffer}
             >
               {m.edition_publication_create_offer()}
             </a>
             <a
-              className="inline-flex min-h-11 items-center underline underline-offset-4"
+              className={buttonVariants({
+                variant: 'link',
+                className: 'h-auto min-h-7 max-w-full whitespace-normal',
+              })}
               href={`/${locale}/editions/${encodeURIComponent(edition.editionId)}`}
             >
               {m.edition_publication_open()}

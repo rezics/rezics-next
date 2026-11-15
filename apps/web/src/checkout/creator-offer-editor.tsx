@@ -178,7 +178,7 @@ export function CreatorPriceField({
         required
         aria-invalid={!!issue}
         aria-describedby={`${id}-help ${id}-preview`}
-        className="min-h-11 tabular-nums"
+        className="tabular-nums"
       />
       <p id={`${id}-help`} className="text-sm leading-relaxed text-muted-foreground">
         {m.creator_price_convention()}
@@ -244,7 +244,7 @@ export function CreatorPriceFields({
           disabled={disabled}
           onValueChange={(value) => onChange({ currency: value!, text: '' })}
         >
-          <SelectTrigger id={id} aria-describedby={`${id}-help`} className="w-full min-h-11">
+          <SelectTrigger id={id} aria-describedby={`${id}-help`} className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -514,7 +514,7 @@ function CreatorOfferForm({
         <PageHeading>{m.creator_new_offer()}</PageHeading>
         <a
           href={`/${locale}/creator/offers`}
-          className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+          className="inline-flex items-center text-primary underline underline-offset-4"
         >
           {m.creator_offers_heading()}
         </a>
@@ -531,7 +531,7 @@ function CreatorOfferForm({
           <p>{editor.kind === 'choose-edition' ? m.creator_choose_edition() : creatorNotice(editor.kind)}</p>
           <a
             href={`/${locale}/editions/new`}
-            className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+            className="inline-flex items-center text-primary underline underline-offset-4"
           >
             {m.creator_publish_edition()}
           </a>
@@ -585,7 +585,7 @@ function CreatorOfferForm({
                     setTitle(event.target.value);
                   }
                 }}
-                className="min-h-11"
+               
               />
             </Field>
             <CreatorPriceFields
@@ -620,7 +620,7 @@ function CreatorOfferForm({
                     setTaxCode(event.target.value);
                   }
                 }}
-                className="min-h-11"
+               
               />
               <p className="text-sm text-muted-foreground">{m.creator_tax_code_hint()}</p>
             </Field>
@@ -630,7 +630,7 @@ function CreatorOfferForm({
                 <Button
                   type="button"
                   variant="outline"
-                  className="min-h-11"
+                 
                   disabled={checking}
                   onClick={() => void reviewCurrent()}
                 >
@@ -640,14 +640,14 @@ function CreatorOfferForm({
               {result?.kind === 'saved' ? (
                 <a
                   href={`/${locale}/offers/${result.id}`}
-                  className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+                  className="inline-flex items-center text-primary underline underline-offset-4"
                 >
                   {m.creator_view_offer()}
                 </a>
               ) : (
                 <Button
                   type="submit"
-                  className="min-h-11"
+                 
                   disabled={
                     busy ||
                     checking ||

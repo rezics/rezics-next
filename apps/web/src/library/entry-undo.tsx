@@ -1,6 +1,6 @@
 import { useContext, useState, type FormEventHandler, type ReactNode } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
 import { Exposure } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
@@ -9,10 +9,7 @@ import { LibraryTitle } from './title';
 
 export type EntryFormContext = { locale: string; csrfToken?: string | null; returnTo?: string };
 
-const entryActionClassName = cn(
-  buttonVariants({ variant: 'outline', size: 'sm' }),
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring',
-);
+const entryActionClassName = 'h-auto min-h-6 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 // Document responses have already checked this operation against the native exposure response.
 function EntryOperation({
@@ -71,9 +68,9 @@ export function EntryUndoForm({
         <p role="status" className="min-w-0 max-w-full">
           {m.library_removed()}
         </p>
-        <button className={entryActionClassName} type="submit" disabled={disabled}>
+        <Button className={entryActionClassName} variant="outline" size="sm" type="submit" disabled={disabled}>
           {retry ? m.library_entry_restore_retry_action() : m.editor_undo()}
-        </button>
+        </Button>
       </form>
     </EntryOperation>
   );
@@ -109,9 +106,9 @@ export function EntryRemoveForm({
         {typeof incarnationId === 'string' ? <input type="hidden" name="incarnationId" value={incarnationId} /> : null}
         <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
         {credential ? <input type="hidden" name="credential" value={credential} /> : null}
-        <button className={entryActionClassName} type="submit" disabled={disabled}>
+        <Button className={entryActionClassName} variant="outline" size="sm" type="submit" disabled={disabled}>
           {m.library_remove_from_library()}
-        </button>
+        </Button>
       </form>
     </EntryOperation>
   );
@@ -196,7 +193,10 @@ export function EntryFormPage({
       {conflict ? <p role="status">{m.library_conflict()}</p> : null}
       {restore ? <EntryRestoreFeedback restore={restore} locale={locale} /> : null}
       <a
-        className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 text-primary underline whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+        className={cn(
+          buttonVariants({ variant: 'link', size: 'sm' }),
+          'h-auto min-h-6 max-w-full whitespace-normal px-0 [overflow-wrap:anywhere]',
+        )}
         href={returnTo}
       >
         {m.library_menu_back()}

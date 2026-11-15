@@ -449,7 +449,7 @@ export function WorkbenchPage({
           <section className="space-y-3">
             <p role="status">{m.moderation_directory_retired()}</p>
             <Button
-              className="min-h-11 whitespace-normal"
+              className="whitespace-normal"
               onClick={() => {
                 if (!navigation || navigation.isCurrent()) onRetry();
               }}

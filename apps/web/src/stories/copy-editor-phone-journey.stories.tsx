@@ -7,6 +7,7 @@ import recording from '../kernel/recorded/library-copies.json';
 import { setCopyKindsStory } from '../kernel/fake/copies-kinds';
 import { m } from '../paraglide/messages.js';
 import { PatternStory, pagePaths } from './page';
+import { Button } from '@rezics/ui/shadcn/button';
 
 // Constructed editor fixtures use the real form and fake command transport, not native acceptance evidence.
 const meta = {
@@ -50,8 +51,7 @@ const fixture: CopyItem = {
   subject: null,
   idempotencyKey: '0192f3a0-6c1e-7b2a-9d4e-000000000001',
 };
-const action =
-  'min-h-11 min-w-11 max-w-full rounded-lg border px-4 py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-ring';
+const action = 'h-auto min-h-6 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 function Editor({ inline }: { inline: boolean }) {
   const [copy, setCopy] = useState<CopyItem | null>(() => {
     setCopyKindsStory();
@@ -63,13 +63,13 @@ function Editor({ inline }: { inline: boolean }) {
   return (
     <div className="min-w-0 space-y-4 p-4">
       <div className="flex flex-wrap gap-3">
-        <button className={action} onClick={() => setMode('add')}>
+        <Button type="button" variant="outline" size="sm" className={action} onClick={() => setMode('add')}>
           {m.library_copy_add()}
-        </button>
+        </Button>
         {copy ? (
-          <button className={action} onClick={() => setMode('edit')}>
+          <Button type="button" variant="outline" size="sm" className={action} onClick={() => setMode('edit')}>
             {m.library_copy_edit()}
-          </button>
+          </Button>
         ) : null}
       </div>
       <p role="status">{outcome}</p>

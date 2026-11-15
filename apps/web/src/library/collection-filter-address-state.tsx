@@ -1,3 +1,4 @@
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import type { CollectionFilterParams } from './collection-filter-params';
 import { collectionFilterAddress } from './collection-filter-params';
 import { getLocale } from '../paraglide/runtime.js';
@@ -45,8 +46,9 @@ export function CollectionFilterAddressState({
               </li>
             ))}
           </ul>
-          <div className="flex flex-wrap gap-3 py-2">
+          <div className="flex flex-wrap items-center gap-2">
             <a
+              className={buttonVariants({ variant: 'link', size: 'sm' })}
               href={collectionFilterAddress(
                 getLocale(),
                 id,
@@ -59,7 +61,7 @@ export function CollectionFilterAddressState({
             >
               {m.collection_filter_address_correct()}
             </a>
-            <a href={collectionFilterAddress(getLocale(), id, {}, {}, {}, type, context)}>
+            <a className={buttonVariants({ variant: 'link', size: 'sm' })} href={collectionFilterAddress(getLocale(), id, {}, {}, {}, type, context)}>
               {m.collection_filter_clear()}
             </a>
           </div>
@@ -67,7 +69,7 @@ export function CollectionFilterAddressState({
       ) : null}
       <details>
         <summary>{m.collection_filter_address_inspect()}</summary>
-        <a href={original}>{m.collection_filter_address_original()}</a>
+        <a className={buttonVariants({ variant: 'link', size: 'sm' })} href={original}>{m.collection_filter_address_original()}</a>
         <pre className="whitespace-pre-wrap break-all">{search}</pre>
         <p>{m.collection_filter_address_accepted()}</p>
         <ul>

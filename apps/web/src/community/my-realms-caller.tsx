@@ -81,7 +81,7 @@ export function MyRealmsCallerHost({
   if (!hydrated && caller.acceptsHydrationSeed(initial.visit, initial.page))
     return (
       <div className="space-y-6">
-        <Link to="/realms/new" className="inline-flex min-h-10 items-center text-primary underline underline-offset-4">
+        <Link to="/realms/new" className="inline-flex items-center text-primary underline underline-offset-4">
           {m.space_setup_heading()}
         </Link>
         <MyRealmsCurrentControllerHost page={initial.page} owner={currentOwner}>
@@ -141,7 +141,7 @@ function MyRealmsAdmittedPage({
 
   return (
     <div className="space-y-6">
-      <Link to="/realms/new" className="inline-flex min-h-10 items-center text-primary underline underline-offset-4">
+      <Link to="/realms/new" className="inline-flex items-center text-primary underline underline-offset-4">
         {m.space_setup_heading()}
       </Link>
       <MyRealmsCurrentControllerHost page={page} owner={owner}>

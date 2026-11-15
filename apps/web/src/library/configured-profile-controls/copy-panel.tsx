@@ -5,13 +5,11 @@ import { CopyForm, type CopiesOrigin } from '../copies-page';
 import { readCopyDetail, readCopySubject } from '../copies-actions';
 import type { CopyItem, CopyRemoved } from '../copies-read';
 import type { CopyProfile } from '../copies-profiles';
+import { Button } from '@rezics/ui/shadcn/button';
 import { csrfHeaders } from '../../threads/composer';
 
-const target =
-  'min-h-11 min-w-11 max-w-full cursor-pointer whitespace-normal py-2 text-center [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const quiet = `${target} inline-flex shrink-0 items-center justify-center rounded-lg border border-border px-4 hover:bg-muted disabled:opacity-60`;
-const linkClass =
-  'inline-flex min-h-11 min-w-0 max-w-full flex-wrap items-center text-sm text-primary underline-offset-4 [overflow-wrap:anywhere] hover:underline';
+const controlWrap = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const compactWrap = 'h-auto min-h-6 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 export type ConfiguredCopyOrigin = CopiesOrigin;
 
@@ -105,33 +103,42 @@ export function ConfiguredCopyPanel({
                 {copy.statusLabel ?? copy.status}
               </span>
               <Exposure operation="copy.get">
-                <button
+                <Button
                   type="button"
-                  className={quiet}
+                  variant="outline"
+                  size="sm"
+                  className={compactWrap}
                   onClick={() => originating.isCurrent('copy.get') && setEditing(copy)}
                 >
                   {m.library_configured_open_copy()}
-                </button>
+                </Button>
               </Exposure>
             </li>
           ))}
         </ul>
       )}
       {next && onPage ? (
-        <button type="button" className={linkClass} onClick={() => originating.isCurrent('copy.list') && onPage(next)}>
+        <Button
+          type="button"
+          variant="link"
+          size="sm"
+          className={compactWrap}
+          onClick={() => originating.isCurrent('copy.list') && onPage(next)}
+        >
           {m.library_configured_next_copies()}
-        </button>
+        </Button>
       ) : null}
       {writable ? (
         editing === undefined ? (
           <Exposure operation="copy.create">
-            <button
+            <Button
               type="button"
-              className={quiet}
+              variant="outline"
+              className={controlWrap}
               onClick={() => originating.isCurrent('copy.create') && setEditing(null)}
             >
               {m.library_configured_add_copy()}
-            </button>
+            </Button>
           </Exposure>
         ) : (
           <CopyForm

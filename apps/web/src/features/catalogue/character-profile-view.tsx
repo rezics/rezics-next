@@ -76,9 +76,9 @@ function CharacterProfileLive({
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const createActionClass =
-    'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8';
+    'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
   const identityActionsClass =
-    'flex min-w-0 max-w-full flex-wrap items-start gap-2 [&>a]:h-auto [&>a]:min-h-11 [&>a]:min-w-11 [&>a]:max-w-full [&>a]:whitespace-normal [&>a]:py-2 [&>a]:[overflow-wrap:anywhere] md:pointer-fine:[&>a]:min-h-8 md:pointer-fine:[&>a]:py-1';
+    'flex min-w-0 max-w-full flex-wrap items-start gap-2 [&>a]:h-auto [&>a]:min-h-7 [&>a]:max-w-full [&>a]:whitespace-normal [&>a]:[overflow-wrap:anywhere]';
   const [id, setId] = useState(initialId);
   const [work, setWork] = useState(initialWork);
   const [created, setCreated] = useState<Extract<CreateResult, { ok: true }>>();
@@ -334,7 +334,7 @@ function CharacterProfileLive({
               >
                 <p role="status">{m.character_created({}, o)}</p>
                 <details className="min-w-0 text-sm">
-                  <summary className="min-h-11 cursor-pointer py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
+                  <summary className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
                     {m.catalogue_creation_technical_details({}, o)}
                   </summary>
                   <dl className="min-w-0">

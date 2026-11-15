@@ -51,7 +51,7 @@ export function AniListReviewPage({
             {snap.question ? (
               <>
                 <p className="font-medium">{snap.question.label}</p>
-                <p className="[overflow-wrap:anywhere]">
+                <p className="h-auto [overflow-wrap:anywhere]">
                   {snap.question.meaning ?? m.library_anilist_question_meaning_unavailable()}
                 </p>
                 <p className="text-sm text-muted-foreground">

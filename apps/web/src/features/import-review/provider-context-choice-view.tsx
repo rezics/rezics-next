@@ -131,10 +131,10 @@ export function ProviderContextChoiceField({
             }}
           />
         </Field>
-        <Button type="button" variant="outline" className="min-h-11" onClick={() => void search()}>
+        <Button type="button" variant="outline" onClick={() => void search()}>
           {m.provider_scope_find({}, o)}
         </Button>
-        <Button type="button" variant="outline" className="min-h-11" onClick={() => void choose(globalReviewContext)}>
+        <Button type="button" variant="outline" onClick={() => void choose(globalReviewContext)}>
           {m.prq_global({}, o)}
         </Button>
       </div>
@@ -159,7 +159,6 @@ export function ProviderContextChoiceField({
                     <Button
                       type="button"
                       variant="outline"
-                      className="min-h-11"
                       onClick={() => {
                         if (
                           visit.live() &&
@@ -180,7 +179,6 @@ export function ProviderContextChoiceField({
             <Button
               type="button"
               variant="outline"
-              className="min-h-11"
               onClick={() => {
                 if (visit.live() && generation === sequence.current && phase === 'ready') void search(page.next!);
               }}

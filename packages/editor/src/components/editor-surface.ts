@@ -284,7 +284,7 @@ export function EditorSurface({
   return createElement(
     'div',
     {
-      className: cn('min-w-0 rounded-2xl border border-border/60 bg-background', disabled && 'opacity-64', className),
+      className: cn('min-w-0 rounded-lg border border-border bg-background', disabled && 'opacity-50', className),
       'data-slot': 'rich-text-editor',
       onKeyDown,
       onKeyDownCapture,

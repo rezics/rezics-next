@@ -67,7 +67,7 @@ export function ProfileAvatarCrop({
           </div>
           <Slider
             aria-labelledby={horizontalId}
-            className="w-full [&>div]:min-h-11 **:data-[slot=slider-thumb]:size-5"
+            className="w-full"
             disabled={controlsDisabled}
             min={0}
             max={100}
@@ -85,7 +85,7 @@ export function ProfileAvatarCrop({
           </div>
           <Slider
             aria-labelledby={verticalId}
-            className="w-full [&>div]:min-h-11 **:data-[slot=slider-thumb]:size-5"
+            className="w-full"
             disabled={controlsDisabled}
             min={0}
             max={100}
@@ -103,7 +103,7 @@ export function ProfileAvatarCrop({
           </div>
           <Slider
             aria-labelledby={zoomId}
-            className="w-full [&>div]:min-h-11 **:data-[slot=slider-thumb]:size-5"
+            className="w-full"
             disabled={controlsDisabled || zoomLimit <= 100}
             min={100}
             max={zoomLimit}
@@ -116,7 +116,7 @@ export function ProfileAvatarCrop({
       <div className="flex min-w-0 flex-wrap gap-3">
         <Button
           type="button"
-          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+          className="h-auto max-w-full whitespace-normal break-words min-h-7"
           disabled={controlsDisabled}
           onClick={(event) => {
             onPendingAction(event.currentTarget);
@@ -128,7 +128,7 @@ export function ProfileAvatarCrop({
         <Button
           type="button"
           variant="outline"
-          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+          className="h-auto max-w-full whitespace-normal break-words min-h-7"
           disabled={controlsDisabled}
           onClick={(event) => {
             onPendingAction(event.currentTarget);

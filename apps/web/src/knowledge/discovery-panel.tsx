@@ -17,9 +17,9 @@ import {
 const ignoreSubscribe = () => () => {};
 const idleSnapshot: KnowledgeDiscoverySnapshot = { state: 'preparing', cursor: null, busy: true };
 const controlClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words px-4 py-2 text-start leading-snug [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'h-auto min-h-7 max-w-full whitespace-normal break-words text-start leading-snug [overflow-wrap:anywhere]';
 const linkClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'inline-flex max-w-full items-center rounded-sm text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 function localeOptions(locale: string) {
   return { locale: locale as never };

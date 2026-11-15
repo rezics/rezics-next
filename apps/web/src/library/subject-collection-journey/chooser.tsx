@@ -1,27 +1,11 @@
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { buttonVariants, Button } from '@rezics/ui/shadcn/button';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { SubjectRef, type SubjectReference } from '../subject-ref';
 import { ReceivedCollectionDetails } from '../subject-collection-choice-reading/details';
-import {
-  collectionReadFailure,
-  emptyCollectionPage,
-  firstCollectionVisit,
-  isCuratedWriteDestination,
-  nextCollectionVisit,
-  previousCollectionVisit,
-  replaceCollectionPage,
-  type BoundCollectionPage,
-  type CapturedChooserTarget,
-  type ChooserCollectionRow,
-  type SubjectCollectionVisit,
-} from './model';
+import { collectionReadFailure, emptyCollectionPage, firstCollectionVisit, isCuratedWriteDestination, nextCollectionVisit, previousCollectionVisit, replaceCollectionPage, type BoundCollectionPage, type CapturedChooserTarget, type ChooserCollectionRow, type SubjectCollectionVisit } from './model';
 
-const buttonClass = buttonVariants({ variant: 'outline' });
-const controlClass =
-  'h-auto min-h-[44px] min-w-0 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const linkClass = 'text-sm text-primary underline-offset-4 hover:underline';
-const rowClass = `${linkClass} inline-flex min-h-[44px] w-full min-w-0 items-center justify-between gap-2 rounded-md px-2 py-2 text-start whitespace-normal hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`;
+const rowClass = 'h-auto min-h-7 w-full min-w-0 justify-between gap-2 text-start whitespace-normal';
 
 export type ChooserCollectionsRead = {
   collections: ChooserCollectionRow[] | null;
@@ -369,9 +353,9 @@ export function CollectionChooserPanel({
           }}
         >
           <input type="hidden" name="slot" value="collections" />
-          <button className={`${buttonClass} ${controlClass}`} type="submit">
+          <Button variant="outline" type="submit">
             {m.library_subject_load_collections()}
-          </button>
+          </Button>
         </form>
       ) : null}
       {loaded || page.generation > 0 || busy ? (
@@ -385,14 +369,14 @@ export function CollectionChooserPanel({
                     ? m.library_subject_closed()
                     : m.library_subject_unavailable()}
               </p>
-              <button
+              <Button
                 type="button"
-                className={`${buttonClass} ${controlClass}`}
+                variant="outline"
                 disabled={busy || !hydrated}
                 onClick={(event) => void load(firstCollectionVisit(), event.currentTarget)}
               >
                 {m.library_subject_continuation_restart()}
-              </button>
+              </Button>
             </div>
           ) : null}
           {!issue && !busy && destinations.length === 0 ? (
@@ -408,19 +392,19 @@ export function CollectionChooserPanel({
             <ul className="space-y-2" data-collection-rows>
               {destinations.map((collection) => (
                 <li key={collection.id}>
-                  <button
-                    className={rowClass}
+                  <Button
+                    variant="outline" className={rowClass}
                     type="button"
                     aria-pressed={selectedStill?.id === collection.id}
                     disabled={!hydrated || !csrfToken || !admitted}
                     onClick={() => choose(collection, page, episode)}
                   >
-                    <span className="min-w-0 [overflow-wrap:anywhere]">{collection.title}</span>
+                    <span className="h-auto min-w-0 [overflow-wrap:anywhere]">{collection.title}</span>
                     <span className="shrink-0 text-muted-foreground">{collection.memberCount}</span>
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
-                    className={`${linkClass} ${controlClass} rounded-md px-2`}
+                    variant="outline"
                     data-collection-inspect
                     aria-label={m.library_destination_inspect_named({ title: collection.title })}
                     aria-expanded={inspected?.row === collection}
@@ -428,7 +412,7 @@ export function CollectionChooserPanel({
                     onClick={(event) => inspect(collection, event.currentTarget)}
                   >
                     {m.library_destination_inspect()}
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -448,9 +432,9 @@ export function CollectionChooserPanel({
           {!issue ? (
             <div className="mt-3 flex min-w-0 flex-wrap gap-2">
               {previousCollectionVisit(page.visit) ? (
-                <button
+                <Button
                   type="button"
-                  className={`${buttonClass} ${controlClass}`}
+                  variant="outline"
                   disabled={busy || !hydrated}
                   onClick={(event) => {
                     const previous = previousCollectionVisit(page.visit);
@@ -458,27 +442,27 @@ export function CollectionChooserPanel({
                   }}
                 >
                   {m.library_subject_continuation_previous()}
-                </button>
+                </Button>
               ) : null}
               {page.visit.page > 1 ? (
-                <button
+                <Button
                   type="button"
-                  className={`${buttonClass} ${controlClass}`}
+                  variant="outline"
                   disabled={busy || !hydrated}
                   onClick={(event) => void load(firstCollectionVisit(), event.currentTarget)}
                 >
                   {m.library_subject_continuation_restart()}
-                </button>
+                </Button>
               ) : null}
               {page.next && !issue ? (
-                <button
+                <Button
                   type="button"
-                  className={`${buttonClass} ${controlClass}`}
+                  variant="outline"
                   disabled={busy || !hydrated}
                   onClick={(event) => void load(nextCollectionVisit(page.visit, page.next), event.currentTarget)}
                 >
                   {m.library_subject_continuation_next()}
-                </button>
+                </Button>
               ) : null}
             </div>
           ) : null}
@@ -486,33 +470,33 @@ export function CollectionChooserPanel({
       ) : null}
       {selectedStill ? (
         <div data-add-collection-review className="mt-4 space-y-2 border-t border-border pt-3">
-          <p role="status" className="text-sm [overflow-wrap:anywhere]">
+          <p role="status" className="h-auto text-sm [overflow-wrap:anywhere]">
             {m.library_subject_chooser_selected({ title: selectedStill.title })}
           </p>
-          <p className="text-sm [overflow-wrap:anywhere]">
+          <p className="h-auto text-sm [overflow-wrap:anywhere]">
             {m.library_subject_add_review({ title: selectedStill.title })}
           </p>
-          <button
+          <Button
             type="button"
-            className={`${buttonClass} ${controlClass}`}
+            variant="outline"
             disabled={!hydrated || !csrfToken || !admitted || pending}
             onClick={() => onConfirm(selectedStill.id)}
           >
             {m.library_subject_add_confirm()}
-          </button>
+          </Button>
         </div>
       ) : null}
       {addedId ? (
         <nav className="mt-3 flex flex-col gap-2" aria-label={m.library_subject_heading()}>
           <a
-            className={`${linkClass} min-h-[44px] [overflow-wrap:anywhere]`}
+           className={buttonVariants({ variant: 'link', className: 'h-auto min-h-7 [overflow-wrap:anywhere]' })}
             href={`/${encodeURIComponent(locale)}/collections/${encodeURIComponent(addedId)}`}
           >
             {m.library_subject_collection_open({
               title: selectedStill?.id === addedId ? selectedStill.title : addedId,
             })}
           </a>
-          <a className={`${linkClass} min-h-[44px]`} href={readerHref}>
+          <a className={buttonVariants({ variant: 'link' })} href={readerHref}>
             {m.library_subject_return_reader()}
           </a>
         </nav>

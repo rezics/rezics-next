@@ -5,8 +5,7 @@ import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
 import type { SearchWindowNavigation } from './search-window';
 
-const windowActionClass =
-  'h-auto min-h-11 min-w-0 max-w-full whitespace-normal text-start wrap-anywhere';
+const windowActionClass = 'h-auto min-h-7 min-w-0 max-w-full whitespace-normal text-start wrap-anywhere';
 
 /** Group addresses are distinct from each work's independent child-release window. */
 export function ReleaseWindowControls({

@@ -18,7 +18,7 @@ import { WatchController, type WatchReturnReceipt } from './watch-controller';
 import { readWatchInventory, removeWatchSubscription } from './actions';
 import type { WatchManagementIO } from './watch-native';
 
-const controlClass = 'h-auto min-h-11 max-w-full whitespace-normal break-words px-4 py-2 text-start leading-5';
+const controlClass = 'h-auto max-w-full whitespace-normal break-words text-start min-h-7';
 
 type BoardPlace = Readonly<{ realmId: string; title: string }> | null;
 
@@ -491,7 +491,7 @@ function OwnedWatches({
                                     );
                                     if (receipt && !onVisitTarget(receipt, target.href)) event.preventDefault();
                                   }}
-                                  className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
+                                  className="inline-flex max-w-full items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
                                 >
                                   <span id={titleId}>{target.title}</span>
                                 </Link>
@@ -499,7 +499,7 @@ function OwnedWatches({
                                 <a
                                   href={target.href}
                                   aria-labelledby={placeLabel === null ? undefined : `${titleId} ${placeId}`}
-                                  className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
+                                  className="inline-flex max-w-full items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
                                 >
                                   <span id={titleId}>{target.title}</span>
                                 </a>

@@ -19,7 +19,7 @@ export function SecurityTargetReturnView({
         ? m.auth_security_target_return_refused()
         : m.auth_security_target_return_unknown();
   return (
-    <section className="auth-login-form rounded-lg border p-4 sm:p-6" aria-labelledby="security-return-heading">
+    <section className="auth-login-form rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10" aria-labelledby="security-return-heading">
       <h2 id="security-return-heading">{m.auth_security_target_return_heading()}</h2>
       <div ref={statusRef} tabIndex={-1} role="status">
         {message}

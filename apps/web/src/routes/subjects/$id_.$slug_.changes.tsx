@@ -18,7 +18,7 @@ function ChangesRoute() {
   return (
     <>
       {via && (
-        <a className="inline-flex min-h-11 underline" href={via}>
+        <a className="underline underline-offset-4" href={via}>
           {m.release_fidelity_origin()}
         </a>
       )}

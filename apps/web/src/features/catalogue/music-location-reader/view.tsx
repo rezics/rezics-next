@@ -1,4 +1,5 @@
 import { useId, useRef } from 'react';
+import { cn } from '@rezics/ui/utils';
 import { ContentItemFrame } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import type { SubjectRead } from '@rezics/client';
@@ -7,15 +8,15 @@ import { subjectHref } from '../../../subject/subject-href';
 import { ReadingValue } from './reading/value';
 import { contextHref } from '../../pages/context-navigation';
 import { useSubjectCommunityReading } from '../../pages/subject-community-lifetime';
-import { linkClass, linkColor } from '../../pages/shared';
+
 import type { MusicLocationRead, MusicLocationTransport } from './model';
 import { musicLocationSnapshot } from './model';
 import { useMusicLocationReading } from './reading/use-reading';
 import { useEndpointReturn } from './reading/focus';
 
 const action =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal [overflow-wrap:anywhere] rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const link = `${action} ${linkClass} ${linkColor} underline`;
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
+const link = cn(buttonVariants({ variant: 'link' }), action, 'underline');
 type Ready = Extract<MusicLocationRead, { ok: true }>;
 
 export type MusicLocationReaderProps = {
@@ -133,7 +134,7 @@ export function MusicLocationWindow({
                 type="button"
                 aria-pressed={stream.key === selected}
                 disabled={disabled || (stream.key === selected && !failure)}
-                className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                className={cn(buttonVariants({ variant: 'outline' }), action)}
                 onClick={() => void reading.select(stream.key)}
               >
                 <span lang={stream.label.lang ?? undefined}>{stream.label.text}</span>
@@ -292,7 +293,7 @@ export function MusicLocationWindow({
           <nav className="flex min-w-0 flex-wrap gap-2" aria-label={m.music_location_navigation({}, options)}>
             <button
               type="button"
-              className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+              className={cn(buttonVariants({ variant: 'outline' }), action)}
               disabled={disabled || !reading.previous || !!failure || selected !== page.stream.key}
               onClick={() => void reading.back()}
             >
@@ -300,7 +301,7 @@ export function MusicLocationWindow({
             </button>
             <button
               type="button"
-              className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+              className={cn(buttonVariants({ variant: 'outline' }), action)}
               disabled={disabled || !selected}
               onClick={() => void reading.start()}
             >
@@ -309,7 +310,7 @@ export function MusicLocationWindow({
             {page.next && selected === page.stream.key ? (
               <button
                 type="button"
-                className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                className={cn(buttonVariants({ variant: 'outline' }), action)}
                 disabled={disabled || !!failure}
                 onClick={() => void reading.more()}
               >
@@ -343,7 +344,7 @@ export function MusicLocationWindow({
               {failure.reason === 'unavailable' ? (
                 <button
                   type="button"
-                  className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                  className={cn(buttonVariants({ variant: 'outline' }), action)}
                   disabled={disabled}
                   onClick={() => void reading.retry()}
                 >
@@ -353,7 +354,7 @@ export function MusicLocationWindow({
               {failure.reason === 'stale' && refresh ? (
                 <button
                   type="button"
-                  className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                  className={cn(buttonVariants({ variant: 'outline' }), action)}
                   disabled={disabled}
                   onClick={() => void reading.refresh()}
                 >
@@ -363,7 +364,7 @@ export function MusicLocationWindow({
               {failure.reason === 'invalid' ? (
                 <button
                   type="button"
-                  className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                  className={cn(buttonVariants({ variant: 'outline' }), action)}
                   disabled={disabled}
                   onClick={() => void reading.choices()}
                 >

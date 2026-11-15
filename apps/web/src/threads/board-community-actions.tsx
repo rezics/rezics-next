@@ -56,9 +56,9 @@ export function BoardStartThread({
       to="/boards/$id/new"
       params={{ id: board.id }}
       search={preparedReturnTo ? { returnTo: preparedReturnTo } : {}}
-      className={buttonVariants({ size: 'lg' })}
+      className={buttonVariants({ className: 'h-auto min-h-7 max-w-full whitespace-normal' })}
     >
-      <MessageSquarePlusIcon aria-hidden="true" className="size-4" />
+      <MessageSquarePlusIcon aria-hidden="true" />
       {m.board_start_thread()}
     </Link>
   );

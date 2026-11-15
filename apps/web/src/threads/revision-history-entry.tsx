@@ -66,7 +66,7 @@ export function RevisionEntry({
             href={exactRevisionHref({ postId: revision.id, revisionId: revision.revisionId }, locale)}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex min-h-11 max-w-full items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="inline-flex max-w-full items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             {m.thread_history_version({ number: String(number) })}
           </a>
@@ -132,7 +132,7 @@ function RevisionInspector({
 }
 
 const historyAction =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 text-start text-sm whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'inline-flex max-w-full items-center rounded-sm text-start text-sm whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 /** A compact row keeps its immutable address even while its full inspector is unmounted. */
 export function RevisionSummaryRow({
@@ -243,7 +243,7 @@ export function RevisionSummaryRow({
             aria-describedby={availabilityId}
             data-history-inspect={summary.index}
             onClick={expanded ? onCollapse : onInspect}
-            className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere]"
+            className="h-auto min-h-7 max-w-full text-start whitespace-normal [overflow-wrap:anywhere]"
           >
             {expanded
               ? m.revision_history_collapse({ number: ordinal })
@@ -301,7 +301,7 @@ export function RevisionSummaryRow({
                 type="button"
                 variant="ghost"
                 onClick={onCollapse}
-                className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere]"
+                className="h-auto min-h-7 max-w-full text-start whitespace-normal [overflow-wrap:anywhere]"
               >
                 {m.revision_history_close_inspector()}
               </Button>
@@ -359,7 +359,7 @@ export function RevisionSummaryRow({
                   type="button"
                   variant="ghost"
                   onClick={onNavigate}
-                  className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere]"
+                  className="h-auto min-h-7 max-w-full text-start whitespace-normal [overflow-wrap:anywhere]"
                 >
                   {m.revision_history_back_to_navigator()}
                 </Button>

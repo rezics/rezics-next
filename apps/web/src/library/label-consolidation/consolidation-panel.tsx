@@ -184,7 +184,7 @@ export function ConsolidationPanel({
                       {cataloguePage.labels
                         .filter((label) => label.id !== source.id)
                         .map((label) => (
-                          <label key={label.id} className="flex min-h-11 min-w-0 items-center gap-3 rounded px-2 py-1 hover:bg-muted/50">
+                          <label key={label.id} className="flex min-w-0 items-center gap-3 rounded px-2 py-1 hover:bg-muted/50">
                             <input
                               type="radio"
                               name="consolidation-target"
@@ -195,7 +195,7 @@ export function ConsolidationPanel({
                               }}
                             />
                             <span className="min-w-0">
-                              <span className="block break-words">{label.name}</span>
+                              <span className="h-auto block break-words">{label.name}</span>
                               <code className="block break-all text-xs text-muted-foreground">{label.id}</code>
                             </span>
                           </label>
@@ -260,7 +260,7 @@ export function ConsolidationPanel({
               {!confirmation ? (
                 <>
                   <details className="rounded-md border px-3">
-                    <summary className="min-h-11 cursor-pointer py-3">
+                    <summary className="cursor-pointer py-3">
                       {m.library_selection_heading()} · {m.library_selection_count({ count: picked.length })}
                     </summary>
                     <SelectedAssignments picked={picked} compact />
@@ -378,7 +378,7 @@ function SelectedAssignments({ picked, compact = false }: { picked: readonly Con
       <ol className="space-y-2">
         {picked.map((item) => (
           <li key={item.selected.assignmentId} className="min-w-0 rounded-md border px-3 py-2">
-            <span className="block break-words font-medium">{item.title}</span>
+            <span className="h-auto block break-words font-medium">{item.title}</span>
             <code className="mt-1 block break-all text-xs text-muted-foreground">
               {item.selected.subjectId} · {item.selected.assignmentId} · {item.selected.revision}
             </code>
@@ -411,7 +411,7 @@ function ReviewAssignments({
         {items.map((item) => (
           <li key={item.selected.assignmentId} className="min-w-0 rounded-md border p-3 sm:p-4">
             <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
-              <span className="break-words font-medium">{titleFor(item.selected.subjectId)}</span>
+              <span className="h-auto break-words font-medium">{titleFor(item.selected.subjectId)}</span>
               <span className="text-sm">{stateLabel(item.outcome)}</span>
             </div>
             <details className="mt-2 text-sm">
@@ -542,7 +542,7 @@ function ResultAssignment({
   return (
     <li data-consolidation-result={item.status} className="min-w-0 rounded-md border p-3 sm:p-4">
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
-        <span className="break-words font-medium">{title}</span>
+        <span className="h-auto break-words font-medium">{title}</span>
         <span className="text-sm">{stateLabel(item.status)}</span>
       </div>
       {item.targetAssignment ? (
@@ -600,7 +600,7 @@ function ResultAssignment({
 function EvidenceValue({ label, children }: { label: string; children: string }) {
   return (
     <div className="min-w-0">
-      <dt className="break-words text-xs text-muted-foreground">{label}</dt>
+      <dt className="h-auto break-words text-xs text-muted-foreground">{label}</dt>
       <dd className="break-all"><code>{children}</code></dd>
     </div>
   );

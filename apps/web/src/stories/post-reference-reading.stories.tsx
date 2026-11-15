@@ -11,6 +11,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { sessionQuery } from '../session/query';
 import { preparedPostReading } from './post-reading-fixtures';
+import { Button } from '@rezics/ui/shadcn/button';
 
 type State = 'mixed' | 'long' | 'overflow';
 
@@ -53,9 +54,9 @@ function PreparedReferences({ state = 'mixed' }: { state?: State }) {
       <p role="note" className="mb-4 text-sm text-muted-foreground">
         Published post fixture with mixed destinations, concealed links and exact source return.
       </p>
-      <button className="mb-4 min-h-11 rounded border px-3" onClick={() => setCurrent((value) => !value)}>
+      <Button type="button" className="mb-4" variant="outline" size="sm" onClick={() => setCurrent((value) => !value)}>
         {current ? 'Replace viewer disclosure' : 'Read as the next viewer'}
-      </button>
+      </Button>
       <ThreadReading
         page={supplied.page}
         pageCurrent={current}

@@ -194,7 +194,7 @@ export function ThreadReadingHeader({
           <a
             data-slot="thread-subject-return"
             href={subjectReturn}
-            className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm px-2 py-2.5 text-sm font-medium text-primary underline-offset-4 hover:underline"
+            className="inline-flex max-w-full items-center rounded-sm px-2 py-1 text-sm font-medium text-primary underline-offset-4 hover:underline"
           >
             {m.subject_connections_return()}
           </a>
@@ -202,7 +202,7 @@ export function ThreadReadingHeader({
         {currentOrigin ? (
           <a
             href={origin}
-            className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm px-2 py-2.5 text-sm font-medium text-primary underline-offset-4 hover:underline"
+            className="inline-flex max-w-full items-center rounded-sm px-2 py-1 text-sm font-medium text-primary underline-offset-4 hover:underline"
           >
             {m.board_reading_return()}
           </a>
@@ -210,7 +210,7 @@ export function ThreadReadingHeader({
           <div role="status" className="space-y-2 text-sm">
             <p>{m.board_reading_return_unavailable()}</p>
             {restart ? (
-              <a href={restart} className="inline-flex min-h-11 items-center underline">
+              <a href={restart} className="underline underline-offset-4">
                 {m.board_reading_restart()}
               </a>
             ) : null}
@@ -1151,7 +1151,7 @@ export function ThreadReadingPost({
                 {post.revisionId ? (
                   <a
                     href={exactRevisionHref({ postId: post.id, revisionId: post.revisionId }, getLocale())}
-                    className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+                    className="text-sm underline underline-offset-4"
                   >
                     {m.exact_revision_heading()}
                   </a>

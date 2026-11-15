@@ -5,8 +5,7 @@ import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
 import type { SearchWindowNavigation } from './use-search-window';
 
-const windowActionClass =
-  'h-auto min-h-11 min-w-0 max-w-full whitespace-normal text-start wrap-anywhere';
+const windowActionClass = 'h-auto min-h-7 min-w-0 max-w-full whitespace-normal text-start wrap-anywhere';
 
 /** Window numbers describe admitted addresses, never result offsets or totals. */
 export function SearchWindowControls({

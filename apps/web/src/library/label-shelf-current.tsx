@@ -535,13 +535,13 @@ function LabelShelfRead({
           href={`/${encodeURIComponent(locale)}/library/labels`}
           className={buttonVariants({
             variant: 'ghost',
-            className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal px-3 py-2',
+            className: 'h-auto min-h-7 max-w-full whitespace-normal',
           })}
           onClick={(event) => {
             if (!isCurrent()) event.preventDefault();
           }}
         >
-          <ArrowLeftIcon aria-hidden="true" className="size-4 shrink-0" />
+          <ArrowLeftIcon aria-hidden="true" className="shrink-0" />
           {m.library_labels_heading()}
         </a>
         <span className="flex items-center gap-2 text-sm text-muted-foreground">

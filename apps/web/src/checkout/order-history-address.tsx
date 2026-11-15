@@ -27,7 +27,7 @@ export function OrderHistoryAddressPage({ locale, history }: { locale: string; h
       <p>{m.buyer_orders_address_explanation()}</p>
       <a
         href={purchaseHistoryHref(locale, 'orders', { entitlementsCursor: history.entitlementsCursor })}
-        className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+        className={buttonVariants({ variant: 'outline' })}
       >
         {m.buyer_orders_address_restart()}
       </a>

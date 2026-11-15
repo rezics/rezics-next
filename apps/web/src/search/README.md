@@ -8,10 +8,10 @@ search surface.
 
 The expanded composer inherits the panel's `background` surface in both themes. Expanded chrome uses the panel's top
 rounding only, so the rest pill does not remain as a second card. Its separator divides entry from discovery.
-Keyboard focus outlines the actual input or action using a solid `foreground` outline; the composer has no enclosing focus ring.
+Keyboard focus uses the official control ring on the input or action; the composer has no enclosing focus ring.
 Keyboard-activated suggestion Retry
 restores that input when loading removes the action; the intent retires on close,
-unmount, owner change, or a reader who has moved. Shared Aura tokens and danger styling retain their existing meaning.
+unmount, owner change, or a reader who has moved. Official Mira tokens and danger styling retain their existing meaning.
 
 The phone surface contains focus, returns it on Back/Escape, retains the draft and locks background scrolling.
 Safe-area padding and the active visual viewport bound the surface while its discovery/results region scrolls.

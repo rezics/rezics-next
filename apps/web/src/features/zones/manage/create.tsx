@@ -16,6 +16,7 @@ import {
 } from '@rezics/composition';
 import { ContentItemFrame } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { Field, FieldLabel, FieldDescription } from '@rezics/ui/shadcn/field';
 import { ZoneNameFields } from '../editor/name-fields';
 import { PageHeading } from '../../../shell/page-heading';
@@ -36,7 +37,7 @@ export type CreateProps = {
 };
 
 const actionClassName =
-  'h-auto min-w-0 max-w-full whitespace-normal break-words py-2 text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 max-md:min-w-11 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11';
+  'h-auto min-h-7 min-w-0 max-w-full whitespace-normal break-words text-start';
 
 const noSubscription = () => () => {};
 const fixtureSnapshot = () => null;
@@ -176,7 +177,7 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
         clearBlockedDeparture={clearBlockedDeparture}
       />
       <a
-        className={`inline-flex items-center rounded-md px-2 underline ${actionClassName}`}
+        className={cn(buttonVariants({ variant: 'link' }), actionClassName)}
         href={zonePaths(locale).list}
       >
         {m.zones_owner_title({}, options)}
@@ -186,7 +187,7 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
         <p className="text-muted-foreground">{m.zones_create_intro({}, options)}</p>
       </header>
       {result?.kind === 'saved' ? (
-        <section role="status" className="min-w-0 space-y-3 rounded-xl border border-primary/30 bg-muted/30 p-3 sm:p-4">
+        <section role="status" className="min-w-0 space-y-3 rounded-xl border border-border p-3 sm:p-4">
           <p>{m.zones_create_saved({}, options)}</p>
           <p className="min-w-0 [overflow-wrap:anywhere]">
             <strong lang={createdName?.lang ?? undefined}>
@@ -194,11 +195,11 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
             </strong>
           </p>
           <div className="flex flex-wrap gap-2">
-            <a className={`${buttonVariants()} ${actionClassName}`} href={zonePaths(locale, result.zone.id).edit}>
+            <a className={cn(buttonVariants(), actionClassName)} href={zonePaths(locale, result.zone.id).edit}>
               {m.zones_owner_configure({}, options)}
             </a>
             <a
-              className={`${buttonVariants({ variant: 'outline' })} ${actionClassName}`}
+              className={cn(buttonVariants({ variant: 'outline' }), actionClassName)}
               href={zonePaths(locale, result.zone.id).reader}
             >
               {m.zones_owner_open({}, options)}
@@ -271,7 +272,7 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
                       ref={choose}
                       aria-invalid={invalid && !starter}
                       aria-describedby={`${starterId}-zone-starter-help`}
-                      className="h-auto min-h-8 w-full max-w-full whitespace-normal break-words max-md:min-h-11 [@media(pointer:coarse)]:min-h-11"
+                      className="w-full"
                     >
                       <SharedSelect.SelectValue />
                     </SharedSelect.SelectTrigger>

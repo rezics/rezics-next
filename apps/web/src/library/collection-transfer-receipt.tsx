@@ -1,10 +1,10 @@
+import { cn } from '@rezics/ui/utils';
 import type { Ref } from 'react';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import type { CollectionTransferReceipt } from './collection-placement-journey/transfer';
 
-const link =
-  'inline-flex min-h-11 max-w-full items-center break-words rounded-lg border px-3 py-2 underline-offset-4 hover:underline [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const link = cn(buttonVariants({ variant: 'outline' }), 'h-auto min-h-7 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]');
 
 function admissionStatus(receipt: CollectionTransferReceipt) {
   if (receipt.state === 'reading') return m.library_collection_move_reconciling();
@@ -63,7 +63,7 @@ export function CollectionTransferReceiptPanel({
           <Button
             type="button"
             variant="outline"
-            className="min-h-11 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
+            className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
             disabled={pending}
             onClick={onReread}
           >

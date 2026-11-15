@@ -1,4 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
 import type { DocumentImagePresentation } from './document-media';
@@ -131,14 +132,9 @@ function DocumentImageDisclosure({ image, alt, locale, mediaId, occurrence, insp
             {alt ? <span className="mt-1 block whitespace-pre-wrap [overflow-wrap:anywhere]">{alt}</span> : null}
           </div>
           {admitted && (phase === 'failed' || recovering) ? (
-            <button
-              type="button"
-              onClick={(event) => retry(event.currentTarget)}
-              disabled={recovering}
-              className="rounded-md px-3 py-2 text-sm underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
-            >
+            <Button type="button" variant="link" size="sm" onClick={(event) => retry(event.currentTarget)} disabled={recovering}>
               {m.document_image_retry({}, options)}
-            </button>
+            </Button>
           ) : null}
         </>
       ) : null}

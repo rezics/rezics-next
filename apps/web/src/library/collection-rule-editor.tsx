@@ -31,7 +31,7 @@ export { RuleEditLink } from './saved-query-results';
 function TechnicalDetails({ label, children, id }: { label: string; children: ReactNode; id?: string }) {
   return (
     <details id={id} className="min-w-0 text-sm">
-      <summary className="min-h-11 cursor-pointer content-center rounded-md py-2 text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+      <summary className="cursor-pointer content-center rounded-md text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
         {m.catalogue_technical_details()} · {label}
       </summary>
       <div className="flex min-w-0 flex-col gap-2 pt-2">{children}</div>
@@ -73,7 +73,7 @@ function Choice({
         aria-labelledby={`${fieldId}-label`}
         aria-describedby={help || retained.length ? `${fieldId}-help` : undefined}
         aria-details={hasDetails ? `${fieldId}-details` : undefined}
-        className="min-h-11 h-auto w-full min-w-0"
+        className="w-full min-w-0"
         style={multiple ? { height: 'auto' } : undefined}
       >
         <SelectValue placeholder={m.condition_choose_value()} />
@@ -119,7 +119,7 @@ function Choice({
           type="button"
           variant="outline"
           size="sm"
-          className="min-h-11 h-auto whitespace-normal"
+          className="whitespace-normal"
           aria-label={`${m.library_subject_clear()} · ${label}`}
           onClick={() => onChange([])}
         >
@@ -794,7 +794,7 @@ function RuleForm({
       <form
         noValidate
         onSubmit={(event) => void submit(event)}
-        className="min-w-0 [&_button]:min-h-11 [&_button]:h-auto [&_button]:whitespace-normal [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-offset-2"
+        className="min-w-0"
       >
         <CollectionRuleWorkspace
           context={
@@ -977,7 +977,7 @@ function RuleForm({
                       extension={extension}
                     />
                     <details className="text-sm">
-                      <summary className="min-h-11 cursor-pointer content-center rounded-md py-2 text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                      <summary className="cursor-pointer content-center rounded-md text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                         {m.search_reader_condition_limits_title()}
                       </summary>
                       <p className="text-muted-foreground">{m.search_reader_condition_limits()}</p>

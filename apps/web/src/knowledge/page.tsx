@@ -1,6 +1,7 @@
 import { KnowledgeDetails, knowledgeControl, knowledgeLink } from './workspace';
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 import { KnowledgeReferenceBody } from './reference-view';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -91,7 +92,7 @@ function KnowledgeCitation({
       </h2>
       <a
         href={href}
-        className="inline-flex min-h-11 max-w-full items-center rounded-sm text-sm underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        className="inline-flex max-w-full items-center rounded-sm text-sm underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
         <bdi dir="ltr">{destination}</bdi>
       </a>
@@ -113,7 +114,7 @@ function KnowledgeCitation({
           <label htmlFor={fieldId} className="block text-sm">
             {m.knowledge_citation_label()}
           </label>
-          <input
+          <Input
             id={fieldId}
             type="text"
             dir="ltr"
@@ -121,7 +122,7 @@ function KnowledgeCitation({
             spellCheck={false}
             value={destination}
             onFocus={(event) => event.currentTarget.select()}
-            className="min-h-11 w-full min-w-0 rounded-lg border border-input bg-background px-3 py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="w-full min-w-0"
           />
         </div>
       ) : null}

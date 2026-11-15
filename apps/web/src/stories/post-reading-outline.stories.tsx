@@ -13,6 +13,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { sessionQuery } from '../session/query';
 import { preparedPostReading } from './post-reading-fixtures';
+import { Button } from '@rezics/ui/shadcn/button';
 
 type State = 'ordinary' | 'overflow' | 'concealed' | 'no-headings';
 const duplicate = 'Shared observation / 共通の観測';
@@ -75,9 +76,9 @@ function PreparedSections({ state }: { state: State }) {
         Prepared published document on recorded DTOs. This connected story demonstrates the reading visit; native
         disclosure is verified separately.
       </p>
-      <button className="mb-4 min-h-11 rounded border px-3" onClick={() => setCurrent((value) => !value)}>
+      <Button type="button" className="mb-4" variant="outline" size="sm" onClick={() => setCurrent((value) => !value)}>
         {current ? 'Replace viewer disclosure' : 'Read as the next viewer'}
-      </button>
+      </Button>
       {exact ? (
         <ExactRevisionView identity={identity} page={supplied.revision} />
       ) : (

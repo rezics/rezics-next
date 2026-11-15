@@ -22,14 +22,14 @@ export function TopBar({
       data-shell-header
       className="sticky top-0 z-40 border-b border-border/60 bg-background/95 backdrop-blur-md has-[[data-expanded=true]]:z-50"
     >
-      <div className="mx-auto grid w-full max-w-[112rem] grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1 px-3 py-2 lg:min-h-16 lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,auto)] lg:gap-x-4">
+      <div className="mx-auto grid w-full max-w-[112rem] grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1 px-3 py-2 lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,auto)] lg:gap-x-4">
         <div className="flex min-w-0 items-center gap-1">
           {navigation}
           {logo}
         </div>
         <div
           data-shell-header-search
-          className="col-span-2 row-start-2 min-h-11 min-w-0 w-full lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:min-h-0 lg:mx-auto lg:max-w-160"
+          className="col-span-2 row-start-2 min-w-0 w-full lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:mx-auto lg:max-w-160"
         >
           {search}
         </div>
@@ -50,9 +50,9 @@ export function NotificationsLink({ pathname, badge }: { pathname: string; badge
     <a
       href={`/${locale}/inbox`}
       aria-current={navigationPathMatches({ locale, pathname }, '/inbox', 'prefix') ? 'page' : undefined}
-      className={cn(buttonVariants({ variant: 'ghost', size: 'icon-lg' }), 'relative rounded-full text-primary')}
+      className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'relative')}
     >
-      <Bell aria-hidden="true" className="size-5" />
+      <Bell aria-hidden="true" />
       <span className="sr-only">{m.settings_notifications_heading()}</span>
       <span className="absolute -end-1 -top-1">{badge}</span>
     </a>
@@ -70,12 +70,9 @@ export function UnavailableAccountAction({ signIn }: { signIn: string }) {
         href={signIn}
         aria-label={m.account_sign_in()}
         title={m.account_sign_in()}
-        className={cn(
-          buttonVariants({ variant: 'outline', size: 'lg' }),
-          'min-h-11 min-w-11 shrink-0 rounded-full px-3 text-primary',
-        )}
+        className={cn(buttonVariants({ variant: 'outline' }), 'h-auto min-h-7 max-w-48 shrink-0 whitespace-normal')}
       >
-        <LogIn aria-hidden="true" className="size-4 shrink-0" />
+        <LogIn aria-hidden="true" />
         <span className="hidden sm:inline">{m.account_sign_in()}</span>
       </a>
     </div>
@@ -107,11 +104,7 @@ export function ShellTopActions({
         session={session}
         returnTo={returnTo}
         trigger={
-          <Button
-            size="lg"
-            className="min-h-11 h-auto min-w-11 shrink-0 rounded-full px-3 py-2"
-            aria-label={m.shell_create()}
-          >
+          <Button className="h-auto min-h-7 max-w-48 shrink-0 whitespace-normal" aria-label={m.shell_create()}>
             <Plus aria-hidden="true" />
             <span className="hidden max-w-32 wrap-anywhere whitespace-normal xl:inline">{m.shell_create()}</span>
           </Button>
@@ -140,20 +133,17 @@ export function ShellTopActions({
           </div>
           <a
             href={signIn}
-            className={cn(
-              buttonVariants({ variant: 'outline', size: 'lg' }),
-              'min-h-11 h-auto min-w-11 max-w-48 rounded-full px-3 py-2 text-primary',
-            )}
+            className={cn(buttonVariants({ variant: 'outline' }), 'h-auto min-h-7 max-w-48 whitespace-normal')}
           >
-            <LogIn aria-hidden="true" className="size-4" />
+            <LogIn aria-hidden="true" />
             <span className="min-w-0 wrap-anywhere whitespace-normal">{m.account_sign_in()}</span>
           </a>
         </>
       ) : session === 'unknown' ? (
         <div data-session-pending role="status" aria-busy="true" className="flex items-center gap-1">
           <span className="sr-only">{m.candidate_loading()}</span>
-          <Skeleton aria-hidden className="size-11 rounded-full motion-reduce:animate-none" />
-          <Skeleton aria-hidden className="hidden size-11 rounded-full motion-reduce:animate-none md:block" />
+          <Skeleton aria-hidden className="size-7 rounded-md motion-reduce:animate-none" />
+          <Skeleton aria-hidden className="hidden size-7 rounded-md motion-reduce:animate-none md:block" />
         </div>
       ) : (
         <UnavailableAccountAction signIn={signIn} />

@@ -1,11 +1,11 @@
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { useSearchRetryWait } from '../../search/search-recovery-retry';
 import { OverviewContext } from './overview-context';
 import { nativeReactionSummaryPage, plannedReactionRead, subjectReactionKinds } from './reaction-page-admission';
-import { linkClass, linkColor } from './shared';
 import { useContext } from 'react';
 
-const controlClass = `${linkClass} ${linkColor} inline-flex min-h-[44px] min-w-[44px] max-w-full items-center rounded-sm px-2 py-2 text-start whitespace-normal [overflow-wrap:anywhere] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`;
+const controlClass = `${buttonVariants({ variant: 'link', size: 'sm' })} h-auto min-h-6 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]`;
 const labels = {
   like: (locale: string) => m.reaction_like({}, { locale: locale as never }),
   love: (locale: string) => m.reaction_love({}, { locale: locale as never }),
@@ -38,13 +38,15 @@ export function ReactionSummary(props: Record<string, unknown>) {
           {m.subject_reactions_unavailable({}, options)}{' '}
           {retryHref &&
             (retryWaiting ? (
-              <button
+              <Button
                 type="button"
+                variant="link"
+                size="sm"
                 disabled
                 className={`${controlClass} disabled:cursor-not-allowed disabled:opacity-60`}
               >
                 {m.subject_section_retry({}, options)}
-              </button>
+              </Button>
             ) : (
               <a href={retryHref} className={controlClass}>
                 {m.subject_section_retry({}, options)}

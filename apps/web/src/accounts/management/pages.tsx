@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { ContentItemHeading } from '@rezics/ui/content-item';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import {
   ContentSection,
   ContentSectionBody,
@@ -19,16 +20,18 @@ import type { WindowNavigation } from './window-route';
 import { readCursors, issuerPage, type Cursors, type Detail, type Identity, type Inventory, type Page } from './data';
 
 const linkClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal wrap-anywhere rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const actionClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-md border border-border bg-background px-3 py-2 text-start whitespace-normal wrap-anywhere text-primary underline underline-offset-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'inline-flex max-w-full items-center whitespace-normal wrap-anywhere text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const actionClass = cn(
+  buttonVariants({ variant: 'outline' }),
+  'h-auto min-h-7 max-w-full whitespace-normal text-start wrap-anywhere',
+);
 const actionGroupClass = 'flex flex-wrap gap-2';
 const rowClass =
   'flex min-w-0 flex-col gap-3 rounded-xl border border-border/70 bg-card p-4 sm:flex-row sm:items-center sm:justify-between';
 const rowIdentityClass = 'min-w-0 space-y-1';
 const rowTitleClass = 'break-words font-semibold';
 const badgeClass = 'h-auto min-h-5 max-w-full whitespace-normal wrap-anywhere text-start';
-const retryClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-3 text-start';
+const retryClass = 'h-auto max-w-full whitespace-normal wrap-anywhere text-start min-h-7';
 export function managementHref(account: Identity) {
   return `/${getLocale()}/${account.kind === 'organization' ? 'organizations' : 'accounts'}/${encodeURIComponent(account.id)}`;
 }
@@ -87,7 +90,7 @@ function Failure({ page, retry }: { page: Exclude<Page<unknown>, { state: 'ready
 }
 function IdentityLink({ account, management = true }: { account: Identity | null; management?: boolean }) {
   return account ? (
-    <div className="min-w-0 space-y-1 rounded-xl border border-primary/25 bg-primary/5 p-4 sm:p-5">
+    <div className="min-w-0 space-y-1 rounded-xl border bg-muted/40 p-4 sm:p-5">
       {management || account.handle ? (
         <a
           className={`${linkClass} break-words text-base font-semibold sm:text-lg`}
@@ -392,7 +395,7 @@ export function AccountManagementPage({
         </ContentSectionHeader>
         <ContentSectionBody
           data-slot="account-management-identity"
-          className="grid min-w-0 gap-4 rounded-xl border border-primary/25 bg-primary/5 p-4 sm:p-5"
+          className="grid min-w-0 gap-4 rounded-xl border bg-muted/40 p-4 sm:p-5"
         >
           {value.account.handle ? (
             <a

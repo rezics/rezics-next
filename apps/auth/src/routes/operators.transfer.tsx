@@ -3,6 +3,7 @@ import { rememberTransferReturn, type TransferReturnEntry } from '../operator-tr
 import { OperatorTransferReturnView } from '../operator-transfer-return-view';
 import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
@@ -1065,7 +1066,7 @@ export function OperatorTransferPage({
         <Input
           id={id}
           type="file"
-          className="h-auto min-h-11 w-full file:min-h-11"
+          className="w-full"
           disabled={locked || (kind === 'acceptance' && !acceptanceEditable)}
           aria-describedby="transfer-file-help transfer-file-feedback"
           onChange={(event) => {
@@ -1137,7 +1138,7 @@ export function OperatorTransferPage({
               {errorMessage(result)}
               {result.status ? (
                 <details>
-                  <summary className="min-h-11 cursor-pointer py-3">{m.auth_transfer_handoff_diagnostics()}</summary>
+                  <summary className="cursor-pointer">{m.auth_transfer_handoff_diagnostics()}</summary>
                   {result.status}
                   {result.code && /^[a-z][a-z0-9_]{0,79}$/.test(result.code) ? ` · ${result.code}` : ''}
                 </details>
@@ -1154,7 +1155,7 @@ export function OperatorTransferPage({
                 {m.auth_transfer_handoff_download_acceptance()}
               </Button>
               <details>
-                <summary className="min-h-11 cursor-pointer py-3">{m.auth_transfer_handoff_technical()}</summary>
+                <summary className="cursor-pointer">{m.auth_transfer_handoff_technical()}</summary>
                 <Field>
                   <FieldLabel htmlFor="transfer-accepted">{m.auth_transfer_acceptance()}</FieldLabel>
                   <Textarea id="transfer-accepted" value={attempt.reference} readOnly />
@@ -1167,7 +1168,7 @@ export function OperatorTransferPage({
             <div role="status">
               <h2>{m.auth_transfer_acknowledged()}</h2>
               <details>
-                <summary className="min-h-11 cursor-pointer py-3">{m.auth_transfer_handoff_technical()}</summary>
+                <summary className="cursor-pointer">{m.auth_transfer_handoff_technical()}</summary>
                 <Field>
                   <FieldLabel htmlFor="transfer-acknowledgment">{m.auth_transfer_acceptance()}</FieldLabel>
                   <Textarea id="transfer-acknowledgment" value={result.reference} readOnly />
@@ -1250,7 +1251,7 @@ export function OperatorTransferPage({
               <h2>{m.auth_transfer_handoff_review_heading()}</h2>
               {fileField('request')}
               <details>
-                <summary className="min-h-11 cursor-pointer py-3">{m.auth_transfer_handoff_manual_request()}</summary>
+                <summary className="cursor-pointer">{m.auth_transfer_handoff_manual_request()}</summary>
                 <Field>
                   <FieldLabel htmlFor="transfer-request-input">{m.auth_transfer_request()}</FieldLabel>
                   <Textarea
@@ -1308,7 +1309,7 @@ export function OperatorTransferPage({
               </>
             ) : null}
             <details>
-              <summary className="min-h-11 cursor-pointer py-3">{m.auth_transfer_handoff_technical()}</summary>
+              <summary className="cursor-pointer">{m.auth_transfer_handoff_technical()}</summary>
               <dl>
                 <dt>{m.auth_transfer_version()}</dt>
                 <dd>{attempt.request.expectedVersion}</dd>
@@ -1360,7 +1361,7 @@ export function OperatorTransferPage({
                     </p>
                     {fileField('acceptance')}
                     <details>
-                      <summary className="min-h-11 cursor-pointer py-3">
+                      <summary className="cursor-pointer">
                         {m.auth_transfer_handoff_manual_acceptance()}
                       </summary>
                       <Field>
@@ -1382,23 +1383,22 @@ export function OperatorTransferPage({
                     </details>
                   </>
                 ) : null}
-                <Field>
-                  <FieldLabel htmlFor="transfer-confirm">
-                    <input
-                      id="transfer-confirm"
-                      type="checkbox"
-                      checked={confirmed}
-                      onChange={(event) => setConfirmed(event.target.checked)}
-                      disabled={
-                        pending ||
-                        !nativeReady ||
-                        needsProof ||
-                        invalidContinuation ||
-                        (attempt.phase === 'approve' && nativeAdvice !== attempt.side) ||
-                        (attempt.phase === 'execute' && (!recoveryReviewed || nativeAdvice !== 'source'))
-                      }
-                      required
-                    />
+                <Field orientation="horizontal" className="items-start">
+                  <Checkbox
+                    id="transfer-confirm"
+                    checked={confirmed}
+                    required
+                    onCheckedChange={(checked) => setConfirmed(checked === true)}
+                    disabled={
+                      pending ||
+                      !nativeReady ||
+                      needsProof ||
+                      invalidContinuation ||
+                      (attempt.phase === 'approve' && nativeAdvice !== attempt.side) ||
+                      (attempt.phase === 'execute' && (!recoveryReviewed || nativeAdvice !== 'source'))
+                    }
+                  />
+                  <FieldLabel className="min-w-0 font-normal wrap-anywhere" htmlFor="transfer-confirm">
                     {attempt.side === 'source'
                       ? m.auth_transfer_confirm_source()
                       : m.auth_transfer_confirm_destination()}
@@ -1442,7 +1442,7 @@ export function OperatorTransferPage({
               <dd>{current.previous.operatorAccountId}</dd>
             </dl>
             <details>
-              <summary className="min-h-11 cursor-pointer py-3">{m.auth_transfer_handoff_technical()}</summary>
+              <summary className="cursor-pointer">{m.auth_transfer_handoff_technical()}</summary>
               <dl>
                 <dt>{m.auth_transfer_version()}</dt>
                 <dd>{current.expectedVersion}</dd>
@@ -1453,7 +1453,7 @@ export function OperatorTransferPage({
           </div>
         ) : null}
         <details>
-          <summary className="min-h-11 cursor-pointer py-3">{m.auth_transfer_guide_heading()}</summary>
+          <summary className="cursor-pointer">{m.auth_transfer_guide_heading()}</summary>
           <div className="space-y-3">
             <p>{m.auth_transfer_handoff_explanation()}</p>
             <ol className="list-decimal space-y-3 ps-6">

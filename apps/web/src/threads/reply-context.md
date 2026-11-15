@@ -54,7 +54,7 @@ Decision: each available native thread post mounts `ReplyButton` after its docum
 `ConversationBranches` wraps the passed Post component, preserving its existing actions, body and reply callback.
 Every Post remains mounted in native order, including while a related branch is locally hidden. Collapse never changes
 moderation, native disclosure, command state or unsent writing. Unrelated rows remain visible. The controls expose
-expanded state and the IDs of the actual affected wrappers, support Enter/Space and Left/Right, and retain 44px targets.
+expanded state and the IDs of the actual affected wrappers, and support Enter/Space and Left/Right.
 The nearest-first parent path wraps within the phone measure; indentation never exceeds eight steps.
 
 Decision: Collapse affects only supplied descendants reachable within eight admitted links; deeper rows stay visible

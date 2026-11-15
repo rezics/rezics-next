@@ -76,7 +76,7 @@ export function ShelfColumnsControl({
             type="button"
             variant="ghost"
             size="sm"
-            className="h-auto whitespace-normal"
+            className="h-auto min-h-6 whitespace-normal"
             onClick={() => change(undefined)}
           >
             {m.library_columns_reset()}

@@ -1,22 +1,13 @@
 import { m } from '../../paraglide/messages.js';
 import type { AniListRow, AniListScoreFormat, AniListSourceField } from './contract';
-import {
-  aniListEmptyFields,
-  aniListFieldLabel,
-  aniListFieldValue,
-  aniListIdentifierLabel,
-  aniListMediaType,
-  aniListPrivateNote,
-  aniListUnsupportedFields,
-  aniListValidityLabel,
-} from './meaning';
+import { aniListEmptyFields, aniListFieldLabel, aniListFieldValue, aniListIdentifierLabel, aniListMediaType, aniListPrivateNote, aniListUnsupportedFields, aniListValidityLabel } from './meaning';
 
 function Fact({ label, value, reason }: { label: string; value: string; reason?: string }) {
   return (
     <div>
-      <dt className="text-sm font-medium [overflow-wrap:anywhere]">{label}</dt>
-      <dd className="whitespace-normal [overflow-wrap:anywhere]">{value}</dd>
-      {reason ? <dd className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{reason}</dd> : null}
+      <dt className="h-auto text-sm font-medium [overflow-wrap:anywhere]">{label}</dt>
+      <dd className="h-auto whitespace-normal [overflow-wrap:anywhere]">{value}</dd>
+      {reason ? <dd className="h-auto text-sm text-muted-foreground [overflow-wrap:anywhere]">{reason}</dd> : null}
     </div>
   );
 }
@@ -26,7 +17,7 @@ function FieldList({ fields, row }: { fields: AniListSourceField[]; row: AniList
   return (
     <ul className="mt-2 space-y-2">
       {fields.map((field) => (
-        <li key={field.field} className="[overflow-wrap:anywhere]" data-anilist-field={field.field}>
+        <li key={field.field} className="h-auto [overflow-wrap:anywhere]" data-anilist-field={field.field}>
           <span className="font-medium">{aniListFieldLabel(field, mediaType)}</span>
           {': '}
           {aniListFieldValue(row.source.evidence, field)}
@@ -137,8 +128,8 @@ export function AniListEvidencePanel({
       </dl>
       {source.group ? (
         <details className="rounded-md border p-3" data-anilist-group>
-          <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_anilist_group_summary()}</summary>
-          <pre className="overflow-x-auto whitespace-pre-wrap text-sm [overflow-wrap:anywhere]">
+          <summary className="cursor-pointer py-2 font-medium">{m.library_anilist_group_summary()}</summary>
+          <pre className="h-auto overflow-x-auto whitespace-pre-wrap text-sm [overflow-wrap:anywhere]">
             {JSON.stringify(source.group, null, 2)}
           </pre>
         </details>
@@ -149,19 +140,19 @@ export function AniListEvidencePanel({
       <p>{m.library_anilist_not_public()}</p>
       {note ? (
         <details className="rounded-md border p-3">
-          <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_anilist_notes_summary()}</summary>
-          <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{aniListFieldValue(source.evidence, note)}</p>
+          <summary className="cursor-pointer py-2 font-medium">{m.library_anilist_notes_summary()}</summary>
+          <p className="h-auto whitespace-pre-wrap [overflow-wrap:anywhere]">{aniListFieldValue(source.evidence, note)}</p>
           <p className="mt-2 text-sm text-muted-foreground">{note.reason}</p>
           <p className="mt-2 text-sm text-muted-foreground">{m.library_anilist_not_review()}</p>
         </details>
       ) : null}
       <details className="rounded-md border p-3">
-        <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_anilist_retained_summary()}</summary>
+        <summary className="cursor-pointer py-2 font-medium">{m.library_anilist_retained_summary()}</summary>
         <FieldList fields={source.fields} row={row} />
       </details>
       {unknown.length ? (
         <details className="rounded-md border p-3" data-anilist-unknown-fields>
-          <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_anilist_unknown_summary()}</summary>
+          <summary className="cursor-pointer py-2 font-medium">{m.library_anilist_unknown_summary()}</summary>
           <FieldList fields={unknown} row={row} />
         </details>
       ) : null}

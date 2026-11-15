@@ -1,4 +1,5 @@
 import { CatalogueCurrentReading, catalogueEditor, useEditorLifetime } from '../editor-lifetime';
+import { cn } from '@rezics/ui/utils';
 import { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
 import { useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -52,11 +53,11 @@ export type CatalogueFileTransport = {
 };
 
 const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
 const linkClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8';
+  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
 const summaryClass =
-  'cursor-pointer rounded-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 max-md:min-w-11 max-md:py-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:py-2';
+  'cursor-pointer font-medium [overflow-wrap:anywhere]';
 
 function rowTarget(row: FileRow): string | undefined {
   return row.statement ? (relatedTarget(row.statement) ?? row.holder) : row.holder;
@@ -249,7 +250,7 @@ function CatalogueFileProfileLive({
     <section className="flex flex-col gap-4" data-slot="catalogue-file-profile" aria-busy={busy}>
       {sourceReturnHref ? (
         <p>
-          <a href={sourceReturnHref} className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`}>
+          <a href={sourceReturnHref} className={cn(buttonVariants({ variant: 'outline' }), actionClass)}>
             {m.catalogue_file_reader_return({}, o)}
           </a>
         </p>
@@ -282,7 +283,7 @@ function CatalogueFileProfileLive({
           )}
           <button
             type="button"
-            className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`}
+            className={cn(buttonVariants({ variant: 'outline' }), actionClass)}
             onClick={(event) => void load({}, event)}
           >
             {m.release_fidelity_reload({}, o)}

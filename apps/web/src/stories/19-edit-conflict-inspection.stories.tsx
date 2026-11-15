@@ -8,6 +8,8 @@ import { InlinePostEditor } from '../threads/composer';
 import type { CurrentPost, EditFailure } from '../threads/actions';
 import { sessionQuery } from '../session/query';
 import { m } from '../paraglide/messages.js';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
 
 type Scenario = 'available' | 'missing' | 'erased' | 'unknown';
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
@@ -136,12 +138,12 @@ function ChangedInspectionExample({
   return (
     <main className="mx-auto min-w-0 max-w-3xl space-y-4 p-4">
       <p>Prepared external-change fixture; the controller changes this reading without a native request.</p>
-      <textarea
-        ref={origin}
-        aria-label={m.thread_reply_body_label()}
-        defaultValue="Prepared retained writing"
-        className="min-h-32 w-full rounded-xl border p-3"
-      />
+      <Textarea 
+ ref={origin}
+ aria-label={m.thread_reply_body_label()}
+ defaultValue="Prepared retained writing"
+ className="min-h-32 w-full"
+ />
       <EditConflictRecovery
         current={result}
         presentation={{
@@ -157,11 +159,7 @@ function ChangedInspectionExample({
         }}
         returningFocus={() => origin.current}
       />
-      <button
-        type="button"
-        data-prepared-change=""
-        className="min-h-11 rounded-xl border p-3"
-        onClick={() => {
+      <Button type="button" data-prepared-change="" variant="outline" size="sm" onClick={() => {
           if (retired) {
             setExpired(true);
             controller.abort();
@@ -174,7 +172,7 @@ function ChangedInspectionExample({
         }}
       >
         Apply prepared external change
-      </button>
+      </Button>
       {expired ? <p role="alert">{m.thread_authoring_session_changed()}</p> : null}
     </main>
   );

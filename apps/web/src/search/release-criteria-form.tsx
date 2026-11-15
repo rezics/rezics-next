@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
 import { quantityUnitLabel } from '../subject/quantity-presentation';
@@ -23,7 +25,6 @@ import {
 } from './release-search';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 
-const fieldClass = 'h-10 rounded-md border bg-background px-3 font-normal';
 const subjectFields = ['platform', 'developer', 'publisher'] as const;
 type SubjectField = (typeof subjectFields)[number];
 type ConditionComposition = ReturnType<typeof useConditionComposition>;
@@ -228,12 +229,11 @@ function ReleaseSearchSubjectPicker({
   const describedBy = [helpId, `${inputId}-status`, errorId].filter(Boolean).join(' ');
 
   return (
-    <div className="grid gap-1 text-sm font-medium">
-      <label htmlFor={inputId}>{label}</label>
-      <input
+    <div className="grid gap-1 text-sm">
+      <label htmlFor={inputId} className="font-medium">{label}</label>
+      <Input
         ref={inputRef}
         id={inputId}
-        className={fieldClass}
         type="search"
         autoComplete="off"
         placeholder={m.search_placeholder({}, options)}
@@ -281,21 +281,23 @@ function ReleaseSearchSubjectPicker({
         }}
       />
       <input type="hidden" name={name} value={selection?.id ?? ''} />
-      <span id={helpId} className="font-normal text-muted-foreground">
+      <span id={helpId} className="text-muted-foreground">
         {help}
       </span>
       {selection && (
         <div
           role="group"
           aria-label={label}
-          className="flex flex-wrap items-center gap-2 rounded-md border p-2 font-normal"
+          className="flex flex-wrap items-center gap-2 rounded-md border p-2"
         >
           <span>{selection.label ?? m.search_suggestions_unavailable({}, options)}</span>
           {selection.type && <span className="text-muted-foreground">{selection.type}</span>}
           <code className="text-xs text-muted-foreground">{selection.id}</code>
-          <button
+          <Button
             type="button"
-            className="underline"
+            variant="link"
+            size="sm"
+            className="h-auto min-h-6 whitespace-normal"
             onClick={() => {
               cancel();
               onSelection(undefined);
@@ -303,13 +305,15 @@ function ReleaseSearchSubjectPicker({
             }}
           >
             {m.library_subject_clear({}, options)}
-          </button>
+          </Button>
         </div>
       )}
       {query && !selection && (
-        <button
+        <Button
           type="button"
-          className="justify-self-start underline"
+          variant="link"
+          size="sm"
+          className="h-auto min-h-6 justify-self-start whitespace-normal"
           onClick={() => {
             cancel();
             setQuery('');
@@ -317,9 +321,9 @@ function ReleaseSearchSubjectPicker({
           }}
         >
           {m.library_subject_clear({}, options)}
-        </button>
+        </Button>
       )}
-      <p id={`${inputId}-status`} role="status" aria-live="polite" className="font-normal text-muted-foreground">
+      <p id={`${inputId}-status`} role="status" aria-live="polite" className="text-muted-foreground">
         {statusText}
       </p>
       {status === 'ready' && currentSuggestions && (
@@ -338,7 +342,7 @@ function ReleaseSearchSubjectPicker({
                 id={`${listId}-${index}`}
                 role="option"
                 aria-selected={activeIndex === index}
-                className="cursor-pointer px-3 py-2 hover:bg-muted"
+                className="cursor-pointer px-2.5 py-1.5 text-sm hover:bg-muted"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => choose(subject)}
               >
@@ -543,11 +547,10 @@ export function ReleaseSearchFormView({
       .join(' ');
     const precisionText = dateText ? calendarPrecision(draft.form[name], locale) : undefined;
     return (
-      <div className="grid gap-1 text-sm font-medium">
-        <label htmlFor={id}>{label}</label>
-        <input
+      <div className="grid gap-1 text-sm">
+        <label htmlFor={id} className="font-medium">{label}</label>
+        <Input
           id={id}
-          className={fieldClass}
           name={name}
           type="text"
           inputMode={inputMode}
@@ -557,24 +560,24 @@ export function ReleaseSearchFormView({
           onChange={(event) => setField(name, event.currentTarget.value)}
         />
         {help && (
-          <span id={helpId} className="font-normal text-muted-foreground">
+          <span id={helpId} className="text-muted-foreground">
             {help}
           </span>
         )}
         {dateText && (
-          <span id={`${id}-precision`} className="font-normal text-muted-foreground">
+          <span id={`${id}-precision`} className="text-muted-foreground">
             {precisionText} · {m.condition_calendar_help({}, options)}
           </span>
         )}
         {invalid && (
-          <p id={issueId(name)} className="font-normal text-destructive">
+          <p id={issueId(name)} className="text-destructive">
             {issue(name)}
           </p>
         )}
         {invalid && draft.form[name] !== '' && (
-          <button type="button" className="justify-self-start font-normal underline" onClick={() => clear(name)}>
+          <Button type="button" variant="link" size="sm" className="h-auto min-h-6 justify-self-start whitespace-normal" onClick={() => clear(name)}>
             {m.library_subject_clear({}, options)}
-          </button>
+          </Button>
         )}
       </div>
     );
@@ -662,8 +665,8 @@ export function ReleaseSearchFormView({
           {m.release_search_draft_notice({}, options)}
         </p>
       )}
-      <label className="grid gap-1 text-sm font-medium">
-        <span>{m.release_search_subtype({}, options)}</span>
+      <label className="grid gap-1 text-sm">
+        <span className="font-medium">{m.release_search_subtype({}, options)}</span>
         <Select
           name="subtype"
           value={draft.form.subtype === '' ? null : draft.form.subtype}
@@ -671,7 +674,7 @@ export function ReleaseSearchFormView({
         >
           <SelectTrigger
             id="release-search-subtype"
-            className={fieldClass}
+            className="w-full"
             aria-invalid={errors.includes('subtype') || undefined}
             aria-describedby={errors.includes('subtype') ? issueId('subtype') : undefined}
           >
@@ -699,11 +702,10 @@ export function ReleaseSearchFormView({
         </div>
       )}
       {(controls?.language || controls?.platform?.languageQualifier || draft.form.releaseLanguage) && (
-        <div className="grid gap-1 text-sm font-medium">
-          <label htmlFor="release-search-releaseLanguage">{m.release_search_languages({}, options)}</label>
-          <input
+        <div className="grid gap-1 text-sm">
+          <label htmlFor="release-search-releaseLanguage" className="font-medium">{m.release_search_languages({}, options)}</label>
+          <Input
             id="release-search-releaseLanguage"
-            className={fieldClass}
             name="releaseLanguage"
             value={draft.form.releaseLanguage}
             aria-invalid={errors.includes('releaseLanguage') || undefined}
@@ -711,18 +713,20 @@ export function ReleaseSearchFormView({
             onChange={(event) => setField('releaseLanguage', event.currentTarget.value)}
           />
           {errors.includes('releaseLanguage') && (
-            <p id={issueId('releaseLanguage')} className="font-normal text-destructive">
+            <p id={issueId('releaseLanguage')} className="text-destructive">
               {issue('releaseLanguage')}
             </p>
           )}
           {errors.includes('releaseLanguage') && draft.form.releaseLanguage && (
-            <button
+            <Button
               type="button"
-              className="justify-self-start font-normal underline"
+              variant="link"
+              size="sm"
+              className="h-auto min-h-6 justify-self-start whitespace-normal"
               onClick={() => clear('releaseLanguage')}
             >
               {m.library_subject_clear({}, options)}
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -768,8 +772,8 @@ export function ReleaseSearchFormView({
             m.release_search_age_help({}, options),
             'decimal',
           )}
-          <div className="grid gap-1 text-sm font-medium">
-            <label htmlFor="release-search-ageUnit">{m.release_search_age_unit({}, options)}</label>
+          <div className="grid gap-1 text-sm">
+            <label htmlFor="release-search-ageUnit" className="font-medium">{m.release_search_age_unit({}, options)}</label>
             <Select
               name="ageUnit"
               value={draft.form.ageUnit === '' ? null : draft.form.ageUnit}
@@ -777,7 +781,7 @@ export function ReleaseSearchFormView({
             >
               <SelectTrigger
                 id="release-search-ageUnit"
-                className={fieldClass}
+                className="w-full"
                 aria-invalid={errors.includes('ageUnit') || undefined}
                 aria-describedby={errors.includes('ageUnit') ? issueId('ageUnit') : undefined}
               >
@@ -798,7 +802,7 @@ export function ReleaseSearchFormView({
               </SelectContent>
             </Select>
             {errors.includes('ageUnit') && (
-              <p id={issueId('ageUnit')} className="font-normal text-destructive">
+              <p id={issueId('ageUnit')} className="text-destructive">
                 {issue('ageUnit')}
               </p>
             )}
@@ -818,8 +822,8 @@ export function ReleaseSearchFormView({
             </div>
           ),
       )}
-      <label className="grid gap-1 text-sm font-medium">
-        <span>{m.release_search_sort({}, options)}</span>
+      <label className="grid gap-1 text-sm">
+        <span className="font-medium">{m.release_search_sort({}, options)}</span>
         <Select
           name="sort"
           value={draft.form.sort === '' ? null : draft.form.sort}
@@ -827,7 +831,7 @@ export function ReleaseSearchFormView({
         >
           <SelectTrigger
             id="release-search-sort"
-            className={fieldClass}
+            className="w-full"
             aria-invalid={errors.includes('sort') || undefined}
             aria-describedby={errors.includes('sort') ? issueId('sort') : undefined}
           >
@@ -845,8 +849,8 @@ export function ReleaseSearchFormView({
         </Select>
         {errors.includes('sort') && <span id={issueId('sort')}>{issue('sort')}</span>}
       </label>
-      <label className="grid gap-1 text-sm font-medium">
-        <span>{m.release_search_spoilers({}, options)}</span>
+      <label className="grid gap-1 text-sm">
+        <span className="font-medium">{m.release_search_spoilers({}, options)}</span>
         <Select
           name="threshold"
           value={draft.form.threshold === '' ? null : draft.form.threshold}
@@ -854,7 +858,7 @@ export function ReleaseSearchFormView({
         >
           <SelectTrigger
             id="release-search-threshold"
-            className={fieldClass}
+            className="w-full"
             aria-invalid={errors.includes('threshold') || undefined}
             aria-describedby={errors.includes('threshold') ? issueId('threshold') : undefined}
           >
@@ -874,11 +878,11 @@ export function ReleaseSearchFormView({
         {errors.includes('threshold') && <span id={issueId('threshold')}>{issue('threshold')}</span>}
       </label>
       {draft.form.condition && (
-        <div className="grid gap-1 text-sm font-medium sm:col-span-2">
-          <label htmlFor="release-search-condition">{m.release_search_condition({}, options)}</label>
-          <textarea
+        <div className="grid gap-1 text-sm sm:col-span-2">
+          <label htmlFor="release-search-condition" className="font-medium">{m.release_search_condition({}, options)}</label>
+          <Textarea
             id="release-search-condition"
-            className="min-h-20 rounded-md border bg-background px-3 py-2 font-normal"
+            className="min-h-20"
             name="condition"
             value={draft.form.condition}
             aria-invalid={errors.includes('condition') || undefined}
@@ -886,18 +890,20 @@ export function ReleaseSearchFormView({
             onChange={(event) => setField('condition', event.currentTarget.value)}
           />
           {errors.includes('condition') && (
-            <p id={issueId('condition')} className="font-normal text-destructive">
+            <p id={issueId('condition')} className="text-destructive">
               {issue('condition')}
             </p>
           )}
           {errors.includes('condition') && (
-            <button
+            <Button
               type="button"
-              className="justify-self-start font-normal underline"
+              variant="link"
+              size="sm"
+              className="h-auto min-h-6 justify-self-start whitespace-normal"
               onClick={() => clear('condition')}
             >
               {m.library_subject_clear({}, options)}
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -930,9 +936,9 @@ export function ReleaseSearchFormView({
         </div>
       )}
       <div className="sm:col-span-2">
-        <button type="submit" className={buttonVariants()}>
+        <Button type="submit">
           {m.release_search_apply({}, options)}
-        </button>
+        </Button>
       </div>
     </form>
   );

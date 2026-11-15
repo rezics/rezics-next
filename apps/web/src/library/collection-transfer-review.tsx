@@ -1,11 +1,12 @@
+import { cn } from '@rezics/ui/utils';
 import type { Ref } from 'react';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import type { CollectionTransferReview, CollectionTransferReviewState } from './collection-placement-journey/transfer';
 
 const action =
-  'h-auto min-h-11 max-w-full whitespace-normal break-words px-4 py-3 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'h-auto min-h-7 max-w-full whitespace-normal break-words text-start [overflow-wrap:anywhere]';
 
 /** Review is the captured command, including duplicate Subjects with different occurrence IDs. */
 export function CollectionTransferReviewPanel({
@@ -58,7 +59,7 @@ export function CollectionTransferReviewPanel({
           <dd className="min-w-0">
             <a
               href={transfer.sourceHref}
-              className="inline-flex min-h-11 items-center font-medium underline underline-offset-4"
+              className={cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full whitespace-normal font-medium')}
             >
               {transfer.sourceTitle}
             </a>
@@ -74,7 +75,7 @@ export function CollectionTransferReviewPanel({
           <dd className="min-w-0">
             <a
               href={transfer.destinationHref}
-              className="inline-flex min-h-11 items-center font-medium underline underline-offset-4"
+              className={cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full whitespace-normal font-medium')}
             >
               {transfer.destination.title}
             </a>

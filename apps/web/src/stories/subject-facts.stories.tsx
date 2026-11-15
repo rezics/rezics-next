@@ -292,7 +292,7 @@ export const Independent: Story = {
     docs: {
       description: {
         story:
-          'UNRUN: two actual workspaces, independent keyboard selection/inclusion and rendered 44px phone targets. Browser, native and visual acceptance remain deferred.',
+          'UNRUN: two actual workspaces and independent keyboard selection/inclusion. Browser, native and visual acceptance remain deferred.',
       },
     },
   },

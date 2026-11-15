@@ -52,18 +52,18 @@ export function ReceivedEntryReader({
             id={titleId}
             ref={headingRef}
             tabIndex={-1}
-            className="break-words text-xl font-semibold focus-visible:outline-2 focus-visible:outline-ring"
+            className="h-auto break-words text-xl font-semibold focus-visible:outline-2 focus-visible:outline-ring"
           >
             {m.library_entry_reading_heading({}, options)}
           </h2>
-          <p className="break-words text-sm font-medium" lang={title?.lang} dir="auto">
+          <p className="h-auto break-words text-sm font-medium" lang={title?.lang} dir="auto">
             {title?.text ?? m.library_subject_unavailable({}, options)}
           </p>
         </div>
         <Button
           type="button"
           variant="outline"
-          className="h-auto min-h-11 max-w-full whitespace-normal break-words"
+          className="h-auto min-h-7 max-w-full whitespace-normal break-words"
           data-received-entry-reading-close=""
           onClick={() => {
             if (isCurrent()) close();

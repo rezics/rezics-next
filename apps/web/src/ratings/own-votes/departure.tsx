@@ -158,14 +158,14 @@ export function OwnVotesDeparture({
           <AlertDialogFooter>
             <AlertDialogCancel
               ref={stay}
-              className="h-auto min-h-11 max-w-full whitespace-normal wrap-anywhere py-2"
+              className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
               onClick={() => choose(false)}
             >
               {m.library_my_ratings_stay()}
             </AlertDialogCancel>
             {!locked ? (
               <AlertDialogAction
-                className="h-auto min-h-11 max-w-full whitespace-normal wrap-anywhere py-2"
+                className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
                 onClick={() => choose(true)}
               >
                 {m.library_my_ratings_leave()}

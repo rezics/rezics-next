@@ -38,11 +38,11 @@ export type WorkspaceProps = {
   onReload: () => void | Promise<void>;
 };
 
-// Keep compact desktop navigation while allowing complete labels and touch targets.
+// Official control size, with wrapping for complete labels.
 const ownerControlClassName =
-  'h-auto min-h-8 min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere] py-1 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 max-md:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11';
+  'h-auto min-h-7 min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center';
 const ownerFeedbackClassName =
-  'min-w-0 [overflow-wrap:anywhere] [&_[role=alert]_:is(a,button)]:inline-flex [&_[role=alert]_:is(a,button)]:h-auto [&_[role=alert]_:is(a,button)]:max-w-full [&_[role=alert]_:is(a,button)]:items-center [&_[role=alert]_:is(a,button)]:whitespace-normal [&_[role=alert]_:is(a,button)]:focus-visible:outline-2 [&_[role=alert]_:is(a,button)]:focus-visible:outline-offset-2 [&_[role=alert]_:is(a,button)]:focus-visible:outline-ring max-md:[&_[role=alert]_:is(a,button)]:min-h-11 max-md:[&_[role=alert]_:is(a,button)]:min-w-11 pointer-coarse:[&_[role=alert]_:is(a,button)]:min-h-11 pointer-coarse:[&_[role=alert]_:is(a,button)]:min-w-11';
+  'min-w-0 [overflow-wrap:anywhere] [&_[role=alert]_:is(a,button)]:inline-flex [&_[role=alert]_:is(a,button)]:h-auto [&_[role=alert]_:is(a,button)]:min-h-7 [&_[role=alert]_:is(a,button)]:max-w-full [&_[role=alert]_:is(a,button)]:items-center [&_[role=alert]_:is(a,button)]:whitespace-normal';
 
 function DeleteZone({
   zone,
@@ -300,7 +300,7 @@ function OwnerVisit({ locale, input, outcome, owner, onChange, onReload }: Works
           ref={outcomeRegion}
           tabIndex={-1}
           role="status"
-          className="min-w-0 space-y-3 rounded-xl border border-primary/30 bg-muted/30 p-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:p-4"
+          className="min-w-0 space-y-3 rounded-xl border border-border p-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:p-4"
         >
           <p>{savedInTrash ? m.zones_owner_trashed({}, options) : m.zones_owner_restored({}, options)}</p>
           <p className="min-w-0 [overflow-wrap:anywhere]">
@@ -485,7 +485,7 @@ function OwnerVisit({ locale, input, outcome, owner, onChange, onReload }: Works
       ) : null}
       {input.cursor ? (
         <a
-          className={`flex w-fit items-center rounded-sm underline ${ownerControlClassName}`}
+          className={cn(buttonVariants({ variant: 'link' }), ownerControlClassName, 'w-fit')}
           href={listHref(locale, { deleted: input.deleted })}
         >
           {m.zones_owner_start({}, options)}

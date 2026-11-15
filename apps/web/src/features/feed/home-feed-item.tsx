@@ -1,3 +1,5 @@
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { continueProgress } from '../../library/continue-source';
 import { progressView } from '../../library/progress-label';
 import { m } from '../../paraglide/messages.js';
@@ -110,7 +112,10 @@ export function homeFeedItemPresentation(
       resume === undefined ? undefined : (
         <a
           href={resume}
-          className="inline-flex min-h-11 items-center break-words text-sm text-primary underline underline-offset-4"
+          className={cn(
+            buttonVariants({ variant: 'link', size: 'sm' }),
+            'h-auto min-h-6 max-w-full whitespace-normal break-words',
+          )}
         >
           {m.home_continue_label({ title }, options)}
         </a>

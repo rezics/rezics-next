@@ -13,6 +13,7 @@ import type { IdentifierInspection, IdentifierVisitOrigin } from './identifier-c
 import { identifierOriginHref, identifierReviewHref } from './identifier-current-visit';
 import { candidateContext } from '../pages/visit-host-port';
 import { pageText } from '../pages/shared';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { subjectHref } from '../../subject/subject-href';
 
 export type IdentifiersProfileProps = {
@@ -90,9 +91,9 @@ function IdentifiersProfileLive({
             <p role="status">{m.candidate_loading({}, o)}</p>
           )}
           {session === 'signed-in' && !query.isFetching && (
-            <button type="button" className="text-start underline" onClick={() => void query.refetch()}>
+            <Button type="button" variant="link" className="h-auto min-h-7 justify-start text-start" onClick={() => void query.refetch()}>
               {m.correction_reload({}, o)}
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -124,7 +125,7 @@ function IdentifiersProfileLive({
                 <div className="space-y-2">
                   <p>{m.identifiers_global_only_notice({}, o)}</p>
                   {originHref && (
-                    <a className="inline-flex min-h-11 items-center underline underline-offset-4" href={originHref}>
+                    <a className={buttonVariants({ variant: 'link', className: 'h-auto min-h-7 justify-start' })} href={originHref}>
                       {m.identifiers_return_origin({}, o)}
                     </a>
                   )}
@@ -133,7 +134,7 @@ function IdentifiersProfileLive({
                 <div className="space-y-2">
                   <p>{m.identifiers_global_only_notice({}, o)}</p>
                   <a
-                    className="inline-flex min-h-11 items-center underline underline-offset-4"
+                    className={buttonVariants({ variant: 'link', className: 'h-auto min-h-7 justify-start' })}
                     href={globalHref ?? identifierOriginHref({ id, label }, locale)}
                   >
                     {m.identifiers_open_global_subject({}, o)}

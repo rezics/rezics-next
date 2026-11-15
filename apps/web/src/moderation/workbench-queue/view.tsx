@@ -103,31 +103,37 @@ function CaseRow({
             <WorkbenchTriageDetails item={item} identity={identity} />
           </div>
         </div>
-        <a
-          aria-label={m.moderation_workbench_open_case({ id: item.id })}
-          className={`${control} inline-flex items-center justify-center rounded-md border border-primary px-4 text-center font-semibold text-primary underline-offset-4 hover:underline lg:self-start`}
-          href={href}
-          onClick={(event) => {
-            if (isCurrent && !isCurrent()) event.preventDefault();
-            else if (
-              onOpenCase &&
-              event.button === 0 &&
-              !event.metaKey &&
-              !event.ctrlKey &&
-              !event.shiftKey &&
-              !event.altKey
-            ) {
-              event.preventDefault();
-              const source = event.currentTarget;
-              const keyboard = event.detail === 0 && source.ownerDocument.activeElement === source;
-              const open = () => onOpenCase(item, href, source, keyboard);
-              requestDeparture(open);
-            }
-          }}
-          {...(item.kind === 'appeal' ? { 'data-workbench-appeal-activator': encodeURIComponent(item.id) } : {})}
+        <Button
+          nativeButton={false}
+          variant="outline"
+          className={`${control} text-center lg:self-start`}
+          render={
+            <a
+              aria-label={m.moderation_workbench_open_case({ id: item.id })}
+              href={href}
+              onClick={(event) => {
+                if (isCurrent && !isCurrent()) event.preventDefault();
+                else if (
+                  onOpenCase &&
+                  event.button === 0 &&
+                  !event.metaKey &&
+                  !event.ctrlKey &&
+                  !event.shiftKey &&
+                  !event.altKey
+                ) {
+                  event.preventDefault();
+                  const source = event.currentTarget;
+                  const keyboard = event.detail === 0 && source.ownerDocument.activeElement === source;
+                  const open = () => onOpenCase(item, href, source, keyboard);
+                  requestDeparture(open);
+                }
+              }}
+              {...(item.kind === 'appeal' ? { 'data-workbench-appeal-activator': encodeURIComponent(item.id) } : {})}
+            />
+          }
         >
           {m.moderation_case_open()}
-        </a>
+        </Button>
       </div>
     </li>
   );
@@ -391,7 +397,7 @@ export function WorkbenchView({
                       )
                     }
                   >
-                    <SelectTrigger id={`${filterId}-kind`} className="w-full min-w-0 max-w-full min-h-11 min-w-11">
+                    <SelectTrigger id={`${filterId}-kind`} className="w-full min-w-0 max-w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -416,7 +422,7 @@ export function WorkbenchView({
                       onSearch(workbenchSearch({ ...workbenchWithoutContinuation(search), order: value! }))
                     }
                   >
-                    <SelectTrigger id={`${filterId}-order`} className="w-full min-w-0 max-w-full min-h-11 min-w-11">
+                    <SelectTrigger id={`${filterId}-order`} className="w-full min-w-0 max-w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

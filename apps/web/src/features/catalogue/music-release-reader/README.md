@@ -59,7 +59,7 @@ Delayed responses cannot restore old controls or focus. Destinations, evidence l
 new-tab contract. Keyboard return restores only a connected current origin, falling back to the stable heading when
 that origin was removed and focus was lost. Intervening user focus wins. Mouse visits discard keyboard return origins
 and do not steal focus. Keyboard inspection focuses its heading; closing returns to the exact occurrence control.
-Wrapping components, inherited themes and 44px controls serve 390/1440 layouts and all eight locales.
+Wrapping components and inherited themes serve 390/1440 layouts and all eight locales.
 
 Disclosed Subject destinations and correction links carry the exact Context, Realm and a bounded `via` return with
 the current stream, opaque cursor, Definition digest/revision and selected holder/assertion locator. Returning performs

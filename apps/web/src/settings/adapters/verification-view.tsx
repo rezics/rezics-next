@@ -132,7 +132,7 @@ export function VerificationSubjectChooserView({ selected, onSelect, disabled = 
             ref={change}
             type="button"
             variant="outline"
-            className="min-h-11 whitespace-normal"
+            className="whitespace-normal"
             disabled={disabled}
             onClick={() => {
               if (disabled) return;
@@ -176,7 +176,7 @@ export function VerificationSubjectChooserView({ selected, onSelect, disabled = 
             <ComboboxInput
               ref={input}
               id={`${id}-input`}
-              className="w-full min-h-11"
+              className="w-full"
               showTrigger={false}
               autoComplete="off"
               maxLength={100}
@@ -210,7 +210,7 @@ export function VerificationSubjectChooserView({ selected, onSelect, disabled = 
             <ComboboxContent>
               <ComboboxList aria-labelledby={`${id}-label`} className="space-y-2 p-2">
                 {(subject: VerificationSubject) => (
-                  <ComboboxItem key={subject.id} value={subject} className="min-h-11 gap-3 py-3">
+                  <ComboboxItem key={subject.id} value={subject} className="gap-3">
                     <span className="min-w-0 break-words">
                       {subject.title} · {subject.type}
                     </span>
@@ -238,7 +238,7 @@ export function VerificationSubjectChooserView({ selected, onSelect, disabled = 
             <Button
               type="button"
               variant="outline"
-              className="min-h-11 justify-self-start"
+              className="justify-self-start"
               disabled={retryWaiting || state.failure?.retryable === false}
               onClick={() => {
                 lookup.retry(episode);

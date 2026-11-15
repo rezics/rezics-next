@@ -11,10 +11,9 @@ import { UndoNotice } from './copies-undo';
 import type { DeletionEvidence } from './copies-receipt';
 import type { PublishedLog } from './logs-read';
 import { LogContributor } from './log-contributor';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { rowRatio, SubjectIdentity } from './subject-row';
-
-const buttonClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal rounded-lg border border-border px-4 py-2 text-start text-primary underline-offset-4 [overflow-wrap:anywhere] hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 function stateLabel(state: PublishedLog['sessionState']): string {
   if (state === 'completed') return m.library_progress_state_completed();
@@ -45,7 +44,7 @@ function PublishedLogBack({
   return (
     <a
       href={href}
-      className="inline-flex min-h-11 items-center rounded text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      className={cn(buttonVariants({ variant: 'link', size: 'sm' }), 'h-auto min-h-6 max-w-full whitespace-normal px-0')}
       onClick={(event) => logsReturnBackClick(event, logId, locale, sessionSubject ?? null)}
     >
       {m.library_logs_back()}
@@ -483,7 +482,7 @@ export function PublishedLogPageView({
         ) : null}
       </section>
       <details className="rounded-lg border px-4">
-        <summary className="min-h-11 cursor-pointer content-center text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        <summary className="cursor-pointer content-center text-sm font-medium">
           {m.library_logs_dates()}
         </summary>
         <section aria-label={m.library_logs_dates()} className="space-y-2 border-t py-4 text-sm">
@@ -532,12 +531,14 @@ export function PublishedLogPageView({
             ) : null}
             <div className="flex flex-wrap gap-3">
               {!confirming ? (
-                <button
+                <Button
                   ref={(node) => {
                     if (presentationTargets.current === targets) targets.deleteButton = node;
                   }}
                   type="button"
-                  className={buttonClass}
+                  variant="outline"
+                  size="sm"
+                  className="h-auto min-h-6 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
                   onClick={(event) => {
                     if (isCurrent('remove')) {
                       const origin = originPresentation(originating);
@@ -553,24 +554,28 @@ export function PublishedLogPageView({
                   }}
                 >
                   {m.library_logs_delete()}
-                </button>
+                </Button>
               ) : (
                 <>
-                  <button
+                  <Button
                     ref={(node) => {
                       if (presentationTargets.current === targets) targets.confirmButton = node;
                     }}
                     type="button"
-                    className={buttonClass}
+                    variant="destructive"
+                    size="sm"
+                    className="h-auto min-h-6 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
                     disabled={pending}
                     aria-describedby={error ? deleteErrorId : undefined}
                     onClick={() => void remove()}
                   >
                     {m.library_logs_confirm_delete()}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
-                    className={buttonClass}
+                    variant="outline"
+                    size="sm"
+                    className="h-auto min-h-6 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
                     disabled={pending}
                     onClick={() => {
                       if (isCurrent('remove')) {
@@ -585,7 +590,7 @@ export function PublishedLogPageView({
                     }}
                   >
                     {m.library_logs_cancel()}
-                  </button>
+                  </Button>
                 </>
               )}
             </div>

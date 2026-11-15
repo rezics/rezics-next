@@ -170,8 +170,7 @@ function OfferPurchase({
             {currentExisting ? (
               <Button
                 variant="outline"
-                size="lg"
-                className="min-h-11 w-full"
+                className="w-full"
                 nativeButton={false}
                 render={
                   <a
@@ -194,8 +193,7 @@ function OfferPurchase({
               <Button
                 type="button"
                 variant="outline"
-                size="lg"
-                className="min-h-11 w-full"
+                className="w-full"
                 onClick={() => {
                   if (origin.isCurrent()) window.location.reload();
                 }}
@@ -206,8 +204,7 @@ function OfferPurchase({
               <Button
                 type="button"
                 variant="outline"
-                size="lg"
-                className="min-h-11 w-full disabled:opacity-100"
+                className="w-full"
                 disabled={!canStart || !termsKnown}
                 onClick={() => void start()}
               >
@@ -217,8 +214,7 @@ function OfferPurchase({
               <Button
                 type="button"
                 variant={buyDisabled ? 'outline' : 'default'}
-                size="lg"
-                className="min-h-11 w-full disabled:opacity-100"
+                className="w-full"
                 disabled={buyDisabled}
                 onClick={() => void start()}
               >

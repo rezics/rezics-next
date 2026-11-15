@@ -4,7 +4,7 @@ import { Link, useLocation, useRouter, type ErrorComponentProps } from '@tanstac
 import { useId, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 
-const actionClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words px-4 py-3 text-center';
+const actionClass = 'h-auto min-h-7 max-w-full whitespace-normal break-words text-center';
 
 type SubjectViewRecoveryRouter = {
   invalidate: () => Promise<unknown>;

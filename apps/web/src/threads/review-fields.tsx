@@ -1,6 +1,7 @@
 import { EntityPicker, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { useEffect, useId, useRef, useState } from 'react';
 import { coverSrc } from '../media/cover-src';
+import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldDescription, FieldLabel } from '@rezics/ui/shadcn/field';
 import { m } from '../paraglide/messages.js';
@@ -198,14 +199,16 @@ function ReviewFieldsVisit({
       {unavailable ? (
         <div className="flex flex-col items-start gap-2">
           <p role="alert">{m.thread_review_vote_read_failed()}</p>
-          <button
+          <Button
             type="button"
-            className="w-fit cursor-pointer text-sm font-medium underline underline-offset-4 disabled:cursor-not-allowed disabled:opacity-60"
+            variant="link"
+            size="sm"
+            className="h-auto min-h-6 whitespace-normal"
             disabled={disabled || retryingVote || !current() || !editable()}
             onClick={() => void retryCurrentVoteRead()}
           >
             {m.thread_review_vote_retry()}
-          </button>
+          </Button>
         </div>
       ) : null}
       {vote ? (
@@ -216,7 +219,7 @@ function ReviewFieldsVisit({
           <FieldLabel
             id={`${detailsId}-citation-label`}
             htmlFor={`${detailsId}-cite-vote`}
-            className="min-h-11 min-w-0 w-full cursor-pointer items-start gap-3 rounded-lg p-3 text-start has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring group-data-[disabled=true]/field:cursor-not-allowed"
+            className="min-w-0 w-full cursor-pointer items-start gap-3 text-start"
           >
             <Checkbox
               id={`${detailsId}-cite-vote`}

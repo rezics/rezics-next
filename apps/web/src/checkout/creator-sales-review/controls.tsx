@@ -1,6 +1,7 @@
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../../paraglide/messages.js';
 import { creatorSaleSettlementLabel } from '../creator-sale-inspection';
 import {
@@ -11,7 +12,7 @@ import {
   type ReviewCriteria,
 } from './model';
 
-const fieldClass = 'min-h-11 w-full min-w-0 rounded-md border bg-background px-3 py-2 text-sm';
+const fieldClass = 'w-full min-w-0';
 
 type Props = {
   review: ReceivedPageReview;
@@ -37,11 +38,9 @@ export function CreatorSalesReviewControls({ review, criteria, visible, change, 
       </div>
       <fieldset disabled={!current} aria-describedby="creator-sales-review-scope" className="min-w-0 space-y-4">
         <legend className="sr-only">{m.creator_review_filters()}</legend>
-        <div className="space-y-2">
-          <label htmlFor="creator-sales-review-text" className="block text-sm font-medium">
-            {m.creator_review_search()}
-          </label>
-          <input
+        <Field className="min-w-0 space-y-2">
+          <FieldLabel htmlFor="creator-sales-review-text">{m.creator_review_search()}</FieldLabel>
+          <Input
             id="creator-sales-review-text"
             type="search"
             autoComplete="off"
@@ -54,7 +53,7 @@ export function CreatorSalesReviewControls({ review, criteria, visible, change, 
           <p id="creator-sales-review-search-hint" className="text-sm text-muted-foreground">
             {m.creator_review_search_hint()}
           </p>
-        </div>
+        </Field>
         <div className="grid min-w-0 gap-4 sm:grid-cols-2">
           <Field className="min-w-0 space-y-2">
             <FieldLabel htmlFor="creator-sales-review-work" className="block text-sm font-medium">
@@ -158,7 +157,7 @@ export function CreatorSalesReviewControls({ review, criteria, visible, change, 
       <div className="flex flex-wrap items-center gap-3">
         <Button
           variant="outline"
-          className="min-h-11 whitespace-normal"
+          className="h-auto min-h-7 whitespace-normal"
           disabled={!filtered || !current}
           onClick={reset}
         >
@@ -208,7 +207,7 @@ export function CreatorSalesReviewControls({ review, criteria, visible, change, 
 export function CreatorSalesPageObservations({ review }: { review: ReceivedPageReview }) {
   return (
     <details className="min-w-0 rounded-xl border p-4 sm:p-5">
-      <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.creator_review_observations()}</summary>
+      <summary className="cursor-pointer font-medium">{m.creator_review_observations()}</summary>
       <div className="min-w-0 space-y-5 pt-4">
         <p className="max-w-prose text-sm text-muted-foreground">{m.creator_review_observations_hint()}</p>
         <section className="space-y-3" aria-labelledby="creator-review-status-counts">

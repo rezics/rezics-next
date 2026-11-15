@@ -1,5 +1,6 @@
 import { useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import {
   Dialog,
@@ -181,7 +182,7 @@ export function ShelfLabelAction({ controls, kind = 'assign' }: { controls: Cont
           </DialogHeader>
           <label className="grid min-w-0 gap-1 text-sm font-medium">
             {m.library_selected_labels_search()}
-            <input
+            <Input
               autoComplete="off"
               value={query}
               aria-invalid={inputError ? true : undefined}
@@ -192,7 +193,6 @@ export function ShelfLabelAction({ controls, kind = 'assign' }: { controls: Cont
                 invalidate();
                 setQuery(value);
               }}
-              className="h-11 w-full min-w-0 rounded-md border bg-background px-3"
             />
           </label>
           {inputError ? (
@@ -219,7 +219,7 @@ export function ShelfLabelAction({ controls, kind = 'assign' }: { controls: Cont
               <ul aria-label={m.library_selected_labels_search()} className="max-h-64 space-y-1 overflow-y-auto">
                 {page.labels.map((label) => (
                   <li key={label.id}>
-                    <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded px-2 hover:bg-muted">
+                    <label className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1 hover:bg-muted">
                       <Checkbox
                         aria-label={label.name}
                         checked={choiceId === label.id}

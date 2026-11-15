@@ -19,8 +19,9 @@ Subject follows cannot displace Spaces before filtering. FULL supplies the curre
 Space-address or Realm-ID destination; unavailable/withheld targets or destinations produce no link. The shell
 uses no Space/Realm point reads, UUID fallback addresses, owner-based Realm inference or invented alternate paths.
 Native label language annotations survive the projection. The drawer receives that same projection, status and
-manage link. Rows keep 44px targets, visible keyboard focus, segment-boundary current-path matching and current
-theme tokens; collapsed rails retain named icons and an accessible manage control.
+manage link. Rows use the official sidebar control size, keep visible keyboard focus, segment-boundary current-path
+matching and current theme tokens, and wrap long labels; collapsed rails retain named icons and an accessible manage
+control.
 
 The generic Follow engine is the subscription authority for Subject, Collection, Space and Zone targets.
 A Realm-backed Space can supply a Realm destination; an ordinary Space can supply its address. Zone is an

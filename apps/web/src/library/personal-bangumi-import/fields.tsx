@@ -1,21 +1,13 @@
 import { m } from '../../paraglide/messages.js';
 import type { BangumiEvidence, BangumiRetainedField, BangumiRow } from './contract';
-import {
-  bangumiEmptyFields,
-  bangumiFieldLabel,
-  bangumiFieldValue,
-  bangumiKnownFields,
-  bangumiMeaningLabel,
-  bangumiPrivateNote,
-  bangumiUnknownFields,
-} from './meaning';
+import { bangumiEmptyFields, bangumiFieldLabel, bangumiFieldValue, bangumiKnownFields, bangumiMeaningLabel, bangumiPrivateNote, bangumiUnknownFields } from './meaning';
 
 function Fact({ label, value, reason }: { label: string; value: string; reason?: string }) {
   return (
     <div>
-      <dt className="text-sm font-medium [overflow-wrap:anywhere]">{label}</dt>
-      <dd className="whitespace-normal [overflow-wrap:anywhere]">{value}</dd>
-      {reason ? <dd className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{reason}</dd> : null}
+      <dt className="h-auto text-sm font-medium [overflow-wrap:anywhere]">{label}</dt>
+      <dd className="h-auto whitespace-normal [overflow-wrap:anywhere]">{value}</dd>
+      {reason ? <dd className="h-auto text-sm text-muted-foreground [overflow-wrap:anywhere]">{reason}</dd> : null}
     </div>
   );
 }
@@ -24,7 +16,7 @@ function FieldList({ fields, medium }: { fields: BangumiRetainedField[]; medium:
   return (
     <ul className="mt-2 space-y-2">
       {fields.map((field) => (
-        <li key={field.field} className="[overflow-wrap:anywhere]">
+        <li key={field.field} className="h-auto [overflow-wrap:anywhere]">
           <span className="font-medium">{bangumiFieldLabel(field, medium)}</span>
           {': '}
           {bangumiFieldValue(field)}
@@ -100,19 +92,19 @@ export function BangumiEvidencePanel({ row }: { row: BangumiRow }) {
       <p>{m.library_bangumi_not_public()}</p>
       {note ? (
         <details className="rounded-md border p-3">
-          <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_bangumi_notes_summary()}</summary>
-          <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{bangumiFieldValue(note)}</p>
+          <summary className="cursor-pointer py-2 font-medium">{m.library_bangumi_notes_summary()}</summary>
+          <p className="h-auto whitespace-pre-wrap [overflow-wrap:anywhere]">{bangumiFieldValue(note)}</p>
           <p className="mt-2 text-sm text-muted-foreground">{note.reason}</p>
           <p className="mt-2 text-sm text-muted-foreground">{m.library_bangumi_not_review()}</p>
         </details>
       ) : null}
       <details className="rounded-md border p-3">
-        <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_bangumi_retained_summary()}</summary>
+        <summary className="cursor-pointer py-2 font-medium">{m.library_bangumi_retained_summary()}</summary>
         <FieldList fields={known} medium={evidence.medium} />
       </details>
       {unknown.length ? (
         <details className="rounded-md border p-3" data-bangumi-unknown-fields>
-          <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_bangumi_unknown_summary()}</summary>
+          <summary className="cursor-pointer py-2 font-medium">{m.library_bangumi_unknown_summary()}</summary>
           <FieldList fields={unknown} medium={evidence.medium} />
         </details>
       ) : null}

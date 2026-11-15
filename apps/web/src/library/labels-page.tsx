@@ -65,9 +65,8 @@ function LabelExposure({
   const name = `library_label.${operation}` as const;
   return page.operations.includes(name) && (!current || current(name)) ? children : null;
 }
-const fieldClass = 'h-11';
-const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] px-3 py-2 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const fieldClass = 'min-w-0 max-w-full';
+const actionClass = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center';
 type LabelAction = {
   operation: 'rename' | 'delete';
   label: LabelsPage['labels'][number];
@@ -848,7 +847,7 @@ export function LabelsPageView({
               aria-invalid={fieldError('create') || undefined}
               aria-describedby={`create-name-help${fieldError('create') ? ' create-error' : ''}`}
             />
-            <Button type="submit" variant="default" size="lg" className={actionClass} disabled={busy}>
+            <Button type="submit" variant="default" className={actionClass} disabled={busy}>
               {m.library_label_create()}
             </Button>
           </div>
@@ -945,8 +944,7 @@ export function LabelsPageView({
                               else actionTriggers.current.delete(label.id);
                             }}
                             variant="ghost"
-                            size="icon"
-                            className="min-h-11 min-w-11"
+                            size="icon-sm"
                             disabled={busy}
                             aria-label={m.library_label_actions({ name: label.name })}
                           >

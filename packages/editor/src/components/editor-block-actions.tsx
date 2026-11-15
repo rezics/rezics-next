@@ -242,7 +242,7 @@ export function BlockActions({
           <Button
             type="button"
             variant="ghost"
-            className="min-h-11"
+            className="h-auto min-h-7 max-w-full whitespace-normal text-start"
             aria-label={title}
             onMouseDown={(event) => event.preventDefault()}
           >

@@ -23,12 +23,12 @@ export function OperatorTransferReturnView({
 }) {
   if (!entries.length) return null;
   return (
-    <section aria-labelledby="transfer-return-heading" className="space-y-3 rounded-lg border p-4">
+    <section aria-labelledby="transfer-return-heading" className="space-y-3 rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10">
       <h2
         id="transfer-return-heading"
         ref={focusRef}
         tabIndex={-1}
-        className="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4"
+        className="outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
       >
         {m.auth_transfer_return_heading()}
       </h2>

@@ -377,7 +377,7 @@ dirty-editor protection, Book/article publication and frozen public reading keep
 
 The route owns departure/locale/credential lifetime; source, account and session incarnation changes permanently
 retire the visit, picker, selection and window, abort requests and fence late commands, reads and focus. All actions
-use shared controls, wrapping 44px targets and distinct `studio_root_append_*` messages in all eight launch locales.
+use shared controls, wrapping labels and distinct `studio_root_append_*` messages in all eight launch locales.
 Review, recovery and explicit next-edit orientation request keyboard focus only while the initiating focus remains;
 later focus, pointer or Tab navigation cancels that request. Next-edit success returns to the saved-draft heading,
 and review editing returns to the title field. The shared draft-command continuation below also applies to append.
@@ -455,7 +455,7 @@ contracts; and the read-only main checkout `.reference/INDEX.md`. The brief's ap
 `hosted-root-append.ts`, `hosted-root-append-view.tsx` and `studio-hosted-root-append.test.tsx`.
 
 Account, session incarnation, source, credential, locale and departure retire selections, abort pending requests and
-fence late results and focus. Shared wrapping 44px controls and eight-locale point and draft-command messages retain
+fence late results and focus. Shared wrapping controls and eight-locale point and draft-command messages retain
 the existing Studio appearance. Review/recovery requests keyboard focus only while the initiating focus remains;
 subsequent focus, pointer or Tab movement cancels that request. Legacy body editing, native recovery,
 remove/update and publication keep their existing entry paths.
@@ -513,7 +513,7 @@ HTTP200 confirmation survives failed readback. Exact receipt metadata and a sing
 retry reading never reissues publication. A fresh matching owner pointer, nonempty bounded confirmed evidence and
 anonymous admission of that exact release precede the shared published-Book link. Historical receipt replay can be
 observed without presenting it as the current owner pointer. Account/session/source/credential/locale/departure
-boundaries retire drafts, responses, links and focus effects. Controls retain Studio's wrapped 44px targets.
+boundaries retire drafts, responses, links and focus effects. Controls retain Studio's wrapped labels.
 
 Sources read before design: generated `packages/client/src/kernel/content/hosted-chapters-routes.d.ts` point routes,
 Content's [authoring, publication and consent contract](../../../../services/kernel/src/content/hosted-chapters.md),

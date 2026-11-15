@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { ContentItem } from '@rezics/ui/content-item';
 import { formatJournalAssessment, formatJournalDate } from '@rezics/progress';
 import { m } from '../../paraglide/messages.js';
@@ -127,14 +128,14 @@ export function ReadingOccurrence({
       title={title.text}
       {...(title.lang ? { titleLang: title.lang } : {})}
       headingLevel={3}
-      className="min-w-0 rounded-xl border bg-card px-4 sm:px-5 [&_h3]:text-lg [&_h3]:[overflow-wrap:anywhere]"
+      className="h-auto min-w-0 rounded-xl border bg-card px-4 sm:px-5 [&_h3]:text-lg [&_h3]:[overflow-wrap:anywhere]"
       state={
-        <span className="max-w-full rounded-full bg-muted px-2.5 py-1 text-start text-xs font-medium [overflow-wrap:anywhere]">
+        <span className="h-auto max-w-full rounded-full bg-muted px-2.5 py-1 text-start text-xs font-medium [overflow-wrap:anywhere]">
           {m.library_diary_state({ state: stateLabel(occurrence.state) })}
         </span>
       }
       metadata={
-        <div className="min-w-0 space-y-1 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+        <div className="h-auto min-w-0 space-y-1 text-sm text-muted-foreground [overflow-wrap:anywhere]">
           <p>{m.library_history_recorded_event()}</p>
           <p lang={versionAttached ? (occurrence.versionSubject?.language ?? undefined) : undefined}>
             <span className="font-medium">{m.library_diary_version_subject()}:</span> {versionLabel}
@@ -149,47 +150,47 @@ export function ReadingOccurrence({
         <div className="min-w-0 space-y-3">
           <dl className="grid min-w-0 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
             <div className="min-w-0">
-              <dt className="min-w-0 text-muted-foreground [overflow-wrap:anywhere]">{m.library_diary_reported_start()}</dt>
-              <dd className="mt-0.5 min-w-0 [overflow-wrap:anywhere]">{startDate}</dd>
+              <dt className="h-auto min-w-0 text-muted-foreground [overflow-wrap:anywhere]">{m.library_diary_reported_start()}</dt>
+              <dd className="h-auto mt-0.5 min-w-0 [overflow-wrap:anywhere]">{startDate}</dd>
             </div>
             <div className="min-w-0">
-              <dt className="min-w-0 text-muted-foreground [overflow-wrap:anywhere]">
+              <dt className="h-auto min-w-0 text-muted-foreground [overflow-wrap:anywhere]">
                 {m.library_diary_reported_finish()}
               </dt>
-              <dd className="mt-0.5 min-w-0 [overflow-wrap:anywhere]">{finishDate}</dd>
+              <dd className="h-auto mt-0.5 min-w-0 [overflow-wrap:anywhere]">{finishDate}</dd>
             </div>
           </dl>
           <details className="min-w-0 border-t">
-            <summary className="min-h-11 cursor-pointer content-center rounded px-1 text-sm text-muted-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            <summary className="cursor-pointer content-center rounded px-1 text-sm text-muted-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
               {m.library_diary_review_details()}
             </summary>
-            <div className="min-w-0 space-y-4 pb-4 pt-2 [&_h4]:[overflow-wrap:anywhere] [&_p]:[overflow-wrap:anywhere]">
+            <div className="h-auto min-w-0 space-y-4 pb-4 pt-2 [&_h4]:[overflow-wrap:anywhere] [&_p]:[overflow-wrap:anywhere]">
               <p className="text-sm">{m.library_diary_review_read_only()}</p>
               <dl className="grid min-w-0 gap-x-5 gap-y-3 sm:grid-cols-2">
                 {facts.map(({ id, label, value }) => (
                   <div className="min-w-0" key={id}>
-                    <dt className="min-w-0 text-sm font-medium [overflow-wrap:anywhere]">{label}</dt>
-                    <dd className="mt-1 min-w-0 [overflow-wrap:anywhere]">{value}</dd>
+                    <dt className="h-auto min-w-0 text-sm font-medium [overflow-wrap:anywhere]">{label}</dt>
+                    <dd className="h-auto mt-1 min-w-0 [overflow-wrap:anywhere]">{value}</dd>
                   </div>
                 ))}
                 <div className="min-w-0">
-                  <dt className="text-sm font-medium [overflow-wrap:anywhere]">{m.library_diary_occurrence_id()}</dt>
+                  <dt className="h-auto text-sm font-medium [overflow-wrap:anywhere]">{m.library_diary_occurrence_id()}</dt>
                   <dd className="mt-1 break-all font-mono text-sm">{occurrence.id}</dd>
                 </div>
                 <div className="min-w-0">
-                  <dt className="text-sm font-medium [overflow-wrap:anywhere]">
+                  <dt className="h-auto text-sm font-medium [overflow-wrap:anywhere]">
                     {m.library_diary_occurrence_revision()}
                   </dt>
                   <dd className="mt-1 font-mono text-sm">{String(occurrence.revision)}</dd>
                 </div>
                 <div className="min-w-0">
-                  <dt className="text-sm font-medium [overflow-wrap:anywhere]">{m.library_diary_page_revision()}</dt>
+                  <dt className="h-auto text-sm font-medium [overflow-wrap:anywhere]">{m.library_diary_page_revision()}</dt>
                   <dd className="mt-1 break-all font-mono text-sm">
                     {page.currentness?.revision ?? m.library_diary_page_revision_unavailable()}
                   </dd>
                 </div>
                 <div className="min-w-0">
-                  <dt className="text-sm font-medium [overflow-wrap:anywhere]">{m.library_diary_page_order()}</dt>
+                  <dt className="h-auto text-sm font-medium [overflow-wrap:anywhere]">{m.library_diary_page_order()}</dt>
                   <dd className="mt-1 break-all font-mono text-sm">{page.order}</dd>
                 </div>
               </dl>
@@ -200,7 +201,7 @@ export function ReadingOccurrence({
       }
       actions={
         <Link
-          className="inline-flex min-h-11 w-full items-center justify-center rounded-md border px-4 text-sm font-medium text-primary hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:w-auto"
+          className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 w-full whitespace-normal sm:w-auto' })}
           id={'diary-occurrence-' + occurrence.id}
           to="/library/progress/$id"
           params={{ id: occurrence.id }}

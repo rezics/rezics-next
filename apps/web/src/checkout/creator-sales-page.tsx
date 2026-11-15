@@ -62,11 +62,11 @@ export function CreatorSalesPage({
         <PageHeading id="creator-sales-heading">{m.creator_sales_heading()}</PageHeading>
         {page.kind !== 'loading' &&
           (refresh ? (
-            <Button variant="outline" className="min-h-11" disabled={refreshing} onClick={refresh}>
+            <Button variant="outline" disabled={refreshing} onClick={refresh}>
               {refreshing ? m.creator_review_refreshing_action() : m.statements_refresh()}
             </Button>
           ) : (
-            <Button variant="outline" className="min-h-11" nativeButton={false} render={<a href={href} />}>
+            <Button variant="outline" nativeButton={false} render={<a href={href} />}>
               {m.statements_refresh()}
             </Button>
           ))}
@@ -79,7 +79,7 @@ export function CreatorSalesPage({
       )}
       <nav aria-label={m.creator_sales_navigation()} className="flex flex-wrap gap-x-6 gap-y-2">
         <a
-          className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+          className="inline-flex items-center text-primary underline underline-offset-4"
           href={`/${locale}/creator/statements`}
           onClick={(event) => {
             if (!reading.sale || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
@@ -90,7 +90,7 @@ export function CreatorSalesPage({
           {m.statements_heading()}
         </a>
         <a
-          className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+          className="inline-flex items-center text-primary underline underline-offset-4"
           href={`/${locale}/creator/offers`}
           onClick={(event) => {
             if (!reading.sale || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
@@ -112,14 +112,14 @@ export function CreatorSalesPage({
       >
         <p>{notice}</p>
         {page.kind !== 'loading' && windows?.staged && page.kind !== 'stale' ? (
-          <Button variant="outline" className="min-h-11 min-w-11" onClick={windows.retry}>
+          <Button variant="outline" onClick={windows.retry}>
             {m.creator_sales_retry()}
           </Button>
         ) : (
           page.kind !== 'loading' && (
             <Button
               variant="outline"
-              className="min-h-11"
+             
               nativeButton={false}
               render={
                 <a
@@ -142,11 +142,11 @@ export function CreatorSalesPage({
           <div className="space-y-3 rounded-xl border bg-card p-5 text-card-foreground" role="status">
             <p>{m.creator_sales_preparing()}</p>
             {refresh ? (
-              <Button variant="outline" className="min-h-11 min-w-11" disabled={refreshing} onClick={refresh}>
+              <Button variant="outline" disabled={refreshing} onClick={refresh}>
                 {m.statements_refresh()}
               </Button>
             ) : (
-              <a className="inline-flex min-h-11 items-center text-primary underline underline-offset-4" href={href}>
+              <a className="inline-flex items-center text-primary underline underline-offset-4" href={href}>
                 {m.statements_refresh()}
               </a>
             )}
@@ -173,7 +173,7 @@ export function CreatorSalesPage({
           {windows?.previous && (
             <Button
               variant="outline"
-              className="min-h-11 min-w-11"
+             
               nativeButton={false}
               render={
                 <a
@@ -188,7 +188,7 @@ export function CreatorSalesPage({
           {cursor && (
             <Button
               variant="outline"
-              className="min-h-11"
+             
               nativeButton={false}
               render={<a href={creatorSalesHref(locale)} onClick={paging('restart', undefined)} />}
             >
@@ -198,7 +198,7 @@ export function CreatorSalesPage({
           {page.next && (
             <Button
               variant="outline"
-              className="min-h-11"
+             
               nativeButton={false}
               render={<a href={creatorSalesHref(locale, page.next)} onClick={paging('next', page.next)} />}
             >
@@ -211,7 +211,7 @@ export function CreatorSalesPage({
   const evidence =
     page.kind === 'ready' ? (
       <details className="min-w-0 rounded-xl border p-4 sm:p-5">
-        <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.creator_review_page_context()}</summary>
+        <summary className="cursor-pointer font-medium">{m.creator_review_page_context()}</summary>
         <div className="min-w-0 space-y-4 pt-4">
           <p className="text-sm text-muted-foreground">{m.creator_review_page_context_hint()}</p>
           <dl className="min-w-0 space-y-4 text-sm">

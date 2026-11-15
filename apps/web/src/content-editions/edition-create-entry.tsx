@@ -28,7 +28,7 @@ export function EditionCreateEntry({ identity }: { identity: EditionSourceIdenti
         <>
           <p className="text-sm text-muted-foreground">{m.edition_publication_entry_help()}</p>
           <a
-            className="inline-flex min-h-11 items-center underline underline-offset-4"
+            className="inline-flex items-center underline underline-offset-4"
             href={editionCreateHref(identity, getLocale())}
           >
             {m.edition_publication_entry_action()}
@@ -43,7 +43,6 @@ export function EditionCreateEntry({ identity }: { identity: EditionSourceIdenti
             <Button
               type="button"
               variant="outline"
-              className="min-h-11"
               disabled={fetchStatus !== 'idle'}
               onClick={() => void refetch({ cancelRefetch: false })}
             >

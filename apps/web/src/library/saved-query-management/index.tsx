@@ -1,13 +1,4 @@
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@rezics/ui/shadcn/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@rezics/ui/shadcn/alert-dialog';
 import { Button } from '@rezics/ui/shadcn/button';
 import { useLayoutEffect, useRef, useState, useSyncExternalStore, type FormEvent, type MouseEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
@@ -246,7 +237,7 @@ function SavedQueryManagementLifetime({
   return (
     <section
       ref={panel}
-      className="mt-4 min-w-0 space-y-3 [&_button]:min-h-11 [&_button]:h-auto [&_button]:whitespace-normal [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-offset-2 [&_input]:min-h-11 [&_textarea]:min-h-24"
+      className="h-auto mt-4 min-w-0 space-y-3 [&_button]:h-auto [&_button]:min-h-7 [&_button]:whitespace-normal [&_textarea]:min-h-24"
       aria-label={m.library_saved_query_manage()}
       data-saved-query-management
     >
@@ -308,7 +299,7 @@ function SavedQueryManagementLifetime({
         <div className="space-y-4 rounded-2xl border border-border bg-card p-4 sm:p-6">
           <div className="space-y-2">
             <h2 className="text-lg font-semibold">{m.library_saved_query_management_heading()}</h2>
-            <p className="break-words font-medium">{state.snapshot.title}</p>
+            <p className="h-auto break-words font-medium">{state.snapshot.title}</p>
             <p className="max-w-3xl text-sm text-muted-foreground">
               {m.library_saved_query_management_metadata_only()}
             </p>
@@ -318,7 +309,7 @@ function SavedQueryManagementLifetime({
             <div className="min-w-0 space-y-3 rounded-lg border border-border p-3 text-sm">
               <dl className="grid min-w-0 gap-2">
                 <dt className="font-medium">{m.library_collection_title()}</dt>
-                <dd className="break-words">
+                <dd className="h-auto break-words">
                   {state.intent.operation === 'collection.update'
                     ? state.intent.command.request.data.title
                     : state.snapshot.title}
@@ -326,12 +317,12 @@ function SavedQueryManagementLifetime({
                 {state.intent.operation === 'collection.update' && (
                   <>
                     <dt className="font-medium">{m.library_collection_description()}</dt>
-                    <dd className="whitespace-pre-wrap break-words">{state.intent.command.request.data.description}</dd>
+                    <dd className="h-auto whitespace-pre-wrap break-words">{state.intent.command.request.data.description}</dd>
                   </>
                 )}
               </dl>
               <details className="min-w-0">
-                <summary className="min-h-11 cursor-pointer content-center rounded-md py-2 text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                <summary className="cursor-pointer content-center rounded-md py-2 text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                   {m.catalogue_technical_details()} · {m.library_saved_query_management_collection_id()}
                 </summary>
                 <dl className="grid min-w-0 gap-2 pt-2">
@@ -422,7 +413,7 @@ function SavedQueryManagementLifetime({
         <AlertDialogContent
           size="sm"
           finalFocus={returnDialogFocus}
-          className="[&_button]:min-h-11 [&_button]:h-auto [&_button]:whitespace-normal"
+          className="h-auto [&_button]:h-auto [&_button]:min-h-7 [&_button]:whitespace-normal"
         >
           <AlertDialogHeader>
             <AlertDialogTitle>{m.library_collection_delete_title()}</AlertDialogTitle>
@@ -431,7 +422,7 @@ function SavedQueryManagementLifetime({
           {state.snapshot ? (
             <dl className="grid min-w-0 gap-2 text-sm">
               <dt className="font-medium">{m.library_collection_title()}</dt>
-              <dd className="break-words">{state.snapshot.title}</dd>
+              <dd className="h-auto break-words">{state.snapshot.title}</dd>
               <dt className="font-medium">{m.library_saved_query_management_collection_id()}</dt>
               <dd className="break-all font-mono">{state.snapshot.id}</dd>
               <dt className="font-medium">
@@ -440,12 +431,12 @@ function SavedQueryManagementLifetime({
             </dl>
           ) : null}
           <AlertDialogFooter>
-            <AlertDialogCancel className="min-h-11" disabled={state.busy}>
+            <AlertDialogCancel disabled={state.busy}>
               {m.library_collection_cancel()}
             </AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
-              className="min-h-11"
+             
               disabled={state.busy || !canDelete}
               aria-busy={state.busy}
               onClick={controller.confirmDelete}
@@ -469,17 +460,17 @@ function SavedQueryManagementLifetime({
         <AlertDialogContent
           size="sm"
           finalFocus={returnDialogFocus}
-          className="[&_button]:min-h-11 [&_button]:h-auto [&_button]:whitespace-normal"
+          className="h-auto [&_button]:h-auto [&_button]:min-h-7 [&_button]:whitespace-normal"
         >
           <AlertDialogHeader>
             <AlertDialogTitle>{m.library_saved_query_management_leave_title()}</AlertDialogTitle>
             <AlertDialogDescription>{m.library_saved_query_management_leave_description()}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="min-h-11" disabled={state.busy}>
+            <AlertDialogCancel disabled={state.busy}>
               {m.library_collection_cancel()}
             </AlertDialogCancel>
-            <AlertDialogAction className="min-h-11" variant="destructive" onClick={controller.confirmDeparture}>
+            <AlertDialogAction variant="destructive" onClick={controller.confirmDeparture}>
               {m.library_saved_query_management_leave_confirm()}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -499,17 +490,17 @@ function SavedQueryManagementLifetime({
         <AlertDialogContent
           size="sm"
           finalFocus={returnDialogFocus}
-          className="[&_button]:min-h-11 [&_button]:h-auto [&_button]:whitespace-normal"
+          className="h-auto [&_button]:h-auto [&_button]:min-h-7 [&_button]:whitespace-normal"
         >
           <AlertDialogHeader>
             <AlertDialogTitle>{m.library_saved_query_management_reconcile_title()}</AlertDialogTitle>
             <AlertDialogDescription>{m.library_saved_query_management_reconcile_description()}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="min-h-11" disabled={state.busy}>
+            <AlertDialogCancel disabled={state.busy}>
               {m.library_collection_cancel()}
             </AlertDialogCancel>
-            <AlertDialogAction className="min-h-11" onClick={(event) => launchRead(event, controller.confirmReconcile)}>
+            <AlertDialogAction onClick={(event) => launchRead(event, controller.confirmReconcile)}>
               {m.library_saved_query_management_reconcile_confirm()}
             </AlertDialogAction>
           </AlertDialogFooter>

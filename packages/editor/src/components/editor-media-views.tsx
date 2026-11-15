@@ -205,11 +205,21 @@ export function EditorMediaPropertiesDialog({
               />
             </Field>
           )}
-          <Field orientation="horizontal" className="flex-wrap">
-            <Button type="submit" variant="secondary" disabled={image && !validDimensions}>
+          <Field orientation="horizontal" className="flex-wrap items-center">
+            <Button
+              type="submit"
+              variant="secondary"
+              className="h-auto min-h-7 max-w-full whitespace-normal text-start"
+              disabled={image && !validDimensions}
+            >
               {labels.apply}
             </Button>
-            <Button type="button" variant="ghost" onClick={onCancel}>
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-auto min-h-7 max-w-full whitespace-normal text-start"
+              onClick={onCancel}
+            >
               {labels.cancel}
             </Button>
           </Field>
@@ -245,7 +255,7 @@ function OpaqueView({ node, editor, selected, fallback }: NodeViewProps & { fall
       data-block-id={node.attrs.id}
       data-id={node.attrs.id}
       data-drag-handle={!node.isInline ? '' : undefined}
-      className={`${node.isInline ? 'inline' : 'my-3 block p-3'} rounded border border-border text-sm ${selected ? 'ring-2 ring-ring' : ''}`}
+      className={`${node.isInline ? 'inline' : 'my-3 block p-3'} rounded-xl border border-border text-sm ${selected ? 'ring-2 ring-ring' : ''}`}
     >
       {node.attrs.fallback || unavailable}
     </NodeViewWrapper>
@@ -452,7 +462,13 @@ function MediaView({ node, editor, getPos, selected, fallback }: NodeViewProps &
             onCancel={() => finish(false)}
           />
         ) : (
-          <Button ref={editButton} type="button" variant="outline" className="min-h-11" onClick={open}>
+          <Button
+            ref={editButton}
+            type="button"
+            variant="outline"
+            className="h-auto min-h-7 max-w-full whitespace-normal text-start"
+            onClick={open}
+          >
             {label(image ? 'imageProperties' : 'mediaProperties')}
           </Button>
         )

@@ -55,7 +55,7 @@ export const SubjectTermsSession = candidateSession(function SubjectTermsSession
       {returnHref && (
         <div className="mx-auto w-full max-w-4xl px-6 pt-4">
           <Link
-            className="inline-flex min-h-11 items-center rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="inline-flex items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             to={returnHref as never}
           >
             {m.changes_return_to_changes()}

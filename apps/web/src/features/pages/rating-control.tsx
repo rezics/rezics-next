@@ -50,7 +50,7 @@ function formResultFailure(locale: string, result: SubjectRatingFormHint | undef
 }
 
 const actionClassName =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 export async function applyOptimisticRatingChange(input: {
   queryClient: ReturnType<typeof useQueryClient>;
@@ -255,7 +255,7 @@ export function RatingControlView({
           </output>
         </div>
         <Slider.Root
-          className="[&>div]:min-h-11 **:data-[slot=slider-thumb]:size-5 **:data-[slot=slider-thumb]:ring-2 **:data-[slot=slider-thumb]:ring-primary"
+
           data-slot="slider"
           disabled={nativeFallback && pending}
           aria-disabled={pending}
@@ -282,10 +282,10 @@ export function RatingControlView({
           step={question.scale.displayStep}
           value={[sliderValue]}
         >
-          <Slider.Control className="relative flex min-h-11 w-full touch-none items-center select-none data-disabled:opacity-50">
+          <Slider.Control className="relative flex w-full touch-none items-center select-none data-disabled:opacity-50">
             <Slider.Track
               data-slot="slider-track"
-              className="relative h-1 w-full grow overflow-hidden rounded-2xl bg-input/90"
+              className="relative h-1 w-full grow overflow-hidden rounded-md bg-muted select-none"
             >
               <Slider.Indicator data-slot="slider-range" className="h-full bg-primary" />
             </Slider.Track>
@@ -294,7 +294,7 @@ export function RatingControlView({
               aria-valuetext={valueText}
               aria-describedby={scaleId}
               data-slot="slider-thumb"
-              className="block size-5 shrink-0 rounded-2xl bg-white shadow-md ring-2 ring-primary not-dark:bg-clip-padding transition-[color,box-shadow] duration-200 select-none hover:ring-4 hover:ring-ring/30 focus-visible:ring-4 focus-visible:ring-ring/30 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
+              className="relative block size-3 shrink-0 rounded-md border border-ring bg-white ring-ring/30 transition-[color,box-shadow] select-none after:absolute after:-inset-2 hover:ring-2 focus-visible:ring-2 focus-visible:outline-hidden active:ring-2 disabled:pointer-events-none disabled:opacity-50"
             />
           </Slider.Control>
         </Slider.Root>
@@ -473,7 +473,7 @@ function NoScriptForm({
         <input
           aria-label={question.label}
           aria-describedby={scaleId}
-          className="min-h-11 min-w-11 max-w-full"
+          className="max-w-full"
           defaultValue={
             value ??
             question.scale.min +
@@ -497,23 +497,13 @@ function NoScriptForm({
             options,
           )}
         </p>
-        <button
-          className={`rounded-2xl bg-primary px-3 text-primary-foreground text-sm ${actionClassName}`}
-          name="intent"
-          type="submit"
-          value="save"
-        >
+        <Button className={actionClassName} name="intent" type="submit" value="save">
           {m.subject_rating_control_save({}, options)}
-        </button>
+        </Button>
         {value !== null && (
-          <button
-            className={`rounded-2xl border px-3 text-sm ${actionClassName}`}
-            name="intent"
-            type="submit"
-            value="clear"
-          >
+          <Button className={actionClassName} name="intent" type="submit" value="clear" variant="outline">
             {m.subject_rating_control_clear({}, options)}
-          </button>
+          </Button>
         )}
       </form>
     </noscript>

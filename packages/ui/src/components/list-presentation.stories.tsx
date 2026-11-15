@@ -4,6 +4,7 @@ import { expect, screen, userEvent, within } from 'storybook/test';
 import { fallbackListPresentation, type CoverSubject, type CoverSummary } from './cover.tsx';
 import { CoverCard, CoverGrid } from './cover-card.tsx';
 import { MemberListRow, MemberReadingDetail, MemberReadingItem } from './list-presentation.tsx';
+import { Button } from '../shadcn/button.tsx';
 import { withSurface } from '../stories/support.tsx';
 
 const book: CoverSubject = { id: 'list-book', title: 'The Little Prince', types: ['schema:Book'] };
@@ -346,9 +347,9 @@ function CollectionReadingExample({ layout }: { layout: 'list' | 'grid' }) {
       )}
       {selection === undefined && <div id={detailId} hidden />}
       <nav aria-label="Collection pages">
-        <a href="/collections/next" className="inline-flex min-h-11 items-center rounded-lg border px-3">
+        <Button variant="outline" render={<a href="/collections/next" />}>
           More
-        </a>
+        </Button>
       </nav>
     </div>
   );

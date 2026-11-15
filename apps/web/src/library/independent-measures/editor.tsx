@@ -41,7 +41,7 @@ function recordingNotice(measure: IndependentMeasure): string | null {
 function MeasureDetails({ measure }: { measure: IndependentMeasure }) {
   return (
     <details className="text-sm text-muted-foreground">
-      <summary className="min-h-11 cursor-pointer content-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+      <summary className="cursor-pointer content-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
         {m.library_progress_details()}
       </summary>
       <dl className="grid gap-3 pb-2 sm:grid-cols-2">
@@ -92,13 +92,13 @@ export function IndependentMeasuresReadout({
             className="grid min-w-0 gap-1 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:gap-4"
           >
             <dt className="space-y-1 text-sm">
-              <span className="block font-medium [overflow-wrap:anywhere]">{measure.label}</span>
+              <span className="h-auto block font-medium [overflow-wrap:anywhere]">{measure.label}</span>
               <span className="block text-xs text-muted-foreground">
                 {measure.primary ? m.library_progress_measure_primary() : m.library_progress_measure_additional()}
               </span>
             </dt>
             <dd className="min-w-0 space-y-1">
-              <p className="font-medium tabular-nums [overflow-wrap:anywhere]">{valueLabel(measure)}</p>
+              <p className="h-auto font-medium tabular-nums [overflow-wrap:anywhere]">{valueLabel(measure)}</p>
               {measure.total !== null ? (
                 <p className="text-sm text-muted-foreground">
                   {m.library_progress_measure_total({ value: measure.total })}
@@ -112,7 +112,7 @@ export function IndependentMeasuresReadout({
         ))}
       </dl>
       <details className="text-sm text-muted-foreground">
-        <summary className="min-h-11 cursor-pointer content-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        <summary className="cursor-pointer content-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
           {m.library_progress_details()}
         </summary>
         <p>{m.library_progress_measures_shared_revision({ revision })}</p>
@@ -177,13 +177,13 @@ export function IndependentMeasuresEditor({
           const intentId = `${fieldId}-intent`;
           return (
             <fieldset key={measure.unit} className="min-w-0 space-y-3 rounded-xl border border-border p-4">
-              <legend className="max-w-full px-1 text-sm font-medium [overflow-wrap:anywhere]">
+              <legend className="h-auto max-w-full px-1 text-sm font-medium [overflow-wrap:anywhere]">
                 {measure.primary ? m.library_progress_measure_primary() : m.library_progress_measure_additional()}:{' '}
                 <span>{measure.label}</span>
               </legend>
               <div className="grid items-start gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                 <div className="min-w-0 space-y-2">
-                  <p id={savedId} className="text-sm tabular-nums [overflow-wrap:anywhere]">
+                  <p id={savedId} className="h-auto text-sm tabular-nums [overflow-wrap:anywhere]">
                     {m.library_progress_current_total({ value: valueLabel(measure) })}
                   </p>
                   {measure.total !== null ? (
@@ -216,7 +216,7 @@ export function IndependentMeasuresEditor({
                       <Button
                         type="button"
                         variant="outline"
-                        className="min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]"
+                        className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]"
                         disabled={busy}
                         onClick={() => onDraft(measure.unit, measure.amount ?? '')}
                       >
@@ -226,7 +226,7 @@ export function IndependentMeasuresEditor({
                       <Button
                         type="button"
                         variant="outline"
-                        className="min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]"
+                        className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]"
                         disabled={busy || measure.amount === null}
                         onClick={() => onClear(measure.unit)}
                       >
@@ -258,7 +258,7 @@ export function IndependentMeasuresEditor({
           <Exposure operation="progress_session.record">
             <Button
               type="button"
-              className="min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]"
+              className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]"
               disabled={busy || !edits.length}
               onClick={onReview}
             >
@@ -268,7 +268,7 @@ export function IndependentMeasuresEditor({
           <Button
             type="button"
             variant="outline"
-            className="min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]"
+            className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]"
             disabled={busy || refreshing}
             onClick={onRefresh}
           >

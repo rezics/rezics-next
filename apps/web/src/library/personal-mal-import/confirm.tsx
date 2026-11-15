@@ -8,6 +8,7 @@ import { malKindLabel, malMatchLabel, malOriginalScoreLabel, malVoteReadKey } fr
 import { MalReviewedLabels } from './labels';
 import { malSourcePreview } from './source';
 import type { RowDraft } from './row';
+import { NativeCheckbox } from '@rezics/ui/native-checkbox';
 
 export function MalConfirmPage({
   rows,
@@ -96,7 +97,7 @@ export function MalConfirmPage({
           const currentVote = currentVoteLabel(row, score, nativeQuestion?.id, readback);
           return (
             <li key={row.index} className="rounded-md border p-3">
-              <p className="font-medium [overflow-wrap:anywhere]">{row.title}</p>
+              <p className="h-auto font-medium [overflow-wrap:anywhere]">{row.title}</p>
               <p className="text-sm">
                 {malKindLabel(row.kind)} · {malMatchLabel(row.match, review.skip)}
               </p>
@@ -117,7 +118,7 @@ export function MalConfirmPage({
               <div className="space-y-2 rounded-md bg-muted/40 p-3">
                 <p className="text-sm">{m.library_mal_source_score({ value: malOriginalScoreLabel(row.score) })}</p>
                 {questionText ? (
-                  <p className="text-sm [overflow-wrap:anywhere]">{questionText}</p>
+                  <p className="h-auto text-sm [overflow-wrap:anywhere]">{questionText}</p>
                 ) : (
                   <p role="status">{m.library_mal_question_unavailable()}</p>
                 )}
@@ -134,10 +135,9 @@ export function MalConfirmPage({
                     })}
                   </p>
                   {scoreAvailable && scoreKey ? (
-                    <label className="flex min-h-11 items-center gap-3 whitespace-normal [overflow-wrap:anywhere]">
-                      <input
-                        className="size-5 shrink-0"
-                        type="checkbox"
+                    <label className="h-auto flex items-center gap-3 whitespace-normal [overflow-wrap:anywhere]">
+                      <NativeCheckbox
+                        className='shrink-0'
                         checked={scoreConsents.has(scoreKey)}
                         disabled={busy || review.skip}
                         onChange={(event) => {

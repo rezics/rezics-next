@@ -13,6 +13,7 @@ import {
   useMyRealmsInventoryVisit,
 } from '../../community/my-realms-caller';
 import { ClosedErrorPage } from '../../shell/closed';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
@@ -75,7 +76,10 @@ function MyRealmsErrorPage({ error, reset }: { error: unknown; reset?: () => voi
           <Link
             to="/realms"
             search={{}}
-            className="inline-flex min-h-11 min-w-11 max-w-full items-center justify-center whitespace-normal rounded-lg border border-border px-4 py-2 text-start text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className={buttonVariants({
+              variant: 'outline',
+              className: 'h-auto min-h-7 max-w-full whitespace-normal text-start',
+            })}
           >
             {m.realms_first_page()}
           </Link>

@@ -47,13 +47,13 @@ import { AuthoringDepartureBoundary } from '../../threads/authoring-departure';
 import { GameDraftDeparture } from './game-classification-departure';
 
 const gameActionClass =
-  'min-h-8 min-w-8 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [@media(max-width:639px)_and_(pointer:coarse)]:h-auto [@media(max-width:639px)_and_(pointer:coarse)]:min-h-11 [@media(max-width:639px)_and_(pointer:coarse)]:min-w-11';
+  'min-h-7 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [@media(max-width:639px)_and_(pointer:coarse)]:h-auto';
 const gameDisclosureSummaryClass =
-  'max-w-full cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [@media(max-width:639px)_and_(pointer:coarse)]:min-h-11 [@media(max-width:639px)_and_(pointer:coarse)]:py-3';
+  'max-w-full cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [@media(max-width:639px)_and_(pointer:coarse)]:py-3';
 const gameReturnClass =
-  'inline-flex min-h-11 min-w-0 max-w-full items-center whitespace-normal break-words [overflow-wrap:anywhere] underline';
+  'inline-flex min-w-0 max-w-full items-center whitespace-normal break-words [overflow-wrap:anywhere] underline';
 const gameSummaryActionsClass =
-  'flex min-w-0 max-w-full flex-wrap items-start gap-2 [overflow-wrap:anywhere] [&>a]:h-auto [&>a]:min-h-11 [&>a]:min-w-11 [&>a]:max-w-full [&>a]:whitespace-normal [&>a]:py-2 [&>a]:[overflow-wrap:anywhere] md:pointer-fine:[&>a]:min-h-8 md:pointer-fine:[&>a]:py-1';
+  'flex min-w-0 max-w-full flex-wrap items-start gap-2 [overflow-wrap:anywhere] [&>a]:h-auto [&>a]:min-h-7 [&>a]:max-w-full [&>a]:whitespace-normal [&>a]:[overflow-wrap:anywhere]';
 
 export type GameProfileTransport = {
   load: () => Promise<GameRead>;
@@ -823,7 +823,7 @@ function GameCorrection({
       )}
       {visible && (
         <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3">
-          <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
+          <summary className="min-h-7 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             {m.specialist_identity_names({}, o)}
           </summary>
           <dl className="mt-3 min-w-0 space-y-3">

@@ -7,6 +7,7 @@ import { AniListAction, AniListCheck } from './controls';
 import { AniListTargetSearch } from './target';
 import { ImportDetails } from '../personal-list-import/presentation';
 import { AniListLabelResult } from './results';
+import { Input } from '@rezics/ui/shadcn/input';
 
 /** One retained row, one bounded target-search page; native evidence is never reconstructed from JSON. */
 export function AniListLabelAdoption({
@@ -120,7 +121,7 @@ export function AniListLabelAdoption({
   return (
     <section
       aria-labelledby={headingId}
-      className="min-w-0 space-y-4 rounded-xl border bg-muted/20 p-4 [overflow-wrap:anywhere] sm:p-5"
+      className="h-auto min-w-0 space-y-4 rounded-xl border bg-muted/20 p-4 [overflow-wrap:anywhere] sm:p-5"
       data-anilist-label-row={row.ordinal}
     >
       <header className="space-y-1">
@@ -154,9 +155,9 @@ export function AniListLabelAdoption({
           </section>
           <section className="min-w-0 space-y-2" data-anilist-label-target-search>
             <label htmlFor={`${id}-search`}>{m.library_anilist_labels_search()}</label>
-            <input
+            <Input
               id={`${id}-search`}
-              className="min-h-11 w-full rounded border px-3"
+              className='w-full'
               disabled={locked}
               value={query}
               onChange={(event) => {
@@ -195,7 +196,7 @@ export function AniListLabelAdoption({
             </div>
             {searchFailed ? <p role="status">{m.library_anilist_labels_search_failed()}</p> : null}
             {targets ? (
-              <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]" data-anilist-label-search-provenance>
+              <p className="h-auto text-sm text-muted-foreground [overflow-wrap:anywhere]" data-anilist-label-search-provenance>
                 {m.library_anilist_labels_search()} · {query}
               </p>
             ) : null}
@@ -257,7 +258,7 @@ export function AniListLabelAdoption({
                               <SelectTrigger
                                 id={`${id}-${value.key}-target`}
                                 aria-labelledby={`${id}-${value.key}-target-label`}
-                                className="min-h-11 w-full rounded border px-3"
+                                className='w-full'
                               >
                                 <SelectValue />
                               </SelectTrigger>
@@ -275,9 +276,9 @@ export function AniListLabelAdoption({
                           {'name' in selection.target ? (
                             <>
                               <label htmlFor={`${id}-${value.key}-name`}>{m.library_anilist_labels_new()}</label>
-                              <input
+                              <Input
                                 id={`${id}-${value.key}-name`}
-                                className="min-h-11 w-full rounded border px-3"
+                                className='w-full'
                                 disabled={locked}
                                 value={selection.target.name}
                                 onChange={(event) => target(value.key, { name: event.target.value })}

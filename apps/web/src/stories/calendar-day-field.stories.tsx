@@ -5,6 +5,7 @@ import { CalendarDayField, calendarDayDate } from '../library/calendar-day-field
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { PatternStory, pagePaths } from './page';
+import { Button } from '@rezics/ui/shadcn/button';
 
 const meta = {
   title: 'Library/Calendar day field',
@@ -58,14 +59,10 @@ function CalendarFields() {
           disabled={disabled}
           onChange={() => undefined}
         />
-        <button
-          type="button"
-          className="min-h-11 min-w-11 w-fit rounded-lg border px-4 py-2 focus-visible:outline-2 focus-visible:outline-ring"
-          aria-pressed={disabled}
-          onClick={() => setDisabled((current) => !current)}
+        <Button type="button" className="w-fit" aria-pressed={disabled} variant="outline" size="sm" onClick={() => setDisabled((current) => !current)}
         >
           {disabled ? 'Enable date field' : 'Disable date field'}
-        </button>
+        </Button>
       </section>
     </PatternStory>
   );

@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { personalRead } from '../../kernel/query';
 import { AnonymousSessionContext, useSession } from '../../session/query';
 import { useContext, useId, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
 import { m } from '../../paraglide/messages.js';
 import type { SubjectSummary } from '../../media/summary';
@@ -559,7 +559,7 @@ export function MemberList({
           href={value.listHref(node, cursor)}
           className={cn(
             buttonVariants({ variant: 'outline' }),
-            'inline-flex h-auto min-h-11 min-w-11 max-w-full items-center justify-center whitespace-normal break-words py-2 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+            'h-auto min-h-7 max-w-full whitespace-normal break-words text-center',
           )}
         >
           {m.subject_section_more({ label: title }, options)}
@@ -568,22 +568,20 @@ export function MemberList({
         target &&
         continuationEnabled &&
         (restart || failed || (paged && cursor)) && (
-          <button
+          <Button
             type="button"
+            variant="outline"
             onClick={more}
             aria-disabled={pending || waiting}
             aria-describedby={`${instance}-status`}
-            className={cn(
-              buttonVariants({ variant: 'outline' }),
-              'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
-            )}
+            className="h-auto min-h-7 max-w-full whitespace-normal break-words text-center"
           >
             {restart
               ? m.member_window_restart({}, options)
               : failed
                 ? m.subject_section_retry({}, options)
                 : m.subject_section_more({ label: title }, options)}
-          </button>
+          </Button>
         )
       )}
     </section>

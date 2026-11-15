@@ -15,7 +15,7 @@ import {
 import type { Release } from '@rezics/definitions';
 
 const actionClass =
-  'h-auto min-h-8 min-w-8 max-w-full whitespace-normal break-words py-2 [@media(max-width:639px)_and_(pointer:coarse)]:min-h-11 [@media(max-width:639px)_and_(pointer:coarse)]:min-w-11';
+  'h-auto min-h-7 max-w-full whitespace-normal break-words';
 
 export { StatementSummary as ConceptStatementSummary } from './statement-summary';
 

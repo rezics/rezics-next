@@ -91,7 +91,7 @@ export function ConceptWeightRange({
             name="unit"
             defaultValue={(range?.unit ?? definition.units[0]) === '' ? null : (range?.unit ?? definition.units[0])}
           >
-            <SelectTrigger id={`${id}-unit`} className="w-full min-w-0 max-w-full h-auto min-h-11 max-w-full">
+            <SelectTrigger id={`${id}-unit`} className="w-full min-w-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -106,7 +106,7 @@ export function ConceptWeightRange({
           </Select>
         </Field>
       </div>
-      <Button type="submit" variant="outline" className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2">
+      <Button type="submit" variant="outline" className="h-auto min-h-7 max-w-full whitespace-normal">
         {m.search_apply({}, options)}
       </Button>
     </form>

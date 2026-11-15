@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { cn } from '@rezics/ui/utils';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../../../paraglide/messages.js';
 import { subjectHref, subjectUrlForView } from '../../../../subject/load-subject';
@@ -59,7 +60,7 @@ export function RetiredReading(props: Address & { refresh?: (() => Promise<void>
       {props.refresh ? (
         <button
           type="button"
-          className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+          className={cn(buttonVariants({ variant: 'outline' }), action)}
           disabled={busy}
           onClick={async () => {
             if (flight.current) return;

@@ -42,7 +42,7 @@ import { SubjectTermsEntry } from './subject-terms-entry';
 import { AuthoringDepartureProvider, useAuthoringDeparture } from '../../threads/authoring-departure';
 
 const albumActionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 [overflow-wrap:anywhere] md:pointer-fine:min-h-8';
+  'h-auto min-h-7 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]';
 
 export type AlbumEditors = {
   facts: FactsTransport;
@@ -465,7 +465,7 @@ function AlbumCorrectionWorkspaceLive({
           <p className="text-muted-foreground">{m.album_grain({}, o)}</p>
           <p className="text-sm text-muted-foreground">{m.album_scope({}, o)}</p>
           <nav
-            className="flex min-w-0 max-w-full flex-wrap items-start gap-3 [&>a]:h-auto [&>a]:min-h-11 [&>a]:min-w-11 [&>a]:max-w-full [&>a]:whitespace-normal [&>a]:break-words [&>a]:py-2 [&>a]:[overflow-wrap:anywhere] md:pointer-fine:[&>a]:min-h-8 md:pointer-fine:[&>a]:py-1"
+            className="flex min-w-0 max-w-full flex-wrap items-start gap-3 [&>a]:h-auto [&>a]:min-h-7 [&>a]:max-w-full [&>a]:whitespace-normal [&>a]:break-words [&>a]:[overflow-wrap:anywhere]"
             aria-label={m.facts_other_editors({}, o)}
           >
             <a className={buttonVariants({ variant: 'outline' })} href={href}>
@@ -475,7 +475,7 @@ function AlbumCorrectionWorkspaceLive({
             <DefinitionGuideLink locale={locale} address={{ type: subject!.type, returnTo: `${href}/album` }} />
           </nav>
           <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3">
-            <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
+            <summary className="min-h-7 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
               {m.specialist_identity_names({}, o)}
             </summary>
             <dl className="mt-3 min-w-0 space-y-3">
@@ -515,7 +515,7 @@ function AlbumCorrectionWorkspaceLive({
             </dl>
           </details>
           <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3 border-t border-border pt-4">
-            <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
+            <summary className="min-h-7 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
               {m.specialist_identity_reference({}, o)}
             </summary>
             <dl className="mt-3 min-w-0 space-y-3">
@@ -839,7 +839,7 @@ function AlbumDraftRemoval({
         ref={trigger}
         type="button"
         variant="outline"
-        className="h-auto min-h-11 max-w-full whitespace-normal break-words"
+        className="h-auto min-h-7 max-w-full whitespace-normal break-words"
         disabled={disabled}
         hidden={confirming}
         onClick={() => {

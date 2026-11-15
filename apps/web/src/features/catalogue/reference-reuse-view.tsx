@@ -19,7 +19,7 @@ import {
 } from './reference-reuse';
 import { factHolder, type FactDraft } from './subject-facts';
 
-const wrap = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2';
+const wrap = 'h-auto min-h-7 max-w-full whitespace-normal break-words';
 
 function refusalText(reason: ReuseRefusal, locale: string) {
   const o = { locale: locale as never };
@@ -195,7 +195,7 @@ export function ReferenceReusePanel({
               <Field orientation="horizontal" className="min-w-0">
                 <Checkbox
                   id={id}
-                  className="size-11 after:inset-0"
+                 
                   checked={checked}
                   disabled={!preview.ok || (!checked && selected.length >= reuseTargetLimit)}
                   onCheckedChange={(value) => {
@@ -207,7 +207,7 @@ export function ReferenceReusePanel({
                 />
                 <FieldLabel
                   id={context.propertyId}
-                  className="min-h-11 min-w-0 items-center gap-x-2 whitespace-normal [overflow-wrap:anywhere]"
+                  className="min-w-0 items-center gap-x-2 whitespace-normal [overflow-wrap:anywhere]"
                   htmlFor={id}
                 >
                   {context.propertyLabel}

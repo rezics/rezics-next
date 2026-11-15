@@ -30,7 +30,7 @@ import { CatalogueFileCreateReview } from './catalogue-file-create-review';
 
 const factsId = 'catalogue-file-initial-facts';
 const formClass =
-  'inline-flex min-h-11 min-w-11 items-center justify-center whitespace-normal rounded-md border px-4 py-2';
+  'inline-flex items-center justify-center whitespace-normal border';
 
 function CatalogueFileCreateSessionLive({ locale, initial }: { locale: string; initial: CatalogueFileCreateRead }) {
   const { state } = useSession();

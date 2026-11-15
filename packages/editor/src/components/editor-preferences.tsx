@@ -3,6 +3,7 @@
 import { useEffect, useId, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
+import { Toggle } from '@rezics/ui/shadcn/toggle';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Switch } from '@rezics/ui/shadcn/switch';
 import {
@@ -156,7 +157,7 @@ function ShortcutField({
       <FieldLabel htmlFor={inputId} className="max-w-full whitespace-normal break-words">
         {labels.shortcut}
       </FieldLabel>
-      <div className="flex min-w-0 flex-wrap gap-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
         <Input
           id={inputId}
           value={draft}
@@ -181,7 +182,7 @@ function ShortcutField({
           type="button"
           variant="outline"
           disabled={disabled}
-          className="h-auto min-h-8 max-w-full shrink-0 whitespace-normal text-start"
+          className="h-auto min-h-7 max-w-full shrink-0 whitespace-normal text-start"
           onClick={onReset}
         >
           {labels.resetShortcut}
@@ -513,30 +514,28 @@ export function EditorPreferencesPanel({
                   <FieldSet key={entry.id} className="min-w-0 rounded-xl border p-3">
                     <FieldLegend className="max-w-full whitespace-normal break-words">{entry.label}</FieldLegend>
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <Button
-                        type="button"
+                      <Toggle
                         variant="outline"
-                        className="h-auto min-h-8 max-w-full whitespace-normal text-start"
+                        className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                         disabled={disabled}
-                        aria-pressed={resolved.pinnedCommands.includes(entry.id)}
-                        onClick={() => toggleCommand('pinnedCommands', entry.id)}
+                        pressed={resolved.pinnedCommands.includes(entry.id)}
+                        onPressedChange={() => toggleCommand('pinnedCommands', entry.id)}
                       >
                         {text.pinned}
-                      </Button>
-                      <Button
-                        type="button"
+                      </Toggle>
+                      <Toggle
                         variant="outline"
-                        className="h-auto min-h-8 max-w-full whitespace-normal text-start"
+                        className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                         disabled={disabled}
-                        aria-pressed={!resolved.hiddenCommands.includes(entry.id)}
-                        onClick={() => toggleCommand('hiddenCommands', entry.id)}
+                        pressed={!resolved.hiddenCommands.includes(entry.id)}
+                        onPressedChange={() => toggleCommand('hiddenCommands', entry.id)}
                       >
                         {text.visible}
-                      </Button>
+                      </Toggle>
                       <Button
                         type="button"
                         variant="ghost"
-                        className="h-auto min-h-8 max-w-full whitespace-normal text-start"
+                        className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                         disabled={disabled || ordered[0]?.id === entry.id}
                         aria-label={`${text.moveUp}: ${entry.label}`}
                         onClick={() => move(entry.id, -1)}
@@ -546,7 +545,7 @@ export function EditorPreferencesPanel({
                       <Button
                         type="button"
                         variant="ghost"
-                        className="h-auto min-h-8 max-w-full whitespace-normal text-start"
+                        className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                         disabled={disabled || ordered.at(-1)?.id === entry.id}
                         aria-label={`${text.moveDown}: ${entry.label}`}
                         onClick={() => move(entry.id, 1)}
@@ -601,7 +600,7 @@ export function EditorPreferencesPanel({
         <Button
           type="button"
           variant="outline"
-          className="h-auto min-h-8 max-w-full whitespace-normal"
+          className="h-auto min-h-7 max-w-full whitespace-normal"
           disabled={disabled}
           onClick={() => {
             setResetVersion((version) => version + 1);
@@ -614,7 +613,7 @@ export function EditorPreferencesPanel({
           <Button
             type="button"
             variant="outline"
-            className="h-auto min-h-8 max-w-full whitespace-normal"
+            className="h-auto min-h-7 max-w-full whitespace-normal"
             onClick={onRetry}
           >
             {text.retry}
@@ -624,7 +623,7 @@ export function EditorPreferencesPanel({
           <Button
             type="button"
             variant="outline"
-            className="h-auto min-h-8 max-w-full whitespace-normal"
+            className="h-auto min-h-7 max-w-full whitespace-normal"
             onClick={onReload}
           >
             {text.reload}

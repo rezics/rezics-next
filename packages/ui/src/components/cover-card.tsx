@@ -7,7 +7,11 @@ import {
   type PointerEventHandler,
   type ReactNode,
 } from 'react';
+import { cn } from '../utils.ts';
+import { Badge } from '../shadcn/badge.tsx';
 import { Button } from '../shadcn/button.tsx';
+import { Checkbox } from '../shadcn/checkbox.tsx';
+import { Field } from '../shadcn/field.tsx';
 import { Menu, type MenuEntry } from './menu.tsx';
 import { Cover, coverRadius, listPresentationForCover, type CoverProps, type CoverRatio } from './cover.tsx';
 import { ContentItemFrame, ContentItemHeading, ContentItemTitleLink } from './content-item.tsx';
@@ -123,7 +127,7 @@ export function CoverCard({
     menu != null || menuEntries != null || menuTrigger != null ? (
       <span
         data-slot="cover-card-actions"
-        className="relative z-20 flex min-h-11 min-w-11 shrink-0 items-center justify-center [&_a]:min-h-11 [&_a]:min-w-11 [&_button]:min-h-11 [&_button]:min-w-11"
+        className="relative z-20 flex shrink-0 items-center justify-center"
       >
         {menuTrigger ?? (
           <Menu
@@ -133,7 +137,6 @@ export function CoverCard({
                 type="button"
                 variant="ghost"
                 size="icon-xs"
-                className="min-h-11 min-w-11 shrink-0"
                 aria-label={menuLabel ?? `More actions for ${title}`}
               >
                 <EllipsisIcon aria-hidden />
@@ -165,36 +168,37 @@ export function CoverCard({
         image
       )}
       {selectable ? (
-        <button
+        <Button
           type="button"
+          variant="ghost"
           aria-pressed={selected}
           aria-label={title}
           title={small ? title : undefined}
           onClick={(event) => onSelectedChange?.(!selected, event)}
-          className="absolute inset-0 z-10 cursor-pointer outline-none"
+          className="absolute inset-0 z-10 size-full cursor-pointer rounded-none hover:bg-transparent focus-visible:ring-0 active:translate-y-0"
         />
       ) : null}
       {selectable ? (
         <span
           aria-hidden
-          className="pointer-events-none absolute top-2 left-2 z-20 flex size-5 items-center justify-center rounded border bg-background text-foreground"
+          className={cn(
+            'pointer-events-none absolute top-2 left-2 z-20 flex size-4 items-center justify-center rounded-[4px] border border-input text-primary-foreground',
+            selected ? 'border-primary bg-primary' : 'dark:bg-input/30',
+          )}
         >
-          {selected && <CheckIcon className="size-4" />}
+          {selected && <CheckIcon className="size-3.5" />}
         </span>
       ) : (
         <>
           {onSelect && (
-            <button
-              type="button"
-              role="checkbox"
-              aria-checked="false"
-              aria-label={title}
-              data-shelf-select
-              onClick={onSelect}
-              className="absolute top-0 left-0 z-20 flex size-11 items-start justify-start rounded-sm opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            >
-              <span aria-hidden className="mt-2 ml-2 size-5 rounded border bg-background" />
-            </button>
+            <Field orientation="horizontal" className="absolute top-2 left-2 z-20 w-auto">
+              <Checkbox
+                aria-label={title}
+                checked={false}
+                data-shelf-select
+                onClick={onSelect}
+              />
+            </Field>
           )}
         </>
       )}
@@ -244,24 +248,15 @@ export function CoverCard({
         {status != null && (
           <ListRowControl className="z-20">
             <div data-slot="cover-card-status-row" className="flex min-w-0 justify-center pt-0.5">
-              {status.href !== undefined ? (
-                <a
-                  href={status.href}
-                  aria-label={status.label}
-                  data-slot="cover-card-status"
-                  className="relative z-20 inline-flex min-h-11 min-w-11 max-w-full items-center justify-center whitespace-normal rounded-sm bg-muted px-1.5 py-0.5 text-[10px] leading-4 text-muted-foreground wrap-anywhere outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {status.label}
-                </a>
-              ) : (
-                <span
-                  aria-label={status.label}
-                  data-slot="cover-card-status"
-                  className="block min-w-0 max-w-full whitespace-normal rounded-sm bg-muted px-1.5 py-0.5 text-[10px] leading-4 text-muted-foreground wrap-anywhere"
-                >
-                  {status.label}
-                </span>
-              )}
+              <Badge
+                variant="secondary"
+                aria-label={status.label}
+                data-slot="cover-card-status"
+                className="relative z-20 h-auto min-h-5 max-w-full overflow-visible whitespace-normal wrap-anywhere"
+                {...(status.href !== undefined ? { render: <a href={status.href} /> } : {})}
+              >
+                {status.label}
+              </Badge>
             </div>
           </ListRowControl>
         )}

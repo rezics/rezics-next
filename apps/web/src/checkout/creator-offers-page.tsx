@@ -306,7 +306,7 @@ function OfferCommands({
         aria-label={m.creator_offer_controls_manage_offer({ title: observed.title })}
         aria-disabled={keepOpen}
         aria-describedby={keepOpen ? `${controlsId}-retained` : undefined}
-        className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+        className="h-auto min-h-7 max-w-full whitespace-normal text-start"
         onClick={() => {
           if (!keepOpen) setOpen((value) => !value);
         }}
@@ -374,7 +374,7 @@ function OfferCommands({
                   if (pending.current?.operation !== 'create') void change(pending.current?.operation ?? 'reprice');
                 }}
                 disabled={busy || !editable}
-                className="min-h-11"
+               
               >
                 {m.creator_retry()}
               </Button>
@@ -383,7 +383,7 @@ function OfferCommands({
                 <Button
                   type="submit"
                   disabled={!editable || frozen || requiresReview || parsedPrice(text, rule) === null}
-                  className="min-h-11"
+                 
                 >
                   {m.creator_reprice()}
                 </Button>
@@ -391,7 +391,7 @@ function OfferCommands({
                   type="button"
                   variant="outline"
                   disabled={!editable || frozen}
-                  className="min-h-11"
+                 
                   onClick={() => void change('delist')}
                 >
                   {m.creator_delist()}
@@ -405,7 +405,7 @@ function OfferCommands({
           <Button
             type="button"
             variant="outline"
-            className="min-h-11"
+           
             disabled={checking}
             onClick={() => void refreshSaved(requiresReview)}
           >
@@ -497,18 +497,18 @@ export function CreatorOffersPage({
               {data && (
                 <a
                   href={`/${locale}/creator/offers/new`}
-                  className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+                  className={buttonVariants({ variant: 'outline' })}
                 >
                   {m.creator_new_offer()}
                 </a>
               )}
               {page.kind !== 'preparing' &&
                 (onRefresh ? (
-                  <Button variant="outline" className="min-h-11" onClick={onRefresh} disabled={refreshing}>
+                  <Button variant="outline" onClick={onRefresh} disabled={refreshing}>
                     {m.creator_offers_refresh()}
                   </Button>
                 ) : (
-                  <a href={href} className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}>
+                  <a href={href} className={buttonVariants({ variant: 'outline' })}>
                     {m.creator_offers_refresh()}
                   </a>
                 ))}
@@ -521,7 +521,7 @@ export function CreatorOffersPage({
               {page.kind !== 'preparing' && (
                 <a
                   href={restart ? creatorOffersHref(locale) : href}
-                  className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+                  className={buttonVariants({ variant: 'outline' })}
                 >
                   {restart ? m.creator_offers_restart({}, messageOptions) : m.creator_offers_retry({}, messageOptions)}
                 </a>
@@ -642,7 +642,7 @@ export function CreatorOffersPage({
                 {cursor && (
                   <a
                     href={creatorOffersHref(locale)}
-                    className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+                    className={buttonVariants({ variant: 'outline' })}
                   >
                     {m.creator_offers_restart({}, messageOptions)}
                   </a>
@@ -650,7 +650,7 @@ export function CreatorOffersPage({
                 {page.next && (
                   <a
                     href={creatorOffersHref(locale, page.next)}
-                    className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+                    className={buttonVariants({ variant: 'outline' })}
                   >
                     {m.creator_offers_next({}, messageOptions)}
                   </a>

@@ -181,11 +181,11 @@ function InstalledPublication({ controller, scenario }: { controller: StudioCont
       </header>
       {scenario === 'replacement' ? (
         <Button
-          type="button"
-          variant="outline"
-          data-story-replace-review="true"
-          className="h-auto min-h-11 whitespace-normal"
-          onClick={() => void controller.reviewPublication()}
+ type="button"
+ variant="outline"
+ data-story-replace-review="true"
+ className="h-auto min-h-7 whitespace-normal"
+ onClick={() => void controller.reviewPublication()}
         >
           Replace frozen review (fixture)
         </Button>

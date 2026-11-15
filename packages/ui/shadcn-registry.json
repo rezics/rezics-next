@@ -1,6 +1,6 @@
 {
-  "source": "https://ui.shadcn.com/r/styles/base-rhea/registry.json",
-  "style": "base-rhea",
+  "source": "https://ui.shadcn.com/r/styles/base-mira/registry.json",
+  "style": "base-mira",
   "items": [
     {
       "name": "index",
@@ -15,7 +15,7 @@
       "type": "registry:ui",
       "description": "A vertically stacked set of interactive headings that each reveal a section of content.",
       "files": [
-        "registry/base-rhea/ui/accordion.tsx"
+        "registry/base-mira/ui/accordion.tsx"
       ]
     },
     {
@@ -23,7 +23,7 @@
       "type": "registry:ui",
       "description": "Displays a callout for user attention.",
       "files": [
-        "registry/base-rhea/ui/alert.tsx"
+        "registry/base-mira/ui/alert.tsx"
       ]
     },
     {
@@ -31,7 +31,7 @@
       "type": "registry:ui",
       "description": "A modal dialog that interrupts the user with important content and expects a response.",
       "files": [
-        "registry/base-rhea/ui/alert-dialog.tsx"
+        "registry/base-mira/ui/alert-dialog.tsx"
       ]
     },
     {
@@ -39,7 +39,7 @@
       "type": "registry:ui",
       "description": "Displays content within a desired ratio.",
       "files": [
-        "registry/base-rhea/ui/aspect-ratio.tsx"
+        "registry/base-mira/ui/aspect-ratio.tsx"
       ]
     },
     {
@@ -47,7 +47,7 @@
       "type": "registry:ui",
       "description": "An image element with a fallback for representing the user.",
       "files": [
-        "registry/base-rhea/ui/avatar.tsx"
+        "registry/base-mira/ui/avatar.tsx"
       ]
     },
     {
@@ -55,7 +55,7 @@
       "type": "registry:ui",
       "description": "Displays a badge or a component that looks like a badge.",
       "files": [
-        "registry/base-rhea/ui/badge.tsx"
+        "registry/base-mira/ui/badge.tsx"
       ]
     },
     {
@@ -63,7 +63,7 @@
       "type": "registry:ui",
       "description": "Displays the path to the current resource using a hierarchy of links.",
       "files": [
-        "registry/base-rhea/ui/breadcrumb.tsx"
+        "registry/base-mira/ui/breadcrumb.tsx"
       ]
     },
     {
@@ -71,7 +71,7 @@
       "type": "registry:ui",
       "description": "Displays a button or a component that looks like a button.",
       "files": [
-        "registry/base-rhea/ui/button.tsx"
+        "registry/base-mira/ui/button.tsx"
       ]
     },
     {
@@ -79,7 +79,7 @@
       "type": "registry:ui",
       "description": "A container that groups related buttons together with consistent styling.",
       "files": [
-        "registry/base-rhea/ui/button-group.tsx"
+        "registry/base-mira/ui/button-group.tsx"
       ]
     },
     {
@@ -87,7 +87,7 @@
       "type": "registry:ui",
       "description": "A calendar component that allows users to select a date or a range of dates.",
       "files": [
-        "registry/base-rhea/ui/calendar.tsx"
+        "registry/base-mira/ui/calendar.tsx"
       ]
     },
     {
@@ -95,7 +95,7 @@
       "type": "registry:ui",
       "description": "Displays a card with header, content, and footer.",
       "files": [
-        "registry/base-rhea/ui/card.tsx"
+        "registry/base-mira/ui/card.tsx"
       ]
     },
     {
@@ -103,7 +103,7 @@
       "type": "registry:ui",
       "description": "A carousel with motion and swipe built using Embla.",
       "files": [
-        "registry/base-rhea/ui/carousel.tsx"
+        "registry/base-mira/ui/carousel.tsx"
       ]
     },
     {
@@ -111,7 +111,7 @@
       "type": "registry:ui",
       "description": "Beautiful charts. Built using Recharts. Copy and paste into your apps.",
       "files": [
-        "registry/base-rhea/ui/chart.tsx"
+        "registry/base-mira/ui/chart.tsx"
       ]
     },
     {
@@ -119,7 +119,7 @@
       "type": "registry:ui",
       "description": "A control that allows the user to toggle between checked and not checked.",
       "files": [
-        "registry/base-rhea/ui/checkbox.tsx"
+        "registry/base-mira/ui/checkbox.tsx"
       ]
     },
     {
@@ -127,7 +127,7 @@
       "type": "registry:ui",
       "description": "An interactive component which expands/collapses a panel.",
       "files": [
-        "registry/base-rhea/ui/collapsible.tsx"
+        "registry/base-mira/ui/collapsible.tsx"
       ]
     },
     {
@@ -135,7 +135,7 @@
       "type": "registry:ui",
       "description": "Autocomplete input with a list of suggestions.",
       "files": [
-        "registry/base-rhea/ui/combobox.tsx"
+        "registry/base-mira/ui/combobox.tsx"
       ]
     },
     {
@@ -143,7 +143,7 @@
       "type": "registry:ui",
       "description": "Command menu for search and quick actions.",
       "files": [
-        "registry/base-rhea/ui/command.tsx"
+        "registry/base-mira/ui/command.tsx"
       ]
     },
     {
@@ -151,7 +151,7 @@
       "type": "registry:ui",
       "description": "Displays a menu of actions triggered by a right click.",
       "files": [
-        "registry/base-rhea/ui/context-menu.tsx"
+        "registry/base-mira/ui/context-menu.tsx"
       ]
     },
     {
@@ -159,7 +159,7 @@
       "type": "registry:ui",
       "description": "A window overlaid on either the primary window or another dialog window, rendering the content underneath inert.",
       "files": [
-        "registry/base-rhea/ui/dialog.tsx"
+        "registry/base-mira/ui/dialog.tsx"
       ]
     },
     {
@@ -167,7 +167,7 @@
       "type": "registry:ui",
       "description": "A drawer component for React.",
       "files": [
-        "registry/base-rhea/ui/drawer.tsx"
+        "registry/base-mira/ui/drawer.tsx"
       ]
     },
     {
@@ -175,7 +175,7 @@
       "type": "registry:ui",
       "description": "Displays a menu to the user — such as a set of actions or functions — triggered by a button.",
       "files": [
-        "registry/base-rhea/ui/dropdown-menu.tsx"
+        "registry/base-mira/ui/dropdown-menu.tsx"
       ]
     },
     {
@@ -183,7 +183,7 @@
       "type": "registry:ui",
       "description": "Use the Empty component to display an empty state.",
       "files": [
-        "registry/base-rhea/ui/empty.tsx"
+        "registry/base-mira/ui/empty.tsx"
       ]
     },
     {
@@ -191,7 +191,7 @@
       "type": "registry:ui",
       "description": "Combine labels, controls, and help text to compose accessible form fields and grouped inputs.",
       "files": [
-        "registry/base-rhea/ui/field.tsx"
+        "registry/base-mira/ui/field.tsx"
       ]
     },
     {
@@ -203,7 +203,7 @@
       "type": "registry:ui",
       "description": "For sighted users to preview content available behind a link.",
       "files": [
-        "registry/base-rhea/ui/hover-card.tsx"
+        "registry/base-mira/ui/hover-card.tsx"
       ]
     },
     {
@@ -211,7 +211,7 @@
       "type": "registry:ui",
       "description": "A text input component for forms and user data entry with built-in styling and accessibility features.",
       "files": [
-        "registry/base-rhea/ui/input.tsx"
+        "registry/base-mira/ui/input.tsx"
       ]
     },
     {
@@ -219,7 +219,7 @@
       "type": "registry:ui",
       "description": "Add addons, buttons, and helper content to inputs.",
       "files": [
-        "registry/base-rhea/ui/input-group.tsx"
+        "registry/base-mira/ui/input-group.tsx"
       ]
     },
     {
@@ -227,7 +227,7 @@
       "type": "registry:ui",
       "description": "Accessible one-time password component with copy-paste functionality.",
       "files": [
-        "registry/base-rhea/ui/input-otp.tsx"
+        "registry/base-mira/ui/input-otp.tsx"
       ]
     },
     {
@@ -235,7 +235,7 @@
       "type": "registry:ui",
       "description": "A versatile component for displaying content with media, title, description, and actions.",
       "files": [
-        "registry/base-rhea/ui/item.tsx"
+        "registry/base-mira/ui/item.tsx"
       ]
     },
     {
@@ -243,7 +243,7 @@
       "type": "registry:ui",
       "description": "Renders an accessible label associated with controls.",
       "files": [
-        "registry/base-rhea/ui/label.tsx"
+        "registry/base-mira/ui/label.tsx"
       ]
     },
     {
@@ -251,7 +251,7 @@
       "type": "registry:ui",
       "description": "A visually persistent menu common in desktop applications that provides quick access to a consistent set of commands.",
       "files": [
-        "registry/base-rhea/ui/menubar.tsx"
+        "registry/base-mira/ui/menubar.tsx"
       ]
     },
     {
@@ -259,7 +259,7 @@
       "type": "registry:ui",
       "description": "A collection of links for navigating websites.",
       "files": [
-        "registry/base-rhea/ui/navigation-menu.tsx"
+        "registry/base-mira/ui/navigation-menu.tsx"
       ]
     },
     {
@@ -267,7 +267,7 @@
       "type": "registry:ui",
       "description": "Pagination with page navigation, next and previous links.",
       "files": [
-        "registry/base-rhea/ui/pagination.tsx"
+        "registry/base-mira/ui/pagination.tsx"
       ]
     },
     {
@@ -275,7 +275,7 @@
       "type": "registry:ui",
       "description": "Displays rich content in a portal, triggered by a button.",
       "files": [
-        "registry/base-rhea/ui/popover.tsx"
+        "registry/base-mira/ui/popover.tsx"
       ]
     },
     {
@@ -283,7 +283,7 @@
       "type": "registry:ui",
       "description": "Displays an indicator showing the completion progress of a task, typically displayed as a progress bar.",
       "files": [
-        "registry/base-rhea/ui/progress.tsx"
+        "registry/base-mira/ui/progress.tsx"
       ]
     },
     {
@@ -291,7 +291,7 @@
       "type": "registry:ui",
       "description": "A set of checkable buttons—known as radio buttons—where no more than one of the buttons can be checked at a time.",
       "files": [
-        "registry/base-rhea/ui/radio-group.tsx"
+        "registry/base-mira/ui/radio-group.tsx"
       ]
     },
     {
@@ -299,7 +299,7 @@
       "type": "registry:ui",
       "description": "Accessible resizable panel groups and layouts with keyboard support.",
       "files": [
-        "registry/base-rhea/ui/resizable.tsx"
+        "registry/base-mira/ui/resizable.tsx"
       ]
     },
     {
@@ -307,7 +307,7 @@
       "type": "registry:ui",
       "description": "Augments native scroll functionality for custom, cross-browser styling.",
       "files": [
-        "registry/base-rhea/ui/scroll-area.tsx"
+        "registry/base-mira/ui/scroll-area.tsx"
       ]
     },
     {
@@ -315,7 +315,7 @@
       "type": "registry:ui",
       "description": "Displays a list of options for the user to pick from—triggered by a button.",
       "files": [
-        "registry/base-rhea/ui/select.tsx"
+        "registry/base-mira/ui/select.tsx"
       ]
     },
     {
@@ -323,7 +323,7 @@
       "type": "registry:ui",
       "description": "Visually or semantically separates content.",
       "files": [
-        "registry/base-rhea/ui/separator.tsx"
+        "registry/base-mira/ui/separator.tsx"
       ]
     },
     {
@@ -331,7 +331,7 @@
       "type": "registry:ui",
       "description": "Extends the Dialog component to display content that complements the main content of the screen.",
       "files": [
-        "registry/base-rhea/ui/sheet.tsx"
+        "registry/base-mira/ui/sheet.tsx"
       ]
     },
     {
@@ -339,7 +339,7 @@
       "type": "registry:ui",
       "description": "A composable, themeable and customizable sidebar component.",
       "files": [
-        "registry/base-rhea/ui/sidebar.tsx"
+        "registry/base-mira/ui/sidebar.tsx"
       ]
     },
     {
@@ -347,7 +347,7 @@
       "type": "registry:ui",
       "description": "Use to show a placeholder while content is loading.",
       "files": [
-        "registry/base-rhea/ui/skeleton.tsx"
+        "registry/base-mira/ui/skeleton.tsx"
       ]
     },
     {
@@ -355,7 +355,7 @@
       "type": "registry:ui",
       "description": "An input where the user selects a value from within a given range.",
       "files": [
-        "registry/base-rhea/ui/slider.tsx"
+        "registry/base-mira/ui/slider.tsx"
       ]
     },
     {
@@ -363,7 +363,7 @@
       "type": "registry:ui",
       "description": "A succinct message that is displayed temporarily.",
       "files": [
-        "registry/base-rhea/ui/sonner.tsx"
+        "registry/base-mira/ui/sonner.tsx"
       ]
     },
     {
@@ -371,7 +371,7 @@
       "type": "registry:ui",
       "description": "An indicator that can be used to show a loading state.",
       "files": [
-        "registry/base-rhea/ui/spinner.tsx"
+        "registry/base-mira/ui/spinner.tsx"
       ]
     },
     {
@@ -379,7 +379,7 @@
       "type": "registry:ui",
       "description": "A control that allows the user to toggle between checked and not checked.",
       "files": [
-        "registry/base-rhea/ui/switch.tsx"
+        "registry/base-mira/ui/switch.tsx"
       ]
     },
     {
@@ -387,7 +387,7 @@
       "type": "registry:ui",
       "description": "A responsive table component.",
       "files": [
-        "registry/base-rhea/ui/table.tsx"
+        "registry/base-mira/ui/table.tsx"
       ]
     },
     {
@@ -395,7 +395,7 @@
       "type": "registry:ui",
       "description": "A set of layered sections of content—known as tab panels—that are displayed one at a time.",
       "files": [
-        "registry/base-rhea/ui/tabs.tsx"
+        "registry/base-mira/ui/tabs.tsx"
       ]
     },
     {
@@ -403,7 +403,7 @@
       "type": "registry:ui",
       "description": "Displays a form textarea or a component that looks like a textarea.",
       "files": [
-        "registry/base-rhea/ui/textarea.tsx"
+        "registry/base-mira/ui/textarea.tsx"
       ]
     },
     {
@@ -411,7 +411,7 @@
       "type": "registry:ui",
       "description": "A succinct message that is displayed temporarily.",
       "files": [
-        "registry/base-rhea/ui/toast.tsx"
+        "registry/base-mira/ui/toast.tsx"
       ]
     },
     {
@@ -419,7 +419,7 @@
       "type": "registry:ui",
       "description": "A two-state button that can be either on or off.",
       "files": [
-        "registry/base-rhea/ui/toggle.tsx"
+        "registry/base-mira/ui/toggle.tsx"
       ]
     },
     {
@@ -427,7 +427,7 @@
       "type": "registry:ui",
       "description": "A set of two-state buttons that can be toggled on or off.",
       "files": [
-        "registry/base-rhea/ui/toggle-group.tsx"
+        "registry/base-mira/ui/toggle-group.tsx"
       ]
     },
     {
@@ -435,7 +435,7 @@
       "type": "registry:ui",
       "description": "A popup that displays information related to an element when the element receives keyboard focus or the mouse hovers over it.",
       "files": [
-        "registry/base-rhea/ui/tooltip.tsx"
+        "registry/base-mira/ui/tooltip.tsx"
       ]
     },
     {
@@ -443,7 +443,7 @@
       "type": "registry:ui",
       "description": "Used to display textual user input from keyboard.",
       "files": [
-        "registry/base-rhea/ui/kbd.tsx"
+        "registry/base-mira/ui/kbd.tsx"
       ]
     },
     {
@@ -451,7 +451,7 @@
       "type": "registry:ui",
       "description": "A styled native HTML select element with consistent design system integration.",
       "files": [
-        "registry/base-rhea/ui/native-select.tsx"
+        "registry/base-mira/ui/native-select.tsx"
       ]
     },
     {
@@ -459,28 +459,28 @@
       "type": "registry:ui",
       "description": "A provider component that sets the text direction for your application.",
       "files": [
-        "registry/base-rhea/ui/direction.tsx"
+        "registry/base-mira/ui/direction.tsx"
       ]
     },
     {
       "name": "attachment",
       "type": "registry:ui",
       "files": [
-        "registry/base-rhea/ui/attachment.tsx"
+        "registry/base-mira/ui/attachment.tsx"
       ]
     },
     {
       "name": "bubble",
       "type": "registry:ui",
       "files": [
-        "registry/base-rhea/ui/bubble.tsx"
+        "registry/base-mira/ui/bubble.tsx"
       ]
     },
     {
       "name": "message-scroller",
       "type": "registry:ui",
       "files": [
-        "registry/base-rhea/ui/message-scroller.tsx"
+        "registry/base-mira/ui/message-scroller.tsx"
       ]
     },
     {
@@ -488,14 +488,14 @@
       "type": "registry:ui",
       "description": "A multi-step questionnaire with single-choice, multiple-choice, freeform, and skippable questions.",
       "files": [
-        "registry/base-rhea/ui/questionnaire.tsx"
+        "registry/base-mira/ui/questionnaire.tsx"
       ]
     },
     {
       "name": "marker",
       "type": "registry:ui",
       "files": [
-        "registry/base-rhea/ui/marker.tsx"
+        "registry/base-mira/ui/marker.tsx"
       ]
     },
     {
@@ -503,7 +503,7 @@
       "type": "registry:ui",
       "description": "The building block for reasoning, tool calls, sources and more.",
       "files": [
-        "registry/base-rhea/ui/trace.tsx"
+        "registry/base-mira/ui/trace.tsx"
       ]
     },
     {
@@ -511,14 +511,14 @@
       "type": "registry:ui",
       "description": "Displays code, terminal output and diffs with an optional header, line numbers and a copy button.",
       "files": [
-        "registry/base-rhea/ui/code-block.tsx"
+        "registry/base-mira/ui/code-block.tsx"
       ]
     },
     {
       "name": "message",
       "type": "registry:ui",
       "files": [
-        "registry/base-rhea/ui/message.tsx"
+        "registry/base-mira/ui/message.tsx"
       ]
     },
     {
@@ -526,7 +526,7 @@
       "type": "registry:example",
       "title": "Accordion",
       "files": [
-        "registry/base-rhea/examples/accordion-example.tsx"
+        "registry/base-mira/examples/accordion-example.tsx"
       ]
     },
     {
@@ -534,7 +534,7 @@
       "type": "registry:example",
       "title": "Alert",
       "files": [
-        "registry/base-rhea/examples/alert-example.tsx"
+        "registry/base-mira/examples/alert-example.tsx"
       ]
     },
     {
@@ -542,7 +542,7 @@
       "type": "registry:example",
       "title": "Alert Dialog",
       "files": [
-        "registry/base-rhea/examples/alert-dialog-example.tsx"
+        "registry/base-mira/examples/alert-dialog-example.tsx"
       ]
     },
     {
@@ -550,7 +550,7 @@
       "type": "registry:example",
       "title": "Aspect Ratio",
       "files": [
-        "registry/base-rhea/examples/aspect-ratio-example.tsx"
+        "registry/base-mira/examples/aspect-ratio-example.tsx"
       ]
     },
     {
@@ -558,7 +558,7 @@
       "type": "registry:example",
       "title": "Avatar",
       "files": [
-        "registry/base-rhea/examples/avatar-example.tsx"
+        "registry/base-mira/examples/avatar-example.tsx"
       ]
     },
     {
@@ -566,7 +566,7 @@
       "type": "registry:example",
       "title": "Badge",
       "files": [
-        "registry/base-rhea/examples/badge-example.tsx"
+        "registry/base-mira/examples/badge-example.tsx"
       ]
     },
     {
@@ -574,7 +574,7 @@
       "type": "registry:example",
       "title": "Breadcrumb",
       "files": [
-        "registry/base-rhea/examples/breadcrumb-example.tsx"
+        "registry/base-mira/examples/breadcrumb-example.tsx"
       ]
     },
     {
@@ -582,7 +582,7 @@
       "type": "registry:example",
       "title": "Button",
       "files": [
-        "registry/base-rhea/examples/button-example.tsx"
+        "registry/base-mira/examples/button-example.tsx"
       ]
     },
     {
@@ -590,7 +590,7 @@
       "type": "registry:example",
       "title": "Button Group",
       "files": [
-        "registry/base-rhea/examples/button-group-example.tsx"
+        "registry/base-mira/examples/button-group-example.tsx"
       ]
     },
     {
@@ -598,7 +598,7 @@
       "type": "registry:example",
       "title": "Calendar",
       "files": [
-        "registry/base-rhea/examples/calendar-example.tsx"
+        "registry/base-mira/examples/calendar-example.tsx"
       ]
     },
     {
@@ -606,7 +606,7 @@
       "type": "registry:example",
       "title": "Card",
       "files": [
-        "registry/base-rhea/examples/card-example.tsx"
+        "registry/base-mira/examples/card-example.tsx"
       ]
     },
     {
@@ -614,7 +614,7 @@
       "type": "registry:example",
       "title": "Carousel",
       "files": [
-        "registry/base-rhea/examples/carousel-example.tsx"
+        "registry/base-mira/examples/carousel-example.tsx"
       ]
     },
     {
@@ -622,7 +622,7 @@
       "type": "registry:example",
       "title": "Chart",
       "files": [
-        "registry/base-rhea/examples/chart-example.tsx"
+        "registry/base-mira/examples/chart-example.tsx"
       ]
     },
     {
@@ -630,7 +630,7 @@
       "type": "registry:example",
       "title": "Checkbox",
       "files": [
-        "registry/base-rhea/examples/checkbox-example.tsx"
+        "registry/base-mira/examples/checkbox-example.tsx"
       ]
     },
     {
@@ -638,7 +638,7 @@
       "type": "registry:example",
       "title": "Collapsible",
       "files": [
-        "registry/base-rhea/examples/collapsible-example.tsx"
+        "registry/base-mira/examples/collapsible-example.tsx"
       ]
     },
     {
@@ -646,7 +646,7 @@
       "type": "registry:example",
       "title": "Combobox",
       "files": [
-        "registry/base-rhea/examples/combobox-example.tsx"
+        "registry/base-mira/examples/combobox-example.tsx"
       ]
     },
     {
@@ -654,7 +654,7 @@
       "type": "registry:example",
       "title": "Command",
       "files": [
-        "registry/base-rhea/examples/command-example.tsx"
+        "registry/base-mira/examples/command-example.tsx"
       ]
     },
     {
@@ -662,7 +662,7 @@
       "type": "registry:example",
       "title": "Context Menu",
       "files": [
-        "registry/base-rhea/examples/context-menu-example.tsx"
+        "registry/base-mira/examples/context-menu-example.tsx"
       ]
     },
     {
@@ -670,7 +670,7 @@
       "type": "registry:example",
       "title": "Dialog",
       "files": [
-        "registry/base-rhea/examples/dialog-example.tsx"
+        "registry/base-mira/examples/dialog-example.tsx"
       ]
     },
     {
@@ -678,7 +678,7 @@
       "type": "registry:example",
       "title": "Drawer",
       "files": [
-        "registry/base-rhea/examples/drawer-example.tsx"
+        "registry/base-mira/examples/drawer-example.tsx"
       ]
     },
     {
@@ -686,7 +686,7 @@
       "type": "registry:example",
       "title": "Dropdown Menu",
       "files": [
-        "registry/base-rhea/examples/dropdown-menu-example.tsx"
+        "registry/base-mira/examples/dropdown-menu-example.tsx"
       ]
     },
     {
@@ -694,7 +694,7 @@
       "type": "registry:example",
       "title": "Empty",
       "files": [
-        "registry/base-rhea/examples/empty-example.tsx"
+        "registry/base-mira/examples/empty-example.tsx"
       ]
     },
     {
@@ -702,7 +702,7 @@
       "type": "registry:example",
       "title": "Field",
       "files": [
-        "registry/base-rhea/examples/field-example.tsx"
+        "registry/base-mira/examples/field-example.tsx"
       ]
     },
     {
@@ -710,7 +710,7 @@
       "type": "registry:example",
       "title": "Hover Card",
       "files": [
-        "registry/base-rhea/examples/hover-card-example.tsx"
+        "registry/base-mira/examples/hover-card-example.tsx"
       ]
     },
     {
@@ -718,7 +718,7 @@
       "type": "registry:example",
       "title": "Input",
       "files": [
-        "registry/base-rhea/examples/input-example.tsx"
+        "registry/base-mira/examples/input-example.tsx"
       ]
     },
     {
@@ -726,7 +726,7 @@
       "type": "registry:example",
       "title": "Input Group",
       "files": [
-        "registry/base-rhea/examples/input-group-example.tsx"
+        "registry/base-mira/examples/input-group-example.tsx"
       ]
     },
     {
@@ -734,7 +734,7 @@
       "type": "registry:example",
       "title": "Input OTP",
       "files": [
-        "registry/base-rhea/examples/input-otp-example.tsx"
+        "registry/base-mira/examples/input-otp-example.tsx"
       ]
     },
     {
@@ -742,7 +742,7 @@
       "type": "registry:example",
       "title": "Item",
       "files": [
-        "registry/base-rhea/examples/item-example.tsx"
+        "registry/base-mira/examples/item-example.tsx"
       ]
     },
     {
@@ -750,7 +750,7 @@
       "type": "registry:example",
       "title": "Kbd",
       "files": [
-        "registry/base-rhea/examples/kbd-example.tsx"
+        "registry/base-mira/examples/kbd-example.tsx"
       ]
     },
     {
@@ -758,7 +758,7 @@
       "type": "registry:example",
       "title": "Label",
       "files": [
-        "registry/base-rhea/examples/label-example.tsx"
+        "registry/base-mira/examples/label-example.tsx"
       ]
     },
     {
@@ -766,7 +766,7 @@
       "type": "registry:example",
       "title": "Menubar",
       "files": [
-        "registry/base-rhea/examples/menubar-example.tsx"
+        "registry/base-mira/examples/menubar-example.tsx"
       ]
     },
     {
@@ -774,7 +774,7 @@
       "type": "registry:example",
       "title": "Native Select",
       "files": [
-        "registry/base-rhea/examples/native-select-example.tsx"
+        "registry/base-mira/examples/native-select-example.tsx"
       ]
     },
     {
@@ -782,7 +782,7 @@
       "type": "registry:example",
       "title": "Navigation Menu",
       "files": [
-        "registry/base-rhea/examples/navigation-menu-example.tsx"
+        "registry/base-mira/examples/navigation-menu-example.tsx"
       ]
     },
     {
@@ -790,7 +790,7 @@
       "type": "registry:example",
       "title": "Pagination",
       "files": [
-        "registry/base-rhea/examples/pagination-example.tsx"
+        "registry/base-mira/examples/pagination-example.tsx"
       ]
     },
     {
@@ -798,7 +798,7 @@
       "type": "registry:example",
       "title": "Popover",
       "files": [
-        "registry/base-rhea/examples/popover-example.tsx"
+        "registry/base-mira/examples/popover-example.tsx"
       ]
     },
     {
@@ -806,7 +806,7 @@
       "type": "registry:example",
       "title": "Progress",
       "files": [
-        "registry/base-rhea/examples/progress-example.tsx"
+        "registry/base-mira/examples/progress-example.tsx"
       ]
     },
     {
@@ -814,7 +814,7 @@
       "type": "registry:example",
       "title": "Radio Group",
       "files": [
-        "registry/base-rhea/examples/radio-group-example.tsx"
+        "registry/base-mira/examples/radio-group-example.tsx"
       ]
     },
     {
@@ -822,7 +822,7 @@
       "type": "registry:example",
       "title": "Resizable",
       "files": [
-        "registry/base-rhea/examples/resizable-example.tsx"
+        "registry/base-mira/examples/resizable-example.tsx"
       ]
     },
     {
@@ -830,7 +830,7 @@
       "type": "registry:example",
       "title": "Scroll Area",
       "files": [
-        "registry/base-rhea/examples/scroll-area-example.tsx"
+        "registry/base-mira/examples/scroll-area-example.tsx"
       ]
     },
     {
@@ -838,7 +838,7 @@
       "type": "registry:example",
       "title": "Select",
       "files": [
-        "registry/base-rhea/examples/select-example.tsx"
+        "registry/base-mira/examples/select-example.tsx"
       ]
     },
     {
@@ -846,7 +846,7 @@
       "type": "registry:example",
       "title": "Separator",
       "files": [
-        "registry/base-rhea/examples/separator-example.tsx"
+        "registry/base-mira/examples/separator-example.tsx"
       ]
     },
     {
@@ -854,7 +854,7 @@
       "type": "registry:example",
       "title": "Sheet",
       "files": [
-        "registry/base-rhea/examples/sheet-example.tsx"
+        "registry/base-mira/examples/sheet-example.tsx"
       ]
     },
     {
@@ -862,7 +862,7 @@
       "type": "registry:example",
       "title": "Sidebar",
       "files": [
-        "registry/base-rhea/examples/sidebar-example.tsx"
+        "registry/base-mira/examples/sidebar-example.tsx"
       ]
     },
     {
@@ -870,7 +870,7 @@
       "type": "registry:example",
       "title": "Sidebar (Icon)",
       "files": [
-        "registry/base-rhea/examples/sidebar-icon-example.tsx"
+        "registry/base-mira/examples/sidebar-icon-example.tsx"
       ]
     },
     {
@@ -878,7 +878,7 @@
       "type": "registry:example",
       "title": "Sidebar (Inset)",
       "files": [
-        "registry/base-rhea/examples/sidebar-inset-example.tsx"
+        "registry/base-mira/examples/sidebar-inset-example.tsx"
       ]
     },
     {
@@ -886,7 +886,7 @@
       "type": "registry:example",
       "title": "Sidebar (Floating)",
       "files": [
-        "registry/base-rhea/examples/sidebar-floating-example.tsx"
+        "registry/base-mira/examples/sidebar-floating-example.tsx"
       ]
     },
     {
@@ -894,7 +894,7 @@
       "type": "registry:example",
       "title": "Skeleton",
       "files": [
-        "registry/base-rhea/examples/skeleton-example.tsx"
+        "registry/base-mira/examples/skeleton-example.tsx"
       ]
     },
     {
@@ -902,7 +902,7 @@
       "type": "registry:example",
       "title": "Slider",
       "files": [
-        "registry/base-rhea/examples/slider-example.tsx"
+        "registry/base-mira/examples/slider-example.tsx"
       ]
     },
     {
@@ -910,7 +910,7 @@
       "type": "registry:example",
       "title": "Sonner",
       "files": [
-        "registry/base-rhea/examples/sonner-example.tsx"
+        "registry/base-mira/examples/sonner-example.tsx"
       ]
     },
     {
@@ -918,7 +918,7 @@
       "type": "registry:example",
       "title": "Spinner",
       "files": [
-        "registry/base-rhea/examples/spinner-example.tsx"
+        "registry/base-mira/examples/spinner-example.tsx"
       ]
     },
     {
@@ -926,7 +926,7 @@
       "type": "registry:example",
       "title": "Switch",
       "files": [
-        "registry/base-rhea/examples/switch-example.tsx"
+        "registry/base-mira/examples/switch-example.tsx"
       ]
     },
     {
@@ -934,7 +934,7 @@
       "type": "registry:example",
       "title": "Table",
       "files": [
-        "registry/base-rhea/examples/table-example.tsx"
+        "registry/base-mira/examples/table-example.tsx"
       ]
     },
     {
@@ -942,7 +942,7 @@
       "type": "registry:example",
       "title": "Tabs",
       "files": [
-        "registry/base-rhea/examples/tabs-example.tsx"
+        "registry/base-mira/examples/tabs-example.tsx"
       ]
     },
     {
@@ -950,7 +950,7 @@
       "type": "registry:example",
       "title": "Textarea",
       "files": [
-        "registry/base-rhea/examples/textarea-example.tsx"
+        "registry/base-mira/examples/textarea-example.tsx"
       ]
     },
     {
@@ -958,7 +958,7 @@
       "type": "registry:example",
       "title": "Toast",
       "files": [
-        "registry/base-rhea/examples/toast-example.tsx"
+        "registry/base-mira/examples/toast-example.tsx"
       ]
     },
     {
@@ -966,7 +966,7 @@
       "type": "registry:example",
       "title": "Toggle",
       "files": [
-        "registry/base-rhea/examples/toggle-example.tsx"
+        "registry/base-mira/examples/toggle-example.tsx"
       ]
     },
     {
@@ -974,7 +974,7 @@
       "type": "registry:example",
       "title": "Toggle Group",
       "files": [
-        "registry/base-rhea/examples/toggle-group-example.tsx"
+        "registry/base-mira/examples/toggle-group-example.tsx"
       ]
     },
     {
@@ -982,7 +982,7 @@
       "type": "registry:example",
       "title": "Tooltip",
       "files": [
-        "registry/base-rhea/examples/tooltip-example.tsx"
+        "registry/base-mira/examples/tooltip-example.tsx"
       ]
     },
     {
@@ -990,7 +990,7 @@
       "type": "registry:example",
       "title": "Demo",
       "files": [
-        "registry/base-rhea/examples/demo.tsx"
+        "registry/base-mira/examples/demo.tsx"
       ]
     },
     {
@@ -998,7 +998,7 @@
       "type": "registry:example",
       "title": "Example",
       "files": [
-        "registry/base-rhea/examples/component-example.tsx"
+        "registry/base-mira/examples/component-example.tsx"
       ]
     },
     {
@@ -1006,7 +1006,7 @@
       "type": "registry:example",
       "title": "Attachment",
       "files": [
-        "registry/base-rhea/examples/attachment-example.tsx"
+        "registry/base-mira/examples/attachment-example.tsx"
       ]
     },
     {
@@ -1014,7 +1014,7 @@
       "type": "registry:example",
       "title": "Bubble",
       "files": [
-        "registry/base-rhea/examples/bubble-example.tsx"
+        "registry/base-mira/examples/bubble-example.tsx"
       ]
     },
     {
@@ -1022,7 +1022,7 @@
       "type": "registry:example",
       "title": "Message Scroller",
       "files": [
-        "registry/base-rhea/examples/message-scroller-example.tsx"
+        "registry/base-mira/examples/message-scroller-example.tsx"
       ]
     },
     {
@@ -1030,7 +1030,7 @@
       "type": "registry:example",
       "title": "Questionnaire",
       "files": [
-        "registry/base-rhea/examples/questionnaire-example.tsx"
+        "registry/base-mira/examples/questionnaire-example.tsx"
       ]
     },
     {
@@ -1038,7 +1038,7 @@
       "type": "registry:example",
       "title": "Marker",
       "files": [
-        "registry/base-rhea/examples/marker-example.tsx"
+        "registry/base-mira/examples/marker-example.tsx"
       ]
     },
     {
@@ -1046,7 +1046,7 @@
       "type": "registry:example",
       "title": "Trace",
       "files": [
-        "registry/base-rhea/examples/trace-example.tsx"
+        "registry/base-mira/examples/trace-example.tsx"
       ]
     },
     {
@@ -1054,7 +1054,7 @@
       "type": "registry:example",
       "title": "Code Block",
       "files": [
-        "registry/base-rhea/examples/code-block-example.tsx"
+        "registry/base-mira/examples/code-block-example.tsx"
       ]
     },
     {
@@ -1062,14 +1062,14 @@
       "type": "registry:example",
       "title": "Message",
       "files": [
-        "registry/base-rhea/examples/message-example.tsx"
+        "registry/base-mira/examples/message-example.tsx"
       ]
     },
     {
       "name": "utils",
       "type": "registry:lib",
       "files": [
-        "registry/base-rhea/lib/utils.ts"
+        "registry/base-mira/lib/utils.ts"
       ]
     },
     {
@@ -1077,7 +1077,7 @@
       "type": "registry:component",
       "title": "Example",
       "files": [
-        "registry/base-rhea/components/example.tsx"
+        "registry/base-mira/components/example.tsx"
       ]
     },
     {
@@ -1085,7 +1085,7 @@
       "type": "registry:block",
       "title": "Preview",
       "files": [
-        "registry/base-rhea/blocks/preview/index.tsx"
+        "registry/base-mira/blocks/preview/index.tsx"
       ]
     },
     {
@@ -1093,7 +1093,7 @@
       "type": "registry:block",
       "title": "Preview 02",
       "files": [
-        "registry/base-rhea/blocks/preview-02/index.tsx"
+        "registry/base-mira/blocks/preview-02/index.tsx"
       ]
     },
     {
@@ -1101,7 +1101,7 @@
       "type": "registry:block",
       "title": "Preview 03",
       "files": [
-        "registry/base-rhea/blocks/preview-03/index.tsx"
+        "registry/base-mira/blocks/preview-03/index.tsx"
       ]
     },
     {
@@ -1114,8 +1114,8 @@
         "login"
       ],
       "files": [
-        "registry/base-rhea/blocks/login-01/page.tsx",
-        "registry/base-rhea/blocks/login-01/components/login-form.tsx"
+        "registry/base-mira/blocks/login-01/page.tsx",
+        "registry/base-mira/blocks/login-01/components/login-form.tsx"
       ]
     },
     {
@@ -1128,8 +1128,8 @@
         "login"
       ],
       "files": [
-        "registry/base-rhea/blocks/login-02/page.tsx",
-        "registry/base-rhea/blocks/login-02/components/login-form.tsx"
+        "registry/base-mira/blocks/login-02/page.tsx",
+        "registry/base-mira/blocks/login-02/components/login-form.tsx"
       ]
     },
     {
@@ -1142,8 +1142,8 @@
         "login"
       ],
       "files": [
-        "registry/base-rhea/blocks/login-03/page.tsx",
-        "registry/base-rhea/blocks/login-03/components/login-form.tsx"
+        "registry/base-mira/blocks/login-03/page.tsx",
+        "registry/base-mira/blocks/login-03/components/login-form.tsx"
       ]
     },
     {
@@ -1156,8 +1156,8 @@
         "login"
       ],
       "files": [
-        "registry/base-rhea/blocks/login-04/page.tsx",
-        "registry/base-rhea/blocks/login-04/components/login-form.tsx"
+        "registry/base-mira/blocks/login-04/page.tsx",
+        "registry/base-mira/blocks/login-04/components/login-form.tsx"
       ]
     },
     {
@@ -1170,8 +1170,8 @@
         "login"
       ],
       "files": [
-        "registry/base-rhea/blocks/login-05/page.tsx",
-        "registry/base-rhea/blocks/login-05/components/login-form.tsx"
+        "registry/base-mira/blocks/login-05/page.tsx",
+        "registry/base-mira/blocks/login-05/components/login-form.tsx"
       ]
     },
     {
@@ -1184,8 +1184,8 @@
         "signup"
       ],
       "files": [
-        "registry/base-rhea/blocks/signup-01/page.tsx",
-        "registry/base-rhea/blocks/signup-01/components/signup-form.tsx"
+        "registry/base-mira/blocks/signup-01/page.tsx",
+        "registry/base-mira/blocks/signup-01/components/signup-form.tsx"
       ]
     },
     {
@@ -1198,8 +1198,8 @@
         "signup"
       ],
       "files": [
-        "registry/base-rhea/blocks/signup-02/page.tsx",
-        "registry/base-rhea/blocks/signup-02/components/signup-form.tsx"
+        "registry/base-mira/blocks/signup-02/page.tsx",
+        "registry/base-mira/blocks/signup-02/components/signup-form.tsx"
       ]
     },
     {
@@ -1212,8 +1212,8 @@
         "signup"
       ],
       "files": [
-        "registry/base-rhea/blocks/signup-03/page.tsx",
-        "registry/base-rhea/blocks/signup-03/components/signup-form.tsx"
+        "registry/base-mira/blocks/signup-03/page.tsx",
+        "registry/base-mira/blocks/signup-03/components/signup-form.tsx"
       ]
     },
     {
@@ -1226,8 +1226,8 @@
         "signup"
       ],
       "files": [
-        "registry/base-rhea/blocks/signup-04/page.tsx",
-        "registry/base-rhea/blocks/signup-04/components/signup-form.tsx"
+        "registry/base-mira/blocks/signup-04/page.tsx",
+        "registry/base-mira/blocks/signup-04/components/signup-form.tsx"
       ]
     },
     {
@@ -1240,8 +1240,8 @@
         "signup"
       ],
       "files": [
-        "registry/base-rhea/blocks/signup-05/page.tsx",
-        "registry/base-rhea/blocks/signup-05/components/signup-form.tsx"
+        "registry/base-mira/blocks/signup-05/page.tsx",
+        "registry/base-mira/blocks/signup-05/components/signup-form.tsx"
       ]
     },
     {
@@ -1253,17 +1253,17 @@
         "dashboard"
       ],
       "files": [
-        "registry/base-rhea/blocks/dashboard-01/page.tsx",
-        "registry/base-rhea/blocks/dashboard-01/data.json",
-        "registry/base-rhea/blocks/dashboard-01/components/app-sidebar.tsx",
-        "registry/base-rhea/blocks/dashboard-01/components/chart-area-interactive.tsx",
-        "registry/base-rhea/blocks/dashboard-01/components/data-table.tsx",
-        "registry/base-rhea/blocks/dashboard-01/components/nav-documents.tsx",
-        "registry/base-rhea/blocks/dashboard-01/components/nav-main.tsx",
-        "registry/base-rhea/blocks/dashboard-01/components/nav-secondary.tsx",
-        "registry/base-rhea/blocks/dashboard-01/components/nav-user.tsx",
-        "registry/base-rhea/blocks/dashboard-01/components/section-cards.tsx",
-        "registry/base-rhea/blocks/dashboard-01/components/site-header.tsx"
+        "registry/base-mira/blocks/dashboard-01/page.tsx",
+        "registry/base-mira/blocks/dashboard-01/data.json",
+        "registry/base-mira/blocks/dashboard-01/components/app-sidebar.tsx",
+        "registry/base-mira/blocks/dashboard-01/components/chart-area-interactive.tsx",
+        "registry/base-mira/blocks/dashboard-01/components/data-table.tsx",
+        "registry/base-mira/blocks/dashboard-01/components/nav-documents.tsx",
+        "registry/base-mira/blocks/dashboard-01/components/nav-main.tsx",
+        "registry/base-mira/blocks/dashboard-01/components/nav-secondary.tsx",
+        "registry/base-mira/blocks/dashboard-01/components/nav-user.tsx",
+        "registry/base-mira/blocks/dashboard-01/components/section-cards.tsx",
+        "registry/base-mira/blocks/dashboard-01/components/site-header.tsx"
       ]
     },
     {
@@ -1276,10 +1276,10 @@
         "dashboard"
       ],
       "files": [
-        "registry/base-rhea/blocks/sidebar-01/page.tsx",
-        "registry/base-rhea/blocks/sidebar-01/components/app-sidebar.tsx",
-        "registry/base-rhea/blocks/sidebar-01/components/search-form.tsx",
-        "registry/base-rhea/blocks/sidebar-01/components/version-switcher.tsx"
+        "registry/base-mira/blocks/sidebar-01/page.tsx",
+        "registry/base-mira/blocks/sidebar-01/components/app-sidebar.tsx",
+        "registry/base-mira/blocks/sidebar-01/components/search-form.tsx",
+        "registry/base-mira/blocks/sidebar-01/components/version-switcher.tsx"
       ]
     },
     {
@@ -1292,10 +1292,10 @@
         "dashboard"
       ],
       "files": [
-        "registry/base-rhea/blocks/sidebar-02/page.tsx",
-        "registry/base-rhea/blocks/sidebar-02/components/app-sidebar.tsx",
-        "registry/base-rhea/blocks/sidebar-02/components/search-form.tsx",
-        "registry/base-rhea/blocks/sidebar-02/components/version-switcher.tsx"
+        "registry/base-mira/blocks/sidebar-02/page.tsx",
+        "registry/base-mira/blocks/sidebar-02/components/app-sidebar.tsx",
+        "registry/base-mira/blocks/sidebar-02/components/search-form.tsx",
+        "registry/base-mira/blocks/sidebar-02/components/version-switcher.tsx"
       ]
     },
     {
@@ -1308,8 +1308,8 @@
         "dashboard"
       ],
       "files": [
-        "registry/base-rhea/blocks/sidebar-03/page.tsx",
-        "registry/base-rhea/blocks/sidebar-03/components/app-sidebar.tsx"
+        "registry/base-mira/blocks/sidebar-03/page.tsx",
+        "registry/base-mira/blocks/sidebar-03/components/app-sidebar.tsx"
       ]
     },
     {
@@ -1322,8 +1322,8 @@
         "dashboard"
       ],
       "files": [
-        "registry/base-rhea/blocks/sidebar-04/page.tsx",
-        "registry/base-rhea/blocks/sidebar-04/components/app-sidebar.tsx"
+        "registry/base-mira/blocks/sidebar-04/page.tsx",
+        "registry/base-mira/blocks/sidebar-04/components/app-sidebar.tsx"
       ]
     },
     {
@@ -1336,9 +1336,9 @@
         "dashboard"
       ],
       "files": [
-        "registry/base-rhea/blocks/sidebar-05/page.tsx",
-        "registry/base-rhea/blocks/sidebar-05/components/app-sidebar.tsx",
-        "registry/base-rhea/blocks/sidebar-05/components/search-form.tsx"
+        "registry/base-mira/blocks/sidebar-05/page.tsx",
+        "registry/base-mira/blocks/sidebar-05/components/app-sidebar.tsx",
+        "registry/base-mira/blocks/sidebar-05/components/search-form.tsx"
       ]
     },
     {
@@ -1351,10 +1351,10 @@
         "dashboard"
       ],
       "files": [
-        "registry/base-rhea/blocks/sidebar-06/page.tsx",
-        "registry/base-rhea/blocks/sidebar-06/components/app-sidebar.tsx",
-        "registry/base-rhea/blocks/sidebar-06/components/nav-main.tsx",
-        "registry/base-rhea/blocks/sidebar-06/components/sidebar-opt-in-form.tsx"
+        "registry/base-mira/blocks/sidebar-06/page.tsx",
+        "registry/base-mira/blocks/sidebar-06/components/app-sidebar.tsx",
+        "registry/base-mira/blocks/sidebar-06/components/nav-main.tsx",
+        "registry/base-mira/blocks/sidebar-06/components/sidebar-opt-in-form.tsx"
       ]
     },
     {
@@ -1367,12 +1367,12 @@
         "dashboard"
       ],
       "files": [
-        "registry/base-rhea/blocks/sidebar-07/page.tsx",
-        "registry/base-rhea/blocks/sidebar-07/components/app-sidebar.tsx",
-        "registry/base-rhea/blocks/sidebar-07/components/nav-main.tsx",
-        "registry/base-rhea/blocks/sidebar-07/components/nav-projects.tsx",
-        "registry/base-rhea/blocks/sidebar-07/components/nav-user.tsx",
-        "registry/base-rhea/blocks/sidebar-07/components/team-switcher.tsx"
+        "registry/base-mira/blocks/sidebar-07/page.tsx",
+        "registry/base-mira/blocks/sidebar-07/components/app-sidebar.tsx",
+        "registry/base-mira/blocks/sidebar-07/components/nav-main.tsx",
+        "registry/base-mira/blocks/sidebar-07/components/nav-projects.tsx",
+        "registry/base-mira/blocks/sidebar-07/components/nav-user.tsx",
+        "registry/base-mira/blocks/sidebar-07/components/team-switcher.tsx"
       ]
     },
     {
@@ -1385,12 +1385,12 @@
         "dashboard"
       ],
       "files": [
-        "registry/base-rhea/blocks/sidebar-08/page.tsx",
-        "registry/base-rhea/blocks/sidebar-08/components/app-sidebar.tsx",
-        "registry/base-rhea/blocks/sidebar-08/components/nav-main.tsx",
-        "registry/base-rhea/blocks/sidebar-08/components/nav-projects.tsx",
-        "registry/base-rhea/blocks/sidebar-08/components/nav-secondary.tsx",
-        "registry/base-rhea/blocks/sidebar-08/components/nav-user.tsx"
+        "registry/base-mira/blocks/sidebar-08/page.tsx",
+        "registry/base-mira/blocks/sidebar-08/components/app-sidebar.tsx",
+        "registry/base-mira/blocks/sidebar-08/components/nav-main.tsx",
+        "registry/base-mira/blocks/sidebar-08/components/nav-projects.tsx",
+        "registry/base-mira/blocks/sidebar-08/components/nav-secondary.tsx",
+        "registry/base-mira/blocks/sidebar-08/components/nav-user.tsx"
       ]
     },
     {
@@ -1403,9 +1403,9 @@
         "dashboard"
       ],
       "files": [
-        "registry/base-rhea/blocks/sidebar-09/page.tsx",
-        "registry/base-rhea/blocks/sidebar-09/components/app-sidebar.tsx",
-        "registry/base-rhea/blocks/sidebar-09/components/nav-user.tsx"
+        "registry/base-mira/blocks/sidebar-09/page.tsx",
+        "registry/base-mira/blocks/sidebar-09/components/app-sidebar.tsx",
+        "registry/base-mira/blocks/sidebar-09/components/nav-user.tsx"
       ]
     },
     {
@@ -1418,14 +1418,14 @@
         "dashboard"
       ],
       "files": [
-        "registry/base-rhea/blocks/sidebar-10/page.tsx",
-        "registry/base-rhea/blocks/sidebar-10/components/app-sidebar.tsx",
-        "registry/base-rhea/blocks/sidebar-10/components/nav-actions.tsx",
-        "registry/base-rhea/blocks/sidebar-10/components/nav-favorites.tsx",
-        "registry/base-rhea/blocks/sidebar-10/components/nav-main.tsx",
-        "registry/base-rhea/blocks/sidebar-10/components/nav-secondary.tsx",
-        "registry/base-rhea/blocks/sidebar-10/components/nav-workspaces.tsx",
-        "registry/base-rhea/blocks/sidebar-10/components/team-switcher.tsx"
+        "registry/base-mira/blocks/sidebar-10/page.tsx",
+        "registry/base-mira/blocks/sidebar-10/components/app-sidebar.tsx",
+        "registry/base-mira/blocks/sidebar-10/components/nav-actions.tsx",
+        "registry/base-mira/blocks/sidebar-10/components/nav-favorites.tsx",
+        "registry/base-mira/blocks/sidebar-10/components/nav-main.tsx",
+        "registry/base-mira/blocks/sidebar-10/components/nav-secondary.tsx",
+        "registry/base-mira/blocks/sidebar-10/components/nav-workspaces.tsx",
+        "registry/base-mira/blocks/sidebar-10/components/team-switcher.tsx"
       ]
     },
     {
@@ -1438,8 +1438,8 @@
         "dashboard"
       ],
       "files": [
-        "registry/base-rhea/blocks/sidebar-11/page.tsx",
-        "registry/base-rhea/blocks/sidebar-11/components/app-sidebar.tsx"
+        "registry/base-mira/blocks/sidebar-11/page.tsx",
+        "registry/base-mira/blocks/sidebar-11/components/app-sidebar.tsx"
       ]
     },
     {
@@ -1452,11 +1452,11 @@
         "dashboard"
       ],
       "files": [
-        "registry/base-rhea/blocks/sidebar-12/page.tsx",
-        "registry/base-rhea/blocks/sidebar-12/components/app-sidebar.tsx",
-        "registry/base-rhea/blocks/sidebar-12/components/calendars.tsx",
-        "registry/base-rhea/blocks/sidebar-12/components/date-picker.tsx",
-        "registry/base-rhea/blocks/sidebar-12/components/nav-user.tsx"
+        "registry/base-mira/blocks/sidebar-12/page.tsx",
+        "registry/base-mira/blocks/sidebar-12/components/app-sidebar.tsx",
+        "registry/base-mira/blocks/sidebar-12/components/calendars.tsx",
+        "registry/base-mira/blocks/sidebar-12/components/date-picker.tsx",
+        "registry/base-mira/blocks/sidebar-12/components/nav-user.tsx"
       ]
     },
     {
@@ -1469,8 +1469,8 @@
         "dashboard"
       ],
       "files": [
-        "registry/base-rhea/blocks/sidebar-13/page.tsx",
-        "registry/base-rhea/blocks/sidebar-13/components/settings-dialog.tsx"
+        "registry/base-mira/blocks/sidebar-13/page.tsx",
+        "registry/base-mira/blocks/sidebar-13/components/settings-dialog.tsx"
       ]
     },
     {
@@ -1483,8 +1483,8 @@
         "dashboard"
       ],
       "files": [
-        "registry/base-rhea/blocks/sidebar-14/page.tsx",
-        "registry/base-rhea/blocks/sidebar-14/components/app-sidebar.tsx"
+        "registry/base-mira/blocks/sidebar-14/page.tsx",
+        "registry/base-mira/blocks/sidebar-14/components/app-sidebar.tsx"
       ]
     },
     {
@@ -1497,17 +1497,17 @@
         "dashboard"
       ],
       "files": [
-        "registry/base-rhea/blocks/sidebar-15/page.tsx",
-        "registry/base-rhea/blocks/sidebar-15/components/calendars.tsx",
-        "registry/base-rhea/blocks/sidebar-15/components/date-picker.tsx",
-        "registry/base-rhea/blocks/sidebar-15/components/nav-favorites.tsx",
-        "registry/base-rhea/blocks/sidebar-15/components/nav-main.tsx",
-        "registry/base-rhea/blocks/sidebar-15/components/nav-secondary.tsx",
-        "registry/base-rhea/blocks/sidebar-15/components/nav-user.tsx",
-        "registry/base-rhea/blocks/sidebar-15/components/nav-workspaces.tsx",
-        "registry/base-rhea/blocks/sidebar-15/components/sidebar-left.tsx",
-        "registry/base-rhea/blocks/sidebar-15/components/sidebar-right.tsx",
-        "registry/base-rhea/blocks/sidebar-15/components/team-switcher.tsx"
+        "registry/base-mira/blocks/sidebar-15/page.tsx",
+        "registry/base-mira/blocks/sidebar-15/components/calendars.tsx",
+        "registry/base-mira/blocks/sidebar-15/components/date-picker.tsx",
+        "registry/base-mira/blocks/sidebar-15/components/nav-favorites.tsx",
+        "registry/base-mira/blocks/sidebar-15/components/nav-main.tsx",
+        "registry/base-mira/blocks/sidebar-15/components/nav-secondary.tsx",
+        "registry/base-mira/blocks/sidebar-15/components/nav-user.tsx",
+        "registry/base-mira/blocks/sidebar-15/components/nav-workspaces.tsx",
+        "registry/base-mira/blocks/sidebar-15/components/sidebar-left.tsx",
+        "registry/base-mira/blocks/sidebar-15/components/sidebar-right.tsx",
+        "registry/base-mira/blocks/sidebar-15/components/team-switcher.tsx"
       ]
     },
     {
@@ -1520,29 +1520,29 @@
         "dashboard"
       ],
       "files": [
-        "registry/base-rhea/blocks/sidebar-16/page.tsx",
-        "registry/base-rhea/blocks/sidebar-16/components/app-sidebar.tsx",
-        "registry/base-rhea/blocks/sidebar-16/components/nav-main.tsx",
-        "registry/base-rhea/blocks/sidebar-16/components/nav-projects.tsx",
-        "registry/base-rhea/blocks/sidebar-16/components/nav-secondary.tsx",
-        "registry/base-rhea/blocks/sidebar-16/components/nav-user.tsx",
-        "registry/base-rhea/blocks/sidebar-16/components/search-form.tsx",
-        "registry/base-rhea/blocks/sidebar-16/components/site-header.tsx"
+        "registry/base-mira/blocks/sidebar-16/page.tsx",
+        "registry/base-mira/blocks/sidebar-16/components/app-sidebar.tsx",
+        "registry/base-mira/blocks/sidebar-16/components/nav-main.tsx",
+        "registry/base-mira/blocks/sidebar-16/components/nav-projects.tsx",
+        "registry/base-mira/blocks/sidebar-16/components/nav-secondary.tsx",
+        "registry/base-mira/blocks/sidebar-16/components/nav-user.tsx",
+        "registry/base-mira/blocks/sidebar-16/components/search-form.tsx",
+        "registry/base-mira/blocks/sidebar-16/components/site-header.tsx"
       ]
     },
     {
       "name": "use-mobile",
       "type": "registry:hook",
       "files": [
-        "registry/base-rhea/hooks/use-mobile.ts"
+        "registry/base-mira/hooks/use-mobile.ts"
       ]
     },
     {
       "name": "use-highlighted-code",
       "type": "registry:hook",
       "files": [
-        "registry/base-rhea/hooks/use-highlighted-code.ts",
-        "registry/base-rhea/lib/highlighter.tsx"
+        "registry/base-mira/hooks/use-highlighted-code.ts",
+        "registry/base-mira/lib/highlighter.tsx"
       ]
     },
     {

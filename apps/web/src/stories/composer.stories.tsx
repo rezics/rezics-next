@@ -394,10 +394,10 @@ export function AuthoringRecoveryExample({ kind = 'reply' }: { kind?: RecoveryKi
         </p>
         <output aria-label="Prepared command count">{commands.length}</output>
         <div className="flex min-w-0 flex-wrap gap-2">
-          <Button className="h-auto min-h-11 whitespace-normal" onClick={finish}>
+          <Button className="h-auto min-h-7 whitespace-normal" onClick={finish}>
             Prepared acknowledge original
           </Button>
-          <Button className="h-auto min-h-11 whitespace-normal" onClick={refuse}>
+          <Button className="h-auto min-h-7 whitespace-normal" onClick={refuse}>
             Prepared refuse original
           </Button>
         </div>
@@ -430,7 +430,7 @@ export function AuthoringRecoveryExample({ kind = 'reply' }: { kind?: RecoveryKi
           />
         )}
         <details className="min-w-0">
-          <summary className="min-h-11 cursor-pointer p-3">Prepared request operands</summary>
+          <summary className="cursor-pointer focus-visible:ring-3 focus-visible:ring-ring/30">Prepared request operands</summary>
           <pre className="max-h-64 overflow-auto whitespace-pre-wrap [overflow-wrap:anywhere]">
             {JSON.stringify(commands, null, 2)}
           </pre>

@@ -59,9 +59,9 @@ import {
 import { factStatementFeedback, StatementViolationFeedback } from './fact-violation-feedback';
 
 const gameActionClass =
-  'min-h-8 min-w-8 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [@media(max-width:639px)_and_(pointer:coarse)]:h-auto [@media(max-width:639px)_and_(pointer:coarse)]:min-h-11 [@media(max-width:639px)_and_(pointer:coarse)]:min-w-11';
+  'min-h-7 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [@media(max-width:639px)_and_(pointer:coarse)]:h-auto';
 const gamePropertySelectClass =
-  'w-fit min-w-0 max-w-full [&>select]:max-w-full [@media(max-width:639px)_and_(pointer:coarse)]:w-full [@media(max-width:639px)_and_(pointer:coarse)]:[&>select]:min-h-11';
+  'w-fit min-w-0 max-w-full [&>select]:max-w-full [@media(max-width:639px)_and_(pointer:coarse)]:w-full';
 // Raise native controls individually above the shared surface, without a panel-wide hit target.
 const gameFieldFrameClass =
   'min-w-0 max-w-full space-y-4 p-4 [overflow-wrap:anywhere] [&_a]:relative [&_a]:z-10 [&_button]:relative [&_button]:z-10 [&_label]:relative [&_label]:z-10 [&_input]:relative [&_input]:z-10 [&_select]:relative [&_select]:z-10 [&_textarea]:relative [&_textarea]:z-10 [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring [&_input:focus-visible]:outline-2 [&_input:focus-visible]:outline-offset-2 [&_input:focus-visible]:outline-ring [&_select:focus-visible]:outline-2 [&_select:focus-visible]:outline-offset-2 [&_select:focus-visible]:outline-ring';

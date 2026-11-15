@@ -9,7 +9,7 @@ import {
 } from './transfer-visit';
 
 const control =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal px-4 py-2 text-start leading-snug [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'h-auto min-h-7 max-w-full whitespace-normal text-start leading-snug [overflow-wrap:anywhere]';
 
 /** The caller keys this entry by its complete reading lifetime, including source, session and locale. */
 export function KnowledgeTransferEntry({

@@ -21,7 +21,7 @@ export function AuthoredFieldEntry({
       href={entry.href}
       className={cn(
         buttonVariants({ variant: 'outline', size: 'sm' }),
-        'h-auto min-h-11 min-w-11 max-w-full shrink whitespace-normal py-2 text-center [overflow-wrap:anywhere] md:pointer-fine:min-h-8 md:pointer-fine:py-1',
+        'h-auto min-h-6 max-w-full shrink whitespace-normal text-center [overflow-wrap:anywhere]',
       )}
     >
       {entry.label}
@@ -57,14 +57,14 @@ export function AuthoredPublicVisitNotice({
       <p>{message}</p>
       <div className="flex flex-wrap gap-3">
         <a
-          className="inline-flex min-h-11 items-center rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="inline-flex items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           href={returnHref}
         >
           {m.authored_public_return({}, o)}
         </a>
         {state === 'unsupported' && freshHref && (
           <a
-            className="inline-flex min-h-11 items-center rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="inline-flex items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             href={freshHref}
           >
             {m.authored_public_fresh_global({}, o)}
@@ -78,7 +78,7 @@ export function AuthoredPublicVisitNotice({
 export function AuthoredPublicReturnLink({ href, locale }: { href: string; locale: string }) {
   return (
     <a
-      className="inline-flex min-h-11 items-center rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      className="inline-flex items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       href={href}
     >
       {m.authored_public_return({}, { locale: locale as never })}

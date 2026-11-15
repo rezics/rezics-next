@@ -63,7 +63,7 @@ export function EditorCommandPalette({
                 value={command.id}
                 keywords={[command.label, ...(command.keywords ?? [])]}
                 disabled={!!command.disabled}
-                className="min-h-11 gap-3 whitespace-normal text-start"
+                className="whitespace-normal text-start"
                 onSelect={() => {
                   if (!isCurrent() || command.disabled) return;
                   onClose();

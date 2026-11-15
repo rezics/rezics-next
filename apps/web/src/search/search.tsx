@@ -36,6 +36,7 @@ import { BottomSheet } from '@rezics/ui/bottom-sheet';
 
 import { SlidersHorizontalIcon, XIcon } from 'lucide-react';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Input } from '@rezics/ui/shadcn/input';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { cn } from '@rezics/ui/utils';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -241,7 +242,7 @@ function languageDisplayName(tag: string, locale: string) {
   }
 }
 
-const linkClass = cn(buttonVariants({ variant: 'link' }), 'h-auto justify-start p-0');
+const linkClass = cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 justify-start p-0');
 type MessageOptions = { locale: (typeof locales)[number] };
 
 function messageOptions(locale: string): MessageOptions {
@@ -275,7 +276,7 @@ function AdvancedScope({
             onChange({ kind: next, id: next ? id : '' });
           }}
         >
-          <SelectTrigger id={typeId}>
+          <SelectTrigger id={typeId} className="w-full min-w-0">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -290,7 +291,7 @@ function AdvancedScope({
       {kind && (
         <Field>
           <FieldLabel htmlFor={resourceId}>{m.access_identity_resource_id({}, options)}</FieldLabel>
-          <input
+          <Input
             id={resourceId}
             type="text"
             value={id}
@@ -300,7 +301,6 @@ function AdvancedScope({
             aria-invalid={(id.length > 0 && !selected) || undefined}
             aria-describedby={id.length > 0 && !selected ? `${resourceId}-error` : undefined}
             onChange={(event) => onChange({ kind, id: event.currentTarget.value })}
-            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
           {id.length > 0 && !selected && (
             <p id={`${resourceId}-error`} className="text-sm text-destructive">
@@ -900,12 +900,12 @@ export function SearchPage({
           id="search-filter-entry"
           type="button"
           variant="outline"
-          className="min-h-11 shrink-0 self-start"
+          className="shrink-0 self-start"
           aria-controls="search-filters"
           aria-expanded={!hydrated || filterSurface !== undefined}
           onClick={openFilters}
         >
-          <SlidersHorizontalIcon aria-hidden="true" className="size-4" />
+          <SlidersHorizontalIcon aria-hidden="true" />
           {m.search_filters({}, options)} ({number.format(activeFilterCount)})
         </Button>
       </div>
@@ -927,7 +927,7 @@ export function SearchPage({
               <a
                 className={cn(
                   buttonVariants({ variant: 'outline', size: 'sm' }),
-                  'h-auto min-h-11 max-w-full whitespace-normal py-2',
+                  'h-auto min-h-6 max-w-full whitespace-normal',
                 )}
                 aria-label={m.refinement_remove(
                   {
@@ -950,7 +950,7 @@ export function SearchPage({
                     </span>
                   )}
                 </span>
-                <XIcon aria-hidden="true" className="size-3" />
+                <XIcon aria-hidden="true" />
               </a>
             </li>
           ))}
@@ -958,7 +958,7 @@ export function SearchPage({
       )}
       {constraints.some(({ details }) => details !== undefined) && (
         <details className="min-w-0 text-sm" data-search-constraint-details>
-          <summary className="min-h-11 w-fit max-w-full cursor-pointer rounded-sm py-2 wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          <summary className="w-fit max-w-full cursor-pointer rounded-sm wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             {m.search_constraint_identity_details({}, options)}
           </summary>
           <dl className="space-y-3 pt-2">
@@ -1066,7 +1066,7 @@ export function SearchPage({
       </div>
       {constraints.length > 0 && (
         <details className="min-w-0 rounded-lg border border-border/60 p-3 lg:hidden">
-          <summary className="min-h-10 cursor-pointer content-center font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          <summary className="cursor-pointer content-center font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             {filterCopy.current} ({number.format(activeFilterCount)})
           </summary>
           <ul className="space-y-2 pt-2 text-sm text-muted-foreground">
@@ -1215,7 +1215,7 @@ export function SearchPage({
                   setDraft((previous) => ({ ...previous, type: nextSelectValue || undefined }));
                 }}
               >
-                <SelectTrigger id={`${typeControlId}-${surface}`}>
+                <SelectTrigger id={`${typeControlId}-${surface}`} className="w-full min-w-0">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1332,7 +1332,7 @@ export function SearchPage({
           }
           className="min-w-0 border-t border-border/60 pt-5"
         >
-          <summary className="min-h-11 cursor-pointer content-center rounded-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          <summary className="cursor-pointer content-center rounded-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             {m.condition_heading({}, options)}
           </summary>
           <div className="pt-3">

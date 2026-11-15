@@ -2,7 +2,46 @@ import { useRef, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { Button } from '../shadcn/button';
+import { Field, FieldLabel } from '../shadcn/field';
+import { Input } from '../shadcn/input';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '../shadcn/select';
+import { Textarea } from '../shadcn/textarea';
 import { ResponsiveDialog } from './responsive-dialog';
+
+const kindItems = [{ value: 'print', label: 'Print' }];
+const statusItems = [{ value: 'owned', label: 'Owned' }];
+
+function ChoiceField({
+  id,
+  label,
+  items,
+  defaultValue,
+}: {
+  id: string;
+  label: string;
+  items: { value: string; label: string }[];
+  defaultValue: string;
+}) {
+  return (
+    <Field className="min-w-0">
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <Select<string, false> items={items} defaultValue={defaultValue}>
+        <SelectTrigger id={id} className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            {items.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+    </Field>
+  );
+}
 
 const meta = {
   title: 'Components/Responsive dialog',
@@ -30,16 +69,16 @@ function FilterReview() {
         finalFocus={() => launcher.current ?? false}
       >
         <form onSubmit={(event) => event.preventDefault()} className="grid gap-4">
-          <label className="grid gap-2">
-            Minimum word count
-            <input
-              className="min-h-11 rounded-md border bg-background px-3"
+          <Field>
+            <FieldLabel htmlFor="filter-minimum">Minimum word count</FieldLabel>
+            <Input
+              id="filter-minimum"
               name="range.from.schema:wordCount"
               type="number"
               value={minimum}
               onChange={(event) => setMinimum(event.currentTarget.value)}
             />
-          </label>
+          </Field>
           <Button type="submit">Apply filters</Button>
         </form>
       </ResponsiveDialog>
@@ -85,57 +124,46 @@ function LongCopyEditor() {
               3,
             )}
           </p>
-          <label className="grid min-w-0 gap-2">
-            Kind
-            <select className="min-h-11 min-w-0 rounded-md border bg-background px-3 text-base" defaultValue="print">
-              <option value="print">Print</option>
-            </select>
-          </label>
-          <label className="grid min-w-0 gap-2">
-            Status
-            <select className="min-h-11 min-w-0 rounded-md border bg-background px-3 text-base" defaultValue="owned">
-              <option value="owned">Owned</option>
-            </select>
-          </label>
+          <ChoiceField id="copy-kind" label="Kind" items={kindItems} defaultValue="print" />
+          <ChoiceField id="copy-status" label="Status" items={statusItems} defaultValue="owned" />
           <fieldset className="min-w-0 space-y-4">
             <legend className="font-medium">Optional Copy details</legend>
-            <label className="grid min-w-0 gap-2">
-              Location
-              <input
-                className="min-h-11 min-w-0 rounded-md border bg-background px-3 text-base"
+            <Field className="min-w-0">
+              <FieldLabel htmlFor="copy-location">Location</FieldLabel>
+              <Input
+                id="copy-location"
                 value={location}
                 onChange={(event) => setLocation(event.currentTarget.value)}
               />
-            </label>
-            <label className="grid min-w-0 gap-2">
-              Source
-              <input className="min-h-11 min-w-0 rounded-md border bg-background px-3 text-base" defaultValue="" />
-            </label>
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor="copy-source">Source</FieldLabel>
+              <Input id="copy-source" defaultValue="" />
+            </Field>
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-              <label className="grid min-w-0 gap-2">
-                Acquired on
-                <input type="date" className="min-h-11 min-w-0 rounded-md border bg-background px-3 text-base" />
-              </label>
-              <label className="grid min-w-0 gap-2">
-                Disposed on
-                <input type="date" className="min-h-11 min-w-0 rounded-md border bg-background px-3 text-base" />
-              </label>
+              <Field className="min-w-0">
+                <FieldLabel htmlFor="copy-acquired">Acquired on</FieldLabel>
+                <Input id="copy-acquired" type="date" />
+              </Field>
+              <Field className="min-w-0">
+                <FieldLabel htmlFor="copy-disposed">Disposed on</FieldLabel>
+                <Input id="copy-disposed" type="date" />
+              </Field>
             </div>
-            <label className="grid min-w-0 gap-2">
-              Note
-              <textarea
+            <Field className="min-w-0">
+              <FieldLabel htmlFor="copy-note">Note</FieldLabel>
+              <Textarea
+                id="copy-note"
                 rows={12}
-                className="min-h-48 min-w-0 resize-y rounded-md border bg-background p-3 text-base"
+                className="min-h-48 min-w-0 resize-y"
                 value={note}
                 onChange={(event) => setNote(event.currentTarget.value)}
               />
-            </label>
+            </Field>
           </fieldset>
-          <div className="sticky bottom-0 flex flex-wrap gap-3 border-t bg-background pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-            <Button type="submit" className="min-h-11">
-              Save changes
-            </Button>
-            <Button type="button" className="min-h-11" variant="outline" onClick={() => setOpen(false)}>
+          <div className="sticky bottom-0 flex flex-wrap items-center gap-3 border-t bg-background pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <Button type="submit">Save changes</Button>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
           </div>

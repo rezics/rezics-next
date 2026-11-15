@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
+import { Badge } from '@rezics/ui/shadcn/badge';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { m } from '../../../paraglide/messages.js';
 import type { Locale } from '../../../paraglide/runtime.js';
 import { homeCollectionMemberHref } from './member-destination';
@@ -78,7 +80,7 @@ function HomeCollectionCurator({ curator, locale }: { curator: CollectionCard['c
     <p className="text-muted-foreground" data-home-curator-state="available">
       {m.discovery_collection_curator({}, options)}{' '}
       {href ? (
-        <a href={href} className="inline-flex min-h-11 items-center text-primary underline underline-offset-4">
+        <a href={href} className="text-primary underline underline-offset-4">
           <bdi>{label}</bdi>
         </a>
       ) : (
@@ -110,7 +112,7 @@ function HomeCollectionPreview({
       </p>
     );
   return (
-    <div className="space-y-2 rounded-lg bg-muted/40 p-3" data-home-collection-preview="available">
+    <div className="space-y-2" data-home-collection-preview="available">
       <p className="text-sm font-medium">{m.discovery_collection_preview({}, options)}</p>
       <ul className="space-y-1" aria-label={m.discovery_collection_preview({}, options)}>
         {preview.members.map((member) => {
@@ -126,7 +128,7 @@ function HomeCollectionPreview({
                   collectionHref: href,
                   memberId: member.id,
                 })}
-                className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 [overflow-wrap:anywhere]"
+                className="max-w-full text-primary underline underline-offset-4 [overflow-wrap:anywhere]"
               >
                 <bdi>{label || m.subject_value_unlabelled({}, options)}</bdi>
               </a>
@@ -154,9 +156,9 @@ function HomeCollectionPresentation({ card, locale }: { card: CollectionCard; lo
       className="flex min-w-0 flex-wrap items-center gap-x-2 text-sm"
       data-home-collection-presentation={dynamic ? 'dynamic' : 'ordered'}
     >
-      <span className="rounded-md bg-muted px-2 py-0.5">
+      <Badge variant="secondary">
         {dynamic ? m.collection_presentation_dynamic({}, options) : m.collection_presentation_ordered({}, options)}
-      </span>
+      </Badge>
       <span
         className="min-w-0 text-muted-foreground [overflow-wrap:anywhere]"
         data-home-collection-kind={kind ?? 'mixed'}
@@ -248,7 +250,13 @@ export function HomePublicOwnerActions({
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-2" data-home-public-owner-actions>
       {href ? (
-        <a href={href} className={`${buttonVariants({ variant: 'outline', size: 'sm' })} min-h-11 whitespace-normal`}>
+        <a
+          href={href}
+          className={cn(
+            buttonVariants({ variant: 'outline', size: 'sm' }),
+            'h-auto min-h-6 max-w-full whitespace-normal',
+          )}
+        >
           {m.home_card_open({ title: homeFeedTitle(item, locale) }, options)}
         </a>
       ) : null}

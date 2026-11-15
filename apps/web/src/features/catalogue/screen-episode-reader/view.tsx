@@ -1,4 +1,5 @@
 import { useState, type MouseEvent } from 'react';
+import { cn } from '@rezics/ui/utils';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { ContentItemHeading } from '@rezics/ui/content-item';
@@ -19,7 +20,7 @@ import {
 import type { ScreenEpisodeVisit } from './visit/owner';
 
 const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
 
 function options(locale: string) {
   return { locale: locale as never };
@@ -166,7 +167,7 @@ export function ScreenEpisodeList({
       <span
         onClickCapture={(event) => visit?.onNavigate(kind, href, event as unknown as MouseEvent<HTMLAnchorElement>)}
       >
-        <Link href={href} className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`}>
+        <Link href={href} className={cn(buttonVariants({ variant: 'outline' }), actionClass)}>
           {label}
         </Link>
       </span>
@@ -201,7 +202,7 @@ export function ScreenEpisodeList({
           {failed.reason !== 'stale' && retry ? (
             <button
               type="button"
-              className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`}
+              className={cn(buttonVariants({ variant: 'outline' }), actionClass)}
               data-screen-episode-recovery
               onClick={(event) => {
                 visit?.onRetry(event);
@@ -249,7 +250,7 @@ export function ScreenEpisodeList({
                       <Link
                         href={href}
                         {...(entry.language ? { lang: entry.language } : {})}
-                        className={`${actionClass} inline-flex items-center font-medium text-primary underline-offset-4 hover:underline`}
+                        className={cn(buttonVariants({ variant: 'link' }), actionClass, 'underline')}
                       >
                         {label}
                       </Link>
@@ -263,7 +264,7 @@ export function ScreenEpisodeList({
                   </div>
                   <button
                     type="button"
-                    className={`${buttonVariants({ variant: 'ghost' })} ${actionClass} shrink-0 text-sm`}
+                    className={cn(buttonVariants({ variant: 'ghost' }), actionClass, 'shrink-0 text-sm')}
                     aria-expanded={expanded}
                     {...(expanded ? { 'aria-controls': `screen-episode-evidence-${entry.membershipId}` } : {})}
                     onClick={() =>
@@ -283,7 +284,7 @@ export function ScreenEpisodeList({
                 tabIndex={-1}
                 aria-current={expanded ? 'true' : undefined}
                 data-screen-member-type={entry.type}
-                className="min-w-0 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                className="min-w-0 [overflow-wrap:anywhere] "
               >
                 {spoilerLevel(statement as unknown as Stmt) > readerSpoilerLevel ? (
                   <SpoilerGate

@@ -209,14 +209,8 @@ function formatAccessibleCount(locale: string, count: number): string {
   return compact === exact ? compact : `${compact} (${exact})`;
 }
 
-// Pressed text is ink blue (`--primary`). Brand red is a mark and never colors text.
-const chipClass = cn(
-  buttonVariants({ variant: 'outline', size: 'sm' }),
-  'relative rounded-full transition-none pointer-coarse:after:absolute pointer-coarse:after:-inset-2',
-);
-
-const pressedClass =
-  'border-primary/40 bg-primary/10 text-primary hover:border-primary/40 hover:bg-primary/15 hover:text-primary';
+// Pressed text uses the official primary token. Brand red is a mark and never colors text.
+const pressedClass = 'border-primary text-primary hover:border-primary hover:text-primary';
 
 /**
  * Reactions on a thread or post. shadcn has no reaction cluster (it offers `toggle-group` for exclusive choices and
@@ -396,13 +390,10 @@ export const Reactions = (props: ReactionsProps) => {
     props.presentation !== 'chips' &&
     kinds.includes('upvote') &&
     kinds.includes('downvote');
-  const pickerClass = cn(
-    'rounded-full',
-    votes && 'min-h-11 min-w-11 px-0 sm:min-h-8 sm:min-w-8 pointer-coarse:min-h-11 pointer-coarse:min-w-11',
-  );
+  const pickerSize = votes ? 'icon-sm' : 'sm';
   const pickerLabel = votes ? (
     <>
-      <SmilePlusIcon aria-hidden className="size-4" />
+      <SmilePlusIcon aria-hidden />
       <span className="sr-only">{labels.react}</span>
     </>
   ) : (
@@ -415,8 +406,8 @@ export const Reactions = (props: ReactionsProps) => {
     const pressed = shown.value === kind;
     const count = shown.counts[kind] ?? 0;
     const className = cn(
-      'inline-flex min-h-11 min-w-11 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8 sm:min-w-8 pointer-coarse:min-h-11 pointer-coarse:min-w-11',
-      pressed ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent',
+      buttonVariants({ variant: pressed ? 'secondary' : 'ghost', size: 'icon-sm' }),
+      pressed && pressedClass,
     );
     return signedOut ? (
       <a
@@ -424,19 +415,21 @@ export const Reactions = (props: ReactionsProps) => {
         aria-label={`${labels[kind]} ${formatExactCount(props.locale, count)}`}
         className={className}
       >
-        <Icon aria-hidden className="size-5" />
+        <Icon aria-hidden className={cn(pressed && 'fill-current')} />
       </a>
     ) : (
-      <button
+      <Button
         type="button"
         aria-label={`${labels[kind]} ${formatExactCount(props.locale, count)}`}
         aria-pressed={pressed}
-        className={className}
+        className={cn(pressed && pressedClass)}
         disabled={selectionDisabled || !admittedKinds(props.allowedKinds).includes(kind)}
         onClick={() => select(kind)}
+        size="icon-sm"
+        variant={pressed ? 'secondary' : 'ghost'}
       >
-        <Icon aria-hidden className={cn('size-5', pressed && 'fill-current')} />
-      </button>
+        <Icon aria-hidden className={cn(pressed && 'fill-current')} />
+      </Button>
     );
   };
 
@@ -451,7 +444,7 @@ export const Reactions = (props: ReactionsProps) => {
       {votes ? (
         <div
           data-slot="vote-control"
-          className={cn('inline-flex items-center rounded-full', props.presentation !== 'vote-plain' && 'bg-muted/70')}
+          className={cn('inline-flex items-center', props.presentation !== 'vote-plain' && 'rounded-md bg-muted')}
         >
           {voteArrow('upvote')}
           <output
@@ -477,7 +470,11 @@ export const Reactions = (props: ReactionsProps) => {
             return (
               <a
                 aria-label={name}
-                className={cn(chipClass, pressed && pressedClass, phoneHidden(kind) && 'max-sm:hidden')}
+                className={cn(
+                  buttonVariants({ variant: 'outline', size: 'sm' }),
+                  pressed && pressedClass,
+                  phoneHidden(kind) && 'max-sm:hidden',
+                )}
                 data-pressed={pressed ? 'true' : 'false'}
                 data-slot="reaction-chip"
                 href={signInHref}
@@ -491,7 +488,11 @@ export const Reactions = (props: ReactionsProps) => {
           return (
             <span
               aria-label={name}
-              className={cn(chipClass, pressed && pressedClass, phoneHidden(kind) && 'max-sm:hidden')}
+              className={cn(
+                buttonVariants({ variant: 'outline', size: 'sm' }),
+                pressed && pressedClass,
+                phoneHidden(kind) && 'max-sm:hidden',
+              )}
               data-pressed={pressed ? 'true' : 'false'}
               data-slot="reaction-chip"
               key={kind}
@@ -508,7 +509,7 @@ export const Reactions = (props: ReactionsProps) => {
           <Button
             aria-label={name}
             aria-pressed={pressed}
-            className={cn(chipClass, pressed && pressedClass, phoneHidden(kind) && 'max-sm:hidden')}
+            className={cn(pressed && pressedClass, phoneHidden(kind) && 'max-sm:hidden')}
             data-pressed={pressed ? 'true' : 'false'}
             data-slot="reaction-chip"
             disabled={selectionDisabled || !admittedKinds(props.allowedKinds).includes(kind)}
@@ -524,14 +525,14 @@ export const Reactions = (props: ReactionsProps) => {
         );
       })}
       {props.inlineKinds ? null : signedOut ? (
-        <a className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), pickerClass)} href={signInHref}>
+        <a className={buttonVariants({ variant: 'outline', size: pickerSize })} href={signInHref}>
           {pickerLabel}
         </a>
       ) : (
         <Menu
           title={labels.choose}
           trigger={
-            <Button className={pickerClass} disabled={selectionDisabled} size="sm" variant="outline">
+            <Button disabled={selectionDisabled} size={pickerSize} variant="outline">
               {pickerLabel}
             </Button>
           }
@@ -545,7 +546,7 @@ export const Reactions = (props: ReactionsProps) => {
                   <Button
                     aria-label={`${labels[kind]} ${formatAccessibleCount(props.locale, count)}`}
                     aria-pressed={pressed}
-                    className={cn('relative w-full justify-start px-3 transition-none', pressed && pressedClass)}
+                    className={cn('relative w-full justify-start', pressed && pressedClass)}
                     disabled={selectionDisabled || !admittedKinds(props.allowedKinds).includes(kind)}
                     key={kind}
                     onClick={() => select(kind)}

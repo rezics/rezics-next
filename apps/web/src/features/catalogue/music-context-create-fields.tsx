@@ -26,9 +26,9 @@ import { reuseIsStale } from './reference-reuse';
 import { MusicContextStatementSummary } from './music-context-create-review';
 
 const actionClass =
-  'h-auto min-h-8 min-w-8 max-w-full whitespace-normal break-words py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [@media(max-width:639px)_and_(pointer:coarse)]:min-h-11 [@media(max-width:639px)_and_(pointer:coarse)]:min-w-11';
+  'h-auto min-h-7 max-w-full whitespace-normal break-words focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const selectClass =
-  'w-fit min-w-0 max-w-full [&>select]:max-w-full [@media(max-width:639px)_and_(pointer:coarse)]:w-full [@media(max-width:639px)_and_(pointer:coarse)]:[&>select]:min-h-11';
+  'w-fit min-w-0 max-w-full [&>select]:max-w-full [@media(max-width:639px)_and_(pointer:coarse)]:w-full';
 
 export function MusicContextCreateFields({
   type,

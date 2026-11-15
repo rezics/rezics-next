@@ -2,13 +2,13 @@ import { metaText } from '@rezics/ui/meta-line';
 import { useId } from 'react';
 import type { CopiesPageData } from './copies-read';
 import { m } from '../paraglide/messages.js';
+import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { copyConditionChoices, kindAdmitsCondition } from './copy-condition';
 
-const submitTarget =
-  'min-h-11 min-w-11 h-auto rounded-lg bg-primary px-4 py-3 font-medium whitespace-normal break-words text-primary-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2';
+const controlWrap = 'h-auto min-h-7 max-w-full whitespace-normal break-words';
 
 /** Each ordinary form offers one advertised kind's statuses; the kernel still validates the current pair. */
 export function CopiesFallback({ page, csrfToken }: { page: CopiesPageData; csrfToken?: string | null | undefined }) {
@@ -28,16 +28,16 @@ export function CopiesFallback({ page, csrfToken }: { page: CopiesPageData; csrf
         <form method="get">
           <Field>
             <FieldLabel htmlFor="fallback-copy-subject">{m.library_copy_edition()}</FieldLabel>
-            <Input id="fallback-copy-subject" name="subjectId" required className="min-h-11" />
+            <Input id="fallback-copy-subject" name="subjectId" required />
           </Field>
-          <button type="submit" className={submitTarget}>
+          <Button type="submit" className={controlWrap}>
             {m.library_copy_add()}
-          </button>
+          </Button>
         </form>
       ) : null}
       {page.profile?.kinds.length ? (
         <details className="space-y-4">
-          <summary className="min-h-11 min-w-11 cursor-pointer rounded-lg px-4 py-3 whitespace-normal break-words focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
+          <summary className="max-w-full cursor-pointer whitespace-normal break-words rounded-lg focus-visible:ring-2 focus-visible:ring-ring/30">
             {m.library_copy_add()}
           </summary>
           {page.profile.kinds.map((kind, index) => {
@@ -134,9 +134,9 @@ export function CopiesFallback({ page, csrfToken }: { page: CopiesPageData; csrf
                       </Field>
                     </>
                   ) : null}
-                  <button type="submit" className={submitTarget}>
+                  <Button type="submit" className={controlWrap}>
                     {m.library_copy_add_submit()}
-                  </button>
+                  </Button>
                 </FieldSet>
               </form>
             );

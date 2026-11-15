@@ -83,7 +83,7 @@ are O(admitted bytes + rows), independent of total arc size.
 
 Authored stories exercise the disclosed journey, unsupported definitions and unavailable continuation. They are
 source examples, not native publication or rendered passes. Focused tests use generated native client seams and
-mounted keyboard/spoiler/retirement journeys. Wrapping shell components, theme tokens, 44px controls and all eight
+mounted keyboard/spoiler/retirement journeys. Wrapping shell components, theme tokens and all eight
 existing locales support phone390/desktop1280. Native/browser acceptance remains deferred to integration.
 
 Preparation regressions extend `story-arc-reader-view.test.tsx` (first default/non-default settings, equal observations,

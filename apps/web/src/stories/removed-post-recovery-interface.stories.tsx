@@ -103,10 +103,10 @@ function RecoveryInterface() {
             {`Restore calls ${restores.join(', ')}; refresh calls ${refreshes.join(', ')}; copy calls ${copies.join(', ')}. ${pending ? 'Request pending.' : 'No request pending.'}`}
           </p>
           <Button
-            variant="outline"
-            disabled={!pending}
-            className="h-auto min-h-11 whitespace-normal py-2"
-            onClick={() => {
+ variant="outline"
+ disabled={!pending}
+ className="h-auto min-h-7 whitespace-normal"
+ onClick={() => {
               pendingRef.current = false;
               setPending(false);
               setError(failure);

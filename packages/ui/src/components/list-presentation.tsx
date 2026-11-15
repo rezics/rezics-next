@@ -137,7 +137,8 @@ export function MemberReadingItem({
       aria-expanded={expanded}
       aria-controls={detailId}
       data-collection-detail-opener
-      className="h-auto min-h-11 min-w-11 max-w-full justify-start whitespace-normal rounded-sm px-0 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      size="sm"
+      className="h-auto min-h-6 max-w-full justify-start px-0 whitespace-normal text-left"
       onClick={(event) => onInspect(event.currentTarget)}
       onKeyDown={(event) => {
         if (event.key === 'Escape' && expanded && onClose && !event.defaultPrevented) {
@@ -243,7 +244,7 @@ export function MemberReadingItem({
           </div>
           <ListRowControl
             data-content-item-slot="actions"
-            className="mt-3 flex min-h-11 min-w-0 flex-wrap items-center gap-2 @min-[40rem]/content-item:col-start-2 @min-[40rem]/content-item:row-start-1 @min-[40rem]/content-item:mt-0 @min-[40rem]/content-item:justify-end"
+            className="mt-3 flex min-w-0 flex-wrap items-center gap-2 @min-[40rem]/content-item:col-start-2 @min-[40rem]/content-item:row-start-1 @min-[40rem]/content-item:mt-0 @min-[40rem]/content-item:justify-end"
           >
             {opener}
           </ListRowControl>
@@ -296,7 +297,7 @@ export function MemberReadingDetail({
         <Button
           type="button"
           variant="ghost"
-          className="min-h-11 min-w-11 max-w-full whitespace-normal"
+          className="h-auto min-h-7 max-w-full whitespace-normal"
           onClick={close}
         >
           {closeLabel}

@@ -21,7 +21,7 @@ type BoardBylineAuthor = Readonly<{
 type BylineAuthor = PageAuthor | BoardBylineAuthor;
 
 const personLink =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm text-start whitespace-normal [overflow-wrap:anywhere] underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'inline-flex max-w-full items-center rounded-sm text-start whitespace-normal [overflow-wrap:anywhere] underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 /** The author of a post or thread: avatar with initials, display name and handle linked to the person, and the time. */
 export function Byline({

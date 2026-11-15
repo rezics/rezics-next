@@ -1,4 +1,5 @@
-import { Button } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { savedQueryRuleReturn } from './saved-query-results';
@@ -31,8 +32,13 @@ export function CollectionRuleControls({
   const href = id ? savedQueryRuleReturn(resultsHref, id, getLocale(), !!savedId) : null;
   return (
     <>
-      <div className="flex flex-wrap gap-3 [&_button]:min-h-11 [&_button]:h-auto [&_button]:whitespace-normal">
-        <Button type="submit" aria-busy={pending} disabled={pending || conflict || !hasFilter || !!savedId}>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="submit"
+          className="h-auto min-h-7 max-w-full whitespace-normal"
+          aria-busy={pending}
+          disabled={pending || conflict || !hasFilter || !!savedId}
+        >
           {pending
             ? m.library_collection_save_pending()
             : savedId
@@ -51,24 +57,29 @@ export function CollectionRuleControls({
         </Button>
         {creating && savedId ? (
           <a
-            className="inline-flex min-h-11 items-center rounded-lg px-4 py-2 text-primary underline focus-visible:outline-2 focus-visible:outline-offset-2"
+            className={cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full whitespace-normal')}
             href={`/${getLocale()}/collections/${encodeURIComponent(id!)}/rule`}
           >
             {m.library_rule_edit()}
           </a>
         ) : (
-          <Button type="button" variant="outline" disabled={pending} onClick={refresh}>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-auto min-h-7 max-w-full whitespace-normal"
+            disabled={pending}
+            onClick={refresh}
+          >
             {conflict ? m.library_rule_review_current_read() : m.library_collection_reload()}
           </Button>
         )}
       </div>
       {href && (
         <a
-          className={
-            savedId
-              ? 'inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 py-2 text-center font-medium text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
-              : 'inline-flex min-h-11 items-center rounded-lg px-4 py-2 text-primary underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
-          }
+          className={cn(
+            buttonVariants({ variant: savedId ? 'default' : 'link' }),
+            'h-auto min-h-7 max-w-full whitespace-normal',
+          )}
           href={href}
         >
           {m.library_rule_members()}

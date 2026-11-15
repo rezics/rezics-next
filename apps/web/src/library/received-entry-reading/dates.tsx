@@ -26,7 +26,7 @@ function Instant({ value, locale, isCurrent }: { value: string; locale: string; 
       >
         <summary
           aria-controls={exactId}
-          className="min-h-11 w-fit max-w-full cursor-pointer rounded-sm py-2 text-sm underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+          className="w-fit max-w-full cursor-pointer rounded-sm py-2 text-sm underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
           onClick={(event) => {
             if (!isCurrent()) event.preventDefault();
           }}
@@ -72,20 +72,20 @@ export function ReceivedEntryDates({
         {m.library_entry_reading_dates_heading({}, options)}
       </h3>
       <dl className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-x-3 gap-y-4 text-sm">
-        <dt className="break-words text-muted-foreground">{m.library_entry_reading_created({}, options)}</dt>
-        <dd className="min-w-0 break-words">
+        <dt className="h-auto break-words text-muted-foreground">{m.library_entry_reading_created({}, options)}</dt>
+        <dd className="h-auto min-w-0 break-words">
           <Instant value={entry.createdAt} locale={locale} isCurrent={isCurrent} />
         </dd>
-        <dt className="break-words text-muted-foreground">{m.library_entry_reading_updated({}, options)}</dt>
-        <dd className="min-w-0 break-words">
+        <dt className="h-auto break-words text-muted-foreground">{m.library_entry_reading_updated({}, options)}</dt>
+        <dd className="h-auto min-w-0 break-words">
           <Instant value={entry.updatedAt} locale={locale} isCurrent={isCurrent} />
         </dd>
-        <dt className="break-words text-muted-foreground">{m.library_entry_reading_last_activity({}, options)}</dt>
-        <dd className="min-w-0 break-words">
+        <dt className="h-auto break-words text-muted-foreground">{m.library_entry_reading_last_activity({}, options)}</dt>
+        <dd className="h-auto min-w-0 break-words">
           <DateValue value={entry.lastActivityAt} locale={locale} isCurrent={isCurrent} />
         </dd>
-        <dt className="break-words text-muted-foreground">{m.library_entry_reading_finished({}, options)}</dt>
-        <dd className="min-w-0 break-words">
+        <dt className="h-auto break-words text-muted-foreground">{m.library_entry_reading_finished({}, options)}</dt>
+        <dd className="h-auto min-w-0 break-words">
           <DateValue value={entry.finishedAt} locale={locale} isCurrent={isCurrent} />
         </dd>
       </dl>

@@ -112,7 +112,7 @@ function ExposureView({
           <p className="text-muted-foreground">{m.exposure_current_page()}</p>
           <div className="space-y-2 rounded-lg border p-4">
             <a
-              className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline"
+              className="inline-flex items-center text-primary underline-offset-4 hover:underline"
               href={`/${getLocale()}/access/00000000-0000-8000-8000-000000000000`}
             >
               {m.exposure_grants_link()}

@@ -1,4 +1,4 @@
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
@@ -49,17 +49,16 @@ export function CreatorOfferAddressPage({
                 required
                 pattern={UUID.source.replaceAll('a-f', 'a-fA-F')}
                 autoComplete="off"
-                className="min-h-11"
               />
             </label>
-            <button className={buttonVariants({ variant: 'outline', className: 'min-h-11' })} type="submit">
+            <Button variant="outline" type="submit">
               {m.creator_offer_address_open_edition()}
-            </button>
+            </Button>
           </form>
         ) : (
           <a
             href={`/${locale}/creator/offers`}
-            className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+            className={buttonVariants({ variant: 'outline' })}
           >
             {m.creator_offer_address_first_page()}
           </a>

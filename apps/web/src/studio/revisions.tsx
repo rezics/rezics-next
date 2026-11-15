@@ -7,7 +7,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { sameExact, type ExactDocument, type StudioPresentation, type StudioRevision } from './contract';
 import type { StudioController, StudioState } from './controller';
 
-const control = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]';
+const control = 'h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]';
 
 export function ExactVersionDetails({ exact }: { exact: ExactDocument }) {
   const options = { locale: getLocale() };

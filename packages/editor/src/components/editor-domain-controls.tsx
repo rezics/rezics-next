@@ -3,6 +3,7 @@
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { TooltipProvider } from '@rezics/ui/shadcn/tooltip';
 import { ResponsiveDialog } from '@rezics/ui/responsive-dialog';
@@ -37,8 +38,43 @@ import { editorCommandsForPresentation } from './editor-command-preferences.ts';
 import { returnFocus } from './editor-menu-helpers.ts';
 
 type Panel = 'ruby' | 'language' | 'footnote';
-const selectClass =
-  'min-h-11 w-full rounded-lg border border-input bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-ring';
+const wrappingAction = 'h-auto min-h-7 max-w-full min-w-0 whitespace-normal text-start';
+
+function ChoiceSelect({
+  id,
+  label,
+  value,
+  options,
+  onValueChange,
+}: {
+  id: string;
+  label: string;
+  value: string | null;
+  options: { value: string | null; label: string; disabled?: boolean }[];
+  onValueChange: (value: string | null) => void;
+}) {
+  return (
+    <Field className="min-w-0">
+      <FieldLabel id={`${id}-label`} htmlFor={id} className="max-w-full min-w-0 flex-wrap text-wrap">
+        {label}
+      </FieldLabel>
+      <Select<string, false> items={options} value={value} onValueChange={onValueChange}>
+        <SelectTrigger id={id} aria-labelledby={`${id}-label`} className="w-full min-w-0 max-w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent alignItemWithTrigger={false}>
+          <SelectGroup>
+            {options.map((option) => (
+              <SelectItem key={option.value ?? ''} value={option.value} disabled={option.disabled}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+    </Field>
+  );
+}
 
 function AnnotationDialog({
   editor,
@@ -194,19 +230,19 @@ function AnnotationDialog({
                 onChange={(event) => setReading(event.target.value)}
               />
             </Field>
-            <Field>
-              <FieldLabel htmlFor={`${id}-position`}>{t('rubyPosition')}</FieldLabel>
-              <select
-                id={`${id}-position`}
-                className={selectClass}
-                value={position}
-                onChange={(event) => setPosition(event.target.value as typeof position)}
-              >
-                <option value="over">{t('rubyOver')}</option>
-                <option value="under">{t('rubyUnder')}</option>
-                <option value="inter-character">{t('rubyInterCharacter')}</option>
-              </select>
-            </Field>
+            <ChoiceSelect
+              id={`${id}-position`}
+              label={t('rubyPosition')}
+              value={position}
+              options={[
+                { value: 'over', label: t('rubyOver') },
+                { value: 'under', label: t('rubyUnder') },
+                { value: 'inter-character', label: t('rubyInterCharacter') },
+              ]}
+              onValueChange={(value) => {
+                if (value === 'over' || value === 'under' || value === 'inter-character') setPosition(value);
+              }}
+            />
           </>
         ) : null}
         {panel === 'ruby' || panel === 'language' ? (
@@ -224,34 +260,33 @@ function AnnotationDialog({
         ) : null}
         {panel === 'language' ? (
           <>
-            <Field>
-              <FieldLabel htmlFor={`${id}-direction`}>{t('direction')}</FieldLabel>
-              <select
-                id={`${id}-direction`}
-                className={selectClass}
-                value={direction}
-                onChange={(event) => setDirection(event.target.value as typeof direction)}
-              >
-                <option value="">{t('directionDefault')}</option>
-                <option value="ltr">{t('directionLtr')}</option>
-                <option value="rtl">{t('directionRtl')}</option>
-                <option value="auto">{t('directionAuto')}</option>
-              </select>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor={`${id}-scope`}>{t('languageScope')}</FieldLabel>
-              <select
-                id={`${id}-scope`}
-                className={selectClass}
-                value={scope}
-                onChange={(event) => setScope(event.target.value as typeof scope)}
-              >
-                <option value="selection" disabled={target.from === target.to}>
-                  {t('languageSelection')}
-                </option>
-                <option value="block">{t('languageBlock')}</option>
-              </select>
-            </Field>
+            <ChoiceSelect
+              id={`${id}-direction`}
+              label={t('direction')}
+              value={direction === '' ? null : direction}
+              options={[
+                { value: null, label: t('directionDefault') },
+                { value: 'ltr', label: t('directionLtr') },
+                { value: 'rtl', label: t('directionRtl') },
+                { value: 'auto', label: t('directionAuto') },
+              ]}
+              onValueChange={(value) => {
+                if (value === 'ltr' || value === 'rtl' || value === 'auto') setDirection(value);
+                else setDirection('');
+              }}
+            />
+            <ChoiceSelect
+              id={`${id}-scope`}
+              label={t('languageScope')}
+              value={scope}
+              options={[
+                { value: 'selection', label: t('languageSelection'), disabled: target.from === target.to },
+                { value: 'block', label: t('languageBlock') },
+              ]}
+              onValueChange={(value) => {
+                if (value === 'selection' || value === 'block') setScope(value);
+              }}
+            />
           </>
         ) : null}
         {panel === 'footnote' ? (
@@ -284,6 +319,7 @@ function AnnotationDialog({
               <Button
                 type="button"
                 variant="outline"
+                className={wrappingAction}
                 onClick={() => {
                   if (!current()) return;
                   close(false);
@@ -300,11 +336,12 @@ function AnnotationDialog({
             {invalidMessage}
           </p>
         ) : null}
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {panel === 'ruby' && target.ruby ? (
             <Button
               type="button"
               variant="outline"
+              className={wrappingAction}
               onClick={() => run((admitted) => removeRuby(editor, admitted, current))}
             >
               {t('removeRuby')}
@@ -314,6 +351,7 @@ function AnnotationDialog({
             <Button
               type="button"
               variant="outline"
+              className={wrappingAction}
               onClick={() => run((admitted) => applyLanguage(editor, admitted, { lang: '', dir: '', scope }, current))}
             >
               {t('clearLanguage')}
@@ -325,6 +363,7 @@ function AnnotationDialog({
                 <Button
                   type="button"
                   variant="outline"
+                  className={wrappingAction}
                   onClick={() => run((admitted) => removeFootnote(editor, admitted, false, current))}
                 >
                   {t('removeFootnoteReference')}
@@ -332,8 +371,8 @@ function AnnotationDialog({
               ) : null}
               <Button
                 type="button"
-                variant="outline"
-                className="text-destructive"
+                variant="destructive"
+                className={wrappingAction}
                 onClick={() => run((admitted) => removeFootnote(editor, admitted, true, current))}
               >
                 {t('removeFootnote')}
@@ -341,11 +380,11 @@ function AnnotationDialog({
             </>
           ) : null}
         </div>
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={() => close()}>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button type="button" variant="ghost" className={wrappingAction} onClick={() => close()}>
             {labels.cancel}
           </Button>
-          <Button type="submit" disabled={!valid}>
+          <Button type="submit" className={wrappingAction} disabled={!valid}>
             {labels.apply}
           </Button>
         </div>

@@ -55,7 +55,7 @@ export function CommunityNativePresentation({
   ) : null;
   const activity = conversationActivity(card.comments ?? undefined);
   return (
-    <div className="min-w-0 space-y-2 [&_button]:min-h-11 [&_button]:min-w-11 [&_a]:min-h-11 [&_a]:min-w-11">
+    <div className="min-w-0 space-y-2">
       {card.presentation?.spoiler ? (
         <SpoilerGate label={m.subject_spoiler_show({}, options)} hideLabel={m.subject_spoiler_hide({}, options)}>
           {content}
@@ -170,7 +170,7 @@ export function CommunityCardPresentation({ card, locale, now }: { card: Communi
   const activity = card.activity ? threadActivity(card.activity) : null;
   const options = { locale: locale as never };
   return (
-    <div className="min-w-0 space-y-2 [&_button]:min-h-11 [&_button]:min-w-11 [&_a]:min-h-11 [&_a]:min-w-11">
+    <div className="min-w-0 space-y-2">
       {activity && activity.replyCount !== null && activity.lastActivityAt !== null ? (
         <p data-slot="community-activity" className="flex flex-wrap gap-x-3 text-sm text-muted-foreground">
           <span>

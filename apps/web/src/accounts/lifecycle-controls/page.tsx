@@ -10,6 +10,7 @@ import {
   useSyncExternalStore,
 } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
+import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
 import {
   ContentSection,
@@ -35,7 +36,7 @@ const identityLabel = (identity: DisplayIdentity) =>
 function AccountDetails({ accountId }: { accountId: string }) {
   return (
     <details>
-      <summary className="min-h-11 cursor-pointer py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
+      <summary className="cursor-pointer py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
         {m.lifecycle_identity_details()}
       </summary>
       <dl className="mt-2 flex flex-col gap-1">
@@ -333,8 +334,10 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
                 {offered.length > 0 ? (
                   <ul className="flex flex-wrap gap-2">
                     {offered.map((item) => (
-                      <li className="rounded-full border px-3 py-1 text-sm" key={item}>
-                        {actionLabel(item)}
+                      <li key={item}>
+                        <Badge variant="outline" className="h-auto min-h-5 max-w-full whitespace-normal wrap-anywhere">
+                          {actionLabel(item)}
+                        </Badge>
                       </li>
                     ))}
                   </ul>
@@ -428,7 +431,7 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
       {confirmation && (
         <section
           aria-labelledby={titleId}
-          className="flex max-w-full flex-col gap-5 rounded-lg border-2 border-primary/30 bg-card p-4 shadow-sm sm:p-6"
+          className="flex max-w-full flex-col gap-5 rounded-lg border bg-card p-4 sm:p-6"
         >
           <h2 id={titleId} className="text-lg font-semibold sm:text-xl">
             {m.lifecycle_confirmation()}
@@ -477,7 +480,7 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
           )}
           {locked && <p>{m.lifecycle_locked()}</p>}
           <details>
-            <summary className="min-h-11 cursor-pointer py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
+            <summary className="cursor-pointer py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
               {m.lifecycle_operation_details()}
             </summary>
             <div className="mt-2 flex flex-col gap-3 text-sm">
@@ -522,7 +525,7 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
         </div>
       </div>
       <details>
-        <summary className="min-h-11 cursor-pointer py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
+        <summary className="cursor-pointer py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
           {m.lifecycle_technical_details()}
         </summary>
         <div className="mt-2 flex flex-col gap-3 text-sm text-muted-foreground">

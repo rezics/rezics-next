@@ -51,7 +51,7 @@ function TermsRoute() {
     <>
       {showGeneralReturn && (
         <div className="mx-auto w-full max-w-4xl px-6 pt-4">
-          <a className="inline-flex min-h-11 items-center text-primary underline underline-offset-4" href={returnHref}>
+          <a className="text-primary underline underline-offset-4" href={returnHref}>
             {m.subject_terms_public_return({}, { locale: locale as never })}
           </a>
         </div>

@@ -82,7 +82,7 @@ export function RemovedPost({
           <Withheld shape="passage" labels={{ withheld: m.thread_post_withheld() }} />
           {owner && 'decisionId' in post && typeof post.decisionId === 'string' && post.decisionId ? (
             <a
-              className="mt-3 inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="mt-3 inline-flex max-w-full items-center rounded-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               href={`/moderation/decisions/${encodeURIComponent(post.decisionId)}`}
             >
               {m.thread_post_decision_link()}
@@ -103,7 +103,7 @@ export function RemovedPost({
           <Tombstone
             shape="post"
             reason={reason}
-            className="pr-16 [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:py-2 [&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-ring [&_time]:min-w-0 [&_time]:max-w-full"
+            className="pr-16 [&_button]:h-auto [&_button]:max-w-full [&_button]:whitespace-normal [&_time]:min-w-0 [&_time]:max-w-full [&_button]:min-h-7"
             {...(ownedRestorableUntil && onRestore ? { restoreUntil: ownedRestorableUntil, onRestore } : {})}
             labels={{
               unavailable: m.thread_post_unavailable(),
@@ -123,7 +123,6 @@ export function RemovedPost({
                     ref={menuButton}
                     size="icon-sm"
                     variant="ghost"
-                    className="size-11 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   >
                     <EllipsisIcon aria-hidden="true" />
                   </Button>
@@ -140,7 +139,7 @@ export function RemovedPost({
               <Button
                 variant="outline"
                 size="sm"
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="h-auto min-h-6 max-w-full whitespace-normal"
                 onClick={onRestore}
               >
                 {m.thread_post_restore()}
@@ -156,7 +155,7 @@ export function RemovedPost({
               <Button
                 variant="outline"
                 size="sm"
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="h-auto min-h-6 max-w-full whitespace-normal"
                 onClick={onRefresh}
               >
                 {m.thread_post_refresh()}

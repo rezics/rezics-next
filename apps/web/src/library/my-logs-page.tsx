@@ -1,5 +1,5 @@
 import { ContentItem } from '@rezics/ui/content-item';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { useRouter } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -335,8 +335,10 @@ export function MyLogsPageView({
     event.preventDefault();
     void router.navigate({ href: newest.route });
   };
-  const windowControlClass =
-    'inline-flex min-h-11 min-w-11 max-w-full items-center justify-center rounded-lg border border-border px-4 py-2 text-start whitespace-normal text-primary hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  const windowControlClass = buttonVariants({
+    variant: 'outline',
+    className: 'h-auto min-h-7 max-w-full whitespace-normal text-start',
+  });
   return (
     <article ref={listRoot} className="min-w-0 max-w-4xl space-y-6 text-foreground [overflow-wrap:anywhere]">
       <header className="space-y-2">
@@ -352,7 +354,7 @@ export function MyLogsPageView({
           <a
             href={newest.link}
             onClick={openNewest}
-            className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded px-3 py-2 text-start whitespace-normal text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="max-w-full text-start whitespace-normal text-primary underline underline-offset-4"
           >
             {m.library_my_logs_newest()}
           </a>
@@ -360,7 +362,7 @@ export function MyLogsPageView({
       ) : page.state === 'signed-out' ? (
         <a
           href={`/auth/sign-in?return_to=${encodeURIComponent(`/${getLocale()}/library/logs`)}`}
-          className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded px-3 py-2 text-start whitespace-normal text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="max-w-full text-start whitespace-normal text-primary underline underline-offset-4"
         >
           {m.library_my_logs_sign_in()}
         </a>
@@ -376,7 +378,7 @@ export function MyLogsPageView({
           {onRetry ? (
             <Button
               variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full px-3 py-2 text-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
               onClick={onRetry}
             >
               {m.library_my_logs_retry()}
@@ -436,7 +438,7 @@ export function MyLogsPageView({
                             title: title.text,
                             date: fullDateTime(log.publishedAt, getLocale()),
                           })}
-                          className="inline-flex min-h-11 items-center rounded text-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                          className="text-sm text-primary underline underline-offset-4"
                           onClick={(event) =>
                             logsDestinationClick(
                               event,
@@ -461,7 +463,7 @@ export function MyLogsPageView({
                             >
                               {log.note}
                             </span>
-                            <span className="flex min-h-11 items-center text-sm text-primary underline underline-offset-4">
+                            <span className="text-sm text-primary underline underline-offset-4">
                               {m.library_my_logs_full_note()}
                             </span>
                           </summary>

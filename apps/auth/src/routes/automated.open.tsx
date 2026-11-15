@@ -2,6 +2,7 @@ import { operatorWebsiteHref } from '../operator-opening-navigation';
 import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { flushSync } from 'react-dom';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import {
@@ -545,7 +546,7 @@ function OpeningReview({
           </ErrorAlert>
         ) : null}
         {status === 'unavailable' && !metadata && !terminal ? (
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" disabled={busy} onClick={() => void restore(attempt)}>
               {m.auth_account_identity_retry()}
             </Button>
@@ -619,16 +620,15 @@ function OpeningReview({
                 </small>
               </dd>
             </dl>
-            <Field>
-              <FieldLabel htmlFor="opening-confirm">
-                <input
-                  id="opening-confirm"
-                  type="checkbox"
-                  checked={confirmed}
-                  onChange={(event) => setConfirmed(event.target.checked)}
-                  required
-                  disabled={busy}
-                />
+            <Field orientation="horizontal" className="items-start">
+              <Checkbox
+                id="opening-confirm"
+                checked={confirmed}
+                required
+                disabled={busy}
+                onCheckedChange={(checked) => setConfirmed(checked === true)}
+              />
+              <FieldLabel className="min-w-0 font-normal wrap-anywhere" htmlFor="opening-confirm">
                 {m.auth_opening_confirm()}
               </FieldLabel>
             </Field>

@@ -91,7 +91,7 @@ import type { KnowledgeHistoryOperations } from './history';
 
 const controlClass = knowledgeControl;
 const inputClass =
-  'min-h-11 min-w-0 max-w-full border-border bg-background px-3 text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'min-w-0 max-w-full text-foreground';
 const linkClass = knowledgeLink;
 const defaultLicence = 'LicenseRef-rezics-terms';
 const operationSources = new WeakMap<object, number>();

@@ -10,8 +10,8 @@ import { useId, useRef, type Ref } from 'react';
 import type { RichTextEditorLabels } from '../../editor-labels.ts';
 import { ActionButton } from './action-button.tsx';
 
-const wrappingAction = 'h-auto min-h-8 max-w-full min-w-0 shrink whitespace-normal text-start';
-const wrappingViewAction = 'h-auto max-w-full shrink whitespace-normal text-start';
+const wrappingAction = 'h-auto min-h-7 max-w-full min-w-0 shrink whitespace-normal text-start';
+const wrappingViewAction = 'h-auto min-h-7 max-w-full shrink whitespace-normal text-start';
 
 /** The URL form edits a captured range. Annotated document text stays with the schema owner. */
 export function LinkEditBlock({
@@ -90,7 +90,7 @@ export function LinkEditBlock({
             </FieldError>
           ) : null}
         </Field>
-        <Field orientation="horizontal" className="flex-wrap justify-end">
+        <Field orientation="horizontal" className="flex-wrap items-center justify-end">
           {linked ? (
             <Button type="button" variant="ghost" className={wrappingAction} onClick={onClear}>
               {labels.unlink}
@@ -137,7 +137,7 @@ export function LinkViewBlock({
               if (!isCurrent()) event.preventDefault();
             }}
             aria-label={`${labels.openLink}: ${href}`}
-            className="flex min-h-11 min-w-0 items-start gap-2 rounded-lg p-2 text-sm text-primary underline underline-offset-2"
+            className="flex min-w-0 items-start gap-2 text-sm text-primary underline underline-offset-2"
           >
             <ExternalLink aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
             <span className="min-w-0 break-all" dir="ltr">
@@ -145,7 +145,7 @@ export function LinkViewBlock({
             </span>
           </a>
         ) : null}
-        <div className="flex min-w-0 w-full flex-wrap gap-1">
+        <div className="flex min-w-0 w-full flex-wrap items-center gap-1">
           <ActionButton
             label={labels.editLink}
             icon={<Pencil aria-hidden="true" />}

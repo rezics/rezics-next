@@ -44,14 +44,14 @@ const panelClassName =
   'min-w-0 max-w-full space-y-4 p-4 sm:p-5 [overflow-wrap:anywhere] [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring [&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-ring [&_input:focus-visible]:outline-2 [&_input:focus-visible]:outline-offset-2 [&_input:focus-visible]:outline-ring [&:focus-visible]:outline-2 [&:focus-visible]:outline-offset-2 [&:focus-visible]:outline-ring [&_textarea:focus-visible]:outline-2 [&_textarea:focus-visible]:outline-offset-2 [&_textarea:focus-visible]:outline-ring';
 
 const actionClassName =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
-const inputClassName = 'min-w-0 min-h-11 md:pointer-fine:min-h-8';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const inputClassName = 'min-w-0';
 const labelClassName = 'min-w-0 max-w-full flex-wrap [overflow-wrap:anywhere]';
 // Keep the shared Select trigger at the same phone target size as its neighboring fields.
-const selectClassName = 'w-full min-w-0 max-w-full min-h-11 md:pointer-fine:min-h-8';
+const selectClassName = 'w-full min-w-0 max-w-full';
 // QualifierInput has no class prop. Keep its caller's input/label sizing local to these rows.
 const qualifierClassName =
-  'min-w-0 w-full sm:w-auto sm:basis-64 sm:flex-1 [&_input]:min-h-11 md:pointer-fine:[&_input]:min-h-8 [&_[data-slot=field-label]]:min-w-0 [&_[data-slot=field-label]]:max-w-full [&_[data-slot=field-label]]:flex-wrap [&_[data-slot=field-label]]:[overflow-wrap:anywhere]';
+  'min-w-0 w-full sm:w-auto sm:basis-64 sm:flex-1 [&_[data-slot=field-label]]:min-w-0 [&_[data-slot=field-label]]:max-w-full [&_[data-slot=field-label]]:flex-wrap [&_[data-slot=field-label]]:[overflow-wrap:anywhere]';
 
 /** Initial facts only. Every optional assertion begins with the reader explicitly adding its field. */
 export const AlbumProfileCreate = catalogueEditor(AlbumProfileCreateBoundary);
@@ -591,7 +591,7 @@ function AlbumProfileCreateLive({
             ))}
             <Button
               id={`${termsId}-add`}
-              className="h-auto min-h-11 max-w-full whitespace-normal"
+              className="h-auto min-h-7 max-w-full whitespace-normal"
               type="button"
               variant="outline"
               disabled={locked}
@@ -662,8 +662,8 @@ function AlbumProfileCreateLive({
             disabled={locked}
             fieldClassName="w-full min-w-0 sm:flex-1"
             labelClassName={labelClassName}
-            selectClassName="w-full min-h-11"
-            buttonClassName="h-auto min-h-11 max-w-full whitespace-normal"
+            selectClassName="w-full"
+            buttonClassName="h-auto min-h-7 max-w-full whitespace-normal"
             add={(property) => {
               if (!editable()) return false;
               const id = crypto.randomUUID();
@@ -729,7 +729,7 @@ function AlbumProfileCreateLive({
                     correction.target!.startsWith(`album-row-${row.id}-`),
                 )) ? (
                 <a
-                  className="inline-flex min-h-11 min-w-11 max-w-full items-center underline [overflow-wrap:anywhere] md:pointer-fine:min-h-8"
+                  className="inline-flex max-w-full items-center underline [overflow-wrap:anywhere]"
                   href={`#${correction.target}`}
                   onClick={(event) => {
                     event.preventDefault();

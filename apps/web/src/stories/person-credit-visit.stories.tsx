@@ -15,6 +15,7 @@ import { GREGORIAN_CALENDAR } from '../subject/time-presentation';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { ConnectedStory } from './connected-story';
+import { Button } from '@rezics/ui/shadcn/button';
 
 const meta = {
   title: 'Subjects/Person credit visit',
@@ -108,9 +109,9 @@ function PersonCreditVisit({ mode = 'normal', signedIn = false }: { mode?: Mode;
     ...item,
     gated: mode === 'concealed',
     supportSlot: (
-      <button className="min-h-11 underline" onClick={() => setSelected(index)}>
+      <Button type="button" variant="link" size="sm" onClick={() => setSelected(index)}>
         {m.credit_inspect()} · {index + 1}
-      </button>
+      </Button>
     ),
   }));
   return (

@@ -1,10 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { subjectHref } from '../../../subject/load-subject';
 import type { Subject } from '../../../subject/types';
 import type { RelationDefinition } from '../../../subject/relations';
 import type { Reader } from '../../../subject/reader';
 import { m } from '../../../paraglide/messages.js';
-import { pageText, PlainLink, linkClass, linkColor, type PageLink } from '../../pages/shared';
+import { pageText, PlainLink, type PageLink } from '../../pages/shared';
 import { WorkReadingProvider, useWorkReading, type WorkReadingPort } from '../work-reading-port';
 import type { ProfileRelationWindow } from '../../pages/views';
 import {
@@ -28,6 +30,14 @@ import {
   mangaWindowAddress,
 } from './navigation';
 import { withSubjectVisitReturn } from '../../pages/subject-visit-navigation';
+
+const textLink = cn(
+  buttonVariants({ variant: 'link' }),
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+  'underline',
+);
+const compactWrap =
+  'h-auto min-h-6 max-w-full justify-start whitespace-normal text-start [overflow-wrap:anywhere]';
 
 function options(locale: string) {
   return { locale: locale as never };
@@ -235,7 +245,7 @@ export function MangaReader({
           ref={heading}
           id="manga-reader-title"
           tabIndex={-1}
-          className="text-xl leading-snug font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:text-2xl"
+          className="text-xl leading-snug font-semibold tracking-tight sm:text-2xl"
         >
           {m.manga_reader_title({}, options(locale))}
         </h2>
@@ -251,11 +261,11 @@ export function MangaReader({
         {retired ? (
           <div role="status" className="space-y-2 text-sm text-muted-foreground">
             <p>{m.manga_reader_stale({}, options(locale))}</p>
-            <a className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center`} href={recoveryHref}>
+            <a className={textLink} href={recoveryHref}>
               {m.manga_reader_recover({}, options(locale))}
             </a>
             <a
-              className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center`}
+              className={textLink}
               href={mangaRestartAddress(recoveryHref)}
             >
               {m.manga_reader_restart({}, options(locale))}
@@ -267,7 +277,7 @@ export function MangaReader({
               <div role="status" className="space-y-1 text-sm text-muted-foreground">
                 <p>{m.manga_reader_origin_missing({}, options(locale))}</p>
                 <a
-                  className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center`}
+                  className={textLink}
                   href={mangaRestartAddress(recoveryHref)}
                 >
                   {m.manga_reader_restart({}, options(locale))}
@@ -297,12 +307,12 @@ export function MangaReader({
                   </p>
                   {status === 'unavailable' ? (
                     <div className="flex flex-wrap gap-x-4">
-                      <a href={recoveryHref} className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center`}>
+                      <a href={recoveryHref} className={textLink}>
                         {m.manga_reader_retry({}, options(locale))}
                       </a>
                       <a
                         href={mangaRestartAddress(recoveryHref)}
-                        className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center`}
+                        className={textLink}
                       >
                         {m.manga_reader_restart({}, options(locale))}
                       </a>
@@ -317,7 +327,7 @@ export function MangaReader({
                           kind,
                           observation.realm,
                         )}
-                        className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center`}
+                        className={textLink}
                       >
                         {kind === 'editions'
                           ? m.manga_reader_open_editions({}, options(locale))
@@ -335,7 +345,7 @@ export function MangaReader({
                             cursor: next,
                           },
                         )}
-                        className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center`}
+                        className={textLink}
                       >
                         {m.manga_reader_next({}, options(locale))}
                       </Link>
@@ -402,18 +412,20 @@ export function MangaReader({
                                   locale,
                                 )}
                                 lang={row.labelLanguage}
-                                className={`${linkClass} ${linkColor} inline-flex min-h-11 w-full min-w-0 max-w-full items-start rounded-md border border-border bg-background px-3 py-3 text-start font-medium [overflow-wrap:anywhere]`}
+                                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), compactWrap, 'w-full')}
                               >
                                 {label}
                               </Link>
-                              <button
+                              <Button
                                 ref={(element) => {
                                   if (element) rowControls.current.set(row.key, element);
                                   else rowControls.current.delete(row.key);
                                 }}
                                 type="button"
+                                variant="outline"
+                                size="sm"
                                 aria-expanded={selectedRow}
-                                className="inline-flex min-h-11 w-full min-w-11 items-center justify-center rounded-md border border-primary/40 bg-primary/5 px-3 text-sm font-medium text-primary hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:w-auto sm:justify-self-end"
+                                className={cn(compactWrap, 'w-full sm:w-auto sm:justify-self-end')}
                                 onClick={() => {
                                   if (retiredVisit.current) return;
                                   originHandled.current = true;
@@ -424,7 +436,7 @@ export function MangaReader({
                                 {selectedRow
                                   ? m.manga_reader_close_inspection({}, options(locale))
                                   : m.manga_reader_inspect({}, options(locale))}
-                              </button>
+                              </Button>
                             </div>
                             {(type || row.notes.length > 0) && (
                               <ul className="min-w-0 space-y-1 border-s-2 border-border ps-3 text-sm text-muted-foreground [overflow-wrap:anywhere]">

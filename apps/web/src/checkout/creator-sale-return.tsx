@@ -18,7 +18,7 @@ export function CreatorSaleReturn({ close, returned, locale, cursor, orderId }: 
         {returned ? m.creator_review_returned_hint() : m.creator_review_departure_hint()}
       </p>
       <details className="min-w-0 rounded-lg border p-3">
-        <summary className="min-h-11 cursor-pointer py-2 text-sm font-medium">
+        <summary className="cursor-pointer text-sm font-medium">
           {m.creator_review_return_context()}
         </summary>
         <div className="min-w-0 space-y-4 pt-3">
@@ -44,7 +44,7 @@ export function CreatorSaleReturn({ close, returned, locale, cursor, orderId }: 
           <p className="text-sm text-muted-foreground">{m.creator_review_return_fresh()}</p>
         </div>
       </details>
-      <Button className="min-h-11 whitespace-normal" variant="outline" onClick={close}>
+      <Button className="h-auto min-h-7 whitespace-normal" variant="outline" onClick={close}>
         {m.creator_sale_close()}
       </Button>
     </div>

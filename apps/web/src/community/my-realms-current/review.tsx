@@ -56,7 +56,7 @@ export function MyRealmsLeaveReview({
       aria-labelledby={headingId}
       aria-describedby={showStanding ? `${promptId} ${standingId}` : promptId}
       aria-busy={review.phase === 'submitting' || review.standing === 'loading'}
-      className="min-w-0 space-y-3 ps-3 [overflow-wrap:anywhere] [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:text-start [&_button]:whitespace-normal"
+      className="min-w-0 space-y-3 ps-3 [overflow-wrap:anywhere] [&_button]:h-auto [&_button]:max-w-full [&_button]:text-start [&_button]:whitespace-normal"
       data-slot="my-realms-leave-review"
       data-phase={review.phase}
       data-workflow-id={review.workflowId}

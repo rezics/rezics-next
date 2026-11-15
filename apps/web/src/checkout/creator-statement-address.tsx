@@ -25,7 +25,7 @@ function AddressChoice({ id, message, href, label }: { id: string; message: stri
       </p>
       <Button
         variant="outline"
-        className="min-h-11"
+       
         nativeButton={false}
         render={<a href={href} aria-describedby={id} />}
       >

@@ -61,7 +61,7 @@ export type SearchResultsRegionProps = {
   formAction?: string | undefined;
   personal?: Pick<ReturnType<typeof useDiscoveryPersonalResults>, 'regionRef' | 'renderPersonal' | 'recoveryView'>;
 };
-const linkClass = cn(buttonVariants({ variant: 'link' }), 'h-auto justify-start p-0');
+const linkClass = cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 justify-start p-0');
 function messageOptions(locale: string) {
   return { locale: locales.find((value) => value === locale) ?? 'en' };
 }

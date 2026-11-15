@@ -3,6 +3,7 @@ import { CancelledError, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSession } from './application';
 import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
 import { personalRead } from '../session/reading-policy';
+import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { LoansPage, type LoansOrigin } from './loans-page';
 import { useManagementCurrentOrigin } from './management-current-origin';
@@ -148,14 +149,16 @@ function CurrentLoansRead({
       <div>
         <p role="status">{query.isError || query.data ? m.error_message() : m.library_sort_preparing()}</p>
         {hydrated && !query.isFetching ? (
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={() => {
               if (origin.isCurrent()) void query.refetch();
             }}
           >
             {m.subject_view_retry()}
-          </button>
+          </Button>
         ) : null}
       </div>
     );

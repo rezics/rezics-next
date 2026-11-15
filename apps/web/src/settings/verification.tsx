@@ -61,9 +61,9 @@ import {
 } from './settings-session-owner';
 
 const verificationActionClassName =
-  'h-auto min-h-11 min-w-11 w-full max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] sm:w-auto';
+  'h-auto w-full max-w-full whitespace-normal [overflow-wrap:anywhere] sm:w-auto min-h-7';
 const verificationSummaryClassName =
-  'min-h-11 min-w-11 max-w-full cursor-pointer py-3 whitespace-normal [overflow-wrap:anywhere]';
+  'max-w-full cursor-pointer py-1 whitespace-normal [overflow-wrap:anywhere]';
 
 type VerificationPresentationFocusIntent = {
   id: number;
@@ -690,7 +690,7 @@ export function VerificationCard({
                     {issues.map((issue) => (
                       <li key={fieldId(issue)}>
                         <a
-                          className="flex min-h-11 items-center underline"
+                          className="flex items-center underline"
                           href={`#${fieldId(issue)}`}
                           onClick={(event) => {
                             event.preventDefault();

@@ -37,7 +37,7 @@ export function ProgressChoice({
         disabled={disabled}
         onValueChange={(next) => onValueChange(next ?? '')}
       >
-        <SelectTrigger id={id} aria-labelledby={`${id}-label`} className="min-h-11 w-full">
+        <SelectTrigger id={id} aria-labelledby={`${id}-label`} className="w-full">
           <SelectValue />
         </SelectTrigger>
         <SelectContent alignItemWithTrigger={false}>

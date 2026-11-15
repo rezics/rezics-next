@@ -1,4 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
+import { cn } from '@rezics/ui/utils';
 import { ContentItemFrame } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
@@ -11,7 +12,7 @@ import type {
   ViewerActionComponent,
 } from '../../../subject/candidate-contract';
 import { useSubjectCommunityReading } from '../../pages/subject-community-lifetime';
-import { linkClass, linkColor } from '../../pages/shared';
+
 import { MusicReleaseFacts, MusicReleaseOccurrenceFacts, MusicReleaseSlot } from './facts';
 import { musicReleaseRoute, type MusicReleaseFocus, type MusicReleaseReturn } from './navigation';
 import {
@@ -30,8 +31,8 @@ import {
 } from './model';
 
 const action =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal [overflow-wrap:anywhere] rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const link = `${action} ${linkClass} ${linkColor} underline`;
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
+const link = cn(buttonVariants({ variant: 'link' }), action, 'underline');
 type Ready = Extract<MusicReleaseRead, { ok: true }>;
 type Failure = Extract<MusicReleaseRead, { ok: false }>;
 type Props = {
@@ -260,7 +261,7 @@ export function MusicReleaseReader(props: Props) {
           {props.recoverCurrentPage ? (
             <button
               type="button"
-              className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+              className={cn(buttonVariants({ variant: 'outline' }), action)}
               disabled={recovery?.status === 'pending'}
               onClick={recover}
             >
@@ -475,7 +476,7 @@ export function MusicReleaseWindow({
                 data-stream-key={stream.key}
                 aria-pressed={stream.key === page.stream?.key}
                 disabled={busy}
-                className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                className={cn(buttonVariants({ variant: 'outline' }), action)}
                 onClick={request(musicReleaseFirstAddress(base, stream.key), 'start')}
               >
                 <span lang={stream.label.lang ?? undefined}>{stream.label.text || stream.property}</span>
@@ -535,7 +536,7 @@ export function MusicReleaseWindow({
                         <div className="min-w-0 space-y-3 pt-4">
                           <button
                             type="button"
-                            className={`${buttonVariants({ variant: chosen ? 'secondary' : 'outline' })} ${action}`}
+                            className={cn(buttonVariants({ variant: chosen ? 'secondary' : 'outline' }), action)}
                             disabled={busy}
                             aria-pressed={chosen}
                             aria-expanded={chosen}
@@ -580,7 +581,7 @@ export function MusicReleaseWindow({
                                 </h3>
                                 <button
                                   type="button"
-                                  className={`${buttonVariants({ variant: 'outline' })} ${action} shrink-0`}
+                                  className={cn(buttonVariants({ variant: 'outline' }), action, 'shrink-0')}
                                   onClick={closeInspection}
                                 >
                                   {m.candidate_close({}, o)}
@@ -620,7 +621,7 @@ export function MusicReleaseWindow({
               <MusicReleasePendingWindow pending={navigation.current.pending} page={page} locale={locale} />
               <button
                 type="button"
-                className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                className={cn(buttonVariants({ variant: 'outline' }), action)}
                 disabled={busy}
                 onClick={(event) => {
                   const pending = navigation.current.pending;
@@ -637,7 +638,7 @@ export function MusicReleaseWindow({
               <button
                 type="button"
                 disabled={busy || !previous}
-                className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                className={cn(buttonVariants({ variant: 'outline' }), action)}
                 onClick={request(previous ?? base, 'previous')}
               >
                 {m.album_tracks_previous({}, o)}
@@ -645,7 +646,7 @@ export function MusicReleaseWindow({
               <button
                 type="button"
                 disabled={busy}
-                className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                className={cn(buttonVariants({ variant: 'outline' }), action)}
                 onClick={request(musicReleaseFirstAddress(base, page.stream.key), 'start')}
               >
                 {m.work_parts_restart({}, o)}
@@ -654,7 +655,7 @@ export function MusicReleaseWindow({
                 <button
                   type="button"
                   disabled={busy}
-                  className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                  className={cn(buttonVariants({ variant: 'outline' }), action)}
                   onClick={request(next, 'next')}
                 >
                   {m.work_parts_more({}, o)}

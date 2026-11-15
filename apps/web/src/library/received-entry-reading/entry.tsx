@@ -72,7 +72,7 @@ export function ReceivedEntryRecord({
         <h3 id={stateId} className="font-medium">
           {m.library_entry_reading_state_heading({}, options)}
         </h3>
-        <p className="[overflow-wrap:anywhere]" lang={state.lang} dir="auto">
+        <p className="h-auto [overflow-wrap:anywhere]" lang={state.lang} dir="auto">
           {state.known ? state.label : <code dir="ltr">{state.label}</code>}
         </p>
         {!state.known ? (
@@ -99,10 +99,7 @@ export function ReceivedEntryRecord({
           {workHref ? (
             <a
               href={workHref}
-              className={buttonVariants({
-                variant: 'outline',
-                className: 'h-auto min-h-11 whitespace-normal break-words',
-              })}
+             className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 whitespace-normal break-words' })}
               aria-label={m.library_entry_reading_open_work_named({ title: title!.text }, options)}
               data-received-entry-work-destination=""
               onClick={(event) => {
@@ -120,7 +117,7 @@ export function ReceivedEntryRecord({
             <Button
               type="button"
               variant="outline"
-              className="h-auto min-h-11 max-w-full whitespace-normal break-words"
+              className="h-auto min-h-7 max-w-full whitespace-normal break-words"
               aria-label={m.library_entry_reading_open_progress_named({ title: title!.text }, options)}
               data-received-entry-progress-destination=""
               onClick={() => {

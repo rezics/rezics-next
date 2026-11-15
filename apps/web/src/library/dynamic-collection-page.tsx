@@ -3,6 +3,8 @@ import { Cover } from '@rezics/ui/cover';
 import { coverSrc } from '../media/cover-src';
 import { FilteredLibraryRemovalControl } from './bulk-filtered-library-removal-view';
 import { CollectionFilteredStatus } from './bulk-filtered-status-view';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -289,7 +291,7 @@ function DynamicCollectionPageLifetime({
     <div className="w-full min-w-0 space-y-6 text-foreground">
       <LibraryNavigation current={{ collectionId: current.id }} pins={pins} collections={collections} />
       <article className="w-full min-w-0 space-y-6 text-foreground">
-        <header className="rounded-2xl bg-card p-4 sm:p-6">
+        <header className="min-w-0">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex min-w-0 items-start gap-3">
               <div className="w-16 shrink-0 sm:w-24" data-collection-cover-source={current.coverSource}>
@@ -473,7 +475,7 @@ function DynamicCollectionPageLifetime({
           <div className="min-w-0 space-y-2">
             {incompleteFilter ? <p role="alert">{m.collection_filter_address_rejected()}</p> : null}
             <a
-              className="inline-flex min-h-11 items-center rounded-lg border border-border px-4 py-2 text-primary focus-visible:outline-2 focus-visible:outline-offset-2"
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}
               href={savedQueryResultsAddress(
                 locale,
                 current.id,
@@ -498,9 +500,11 @@ function DynamicCollectionPageLifetime({
                   : m.library_dynamic_retry_preparing_help()}
               </p>
             ) : null}
-            <button
-              className="inline-flex min-h-11 min-w-0 items-center justify-center rounded-lg border border-border px-4 py-2 text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
+            <Button
+              className="h-auto min-h-6 max-w-full whitespace-normal"
               type="button"
+              variant="outline"
+              size="sm"
               ref={retryButton}
               disabled={retrying || !origin.current.read}
               onClick={() => void refreshMembers(true)}
@@ -510,7 +514,7 @@ function DynamicCollectionPageLifetime({
                 : current.unavailable
                   ? m.library_dynamic_retry_unavailable()
                   : m.library_collection_reload()}
-            </button>
+            </Button>
           </div>
         ) : null}
         {membersReady && (laterPage || current.next || windows?.hasPrevious) ? (
@@ -522,7 +526,10 @@ function DynamicCollectionPageLifetime({
                   returnTo,
                 })}
                 onClick={(event) => activateWindow(event, windows.previous, 'previous')}
-                className="inline-flex min-h-11 min-w-0 max-w-full items-center justify-center break-words rounded-lg border border-border px-4 py-2 text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
+                className={cn(
+                  buttonVariants({ variant: 'outline', size: 'sm' }),
+                  'h-auto min-h-6 max-w-full whitespace-normal break-words',
+                )}
               >
                 {m.library_dynamic_page_reader_previous()}
               </a>
@@ -531,7 +538,10 @@ function DynamicCollectionPageLifetime({
               <a
                 href={firstPageHref}
                 onClick={(event) => activateWindow(event, undefined, 'first')}
-                className="inline-flex min-h-11 min-w-0 max-w-full items-center justify-center break-words rounded-lg border border-border px-4 py-2 text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
+                className={cn(
+                  buttonVariants({ variant: 'outline', size: 'sm' }),
+                  'h-auto min-h-6 max-w-full whitespace-normal break-words',
+                )}
               >
                 {m.library_dynamic_page_reader_first_page()}
               </a>
@@ -540,7 +550,10 @@ function DynamicCollectionPageLifetime({
               <a
                 href={savedQueryResultsAddress(locale, current.id, current.next, search, { layout, returnTo })}
                 onClick={(event) => activateWindow(event, current.next!, 'continue')}
-                className="inline-flex min-h-11 min-w-0 max-w-full items-center justify-center break-words rounded-lg border border-border px-4 py-2 text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
+                className={cn(
+                  buttonVariants({ variant: 'outline', size: 'sm' }),
+                  'h-auto min-h-6 max-w-full whitespace-normal break-words',
+                )}
               >
                 {saved ? m.library_dynamic_page_reader_continue() : m.library_collection_more()}
               </a>

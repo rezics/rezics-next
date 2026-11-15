@@ -16,6 +16,7 @@ import { m } from '../paraglide/messages.js';
 import { OwnVotesWorkspace } from '../ratings/own-votes/page';
 import type { OwnVoteIntent } from '../ratings/own-votes/intent';
 import type { OwnVoteReadback } from '../ratings/own-votes/readback';
+import { Button } from '@rezics/ui/shadcn/button';
 
 type Mode =
   | 'rich'
@@ -181,17 +182,14 @@ function StoryScreen() {
   return (
     <>
       {mode === 'advice-replaced' ? (
-        <button
-          className="min-h-11 border p-3"
-          onClick={() =>
-            setPage({
+        <Button type="button" variant="outline" size="sm" onClick={() => setPage({
               ...page,
               votes: page.votes.map((vote) => ({ ...vote, actions: { state: 'unavailable', reason: 'read_only' } })),
             })
           }
         >
           Receive current read-only advice
-        </button>
+        </Button>
       ) : null}
       <OwnVotesWorkspace
         state={

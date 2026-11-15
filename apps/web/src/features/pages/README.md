@@ -98,7 +98,7 @@ answers with distinct localized text beside the personal heading. Unavailability
 nor an absent vote; only an admitted answer displays zero or unrated. Both ordinary rating consumers retain
 independent public figures and question context. This is O(1) local presentation with zero reads and existing
 navigation; it adds no recovery action. Existing sign-in and original-command recovery labels wrap with visible
-focus and minimum 44px targets.
+focus.
 
 `subject-personal-reader.tsx` is the Web owner of private reader admission and lifetime. Content retains question,
 vote and private read admission. Content's dev `f9a4c2f` confirmation and the current `useSubjectPersonalReader` /
@@ -159,7 +159,7 @@ Each node owns its reading independently. Existing dedicated full-list route lin
 
 The persistent polite status starts empty on hydration and clears completion while loading. Each admitted explicit
 page announces the actual newly visible count, including zero, with the existing eight-locale completion/end
-messages. Pending More/Retry stays focusable, ignores repeated activation, wraps, and has 44px minimum targets and
+messages. Pending More/Retry stays focusable, ignores repeated activation, wraps, and keeps
 visible focus. A surviving More keeps focus. Exhaustion moves focus to the local visible end marker only if the
 reader stayed on the requesting trigger; moved focus and retired requests cannot reclaim it.
 
@@ -329,7 +329,7 @@ The connected Current Reading stories cover anonymous/member/writer, admitted ac
 changed current scale, retired/merged original target and concealed context through the native client and this seam.
 Browser review at 390px/1280px, light/dark, keyboard open/action/return remains for the controller's browser check. All eight
 locales share the same layout and localized historical provenance labels; continuation/retry, disclosure and media
-controls retain 44px targets and wrapping. See [Subject pages](../../../../../docs/subject-pages.md#overview).
+controls retain wrapping. See [Subject pages](../../../../../docs/subject-pages.md#overview).
 
 ## Recording reader
 
@@ -432,8 +432,8 @@ The projection visits the supplied facet properties and their already bounded as
 at most 24 rendered cards and one opened evidence panel; it starts zero reads and retains zero result windows or
 command intents. Remaining evidence uses Details, and property continuation uses the mounted Relations reader's
 native page and opaque cursor without refilling sparse pages or implying completeness. The overview keeps exact
-values, weight-state text and spoiler evidence visible beside separate browse and inspect controls. Actions wrap,
-have at least 44px targets and retain focus outlines in light and dark themes. All eight UI locales include these
+values, weight-state text and spoiler evidence visible beside separate browse and inspect controls. Actions wrap
+and retain focus outlines in light and dark themes. All eight UI locales include these
 states; definition/Subject labels retain their native fallback language.
 
 ## Work relation region returns

@@ -166,7 +166,7 @@ export function CapturedOfferReferences({
     <details className="min-w-0 rounded-lg border px-4">
       <summary
         id={summaryId}
-        className="min-h-11 cursor-pointer content-center py-3 font-medium underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        className="cursor-pointer content-center font-medium underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
         {m.creator_inspect_references_heading({}, { locale })}
       </summary>

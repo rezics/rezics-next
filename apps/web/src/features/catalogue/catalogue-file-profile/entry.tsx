@@ -1,4 +1,5 @@
 import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { subjectHref } from '../../../subject/subject-href';
 import { m } from '../../../paraglide/messages.js';
 import { isFileOrGroupType } from './model';
@@ -6,7 +7,7 @@ import type { Release } from '@rezics/definitions';
 import { catalogueFileCorrectionHref } from '../catalogue-file-reader/navigation';
 import { catalogueFileCorrectionOriginParam, type CatalogueFileCorrectionOrigin } from './origin';
 
-const entryClass = `${buttonVariants({ variant: 'outline', size: 'sm' })} h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8`;
+const entryClass = cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-auto min-h-6 max-w-full justify-start whitespace-normal text-start [overflow-wrap:anywhere] break-words');
 
 function admittedFileType(
   type: string | undefined,

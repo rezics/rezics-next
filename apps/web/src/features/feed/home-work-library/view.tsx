@@ -1,5 +1,7 @@
 import { createContext, useContext, useMemo, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { LibraryBigIcon } from 'lucide-react';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { QueryClientContext } from '@tanstack/react-query';
 import { browserObservation } from '../../../session/observation';
 import { m } from '../../../paraglide/messages.js';
@@ -207,7 +209,7 @@ export function HomeWorkLibraryAction({
       ) : null}
       <a
         href={signedIn ? href : signIn}
-        className="inline-flex min-h-11 min-w-11 max-w-full items-center gap-1 rounded-sm px-2 py-2 text-sm font-medium whitespace-normal text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        className={cn(buttonVariants({ variant: 'link', size: 'sm' }), 'h-auto min-h-6 max-w-full whitespace-normal')}
         data-slot="feed-library-action"
       >
         <LibraryBigIcon aria-hidden />

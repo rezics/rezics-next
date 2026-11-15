@@ -30,7 +30,7 @@ export function ConversationInspection({
 }) {
   return (
     <details data-slot="conversation-inspection" className={cn('min-w-0 text-sm', className)}>
-      <summary className="min-h-11 min-w-0 cursor-pointer whitespace-normal rounded-md py-3 text-muted-foreground [overflow-wrap:anywhere] underline-offset-4 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+      <summary className="min-w-0 cursor-pointer whitespace-normal rounded-md text-muted-foreground [overflow-wrap:anywhere] underline-offset-4 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
         {label}
       </summary>
       <div className="min-w-0 space-y-3 pb-3 [overflow-wrap:anywhere]">{children}</div>

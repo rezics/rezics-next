@@ -1,16 +1,10 @@
 import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
+import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Popover, PopoverContent, PopoverTrigger } from '@rezics/ui/shadcn/popover';
 import { isCalendarDate } from '@rezics/filter';
 import { getLocale } from '../paraglide/runtime.js';
-
-const inputClass =
-  'min-h-11 min-w-0 w-full max-w-full rounded-lg border border-border bg-background px-3 text-left text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60';
-const navClass =
-  'inline-flex size-11 items-center justify-center rounded-md hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-40';
-const dayClass =
-  'inline-flex size-11 items-center justify-center rounded-md text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-40';
 
 /** Local calendar components, never an instant, so YYYY-MM-DD is not shifted by the browser zone. */
 export function calendarDayDate(value: string): Date | undefined {
@@ -206,27 +200,29 @@ function DayGrid({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <button
+        <Button
           type="button"
-          className={navClass}
+          size="icon-sm"
+          variant="ghost"
           disabled={!previousTarget}
           aria-label={addMonths(visible, -1).toLocaleString(locale, { month: 'long', year: 'numeric' })}
           onClick={() => previousTarget && focusDay(previousTarget)}
         >
-          <ChevronLeftIcon aria-hidden="true" className="size-5" />
-        </button>
+          <ChevronLeftIcon aria-hidden="true" />
+        </Button>
         <p aria-live="polite" aria-atomic="true" className="min-w-0 text-center font-medium">
           {caption}
         </p>
-        <button
+        <Button
           type="button"
-          className={navClass}
+          size="icon-sm"
+          variant="ghost"
           disabled={!nextTarget}
           aria-label={addMonths(visible, 1).toLocaleString(locale, { month: 'long', year: 'numeric' })}
           onClick={() => nextTarget && focusDay(nextTarget)}
         >
-          <ChevronRightIcon aria-hidden="true" className="size-5" />
-        </button>
+          <ChevronRightIcon aria-hidden="true" />
+        </Button>
       </div>
       <table role="grid" aria-label={caption} className="border-collapse">
         <thead>
@@ -249,10 +245,12 @@ function DayGrid({
                 const blocked = clampDay(day, min, max) !== day;
                 return (
                   <td key={day} role="gridcell" className="p-0">
-                    <button
+                    <Button
                       ref={day === visit.focusDay ? activeDayButton : undefined}
                       type="button"
-                      className={`${dayClass} ${pressed ? 'bg-primary text-primary-foreground' : outside ? 'text-muted-foreground' : ''} ${blocked ? '' : 'hover:bg-muted'}`}
+                      size="icon-sm"
+                      variant={pressed ? 'default' : 'ghost'}
+                      className={outside && !pressed ? 'text-muted-foreground' : undefined}
                       aria-label={new Intl.DateTimeFormat(locale, { dateStyle: 'full' }).format(date)}
                       aria-pressed={pressed}
                       tabIndex={day === visit.focusDay && !blocked ? 0 : -1}
@@ -267,7 +265,7 @@ function DayGrid({
                       }}
                     >
                       {date.getDate()}
-                    </button>
+                    </Button>
                   </td>
                 );
               })}
@@ -323,10 +321,11 @@ export function CalendarDayField({
         <PopoverTrigger
           disabled={disabled}
           render={
-            <button
+            <Button
               type="button"
               id={id}
-              className={inputClass}
+              variant="outline"
+              className="w-full max-w-full min-w-0 justify-start font-normal"
               aria-label={label}
               aria-describedby={describedBy}
               aria-expanded={isOpen}

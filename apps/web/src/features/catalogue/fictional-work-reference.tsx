@@ -6,7 +6,7 @@ import { subjectHref } from '../../subject/subject-href';
 import { pageText } from '../pages/shared';
 
 const referenceActionClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:min-w-8 md:pointer-fine:py-0';
+  'inline-flex max-w-full items-center whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 export function FictionalReferenceDetails({
   id,

@@ -7,6 +7,7 @@ import { BangumiAction } from './controls';
 import { BangumiLabelOutcomes } from './labels';
 import { bangumiOutcomeLabel } from './meaning';
 import { BangumiCurrentFacts, BangumiScoreOutcomeView } from './score';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 
 function Outcome({
   outcome,
@@ -25,7 +26,7 @@ function Outcome({
   const inspected = !!row?.entryReadback || !!row?.voteReadback;
   return (
     <li className="rounded-md border p-3" data-bangumi-outcome={outcome.status} data-bangumi-row={outcome.ordinal}>
-      <p className="font-medium [overflow-wrap:anywhere]">{row?.title ?? `#${outcome.ordinal + 1}`}</p>
+      <p className="h-auto font-medium [overflow-wrap:anywhere]">{row?.title ?? `#${outcome.ordinal + 1}`}</p>
       <ImportTarget target={row?.target} />
       <p>{bangumiOutcomeLabel(outcome.status)}</p>
       {outcome.applied.length ? (
@@ -33,8 +34,8 @@ function Outcome({
       ) : null}
       {outcome.retained.length ? (
         <details>
-          <summary className="min-h-11 cursor-pointer py-2">{m.library_bangumi_retained_summary()}</summary>
-          <p className="text-sm [overflow-wrap:anywhere]">
+          <summary className="cursor-pointer py-2">{m.library_bangumi_retained_summary()}</summary>
+          <p className="h-auto text-sm [overflow-wrap:anywhere]">
             {m.library_bangumi_retained_fields({ fields: outcome.retained.join(', ') })}
           </p>
         </details>
@@ -114,7 +115,7 @@ export function BangumiResultPage({
             data-bangumi-outcome="unattempted"
             data-bangumi-row={ordinal}
           >
-            <p className="font-medium [overflow-wrap:anywhere]">
+            <p className="h-auto font-medium [overflow-wrap:anywhere]">
               {rowsByOrdinal.get(ordinal)?.title ?? `#${ordinal + 1}`}
             </p>
             <p>{m.library_bangumi_result_unattempted()}</p>
@@ -133,7 +134,7 @@ export function BangumiResultPage({
             {m.library_bangumi_retry_command()}
           </BangumiAction>
         ) : null}
-        <a href={`/${locale}/library`} className="inline-flex min-h-11 items-center px-3 py-2 underline">
+        <a href={`/${locale}/library`} className={buttonVariants({ variant: 'link' })}>
           {m.library_bangumi_return_library()}
         </a>
       </div>

@@ -30,9 +30,9 @@ import { screenCreateFactsRead, type ScreenReuseState } from './screen-create-re
 import { screenFactId, screenGroups, screenName, screenTarget, type ScreenGroup } from './screen-profile';
 
 const screenActionClassName =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 const screenSelectClassName =
-  'w-full min-w-0 max-w-full max-md:min-h-11 md:pointer-fine:min-h-8 pointer-coarse:min-h-11';
+  'w-full min-w-0 max-w-full';
 const screenLabelClassName = 'min-w-0 max-w-full flex-wrap whitespace-normal [overflow-wrap:anywhere]';
 
 export type ScreenRow = { key: string; statement: StatementInput };

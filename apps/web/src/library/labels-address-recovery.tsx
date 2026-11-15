@@ -1,3 +1,5 @@
+import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../paraglide/messages.js';
 import type { LabelsAddressIssue } from './labels-address';
 
@@ -28,30 +30,23 @@ export function LabelsAddressRecovery({
           {prefixIssue ? (
             <label className="grid gap-1">
               <span>{m.library_labels_address_prefix_label()}</span>
-              <input name="q" type="text" defaultValue={rawQuery ?? ''} className="min-h-11 rounded border px-3" />
+              <Input name="q" type="text" defaultValue={rawQuery ?? ''} />
             </label>
           ) : (
             <>
               {query !== null ? <input type="hidden" name="q" value={query} /> : null}
               <label className="grid gap-1">
                 <span>{m.library_labels_address_cursor_label()}</span>
-                <input
-                  name="cursor"
-                  type="text"
-                  defaultValue={rawCursor ?? ''}
-                  className="min-h-11 rounded border px-3"
-                />
+                <Input name="cursor" type="text" defaultValue={rawCursor ?? ''} />
               </label>
             </>
           )}
-          <button type="submit" className="min-h-11 rounded bg-primary px-4 text-primary-foreground">
-            {m.library_labels_address_continue()}
-          </button>
+          <Button type="submit">{m.library_labels_address_continue()}</Button>
         </form>
         <form method="get">
-          <button type="submit" className="min-h-11 rounded border px-4">
+          <Button type="submit" variant="outline">
             {m.library_labels_address_clear()}
-          </button>
+          </Button>
         </form>
       </section>
     </main>

@@ -9,7 +9,7 @@ import type {
 } from './writing-inspection';
 
 export const inspectionActionClass =
-  'h-auto min-h-11 min-w-11 max-w-full shrink px-3 py-2 text-start leading-snug whitespace-normal [overflow-wrap:anywhere] focus-visible:ring-2 focus-visible:ring-ring';
+  'h-auto min-h-7 max-w-full shrink text-start leading-snug whitespace-normal [overflow-wrap:anywhere]';
 
 export function outlineKindLabel(kind: OutlineKind): string {
   switch (kind) {
@@ -86,17 +86,19 @@ export function WritingInspectionOutline({
         <ol className="max-h-72 min-w-0 space-y-2 overflow-auto rounded-lg border p-2">
           {projection.outline.map((entry) => (
             <li key={entry.ordinal} className="min-w-0" data-inspection-outline-row>
-              <div className="flex min-w-0 flex-wrap items-start gap-1">
-                <a
-                  className={`${inspectionActionClass} flex min-w-0 flex-1 items-center rounded-md underline underline-offset-4`}
-                  href={`#${prefix}-block-${entry.ordinal}`}
+              <div className="flex min-w-0 flex-wrap items-center gap-1">
+                <Button
+                  nativeButton={false}
+                  variant="link"
+                  className={`${inspectionActionClass} min-w-0 flex-1 justify-start`}
+                  render={<a href={`#${prefix}-block-${entry.ordinal}`} />}
                   onClick={(event) => {
                     event.preventDefault();
                     if (inspection.matches(token)) navigate(entry);
                   }}
                 >
                   {outlineEntryLabel(entry)}
-                </a>
+                </Button>
                 <Button
                   type="button"
                   variant="ghost"

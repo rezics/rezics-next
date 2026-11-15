@@ -21,7 +21,7 @@ import {
   type RealmBanCurrentResult,
 } from './realm-ban-current';
 
-const actionClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2';
+const actionClass = 'h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere';
 
 /** Selection leaves the frontier unchanged; explicit unban uses the existing writer. */
 export function RealmBanCurrentControl({
@@ -123,7 +123,6 @@ export function RealmBanCurrentControl({
         <Input
           ref={field}
           id={`${id}-account`}
-          className="min-h-11 min-w-11"
           autoComplete="off"
           spellCheck={false}
           maxLength={36}

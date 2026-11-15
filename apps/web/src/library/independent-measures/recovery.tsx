@@ -1,10 +1,9 @@
 import { m } from '../../paraglide/messages.js';
 import type { IndependentVisitKind } from './contract';
+import { Button } from '@rezics/ui/shadcn/button';
 
-export const independentActionClass =
-  'inline-flex min-h-11 min-w-11 max-w-full cursor-pointer items-center justify-center whitespace-normal rounded-lg border border-border px-4 py-2 text-center [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60';
-export const independentPrimaryActionClass =
-  'inline-flex min-h-11 min-w-11 max-w-full cursor-pointer items-center justify-center whitespace-normal rounded-lg bg-primary px-4 py-2 text-center font-medium text-primary-foreground [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring hover:opacity-90 disabled:opacity-60';
+export const independentActionClass = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+export const independentPrimaryActionClass = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 export function IndependentMeasuresRecovery({
   kind,
@@ -34,9 +33,9 @@ export function IndependentMeasuresRecovery({
         </p>
       ) : null}
       {onRetry && kind !== 'preparing' && kind !== 'empty' ? (
-        <button type="button" className={independentActionClass} onClick={onRetry}>
+        <Button type="button" variant="outline" className={independentActionClass} onClick={onRetry}>
           {kind === 'stale' ? m.library_progress_measures_refresh() : m.library_progress_retry()}
-        </button>
+        </Button>
       ) : null}
     </section>
   );

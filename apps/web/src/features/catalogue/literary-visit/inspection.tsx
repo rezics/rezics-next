@@ -18,7 +18,7 @@ export function LiteraryAssertionInspection({
   const o = { locale: locale as never };
   return (
     <details className="text-sm" data-slot="literary-assertion-inspection">
-      <summary className="min-h-11 cursor-pointer py-2">{m.literary_visit_inspect({}, o)}</summary>
+      <summary className="cursor-pointer py-2">{m.literary_visit_inspect({}, o)}</summary>
       <dl className="grid min-w-0 gap-x-3 gap-y-2 sm:grid-cols-[max-content_minmax(0,1fr)]">
         <dt className="font-medium">{m.literary_visit_holder({}, o)}</dt>
         <dd className="min-w-0 [overflow-wrap:anywhere]">{holder}</dd>

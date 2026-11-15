@@ -16,7 +16,7 @@ import { Exposure } from '../kernel/exposure';
 import { SaveQueryLink } from './save-query';
 import { admitSavedQuerySelection, hasSavedQueryInput } from './saved-query-editor/selection';
 import { ResponsiveDialog } from '@rezics/ui/responsive-dialog';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { SlidersHorizontalIcon } from 'lucide-react';
 import { Refinement, type RefinementData } from '../search/refinement/refinement';
 import { MAX_CACHED_FACET_PROPERTIES } from '../search/refinement/facet-continuation';
@@ -86,7 +86,7 @@ export function CollectionFilterFeedback({
       ) : null}
       {empty && !unavailable && !rejected && (filter || status === 'failed') ? (
         <a
-          className={buttonClass ?? 'inline-flex min-h-10 items-center rounded-lg border border-border px-3'}
+          className={buttonClass ?? buttonVariants({ variant: 'outline' })}
           href={collectionFilterAddress(
             getLocale(),
             id,
@@ -373,11 +373,11 @@ export function CollectionFilters({
               </span>
             );
           })}
-        <div className="sticky bottom-0 flex flex-wrap gap-2 bg-popover py-3">
-          <button className="min-h-11 rounded-lg bg-primary px-4 text-primary-foreground" type="submit">
+        <div className="sticky bottom-0 flex flex-wrap items-center gap-2 bg-popover py-3">
+          <Button type="submit">
             {m.collection_filter_apply()}
-          </button>
-          <a className="inline-flex min-h-11 items-center rounded-lg border border-border px-4" href={clearAddress}>
+          </Button>
+          <a className={buttonVariants({ variant: 'outline' })} href={clearAddress}>
             {m.collection_filter_clear()}
           </a>
         </div>
@@ -399,10 +399,9 @@ export function CollectionFilters({
               aria-controls={open ? surfaceId : undefined}
               variant="outline"
               size="icon"
-              className="min-h-11 min-w-11"
               onClick={() => changeOpen(true)}
             >
-              <SlidersHorizontalIcon aria-hidden="true" className="size-4" />
+              <SlidersHorizontalIcon aria-hidden="true" />
             </Button>
             <ResponsiveDialog
               id={surfaceId}

@@ -57,7 +57,7 @@ function SubjectCandidateCurationLive({ id, locale }: { id: string; locale: stri
   return (
     <div className="space-y-4">
       {correction && (
-        <a className="inline-flex min-h-11 items-center underline" href={correction}>
+        <a className="inline-flex items-center underline" href={correction}>
           {m.correction_title()}
         </a>
       )}

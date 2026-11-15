@@ -13,9 +13,9 @@ import type { ReferenceInspection, ReferenceInspector } from './reference-read';
 import { inspectKnowledgePublicReferenceRequest } from './reference-server';
 
 export const referenceControl =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words px-3 py-2 text-start leading-snug focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'h-auto min-h-7 max-w-full whitespace-normal break-words text-start leading-snug';
 export const referenceInput =
-  'min-h-11 min-w-0 w-full max-w-full border-border bg-background px-3 text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'min-w-0 w-full max-w-full text-foreground';
 const publicInspector: ReferenceInspector = (input) => inspectKnowledgePublicReferenceRequest({ data: input });
 
 /** The native source manifest is the disclosure authority. No target metadata is inferred or cached here. */
@@ -167,7 +167,7 @@ export function KnowledgeReferenceList({
                 {href ? (
                   <a
                     href={href}
-                    className="inline-flex min-h-11 max-w-full items-center py-2 text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    className="inline-flex max-w-full items-center text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   >
                     {copy.open}
                   </a>

@@ -19,6 +19,8 @@ import { CopyReadingContextView } from './copy-reading-context/view';
 import { copyInventoryReturnHref } from './copy-reading-context/navigation';
 import { subjectHref } from '../subject/subject-href';
 import { withSubjectVisitReturn } from '../features/pages/subject-visit-navigation';
+import { Alert } from '@rezics/ui/shadcn/alert';
+import { Button } from '@rezics/ui/shadcn/button';
 import { Menu } from '@rezics/ui/menu';
 import { EllipsisIcon } from 'lucide-react';
 
@@ -53,10 +55,7 @@ import { CopyInventorySelect } from './copy-inventory-review/select';
 import { CopyInventoryHistory, hasUnresolvedHistory } from './copy-inventory-review/history';
 import { CopyInventoryFilters } from './copy-inventory-filters';
 export { CopiesFallback } from './copies-fallback';
-const target =
-  'min-h-11 min-w-11 max-w-full cursor-pointer whitespace-normal py-2 text-center [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const button = `${target} inline-flex items-center justify-center rounded-lg bg-primary px-4 font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60`;
-const quiet = `${target} inline-flex items-center justify-center rounded-lg border border-border px-4 hover:bg-muted disabled:opacity-60`;
+const controlWrap = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 const locale = () => getLocale();
 const blank = (value: string): string | null => (value === '' ? null : value);
 
@@ -539,25 +538,26 @@ export function CopyForm({
       </p>
       {failure ? <p role="alert">{failure}</p> : null}
       {intent.current && !pending && !conflicted ? (
-        <button
+        <Button
           type="button"
-          className={quiet}
+          variant="outline"
+          className={controlWrap}
           onClick={() => {
             if (intent.current?.operation === 'delete') void remove();
             else if (intent.current) void submit({ preventDefault() {} } as FormEvent<HTMLFormElement>);
           }}
         >
           {m.subject_view_retry()}
-        </button>
+        </Button>
       ) : null}
       {detailState === 'closed' && onRetryDetail ? (
-        <button type="button" className={quiet} onClick={onRetryDetail}>
+        <Button type="button" variant="outline" className={controlWrap} onClick={onRetryDetail}>
           {m.subject_view_retry()}
-        </button>
+        </Button>
       ) : null}
-      <button type="button" className={quiet} onClick={requestClose}>
+      <Button type="button" variant="outline" className={controlWrap} onClick={requestClose}>
         {m.library_copy_cancel()}
-      </button>
+      </Button>
     </div>
   ) : (
     <>
@@ -568,7 +568,7 @@ export function CopyForm({
         aria-label={title}
         data-idempotency-key={copy?.idempotencyKey ?? addKey}
         onSubmit={submit}
-        className="min-w-0 max-w-full space-y-4 [overflow-wrap:anywhere] [&_input]:min-h-11 [&_input]:min-w-0 [&_input]:text-base [&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:min-h-11"
+        className="min-w-0 max-w-full space-y-4 [overflow-wrap:anywhere]"
         aria-busy={pending}
         onKeyDown={(event) => {
           if (confirming && event.key === 'Escape') {
@@ -640,9 +640,15 @@ export function CopyForm({
                       : m.library_copy_profile_unavailable()}
             </p>
             {edition && editionProfile.state === 'unavailable' ? (
-              <button type="button" className={quiet} disabled={pending} onClick={() => void chooseEdition(edition)}>
+              <Button
+                type="button"
+                variant="outline"
+                className={controlWrap}
+                disabled={pending}
+                onClick={() => void chooseEdition(edition)}
+              >
                 {m.subject_view_retry()}
-              </button>
+              </Button>
             ) : null}
           </div>
         ) : null}
@@ -689,14 +695,15 @@ export function CopyForm({
               <div className="space-y-2">
                 <p role="status">{m.library_copy_detail_unavailable()}</p>
                 {onRetryDetail && !conflicted ? (
-                  <button
+                  <Button
                     type="button"
-                    className={quiet}
+                    variant="outline"
+                    className={controlWrap}
                     disabled={pending || !!intent.current}
                     onClick={() => current('copy.get') && !intent.current && onRetryDetail()}
                   >
                     {m.subject_view_retry()}
-                  </button>
+                  </Button>
                 ) : null}
               </div>
             ) : null}
@@ -765,13 +772,9 @@ export function CopyForm({
           />
         ) : null}
         {pending ? (
-          <p role="status" className="rounded-lg bg-muted p-3 text-sm">
-            {m.library_copy_editor_pending()}
-          </p>
+          <Alert role="status">{m.library_copy_editor_pending()}</Alert>
         ) : intent.current ? (
-          <p role="status" className="rounded-lg bg-muted p-3 text-sm">
-            {m.library_copy_editor_uncertain()}
-          </p>
+          <Alert role="status">{m.library_copy_editor_uncertain()}</Alert>
         ) : null}
         {failure ? <p role="alert">{failure}</p> : null}
         {conflicted ? (
@@ -790,27 +793,28 @@ export function CopyForm({
             className="min-w-0 space-y-3 rounded-lg border border-border p-4"
           >
             <p id={confirmationId}>{m.library_copy_delete_question()}</p>
-            <div className="flex flex-wrap gap-3">
-              <button
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
                 ref={cancelDelete}
                 type="button"
-                className={quiet}
+                variant="outline"
+                className={controlWrap}
                 disabled={pending}
                 onClick={() => current() && setConfirming(false)}
               >
                 {m.library_copy_cancel()}
-              </button>
-              <button type="button" className={button} disabled={pending} onClick={() => void remove()}>
+              </Button>
+              <Button type="button" className={controlWrap} disabled={pending} onClick={() => void remove()}>
                 {m.library_copy_delete_confirm()}
-              </button>
+              </Button>
             </div>
           </div>
         ) : null}
-        <div className="sticky bottom-0 z-10 flex flex-wrap gap-3 border-t border-border bg-background pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="sticky bottom-0 z-10 flex flex-wrap items-center gap-3 border-t border-border bg-background pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           {editable ? (
-            <button
+            <Button
               type="submit"
-              className={button}
+              className={controlWrap}
               disabled={
                 pending ||
                 conflicted ||
@@ -824,13 +828,14 @@ export function CopyForm({
                 : copy
                   ? m.library_copy_save()
                   : m.library_copy_add_submit()}
-            </button>
+            </Button>
           ) : null}
           {copy ? (
-            <button
+            <Button
               type="button"
               ref={deleteControl}
-              className={quiet}
+              variant="outline"
+              className={controlWrap}
               disabled={
                 pending ||
                 conflicted ||
@@ -845,11 +850,11 @@ export function CopyForm({
               {!pending && intent.current?.operation === 'delete'
                 ? m.library_copy_editor_retry_delete()
                 : m.library_copy_delete()}
-            </button>
+            </Button>
           ) : null}
-          <button type="button" className={quiet} onClick={requestClose}>
+          <Button type="button" variant="outline" className={controlWrap} onClick={requestClose}>
             {m.library_copy_cancel()}
-          </button>
+          </Button>
         </div>
       </form>
       {copy && originating ? (
@@ -1010,15 +1015,16 @@ export function CopyRow({
           <Menu
             title={m.library_copy_more_actions()}
             trigger={
-              <button
+              <Button
                 type="button"
-                className="inline-flex size-11 items-center justify-center rounded-full hover:bg-muted"
+                variant="ghost"
+                size="icon"
                 aria-label={m.library_copy_more_actions()}
                 ref={launcher}
                 data-copy-edit-id={copy.id}
               >
-                <EllipsisIcon aria-hidden="true" className="size-5" />
-              </button>
+                <EllipsisIcon aria-hidden="true" />
+              </Button>
             }
             entries={[
               {
@@ -1238,20 +1244,26 @@ function LoadedCopiesPage({
         </PageHeading>
         <div className="flex flex-wrap items-center gap-3">
           <Exposure operation="copy.list">
-            <Link
-              to="/library/loans"
-              className={quiet}
-              onClick={(event) => {
-                if (!currentPage('copy.list')) event.preventDefault();
-              }}
+            <Button
+              variant="outline"
+              className={controlWrap}
+              nativeButton={false}
+              render={
+                <Link
+                  to="/library/loans"
+                  onClick={(event) => {
+                    if (!currentPage('copy.list')) event.preventDefault();
+                  }}
+                />
+              }
             >
               {m.library_copy_loans()}
-            </Link>
+            </Button>
           </Exposure>
           {page.inventoryState !== 'forbidden' && (!page.subjectId || page.profile?.kinds.length) ? (
-            <button
+            <Button
               type="button"
-              className={button}
+              className={controlWrap}
               onClick={(event) => {
                 if (!currentPage('copy.create')) return;
                 editorLauncher.current = event.currentTarget;
@@ -1261,7 +1273,7 @@ function LoadedCopiesPage({
               }}
             >
               {m.library_copy_add()}
-            </button>
+            </Button>
           ) : null}
         </div>
       </header>
@@ -1292,16 +1304,23 @@ function LoadedCopiesPage({
         <p className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
           <span>{m.library_copy_filtered_heading({ title: filteredTitle ?? m.library_copy_this_edition() })}</span>
           <Exposure operation="copy.list">
-            <Link
-              to="/library/copies"
-              onClick={(event) => {
-                if (!currentPage()) event.preventDefault();
-              }}
-              search={{ ...(page.kind ? { kind: page.kind } : {}), ...(page.status ? { status: page.status } : {}) }}
-              className="text-primary underline underline-offset-4"
+            <Button
+              variant="link"
+              size="sm"
+              className="h-auto min-h-6 px-0 whitespace-normal"
+              nativeButton={false}
+              render={
+                <Link
+                  to="/library/copies"
+                  onClick={(event) => {
+                    if (!currentPage()) event.preventDefault();
+                  }}
+                  search={{ ...(page.kind ? { kind: page.kind } : {}), ...(page.status ? { status: page.status } : {}) }}
+                />
+              }
             >
               {m.library_copy_all()}
-            </Link>
+            </Button>
           </Exposure>
         </p>
       ) : null}
@@ -1311,16 +1330,23 @@ function LoadedCopiesPage({
             {m.library_copy_filters_active()}: {predicateFilters.join(' · ')}
           </span>
           <Exposure operation="copy.list">
-            <Link
-              to="/library/copies"
-              onClick={(event) => {
-                if (!currentPage('copy.list')) event.preventDefault();
-              }}
-              search={page.subjectId ? { subjectId: page.subjectId } : {}}
-              className="text-primary underline underline-offset-4"
+            <Button
+              variant="link"
+              size="sm"
+              className="h-auto min-h-6 px-0 whitespace-normal"
+              nativeButton={false}
+              render={
+                <Link
+                  to="/library/copies"
+                  onClick={(event) => {
+                    if (!currentPage('copy.list')) event.preventDefault();
+                  }}
+                  search={page.subjectId ? { subjectId: page.subjectId } : {}}
+                />
+              }
             >
               {m.library_copy_filter_reset()}
-            </Link>
+            </Button>
           </Exposure>
         </p>
       ) : null}
@@ -1384,73 +1410,91 @@ function LoadedCopiesPage({
                   : m.library_copy_page_empty()}
           </p>
           {(page.inventoryState === 'forbidden' || page.inventoryState === 'unavailable') && onRetryInventory ? (
-            <button type="button" className={quiet} onClick={onRetryInventory}>
+            <Button type="button" variant="outline" className={controlWrap} onClick={onRetryInventory}>
               {windows?.pending ? m.library_window_retry() : m.subject_view_retry()}
-            </button>
+            </Button>
           ) : null}
         </div>
       )}
       {windows?.pending && onRetryInventory && !page.inventoryState ? (
-        <button type="button" className={quiet} onClick={onRetryInventory}>
+        <Button type="button" variant="outline" className={controlWrap} onClick={onRetryInventory}>
           {m.library_window_retry()}
-        </button>
+        </Button>
       ) : null}
       {!windows?.pending && !page.inventoryState && (page.next || firstAvailable || previousAvailable) ? (
         <Exposure operation="copy.list">
-          <nav aria-label={m.library_copy_heading()} className="flex flex-wrap gap-3">
+          <nav aria-label={m.library_copy_heading()} className="flex flex-wrap items-center gap-3">
             {previousAvailable ? (
-              <Link
-                to="/library/copies"
-                search={{
-                  ...firstPageSearch,
-                  ...(windows?.previous === null || windows?.previous === undefined
-                    ? {}
-                    : { cursor: windows.previous }),
-                }}
-                onClick={(event) => {
-                  if (!currentPage('copy.list')) {
-                    event.preventDefault();
-                    return;
-                  }
-                  if (windows && !windows.move('previous', windows.previous!, event.detail === 0))
-                    event.preventDefault();
-                }}
-                className={`${quiet} text-primary`}
+              <Button
+                variant="outline"
+                className={controlWrap}
+                nativeButton={false}
+                render={
+                  <Link
+                    to="/library/copies"
+                    search={{
+                      ...firstPageSearch,
+                      ...(windows?.previous === null || windows?.previous === undefined
+                        ? {}
+                        : { cursor: windows.previous }),
+                    }}
+                    onClick={(event) => {
+                      if (!currentPage('copy.list')) {
+                        event.preventDefault();
+                        return;
+                      }
+                      if (windows && !windows.move('previous', windows.previous!, event.detail === 0))
+                        event.preventDefault();
+                    }}
+                  />
+                }
               >
                 {m.library_label_previous_page()}
-              </Link>
+              </Button>
             ) : null}
             {firstAvailable ? (
-              <Link
-                to="/library/copies"
-                search={firstPageSearch}
-                onClick={(event) => {
-                  if (!currentPage('copy.list')) {
-                    event.preventDefault();
-                    return;
-                  }
-                  if (windows && !windows.move('first', null, event.detail === 0)) event.preventDefault();
-                }}
-                className={`${quiet} text-primary`}
+              <Button
+                variant="outline"
+                className={controlWrap}
+                nativeButton={false}
+                render={
+                  <Link
+                    to="/library/copies"
+                    search={firstPageSearch}
+                    onClick={(event) => {
+                      if (!currentPage('copy.list')) {
+                        event.preventDefault();
+                        return;
+                      }
+                      if (windows && !windows.move('first', null, event.detail === 0)) event.preventDefault();
+                    }}
+                  />
+                }
               >
                 {m.library_collections_first_page()}
-              </Link>
+              </Button>
             ) : null}
             {page.next ? (
-              <Link
-                to="/library/copies"
-                onClick={(event) => {
-                  if (!currentPage('copy.list')) {
-                    event.preventDefault();
-                    return;
-                  }
-                  if (windows && !windows.move('more', page.next, event.detail === 0)) event.preventDefault();
-                }}
-                search={{ ...firstPageSearch, cursor: page.next }}
-                className={`${quiet} text-primary`}
+              <Button
+                variant="outline"
+                className={controlWrap}
+                nativeButton={false}
+                render={
+                  <Link
+                    to="/library/copies"
+                    onClick={(event) => {
+                      if (!currentPage('copy.list')) {
+                        event.preventDefault();
+                        return;
+                      }
+                      if (windows && !windows.move('more', page.next, event.detail === 0)) event.preventDefault();
+                    }}
+                    search={{ ...firstPageSearch, cursor: page.next }}
+                  />
+                }
               >
                 {m.library_copy_more()}
-              </Link>
+              </Button>
             ) : null}
           </nav>
         </Exposure>

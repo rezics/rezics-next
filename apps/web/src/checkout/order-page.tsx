@@ -339,7 +339,7 @@ function OrderLifetime({
           <p>
             <a
               href={purchaseHistoryHref(locale, 'orders', history)}
-              className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
+              className="inline-flex items-center text-primary underline underline-offset-4"
             >
               {m.nav_orders()}
             </a>
@@ -438,7 +438,7 @@ function OrderLifetime({
               <p>
                 <a
                   href={purchaseHistoryHref(locale, `entitlements/${encodeURIComponent(order.entitlementId)}`, history)}
-                  className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+                  className="inline-flex items-center text-primary underline underline-offset-4"
                 >
                   {m.entitlements_detail_heading()}
                 </a>
@@ -459,7 +459,6 @@ function OrderLifetime({
               <section className="space-y-3" aria-label={m.order_reconcile_action()}>
                 <Button
                   variant="outline"
-                  size="lg"
                   className="w-full sm:w-auto"
                   disabled={
                     (!command.operation && !csrfToken) ||
@@ -492,7 +491,7 @@ function OrderLifetime({
                   <p>{m.order_failed_detail()}</p>
                   <a
                     href={`/${locale}/offers/${order.offerId}`}
-                    className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
+                    className="inline-flex items-center text-primary underline underline-offset-4"
                   >
                     {m.order_back()}
                   </a>
@@ -507,13 +506,13 @@ function OrderLifetime({
                 <div className="flex flex-wrap gap-x-5 gap-y-2">
                   <a
                     href={`/${locale}/library`}
-                    className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
+                    className="inline-flex items-center text-primary underline underline-offset-4"
                   >
                     {m.order_open_library()}
                   </a>
                   <a
                     href={`/${locale}/offers/${order.offerId}`}
-                    className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
+                    className="inline-flex items-center text-primary underline underline-offset-4"
                   >
                     {m.order_back()}
                   </a>
@@ -525,7 +524,7 @@ function OrderLifetime({
                 <AlertDescription className="space-y-3 text-foreground">
                   <a
                     href={`/${locale}/offers/${order.offerId}`}
-                    className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
+                    className="inline-flex items-center text-primary underline underline-offset-4"
                   >
                     {m.order_back()}
                   </a>
@@ -535,7 +534,6 @@ function OrderLifetime({
             {((gaveUp && pending) || order.entitlement.kind === 'refresh') && (
               <Button
                 variant="outline"
-                size="lg"
                 className="w-full sm:w-auto"
                 disabled={!canReadOrder || !signedIn}
                 onClick={() => {
@@ -550,7 +548,7 @@ function OrderLifetime({
       }
       evidence={
         <details className="min-w-0 text-sm">
-          <summary className="min-h-11 cursor-pointer content-center rounded-sm py-3 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          <summary className="cursor-pointer content-center rounded-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             {m.order_technical_details()}
           </summary>
           <dl className="space-y-3 [overflow-wrap:anywhere]">

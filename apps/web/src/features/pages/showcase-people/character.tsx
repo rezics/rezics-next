@@ -45,7 +45,7 @@ export function CharacterReader(input: ProfileReading & { associations?: Charact
               locale={reading.locale}
               link={Link}
             />
-            <a className="inline-flex min-h-11 items-center underline" href="#connections">
+            <a className="inline-flex items-center underline" href="#connections">
               {m.character_identity_visit_open({}, o)}
             </a>
           </nav>

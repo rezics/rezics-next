@@ -13,6 +13,7 @@ import { newCommandKey } from './contract';
 import { BangumiAction } from './controls';
 import { bangumiFailureLabel } from './meaning';
 import type { BangumiVisit } from './visit';
+import { Input } from '@rezics/ui/shadcn/input';
 
 export function emptyBangumiLabelPanel(rowRevision: string | null): BangumiLabelPanelState {
   return {
@@ -499,7 +500,7 @@ export function BangumiLabelAdoption({
 
   return (
     <details className="rounded-md border p-4" data-bangumi-labels={ordinal}>
-      <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_bangumi_label_adoption()}</summary>
+      <summary className="cursor-pointer py-2 font-medium">{m.library_bangumi_label_adoption()}</summary>
       <div className="space-y-4 pt-3">
         {staleCommand ? <p role="status">{m.library_bangumi_label_prior_command_pending()}</p> : null}
         {!current.pages.length ? <p className="text-sm">{m.library_bangumi_label_not_loaded()}</p> : null}
@@ -585,18 +586,18 @@ export function BangumiLabelAdoption({
                   return (
                     <li key={tag.index} className="space-y-3 rounded-md border p-3" data-bangumi-tag-index={tag.index}>
                       <p className="text-sm font-medium">{m.library_bangumi_label_tag_index({ index: tag.index })}</p>
-                      <p className="break-words">
+                      <p className="h-auto break-words">
                         <span className="font-medium">{m.library_bangumi_label_source_text()}</span>{' '}
                         {textValue(tag.value)}
                       </p>
                       {tag.proposedName ? (
-                        <p className="break-words">
+                        <p className="h-auto break-words">
                           <span className="font-medium">{m.library_bangumi_label_proposed_name()}</span>{' '}
                           {tag.proposedName}
                         </p>
                       ) : null}
                       {target ? (
-                        <p className="break-words" data-bangumi-label-target={tag.index}>
+                        <p className="h-auto break-words" data-bangumi-label-target={tag.index}>
                           {m.library_bangumi_label_mapping_selected({
                             target: 'labelId' in target ? target.labelId : target.name,
                           })}
@@ -610,9 +611,9 @@ export function BangumiLabelAdoption({
                           >
                             {m.library_bangumi_label_new_name_input()}
                           </label>
-                          <input
+                          <Input
                             id={`bangumi-new-label-${ordinal}-${tag.index}`}
-                            className="min-h-11 w-full rounded-md border bg-background px-3 py-2"
+                            className='w-full'
                             value={current.newNames[tag.index] ?? tag.proposedName ?? ''}
                             disabled={disabled || current.busy || held}
                             onChange={(event) =>
@@ -652,9 +653,9 @@ export function BangumiLabelAdoption({
                           >
                             {m.library_bangumi_label_search_query()}
                           </label>
-                          <input
+                          <Input
                             id={`bangumi-label-query-${ordinal}-${tag.index}`}
-                            className="min-h-11 w-full rounded-md border bg-background px-3 py-2"
+                            className='w-full'
                             value={query}
                             disabled={disabled || current.busy || held}
                             onChange={(event) => {
@@ -762,7 +763,7 @@ export function BangumiLabelAdoption({
                   <p>
                     {m.library_bangumi_label_tag_index({ index: item.index })}: {textValue(item.source)}
                   </p>
-                  <p className="break-words">
+                  <p className="h-auto break-words">
                     {'labelId' in item.target
                       ? m.library_bangumi_label_review_existing({
                           id: item.target.labelId,

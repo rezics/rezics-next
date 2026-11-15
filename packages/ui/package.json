@@ -38,7 +38,7 @@
     "lucide-react": "1.66.0",
     "react-day-picker": "10.0.2",
     "react-resizable-panels": "4.16.0",
-    "recharts": "3.11.0-canary.8",
+    "recharts": "3.8.0",
     "shiki": "4.5.0",
     "tailwind-variants": "4.0.1",
     "thumbhash": "0.1.1",

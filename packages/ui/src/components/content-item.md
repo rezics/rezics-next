@@ -97,5 +97,5 @@ label and does not render a bar.
 
 Selection remains controlled by the caller. `selectable` makes the tile itself a persistent pressed action, while
 `onSelect` can provide an independent selection checkbox. Optional selection and overflow controls keep separate
-focus targets and 44 px hit areas, including on touch. The adapter does not change caller data, routing,
+focus targets and use official shadcn control sizes, including on touch. The adapter does not change caller data, routing,
 layout containers or collection semantics.

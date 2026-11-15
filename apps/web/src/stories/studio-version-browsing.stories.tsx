@@ -197,20 +197,20 @@ function InstalledVersions({ controller, profile }: { controller: StudioControll
         <h1>{controller.input.title}</h1>
         <nav className="studio-action-row" aria-label={m.studio_workspace_views({}, options)}>
           <Button
-            type="button"
-            variant="outline"
-            className="min-h-11"
-            aria-pressed={tab === 'versions'}
-            onClick={() => setTab('versions')}
+ type="button"
+ variant="outline"
+ 
+ aria-pressed={tab === 'versions'}
+ onClick={() => setTab('versions')}
           >
             {m.studio_revision_heading({}, options)}
           </Button>
           <Button
-            type="button"
-            variant="outline"
-            className="min-h-11"
-            aria-pressed={tab === 'write'}
-            onClick={() => setTab('write')}
+ type="button"
+ variant="outline"
+ 
+ aria-pressed={tab === 'write'}
+ onClick={() => setTab('write')}
           >
             {m.studio_workspace_write({}, options)}
           </Button>

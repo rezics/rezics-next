@@ -16,6 +16,7 @@ import {
   type ThreadCreationReaderAdmission,
 } from '../threads/thread-creation-lifetime';
 import { PatternStory } from './page';
+import { Button } from '@rezics/ui/shadcn/button';
 
 // Illustrative only: existing Storybook session/request and recorded vote fixtures, never native proof.
 // All plays, physical target/focus checks and 390/1280 locale/theme observations are authored UNRUN.
@@ -94,20 +95,14 @@ function AdmittedExamples({
         Illustrative forms using existing story fixtures. Native acceptance is UNRUN.
       </p>
       <div className="flex flex-wrap gap-4">
-        <button
-          type="button"
-          className="min-h-11 rounded-md border px-3 focus-visible:outline-2"
-          onClick={() => setDisabled(!disabled)}
+        <Button type="button" variant="outline" size="sm" onClick={() => setDisabled(!disabled)}
         >
           {disabled ? 'Unlock illustrative fields' : 'Lock illustrative fields'}
-        </button>
-        <button
-          type="button"
-          className="min-h-11 rounded-md border px-3 focus-visible:outline-2"
-          onClick={() => void client.fetchQuery({ ...sessionQuery, staleTime: 0 })}
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => void client.fetchQuery({ ...sessionQuery, staleTime: 0 })}
         >
           Refresh session to retire original visits
-        </button>
+        </Button>
       </div>
       <div className="grid min-w-0 gap-6 md:grid-cols-2">
         <ReviewVisit index={0} admission={admission} disabled={disabled} {...props} />

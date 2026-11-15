@@ -84,7 +84,7 @@ function problemText(problem: SetupFailure) {
 function SetupDetails({ children }: { children: ReactNode }) {
   return (
     <details className="min-w-0 text-sm text-muted-foreground">
-      <summary className="min-h-11 cursor-pointer content-center rounded-md py-2 font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+      <summary className="cursor-pointer text-foreground focus-visible:ring-3 focus-visible:ring-ring/30">
         {m.space_setup_details_heading()}
       </summary>
       <p className="mt-2 leading-relaxed">{children}</p>
@@ -748,7 +748,7 @@ function SpaceSetupFormVisit({
     );
   return (
     <div
-      className="min-w-0 space-y-6 [overflow-wrap:anywhere] [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:h-auto [&_button]:whitespace-normal [&_button]:text-start [&_input]:min-w-0 [&_p]:text-start [&_summary]:min-h-11 [&_summary]:content-center"
+      className="min-w-0 space-y-6 [overflow-wrap:anywhere] [&_button]:max-w-full [&_button]:h-auto [&_button:not([class*='min-h-'])]:min-h-7 [&_button]:whitespace-normal [&_button]:text-start [&_input]:min-w-0 [&_p]:text-start"
       aria-busy={busy}
       onKeyDownCapture={noteKeyboardActivation}
     >
@@ -759,18 +759,20 @@ function SpaceSetupFormVisit({
             const Icon = icons[index] ?? MapPin;
             return (
               <li key={label}>
-                <button
+                <Button
                   type="button"
+                  size="sm"
+                  variant={index === step ? 'secondary' : 'outline'}
                   disabled={!reachable[index] || locked || paused || Boolean(boardId)}
                   aria-current={index === step ? 'step' : undefined}
                   onClick={(event) => advance(index, event.detail === 0 ? event.currentTarget : undefined)}
-                  className="flex min-h-11 min-w-0 w-full items-center gap-3 rounded-xl border border-border px-3 py-3 text-start text-sm font-medium aria-[current=step]:border-primary aria-[current=step]:bg-primary/5 aria-[current=step]:text-primary disabled:opacity-50"
+                  className="h-auto min-h-6 w-full min-w-0 justify-start gap-3 whitespace-normal text-start"
                 >
                   <span className="flex size-7 shrink-0 items-center justify-center rounded-full border border-current/30 text-xs" aria-hidden="true">
                     {completed[index] ? <Check className="size-4" /> : <Icon className="size-4" />}
                   </span>
                   <span className="min-w-0 flex-1">{label}</span>
-                </button>
+                </Button>
               </li>
             );
           })}
@@ -823,10 +825,10 @@ function SpaceSetupFormVisit({
             </p>
             {space?.address ? (
               <Link
-                to="/spaces/$address"
-                params={{ address: space.address }}
-                className="inline-flex min-h-11 min-w-11 max-w-full flex-wrap items-center gap-2 text-sm font-medium text-primary underline underline-offset-4"
-              >
+ to="/spaces/$address"
+ params={{ address: space.address }}
+ className="inline-flex max-w-full flex-wrap items-center gap-2 text-primary underline underline-offset-4"
+ >
                 {m.space_setup_home()}
                 <ArrowRight className="size-4 shrink-0 rtl:rotate-180" aria-hidden="true" />
               </Link>
@@ -941,10 +943,10 @@ function SpaceSetupFormVisit({
                 </dl>
                 <ListRowControl className="flex min-w-0 flex-wrap gap-2" data-content-item-slot="actions">
                   <Link
-                    to="/boards/$id"
-                    params={{ id: boardId }}
-                    className="inline-flex min-h-11 min-w-11 max-w-full flex-wrap items-center gap-2 font-medium text-primary underline underline-offset-4"
-                  >
+ to="/boards/$id"
+ params={{ id: boardId }}
+ className="inline-flex max-w-full flex-wrap items-center gap-2 text-primary underline underline-offset-4"
+ >
                     {m.space_setup_open_board()}
                     <ArrowRight className="size-4 shrink-0 rtl:rotate-180" aria-hidden="true" />
                   </Link>

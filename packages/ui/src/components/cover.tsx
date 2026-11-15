@@ -67,7 +67,7 @@ export const coverLabels = {
 
 export type CoverLabels = { readonly [K in keyof typeof coverLabels]: string };
 
-/** The single corner radius used by every cover surface. */
+/** The single corner radius used by every cover surface. Matches the generated card radius. */
 export const coverRadius = 'rounded-lg' as const;
 
 export interface CoverProps {
@@ -163,7 +163,6 @@ export function Cover({
     <div
       className={cn(
         '@container relative max-w-full shrink-0',
-        (action || cover?.withheld) && 'min-h-11 min-w-11',
         className,
       )}
       data-slot="cover"
@@ -247,12 +246,13 @@ export function Cover({
         )}
       </AspectRatio>
       {action && image && state !== 'withheld' && state !== 'placeholder' ? (
-        <button
+        <Button
+          type="button"
+          variant="ghost"
           className={cn(
-            'absolute inset-0 z-[2] cursor-zoom-in focus-visible:ring-4 focus-visible:ring-primary',
+            'absolute inset-0 z-[2] size-full cursor-zoom-in rounded-[inherit] hover:bg-transparent active:translate-y-0',
             coverRadius,
           )}
-          type="button"
           aria-label={action.label}
           onClick={action.onActivate}
         />
@@ -372,7 +372,7 @@ function RevealButton({ text, onReveal }: { text: CoverLabels; onReveal: () => v
         type="button"
         variant="secondary"
         size="sm"
-        className="min-h-11 min-w-11 max-w-full whitespace-normal"
+        className="h-auto min-h-6 max-w-full whitespace-normal"
         onClick={onReveal}
         aria-label={text.reveal}
       >

@@ -113,7 +113,7 @@ export function CollectionPublicationWorkspace({
                 ref={mobileReviewTrigger}
                 type="button"
                 variant="outline"
-                className="h-auto min-h-11 w-full whitespace-normal text-start lg:hidden"
+                className="h-auto min-h-7 w-full whitespace-normal text-start lg:hidden"
                 aria-controls="publication-review-panel"
                 onClick={showReview}
               >
@@ -132,7 +132,7 @@ export function CollectionPublicationWorkspace({
               <Button
                 type="button"
                 variant="outline"
-                className="h-auto min-h-11 w-full whitespace-normal text-start lg:hidden"
+                className="h-auto min-h-7 w-full whitespace-normal text-start lg:hidden"
                 aria-controls="publication-candidate-panel"
                 onClick={showSelection}
               >

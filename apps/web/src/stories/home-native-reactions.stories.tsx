@@ -4,6 +4,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { HomeFeed } from '../features/pages/home-feed';
 import type { FeedItem, FeedPage } from '../features/pages/home-feed-read';
 import { getLocale } from '../paraglide/runtime.js';
+import { Button } from '@rezics/ui/shadcn/button';
 
 function PreparedHome({ anonymous = false }: { anonymous?: boolean }) {
   const [signedIn, setSignedIn] = useState(!anonymous);
@@ -64,18 +65,16 @@ function PreparedHome({ anonymous = false }: { anonymous?: boolean }) {
           These fixtures do not prove native delivery, including anonymous Content discovery.
         </p>
         <div className="flex flex-wrap gap-4">
-          <button className="min-h-11 underline" onClick={() => setRevision(revision + 1)}>
+          <Button type="button" variant="link" size="sm" onClick={() => setRevision(revision + 1)}>
             Replace page
-          </button>
-          <button
-            className="min-h-11 underline"
-            onClick={() => {
+          </Button>
+          <Button type="button" variant="link" size="sm" onClick={() => {
               client.setQueryData(['session'], { state: 'signed-out', subject: null, csrfToken: null });
               setSignedIn(false);
             }}
           >
             Revoke viewer
-          </button>
+          </Button>
         </div>
         <HomeFeed result={result} locale={getLocale()} signedIn={signedIn} />
       </div>

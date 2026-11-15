@@ -49,10 +49,15 @@ export function BottomSheet({
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2">
             {before}
-            <DrawerTitle className="min-w-0 flex-1 text-left [overflow-wrap:anywhere]">{title}</DrawerTitle>
+            <DrawerTitle className="min-w-0 flex-1 text-start [overflow-wrap:anywhere]">{title}</DrawerTitle>
             <DrawerClose
               render={
-                <Button variant="ghost" className="min-h-11 shrink-0" data-responsive-control-id={closeControlId} />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="shrink-0"
+                  data-responsive-control-id={closeControlId}
+                />
               }
             >
               {label}

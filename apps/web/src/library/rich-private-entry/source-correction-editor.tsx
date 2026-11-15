@@ -2,26 +2,15 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useId, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../../paraglide/messages.js';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 import type {
   PersonalEntryObservation,
   PersonalEntryPrivacyValue,
   PersonalEntrySourceCorrection,
   PersonalEntryTimestampInput,
 } from '@rezics/client';
-import {
-  buildSourceCorrection,
-  inspectSourceTimestamp,
-  sourceCorrectionDraftOf,
-  sourceCorrectionHasChanges,
-  type CorrectionOperation,
-  type PrivacyChoice,
-  type PrivacyCorrectionDraft,
-  type SourceCorrectionDraft,
-  type SourceCorrectionIssue,
-  type TimestampShape,
-  type TimestampChoice,
-  type TimestampCorrectionDraft,
-} from './source-correction';
+import { buildSourceCorrection, inspectSourceTimestamp, sourceCorrectionDraftOf, sourceCorrectionHasChanges, type CorrectionOperation, type PrivacyChoice, type PrivacyCorrectionDraft, type SourceCorrectionDraft, type SourceCorrectionIssue, type TimestampShape, type TimestampChoice, type TimestampCorrectionDraft } from './source-correction';
 
 export type SourceCorrectionNotice =
   | 'saved'
@@ -180,13 +169,13 @@ function FieldStatus({ title, before, after }: { title: string; before: string; 
         <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {m.library_rich_entry_before()}
         </span>
-        <span className="break-words">{before}</span>
+        <span className="h-auto break-words">{before}</span>
       </dd>
       <dd>
         <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {m.library_rich_entry_after()}
         </span>
-        <span className="break-words">{after}</span>
+        <span className="h-auto break-words">{after}</span>
       </dd>
     </div>
   );
@@ -229,7 +218,7 @@ function ModeSelect({
         <SelectTrigger
           id={correctionModeSelectId}
           aria-labelledby={`${correctionModeSelectId}-label`}
-          className="min-h-11 w-full rounded-md border bg-background px-3"
+          className='w-full'
         >
           <SelectValue />
         </SelectTrigger>
@@ -303,7 +292,7 @@ function PrivacyCorrectionField({
               <SelectTrigger
                 id={privacyKindSelectId}
                 aria-labelledby={`${privacyKindSelectId}-label`}
-                className="min-h-11 w-full rounded-md border bg-background px-3"
+                className='w-full'
               >
                 <SelectValue />
               </SelectTrigger>
@@ -321,8 +310,8 @@ function PrivacyCorrectionField({
           {draft.choice === 'unknown' ? (
             <label className="block">
               <span className="mb-1 block text-sm font-medium">{m.library_rich_entry_raw_privacy_value()}</span>
-              <input
-                className="min-h-11 w-full rounded-md border bg-background px-3"
+              <Input
+                className='w-full'
                 type="text"
                 maxLength={192}
                 value={draft.sourceValue}
@@ -411,7 +400,7 @@ function TimestampCorrectionField({
               <SelectTrigger
                 id={timestampKindSelectId}
                 aria-labelledby={`${timestampKindSelectId}-label`}
-                className="min-h-11 w-full rounded-md border bg-background px-3"
+                className='w-full'
               >
                 <SelectValue />
               </SelectTrigger>
@@ -429,9 +418,9 @@ function TimestampCorrectionField({
           {draft.choice === 'known' ? (
             <label className="block">
               <span className="mb-1 block text-sm font-medium">{m.library_rich_entry_timestamp_text()}</span>
-              <input
+              <Input
                 id={valueId}
-                className="min-h-11 w-full rounded-md border bg-background px-3 font-mono"
+                className='w-full font-mono'
                 type="text"
                 inputMode="text"
                 autoComplete="off"
@@ -450,8 +439,8 @@ function TimestampCorrectionField({
           {draft.choice === 'unknown' ? (
             <label className="block">
               <span className="mb-1 block text-sm font-medium">{m.library_rich_entry_raw_timestamp_value()}</span>
-              <input
-                className="min-h-11 w-full rounded-md border bg-background px-3 font-mono"
+              <Input
+                className='w-full font-mono'
                 type="text"
                 inputMode="text"
                 autoComplete="off"
@@ -485,15 +474,15 @@ function CurrentFacts({ observation }: { observation: PersonalEntryObservation |
       <dl className="grid gap-2 sm:grid-cols-2">
         <div>
           <dt className="text-sm font-medium">{m.library_rich_entry_privacy()}</dt>
-          <dd className="break-words">{privacyFactText(observation.privacy)}</dd>
+          <dd className="h-auto break-words">{privacyFactText(observation.privacy)}</dd>
         </div>
         <div>
           <dt className="text-sm font-medium">{m.library_rich_entry_source_created()}</dt>
-          <dd className="break-words">{timestampFactText(observation.sourceCreated)}</dd>
+          <dd className="h-auto break-words">{timestampFactText(observation.sourceCreated)}</dd>
         </div>
         <div>
           <dt className="text-sm font-medium">{m.library_rich_entry_source_updated()}</dt>
-          <dd className="break-words">{timestampFactText(observation.sourceUpdated)}</dd>
+          <dd className="h-auto break-words">{timestampFactText(observation.sourceUpdated)}</dd>
         </div>
       </dl>
     </div>
@@ -528,7 +517,7 @@ function SavedResult({
         {rows.map(({ field, value }) => (
           <li key={field} className="grid gap-1 sm:grid-cols-[8rem_1fr]">
             <span className="font-medium">{labels[field]}</span>
-            <span className="break-words">
+            <span className="h-auto break-words">
               {body[field].op === 'unchanged'
                 ? m.library_rich_entry_source_preserved({ value })
                 : m.library_rich_entry_source_field_saved({ value })}
@@ -616,14 +605,14 @@ export function SourceCorrectionEditor({
         <div className="space-y-2 rounded-md border border-amber-500/50 p-3" role="status">
           <p>{m.library_rich_entry_source_unknown_outcome()}</p>
           {pending ? (
-            <button
+            <Button
               type="button"
-              className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground disabled:opacity-50"
+              variant="default"
               disabled={disabled}
               onClick={onRetry}
             >
               {m.library_rich_entry_source_retry_original()}
-            </button>
+            </Button>
           ) : null}
         </div>
       ) : null}
@@ -635,17 +624,17 @@ export function SourceCorrectionEditor({
             <CurrentFacts observation={current} />
           </div>
           {current && current.revision !== conflictRevision ? (
-            <button
+            <Button
               type="button"
-              className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground"
+              variant="default"
               onClick={onReviewLatest}
             >
               {m.library_rich_entry_review_latest()}
-            </button>
+            </Button>
           ) : (
-            <button type="button" className="min-h-11 rounded-md border px-3" onClick={onRefresh}>
+            <Button type="button" variant="outline" onClick={onRefresh}>
               {m.library_selection_retry()}
-            </button>
+            </Button>
           )}
         </section>
       ) : null}
@@ -655,13 +644,13 @@ export function SourceCorrectionEditor({
           <p>{m.library_rich_entry_source_revision_changed()}</p>
           <CurrentFacts observation={current} />
           {current && basisIsCurrent ? (
-            <button
+            <Button
               type="button"
-              className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground"
+              variant="default"
               onClick={onReviewLatest}
             >
               {m.library_rich_entry_review_latest()}
-            </button>
+            </Button>
           ) : null}
         </section>
       ) : null}
@@ -722,7 +711,7 @@ export function SourceCorrectionEditor({
             {m.library_rich_entry_source_no_changes()}
           </p>
         ) : null}
-        <label className="flex min-h-11 items-start gap-2">
+        <label className="flex items-start gap-2">
           <input
             className="mt-1"
             type="checkbox"
@@ -735,16 +724,16 @@ export function SourceCorrectionEditor({
       </section>
 
       <div className="flex flex-col gap-2 sm:flex-row">
-        <button
+        <Button
           type="submit"
-          className="min-h-11 w-full rounded-md bg-primary px-4 text-primary-foreground disabled:opacity-50 sm:w-auto"
+          variant="default" className='w-full sm:w-auto'
           disabled={!canSubmit}
         >
           {m.library_rich_entry_save_source_correction()}
-        </button>
-        <button type="button" className="min-h-11 w-full rounded-md border px-3 sm:w-auto" onClick={onCancel}>
+        </Button>
+        <Button type="button" variant="outline" className='w-full sm:w-auto' onClick={onCancel}>
           {m.library_rich_entry_cancel()}
-        </button>
+        </Button>
       </div>
     </form>
   );

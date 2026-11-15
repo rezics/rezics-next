@@ -39,7 +39,7 @@ export function QualifiedCredit({
   inspection?: ReactNode;
 }) {
   return (
-    <div className="min-w-0 [&_h3_a]:inline-block [&_h3_a]:min-h-11 [&_h3_a]:max-w-full [&_h3_a]:min-w-11 [&_h3_a]:whitespace-pre-wrap">
+    <div className="min-w-0 [&_h3_a]:inline-block [&_h3_a]:max-w-full [&_h3_a]:whitespace-pre-wrap">
       <CoverCard
         title={title}
         {...(titleLang ? { titleLang } : {})}
@@ -79,7 +79,7 @@ export function QualifiedCredit({
                         <value.link
                           href={relationTargetHref(note.subject, value.locale, value.context)}
                           lang={note.language}
-                          className="inline-block min-h-11 min-w-11 max-w-full py-2.5 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                          className="inline-block max-w-full text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                         >
                           {note.text}
                         </value.link>

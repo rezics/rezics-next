@@ -143,7 +143,7 @@ function CreationCorrection({
     <span ref={ref}>
       {current.available ? (
         <a
-          className="inline-flex min-h-11 max-w-full items-center whitespace-normal underline [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="inline-flex max-w-full items-center whitespace-normal underline [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           href={`#${encodeURIComponent(id ?? '')}`}
           lang={current.label ? current.language : locale}
           onClick={(event) => {
@@ -978,7 +978,7 @@ function CreateSubjectFormLive({
                           <FieldDescription id={`${id}-help`}>
                             {m.catalogue_create_duplicate_help({}, options)}{' '}
                             <a
-                              className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+                              className="inline-flex items-center text-primary underline underline-offset-4"
                               href={`/${locale}/search${row.label.trim() ? `?q=${encodeURIComponent(row.label.trim())}` : ''}`}
                               target="_blank"
                               rel="noopener noreferrer"
@@ -1168,7 +1168,7 @@ function CreateSubjectFormLive({
                 </FieldDescription>
                 {type ? (
                   <details className="min-w-0 text-sm">
-                    <summary className="min-h-11 cursor-pointer content-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                    <summary className="cursor-pointer content-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                       {m.catalogue_creation_technical_details({}, options)}
                     </summary>
                     <dl className="flex min-w-0 flex-col gap-1 py-2">
@@ -1303,7 +1303,7 @@ function CreateSubjectFormLive({
                             locale={locale}
                           />
                           <details className="min-w-0 text-sm">
-                            <summary className="min-h-11 cursor-pointer content-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                            <summary className="cursor-pointer content-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                               {m.catalogue_creation_technical_details({}, options)}
                             </summary>
                             {fieldErrors.map((error, index) => (
@@ -1364,12 +1364,12 @@ function CreateSubjectFormLive({
           )}
           {!profile && (
             <details className="rounded-xl border border-border p-4">
-              <summary className="min-h-11 cursor-pointer content-center font-medium">
+              <summary className="cursor-pointer content-center font-medium">
                 {m.facts_other_editors({}, options)}
               </summary>
               <nav
                 aria-label={m.facts_other_editors({}, options)}
-                className="mt-3 flex flex-wrap gap-2 [&>a]:h-auto [&>a]:max-w-full [&>a]:min-h-11 [&>a]:min-w-11 [&>a]:whitespace-normal"
+                className="mt-3 flex flex-wrap gap-2 [&>a]:h-auto [&>a]:min-h-7 [&>a]:max-w-full [&>a]:whitespace-normal"
               >
                 <LiteraryProfileEntry locale={locale} />
                 <GameProfileEntry locale={locale} />

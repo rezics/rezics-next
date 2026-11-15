@@ -1,4 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
+import { cn } from '@rezics/ui/utils';
 import { ContentItemFrame } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
@@ -6,12 +7,11 @@ import { subjectHref } from '../../../subject/subject-href';
 import { CandidateValue } from '../../pages/data';
 import { contextHref } from '../../pages/context-navigation';
 import { useSubjectCommunityReading } from '../../pages/subject-community-lifetime';
-import { linkClass, linkColor } from '../../pages/shared';
 import type { AlbumTrackAddress, AlbumTrackRead, AlbumTrackTransport } from './model';
 
 const action =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal [overflow-wrap:anywhere] rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const link = `${action} ${linkClass} ${linkColor} underline`;
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
+const link = cn(buttonVariants({ variant: 'link' }), action, 'underline');
 type Ready = Extract<AlbumTrackRead, { ok: true }>;
 type Failure = Extract<AlbumTrackRead, { ok: false }>;
 type Props = {
@@ -262,7 +262,7 @@ export function AlbumTrackWindow({
               type="button"
               aria-pressed={stream.key === selectedStream}
               disabled={busy}
-              className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+              className={cn(buttonVariants({ variant: 'outline' }), action)}
               onClick={request({ ...base, stream: stream.key })}
             >
               <span lang={stream.label.lang ?? undefined}>{stream.label.text || stream.property}</span>
@@ -321,7 +321,7 @@ export function AlbumTrackWindow({
                       aria-controls={selectedKey === key ? inspectionId : undefined}
                       aria-label={`${m.album_tracks_inspect({}, o)}: ${summary?.label?.value || m.work_parts_unresolved({}, o)}; ${row.holder}; ${row.statementId}`}
                       disabled={busy}
-                      className={`${action} w-full flex-col items-start gap-1 text-left`}
+                      className={cn(buttonVariants({ variant: 'ghost' }), action, 'w-full flex-col items-start gap-1')}
                       onClick={(event) => {
                         if (!current()) return;
                         selectionOpener.current = event.currentTarget;
@@ -381,7 +381,7 @@ export function AlbumTrackWindow({
                       </h3>
                       <button
                         type="button"
-                        className={`${buttonVariants({ variant: 'outline' })} ${action} shrink-0`}
+                        className={cn(buttonVariants({ variant: 'outline' }), action, 'shrink-0')}
                         onClick={closeInspection}
                       >
                         {m.candidate_close({}, o)}
@@ -517,7 +517,7 @@ export function AlbumTrackWindow({
         <button
           type="button"
           disabled={busy || previousCount === 0}
-          className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+          className={cn(buttonVariants({ variant: 'outline' }), action)}
           onClick={request(priorAddresses.current.at(-1) ?? base, true)}
         >
           {m.album_tracks_previous({}, o)}
@@ -525,7 +525,7 @@ export function AlbumTrackWindow({
         <button
           type="button"
           disabled={busy}
-          className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+          className={cn(buttonVariants({ variant: 'outline' }), action)}
           onClick={request({ ...base, ...(selectedStream ? { stream: selectedStream } : {}) })}
         >
           {m.work_parts_restart({}, o)}
@@ -533,7 +533,7 @@ export function AlbumTrackWindow({
         {failure ? (
           <button
             type="button"
-            className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+            className={cn(buttonVariants({ variant: 'outline' }), action)}
             disabled={busy}
             onClick={(event) =>
               read(pending.current, event.currentTarget, event.detail === 0, pendingIsPrevious.current)
@@ -546,7 +546,7 @@ export function AlbumTrackWindow({
           <button
             type="button"
             disabled={busy}
-            className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+            className={cn(buttonVariants({ variant: 'outline' }), action)}
             onClick={request({ ...base, stream: page.stream!.key, cursor: page.next })}
           >
             {m.work_parts_more({}, o)}

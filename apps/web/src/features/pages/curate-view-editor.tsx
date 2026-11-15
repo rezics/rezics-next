@@ -97,14 +97,13 @@ import type { DraftPreviewRead } from './draft-preview';
 
 const PageEditor = lazy(() => import('./editor').then((module) => ({ default: module.PageEditor })));
 
-const editorControlClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]';
-const editorSelectClass = 'w-full min-w-0 max-w-full min-h-11';
-const editorInputClass = 'min-h-11';
+const editorControlClass = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const editorSelectClass = 'w-full min-w-0 max-w-full';
 const editorDisclosureClass =
-  'min-h-11 min-w-11 cursor-pointer rounded-md py-2 text-muted-foreground [overflow-wrap:anywhere] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
+  'cursor-pointer text-muted-foreground [overflow-wrap:anywhere] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
 // Scope consumer styling to editor-owned recovery, leaving the supplied preview and Puck untouched.
 const editorRecoveryClass =
-  'contents [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:[overflow-wrap:anywhere] [&_summary]:min-h-11 [&_summary]:min-w-11 [&_summary]:cursor-pointer [&_summary]:rounded-md [&_summary]:py-2 [&_summary]:[overflow-wrap:anywhere] [&_summary]:focus-visible:outline-none [&_summary]:focus-visible:ring-2 [&_summary]:focus-visible:ring-ring [&_summary]:focus-visible:ring-offset-2 [&_pre]:focus-visible:ring-2 [&_pre]:focus-visible:ring-ring';
+  'contents [&_button]:h-auto [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:[overflow-wrap:anywhere] [&_summary]:cursor-pointer [&_summary]:[overflow-wrap:anywhere] [&_summary]:focus-visible:outline-none [&_summary]:focus-visible:ring-2 [&_summary]:focus-visible:ring-ring [&_summary]:focus-visible:ring-offset-2 [&_pre]:focus-visible:ring-2 [&_pre]:focus-visible:ring-ring';
 
 /** The existing whole-profile publication helper owns transport; no retry protocol lives in the editor. */
 export type CurationEditorTransport = PublicationTransport & {
@@ -1564,7 +1563,6 @@ function AdmittedPresentationViewEditor({
               <FieldLabel htmlFor={`${formId}-key`}>{m.curation_key({}, options)}</FieldLabel>
               <Input
                 id={`${formId}-key`}
-                className={editorInputClass}
                 aria-describedby={key ? `${formId}-add-hint ${formId}-key-value` : `${formId}-add-hint`}
                 value={key}
                 onChange={(event) => isCurrent() && setOwned(setKey, event.target.value)}

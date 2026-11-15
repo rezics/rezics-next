@@ -5,18 +5,7 @@ import { useAuthoringDeparture } from '../../threads/authoring-departure';
 import type { ProgressSessionPage, ProgressSessionView, ProgressSnapshot } from '../progress-reads';
 import { progressDecimalIssue } from '../progress-decimal-input';
 import { collectEdits, sameCommand, sessionHasIndependentMeasures, type IndependentVisit } from './contract';
-import {
-  acknowledgeIndependentRetry,
-  applyIndependentOutcome,
-  cancelIndependentReview,
-  editMeasure,
-  independentDirty,
-  independentLocked,
-  readyVisit,
-  refreshIndependentVisit,
-  stageIndependentReview,
-  submitIndependentVisit,
-} from './controller';
+import { acknowledgeIndependentRetry, applyIndependentOutcome, cancelIndependentReview, editMeasure, independentDirty, independentLocked, readyVisit, refreshIndependentVisit, stageIndependentReview, submitIndependentVisit } from './controller';
 import { recordProgressSession } from '../progress-server';
 import { bindMeasureCommand, outcomeFromResult, retryOriginal, type MeasureSender } from './commands';
 import { IndependentMeasuresEditor } from './editor';

@@ -1,5 +1,5 @@
 import { Cover } from '@rezics/ui/cover';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { ChevronRight, Search, X } from 'lucide-react';
 import { m } from '../paraglide/messages.js';
 import { getLocale, locales } from '../paraglide/runtime.js';
@@ -269,9 +269,9 @@ export function RecentHistoryView(props: NativeViewProps | (RecentHistory & { hi
             {m.search_history_clear()}
           </Button>
         ) : (
-          <a href={`/${locale}/search/history`} className="flex items-center text-sm text-muted-foreground">
+          <a href={`/${locale}/search/history`} className={buttonVariants({ variant: 'link', size: 'sm' })}>
             {m.search_history()}
-            <ChevronRight aria-hidden="true" className="size-4" />
+            <ChevronRight aria-hidden="true" />
           </a>
         )}
       </div>
@@ -361,7 +361,7 @@ export function RecentHistoryView(props: NativeViewProps | (RecentHistory & { hi
                   onRemove(item.id);
                 }}
               >
-                <X aria-hidden="true" className="size-4" />
+                <X aria-hidden="true" />
               </Button>
             </li>
           );

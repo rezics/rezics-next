@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { RECOVERY_UPLOAD_BYTES } from './contract';
 import { m } from '../../paraglide/messages.js';
 import { actionClass } from '../private-export/controls';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 
 function base64(bytes: Uint8Array): string {
   const parts: string[] = [];
@@ -171,11 +173,11 @@ export function ArchiveCollectionRecoveryUpload({
       <form className="grid gap-4" aria-busy={preparing || undefined} onSubmit={(event) => void submit(event)}>
         <label className="grid gap-2">
           <span className="font-medium">{m.library_archive_recovery_file()}</span>
-          <input
+          <Input
             ref={input}
             type="file"
             accept="application/json,.json"
-            className="min-h-11 max-w-full rounded-md border p-2"
+            className='max-w-full'
             disabled={busy || locked || preparing}
             onChange={(event) => {
               if (!currentCheck.current()) return;
@@ -204,32 +206,32 @@ export function ArchiveCollectionRecoveryUpload({
                 : m.library_archive_recovery_upload_read_failed()}
           </p>
         ) : null}
-        <button className={actionClass} type="submit" disabled={!hasFile || busy || locked || preparing}>
+        <Button variant="outline" className={actionClass} type="submit" disabled={!hasFile || busy || locked || preparing}>
           {preparing
             ? m.library_archive_recovery_preparing()
             : busy
               ? m.library_archive_recovery_uploading()
               : m.library_archive_recovery_upload_action()}
-        </button>
+        </Button>
         {canUseOriginal ? (
-          <button
-            className={actionClass}
+          <Button
+            variant="outline" className={actionClass}
             type="button"
             disabled={busy || locked || preparing}
             onClick={() => void onUseOriginal()}
           >
             {m.library_archive_recovery_restart_original()}
-          </button>
+          </Button>
         ) : null}
         {canUseCompleted && !canUseOriginal ? (
-          <button
-            className={actionClass}
+          <Button
+            variant="outline" className={actionClass}
             type="button"
             disabled={busy || locked || preparing}
             onClick={() => void onUseCompleted()}
           >
             {m.library_archive_use_completed_export()}
-          </button>
+          </Button>
         ) : null}
       </form>
       {canUseCompleted || canUseOriginal ? <p>{m.library_archive_completed_export_help()}</p> : null}

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Badge } from '@rezics/ui/shadcn/badge';
 import { m } from '../../paraglide/messages.js';
 import type { RecoveryCollection } from './contract';
 
@@ -83,11 +84,12 @@ export function ArchiveCollectionWorkspace({
           <ol className="flex flex-wrap gap-2 text-sm">
             {steps.map((step, index) => (
               <li key={step} aria-current={currentStep === step ? 'step' : undefined}>
-                <span
-                  className={`inline-flex min-h-11 items-center rounded-full border px-3 ${currentStep === step ? 'border-primary bg-primary/10 font-semibold' : ''}`}
+                <Badge
+                  variant={currentStep === step ? 'default' : 'outline'}
+                  className="h-auto min-h-5 max-w-full whitespace-normal"
                 >
                   {index + 1}. {stepLabel(step)}
-                </span>
+                </Badge>
               </li>
             ))}
           </ol>
@@ -103,11 +105,11 @@ export function ArchiveCollectionWorkspace({
               aria-label={m.library_archive_recovery_selected_label()}
             >
               <p className="text-xs font-medium text-muted-foreground">{m.library_archive_recovery_selected_label()}</p>
-              <p className="break-words font-medium">
+              <p className="h-auto break-words font-medium">
                 {collection.title || m.library_archive_recovery_untitled()}
               </p>
               {collection.description ? (
-                <p className="whitespace-pre-wrap break-words text-sm">{collection.description}</p>
+                <p className="h-auto whitespace-pre-wrap break-words text-sm">{collection.description}</p>
               ) : null}
               <p className="text-sm text-muted-foreground">
                 {m.library_archive_recovery_collection_members({ count: collection.memberCount })}

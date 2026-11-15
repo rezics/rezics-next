@@ -5,6 +5,7 @@ import subject from '../kernel/recorded/subject.json';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { Byline, fullDateTime, timeText } from '../threads/byline';
+import { Button } from '@rezics/ui/shadcn/button';
 
 const createdAt = '2026-11-02T11:00:00.000Z';
 const revisedAt = '2026-11-02T11:30:00.000Z';
@@ -61,17 +62,17 @@ const meta = {
   },
   render: (args, { parameters }) => (
     <main id="thread" dir={parameters.direction ?? 'ltr'} className="mx-auto min-w-0 max-w-3xl space-y-4 p-4 sm:p-8">
-      <button type="button" data-before-byline className="min-h-11 rounded-sm px-3">
+      <Button type="button" data-before-byline variant="outline" size="sm">
         Before profile link
-      </button>
+      </Button>
       <Byline {...args}>
         <time dateTime={revisedAt} title={fullDateTime(revisedAt, getLocale())}>
           {m.thread_post_edited()}
         </time>
       </Byline>
-      <button type="button" data-after-byline className="min-h-11 rounded-sm px-3">
+      <Button type="button" data-after-byline variant="outline" size="sm">
         After profile link
-      </button>
+      </Button>
     </main>
   ),
 } satisfies Meta<typeof Byline>;

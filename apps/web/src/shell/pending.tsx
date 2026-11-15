@@ -92,10 +92,10 @@ export function RouteLoading({ layout = 'page' }: { layout?: PendingLayout }) {
             {[0, 1, 2].map((row) => (
               <div key={row} className="space-y-2">
                 <div data-skeleton-block className={`${block} h-4 w-24`} />
-                <div data-skeleton-block className={`${block} ${row === 2 ? 'h-32' : 'h-11'} w-full`} />
+                <div data-skeleton-block className={`${block} ${row === 2 ? 'h-32' : 'h-7'} w-full`} />
               </div>
             ))}
-            <div data-skeleton-block className={`${block} h-11 w-32`} />
+            <div data-skeleton-block className={`${block} h-7 w-32`} />
           </div>
         ) : (
           <div className="max-w-3xl space-y-4">

@@ -1,9 +1,10 @@
 import { Button } from '@rezics/ui/shadcn/button';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import type { Locale } from '../paraglide/runtime.js';
 import type { HostedReleasePreparationVisit, ReleaseState } from './hosted-release-preparation';
 import { releaseSelectionCopy } from './hosted-release-selection-copy';
 
-const control = 'min-h-11 max-w-full whitespace-normal text-start';
+const control = 'h-auto min-h-7 max-w-full whitespace-normal text-start';
 const valueStyle = 'min-w-0 break-all font-mono text-sm';
 
 export function HostedReleaseSelectionView({
@@ -71,13 +72,12 @@ export function HostedReleaseSelectionView({
               <ul className="min-w-0 divide-y rounded-lg border px-3">
                 {outline.page.items.map((item) => (
                   <li key={item.occurrenceId} className="min-w-0 py-2">
-                    <label className="flex min-h-11 min-w-0 items-start gap-3 py-2">
-                      <input
-                        type="checkbox"
-                        className="mt-1 size-5 shrink-0"
+                    <label className="flex min-w-0 items-start gap-3">
+                      <Checkbox
+                        className="mt-0.5"
                         checked={choices.includes(item.occurrenceId)}
                         disabled={!editable || item.availability !== 'available'}
-                        onChange={() => visit.choosePlacement(item.occurrenceId)}
+                        onCheckedChange={() => visit.choosePlacement(item.occurrenceId)}
                       />
                       <span className="min-w-0 space-y-1">
                         <span className="block break-words font-medium">

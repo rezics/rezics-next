@@ -1,4 +1,5 @@
 import type { NoticeInboxItem } from '@rezics/client';
+import { Button } from '@rezics/ui/shadcn/button';
 import { ArrowLeft, Bell, ExternalLink, Flag, Gavel, MessageCircleReply } from 'lucide-react';
 import { m } from '../paraglide/messages.js';
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
@@ -54,13 +55,15 @@ export function InboxNoticeDetailView({
   return (
     <main aria-labelledby="inbox-notice-heading" className="min-h-screen w-full bg-background">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-10">
-        <a
-          href={inboxNoticeBackHref(selection, cursor)}
-          className="inline-flex min-h-11 min-w-11 w-fit max-w-full items-center gap-2 whitespace-normal rounded-sm underline underline-offset-4 wrap-anywhere focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        <Button
+          variant="link"
+          className="h-auto min-h-7 w-fit max-w-full whitespace-normal"
+          nativeButton={false}
+          render={<a href={inboxNoticeBackHref(selection, cursor)} />}
         >
-          <ArrowLeft aria-hidden="true" size={18} className="shrink-0" />
+          <ArrowLeft aria-hidden="true" className="shrink-0" />
           <span className="min-w-0 wrap-anywhere">{m.inbox_notice_back()}</span>
-        </a>
+        </Button>
         <article className="grid min-w-0 gap-6 rounded-xl border border-border p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)] lg:gap-10">
           <div className="min-w-0 wrap-anywhere">
             <header className="max-w-prose">
@@ -111,17 +114,18 @@ export function InboxNoticeDetailView({
 
           <section
             aria-label={m.inbox_notice_destination()}
-            className="grid min-w-0 content-start gap-3 rounded-xl border-2 border-primary/30 bg-muted/30 p-4 sm:p-5"
+            className="grid min-w-0 content-start gap-3 rounded-xl border border-border bg-muted/40 p-4 sm:p-5"
           >
             <h2 className="text-base font-semibold wrap-anywhere">{m.inbox_notice_destination()}</h2>
             {destination ? (
-              <a
-                href={destination}
-                className="inline-flex min-h-11 min-w-11 w-full max-w-full items-center justify-center gap-2 whitespace-normal rounded-md bg-primary px-4 py-3 text-center font-medium text-primary-foreground underline-offset-4 wrap-anywhere hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              <Button
+                className="h-auto min-h-7 w-full max-w-full whitespace-normal"
+                nativeButton={false}
+                render={<a href={destination} />}
               >
-                <ExternalLink aria-hidden="true" size={17} className="shrink-0" />
+                <ExternalLink aria-hidden="true" className="shrink-0" />
                 <span className="min-w-0 wrap-anywhere">{m.inbox_notice_open_destination()}</span>
-              </a>
+              </Button>
             ) : (
               <p role="status" className="text-sm text-muted-foreground">
                 {m.inbox_notice_destination_unavailable()}

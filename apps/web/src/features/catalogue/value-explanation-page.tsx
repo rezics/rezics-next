@@ -178,7 +178,7 @@ export function ValueExplanationPage({
   }
   return (
     <article
-      className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-6 whitespace-normal [overflow-wrap:anywhere] [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring [&_pre]:max-w-full [&_pre]:whitespace-pre-wrap"
+      className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-6 whitespace-normal [overflow-wrap:anywhere] [&_a]:inline-flex [&_a]:max-w-full [&_a]:items-center [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring [&_pre]:max-w-full [&_pre]:whitespace-pre-wrap"
       aria-busy={busy}
       data-slot="value-explanation"
     >
@@ -187,7 +187,7 @@ export function ValueExplanationPage({
           <a
             href={page.href}
             lang={page.title.lang}
-            className="inline-flex min-h-11 min-w-11 max-w-full items-center text-xl font-semibold underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="inline-flex max-w-full items-center text-xl font-semibold underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             {page.title.text || m.subject_value_unlabelled({}, o)}
           </a>
@@ -231,7 +231,7 @@ export function ValueExplanationPage({
         <>
           <nav
             aria-label={m.value_why({}, o)}
-            className="flex min-w-0 flex-wrap gap-x-5 gap-y-3 text-sm text-primary [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:underline [&_a]:underline-offset-4 [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
+            className="flex min-w-0 flex-wrap gap-x-5 gap-y-3 text-sm text-primary [&_a]:inline-flex [&_a]:max-w-full [&_a]:items-center [&_a]:underline [&_a]:underline-offset-4 [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
           >
             <Link href={page.href}>{m.changes_current({}, o)}</Link>
             <Link href={`${page.href}/sources`}>{m.subject_sources({}, o)}</Link>
@@ -336,7 +336,7 @@ export function ValueExplanationPage({
                   {competition?.kind === 'not-returned' && competition.next !== null && onMore && (
                     <Button
                       variant="outline"
-                      className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]"
+                      className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]"
                       disabled={busy}
                       data-value-action="more"
                       onClick={(event) => activate(event, 'more', (action) => onMore(competition.next!, action))}
@@ -377,7 +377,7 @@ export function ValueExplanationPage({
             </div>
           )}
           <details className="min-w-0 rounded-xl border border-border p-4 text-sm">
-            <summary className="min-h-11 cursor-pointer py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            <summary className="cursor-pointer font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
               {m.catalogue_technical_details({}, o)}
             </summary>
             {statement && <p className="mt-4 text-muted-foreground">{m.value_basis({}, o)}</p>}
@@ -431,7 +431,7 @@ export function ValueExplanationPage({
           {onRetry && (
             <Button
               variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]"
+              className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]"
               disabled={busy}
               data-value-action="retry"
               onClick={(event) => activate(event, 'retry', onRetry)}
@@ -442,7 +442,7 @@ export function ValueExplanationPage({
           {onReload && (
             <Button
               variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]"
+              className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]"
               disabled={busy}
               data-value-action="reload"
               onClick={(event) => activate(event, 'reload', onReload)}

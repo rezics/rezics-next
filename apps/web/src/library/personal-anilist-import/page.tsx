@@ -19,6 +19,7 @@ import { AniListApplying, AniListCancelledNotice, AniListRemovedNotice, AniListS
 import { AniListUploadForm } from './upload';
 import { useAniListVisit, type AniListVisit } from './visit';
 import { AniListWorkspace } from './anilist-workspace';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 
 function noticeText(notice: AniListJourneySnapshot['notice']): string | null {
   if (!notice) return null;
@@ -150,7 +151,7 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
           >
             {m.library_anilist_fresh_read()}
           </AniListAction>
-          <a href={`/${getLocale()}/library`} className="inline-flex min-h-11 items-center px-3 py-2 underline">
+          <a href={`/${getLocale()}/library`} className={buttonVariants({ variant: 'link' })}>
             {m.library_anilist_return_library()}
           </a>
         </>

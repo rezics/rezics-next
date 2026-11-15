@@ -12,7 +12,7 @@ import {
   type FactsCurrent,
 } from './subject-facts';
 
-const wrap = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2';
+const wrap = 'h-auto min-h-7 max-w-full whitespace-normal break-words';
 
 export function FactsChangedReview({
   items,

@@ -163,7 +163,7 @@ function QueueGeneration({
           {m.moderation_queue_error()}
         </ContentItemHeading>
         {onRetry ? (
-          <Button variant="outline" className="min-h-11" onClick={() => requestNavigation(() => onRetry?.())}>
+          <Button variant="outline" onClick={() => requestNavigation(() => onRetry?.())}>
             {m.moderation_queue_retry()}
           </Button>
         ) : null}
@@ -193,7 +193,7 @@ function QueueGeneration({
                       disabled={!controller.selectable(report.id)}
                       onCheckedChange={() => controller.toggle(report.id)}
                     />
-                    <FieldLabel htmlFor={`${selectionId}-${index}`} className="min-h-11">
+                    <FieldLabel htmlFor={`${selectionId}-${index}`}>
                       {m.moderation_bulk_select_report({ number: index + 1 })}
                     </FieldLabel>
                   </Field>
@@ -227,9 +227,9 @@ function QueueGeneration({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">{m.moderation_queue_next_hint()}</p>
           <Button
-            variant="outline"
-            className="min-h-11"
-            onClick={() => {
+ variant="outline"
+ 
+ onClick={() => {
               if (!controller.isCurrent()) return;
               requestNavigation(() => onNext?.(next));
             }}

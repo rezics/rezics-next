@@ -1,18 +1,13 @@
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useId, useEffect, useRef, useState } from 'react';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { publicationReadWithin } from '../collection-publication';
 import { isRecord } from '../collection-records';
-import {
-  queryPublicationAddress,
-  queryPublicationInput,
-  type QueryPublicationInput,
-  type QueryPublicationResult,
-  type QueryPublicationStatus,
-} from './query';
+import { NativeCheckbox } from '@rezics/ui/native-checkbox';
+import { queryPublicationAddress, queryPublicationInput, type QueryPublicationInput, type QueryPublicationResult, type QueryPublicationStatus } from './query';
 
 type Address = { collectionId: string; id: string };
 type Transport = {
@@ -184,7 +179,7 @@ export function QueryPublicationView({
               <SelectTrigger
                 id={visibilitySelectId}
                 aria-labelledby={`${visibilitySelectId}-label`}
-                className="min-h-11 rounded-md border border-border bg-background px-3"
+               
               >
                 <SelectValue />
               </SelectTrigger>
@@ -200,11 +195,10 @@ export function QueryPublicationView({
             </Select>
           </Field>
           <label className="flex items-start gap-3">
-            <input
-              type="checkbox"
+            <NativeCheckbox
               checked={confirmed}
               onChange={(event) => setConfirmed(event.target.checked)}
-              className="mt-1 size-5 shrink-0"
+              className='mt-1 shrink-0'
               disabled={busy}
             />
             <span>{m.library_query_publication_confirm()}</span>
@@ -224,7 +218,7 @@ export function QueryPublicationView({
               <p className="break-all">
                 {m.library_publication_published_generation({ generation: status.publication.generation })}
               </p>
-              <a className="inline-flex min-h-11 items-center text-primary underline" href={collectionHref}>
+              <a className={buttonVariants({ variant: 'link' })} href={collectionHref}>
                 {m.library_publication_view()}
               </a>
             </div>
@@ -247,7 +241,7 @@ export function QueryPublicationView({
                 : m.library_query_publication_unknown()}
         </p>
       ) : null}
-      <a className="inline-flex min-h-11 items-center text-primary underline" href={collectionHref}>
+      <a className={buttonVariants({ variant: 'link' })} href={collectionHref}>
         {m.library_publication_back()}
       </a>
     </section>

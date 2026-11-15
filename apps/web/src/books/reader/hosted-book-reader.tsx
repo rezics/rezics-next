@@ -39,7 +39,7 @@ import {
   type HostedBookSource,
 } from './source';
 
-const control = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]';
+const control = 'h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]';
 const focusable = 'rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring';
 export type HostedBookReaderProps = {
   address: BookAddress;
@@ -279,16 +279,16 @@ function BookReaderView({
     // Only the host's origin-local canonical addresses can become native links.
     const href = supplied?.startsWith('/') && !supplied.startsWith('//') && !/[\\\s]/.test(supplied) ? supplied : null;
     const appearance = extra?.appearance ?? 'control';
-    const variant = appearance === 'control' ? 'outline' : 'ghost';
+    const variant = extra?.selected ? 'secondary' : appearance === 'control' ? 'outline' : 'ghost';
     const className = `${control} ${
       appearance === 'breadcrumb'
-        ? 'min-w-0 shrink justify-start px-1.5 py-1 font-normal text-muted-foreground hover:text-foreground hover:underline underline-offset-4'
+        ? 'min-h-6 min-w-0 shrink justify-start font-normal text-muted-foreground'
         : appearance === 'row'
-          ? 'w-full justify-between gap-3 rounded-md px-3 py-3 text-base font-normal'
+          ? 'w-full justify-between gap-3 font-normal'
           : appearance === 'step'
-            ? 'w-full flex-col items-start justify-center gap-1 px-3 py-2 font-normal'
+            ? 'w-full flex-col items-start justify-center gap-1 font-normal'
             : ''
-    } ${extra?.selected ? 'bg-muted font-semibold text-foreground' : ''}`;
+    }`;
     const ref = (element: HTMLElement | null) => {
       if (!extra?.row) return;
       if (element) rows.current.set(extra.row, element);
@@ -298,7 +298,11 @@ function BookReaderView({
       <a
         href={href}
         ref={ref}
-        className={buttonVariants({ variant, className })}
+        className={buttonVariants({
+          variant,
+          size: appearance === 'breadcrumb' ? 'sm' : 'default',
+          className,
+        })}
         aria-current={extra?.selected ? 'location' : undefined}
         onClick={(event) => {
           if (
@@ -554,7 +558,7 @@ function BookReaderView({
             {renderProgress ? (
               <details className="group min-w-0 border-t pt-3">
                 <summary
-                  className={`flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm font-medium ${focusable}`}
+                  className={`flex cursor-pointer items-center justify-between gap-3 text-sm font-medium ${focusable}`}
                 >
                   {m.book_reader_progress_review({}, options)}
                   <ChevronDown aria-hidden="true" className="size-4 shrink-0 group-open:rotate-180" />
@@ -571,7 +575,7 @@ function BookReaderView({
             ) : null}
             <nav
               aria-label={m.book_reader_navigation({}, options)}
-              className={`${pinNavigation ? 'sticky bottom-0 z-10 shadow-sm' : ''} grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-1 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] pt-2 [overflow-wrap:anywhere]`}
+              className={`${pinNavigation ? 'sticky bottom-0 z-10' : ''} grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-1 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] pt-2 [overflow-wrap:anywhere]`}
             >
               {step(page.previous, false)}
               <Button

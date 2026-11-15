@@ -1,45 +1,15 @@
-import {
-  buildJournalDraftPatch,
-  emptyJournalDraft,
-  journalDraftText,
-  reviewJournalDraft,
-  formatJournalDate,
-  formatJournalAssessment,
-  parseJournalDateText,
-  MAX_JOURNAL_REFLECTION_CHARACTERS,
-  MAX_JOURNAL_REFLECTION_BYTES,
-  type JournalDraft,
-  type JournalField,
-  type JournalFieldDraft,
-  type ProgressSessionJournalPatch,
-} from '@rezics/progress';
-import { Button } from '@rezics/ui/shadcn/button';
+import { buildJournalDraftPatch, emptyJournalDraft, journalDraftText, reviewJournalDraft, formatJournalDate, formatJournalAssessment, parseJournalDateText, MAX_JOURNAL_REFLECTION_CHARACTERS, MAX_JOURNAL_REFLECTION_BYTES, type JournalDraft, type JournalField, type JournalFieldDraft, type ProgressSessionJournalPatch } from '@rezics/progress';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  useId,
-  type FormEvent,
-  type ReactNode,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useId, type FormEvent, type ReactNode } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { useOperation } from '../application';
 import { useSession } from '../application';
 import type { ProgressSessionView } from '../progress-reads';
-import {
-  correctOccurrenceJournal,
-  readOccurrenceJournal,
-  changeOccurrenceLifecycle,
-  type JournalReadResult,
-  type JournalPatch,
-} from './occurrence-server';
+import { correctOccurrenceJournal, readOccurrenceJournal, changeOccurrenceLifecycle, type JournalReadResult, type JournalPatch } from './occurrence-server';
 
 import { historyReturn } from './address';
 import { PrivateJournalDraftNavigation, usePrivateJournalDraftNavigation } from './draft-navigation';
@@ -690,7 +660,7 @@ function OccurrenceControls({
         <h2 className="font-semibold">{m.library_occurrence_heading()}</h2>
         <p>{m.library_occurrence_retired()}</p>
         <Link
-          className="inline-flex min-h-11 items-center rounded-md border px-3"
+          className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]' })}
           to="/library/history"
           search={returnSearch ?? {}}
         >
@@ -709,7 +679,7 @@ function OccurrenceControls({
 
       {returnSearch ? (
         <Link
-          className="inline-flex min-h-11 items-center rounded-md border px-3"
+          className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]' })}
           to="/library/history"
           search={returnSearch}
         >
@@ -720,9 +690,9 @@ function OccurrenceControls({
       {query.data?.kind === 'unavailable' ? (
         <div className="space-y-2">
           <p role="status">{m.library_occurrence_unavailable()}</p>
-          <button type="button" className="min-h-11 rounded-md border px-3" onClick={() => void query.refetch()}>
+          <Button type="button" variant="outline" onClick={() => void query.refetch()}>
             {m.library_selection_retry()}
-          </button>
+          </Button>
         </div>
       ) : null}
 
@@ -734,7 +704,7 @@ function OccurrenceControls({
               ref={editButton}
               type="button"
               variant="outline"
-              className="min-h-11 w-full sm:w-auto"
+              className="w-full sm:w-auto"
               disabled={!journalUpdateAllowed || (busy && !custody.lifecycle)}
               onClick={() => {
                 if (enabled && isCurrent()) setEditing(true);
@@ -837,7 +807,7 @@ function OccurrenceControls({
                 type="button"
                 variant="ghost"
                 disabled={busy}
-                className="min-h-11 w-full sm:w-auto"
+                className="w-full sm:w-auto"
                 onClick={() => {
                   if (!isCurrent() || custody.command || custody.flight) return;
                   setDraft(emptyJournalDraft());
@@ -928,9 +898,9 @@ function OccurrenceControls({
         <div className="min-w-0 space-y-3">
           <div className="flex flex-wrap gap-2">
             {reopenAllowed && (session.state === 'completed' || session.state === 'abandoned') ? (
-              <button
+              <Button
                 type="button"
-                className="min-h-11 whitespace-normal rounded-md border px-3 py-2 [overflow-wrap:anywhere]"
+                variant="outline" className='h-auto min-h-7 whitespace-normal [overflow-wrap:anywhere]'
                 disabled={
                   lifecycleCommand !== null ||
                   lifecycleConflictRevision !== null ||
@@ -942,12 +912,12 @@ function OccurrenceControls({
                 onClick={(event) => chooseLifecycle('reopen', event.currentTarget)}
               >
                 {m.library_occurrence_reopen()}
-              </button>
+              </Button>
             ) : null}
             {retireAllowed ? (
-              <button
+              <Button
                 type="button"
-                className="min-h-11 whitespace-normal rounded-md border px-3 py-2 [overflow-wrap:anywhere]"
+                variant="outline" className='h-auto min-h-7 whitespace-normal [overflow-wrap:anywhere]'
                 disabled={
                   lifecycleCommand !== null ||
                   lifecycleConflictRevision !== null ||
@@ -959,7 +929,7 @@ function OccurrenceControls({
                 onClick={(event) => chooseLifecycle('retire', event.currentTarget)}
               >
                 {m.library_occurrence_retire()}
-              </button>
+              </Button>
             ) : null}
           </div>
           {lifecycleCommand && lifecyclePermitted(lifecycleCommand) ? (
@@ -986,34 +956,34 @@ function OccurrenceControls({
                 </>
               ) : null}
               <div className="flex flex-wrap gap-2">
-                <button
+                <Button
                   ref={lifecycleSubmit}
                   type="button"
-                  className="min-h-11 whitespace-normal rounded-md bg-primary px-4 py-2 text-primary-foreground [overflow-wrap:anywhere]"
+                  variant="default" className='h-auto min-h-7 whitespace-normal [overflow-wrap:anywhere]'
                   disabled={busy || lifecyclePending || !!custody.flight}
                   onClick={() => void submitLifecycle(lifecycleCommand)}
                 >
                   {lifecycleDispatched
                     ? m.library_occurrence_lifecycle_retry()
                     : m.library_occurrence_confirm_heading()}
-                </button>
+                </Button>
                 {!lifecycleDispatched ? (
-                  <button
+                  <Button
                     type="button"
-                    className="min-h-11 whitespace-normal rounded-md border px-3 py-2 [overflow-wrap:anywhere]"
+                    variant="outline" className='h-auto min-h-7 whitespace-normal [overflow-wrap:anywhere]'
                     onClick={() => cancelLifecycleReview(lifecycleCommand)}
                   >
                     {m.library_progress_cancel()}
-                  </button>
+                  </Button>
                 ) : (
-                  <button
+                  <Button
                     type="button"
-                    className="min-h-11 whitespace-normal rounded-md border px-3 py-2 [overflow-wrap:anywhere]"
+                    variant="outline" className='h-auto min-h-7 whitespace-normal [overflow-wrap:anywhere]'
                     disabled={readingLifecycle || lifecyclePending}
                     onClick={() => void readLifecycleCurrent()}
                   >
                     {m.library_occurrence_lifecycle_read_current()}
-                  </button>
+                  </Button>
                 )}
               </div>
               {lifecycleDispatched ? <LifecycleObservation session={session} /> : null}
@@ -1027,10 +997,10 @@ function OccurrenceControls({
             >
               <p role="alert">{m.library_occurrence_conflict()}</p>
               <LifecycleObservation session={session} />
-              <button
+              <Button
                 ref={lifecycleRecovery}
                 type="button"
-                className="min-h-11 whitespace-normal rounded-md border px-3 py-2 [overflow-wrap:anywhere]"
+                variant="outline" className='h-auto min-h-7 whitespace-normal [overflow-wrap:anywhere]'
                 disabled={readingLifecycle || busy}
                 onClick={() => {
                   if (!enabled || !isCurrent() || departed.current || leaving.current) return;
@@ -1045,7 +1015,7 @@ function OccurrenceControls({
                 {session.revision !== lifecycleConflictRevision
                   ? m.library_occurrence_review_latest()
                   : m.library_occurrence_lifecycle_read_current()}
-              </button>
+              </Button>
             </div>
           ) : null}
           {lifecycleNotice === 'saved' ? (
@@ -1140,7 +1110,7 @@ function JournalFieldEditor({
           value={value}
           placeholder={m.library_journal_reflection_placeholder()}
           disabled={disabled}
-          className="min-h-64 resize-y text-base leading-relaxed [overflow-wrap:anywhere]"
+          className="h-auto min-h-64 resize-y text-base leading-relaxed [overflow-wrap:anywhere]"
           dir="auto"
           aria-invalid={invalid || refused}
           aria-describedby={`${help} ${status}${invalid || refused ? ` ${error}` : ''}`}
@@ -1210,7 +1180,7 @@ function JournalValue({ value }: { value: string | null }) {
   return (
     <span
       dir="auto"
-      className="block max-w-prose whitespace-pre-wrap leading-relaxed [overflow-wrap:anywhere] [unicode-bidi:plaintext]"
+      className="h-auto block max-w-prose whitespace-pre-wrap leading-relaxed [overflow-wrap:anywhere] [unicode-bidi:plaintext]"
     >
       {value}
     </span>
@@ -1259,7 +1229,7 @@ function JournalDraftReview({
         ))}
       </dl>
       {children ? (
-        <div className="sticky bottom-0 -mx-4 flex flex-col gap-2 border-t bg-card px-4 py-3 sm:flex-row [&_button]:min-h-11 [&_button]:whitespace-normal">
+        <div className="h-auto sticky bottom-0 -mx-4 flex flex-col gap-2 border-t bg-card px-4 py-3 sm:flex-row [&_button]:whitespace-normal">
           {children}
         </div>
       ) : null}

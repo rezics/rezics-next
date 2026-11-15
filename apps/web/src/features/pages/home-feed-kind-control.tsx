@@ -64,7 +64,7 @@ export function HomeFeedKindControl({
           <SharedSelect.SelectTrigger
             id={id}
             aria-describedby={selected?.description ? `${id}-meaning` : undefined}
-            className="max-w-full min-h-11 max-w-full"
+            className="max-w-full"
           >
             <SharedSelect.SelectValue />
           </SharedSelect.SelectTrigger>
@@ -80,7 +80,7 @@ export function HomeFeedKindControl({
           </SharedSelect.SelectContent>
         </SharedSelect.Select>
         <Button
-          className="min-h-11 whitespace-normal"
+          className="whitespace-normal"
           variant="outline"
           disabled={snapshot.status === 'loading' || (snapshot.status === 'ready' && !snapshot.kinds?.next)}
           onClick={() => void choices.load(failure ? choices.retryCursor() : (snapshot.kinds?.next ?? undefined))}

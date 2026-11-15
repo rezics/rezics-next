@@ -87,7 +87,6 @@ export function ThreadActivity({
           <Button
             variant="outline"
             size="sm"
-            className="min-h-11 sm:min-h-9"
             disabled={!current || pending}
             onClick={() => void retry()}
           >

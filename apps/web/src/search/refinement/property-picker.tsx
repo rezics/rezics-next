@@ -66,7 +66,7 @@ export function PropertyPicker({
             setQuery('');
           }}
         >
-          <SelectTrigger id={`${id}-property`}>
+          <SelectTrigger id={`${id}-property`} className="w-full min-w-0">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

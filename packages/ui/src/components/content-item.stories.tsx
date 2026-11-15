@@ -205,7 +205,7 @@ function Example() {
             <div className="space-y-2">
               <p>A short description supplied by the owning page, shown beneath the title.</p>
               <details>
-                <summary className="min-h-11 cursor-pointer rounded py-2 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                <summary className="cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                   Read the complete note
                 </summary>
                 <p>The complete note remains visible after the disclosure opens.</p>

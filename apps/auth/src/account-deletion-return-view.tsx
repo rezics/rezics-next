@@ -25,7 +25,7 @@ export function AccountDeletionReturnView({
     <section
       ref={focusRef}
       aria-labelledby="account-delete-return-heading"
-      className="mt-6 grid gap-3 rounded-lg border border-border p-4"
+      className="mt-6 grid gap-3 rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10"
       data-account-deletion-return={history.kind}
       tabIndex={-1}
     >

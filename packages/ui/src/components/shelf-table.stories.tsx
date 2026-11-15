@@ -118,7 +118,7 @@ function WorkflowFilters() {
         </FieldLabel>
         <NativeSelect
           id="workflow-filter-status"
-          className="w-full min-w-0 max-w-full [&>select]:h-11 [&>select]:min-h-11 sm:[&>select]:h-8 sm:[&>select]:min-h-8"
+          className="w-full min-w-0 max-w-full"
         >
           <NativeSelectOption value="all">All languages and statuses</NativeSelectOption>
           <NativeSelectOption value="localized">Localized status with a very long translated name</NativeSelectOption>

@@ -2,12 +2,13 @@ import { useEffect, useId, useRef, type ReactNode } from 'react';
 import type { PersonalEntry, PersonalEntryFieldChange } from '@rezics/client';
 import { m } from '../../paraglide/messages.js';
 import type { AnnotationConfirmation, AnnotationField } from './contract';
+import { Button } from '@rezics/ui/shadcn/button';
 
 export function AnnotationNote({ value }: { value: string | null }) {
   return value === null ? (
     <span className="text-muted-foreground">{m.library_annotation_no_note()}</span>
   ) : (
-    <span className="block whitespace-pre-wrap [overflow-wrap:anywhere]">{value}</span>
+    <span className="h-auto block whitespace-pre-wrap [overflow-wrap:anywhere]">{value}</span>
   );
 }
 
@@ -59,22 +60,22 @@ function ReviewField({
       <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
         <div className="min-w-0">
           <dt className="mb-2 text-sm font-medium text-muted-foreground">{m.library_annotation_received()}</dt>
-          <dd className="min-w-0 break-words">{before}</dd>
+          <dd className="h-auto min-w-0 break-words">{before}</dd>
         </div>
         <div className="min-w-0">
           <dt className="mb-2 text-sm font-medium text-muted-foreground">{m.library_annotation_proposed()}</dt>
-          <dd className="min-w-0 break-words">{after}</dd>
+          <dd className="h-auto min-w-0 break-words">{after}</dd>
         </div>
       </dl>
       <p className="text-sm text-muted-foreground">{help}</p>
-      <button
+      <Button
         type="button"
-        className="min-h-11 w-full rounded-md border px-3 disabled:opacity-50 sm:w-auto"
+        variant="outline" className='w-full sm:w-auto'
         disabled={disabled}
         onClick={onEdit}
       >
         {editLabel}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -116,7 +117,7 @@ export function AnnotationReview({
       </div>
       <dl className="rounded-md bg-muted p-3">
         <dt className="text-sm font-medium">{m.library_annotation_subject()}</dt>
-        <dd className="mt-1 break-words font-semibold">{subject.label}</dd>
+        <dd className="h-auto mt-1 break-words font-semibold">{subject.label}</dd>
       </dl>
       <ReviewField
         label={m.library_rich_entry_note()}
@@ -152,30 +153,30 @@ export function AnnotationReview({
       />
       <p className="text-sm text-muted-foreground">{m.library_annotation_review_exact()}</p>
       <div className="flex flex-col gap-2 sm:flex-row">
-        <button
+        <Button
           type="button"
-          className="min-h-11 w-full rounded-md bg-primary px-4 text-primary-foreground disabled:opacity-50 sm:w-auto"
+          variant="default" className='w-full sm:w-auto'
           disabled={blocked || submitted}
           onClick={onSave}
         >
           {m.library_rich_entry_save()}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="min-h-11 w-full rounded-md border px-3 disabled:opacity-50 sm:w-auto"
+          variant="outline" className='w-full sm:w-auto'
           disabled={submitted}
           onClick={onClose}
         >
           {m.library_annotation_back()}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="min-h-11 w-full rounded-md border px-3 disabled:opacity-50 sm:w-auto"
+          variant="outline" className='w-full sm:w-auto'
           disabled={submitted}
           onClick={(event) => onDiscard(event.currentTarget)}
         >
           {m.library_annotation_discard()}
-        </button>
+        </Button>
       </div>
       {blocked && !submitted ? (
         <p role="status" className="text-sm">

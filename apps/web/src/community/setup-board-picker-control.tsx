@@ -198,7 +198,7 @@ export function SetupBoardPicker({
             type="button"
             variant="ghost"
             size="sm"
-            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="h-auto min-h-6 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
             disabled={disabled}
             onClick={() => {
               searchInput.current?.focus();
@@ -213,7 +213,7 @@ export function SetupBoardPicker({
         id={id}
         ref={searchInput}
         type="search"
-        className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+        className="max-w-full text-start"
         value={query}
         maxLength={256}
         disabled={disabled}
@@ -252,7 +252,7 @@ export function SetupBoardPicker({
                 <FieldLabel
                   key={choice.id}
                   htmlFor={`${id}-${index}`}
-                  className="flex h-auto min-h-12 w-full min-w-0 max-w-full cursor-pointer items-center gap-3 whitespace-normal rounded-xl border border-border p-3 text-start has-[[data-checked]]:border-primary has-[[data-checked]]:bg-primary/5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-solid has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring"
+                  className="flex w-full min-w-0 cursor-pointer items-center gap-3 whitespace-normal text-start"
                 >
                   <RadioGroupItem id={`${id}-${index}`} value={choice.id} />
                   <span className="min-w-0 flex-1 whitespace-normal text-sm leading-relaxed [overflow-wrap:anywhere]">
@@ -292,7 +292,7 @@ export function SetupBoardPicker({
               <Button
                 type="button"
                 variant="outline"
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
                 disabled={disabled}
                 aria-describedby={`${id}-recovery-status`}
                 onClick={(event) =>
@@ -307,7 +307,7 @@ export function SetupBoardPicker({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  className="h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
                   disabled={disabled}
                   aria-describedby={`${id}-recovery-status ${id}-restart-hint`}
                   onClick={(event) =>
@@ -328,7 +328,7 @@ export function SetupBoardPicker({
           <Button
             type="button"
             variant="outline"
-            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
             disabled={disabled}
             onClick={(event) =>
               pageAction(event, shown.status === 'ready' && shown.next !== null, () => pager.next(expected))

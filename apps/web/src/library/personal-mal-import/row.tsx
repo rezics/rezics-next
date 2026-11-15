@@ -12,15 +12,7 @@ import type {
 } from './contract';
 import { standardMalQuestion } from './contract';
 import { MalAction, MalCheck } from './controls';
-import {
-  admittedFields,
-  malKindLabel,
-  malMatchLabel,
-  malProgressEntries,
-  malRetainReason,
-  malOriginalScoreLabel,
-  malValueLabel,
-} from './meaning';
+import { admittedFields, malKindLabel, malMatchLabel, malProgressEntries, malRetainReason, malOriginalScoreLabel, malValueLabel } from './meaning';
 import { MalTargetSearch } from './target';
 import { MalLabelsReview } from './labels';
 
@@ -116,7 +108,7 @@ function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <dt className="text-sm font-medium">{label}</dt>
-      <dd className="whitespace-normal [overflow-wrap:anywhere]">{value}</dd>
+      <dd className="h-auto whitespace-normal [overflow-wrap:anywhere]">{value}</dd>
     </div>
   );
 }
@@ -225,11 +217,11 @@ export function MalRowReview({
   return (
     <article className="space-y-4 rounded-lg border p-4" data-mal-row={row.index} data-mal-kind={row.kind}>
       <header className="space-y-1">
-        <h3 className="text-lg font-medium [overflow-wrap:anywhere]">{row.title}</h3>
+        <h3 className="h-auto text-lg font-medium [overflow-wrap:anywhere]">{row.title}</h3>
         <p className="text-sm text-muted-foreground">
           {malKindLabel(row.kind)} · {malMatchLabel(row.match, draft.skip)}
         </p>
-        <p className="text-sm [overflow-wrap:anywhere]">
+        <p className="h-auto text-sm [overflow-wrap:anywhere]">
           {m.library_mal_identifier({ namespace: row.identifier.namespace, value: row.identifier.value })}
         </p>
         <ImportTarget target={target} />
@@ -305,7 +297,7 @@ export function MalRowReview({
         {questionText ? (
           <section className="space-y-3" aria-label={m.library_mal_native_score_question()}>
             <h4 className="font-medium">{m.library_mal_native_score_question()}</h4>
-            <p className="whitespace-normal [overflow-wrap:anywhere]">{questionText}</p>
+            <p className="h-auto whitespace-normal [overflow-wrap:anywhere]">{questionText}</p>
             <p>{m.library_mal_current_vote_label({ value: voteLabel(row, draft.target, voteReadback) })}</p>
             {row.review?.score && row.scoreReviewState === 'stale' ? (
               <p role="status">{m.library_mal_score_review_stale()}</p>
@@ -315,9 +307,9 @@ export function MalRowReview({
             {canChooseQuestion ? (
               <fieldset className="space-y-2">
                 <legend className="font-medium">{m.library_mal_score_choice()}</legend>
-                <label className="flex min-h-11 items-center gap-3 whitespace-normal [overflow-wrap:anywhere]">
+                <label className="h-auto flex items-center gap-3 whitespace-normal [overflow-wrap:anywhere]">
                   <input
-                    className="size-5 shrink-0"
+                   
                     type="radio"
                     name={`${base}-score`}
                     checked={!draft.score}
@@ -326,9 +318,9 @@ export function MalRowReview({
                   />
                   {m.library_mal_score_keep()}
                 </label>
-                <label className="flex min-h-11 items-center gap-3 whitespace-normal [overflow-wrap:anywhere]">
+                <label className="h-auto flex items-center gap-3 whitespace-normal [overflow-wrap:anywhere]">
                   <input
-                    className="size-5 shrink-0"
+                   
                     type="radio"
                     name={`${base}-score`}
                     checked={draft.score?.action === 'adopt' && currentScoreChoice}
@@ -359,9 +351,9 @@ export function MalRowReview({
                   />
                   {m.library_mal_score_adopt()}
                 </label>
-                <label className="flex min-h-11 items-center gap-3 whitespace-normal [overflow-wrap:anywhere]">
+                <label className="h-auto flex items-center gap-3 whitespace-normal [overflow-wrap:anywhere]">
                   <input
-                    className="size-5 shrink-0"
+                   
                     type="radio"
                     name={`${base}-score`}
                     checked={draft.score?.action === 'clear' && currentScoreChoice}
@@ -400,7 +392,7 @@ export function MalRowReview({
                         <SelectTrigger
                           id={`${base}-units`}
                           aria-labelledby={`${base}-units-label`}
-                          className="min-h-11 w-full rounded-md border bg-background px-3"
+                          className='w-full'
                         >
                           <SelectValue />
                         </SelectTrigger>
@@ -482,12 +474,12 @@ export function MalRowReview({
         <p>{m.library_mal_not_vote()}</p>
         <p>{m.library_mal_not_session()}</p>
         <details className="rounded-md border p-3">
-          <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_mal_notes_summary()}</summary>
-          <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{malValueLabel(row.notes)}</p>
+          <summary className="cursor-pointer py-2 font-medium">{m.library_mal_notes_summary()}</summary>
+          <p className="h-auto whitespace-pre-wrap [overflow-wrap:anywhere]">{malValueLabel(row.notes)}</p>
           <p className="mt-2 text-sm text-muted-foreground">{m.library_mal_not_review()}</p>
         </details>
         <details className="rounded-md border p-3">
-          <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_mal_retained_summary()}</summary>
+          <summary className="cursor-pointer py-2 font-medium">{m.library_mal_retained_summary()}</summary>
           <ul className="mt-2 space-y-2">
             <li>
               {m.library_mal_tags()}: {malValueLabel(row.tags)}

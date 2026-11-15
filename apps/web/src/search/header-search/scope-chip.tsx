@@ -1,3 +1,4 @@
+import { Button } from '@rezics/ui/shadcn/button';
 import { X } from 'lucide-react';
 import { m } from '../../paraglide/messages.js';
 import type { SearchScope } from './types';
@@ -21,14 +22,9 @@ export function ScopeChip({ scope, locale, onRemove }: { scope: SearchScope; loc
         </span>
       )}
       <span className="truncate">{scope.name}</span>
-      <button
-        type="button"
-        aria-label={removeLabel}
-        className="grid size-8 shrink-0 place-items-center rounded-full hover:bg-background focus-visible:outline-2 focus-visible:outline-foreground"
-        onClick={onRemove}
-      >
-        <X aria-hidden="true" className="size-3" />
-      </button>
+      <Button type="button" variant="ghost" size="icon-xs" aria-label={removeLabel} onClick={onRemove}>
+        <X aria-hidden="true" />
+      </Button>
     </span>
   );
 }

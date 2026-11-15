@@ -104,13 +104,13 @@ export function SecurityDepartureDialog({ onStay, onLeave, captureFocus }: Props
   }, []);
 
   return (
-    <div ref={overlay} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div ref={overlay} className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
       <div
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="security-departure-heading"
         aria-describedby="security-departure-description"
-        className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-lg border bg-background p-6 text-foreground shadow-xl wrap-anywhere"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] overflow-y-auto overscroll-contain rounded-xl bg-popover p-4 text-xs/relaxed text-popover-foreground ring-1 ring-foreground/10 wrap-anywhere sm:max-w-sm"
       >
         <h2 id="security-departure-heading" className="text-lg font-semibold">
           {m.auth_security_departure_heading()}
@@ -118,7 +118,7 @@ export function SecurityDepartureDialog({ onStay, onLeave, captureFocus }: Props
         <p id="security-departure-description" className="mt-2 text-sm">
           {m.auth_security_departure_description()}
         </p>
-        <div className="mt-5 flex flex-wrap justify-end gap-2 [&>button]:h-auto [&>button]:min-h-9 [&>button]:whitespace-normal">
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
           <Button ref={stay} type="button" variant="outline" data-stay onClick={() => choose('onStay')}>
             {m.auth_security_departure_stay()}
           </Button>

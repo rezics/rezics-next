@@ -1,8 +1,8 @@
 import type { SelectedContext } from '@rezics/composition';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 
-const recoveryLinkClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-md border border-border px-3 py-2 text-left whitespace-normal text-primary underline underline-offset-4 [overflow-wrap:anywhere] hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
+const recoveryLinkClass = `${buttonVariants({ variant: 'outline' })} h-auto min-h-7 max-w-full whitespace-normal text-left [overflow-wrap:anywhere]`;
 
 /** Keep subject navigation in its population and reset continuation when changing selection. */
 export function contextHref(href: string, realm?: string, options: { resetSelection?: boolean } = {}): string {

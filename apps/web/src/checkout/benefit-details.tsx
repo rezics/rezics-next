@@ -44,7 +44,7 @@ export function BenefitDetails({
       {href ? (
         <a
           href={href}
-          className={buttonVariants({ className: 'min-h-11 w-full sm:w-auto' })}
+          className={buttonVariants({ className: 'w-full sm:w-auto' })}
           onClick={(event) => {
             if (
               event.defaultPrevented ||

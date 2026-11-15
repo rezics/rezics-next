@@ -50,7 +50,7 @@ export function ShelfTabs({
               if (!nativeEvent.defaultPrevented) onValueChange(nextValue);
             });
           }}
-          className="shrink-0 border-b-2 border-transparent px-3 py-3 text-sm text-muted-foreground aria-[current=page]:border-primary aria-[current=page]:font-semibold aria-[current=page]:text-foreground"
+          className="shrink-0 border-b-2 border-transparent px-2.5 py-1.5 text-sm text-muted-foreground aria-[current=page]:border-primary aria-[current=page]:font-semibold aria-[current=page]:text-foreground"
         >
           {tab.label}{' '}
           <span className="ml-1 tabular-nums">
@@ -162,7 +162,8 @@ export function ShelfToolbar(p: Props) {
           <SelectTrigger
             id={sortId}
             aria-labelledby={`${sortId}-label`}
-            className="w-full min-w-0 max-w-full h-11 min-h-11 md:h-8 md:min-h-8"
+            size="default"
+            className="w-full min-w-0 max-w-full"
           >
             <SelectValue />
           </SelectTrigger>
@@ -195,7 +196,8 @@ export function ShelfToolbar(p: Props) {
           <SelectTrigger
             id={directionId}
             aria-labelledby={`${directionId}-label`}
-            className="w-full min-w-0 max-w-full h-11 min-h-11 md:h-8 md:min-h-8"
+            size="default"
+            className="w-full min-w-0 max-w-full"
           >
             <SelectValue />
           </SelectTrigger>

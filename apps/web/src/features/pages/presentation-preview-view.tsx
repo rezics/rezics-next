@@ -92,7 +92,7 @@ function PreviewFailure({ result, locale }: { result: Exclude<PresentationPrevie
       <p>{text({}, { locale: locale as never })}</p>
       {result.reason === 'redirect' && (
         <a
-          className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="inline-flex max-w-full items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           href={accountHref(locale, result.handle)}
         >
           <span className="min-w-0 break-all wrap-anywhere">@{result.handle}</span>
@@ -119,12 +119,11 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
   const contextId = `${instance}-context`;
   const documentId = `${instance}-document`;
   const summaryClassName =
-    'list-item list-inside min-h-11 min-w-11 max-w-full cursor-pointer rounded-sm py-3 whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+    'list-item list-inside max-w-full cursor-pointer whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
   const referenceClassName =
     'min-w-0 rounded-sm break-all select-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-  const previewControlClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]';
-  const previewSelectClass = 'w-full min-w-0 max-w-full min-h-11';
-  const previewInputClass = 'min-h-11';
+  const previewControlClass = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+  const previewSelectClass = 'w-full min-w-0 max-w-full';
   const [kind, setKind] = useState<'subject' | 'route'>(initial?.ok && 'route' in initial.target ? 'route' : 'subject');
   const [address, setAddress] = useState(
     initial?.ok ? ('subject' in initial.target ? initial.target.subject : initial.target.route) : '',
@@ -269,7 +268,6 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
             <FieldLabel htmlFor={addressId}>{m.presentation_preview_address({}, o)}</FieldLabel>
             <Input
               id={addressId}
-              className={previewInputClass}
               value={address}
               required
               autoComplete="off"
@@ -304,7 +302,6 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
             <FieldLabel htmlFor={realmId}>{m.presentation_preview_realm({}, o)}</FieldLabel>
             <Input
               id={realmId}
-              className={previewInputClass}
               value={realm}
               autoComplete="off"
               spellCheck={false}

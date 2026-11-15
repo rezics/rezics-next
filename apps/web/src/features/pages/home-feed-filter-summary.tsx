@@ -43,11 +43,11 @@ export function HomeFeedFilterSummary({
         <>
           <ul aria-label={m.refinement_selected({}, options)} className="flex min-w-0 flex-wrap gap-2">
             {selections.map((selection, index) => (
-              <li key={selection.key} className="max-w-full min-w-0 rounded-xl border border-border bg-muted/40">
+              <li key={selection.key} className="max-w-full min-w-0 rounded-lg border border-border bg-muted/40">
                 <Button
                   type="button"
                   variant="ghost"
-                  className="h-auto min-h-11 max-w-full items-start gap-2 rounded-xl px-3 py-2 text-start whitespace-normal"
+                  className="h-auto min-h-7 max-w-full items-start gap-2 text-start whitespace-normal"
                   aria-label={m.refinement_remove({ value: selection.value }, options)}
                   data-home-filter-remove={selection.key}
                   onClick={() => {
@@ -87,7 +87,7 @@ export function HomeFeedFilterSummary({
             <Button
               type="button"
               variant="ghost"
-              className="min-h-11 whitespace-normal"
+              className="whitespace-normal"
               onClick={() => {
                 removing.current = 0;
                 onClear();

@@ -43,10 +43,10 @@ const nativeIO: ManagedAccountsIO = (data, signal) =>
   readManagedAccountsInventory({ data, ...(signal ? { signal } : {}) });
 // Grow with translated labels while retaining native button and focus behavior.
 const recoveryButtonClassName =
-  'h-auto min-h-11 min-w-11 max-w-full shrink whitespace-normal wrap-anywhere py-2 text-center';
+  'h-auto max-w-full shrink whitespace-normal wrap-anywhere text-center min-h-7';
 const stateClassName = 'h-auto min-h-5 max-w-full shrink whitespace-normal wrap-anywhere';
 const identityRowClassName =
-  'min-h-14 max-w-full wrap-anywhere [&_[data-content-item-slot=title]]:line-clamp-none [&_[data-slot=list-row-link]]:min-h-11';
+  'max-w-full wrap-anywhere [&_[data-content-item-slot=title]]:line-clamp-none';
 
 type RowFeed = 'self' | ManagedFeed;
 function IdentityRow({

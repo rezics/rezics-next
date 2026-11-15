@@ -10,7 +10,7 @@ import type { ThreadPost } from './thread-page';
 import { ThreadReviewContext, type ThreadReviewContextValue } from './thread-review-context';
 
 const linkClass =
-  'inline-flex h-auto min-h-11 min-w-11 max-w-full items-center rounded-sm px-2 py-2.5 whitespace-normal [overflow-wrap:anywhere] hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'inline-flex h-auto min-h-7 max-w-full items-center rounded-sm px-2 whitespace-normal [overflow-wrap:anywhere] hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 /** The quiet line above a page title: the Realm, then the board, each linked to its page. */
 export function BoardContext({

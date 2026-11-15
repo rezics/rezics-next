@@ -12,7 +12,7 @@ import { PostActions } from '../../report/content-actions';
 import type { VerificationConfig } from '../../report/turnstile';
 
 const actionClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm px-2 text-sm font-medium whitespace-normal [overflow-wrap:anywhere] text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'inline-flex max-w-full items-center text-sm font-medium whitespace-normal [overflow-wrap:anywhere] text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 // Standalone lists have no QueryClient. React requires the same snapshot until the store changes.
 const UNKNOWN_OBSERVATION: BrowserObservationSnapshot = { state: 'unknown' };

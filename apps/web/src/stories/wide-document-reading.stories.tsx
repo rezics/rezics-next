@@ -5,6 +5,7 @@ import { m } from '../paraglide/messages.js';
 import { ThreadPostReadingBody } from '../threads/post-reading-body';
 import { preparedPostReading } from './post-reading-fixtures';
 import { PatternStory } from './page';
+import { Button } from '@rezics/ui/shadcn/button';
 
 function WideDocumentReader({ retirement = false }: { retirement?: boolean }) {
   const [readerKey, setReaderKey] = useState('reader-a');
@@ -17,14 +18,10 @@ function WideDocumentReader({ retirement = false }: { retirement?: boolean }) {
           Inspect a code sample or comparison table, then return to the same published post.
         </p>
         {retirement ? (
-          <button
-            type="button"
-            data-story-replace-reader="true"
-            className="min-h-11 rounded-md border px-3"
-            onClick={() => setReaderKey((current) => (current === 'reader-a' ? 'reader-b' : 'reader-a'))}
+          <Button type="button" data-story-replace-reader="true" variant="outline" size="sm" onClick={() => setReaderKey((current) => (current === 'reader-a' ? 'reader-b' : 'reader-a'))}
           >
             Replace reader visit
-          </button>
+          </Button>
         ) : null}
         <ThreadPostReadingBody
           post={prepared.post}

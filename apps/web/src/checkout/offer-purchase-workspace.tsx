@@ -52,7 +52,7 @@ export function OfferPurchaseWorkspace({
             <Button
               type="button"
               variant="link"
-              className="h-auto min-h-11 px-0 py-2 text-sm"
+              className="h-auto px-0 text-sm"
               aria-haspopup="dialog"
               aria-expanded={fullTitlesOpen}
               aria-controls={panelId}

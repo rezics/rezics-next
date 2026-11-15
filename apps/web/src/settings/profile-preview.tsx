@@ -92,7 +92,7 @@ export function ProfilePreview({
       <Button
         type="button"
         variant="outline"
-        className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+        className="h-auto max-w-full whitespace-normal break-words min-h-7"
         aria-expanded={open}
         aria-controls={regionId}
         onClick={() => setOpen((value) => !value)}
@@ -104,7 +104,7 @@ export function ProfilePreview({
         role="region"
         aria-labelledby={headingId}
         hidden={!open}
-        className="min-w-0 rounded-2xl border border-border/60 bg-card p-4 shadow-(--aura-shadow-card) sm:p-6"
+        className="min-w-0 rounded-2xl border border-border/60 bg-card p-4 sm:p-6"
       >
         <div className="min-w-0 space-y-4 font-sans text-foreground">
           <header className="min-w-0 space-y-2">
@@ -143,12 +143,12 @@ export function ProfilePreview({
                               href={link.url}
                               target="_blank"
                               rel="nofollow noopener noreferrer ugc"
-                              className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 wrap-anywhere"
+                              className="inline-flex max-w-full items-center text-primary underline underline-offset-4 wrap-anywhere"
                             >
                               {label}
                             </a>
                           ) : (
-                            <span className="inline-flex min-h-11 max-w-full items-center wrap-anywhere">{label}</span>
+                            <span className="inline-flex max-w-full items-center wrap-anywhere">{label}</span>
                           )}
                           {link.url ? (
                             <p className="max-w-full break-all text-xs text-muted-foreground">{link.url}</p>

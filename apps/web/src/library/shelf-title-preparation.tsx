@@ -69,7 +69,7 @@ export function ShelfTitlePreparation({
               : m.library_title_order_preparing()}
       </p>
       {progress?.installation === 'installed' ? null : (
-        <Button type="button" variant="outline" className="min-h-11" disabled={busy || !isCurrent()} onClick={advance}>
+        <Button type="button" variant="outline" disabled={busy || !isCurrent()} onClick={advance}>
           {busy
             ? m.library_title_prepare_running()
             : failed

@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefCallback } from 'react';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { useRouter } from '@tanstack/react-router';
 import { m } from '../../../paraglide/messages.js';
 import { subjectVisitReturn, summaryReadingReturn, withSubjectVisitReturn } from '../../pages/subject-visit-navigation';
@@ -371,7 +373,11 @@ export function NamesTermsReturn({ id, locale, via }: { id: string; locale: stri
   return (
     <div className="mx-auto w-full max-w-4xl px-6 pt-4">
       <NamesReturnAnchor
-        className="inline-flex min-h-11 items-center text-primary underline focus-visible:outline-2"
+        className={cn(
+          buttonVariants({ variant: 'link' }),
+          'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+          'underline',
+        )}
         href={safe}
         locale={locale}
       >

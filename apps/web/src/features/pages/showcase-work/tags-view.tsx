@@ -21,7 +21,7 @@ import {
 import { readWorkTags, workTagPreviewLimit, type TagDefinitions, type WorkTag } from './tags';
 
 const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 text-left [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'h-auto min-h-7 max-w-full whitespace-normal break-words text-left [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const linkClass = `${buttonVariants({ variant: 'outline', size: 'sm' })} ${actionClass}`;
 
 type Props = {
@@ -306,7 +306,7 @@ export function SubjectConceptTags({
                     <a
                       href={browseHref}
                       data-tag-action="browse"
-                      className={`flex min-h-11 min-w-11 min-w-0 items-center rounded-sm font-medium text-primary underline-offset-4 hover:underline ${actionClass}`}
+                      className={`flex min-w-0 items-center font-medium text-primary underline-offset-4 hover:underline ${actionClass}`}
                     >
                       <span lang={tag.label.lang}>{tag.label.text}</span>
                     </a>

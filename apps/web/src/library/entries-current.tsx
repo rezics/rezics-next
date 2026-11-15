@@ -147,7 +147,7 @@ export function DisplayControls({
   );
   const guidance = compact ? (
     <details className="min-w-0 text-sm">
-      <summary className="min-h-11 cursor-pointer content-center rounded-md px-2 text-muted-foreground hover:text-foreground focus-visible:outline-2">
+      <summary className="cursor-pointer content-center rounded-md px-2 text-sm text-muted-foreground hover:text-foreground">
         {m.library_shelf_view_details()}
       </summary>
       <div className="flex max-w-xl flex-wrap gap-2 rounded-lg border bg-background p-3">{viewDetails}</div>
@@ -367,7 +367,7 @@ export function SortControls({
           <SelectTrigger
             id={orderSelectId}
             aria-labelledby={`${orderSelectId}-label`}
-            className="min-h-11 max-w-full rounded-md border bg-background p-2"
+            className="w-full max-w-full"
           >
             <SelectValue />
           </SelectTrigger>
@@ -399,7 +399,7 @@ export function SortControls({
           <SelectTrigger
             id={directionSelectId}
             aria-labelledby={`${directionSelectId}-label`}
-            className="min-h-11 max-w-full rounded-md border bg-background p-2"
+            className="w-full max-w-full"
           >
             <SelectValue />
           </SelectTrigger>
@@ -414,7 +414,7 @@ export function SortControls({
           </SelectContent>
         </Select>
       </Field>
-      <Button type="submit" variant="outline" className="min-h-11">
+      <Button type="submit" variant="outline">
         {m.library_sort_apply()}
       </Button>
     </form>

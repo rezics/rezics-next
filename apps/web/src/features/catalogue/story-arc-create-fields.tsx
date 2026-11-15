@@ -30,7 +30,7 @@ import { storyArcType } from './story-arc-profile';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 
 const action =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] md:pointer-fine:min-h-8 md:pointer-fine:min-w-0 md:pointer-fine:py-1';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 type ReuseState = {
   source: ReuseSource;
@@ -188,7 +188,7 @@ export function StoryArcCreateFields({
             onValueChange={(nextSelectValue) => setProperty(nextSelectValue ?? '')}
           >
             <SelectTrigger
-              className="h-11 w-full rounded-md border border-input bg-background px-3 md:pointer-fine:h-8"
+              className="w-full"
               aria-label={m.story_arc_create_property({}, o)}
             >
               <SelectValue />

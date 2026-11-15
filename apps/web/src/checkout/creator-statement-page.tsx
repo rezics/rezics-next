@@ -86,7 +86,7 @@ export function CreatorStatementPage({
         preload={false}
         to="/creator/statements"
         search={from ? { cursor: from } : {}}
-        className="inline-flex min-h-11 items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+        className="inline-flex items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
       >
         {m.statements_back()}
       </Link>
@@ -102,7 +102,7 @@ export function CreatorStatementPage({
           )}
         </div>
         {page.kind !== 'preparing' && (
-          <Button variant="outline" className="min-h-11" nativeButton={false} render={<a href={href} />}>
+          <Button variant="outline" nativeButton={false} render={<a href={href} />}>
             {m.statements_refresh()}
           </Button>
         )}
@@ -196,7 +196,7 @@ export function CreatorStatementPage({
                             </dl>
                             <Accordion className="min-w-0">
                               <AccordionItem value="source">
-                                <AccordionTrigger className="min-h-11">
+                                <AccordionTrigger>
                                   {m.statements_line_source_details()}
                                 </AccordionTrigger>
                                 <AccordionContent keepMounted>
@@ -254,7 +254,7 @@ export function CreatorStatementPage({
                                   </dl>
                                   <a
                                     href={`/${locale}/offers/${line.offerId}`}
-                                    className="inline-flex min-h-11 items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                                    className="inline-flex items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
                                   >
                                     {m.creator_sale_open_offer()}
                                   </a>
@@ -273,7 +273,7 @@ export function CreatorStatementPage({
           </section>
           <Accordion className="min-w-0 bg-card text-card-foreground">
             <AccordionItem value="provenance">
-              <AccordionTrigger className="min-h-11">{m.statements_provenance()}</AccordionTrigger>
+              <AccordionTrigger>{m.statements_provenance()}</AccordionTrigger>
               <AccordionContent keepMounted>
                 <dl className="space-y-3 text-sm">
                   <div>
@@ -322,7 +322,7 @@ function StatementLinePagination({
       {hasPrevious && (
         <Button
           variant="outline"
-          className="h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal break-words"
+          className="h-auto min-h-7 max-w-full whitespace-normal break-words"
           nativeButton={false}
           render={
             <Link
@@ -340,7 +340,7 @@ function StatementLinePagination({
       {restart && (
         <Button
           variant="outline"
-          className="h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal break-words"
+          className="h-auto min-h-7 max-w-full whitespace-normal break-words"
           nativeButton={false}
           render={
             <Link
@@ -358,7 +358,7 @@ function StatementLinePagination({
       {next && (
         <Button
           variant="outline"
-          className="h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal break-words"
+          className="h-auto min-h-7 max-w-full whitespace-normal break-words"
           nativeButton={false}
           render={
             <Link

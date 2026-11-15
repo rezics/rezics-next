@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { CancelledError, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Button } from '@rezics/ui/shadcn/button';
 import { SessionRecoveryPage } from '../session';
 import { useSession } from './application';
 import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
@@ -234,14 +235,16 @@ function CurrentCopiesRead({
       <div>
         <p role="status">{query.isError || query.data ? m.error_message() : m.library_sort_preparing()}</p>
         {hydrated && !query.isFetching ? (
-          <button
+          <Button
             type="button"
+            variant="outline"
+            className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]"
             onClick={() => {
               if (origin.isCurrent()) void query.refetch();
             }}
           >
             {windows.pending ? m.library_window_retry() : m.subject_view_retry()}
-          </button>
+          </Button>
         ) : null}
       </div>
     );

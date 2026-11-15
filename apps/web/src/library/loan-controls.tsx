@@ -3,7 +3,10 @@ import type { Loan } from '@rezics/client';
 import { m } from '../paraglide/messages.js';
 import { CalendarDayField } from './calendar-day-field';
 import { LoanCommandIntent, dispatchLoan, type LoanCommand, type LoansOrigin } from './loan-intent';
-import { LoanFacts, loanButton, loanQuiet, loanField, loanFailure } from './loan-reading';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
+import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { LoanFacts, loanFailure } from './loan-reading';
 
 export type LoanCopyOperand = { id: string; revision: number };
 
@@ -114,13 +117,14 @@ export function LoanControls({
         </p>
         <LoanFacts loan={state.result.loan} today={state.result.boundary.today} />
         <p className="text-sm text-muted-foreground">{m.library_loans_read_distinct()}</p>
-        <button
+        <Button
           type="button"
-          className={loanQuiet}
+          variant="outline"
+          className="h-auto min-h-7 max-w-full whitespace-normal"
           onClick={(event) => machine.current() && onRefresh(event.currentTarget)}
         >
           {m.library_loans_refresh()}
-        </button>
+        </Button>
       </div>
     );
 
@@ -129,34 +133,35 @@ export function LoanControls({
       <div hidden={!!operation}>
         <div className="flex flex-wrap gap-3">
           {copy && !loan ? (
-            <button
+            <Button
               type="button"
-              className={loanButton}
+              className="h-auto min-h-7 max-w-full whitespace-normal"
               disabled={disabled || !today || !originating.isCurrent('copy.create')}
               onClick={(event) => choose('create', event.currentTarget)}
             >
               {m.library_loans_create()}
-            </button>
+            </Button>
           ) : null}
           {loan?.actions.extend.allowed ? (
-            <button
+            <Button
               type="button"
-              className={loanQuiet}
+              variant="outline"
+              className="h-auto min-h-7 max-w-full whitespace-normal"
               disabled={disabled || !today || !originating.isCurrent('copy.update')}
               onClick={(event) => choose('extend', event.currentTarget)}
             >
               {m.library_loans_extend()}
-            </button>
+            </Button>
           ) : null}
           {loan?.actions.return.allowed ? (
-            <button
+            <Button
               type="button"
-              className={loanButton}
+              className="h-auto min-h-7 max-w-full whitespace-normal"
               disabled={disabled || !today || !originating.isCurrent('copy.update')}
               onClick={(event) => choose('return', event.currentTarget)}
             >
               {m.library_loans_return()}
-            </button>
+            </Button>
           ) : null}
           {loan && !loan.actions.extend.allowed && !loan.actions.return.allowed ? (
             <p className="text-sm text-muted-foreground">
@@ -206,22 +211,21 @@ export function LoanControls({
               <div className="grid min-w-0 gap-4 sm:grid-cols-2">
                 <label className="min-w-0 space-y-1">
                   <span>{m.library_loans_direction()}</span>
-                  <select
-                    className={loanField}
+                  <NativeSelect
+                    className="w-full"
                     value={direction}
                     disabled={!canEdit}
                     onChange={(event) => {
                       if (machine.current()) setDirection(event.currentTarget.value as 'lent' | 'borrowed');
                     }}
                   >
-                    <option value="lent">{m.library_loans_lent()}</option>
-                    <option value="borrowed">{m.library_loans_borrowed()}</option>
-                  </select>
+                    <NativeSelectOption value="lent">{m.library_loans_lent()}</NativeSelectOption>
+                    <NativeSelectOption value="borrowed">{m.library_loans_borrowed()}</NativeSelectOption>
+                  </NativeSelect>
                 </label>
                 <label className="min-w-0 space-y-1">
                   <span>{m.library_loans_counterparty()}</span>
-                  <input
-                    className={loanField}
+                  <Input
                     value={name}
                     required
                     disabled={!canEdit}
@@ -265,9 +269,9 @@ export function LoanControls({
               {state.refusal && state.refusal.reason !== 'unavailable' ? (
                 <p>{m.library_loans_unknown_refusal()}</p>
               ) : null}
-              <button
+              <Button
                 type="button"
-                className={loanButton}
+                className="h-auto min-h-7 max-w-full whitespace-normal"
                 disabled={disabled}
                 onClick={() => {
                   receiptFocus.current = true;
@@ -275,36 +279,47 @@ export function LoanControls({
                 }}
               >
                 {m.library_loans_retry_exact()}
-              </button>
+              </Button>
             </div>
           ) : null}
           {state.phase === 'refused' ? (
             <div role="alert" className="space-y-3">
               <p>{loanFailure(state.result.reason)}</p>
               {state.result.reason === 'invalid' ? (
-                <button type="button" className={loanQuiet} onClick={() => machine.correct()}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto min-h-7 max-w-full whitespace-normal"
+                  onClick={() => machine.correct()}
+                >
                   {m.library_loans_correct()}
-                </button>
+                </Button>
               ) : null}
-              <button
+              <Button
                 type="button"
-                className={loanQuiet}
+                variant="outline"
+                className="h-auto min-h-7 max-w-full whitespace-normal"
                 onClick={(event) => machine.current() && onRefresh(event.currentTarget)}
               >
                 {m.library_loans_refresh()}
-              </button>
+              </Button>
             </div>
           ) : null}
           <div className="flex flex-wrap gap-3">
             {state.phase === 'idle' ? (
-              <button type="submit" className={loanButton} disabled={disabled}>
+              <Button type="submit" className="h-auto min-h-7 max-w-full whitespace-normal" disabled={disabled}>
                 {operation === 'create' ? m.library_loans_submit() : label}
-              </button>
+              </Button>
             ) : null}
             {!locked ? (
-              <button type="button" className={loanQuiet} onClick={back}>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-auto min-h-7 max-w-full whitespace-normal"
+                onClick={back}
+              >
                 {m.library_loans_back()}
-              </button>
+              </Button>
             ) : null}
           </div>
         </form>

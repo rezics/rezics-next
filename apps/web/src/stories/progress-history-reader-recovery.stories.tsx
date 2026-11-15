@@ -6,6 +6,7 @@ import { ProgressSessionPage, type ProgressDetailOrigin } from '../library/progr
 import type { ProgressChange, ProgressSessionPage as Page } from '../library/progress-reads';
 import { m } from '../paraglide/messages.js';
 import { PatternStory } from './page';
+import { Button } from '@rezics/ui/shadcn/button';
 
 // UNRUN: supplied DTO presentation cases, not native read, authorization or responsive evidence.
 const meta = {
@@ -114,15 +115,12 @@ function Reader({ data, retire = false }: { data: LoadedPage; retire?: boolean }
   return (
     <main className="mx-auto w-full max-w-4xl space-y-6 p-4">
       {retire ? (
-        <button
-          type="button"
-          className="min-h-11 rounded border p-2"
-          onClick={() => {
+        <Button type="button" variant="outline" size="sm" onClick={() => {
             current.current = false;
           }}
         >
           Retire supplied navigation authority
-        </button>
+        </Button>
       ) : null}
       <ProgressSessionPage page={data} logsCursor={cursors.logs} originating={origin.current} />
     </main>

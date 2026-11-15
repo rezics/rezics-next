@@ -22,13 +22,12 @@ import {
 } from './settings';
 
 const actionClassName =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] max-md:min-h-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11';
-const formControlClass =
-  'h-auto min-h-8 min-w-0 max-w-full max-md:min-h-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const formControlClass = 'min-w-0 max-w-full';
 const languageControlClass =
-  'max-w-full max-md:h-11 max-md:min-h-11 max-md:w-full pointer-coarse:h-11 pointer-coarse:min-h-11 pointer-coarse:w-full md:pointer-fine:h-8 md:pointer-fine:w-fit';
+  'max-w-full max-md:w-full pointer-coarse:w-full md:pointer-fine:w-fit';
 const summaryClassName =
-  'min-h-11 min-w-11 cursor-pointer content-center py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'cursor-pointer content-center font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const options = (locale: string) => ({ locale: locale as never });
 
 export function ContextLabelRows({
@@ -226,7 +225,7 @@ export function SettingsPicker({
           </Field>
           <fieldset className="space-y-2" disabled={disabled}>
             <legend className="text-sm font-medium">{m.ctxw_policy({}, o)}</legend>
-            <label className="flex min-h-11 items-start gap-2 py-1">
+            <label className="flex items-start gap-2 py-1">
               <input
                 type="radio"
                 className="mt-2 size-4"
@@ -240,7 +239,7 @@ export function SettingsPicker({
             {page.items.map((choice) => {
               const title = pickText(choice.labels, locale);
               return (
-                <label key={choice.id} className="flex min-h-11 items-start gap-2 py-1">
+                <label key={choice.id} className="flex items-start gap-2 py-1">
                   <input
                     type="radio"
                     className="mt-2 size-4"

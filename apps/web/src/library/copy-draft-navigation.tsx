@@ -157,11 +157,13 @@ export const CopyDraftNavigation = forwardRef<
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="min-w-0 flex-col-reverse sm:flex-row sm:flex-wrap">
-            <AlertDialogCancel ref={stayButton} onClick={stay}>
+            <AlertDialogCancel ref={stayButton} className="h-auto min-h-7 whitespace-normal" onClick={stay}>
               {m.library_copy_draft_navigation_stay()}
             </AlertDialogCancel>
             {dirty && !locked ? (
-              <AlertDialogAction onClick={discard}>{m.library_copy_draft_navigation_discard()}</AlertDialogAction>
+              <AlertDialogAction className="h-auto min-h-7 whitespace-normal" onClick={discard}>
+                {m.library_copy_draft_navigation_discard()}
+              </AlertDialogAction>
             ) : null}
           </AlertDialogFooter>
         </AlertDialogContent>

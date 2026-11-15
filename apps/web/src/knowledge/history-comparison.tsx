@@ -56,7 +56,7 @@ function RevisionMetadata({
         </dl>
       </KnowledgeDetails>
       <details className="min-w-0 space-y-3 border-t border-border pt-3">
-        <summary className="min-h-11 cursor-pointer py-3 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        <summary className="cursor-pointer font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
           {m.knowledge_history_references({}, options)}
         </summary>
         {revision.references.length ? (
@@ -75,7 +75,7 @@ function RevisionMetadata({
         )}
       </details>
       <details className="min-w-0 space-y-3 border-t border-border pt-3">
-        <summary className="min-h-11 cursor-pointer py-3 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        <summary className="cursor-pointer font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
           {m.knowledge_history_source({}, options)}
         </summary>
         <pre className="min-w-0 whitespace-pre-wrap break-words text-sm [overflow-wrap:anywhere]">
@@ -198,7 +198,7 @@ export function KnowledgeHistoryComparisonView({
                   ? m.knowledge_history_left({}, options)
                   : m.knowledge_history_right({}, options);
             return (
-              <Field key={choice} orientation="horizontal" className="min-h-11 min-w-0 items-center gap-2">
+              <Field key={choice} orientation="horizontal" className="min-w-0 items-center gap-2">
                 <RadioGroupItem id={inputId} value={choice} />
                 <FieldLabel htmlFor={inputId} className="min-w-0 break-words">
                   {label}

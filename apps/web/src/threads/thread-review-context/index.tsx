@@ -60,7 +60,7 @@ export function ThreadReviewContext({
         <div className="min-w-0" data-review-subject={subject.id}>
           <a
             href={reviewSubjectHref(subject.id, subject.label, locale)}
-            className="inline-flex min-h-11 max-w-full items-center font-medium underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="inline-flex max-w-full items-center font-medium underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             <bdi lang={subject.language}>
               {m.thread_review_details_selected_subject({ title: subject.label }, options)}
@@ -107,7 +107,7 @@ export function ThreadReviewContext({
                     <ConversationInspection label={m.conversation_inspect_citation({}, options)}>
                       <a
                         href={exactRevisionHref({ postId: item.postId, revisionId: exactPost.revisionId }, locale)}
-                        className="inline-flex min-h-11 max-w-full items-center underline underline-offset-4"
+                        className="inline-flex max-w-full items-center underline underline-offset-4"
                       >
                         {m.post_history_citation_identity({}, options)}
                       </a>
@@ -140,7 +140,7 @@ export function ThreadReviewContext({
                           undefined,
                           boardReturn,
                         )}
-                        className="inline-flex min-h-11 items-center underline underline-offset-4"
+                        className="inline-flex items-center underline underline-offset-4"
                       >
                         {m.thread_posts_heading({}, options)}
                       </a>

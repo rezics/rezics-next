@@ -32,7 +32,7 @@ export function IndependentMeasuresReview({
           const edit = edits.find((item) => item.unit === measure.unit);
           return (
             <div key={measure.unit} className="space-y-1 py-3">
-              <dt className="text-sm font-medium [overflow-wrap:anywhere]">{measure.label}</dt>
+              <dt className="h-auto text-sm font-medium [overflow-wrap:anywhere]">{measure.label}</dt>
               <dd
                 className={`text-sm tabular-nums [overflow-wrap:anywhere] ${edit ? 'font-medium' : 'text-muted-foreground'}`}
               >
@@ -50,7 +50,7 @@ export function IndependentMeasuresReview({
         {onConfirm ? (
           <Button
             type="button"
-            className="min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]"
+            className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]"
             disabled={busy}
             onClick={onConfirm}
           >
@@ -61,7 +61,7 @@ export function IndependentMeasuresReview({
           <Button
             type="button"
             variant="outline"
-            className="min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]"
+            className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]"
             disabled={busy}
             onClick={onCancel}
           >
@@ -70,7 +70,7 @@ export function IndependentMeasuresReview({
         ) : null}
       </div>
       <details className="text-sm text-muted-foreground">
-        <summary className="min-h-11 cursor-pointer content-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        <summary className="cursor-pointer content-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
           {m.library_progress_details()}
         </summary>
         <p>{m.library_progress_measures_shared_revision({ revision })}</p>

@@ -68,15 +68,13 @@ type ShellSession = NavigationSession;
 
 /** Hidden until the first Tab press; the sr-only utilities reveal it on focus. */
 const skipLink = cn(
-  'sr-only focus:not-sr-only focus:fixed focus:start-4 focus:top-4 focus:z-9999 focus:rounded-xl focus:bg-primary',
-  'focus:px-4 focus:py-2 focus:text-sm focus:text-primary-foreground! focus:no-underline!',
+  'sr-only focus:not-sr-only focus:fixed focus:start-4 focus:top-4 focus:z-9999 focus:h-7 focus:rounded-md focus:bg-primary',
+  'focus:px-2 focus:text-xs focus:text-primary-foreground! focus:no-underline!',
   // The offset keeps the ring visible against the primary fill.
   'focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background focus:outline-none',
 );
-const headerControlClass =
-  'h-9 rounded-full border border-border/60 focus-visible:border-primary focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background';
 const accountMenuLinkClass =
-  'flex min-h-11 min-w-0 items-center gap-2.5 rounded-xl px-3 py-2 text-sm wrap-anywhere whitespace-normal [&_svg]:shrink-0 outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground';
+  'flex min-h-7 min-w-0 items-center gap-1 rounded-md px-2 text-xs wrap-anywhere whitespace-normal outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30 [&_svg]:size-3.5 [&_svg]:shrink-0';
 const readAuthIssuer = createServerFn({ method: 'GET' }).handler(async () => {
   const { env } = await import('cloudflare:workers');
   return (env as Partial<SessionEnv>).AUTH_ISSUER ?? '';
@@ -94,7 +92,7 @@ function useHydrated(): boolean {
 
 function Logo() {
   return (
-    <Link to="/" aria-label="REZICS" className="flex h-10 shrink-0 items-center gap-2.5 rounded-xl px-1.5">
+    <Link to="/" aria-label="REZICS" className="flex shrink-0 items-center gap-2 px-1.5">
       <RezicsMark />
       <span className="hidden font-extrabold text-[15px] text-foreground tracking-[0.28em] sm:inline">REZICS</span>
     </Link>
@@ -122,7 +120,7 @@ function Navigation({ pathname, session }: { pathname: string; session: ShellSes
                 return (
                   <SidebarMenuItem key={item.id}>
                     <SidebarMenuButton
-                      className="h-auto min-h-11 whitespace-normal [&>span:last-child]:whitespace-normal [&>span:last-child]:overflow-visible [&>span:last-child]:text-clip"
+                      className="h-auto min-h-8 whitespace-normal [&>span:last-child]:whitespace-normal [&>span:last-child]:overflow-visible [&>span:last-child]:text-clip"
                       isActive={item.current}
                       aria-current={item.current ? 'page' : undefined}
                       aria-disabled={item.unavailable || undefined}
@@ -186,7 +184,7 @@ function ScriptFreeNavigation({ pathname, session }: { pathname: string; session
                     <span
                       role="link"
                       aria-disabled="true"
-                      className="flex min-h-11 min-w-0 items-center gap-2 px-3 py-2 text-sm wrap-anywhere text-muted-foreground"
+                      className="flex min-h-8 min-w-0 items-center gap-2 rounded-[calc(var(--radius-sm)+2px)] p-2 text-xs wrap-anywhere whitespace-normal text-muted-foreground"
                     >
                       {item.label}
                     </span>
@@ -197,7 +195,7 @@ function ScriptFreeNavigation({ pathname, session }: { pathname: string; session
                   <a
                     href={item.href}
                     aria-current={item.current ? 'page' : undefined}
-                    className="flex min-h-11 min-w-0 items-center gap-2 rounded-xl px-3 py-2 text-sm wrap-anywhere aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium"
+                    className="flex min-h-8 min-w-0 items-center gap-2 rounded-[calc(var(--radius-sm)+2px)] p-2 text-xs wrap-anywhere whitespace-normal aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium"
                   >
                     {Icon && <Icon aria-hidden="true" className="size-4 shrink-0 text-sidebar-primary" />}
                     {item.label}
@@ -249,9 +247,9 @@ export function NavigationToggle({
           content={navigation}
           trigger={
             <Button
-              className={cn('relative md:hidden', headerControlClass)}
+              className="relative md:hidden"
               variant="ghost"
-              size="icon-lg"
+              size="icon"
               data-open-navigation
               disabled={!hydrated}
               aria-label={m.shell_open_navigation()}
@@ -263,9 +261,9 @@ export function NavigationToggle({
         />
       )}
       <Button
-        className={cn('hidden md:inline-flex', headerControlClass)}
+        className="hidden md:inline-flex"
         variant="ghost"
-        size="icon-lg"
+        size="icon"
         disabled={!hydrated}
         aria-label={collapsed ? m.shell_expand_navigation() : m.shell_collapse_navigation()}
         onClick={onToggle}
@@ -307,28 +305,29 @@ export function AccountMenu({
       <AppearanceControls />
       {phone && (
         <a href={`/${getLocale()}/settings`} className={accountMenuLinkClass}>
-          <Settings aria-hidden="true" className="size-4" />
+          <Settings aria-hidden="true" className="size-3.5" />
           {m.settings_heading()}
         </a>
       )}
     </div>
   );
   const trigger = phone ? (
-    <button
+    <Button
       id="phone-account-menu-button"
       aria-controls="phone-account-menu"
       aria-label={m.shell_you()}
       aria-describedby="phone-account-state"
       type="button"
-      className={phoneTabClass}
+      variant="ghost"
+      className={`${phoneTabClass} h-auto min-h-7 shrink whitespace-normal`}
       aria-current={
         navigationPathMatches({ locale: getLocale(), pathname: location.pathname }, '/settings', 'prefix')
           ? 'page'
           : undefined
       }
     >
-      <span aria-hidden="true" className="grid size-6 place-items-center rounded-full bg-muted">
-        <UserRound className="size-4" />
+      <span aria-hidden="true" className="grid size-7 place-items-center rounded-md bg-muted">
+        <UserRound className="size-3.5" />
       </span>
       <span>{m.shell_you()}</span>
       <span id="phone-account-state" className="sr-only">
@@ -340,7 +339,7 @@ export function AccountMenu({
               ? m.candidate_loading()
               : m.shell_account_unavailable()}
       </span>
-    </button>
+    </Button>
   ) : undefined;
   if (session === 'unknown' || session === 'unavailable')
     return phone ? (
@@ -355,7 +354,7 @@ export function AccountMenu({
             </p>
             {session === 'unavailable' && (
               <a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} className={accountMenuLinkClass}>
-                <LogIn aria-hidden="true" className="size-4" />
+                <LogIn aria-hidden="true" className="size-3.5" />
                 {m.account_sign_in()}
               </a>
             )}
@@ -374,9 +373,8 @@ export function AccountMenu({
           trigger ?? (
             <Button
               id="account-menu-button"
-              className={cn(headerControlClass, 'min-h-11 h-auto max-w-48 px-3 py-2')}
+              className="h-auto min-h-7 max-w-48 whitespace-normal"
               variant="ghost"
-              size="lg"
               aria-label={m.account_menu()}
               aria-controls="account-menu"
             >
@@ -396,38 +394,38 @@ export function AccountMenu({
           >
             {canOpenLibrary ? (
               <a href={`/${locale}/library`} className={accountMenuLinkClass}>
-                <Library aria-hidden="true" className="size-4" />
+                <Library aria-hidden="true" className="size-3.5" />
                 {m.library_nav_library()}
               </a>
             ) : null}
             {canOpenCollections ? (
               <a href={`/${locale}/library/collections`} className={accountMenuLinkClass}>
-                <Folders aria-hidden="true" className="size-4" />
+                <Folders aria-hidden="true" className="size-3.5" />
                 {m.library_nav_collections()}
               </a>
             ) : null}
             {canOpenFollowing ? (
               <a href={`/${locale}/library/following`} className={accountMenuLinkClass}>
-                <Users aria-hidden="true" className="size-4" />
+                <Users aria-hidden="true" className="size-3.5" />
                 {m.library_nav_following()}
               </a>
             ) : null}
             <Link to="/realms" className={accountMenuLinkClass}>
-              <Globe aria-hidden="true" className="size-4" />
+              <Globe aria-hidden="true" className="size-3.5" />
               {m.realms_heading()}
             </Link>
             {!phone && (
               <a href={`/${locale}/settings`} className={accountMenuLinkClass}>
-                <Settings aria-hidden="true" className="size-4" />
+                <Settings aria-hidden="true" className="size-3.5" />
                 {m.settings_heading()}
               </a>
             )}
             <a href={`/${locale}/settings#account-tools`} className={accountMenuLinkClass}>
-              <Wrench aria-hidden="true" className="size-4" />
+              <Wrench aria-hidden="true" className="size-3.5" />
               {m.shell_account_tools()}
             </a>
             <a href={`/${locale}/accounts`} className={accountMenuLinkClass}>
-              <Users aria-hidden="true" className="size-4" />
+              <Users aria-hidden="true" className="size-3.5" />
               {m.av_accounts()}
             </a>
             {securitySettingsHref ? (
@@ -440,7 +438,7 @@ export function AccountMenu({
                 }}
                 className={accountMenuLinkClass}
               >
-                <ShieldCheck aria-hidden="true" className="size-4" />
+                <ShieldCheck aria-hidden="true" className="size-3.5" />
                 {m.account_security_settings()}
               </a>
             ) : (
@@ -450,13 +448,13 @@ export function AccountMenu({
                 data-account-security-settings
                 className={cn(accountMenuLinkClass, 'text-muted-foreground')}
               >
-                <ShieldCheck aria-hidden="true" className="size-4" />
+                <ShieldCheck aria-hidden="true" className="size-3.5" />
                 {m.account_security_unavailable()}
               </span>
             )}
             <form method="post" action="/auth/sign-out" className="m-0">
               <input type="hidden" name="csrf_token" value={csrfToken ?? ''} />
-              <Button type="submit" variant="ghost" size="lg" className="w-full justify-start rounded-xl px-3">
+              <Button type="submit" variant="ghost" className="h-auto min-h-7 w-full justify-start whitespace-normal">
                 <LogOut aria-hidden="true" />
                 {m.account_sign_out()}
               </Button>
@@ -474,9 +472,8 @@ export function AccountMenu({
       trigger={
         trigger ?? (
           <Button
-            className={cn(headerControlClass, 'min-h-11 h-auto max-w-48 px-3 py-2')}
+            className="h-auto min-h-7 max-w-48 whitespace-normal"
             variant="ghost"
-            size="lg"
             aria-label={m.account_menu()}
           >
             <LogIn aria-hidden="true" />
@@ -487,7 +484,7 @@ export function AccountMenu({
       content={
         <div role="group" aria-label={m.account_menu()} className="grid gap-1">
           <a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} className={accountMenuLinkClass}>
-            <LogIn aria-hidden="true" className="size-4" />
+            <LogIn aria-hidden="true" className="size-3.5" />
             {m.account_sign_in()}
           </a>
           {settings}

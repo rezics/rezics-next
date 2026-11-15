@@ -23,8 +23,10 @@ export type PrivateDiaryReadingLoadResult =
     })
   | Exclude<PrivateDiaryLoadResult, PrivateDiaryLoad>;
 
-import { diarySearch, diaryReturnContext, sameDiaryAddress, safeReturnTo, type DiaryAddress } from './address';
+import { diarySearch, sameDiaryAddress, safeReturnTo, type DiaryAddress } from './address';
 import { ReportedYearPanel } from './year-summary';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 
 export function PrivateDiaryPage({
   loaded,
@@ -299,9 +301,9 @@ export function PrivateDiaryPage({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-2xl font-semibold">{m.library_diary_heading()}</h1>
           <div className="flex flex-wrap gap-2">
-            <button
+            <Button
               type="button"
-              className="min-h-11 rounded-md border px-3"
+              variant="outline"
               disabled={closing}
               onClick={() => void closeDiary()}
             >
@@ -310,7 +312,7 @@ export function PrivateDiaryPage({
                 : activeCloseRetry
                   ? m.library_selection_retry()
                   : m.library_diary_return()}
-            </button>
+            </Button>
           </div>
         </div>
         <p className="text-sm text-muted-foreground">{m.library_diary_help()}</p>
@@ -318,13 +320,13 @@ export function PrivateDiaryPage({
           <p role="status">{m.library_diary_cancel_unavailable()}</p>
         ) : null}
         {activeReplacementRetry ? (
-          <button
+          <Button
             type="button"
-            className="min-h-11 rounded-md border px-3"
+            variant="outline"
             onClick={() => void retryReplacementCancellation()}
           >
             {m.library_selection_retry()}
-          </button>
+          </Button>
         ) : null}
       </header>
 
@@ -349,8 +351,8 @@ export function PrivateDiaryPage({
         >
           <label className="block">
             <span className="mb-1 block text-sm font-medium">{m.library_diary_year_select()}</span>
-            <input
-              className="min-h-11 w-32 rounded-md border bg-background px-3"
+            <Input
+              className='w-32'
               inputMode="numeric"
               pattern="[0-9]{1,4}"
               required
@@ -358,11 +360,11 @@ export function PrivateDiaryPage({
               onChange={(event) => setYearInput(event.currentTarget.value)}
             />
           </label>
-          <button type="submit" className="min-h-11 rounded-md border px-3">
+          <Button type="submit" variant="outline">
             {m.library_diary_year_show()}
-          </button>
+          </Button>
           <Link
-            className="inline-flex min-h-11 items-center rounded-md border px-3"
+            className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]' })}
             to="/library/history"
             search={{ returnTo: currentReturn }}
           >
@@ -394,7 +396,7 @@ export function PrivateDiaryPage({
                       '[&_a]:whitespace-normal [&_a]:[overflow-wrap:anywhere] [&_p]:[overflow-wrap:anywhere]',
                     ].join(' ')}
                   >
-                    <summary className="inline-flex min-h-11 max-w-full cursor-pointer items-center rounded-md border px-3 text-sm font-medium [overflow-wrap:anywhere]">
+                    <summary className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 max-w-full cursor-pointer whitespace-normal [overflow-wrap:anywhere]' })}>
                       {m.library_diary_year_heading({ year: address.year })}
                     </summary>
                     <div className="mt-3 min-w-0">
@@ -417,7 +419,7 @@ export function PrivateDiaryPage({
                   id="library-diary-occurrences"
                   ref={occurrencesHeading}
                   tabIndex={-1}
-                  className="min-w-0 text-lg font-semibold [overflow-wrap:anywhere]"
+                  className="h-auto min-w-0 text-lg font-semibold [overflow-wrap:anywhere]"
                 >
                   {m.library_diary_occurrences()}
                 </h2>
@@ -431,7 +433,7 @@ export function PrivateDiaryPage({
                         </p>
                         <Link
                           to="/library"
-                          className="inline-flex min-h-11 max-w-full items-center rounded-md border px-4 text-sm text-primary [overflow-wrap:anywhere]"
+                          className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]' })}
                         >
                           {m.library_history_open_library()}
                         </Link>
@@ -447,7 +449,7 @@ export function PrivateDiaryPage({
                         className="min-w-0 space-y-3"
                       >
                         <p className="flex min-w-0 items-center gap-3 text-sm font-medium text-muted-foreground">
-                          <time dateTime={group.date} className="min-w-0 [overflow-wrap:anywhere]">
+                          <time dateTime={group.date} className="h-auto min-w-0 [overflow-wrap:anywhere]">
                             {recordedDayLabel(group.date, getLocale())}
                           </time>
                           <span aria-hidden="true" className="h-px min-w-3 flex-1 bg-border" />
@@ -477,7 +479,7 @@ export function PrivateDiaryPage({
               <section className="min-w-0 rounded-md border p-4">
                 <p>{m.library_diary_stale()}</p>
                 <Link
-                  className="mt-2 inline-flex min-h-11 max-w-full items-center rounded-md border px-3 [overflow-wrap:anywhere]"
+                  className={buttonVariants({ variant: 'outline', className: 'mt-2 h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]' })}
                   to="/library/history"
                   search={{
                     year: address.year,
@@ -489,19 +491,19 @@ export function PrivateDiaryPage({
                 </Link>
               </section>
             ) : pageRefusal ? (
-              <p role="status" className="min-w-0 rounded-md border p-4 [overflow-wrap:anywhere]">
+              <p role="status" className="h-auto min-w-0 rounded-md border p-4 [overflow-wrap:anywhere]">
                 {pageRefusal === 'closed' ? m.platform_closed_message() : m.ctxw_denied()}
               </p>
             ) : authorizedLoad?.diary.kind === 'unavailable' || (page && !currentPage) ? (
               <section className="min-w-0 rounded-md border p-4">
                 <p>{m.library_diary_read_unavailable()}</p>
-                <button
+                <Button
                   type="button"
-                  className="mt-2 min-h-11 max-w-full rounded-md border px-3 [overflow-wrap:anywhere]"
+                  variant="outline" className='h-auto min-h-7 mt-2 max-w-full [overflow-wrap:anywhere]'
                   onClick={() => void router.invalidate()}
                 >
                   {m.library_selection_retry()}
-                </button>
+                </Button>
               </section>
             ) : null
           }
@@ -512,18 +514,18 @@ export function PrivateDiaryPage({
                   {navigationReady ? (
                     <>
                       {previousAddress ? (
-                        <button
+                        <Button
                           type="button"
-                          className="min-h-11 max-w-full rounded-md border px-4 [overflow-wrap:anywhere]"
+                          variant="outline" className='h-auto min-h-7 max-w-full [overflow-wrap:anywhere]'
                           onClick={(event) => moveWindow('previous', previousAddress, event.detail === 0)}
                         >
                           {m.library_continue_previous_window()}
-                        </button>
+                        </Button>
                       ) : null}
                       {canStartFirst ? (
-                        <button
+                        <Button
                           type="button"
-                          className="min-h-11 max-w-full rounded-md border px-4 [overflow-wrap:anywhere]"
+                          variant="outline" className='h-auto min-h-7 max-w-full [overflow-wrap:anywhere]'
                           onClick={(event) =>
                             moveWindow(
                               'first',
@@ -537,12 +539,12 @@ export function PrivateDiaryPage({
                           }
                         >
                           {m.library_continue_first_window()}
-                        </button>
+                        </Button>
                       ) : null}
                       {visiblePage.next ? (
-                        <button
+                        <Button
                           type="button"
-                          className="min-h-11 max-w-full rounded-md border px-4 [overflow-wrap:anywhere]"
+                          variant="outline" className='h-auto min-h-7 max-w-full [overflow-wrap:anywhere]'
                           onClick={(event) =>
                             moveWindow(
                               'next',
@@ -557,9 +559,9 @@ export function PrivateDiaryPage({
                           }
                         >
                           {m.library_diary_next()}
-                        </button>
+                        </Button>
                       ) : (
-                        <p className="min-w-0 self-center text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                        <p className="h-auto min-w-0 self-center text-sm text-muted-foreground [overflow-wrap:anywhere]">
                           {m.library_diary_end()}
                         </p>
                       )}
@@ -569,7 +571,7 @@ export function PrivateDiaryPage({
                 {visiblePage.occurrences.length ? (
                   <aside
                     aria-label={m.library_history_window_details()}
-                    className="min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]"
+                    className="h-auto min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]"
                   >
                     {m.library_diary_page_bound({
                       count: Math.min(PRIVATE_DIARY_PAGE_LIMIT, visiblePage.occurrences.length),

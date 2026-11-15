@@ -397,7 +397,7 @@ function KnowledgeOutlineOwner({
             if (event.currentTarget.open) setOrganizationOpened(true);
           }}
         >
-          <summary className="min-h-11 cursor-pointer py-2 text-sm font-medium">
+          <summary className="cursor-pointer text-sm font-medium">
             {m.knowledge_navigation_organization({}, options)}
           </summary>
           {organizationOpened && (

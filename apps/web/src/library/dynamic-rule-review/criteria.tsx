@@ -6,12 +6,7 @@ import { pickText } from '@rezics/composition';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import type { RuleChoices, SavedRule } from '../collection-rule-read';
-import {
-  savedFilterReviewTree,
-  type CurrentFieldState,
-  type ReviewOperand,
-  type ReviewTree,
-} from '../saved-filter-review/model';
+import { savedFilterReviewTree, type CurrentFieldState, type ReviewOperand, type ReviewTree } from '../saved-filter-review/model';
 import type { ReviewRelease } from '../saved-filter-review/read';
 import { OwnerConditionReview } from './owner';
 
@@ -87,7 +82,7 @@ function Basis({
   if (!basis) return null;
   return (
     <details className="min-w-0 rounded-md border border-border p-3" open={expanded || kind === 'original'}>
-      <summary className="min-h-11 cursor-pointer content-center font-medium focus-visible:outline-2 focus-visible:outline-offset-2">
+      <summary className="cursor-pointer content-center font-medium focus-visible:outline-2 focus-visible:outline-offset-2">
         {m.library_rule_review_saved_basis()}
       </summary>
       <p className="my-2 text-sm text-muted-foreground">
@@ -192,7 +187,7 @@ function ExactValues({
         const currentValue = property ? labels[property]?.[entry.exact] : undefined;
         const currentLabel = currentValue ? pickText(currentValue, locale).text : entry.currentTypeLabel;
         return (
-          <li key={`${entry.exact}:${index}`} className="min-w-0 break-words">
+          <li key={`${entry.exact}:${index}`} className="h-auto min-w-0 break-words">
             <LabelPair accepted={entry.acceptedLabel} current={currentLabel} />
             {property && !currentLabel ? (
               <span className="mr-2 text-sm text-muted-foreground">{m.library_rule_review_exact_value()}</span>
@@ -256,7 +251,7 @@ function Operand({
             <ExactValues values={value.values} labels={labels} property={value.fieldId} locale={locale} />
           ) : null}
           {value.range ? (
-            <p className="break-words">
+            <p className="h-auto break-words">
               {m.saved_filter_review_range()} <code>{JSON.stringify(value.range)}</code>
             </p>
           ) : null}
@@ -429,7 +424,7 @@ export const DynamicRuleReview = memo(function DynamicRuleReview({
         </ul>
       </div>
       <details className="min-w-0">
-        <summary className="min-h-11 cursor-pointer content-center underline underline-offset-4 focus-visible:outline-2">
+        <summary className="cursor-pointer content-center underline underline-offset-4 focus-visible:outline-2">
           {m.saved_filter_review_exact()}
         </summary>
         <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">

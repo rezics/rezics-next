@@ -23,6 +23,7 @@ import {
   ThumbsUpIcon,
 } from 'lucide-react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../../paraglide/messages.js';
@@ -81,7 +82,7 @@ export type FeedActionBarProps = {
   subjectTarget?: boolean | undefined;
 };
 
-const actionClass = 'min-h-11 max-w-full whitespace-normal break-words sm:min-h-8 pointer-coarse:min-h-11';
+const actionClass = 'h-auto min-h-6 max-w-full whitespace-normal break-words';
 
 const subjectReactionControls = [
   ['like', ThumbsUpIcon, () => m.reaction_like()],
@@ -130,10 +131,9 @@ function subjectReactionFallback(
           const accessibleCount = count.visible === count.exact ? count.visible : `${count.visible} (${count.exact})`;
           const name = `${label()} ${accessibleCount}`;
           const pressed = viewerKnown ? selected === kind : undefined;
-          const className = `${buttonVariants({ variant: 'outline', size: 'sm' })} min-h-11 rounded-full pointer-coarse:min-h-11`;
           const content = (
             <>
-              <Icon aria-hidden className="size-4" />
+              <Icon aria-hidden />
               <span aria-hidden className="tabular-nums">
                 {count.visible}
               </span>
@@ -145,7 +145,6 @@ function subjectReactionFallback(
               type="button"
               variant="outline"
               size="sm"
-              className={className}
               disabled
               aria-label={name}
               {...(pressed === undefined ? {} : { 'aria-pressed': pressed })}
@@ -153,7 +152,12 @@ function subjectReactionFallback(
               {content}
             </Button>
           ) : (
-            <a key={kind} href={signIn} className={className} aria-label={name}>
+            <a
+              key={kind}
+              href={signIn}
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}
+              aria-label={name}
+            >
               {content}
             </a>
           );
@@ -431,7 +435,7 @@ function ActionVisit({
   const available = origin?.isCurrent() ?? true;
   const activeOverflow = signedIn ? overflow : undefined;
   const shareLabel = <span className="sr-only sm:not-sr-only">{m.thread_reading_share({}, options)}</span>;
-  const shareClass = `${actionClass} min-w-11 px-2 sm:min-w-8`;
+  const shareClass = actionClass;
 
   async function share(native: boolean) {
     if (!href || !current() || running.current) return;
@@ -493,7 +497,7 @@ function ActionVisit({
           href={signIn}
           aria-label={replyName}
           data-slot="feed-reply-action"
-          className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} ${actionClass}`}
+          className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), actionClass)}
         >
           {replyContent}
         </a>
@@ -517,7 +521,7 @@ function ActionVisit({
           href={reply.href}
           aria-label={replyName}
           data-slot="feed-reply-action"
-          className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} ${actionClass}`}
+          className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), actionClass)}
         >
           {replyContent}
         </a>
@@ -535,7 +539,7 @@ function ActionVisit({
         </Button>
       )}
       {!signedIn ? (
-        <a href={signIn} className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} ${shareClass}`}>
+        <a href={signIn} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), shareClass)}>
           <Share2Icon aria-hidden />
           {shareLabel}
         </a>
@@ -562,7 +566,7 @@ function ActionVisit({
         ) : (
           <a
             href={signedIn ? library.href : signIn}
-            className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} ${actionClass}`}
+            className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), actionClass)}
           >
             <LibraryBigIcon aria-hidden />
             {m.feed_action_library({}, options)}
@@ -610,8 +614,7 @@ function ActionVisit({
                     <Button
                       ref={menuButton}
                       variant="ghost"
-                      size="icon"
-                      className={actionClass}
+                      size="icon-sm"
                       aria-label={m.report_more({}, options)}
                     >
                       <EllipsisIcon aria-hidden />
@@ -633,8 +636,7 @@ function ActionVisit({
                   <Button
                     ref={menuButton}
                     variant="ghost"
-                    size="icon"
-                    className={`${actionClass} min-w-11 sm:min-w-8 pointer-coarse:min-w-11`}
+                    size="icon-sm"
                     aria-label={m.report_more({}, options)}
                   >
                     <EllipsisIcon aria-hidden />
@@ -684,7 +686,7 @@ function ActionVisit({
               <Button
                 type="button"
                 variant="outline"
-                className={actionClass}
+                className="h-auto min-h-7 max-w-full whitespace-normal break-words"
                 onClick={() => {
                   setFeedback(null);
                   (returnFocus.current === 'share' ? shareButton : menuButton).current?.focus();

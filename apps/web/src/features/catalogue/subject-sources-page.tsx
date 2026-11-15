@@ -32,7 +32,7 @@ type Props = {
   returnTo?: string;
 };
 const linkClassName =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'inline-flex max-w-full items-center underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 function CitationPart({
   part,
@@ -97,7 +97,7 @@ export function SubjectSourcesPage({
         {onRetry && !['loading', 'missing', 'unsupported'].includes(result.kind) && (
           <Button
             variant="outline"
-            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]"
+            className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]"
             disabled={busy}
             onClick={onRetry}
           >
@@ -254,7 +254,7 @@ export function SubjectSourcesPage({
                     <ContentItemFrame
                       as="div"
                       data-slot="source-statement"
-                      className="min-w-0 space-y-2 py-3 [overflow-wrap:anywhere] sm:py-4 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:rounded-sm [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
+                      className="min-w-0 space-y-2 py-3 [overflow-wrap:anywhere] sm:py-4 [&_a]:inline-flex [&_a]:max-w-full [&_a]:items-center [&_a]:rounded-sm [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
                     >
                       <ContentItemHeading
                         level={4}
@@ -306,7 +306,7 @@ export function SubjectSourcesPage({
           </section>
         ))}
       </section>
-      <div className="min-w-0 space-y-3 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:rounded-sm [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring">
+      <div className="min-w-0 space-y-3 [&_a]:inline-flex [&_a]:max-w-full [&_a]:items-center [&_a]:rounded-sm [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring">
         <SourcesSection value={value} sources={page.sources} />
         <p className="text-sm text-muted-foreground">{m.sources_rights_scope({}, o)}</p>
         {!records.length && <p className="text-sm text-muted-foreground">{m.sources_metadata_unavailable({}, o)}</p>}

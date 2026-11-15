@@ -18,6 +18,9 @@ import { NativeDocumentImage, type DocumentImagePresentation } from '../../../th
 import type { Reader } from '../../../subject/reader';
 import type { Stmt } from '../../pages/shared';
 import { ArtworkReaderContext } from './session';
+
+const compactWrap =
+  'h-auto min-h-6 max-w-full justify-start whitespace-normal text-start [overflow-wrap:anywhere]';
 import { canonicalMediaId, type ArtworkResult, type ArtworkTransport } from './read';
 
 type Selection = { key: string; id: string };
@@ -86,7 +89,7 @@ export function SubjectArtworkBoundary({
       tabIndex={-1}
       role="group"
       aria-label={label}
-      className="min-w-0 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+      className="min-w-0 "
     >
       <ArtworkVisit
         generation={previous.current.generation}
@@ -183,11 +186,11 @@ function ArtworkDisclosure({ spoilerLevel, gated, label, hideLabel, children }: 
             <Button
               variant="outline"
               size="sm"
-              className="min-h-11 min-w-11 whitespace-normal text-left focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-4"
+              className={compactWrap}
             />
           }
         >
-          <Eye aria-hidden="true" className="size-4" />
+          <Eye aria-hidden="true" />
           {open ? (hideLabel ?? m.subject_spoiler_hide()) : label}
         </CollapsibleTrigger>
       ) : null}
@@ -282,7 +285,7 @@ function ArtworkFact({
           variant="outline"
           size="sm"
           disabled={busy || !select}
-          className="min-h-11 max-w-full whitespace-normal text-left"
+          className={compactWrap}
           onClick={choose}
         >
           {result?.kind === 'unavailable'
@@ -297,7 +300,7 @@ function ArtworkFact({
           type="button"
           variant="ghost"
           size="sm"
-          className="min-h-11 whitespace-normal"
+          className={compactWrap}
           onClick={() => setDisclosure('hidden')}
         >
           {m.subject_artwork_hide({}, options)}

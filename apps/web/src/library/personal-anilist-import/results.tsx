@@ -16,7 +16,7 @@ function Outcome({ outcome, row }: { outcome: AniListOutcome; row: AniListRowMet
   return (
     <li className="min-w-0 space-y-4 rounded-xl border bg-card p-4 sm:p-5" data-anilist-outcome={outcome.status} data-anilist-row={outcome.ordinal}>
       <header className="min-w-0 space-y-1">
-        <h3 className="font-semibold [overflow-wrap:anywhere]">{row?.title ?? `#${outcome.ordinal + 1}`}</h3>
+        <h3 className="h-auto font-semibold [overflow-wrap:anywhere]">{row?.title ?? `#${outcome.ordinal + 1}`}</h3>
         <ImportTarget target={row?.target} />
       </header>
       <div className="grid min-w-0 gap-3 md:grid-cols-2">
@@ -60,7 +60,7 @@ function Outcome({ outcome, row }: { outcome: AniListOutcome; row: AniListRowMet
         <h4 className="font-medium">{m.library_anilist_source_retention()}</h4>
         {row?.scoreSource ? (
           <>
-            <p className="text-sm [overflow-wrap:anywhere]">
+            <p className="h-auto text-sm [overflow-wrap:anywhere]">
               {m.library_anilist_score_source({
                 value: row.scoreSource.lexeme ?? JSON.stringify(row.scoreSource.value) ?? String(row.scoreSource.value),
                 scale: row.scoreSource.scale ?? m.library_anilist_score_scale_unknown(),
@@ -75,8 +75,8 @@ function Outcome({ outcome, row }: { outcome: AniListOutcome; row: AniListRowMet
       </section>
       {outcome.retained.length ? (
         <details>
-          <summary className="min-h-11 cursor-pointer py-2">{m.library_anilist_retained_summary()}</summary>
-          <p className="text-sm [overflow-wrap:anywhere]">
+          <summary className="cursor-pointer py-2">{m.library_anilist_retained_summary()}</summary>
+          <p className="h-auto text-sm [overflow-wrap:anywhere]">
             {m.library_anilist_retained_fields({ fields: outcome.retained.join(', ') })}
           </p>
         </details>
@@ -183,7 +183,7 @@ export function AniListResultPage({
             data-anilist-outcome="unattempted"
             data-anilist-row={ordinal}
           >
-            <h3 className="font-semibold [overflow-wrap:anywhere]">{rows.get(ordinal)?.title ?? `#${ordinal + 1}`}</h3>
+            <h3 className="h-auto font-semibold [overflow-wrap:anywhere]">{rows.get(ordinal)?.title ?? `#${ordinal + 1}`}</h3>
             <p>{m.library_anilist_result_unattempted()}</p>
           </li>
         ))}
@@ -199,7 +199,7 @@ export function AniListResultPage({
                 className="min-w-0 space-y-3 rounded-lg border bg-card p-3 sm:p-4"
                 data-anilist-label-result-row={row.ordinal}
               >
-                <h4 className="font-medium [overflow-wrap:anywhere]">{rows.get(row.ordinal)?.title}</h4>
+                <h4 className="h-auto font-medium [overflow-wrap:anywhere]">{rows.get(row.ordinal)?.title}</h4>
                 <ImportTarget target={rows.get(row.ordinal)!.labels!.subjectId} />
                 <AniListLabelResult row={row} labels={rows.get(row.ordinal)!.labels!} />
               </section>

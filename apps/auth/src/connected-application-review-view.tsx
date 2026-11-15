@@ -40,7 +40,7 @@ export function ConnectedApplicationHistory({
       tabIndex={-1}
       role="status"
       aria-labelledby="connected-operation-history-heading"
-      className="flex min-w-0 flex-col gap-2 rounded-md border border-border bg-muted/40 p-4 text-start"
+      className="flex min-w-0 flex-col gap-2 rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10 text-start"
     >
       <h2 id="connected-operation-history-heading" className="font-semibold">
         {m.auth_connected_operation_heading()}
@@ -194,7 +194,7 @@ export function ConnectedApplicationReviewView({
             </ul>
           </div>
         ) : null}
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           {selection.confirming ? (
             <>
               <Button type="button" disabled={reducing || pending} aria-busy={reducing} onClick={onReduce}>
@@ -234,7 +234,7 @@ export function ConnectedApplicationReviewView({
         <>
           <ErrorAlert>{inventoryMessage(page.kind)}</ErrorAlert>
           {page.kind === 'signed-out' ? <a href="/login">{m.auth_security_sign_in()}</a> : null}
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             {canRetryPage ? (
               <Button
                 type="button"
@@ -324,7 +324,7 @@ export function ConnectedApplicationReviewView({
                     !row.pending_reduction &&
                     row.granted.length > 0 &&
                     !preflight ? (
-                      <div className="flex flex-wrap gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Button
                           type="button"
                           variant="outline"
@@ -355,7 +355,7 @@ export function ConnectedApplicationReviewView({
               ))}
             </ItemGroup>
           )}
-          <nav aria-label={m.auth_inventory_consents_heading()} className="flex flex-wrap gap-3">
+          <nav aria-label={m.auth_inventory_consents_heading()} className="flex flex-wrap items-center gap-2">
             {canNavigatePrevious ? (
               <Button
                 type="button"

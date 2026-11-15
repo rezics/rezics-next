@@ -174,7 +174,7 @@ export type EditorFindHandle = {
 };
 
 const findActionClassName =
-  'h-auto min-w-0 max-w-full shrink whitespace-normal wrap-break-word text-start';
+  'h-auto min-h-7 min-w-0 max-w-full shrink whitespace-normal wrap-break-word text-start';
 
 export function EditorFind({
   editor,
@@ -375,7 +375,7 @@ export function EditorFind({
       >
         {result.total ? editorLabel(labels.matchCount, { current: index + 1, total: result.total }) : labels.noMatches}
       </p>
-      <div className="flex min-w-0 flex-wrap gap-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
         <Button
           type="button"
           variant="outline"

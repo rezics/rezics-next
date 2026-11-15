@@ -134,7 +134,7 @@ function EvidenceContent({ evidence }: { evidence: ModerationEvidence['moderatio
           </p>
           {evidence.exact ? (
             <a
-              className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+              className="inline-flex items-center text-sm underline underline-offset-4"
               href={exactRevisionHref({ postId: post.id, revisionId: post.revisionId }, locale)}
             >
               {m.moderation_reported_revision_label()}

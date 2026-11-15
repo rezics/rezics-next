@@ -5,7 +5,7 @@ import { m } from '../../../paraglide/messages.js';
 import type { Failure } from './model';
 
 const recoveryControlClassName =
-  'h-auto min-h-8 min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere] py-1 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 max-md:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11';
+  'h-auto min-h-7 min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center';
 
 export type KeyboardActivation = { generation: number };
 
@@ -89,7 +89,7 @@ export function ZoneFeedback({
     unavailable: m.zones_owner_unavailable,
   }[failure.kind];
   return (
-    <div role="alert" className="min-w-0 space-y-3 rounded-xl border bg-muted/30 p-3 text-foreground sm:p-4">
+    <div role="alert" className="min-w-0 space-y-3 rounded-xl border p-3 text-foreground sm:p-4">
       <p className="whitespace-normal text-base leading-relaxed [overflow-wrap:anywhere]">{text({}, options)}</p>
       {failure.kind === 'signed-out' ? (
         <a

@@ -216,7 +216,7 @@ export function WorkbenchHistory({
                 )
               }
             >
-              <SelectTrigger id={`${filterId}-kind`} className="min-h-11">
+              <SelectTrigger id={`${filterId}-kind`}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

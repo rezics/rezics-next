@@ -15,8 +15,7 @@ import {
   type FollowCountState,
 } from './private-follow-counts';
 
-const countLinkClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 text-primary underline whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
+const countLinkClass = 'max-w-full text-primary underline underline-offset-4 whitespace-normal';
 
 function CountOutcome({
   value,
@@ -140,7 +139,7 @@ export function PrivateFollowCountsPageView({
         <Button
           type="button"
           variant="outline"
-          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-left focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="h-auto min-h-7 max-w-full whitespace-normal text-left"
           disabled={busy}
           onClick={onReload}
         >

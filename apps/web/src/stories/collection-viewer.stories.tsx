@@ -6,6 +6,7 @@ import type { CollectionViewerProjection } from '../library/collection-viewer/mo
 import { collectionMemberReturnAddress, collectionViewerActionHref } from '../library/collection-viewer/model';
 import { subjectHref } from '../subject/subject-href';
 import type { CollectionMember } from '../library/reads';
+import { Button } from '@rezics/ui/shadcn/button';
 
 const subjectId = '00000000-0000-4000-8000-000000000111';
 const memberIds = [
@@ -142,9 +143,9 @@ function RetiredReader() {
   const [retired, setRetired] = useState(false);
   return (
     <main className="mx-auto max-w-4xl space-y-4 p-4">
-      <button type="button" className="min-h-11" onClick={() => setRetired(true)}>
+      <Button type="button" variant="outline" size="sm" onClick={() => setRetired(true)}>
         Replace reader
-      </button>
+      </Button>
       <CollectionReadMembers
         members={members.slice(0, 1)}
         viewerProjection={retired ? { state: 'withheld' } : projection}

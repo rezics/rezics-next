@@ -22,11 +22,11 @@ import {
 } from '../catalogue/character-relationships/reading';
 
 export const characterRelationshipsActionClass =
-  'h-auto min-h-8 max-w-full whitespace-normal [overflow-wrap:anywhere] py-1.5 max-md:min-h-11 max-md:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 export const characterRelationshipsSummaryClass =
-  'cursor-pointer rounded-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 max-md:min-w-11 max-md:py-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:py-2';
+  'cursor-pointer font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 export const characterRelationshipsLinkClass =
-  'block w-fit max-w-full font-sans font-semibold underline max-md:min-h-11 max-md:min-w-11 max-md:py-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:py-2';
+  'block w-fit max-w-full font-sans font-semibold underline';
 
 const kindMessage = (kind: CharacterAssociationStream['kind'], locale: string) => {
   const o = { locale: locale as never };
@@ -249,7 +249,7 @@ export function CharacterRelationshipsGroups({
             >
               <SharedSelect.SelectTrigger
                 id={streamId}
-                className="min-w-0 max-w-full max-md:min-h-11 max-md:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+                className="min-w-0 max-w-full"
               >
                 <SharedSelect.SelectValue />
               </SharedSelect.SelectTrigger>

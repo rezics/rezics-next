@@ -673,11 +673,11 @@ export function RatingInput(props: RatingInputProps) {
           </div>
         </div>
         <Slider
-          className={cn(
-            '[&>div]:min-h-11 **:data-[slot=slider-thumb]:size-5 **:data-[slot=slider-thumb]:ring-2 **:data-[slot=slider-thumb]:ring-primary',
-            units === null &&
-              '**:data-[slot=slider-range]:opacity-0 **:data-[slot=slider-thumb]:bg-muted **:data-[slot=slider-thumb]:ring-primary/50',
-          )}
+          className={
+            units === null
+              ? '**:data-[slot=slider-range]:opacity-0 **:data-[slot=slider-thumb]:bg-muted'
+              : undefined
+          }
           disabled={props.disabled}
           key={visit.id}
           locale={locale}
@@ -697,8 +697,6 @@ export function RatingInput(props: RatingInputProps) {
             // An unrated resting position is not a vote. Name and value text belong to the native range.
             'aria-labelledby': units === null ? `${id}-label ${id}-value` : `${id}-label`,
             'aria-valuetext': text,
-            className:
-              'block size-5 shrink-0 rounded-2xl bg-white shadow-md ring-2 ring-primary not-dark:bg-clip-padding transition-[color,box-shadow] duration-200 select-none hover:ring-4 hover:ring-ring/30 focus-visible:ring-4 focus-visible:ring-ring/30 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50',
           }}
         />
         <div aria-hidden="true" className="flex justify-between text-muted-foreground text-xs tabular-nums">

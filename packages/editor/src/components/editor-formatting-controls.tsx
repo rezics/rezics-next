@@ -219,17 +219,26 @@ function FormattingDialog({
             </Field>
           ) : null}
         </FieldGroup>
-        {!valid || failed ? <p role="alert">{t(!valid ? 'invalidColor' : 'cannotApply')}</p> : null}
-        <div className="flex flex-wrap justify-end gap-2">
+        {!valid || failed ? (
+          <p role="alert" className="text-sm text-destructive">
+            {t(!valid ? 'invalidColor' : 'cannotApply')}
+          </p>
+        ) : null}
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {panel !== 'textStyle' ? (
-            <Button type="button" variant="outline" onClick={() => run(true)}>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto min-h-7 min-w-0 max-w-full whitespace-normal"
+              onClick={() => run(true)}
+            >
               {t(panel === 'codeLanguage' ? 'clearCodeLanguage' : 'removeEmphasis')}
             </Button>
           ) : null}
-          <Button type="button" variant="ghost" onClick={close}>
+          <Button type="button" variant="ghost" className="h-auto min-h-7 min-w-0 max-w-full whitespace-normal" onClick={close}>
             {labels.cancel}
           </Button>
-          <Button type="submit" disabled={!valid}>
+          <Button type="submit" disabled={!valid} className="h-auto min-h-7 min-w-0 max-w-full whitespace-normal">
             {labels.apply}
           </Button>
         </div>

@@ -21,6 +21,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { PatternStory } from './page';
 import { presentationViewNames } from '../features/pages/curate-view-editor';
 import { selectSharedOption } from './shared-select-interaction';
+import { Button } from '@rezics/ui/shadcn/button';
 
 // Contract-shaped native aggregates reuse a recorded anonymous subject; these examples do not attest native execution.
 const reader = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10';
@@ -108,10 +109,7 @@ function Connected({
         <PresentationPreviewContext.Provider value={{ read: async () => ({ ok: false, reason: 'unavailable' }) }}>
           <div className="mx-auto max-w-6xl p-4 sm:p-8">
             {admissionReplacement && (
-              <button
-                type="button"
-                className="mb-4 min-h-11 rounded-md border border-border px-3"
-                onClick={() => {
+              <Button type="button" className="mb-4" variant="outline" size="sm" onClick={() => {
                   const next = !signedOut;
                   client.setQueryData(
                     ['session'],
@@ -123,7 +121,7 @@ function Connected({
                 }}
               >
                 {signedOut ? 'Return to curator' : 'Retire curator admission'}
-              </button>
+              </Button>
             )}
             <CurationView initial={initial} transport={transport} />
           </div>

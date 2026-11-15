@@ -1,3 +1,6 @@
+import { Button } from '@rezics/ui/shadcn/button';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../paraglide/messages.js';
 import { creatorSalesHref } from './creator-sales-page';
 
@@ -12,23 +15,20 @@ export function CreatorSalesAddress({ locale, cursor }: { locale: string; cursor
         {m.creator_sales_address_invalid()}
       </p>
       <p className="text-sm text-muted-foreground">{m.creator_sales_address_retained()}</p>
-      <form method="get" action={href} className="space-y-4">
-        <label htmlFor="creator-sales-cursor" className="block text-sm font-medium">
-          {m.creator_sales_address_cursor_label()}
-        </label>
-        <input
-          id="creator-sales-cursor"
-          name="cursor"
-          type="text"
-          autoComplete="off"
-          required
-          maxLength={4096}
-          defaultValue={cursor ?? ''}
-          className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-        />
-        <button type="submit" className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
-          {m.creator_sales_address_correct()}
-        </button>
+      <form method="get" action={href} className="flex flex-col items-start gap-4">
+        <Field className="w-full">
+          <FieldLabel htmlFor="creator-sales-cursor">{m.creator_sales_address_cursor_label()}</FieldLabel>
+          <Input
+            id="creator-sales-cursor"
+            name="cursor"
+            type="text"
+            autoComplete="off"
+            required
+            maxLength={4096}
+            defaultValue={cursor ?? ''}
+          />
+        </Field>
+        <Button type="submit">{m.creator_sales_address_correct()}</Button>
       </form>
       <a className="text-sm underline" href={href}>
         {m.creator_sales_restart()}

@@ -34,7 +34,7 @@ export function HostedDraftPickerView({
         ref={trigger}
         type="button"
         variant="outline"
-        className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
+        className="h-auto min-h-7 min-w-0 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
         aria-expanded={expanded}
         aria-controls={`${id}-picker`}
         disabled={disabled || state.kind === 'ended' || expanded}
@@ -77,7 +77,7 @@ export function HostedDraftPickerView({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal"
+                  className="h-auto min-h-7 max-w-full whitespace-normal"
                   disabled={disabled || busy}
                   onClick={() => void picker.next()}
                 >
@@ -91,7 +91,7 @@ export function HostedDraftPickerView({
               <Button
                 type="button"
                 variant="outline"
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal"
+                className="h-auto min-h-7 max-w-full whitespace-normal"
                 disabled={disabled}
                 onClick={() => void picker.retry()}
               >
@@ -101,7 +101,7 @@ export function HostedDraftPickerView({
             <Button
               type="button"
               variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal"
+              className="h-auto min-h-7 max-w-full whitespace-normal"
               disabled={disabled || busy}
               onClick={() => void picker.restart()}
             >
@@ -110,7 +110,7 @@ export function HostedDraftPickerView({
             <Button
               type="button"
               variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal"
+              className="h-auto min-h-7 max-w-full whitespace-normal"
               onClick={() => {
                 returnFocus.current = true;
                 picker.close();
@@ -144,7 +144,7 @@ function DraftPickerRow({
       <Button
         type="button"
         variant="ghost"
-        className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
+        className="h-auto min-h-7 min-w-0 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
         aria-describedby={`${id}-status ${id}-saved`}
         disabled={disabled}
         onClick={onSelect}

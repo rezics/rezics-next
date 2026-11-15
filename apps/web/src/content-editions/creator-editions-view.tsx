@@ -225,7 +225,7 @@ export function CreatorEditionsView({ page, cursor }: CreatorEditionsViewProps) 
           <PageHeading id="creator-editions-heading">{m.creator_editions_heading()}</PageHeading>
           <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.creator_editions_intro()}</p>
         </div>
-        <Button className="min-h-11" nativeButton={false} render={<a href={localizeHref('/editions/new')} />}>
+        <Button nativeButton={false} render={<a href={localizeHref('/editions/new')} />}>
           {m.creator_editions_create()}
         </Button>
       </div>
@@ -235,7 +235,6 @@ export function CreatorEditionsView({ page, cursor }: CreatorEditionsViewProps) 
           {page.kind === 'sign-in' ? (
             <Button
               variant="outline"
-              className="min-h-11"
               nativeButton={false}
               render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(href)}`} />}
             >
@@ -246,7 +245,6 @@ export function CreatorEditionsView({ page, cursor }: CreatorEditionsViewProps) 
               <div className="flex flex-wrap gap-3">
                 <Button
                   variant="outline"
-                  className="min-h-11"
                   nativeButton={false}
                   render={
                     <a
@@ -260,7 +258,6 @@ export function CreatorEditionsView({ page, cursor }: CreatorEditionsViewProps) 
                 {page.kind === 'unavailable' && cursor && (
                   <Button
                     variant="ghost"
-                    className="min-h-11"
                     nativeButton={false}
                     render={<a href={creatorEditionsContinuationHref()} data-creator-origin-restart="" />}
                   >
@@ -335,7 +332,6 @@ export function CreatorEditionsView({ page, cursor }: CreatorEditionsViewProps) 
                         {edition.state === 'draft' && (
                           <Button
                             variant="outline"
-                            className="min-h-11"
                             nativeButton={false}
                             render={
                               <a
@@ -349,7 +345,6 @@ export function CreatorEditionsView({ page, cursor }: CreatorEditionsViewProps) 
                         {edition.state === 'published' && (
                           <Button
                             variant="outline"
-                            className="min-h-11"
                             nativeButton={false}
                             render={
                               <a
@@ -377,7 +372,6 @@ export function CreatorEditionsView({ page, cursor }: CreatorEditionsViewProps) 
               {cursor && (
                 <Button
                   variant="ghost"
-                  className="min-h-11"
                   nativeButton={false}
                   render={<a href={creatorEditionsContinuationHref()} data-creator-origin-restart="" />}
                 >
@@ -386,7 +380,6 @@ export function CreatorEditionsView({ page, cursor }: CreatorEditionsViewProps) 
               )}
               <Button
                 variant="outline"
-                className="min-h-11"
                 nativeButton={false}
                 render={<a href={href} data-creator-origin-retry="" />}
               >
@@ -394,7 +387,6 @@ export function CreatorEditionsView({ page, cursor }: CreatorEditionsViewProps) 
               </Button>
               {page.next && (
                 <Button
-                  className="min-h-11"
                   nativeButton={false}
                   render={<a href={creatorEditionsContinuationHref(page.next)} />}
                 >

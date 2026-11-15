@@ -6,8 +6,10 @@ import type { SubjectLibraryReadProvenance, SubjectSlotEntry } from '../subject-
 import type { CurrentEntry, EntryStateChange, EntryStatePage, EntryStateReview } from './contract';
 import { readEntryAfterRestore, readEntryHistoryPage, readEntryHistoryReview, sendEntryStateRestore } from './server';
 import type { RestoreCommand } from './native';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 
-const button = 'min-h-11 max-w-full whitespace-normal rounded-md border px-3 py-2 text-start disabled:opacity-50';
+const button = 'h-auto min-h-7 max-w-full whitespace-normal text-start';
 type ReadNotice = 'missing' | 'stale' | 'retired' | 'denied' | 'unavailable' | 'changed';
 type RestoreNotice = 'stale' | 'state_unavailable' | 'unchanged' | 'missing' | 'retired' | 'denied' | 'rejected';
 type Attempt = {
@@ -210,7 +212,7 @@ export function EntryStateHistory({
     current('library_entry_state_history.restore') &&
     canRestore;
   return (
-    <section aria-label={m.library_entry_history_title()} className="basis-full min-w-0 space-y-3 rounded-md border p-3 [overflow-wrap:anywhere]">
+    <section aria-label={m.library_entry_history_title()} className="h-auto basis-full min-w-0 space-y-3 rounded-md border p-3 [overflow-wrap:anywhere]">
       <h3 className="font-semibold">{m.library_entry_history_title()}</h3>
       <p className="text-sm text-muted-foreground">{m.library_entry_history_intro()}</p>
       <HistoryPage
@@ -234,9 +236,9 @@ export function EntryStateHistory({
         <div className="space-y-2" role="status">
           <p>{m.library_entry_history_uncertain()}</p>
           {retryCurrent ? (
-            <button className={button} onClick={() => void dispatch(activeAttempt, true)}>
+            <Button variant="outline" className={button} onClick={() => void dispatch(activeAttempt, true)}>
               {m.library_entry_history_retry_original()}
-            </button>
+            </Button>
           ) : <p>{m.library_entry_history_fresh_review()}</p>}
         </div>
       ) : null}
@@ -244,7 +246,7 @@ export function EntryStateHistory({
         <div className="space-y-2" role="alert">
           <p>{restoreMessage(restoreNotice)}</p>
           {restoreNotice === 'stale' ? (
-            <button className={button} onClick={onRefresh}>{m.library_entry_history_refresh_entry()}</button>
+            <Button variant="outline" className={button} onClick={onRefresh}>{m.library_entry_history_refresh_entry()}</Button>
           ) : null}
         </div>
       ) : null}
@@ -390,28 +392,39 @@ function HistoryPage({
     <div className="space-y-3">
       <label className="flex flex-wrap items-center gap-2">
         {m.library_entry_history_page_size()}
-        <select
-          className="min-h-11 rounded-md border bg-background px-2"
-          value={limit}
+        <Select<string, false>
+          items={[
+            { value: '20', label: '20' },
+            { value: '50', label: '50' },
+          ]}
+          value={String(limit)}
           disabled={!!busy || commandPending}
-          onChange={(event) => {
-            setLimit(Number(event.target.value));
+          onValueChange={(value) => {
+            if (value === null) return;
+            setLimit(Number(value));
             setPage(null);
             setReview(null);
             setNotice(null);
           }}
         >
-          <option value={20}>20</option>
-          <option value={50}>50</option>
-        </select>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="20">20</SelectItem>
+              <SelectItem value="50">50</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </label>
-      {!page && !busy ? <button className={button} disabled={commandPending} onClick={() => void load()}>{m.library_entry_history_open()}</button> : null}
+      {!page && !busy ? <Button variant="outline" className={button} disabled={commandPending} onClick={() => void load()}>{m.library_entry_history_open()}</Button> : null}
       {busy === 'page' ? <p role="status">{m.library_entry_history_loading()}</p> : null}
       {notice ? (
         <div role="status" className="space-y-2">
           <p>{readMessage(notice)}</p>
           {notice === 'changed' || notice === 'stale' ? (
-            <button className={button} onClick={onRefresh}>{m.library_entry_history_refresh_entry()}</button>
+            <Button variant="outline" className={button} onClick={onRefresh}>{m.library_entry_history_refresh_entry()}</Button>
           ) : null}
         </div>
       ) : null}
@@ -430,26 +443,26 @@ function HistoryPage({
                 <p className="font-medium">{m.library_entry_history_change_revision({ revision: change.revision })}</p>
                 <ChangeEvidence change={change} options={stateOptions} />
                 {canReview ? (
-                  <button
-                    className={button}
+                  <Button
+                    variant="outline" className={button}
                     disabled={!!busy || commandPending}
                     onClick={() => void address(change)}
                   >
                     {m.library_entry_history_review()}
-                  </button>
+                  </Button>
                 ) : null}
               </li>
             ))}
           </ol>
           <div className="flex flex-wrap gap-2">
             {page.next ? (
-              <button className={button} disabled={!!busy || commandPending} onClick={() => void load(page.next!)}>
+              <Button variant="outline" className={button} disabled={!!busy || commandPending} onClick={() => void load(page.next!)}>
                 {m.library_entry_history_next()}
-              </button>
+              </Button>
             ) : null}
-            <button className={button} disabled={!!busy || commandPending} onClick={() => void load()}>
+            <Button variant="outline" className={button} disabled={!!busy || commandPending} onClick={() => void load()}>
               {m.library_entry_history_restart()}
-            </button>
+            </Button>
           </div>
         </>
       ) : null}
@@ -465,13 +478,13 @@ function HistoryPage({
           <ChangeEvidence change={review.value.change} options={stateOptions} beforeLabel={m.library_entry_history_restore_target()} />
           <p>{availabilityMessage(review.value.availability)}</p>
           {review.value.availability === 'available' && canRestore ? (
-            <button
-              className={button}
+            <Button
+              variant="outline" className={button}
               disabled={!!busy || commandPending}
               onClick={() => onRestore(review.value, review.credential, basis)}
             >
               {m.library_entry_history_restore()}
-            </button>
+            </Button>
           ) : null}
         </article>
       ) : null}

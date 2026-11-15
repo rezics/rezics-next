@@ -7,7 +7,7 @@ import type { HistoryRevisionContext } from './post-history-lifetime';
 import { subjectHref } from '../subject/subject-href';
 import { threadLocation } from './thread-href';
 
-const link = 'inline-flex min-h-11 items-center underline underline-offset-4 [overflow-wrap:anywhere]';
+const link = 'inline-flex items-center underline underline-offset-4 [overflow-wrap:anywhere]';
 
 /** Current presentation is admitted beside history; it never substitutes for a selected revision. */
 export function HistoryCurrentContext({

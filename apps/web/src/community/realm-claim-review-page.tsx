@@ -82,7 +82,7 @@ function ClaimantName({ request }: { request: RealmClaimReviewRequest }) {
   return request.claimant?.href ? (
     <a
       href={request.claimant.href}
-      className="inline-block min-h-11 max-w-full content-center rounded-md underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      className="inline-block max-w-full content-center underline underline-offset-4 "
     >
       <bdi>{label}</bdi>
     </a>
@@ -313,7 +313,7 @@ function RealmClaimReviewContent({
               <Button
                 ref={retryPageButton}
                 variant="outline"
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                 disabled={!active}
                 onClick={(event) => {
                   rememberQueueActivation(event.detail);
@@ -325,7 +325,7 @@ function RealmClaimReviewContent({
             ) : null}
             <Button
               variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+              className="h-auto min-h-7 max-w-full whitespace-normal text-start"
               disabled={!active}
               onClick={(event) => {
                 rememberQueueActivation(event.detail);
@@ -339,7 +339,7 @@ function RealmClaimReviewContent({
           <Button
             ref={refreshButton}
             variant="outline"
-            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+            className="h-auto min-h-7 max-w-full whitespace-normal text-start"
             disabled={!active || state.busy || state.outcome === 'uncertain'}
             onClick={(event) => {
               rememberQueueActivation(event.detail);
@@ -402,7 +402,7 @@ function RealmClaimReviewContent({
                       actions={
                         <Button
                           variant="outline"
-                          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                          className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                           disabled={!editable || !request.approvalAdvice}
                           ref={
                             pendingFocus.current?.kind === 'cancel' &&
@@ -436,7 +436,7 @@ function RealmClaimReviewContent({
               {page.next && state.outcome === 'idle' ? (
                 <Button
                   variant="outline"
-                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                  className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                   disabled={!editable}
                   onClick={(event) => {
                     rememberQueueActivation(event.detail);
@@ -483,7 +483,7 @@ function RealmClaimReviewContent({
                 <ReferenceDetails realmId={confirming.source.realmId} requestId={confirming.source.requestId} />
                 <div className="flex flex-wrap gap-3">
                   <Button
-                    className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                    className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                     disabled={!active || state.busy}
                     onClick={(event) => {
                       pendingFocus.current =
@@ -502,7 +502,7 @@ function RealmClaimReviewContent({
                   </Button>
                   <Button
                     variant="outline"
-                    className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                    className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                     disabled={state.busy}
                     onClick={(event) => {
                       pendingFocus.current =
@@ -540,7 +540,7 @@ function RealmClaimReviewContent({
               <Button
                 ref={inspectionButton}
                 variant="outline"
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                 disabled={!active || state.busy}
                 onClick={(event) => {
                   pendingFocus.current =
@@ -579,7 +579,7 @@ function RealmClaimReviewContent({
                 <Button
                   ref={approvalRetryButton}
                   variant="outline"
-                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                  className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                   disabled={!active || state.busy}
                   onClick={(event) => {
                     pendingFocus.current =
@@ -685,7 +685,7 @@ function RealmClaimReviewContent({
         <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
-            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+            className="h-auto min-h-7 max-w-full whitespace-normal text-start"
             disabled={state.busy}
             onClick={() => {
               pendingFocus.current = null;

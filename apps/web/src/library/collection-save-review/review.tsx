@@ -522,7 +522,7 @@ function CurrentBasis({
   canReviewCurrent: boolean;
 }) {
   return (
-    <section className="space-y-3 rounded-xl border border-amber-500/40 bg-amber-500/5 p-3" data-conflict-basis>
+    <section className="space-y-3 rounded-xl border border-destructive/40 bg-destructive/5 p-3" data-conflict-basis>
       <h3 className="font-semibold">{m.collection_save_current_basis()}</h3>
       <p>{m.collection_save_draft_preserved()}</p>
       <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-3">
@@ -549,7 +549,7 @@ function CurrentBasis({
             </p>
             {basisState !== 'reading' && onReadCurrent ? (
               <Button
-                className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                 type="button"
                 variant="outline"
                 onClick={onReadCurrent}
@@ -582,7 +582,7 @@ function CurrentBasis({
       <div className="flex flex-wrap gap-2">
         {rebaseIssue && onDiscardUnavailable ? (
           <Button
-            className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+            className="h-auto min-h-7 max-w-full whitespace-normal text-start"
             type="button"
             variant="outline"
             onClick={onDiscardUnavailable}
@@ -592,7 +592,7 @@ function CurrentBasis({
         ) : null}
         {currentBasis && onDiscard ? (
           <Button
-            className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+            className="h-auto min-h-7 max-w-full whitespace-normal text-start"
             type="button"
             variant="outline"
             onClick={onDiscard}
@@ -602,7 +602,7 @@ function CurrentBasis({
         ) : null}
         {currentBasis && onReviewCurrent ? (
           <Button
-            className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+            className="h-auto min-h-7 max-w-full whitespace-normal text-start"
             type="button"
             disabled={!canReviewCurrent || Boolean(rebaseIssue)}
             onClick={onReviewCurrent}
@@ -650,7 +650,7 @@ export function CollectionSaveReview({
       data-plan-collection={plan.collectionId}
     >
       <details open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
-        <summary className="min-h-11 cursor-pointer rounded-lg py-2 font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
+        <summary className="cursor-pointer rounded-lg font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
           {m.collection_review_heading()}
         </summary>
         <div className="mt-3 space-y-4">
@@ -683,10 +683,10 @@ export function CollectionSaveReview({
           </h3>
           <OutcomeGroups outcomes={outcomes} plan={plan} initial={initial} desired={desired} types={types} />
           {unknown && onRetry ? (
-            <div className="space-y-2 rounded-lg border border-amber-500/40 p-3">
+            <div className="space-y-2 rounded-lg border border-destructive/40 p-3">
               <p>{m.collection_save_unknown_help()}</p>
               <Button
-                className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                 type="button"
                 onClick={onRetry}
               >

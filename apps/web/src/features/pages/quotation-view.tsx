@@ -24,9 +24,9 @@ import { ViewHeading } from './view-heading';
 import { SpoilerGate } from './values';
 import { webUrl } from './shared';
 
-const actionClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2';
+const actionClass = 'h-auto max-w-full whitespace-normal [overflow-wrap:anywhere]';
 const linkClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'inline-flex max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 export type QuotationTransport = {
   read: (input: {
@@ -455,7 +455,7 @@ function SelectedText({
             }))}
             onValueChange={(value) => choose(value ?? undefined)}
           >
-            <SharedSelect.SelectTrigger className="block min-h-11 max-w-full rounded border bg-background p-2">
+            <SharedSelect.SelectTrigger className="w-full max-w-full">
               <SharedSelect.SelectValue />
             </SharedSelect.SelectTrigger>
             <SharedSelect.SelectContent>

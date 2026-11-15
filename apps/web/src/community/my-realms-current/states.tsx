@@ -65,9 +65,6 @@ function Avatar({ row }: { row: MyRealmsCurrentRow }) {
   );
 }
 
-const entryClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center justify-center rounded-lg px-4 py-2 text-sm font-medium whitespace-normal underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-
 /** Current identity and each independent action come from the admitted inventory page. */
 export function MyRealmsCurrentRowView({
   row,
@@ -111,22 +108,23 @@ export function MyRealmsCurrentRowView({
             className="flex min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center"
           >
             {actions.enter.state === 'available' ? (
-              <Link
-                to="/realms/$id"
-                params={{ id: row.realmId }}
-                className={`${entryClass} bg-primary text-primary-foreground hover:bg-primary/90`}
+              <Button
+                className="h-auto min-h-7 max-w-full whitespace-normal"
+                nativeButton={false}
+                render={<Link to="/realms/$id" params={{ id: row.realmId }} />}
               >
                 {m.my_realms_open()}
-              </Link>
+              </Button>
             ) : null}
             {actions.manage.state === 'available' ? (
-              <Link
-                to="/realms/$id/members"
-                params={{ id: row.realmId }}
-                className={`${entryClass} border border-border text-primary hover:bg-muted`}
+              <Button
+                variant="outline"
+                className="h-auto min-h-7 max-w-full whitespace-normal"
+                nativeButton={false}
+                render={<Link to="/realms/$id/members" params={{ id: row.realmId }} />}
               >
                 {m.my_realms_manage()}
-              </Link>
+              </Button>
             ) : null}
           </nav>
         ) : null}
@@ -164,7 +162,7 @@ export function MyRealmsCurrentRowView({
             variant="ghost"
             aria-expanded={Boolean(selected)}
             aria-controls={selected ? reviewId : undefined}
-            className="h-auto min-h-11 max-w-full whitespace-normal text-muted-foreground"
+            className="h-auto min-h-7 max-w-full whitespace-normal text-muted-foreground"
             onClick={(event) => {
               onLeaveSelect?.(event.currentTarget);
               controller.select(row);

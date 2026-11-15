@@ -1,4 +1,6 @@
 import type { SubjectRead } from '@rezics/client';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { pickText, type SelectedContext } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { useCallback, useMemo, useRef, type ReactNode, type RefObject } from 'react';
@@ -7,18 +9,18 @@ import { subjectVisitReturn, withSubjectVisitReturn } from '../../pages/subject-
 import { subjectViewHref } from '../../../subject/subject-href';
 import { CandidateValue } from '../../pages/data';
 import { relationTargetHref } from '../../pages/edition-work';
-import { linkClass, linkColor, PlainLink, type PageLink } from '../../pages/shared';
+import { PlainLink, type PageLink } from '../../pages/shared';
 import { ValueExplanationEntry } from '../value-explanation-entry';
 import type { RecordingFact, RecordingField, RecordingGroup, RecordingVisit } from './model';
 import { recordingStatementDomId, recordingStatementReturnHref } from './review/navigation';
 import { useRecordingFactSelection } from './review/selection';
 
 const actionClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
 const buttonActionClass =
-  `${actionClass} justify-center rounded-md border border-border bg-background px-3 py-2 text-sm font-semibold no-underline hover:bg-muted/40`;
+  cn(buttonVariants({ variant: 'outline' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'justify-center');
 const navigationActionClass =
-  `${actionClass} w-full justify-center rounded-md border border-border/70 bg-background px-3 py-2 text-center no-underline hover:bg-muted/40 sm:w-auto sm:justify-start`;
+  cn(buttonVariants({ variant: 'outline' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'w-full justify-center sm:w-auto sm:justify-start');
 
 const live = () => true;
 
@@ -554,7 +556,7 @@ export function RecordingReader({
             ))}
           </ul>
           <Link
-            className={`${linkClass} ${linkColor} ${navigationActionClass}`}
+            className={`${navigationActionClass}`}
             href={withSubjectVisitReturn(relations, currentAddress ?? '', locale)}
           >
             {m.subject_relations({}, options(locale))}
@@ -567,13 +569,13 @@ export function RecordingReader({
         className="flex min-w-0 flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3"
       >
         <Link
-          className={`${linkClass} ${linkColor} ${navigationActionClass}`}
+          className={`${navigationActionClass}`}
           href={withSubjectVisitReturn(details, currentAddress ?? '', locale)}
         >
           {m.subject_details({}, options(locale))}
         </Link>
         <Link
-          className={`${linkClass} ${linkColor} ${navigationActionClass}`}
+          className={`${navigationActionClass}`}
           href={withSubjectVisitReturn(relations, currentAddress ?? '', locale)}
         >
           {m.subject_relations({}, options(locale))}

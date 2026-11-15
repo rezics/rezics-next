@@ -1,6 +1,7 @@
 import { useRecentSearches } from '../recent';
 import { Cover, coverRatio, type CoverRatio } from '@rezics/ui/cover';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 import { Kbd } from '@rezics/ui/shadcn/kbd';
 import { cn } from '@rezics/ui/utils';
 import { ArrowLeft, ArrowUp, Search, SlidersHorizontal } from 'lucide-react';
@@ -50,8 +51,6 @@ import type { BrowserSession } from '../../session/browser-state';
 import { headerSearchSessionKey } from './session-key';
 import { useSearchRetryWait } from '../search-recovery-retry';
 
-const controlFocus =
-  'focus-visible:ring-0 focus-visible:border-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-2';
 const compactSearch = '(max-width: 1023px)';
 const retryableSuggestions = ['error', 'unavailable', 'preparing', 'restart'];
 
@@ -281,12 +280,13 @@ export function HeaderSearchView({
         aria-describedby={keyboardShortcut ? `${id}-keyboard-help` : undefined}
         title={keyboardShortcut ? m.header_search_keyboard_help({}, messageOptions) : undefined}
         className={cn(
-          'header-search-trigger flex h-11 w-full min-w-0 items-center gap-3 rounded-full border border-border/60 bg-muted/50 px-4 text-start text-sm text-muted-foreground outline-none hover:bg-accent lg:hidden',
-          controlFocus,
+          'header-search-trigger',
+          buttonVariants({ variant: 'outline' }),
+          'w-full min-w-0 justify-start text-start text-muted-foreground lg:hidden',
           expanded && 'hidden',
         )}
       >
-        <Search aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+        <Search aria-hidden="true" className="shrink-0 text-muted-foreground" />
         <span className="truncate">{triggerLabel}</span>
         {keyboardShortcut && (
           <>
@@ -310,9 +310,9 @@ export function HeaderSearchView({
             ? cn(
                 'fixed inset-0 z-50 flex h-dvh flex-col overflow-hidden overscroll-contain p-3 pt-[max(.75rem,env(safe-area-inset-top))] pb-[max(.75rem,env(safe-area-inset-bottom))] ps-[max(.75rem,env(safe-area-inset-left))] pe-[max(.75rem,env(safe-area-inset-right))]',
                 !phoneSheet &&
-                  'lg:absolute lg:inset-auto lg:top-0 lg:h-auto lg:max-h-[min(80dvh,42rem)] lg:w-full lg:rounded-3xl lg:border lg:border-border lg:p-0 lg:shadow-xl',
+                  'lg:absolute lg:inset-auto lg:top-0 lg:h-auto lg:max-h-[min(80dvh,42rem)] lg:w-full lg:rounded-lg lg:bg-popover lg:p-0 lg:text-popover-foreground lg:shadow-md lg:ring-1 lg:ring-foreground/10',
               )
-            : 'hidden rounded-full border border-border lg:block',
+            : 'hidden rounded-md border border-input bg-input/20 lg:block dark:bg-input/30',
         )}
       >
         {retained.map(([name, value], index) => (
@@ -320,32 +320,30 @@ export function HeaderSearchView({
         ))}
         <div
           data-search-composer
-          className={cn(expanded ? 'shrink-0 rounded-t-3xl border-b border-border/60' : 'rounded-full')}
+          className={cn(expanded ? 'shrink-0 rounded-t-lg border-b border-border/60' : 'rounded-md')}
         >
-          <div className={cn('flex min-h-11 min-w-0 items-center gap-2 px-4', expanded && 'py-2')}>
+          <div className="flex min-w-0 items-center gap-2 px-2">
             {expanded ? (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 onClick={onClose}
                 aria-label={m.header_search_close({}, messageOptions)}
-                className={cn(
-                  'grid size-11 shrink-0 place-items-center rounded-full outline-none hover:bg-accent',
-                  controlFocus,
-                  !phoneSheet && 'lg:hidden',
-                )}
+                className={cn(!phoneSheet && 'lg:hidden')}
               >
-                <ArrowLeft aria-hidden="true" className="size-5" />
-              </button>
+                <ArrowLeft aria-hidden="true" />
+              </Button>
             ) : null}
             <Search
               aria-hidden="true"
               className={cn(
-                'size-4 shrink-0 text-muted-foreground',
+                'size-3.5 shrink-0 text-muted-foreground',
                 expanded && (phoneSheet ? 'hidden' : 'hidden lg:block'),
               )}
             />
             {scope && <ScopeChip scope={scope} locale={locale} onRemove={onRemoveScope} />}
-            <input
+            <Input
               {...inputProps}
               ref={inputRef}
               name={action ? 'q' : undefined}
@@ -377,7 +375,7 @@ export function HeaderSearchView({
               value={query}
               autoComplete="off"
               maxLength={scope ? 256 : undefined}
-              className="h-11 min-w-0 flex-1 rounded-lg border-0 bg-transparent px-2 py-3 text-sm placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-foreground focus-visible:-outline-offset-2"
+              className="min-w-0 flex-1 border-0 bg-transparent shadow-none dark:bg-transparent"
             />
             {keyboardShortcut && (
               <Kbd aria-hidden="true" className="shrink-0">
@@ -391,23 +389,23 @@ export function HeaderSearchView({
                 type="button"
                 variant="outline"
                 size="default"
-                className={cn('min-h-11', controlFocus)}
+                className="shrink-0"
                 disabled={!region}
                 onClick={onFilters}
                 title={!region ? m.header_search_filters_unavailable({}, messageOptions) : undefined}
               >
-                <SlidersHorizontal aria-hidden="true" className="size-4" />
+                <SlidersHorizontal aria-hidden="true" />
                 {m.search_filters({}, messageOptions)}
                 {region && region.activeCount > 0 ? ` (${count})` : ''}
               </Button>
               <Button
                 type="submit"
                 size="icon"
-                className={cn('size-11 rounded-full', controlFocus)}
+
                 disabled={!action || (!query.trim() && !scope)}
                 aria-label={m.search_submit({}, messageOptions)}
               >
-                <ArrowUp aria-hidden="true" className="size-4" />
+                <ArrowUp aria-hidden="true" />
               </Button>
             </div>
           )}

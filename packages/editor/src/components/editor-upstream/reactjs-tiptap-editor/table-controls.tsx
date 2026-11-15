@@ -186,7 +186,7 @@ export function TableControls({
         aria-label={labels.table}
         aria-orientation="horizontal"
         data-slot="editor-table-controls"
-        className="mb-2 flex w-full min-w-0 max-w-full items-center gap-1 rounded-xl border border-border/60 bg-popover p-1 text-popover-foreground"
+        className="mb-2 flex w-full min-w-0 max-w-full items-center gap-1 rounded-lg border bg-popover p-1 text-popover-foreground"
         onKeyDown={moveFocus}
       >
         <div className="min-w-0 max-w-full flex-1 md:hidden">
@@ -198,7 +198,7 @@ export function TableControls({
               <Button
                 type="button"
                 variant="ghost"
-                className="h-auto min-h-11 w-full min-w-0 justify-start gap-2 whitespace-normal"
+                className="h-auto min-h-7 w-full min-w-0 justify-start whitespace-normal"
                 aria-label={labels.table}
                 onMouseDown={(event) => event.preventDefault()}
               >
@@ -209,7 +209,7 @@ export function TableControls({
             }
           />
         </div>
-        <div className="hidden min-w-0 max-w-full flex-1 items-center gap-0.5 overflow-x-auto overscroll-x-contain md:flex">
+        <div className="hidden min-w-0 max-w-full flex-1 items-center gap-1 overflow-x-auto overscroll-x-contain md:flex">
           {groups.map((group, index) => (
             <Fragment key={group[0]}>
               {index ? <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-border" /> : null}

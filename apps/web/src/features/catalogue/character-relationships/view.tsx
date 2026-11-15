@@ -1,4 +1,5 @@
 import { catalogueEditor, useEditorLifetime } from '../editor-lifetime';
+import { cn } from '@rezics/ui/utils';
 import { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
 import { useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -14,8 +15,6 @@ import { RelationEditor } from '../relation-editor';
 import { useConsentFocus } from '../statement-consent-focus';
 import {
   CharacterRelationshipsGroups,
-  characterRelationshipsActionClass,
-  characterRelationshipsSummaryClass,
 } from '../../pages/character-relationships';
 import { associationCorrection } from './correction';
 import {
@@ -31,6 +30,9 @@ import {
   type CharacterAssociationStream,
   type CharacterRelationshipsRead,
 } from './reading';
+
+const actionClass =
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
 
 export type CharacterRelationshipsTransport = {
   read: (stream?: string, cursor?: string, session?: string) => Promise<CharacterRelationshipsRead>;
@@ -382,14 +384,14 @@ function CharacterRelationshipsLive({
             />
             <p>
               <a
-                className={buttonVariants({ variant: 'outline', className: characterRelationshipsActionClass })}
+                className={cn(buttonVariants({ variant: 'outline' }), actionClass)}
                 href={changes.href}
               >
                 {m.character_relationships_changes({}, o)}
               </a>
             </p>
             <details className="rounded-lg border border-border p-4 text-sm">
-              <summary className={characterRelationshipsSummaryClass}>{m.catalogue_technical_details({}, o)}</summary>
+              <summary className="cursor-pointer font-medium [overflow-wrap:anywhere]">{m.catalogue_technical_details({}, o)}</summary>
               <dl className="mt-3 space-y-2 [&_dd]:break-all [&_dd]:font-mono [&_dd]:text-xs">
                 <div>
                   <dt>{m.creator_editions_subject({}, o)}</dt>
@@ -412,7 +414,7 @@ function CharacterRelationshipsLive({
         {drafts.map((draft) => (
           <section key={draft.instance} className="space-y-3 border-t border-border pt-6">
             <details className="text-sm">
-              <summary className={characterRelationshipsSummaryClass}>{m.catalogue_technical_details({}, o)}</summary>
+              <summary className="cursor-pointer font-medium [overflow-wrap:anywhere]">{m.catalogue_technical_details({}, o)}</summary>
               <p className="mt-3 break-all">
                 {m.character_relationships_holder({}, o)}: <code>{draft.id}</code>
               </p>
@@ -433,7 +435,7 @@ function CharacterRelationshipsLive({
       </div>
       {(read || concealed) && (
         <Button
-          className={characterRelationshipsActionClass}
+          className={actionClass}
           variant="outline"
           disabled={busy}
           onClick={(event) => void load(stream?.key, cursor.current, event, 'retry')}

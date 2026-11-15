@@ -2,29 +2,11 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { m } from '../../paraglide/messages.js';
 import { useAuthoringDeparture } from '../../threads/authoring-departure';
 import type { ChecklistRow, ChecklistViewerBinding, ChecklistVisit } from './contract';
-import {
-  applyChecklistOutcome,
-  applyReadback,
-  appendRetainedPage,
-  cancelChecklistReview,
-  checklistDirty,
-  checklistLocked,
-  preparingVisit,
-  replaceBinding,
-  stageChecklistClear,
-  stageChecklistReview,
-  submitChecklistVisit,
-  toggleRow,
-} from './controller';
-import {
-  bindEpisodeCommand,
-  outcomeFromRecord,
-  retryOriginal,
-  type BoundEpisodeCommand,
-  type EpisodeSender,
-} from './commands';
+import { applyChecklistOutcome, applyReadback, appendRetainedPage, cancelChecklistReview, checklistDirty, checklistLocked, preparingVisit, replaceBinding, stageChecklistClear, stageChecklistReview, submitChecklistVisit, toggleRow } from './controller';
+import { bindEpisodeCommand, outcomeFromRecord, retryOriginal, type BoundEpisodeCommand, type EpisodeSender } from './commands';
 import { EpisodeChecklistEditor, EpisodeChecklistReadout, EpisodeChecklistReview } from './editor';
 import { EpisodeChecklistRecovery } from './states';
+import { Button } from '@rezics/ui/shadcn/button';
 
 export type ChecklistInspect = (
   ids: readonly string[],
@@ -415,14 +397,14 @@ export function EpisodeChecklistVisit({
         </p>
       ) : null}
       {visit.kind === 'accepted' && visit.pending && load ? (
-        <button
+        <Button
           type="button"
-          className="min-h-11 rounded-lg border border-border px-4"
+          variant="outline"
           disabled={activity !== null}
           onClick={() => void refresh()}
         >
           {m.library_progress_retry()}
-        </button>
+        </Button>
       ) : null}
       {visit.kind === 'review' || visit.kind === 'submitting' ? (
         <EpisodeChecklistReview

@@ -167,7 +167,7 @@ export function ReplyContext({
         {parent ? (
           <a
             href={`#post-${parent.id}`}
-            className="inline-flex min-h-11 min-w-11 min-w-0 items-center rounded-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="inline-flex min-w-0 items-center rounded-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             {label}
           </a>
@@ -178,12 +178,15 @@ export function ReplyContext({
       </p>
       {excerpt ? <p className="line-clamp-2 [overflow-wrap:anywhere]">{excerpt}</p> : null}
       {!parent && navigation ? (
-        <a
-          href={navigation.exactHref(parentId)}
-          className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-md px-3 py-2 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        <Button
+          nativeButton={false}
+          variant="link"
+          size="sm"
+          className="h-auto min-h-6 max-w-full whitespace-normal"
+          render={<a href={navigation.exactHref(parentId)} />}
         >
           {m.thread_branch_parent_destination()}
-        </a>
+        </Button>
       ) : null}
       {!parent && reader ? <OffPageParent key={parentId} parentId={parentId} reader={reader} /> : null}
     </div>
@@ -205,7 +208,7 @@ function OffPageParent({ parentId, reader }: { parentId: string; reader: ReplyPa
         type="button"
         variant="ghost"
         size="sm"
-        className="h-auto min-h-11 min-w-11 max-w-full shrink px-3 py-2 text-left leading-snug whitespace-normal [overflow-wrap:anywhere]"
+        className="h-auto min-h-6 max-w-full shrink text-left leading-snug whitespace-normal [overflow-wrap:anywhere]"
         aria-expanded={open}
         aria-controls={regionId}
         onClick={() => reader.toggle(parentId)}
@@ -222,7 +225,7 @@ function OffPageParent({ parentId, reader }: { parentId: string; reader: ReplyPa
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-auto min-h-11 min-w-11 max-w-full shrink px-3 py-2 text-left leading-snug whitespace-normal [overflow-wrap:anywhere]"
+                className="h-auto min-h-6 max-w-full shrink text-left leading-snug whitespace-normal [overflow-wrap:anywhere]"
                 onClick={() => void reader.load(parentId)}
               >
                 {m.exact_revision_retry()}
@@ -241,7 +244,7 @@ function OffPageParent({ parentId, reader }: { parentId: string; reader: ReplyPa
               {result.revisionId ? (
                 <a
                   href={exactRevisionHref({ postId: result.id, revisionId: result.revisionId }, getLocale())}
-                  className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  className="inline-flex max-w-full items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
                   {m.exact_revision_heading()}
                 </a>
@@ -260,7 +263,7 @@ export function ReplyButton({ disabled, onReply }: { disabled: boolean; onReply:
       type="button"
       variant="ghost"
       size="sm"
-      className="h-auto min-h-11 min-w-11 max-w-full shrink px-3 py-2 text-left leading-snug whitespace-normal [overflow-wrap:anywhere]"
+      className="h-auto min-h-6 max-w-full shrink text-left leading-snug whitespace-normal [overflow-wrap:anywhere]"
       disabled={disabled}
       onClick={onReply}
     >

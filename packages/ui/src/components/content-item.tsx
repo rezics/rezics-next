@@ -197,7 +197,7 @@ export function ContentItem({
             {hasSlot(actions) && (
               <ListRowControl
                 data-content-item-slot="actions"
-                className={cn('flex min-h-11 min-w-0 flex-wrap items-center gap-2', independentControlsClassName)}
+                className={cn('flex min-w-0 flex-wrap items-center gap-2', independentControlsClassName)}
               >
                 {actions}
               </ListRowControl>

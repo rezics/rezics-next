@@ -1,5 +1,7 @@
 import { FilterError, parseFilter, type FilterDocument, type FilterQualifier } from '@rezics/filter';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -42,8 +44,8 @@ type Props = {
 
 const loading: DiscoveryState = { status: 'loading' };
 const worksActionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const worksSelectClass = 'w-full min-w-0 max-w-full h-auto min-h-11 max-w-full';
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
+const worksSelectClass = 'w-full min-w-0 max-w-full';
 
 function requestCondition(value: string | undefined): FilterDocument | undefined {
   if (!value) return;
@@ -333,15 +335,14 @@ function ConceptWorksVisit({
           </Select>
         </Field>
       </div>
-      <label className="flex min-h-11 items-center gap-2 text-sm" htmlFor="concept-work-descendants">
-        <input
+      <Field orientation="horizontal" className="w-auto">
+        <Checkbox
           id="concept-work-descendants"
-          type="checkbox"
           checked={route.includeChildren ?? false}
-          onChange={(event) => onChange?.({ includeChildren: event.currentTarget.checked, cursor: undefined })}
+          onCheckedChange={(checked) => onChange?.({ includeChildren: checked === true, cursor: undefined })}
         />
-        {m.concept_tagged_works_descendants({}, options)}
-      </label>
+        <FieldLabel htmlFor="concept-work-descendants">{m.concept_tagged_works_descendants({}, options)}</FieldLabel>
+      </Field>
 
       {read.works?.state === 'available' && (route.property ?? read.requestedRole) && (
         <ConceptWeightRange
@@ -360,7 +361,7 @@ function ConceptWorksVisit({
 
       {read.works?.state === 'available' && roleAvailableForRoute(read, route) && route.scheme && (
         <details className="rounded-lg border border-border/60 p-3" open={!!route.conditionText}>
-          <summary className="min-h-11 cursor-pointer py-2 font-medium">
+          <summary className="cursor-pointer font-medium [overflow-wrap:anywhere]">
             {m.concept_tagged_works_additional({}, options)}
           </summary>
           <ConditionEditor
@@ -377,7 +378,10 @@ function ConceptWorksVisit({
         <div className="space-y-2">
           <p role="status">{m.discovery_unsupported({}, options)}</p>
           <a
-            className={buttonVariants({ variant: 'outline' })}
+            className={cn(
+              buttonVariants({ variant: 'outline' }),
+              'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+            )}
             href={`${catalogueEntries.facts({ id: read.public.subject.id, label: title, locale }).href}${route.returnTo ? `?${new URLSearchParams({ returnTo: route.returnTo })}` : ''}`}
           >
             {m.concept_tagged_works_source({}, options)}

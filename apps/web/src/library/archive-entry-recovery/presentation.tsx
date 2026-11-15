@@ -155,7 +155,7 @@ function FieldFacts({ fields }: { fields: Record<string, unknown> }) {
       {Object.entries(fields).map(([field, value]) => (
         <div key={field} className="min-w-0 space-y-1 rounded-md bg-muted/40 p-3">
           <dt className="font-medium">{fieldLabel(field)}</dt>
-          <dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">{valueText(value, field)}</dd>
+          <dd className="h-auto whitespace-pre-wrap [overflow-wrap:anywhere]">{valueText(value, field)}</dd>
         </div>
       ))}
     </dl>

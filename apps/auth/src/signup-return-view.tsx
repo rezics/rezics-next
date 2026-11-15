@@ -45,12 +45,12 @@ export function SignupReturnView({
       <AuthTask>
         <AuthTaskSection
           aria-busy={checking}
-          className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-6"
+          className="rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10"
         >
           <h2
             ref={heading}
             tabIndex={-1}
-            className="max-w-prose text-xl font-semibold tracking-tight focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-4 focus:ring-offset-background"
+            className="max-w-prose text-base font-medium tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
           >
             {title}
           </h2>
@@ -59,7 +59,7 @@ export function SignupReturnView({
           ) : unavailable ? (
             <ErrorAlert className="max-w-prose">{m.auth_signup_return_unavailable_body()}</ErrorAlert>
           ) : currentSession ? (
-            <AuthNotice className="max-w-prose border-primary/30 bg-primary/5">
+            <AuthNotice className="max-w-prose">
               <p role="status">
                 {state.currentViewerChanged
                   ? m.auth_signup_return_viewer_changed()
@@ -70,7 +70,7 @@ export function SignupReturnView({
           {summary ? (
             <AuthNotice
               className={
-                summary.kind === 'created' ? 'max-w-prose border-primary/30 bg-primary/5' : 'max-w-prose bg-muted/50'
+                summary.kind === 'created' ? 'max-w-prose' : 'max-w-prose'
               }
               role="status"
             >

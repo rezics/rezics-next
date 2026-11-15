@@ -26,7 +26,7 @@ export function ResourceAccessLink({ resourceId }: { resourceId: string }) {
   }, [resourceId, state]);
   return state === 'signed-in' && authorized === resourceId ? (
     <a
-      className="inline-flex min-h-11 items-center text-sm text-primary underline-offset-4 hover:underline"
+      className="inline-flex items-center text-sm text-primary underline-offset-4 hover:underline"
       href={`/${getLocale()}/access/${encodeURIComponent(resourceId)}`}
     >
       {m.access_heading()}

@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
+import { Button } from '@rezics/ui/shadcn/button';
 import { useEffect, useMemo, useState } from 'react';
 import { CatalogueFileReader, CatalogueFileReturnLink } from '../features/catalogue/catalogue-file-reader/reader';
 import {
@@ -100,13 +101,9 @@ function EvidenceVisit({
                 link={Link}
               />
               {returning && (
-                <button
-                  type="button"
-                  className="min-h-11 rounded border p-3"
-                  onClick={() => setRetirement((value) => value + 1)}
-                >
+                <Button type="button" onClick={() => setRetirement((value) => value + 1)}>
                   {m.catalogue_file_reader_open_again()}
-                </button>
+                </Button>
               )}
             </>
           ) : (

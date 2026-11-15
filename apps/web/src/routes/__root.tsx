@@ -261,7 +261,7 @@ export function Root({ children }: { children: ReactNode }) {
           className="border-b border-border bg-background p-4 text-foreground"
         >
           <p>{m.shell_client_unavailable({}, options)}</p>
-          <a href={href} className="inline-flex min-h-11 items-center text-primary underline">
+          <a href={href} className="text-primary underline underline-offset-4">
             {m.shell_client_reload({}, options)}
           </a>
         </div>

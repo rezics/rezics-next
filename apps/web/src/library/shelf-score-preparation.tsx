@@ -69,7 +69,7 @@ export function ShelfScorePreparation({
               : m.library_score_order_preparing()}
       </p>
       {progress?.installation === 'installed' ? null : (
-        <Button type="button" variant="outline" className="min-h-11" disabled={busy || !isCurrent()} onClick={advance}>
+        <Button type="button" variant="outline" disabled={busy || !isCurrent()} onClick={advance}>
           {busy
             ? m.library_score_prepare_running()
             : failed

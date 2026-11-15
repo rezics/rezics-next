@@ -1,5 +1,6 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 import type { FormEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -197,9 +198,8 @@ export function RealmMembersPage({
             <label htmlFor={`${id}-account`} className="text-sm font-medium">
               {m.realm_bans_inspect_account()}
             </label>
-            <input
+            <Input
               id={`${id}-account`}
-              className="min-h-11 w-full rounded-md border bg-background px-3"
               autoComplete="off"
               spellCheck={false}
               maxLength={36}
@@ -212,7 +212,7 @@ export function RealmMembersPage({
               }}
             />
           </div>
-          <Button type="submit" variant="outline" className="h-auto min-h-11 max-w-full whitespace-normal text-start">
+          <Button type="submit" variant="outline" className="h-auto min-h-7 max-w-full whitespace-normal text-start">
             {m.realm_members_lookup_account()}
           </Button>
           {accountIdInvalid ? (
@@ -257,7 +257,7 @@ export function RealmMembersPage({
               {selected.kind === 'failed' || selected.kind === 'unavailable' ? (
                 <Button
                   variant="outline"
-                  className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                  className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                   onClick={() => void visit.retrySelected()}
                 >
                   {m.realm_members_retry_selected()}
@@ -265,7 +265,7 @@ export function RealmMembersPage({
               ) : null}
               <Button
                 variant="outline"
-                className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                 onClick={close}
               >
                 {m.realm_members_back()}
@@ -365,7 +365,7 @@ export function RealmMembersPage({
                           else rowButtons.current.delete(row.identity.accountId);
                         }}
                         variant="outline"
-                        className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                        className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                         aria-label={m.realm_members_inspect_account({ account: row.identity.reference })}
                         onClick={() => void visit.select(row.identity.accountId)}
                       >
@@ -384,7 +384,7 @@ export function RealmMembersPage({
               {visit.canPrevious() ? (
                 <Button
                   variant="outline"
-                  className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                  className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                   onClick={() => movePage(visit.previousAddress(), visit.previous)}
                 >
                   {m.realm_members_previous()}
@@ -393,7 +393,7 @@ export function RealmMembersPage({
               {visit.canFirst() ? (
                 <Button
                   variant="outline"
-                  className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                  className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                   onClick={() => movePage(visit.firstAddress(), visit.first)}
                 >
                   {m.realm_members_first()}
@@ -402,7 +402,7 @@ export function RealmMembersPage({
               {read.page.next !== null ? (
                 <Button
                   variant="outline"
-                  className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                  className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                   onClick={() => movePage(visit.moreAddress(), visit.more)}
                 >
                   {m.realm_members_more()}
@@ -429,7 +429,7 @@ export function RealmMembersPage({
           {read.kind === 'failed' || read.kind === 'unavailable' || read.kind === 'preparing' ? (
             <Button
               variant="outline"
-              className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+              className="h-auto min-h-7 max-w-full whitespace-normal text-start"
               onClick={() => movePage(snapshot.address, visit.retryPage)}
             >
               {m.realm_members_retry_page()}

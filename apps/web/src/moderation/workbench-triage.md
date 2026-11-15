@@ -42,7 +42,7 @@ fabricated native decision.
 
 Open details bind to the current read identity. Scope, queue, cursor, reader or generation replacement remounts the
 list, closes every details panel, and ignores late close/focus callbacks. Empty, denied and unavailable pages do not
-render cases, so prior evidence and statements cannot remain. Inspect and Close are 44px keyboard targets. Escape
+render cases, so prior evidence and statements cannot remain. Inspect and Close stay keyboard controls. Escape
 closes the panel that contains focus. Closing returns keyboard focus to the originating inspect control when that
 identity is still current. Copy exists in all eight launch locales.
 

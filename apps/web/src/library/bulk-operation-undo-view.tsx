@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { EntryRestoreFeedback, EntryUndoForm } from './entry-undo';
 import { undoOperand, type UndoAttempt, type UndoState } from './bulk-operation-undo';
@@ -205,49 +206,54 @@ export function BulkOperationUndoView({
                 : readMessage(state.read)}
       </p>
       <nav className="flex flex-wrap gap-4" aria-label={m.bulk_operation_results()}>
-        <button
+        <Button
           type="button"
-          className="min-h-11 underline"
+          variant="outline"
+          size="sm"
           disabled={!authorized || state?.read === 'loading' || busy}
           onClick={(event) => beginWindowAction(onRead, event.currentTarget)}
         >
           {m.managed_refresh()}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="min-h-11 underline"
+          variant="outline"
+          size="sm"
           disabled={!authorized || state?.read === 'loading' || busy || !state?.previous}
           onClick={(event) => beginWindowAction(onPrevious, event.currentTarget)}
         >
           {m.library_window_previous()}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="min-h-11 underline"
+          variant="outline"
+          size="sm"
           disabled={!authorized || state?.read === 'loading' || busy}
           onClick={(event) => beginWindowAction(onFirst, event.currentTarget)}
         >
           {m.library_window_first()}
-        </button>
+        </Button>
         {state?.readRetry && (
-          <button
+          <Button
             type="button"
-            className="min-h-11 underline"
+            variant="outline"
+          size="sm"
             disabled={!authorized || busy}
             onClick={(event) => beginWindowAction(onRetryRead, event.currentTarget)}
           >
             {m.library_window_retry()}
-          </button>
+          </Button>
         )}
         {state?.read === 'ready' && state.page?.next && (
-          <button
+          <Button
             type="button"
-            className="min-h-11 underline"
+            variant="outline"
+          size="sm"
             disabled={!authorized || busy}
             onClick={(event) => beginWindowAction(onMore, event.currentTarget)}
           >
             {m.bulk_operation_more()}
-          </button>
+          </Button>
         )}
       </nav>
       {state?.failure && <p role="status">{readMessage(state.failure)}</p>}
@@ -331,16 +337,17 @@ export function BulkOperationUndoView({
                         ) : attempt ? (
                           renderAttempt(outcome.ordinal, attempt)
                         ) : !attempt && operand && writeAvailable ? (
-                          <button
+                          <Button
                             type="button"
-                            className="min-h-11 underline"
+                            variant="outline"
+          size="sm"
                             disabled={busy || !csrfToken}
                             onClick={(event) =>
                               beginRestore(outcome.ordinal, () => onRestore(outcome.ordinal), event.currentTarget)
                             }
                           >
                             {m.editor_undo()}
-                          </button>
+                          </Button>
                         ) : !attempt && outcome.deletion && !operand ? (
                           <p>{m.library_bulk_undo_expired()}</p>
                         ) : null}

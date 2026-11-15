@@ -137,13 +137,13 @@ function RelationEditRoute() {
       <article className="mx-auto w-full max-w-4xl space-y-8">
         <p role="alert">{m.relation_public_unsupported()}</p>
         <a
-          className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+          className="text-primary underline underline-offset-4"
           href={origin.returnHref}
         >
           {general ? m.relation_public_general_return() : m.relation_public_return()}
         </a>
         <a
-          className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+          className="text-primary underline underline-offset-4"
           href={relationPublicFreshHref(data.routePath, origin.returnHref)}
         >
           {m.relation_public_fresh_global()}
@@ -176,7 +176,7 @@ function RelationEditRoute() {
       {publicReturn ? (
         <div className="flex flex-wrap gap-x-6 gap-y-2">
           <a
-            className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+            className="text-primary underline underline-offset-4"
             href={publicReturn}
           >
             {generalPublicReturn ? m.relation_public_general_return() : m.relation_public_return()}
@@ -185,7 +185,7 @@ function RelationEditRoute() {
         </div>
       ) : via ? (
         <p>
-          <a className="inline-flex min-h-11 items-center text-primary underline underline-offset-4" href={via}>
+          <a className="text-primary underline underline-offset-4" href={via}>
             {m.recording_reader_return({}, { locale: getLocale() as never })}
           </a>
         </p>
@@ -211,7 +211,7 @@ function RelationEditRoute() {
         <div className="space-y-3">
           <p role="alert">{m.relation_public_unsupported()}</p>
           <a
-            className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+            className="text-primary underline underline-offset-4"
             href={relationPublicFreshHref(routePath, freshReturn)}
           >
             {m.relation_public_fresh_global()}

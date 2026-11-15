@@ -5,6 +5,7 @@ import { PageHeading } from '../../shell/page-heading';
 import { ExportAction, actionClass } from './controls';
 import { exportTerminalLabel } from './meaning';
 import type { ExportStage } from './controller';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 
 function Shell({ children }: { children: ReactNode }) {
   return (
@@ -41,7 +42,7 @@ export function ExportUnavailable({ denied }: { denied?: boolean }) {
 
 export function LibraryReturnLink() {
   return (
-    <a href={localizeHref('/library')} className={`${actionClass} inline-flex items-center underline`}>
+    <a href={localizeHref('/library')} className={buttonVariants({ variant: 'link', className: actionClass })}>
       {m.library_export_return_library()}
     </a>
   );

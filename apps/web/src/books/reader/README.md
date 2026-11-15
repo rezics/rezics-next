@@ -76,7 +76,7 @@ accepts an optional string of at most 512 characters through the generated page 
 undefined title while preserving every other field, matching the generated exact optional property. Each nonempty admitted title
 is ordinary escaped link text describing the current admitted public opening, not a frozen historical title;
 an omitted or empty title uses the existing localized numbered publication label. Supplied order, exact destinations
-and 44px link targets stay unchanged. Every explicit page is one list request of at most 20 rows with no per-Book
+and wrapping link targets stay unchanged. Every explicit page is one list request of at most 20 rows with no per-Book
 metadata/body reads, refill or hydration. Native cursors bind the title opt-in; an incompatible cursor keeps changed-state
 recovery with its original operands, rather than changing query mode or becoming an empty page.
 
@@ -192,7 +192,7 @@ Keyboard navigation focuses the heading while its original focus intent remains.
 a focus transfer. Contents return focuses the selected occurrence where present. Choosing
 a shared search/header control during navigation or moving focus during a request cancels the transfer. Arrow
 navigation stays inside the reading region, mirrors the document direction, and respects text selection, editable
-and interactive controls, modifiers, held keys and input methods. Controls wrap with 44px targets and phone safe
+and interactive controls, modifiers, held keys and input methods. Controls wrap at the official control size and keep phone safe
 area spacing; the document's language/direction is independent of the interface locale. Eight launch locales cover
 controls and recovery: en, zh-Hant, zh-Hans, ja, ko, de, fr and es.
 
@@ -351,7 +351,7 @@ replacing-page assertions now require retained siblings and rows, while exact-bo
 
 `book-checkpoint-recovery.stories.tsx` mounts the actual checkpoint component inside the shared Book reader with
 installed native response shapes. Its named states are `saved`, `unknown-save`, `unknown-clear`, `failed-read` and
-`replaced-visit`; all use locale globals and wrapping 44px controls. These fixtures and interaction sources do not
+`replaced-visit`; all use locale globals and wrapping controls. These fixtures and interaction sources do not
 claim native save/Continue, keyboard, phone/desktop visual or retirement acceptance; those remain verifier-owned.
 
 `MultipleCataloguePages`, `SparseCatalogueContinuation`, `DirectCatalogueEntry`, `FailedCatalogueRetry` and

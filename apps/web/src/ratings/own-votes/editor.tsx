@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -104,8 +105,8 @@ export function OwnVoteEditor({
         <div className="space-y-3">
           <label className="grid gap-1 text-sm font-medium">
             {m.library_my_ratings_value()}
-            <input
-              className="min-h-11 w-full max-w-sm rounded-md border bg-background px-3 text-base"
+            <Input
+              className="w-full max-w-sm"
               type="number"
               inputMode="numeric"
               min={entry.question.scale.min}
@@ -120,14 +121,14 @@ export function OwnVoteEditor({
           {!validDraft ? <p role="alert">{m.library_my_ratings_choose_value()}</p> : null}
           <div className="flex flex-wrap gap-2">
             <Button
-              className="h-auto min-h-11 max-w-full whitespace-normal wrap-anywhere py-2"
+              className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
               disabled={locked || busy || !validDraft}
               onClick={onSave}
             >
               {m.library_my_ratings_save()}
             </Button>
             <Button
-              className="h-auto min-h-11 max-w-full whitespace-normal wrap-anywhere py-2"
+              className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
               variant="outline"
               disabled={locked || busy}
               onClick={onCancel}
@@ -140,7 +141,7 @@ export function OwnVoteEditor({
         <div className="flex flex-wrap gap-2">
           {editable ? (
             <Button
-              className="h-auto min-h-11 max-w-full whitespace-normal wrap-anywhere py-2"
+              className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
               disabled={locked || busy}
               onClick={onEdit}
             >
@@ -149,7 +150,7 @@ export function OwnVoteEditor({
           ) : null}
           {canClear ? (
             <Button
-              className="h-auto min-h-11 max-w-full whitespace-normal wrap-anywhere py-2"
+              className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
               variant="outline"
               disabled={locked || busy}
               onClick={() => setConfirmingClear(true)}
@@ -168,7 +169,7 @@ export function OwnVoteEditor({
         <div className="flex flex-wrap gap-2">
           {canRetry ? (
             <Button
-              className="h-auto min-h-11 max-w-full whitespace-normal wrap-anywhere py-2"
+              className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
               disabled={busy}
               onClick={onRetry}
             >
@@ -177,7 +178,7 @@ export function OwnVoteEditor({
           ) : null}
           {isAdmittedVoteAction(entry, entry.actions, 'GET') ? (
             <Button
-              className="h-auto min-h-11 max-w-full whitespace-normal wrap-anywhere py-2"
+              className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
               variant="outline"
               disabled={busy}
               onClick={onReview}
@@ -188,7 +189,7 @@ export function OwnVoteEditor({
         </div>
       ) : null}
       <details className="text-xs text-muted-foreground">
-        <summary className="min-h-11 cursor-pointer content-center rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        <summary className="cursor-pointer content-center rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
           {m.library_my_ratings_original_key()}
         </summary>
         <p className="mt-1 break-all" data-slot="own-vote-original-pair">
@@ -203,11 +204,11 @@ export function OwnVoteEditor({
             <AlertDialogDescription>{m.library_my_ratings_confirm_clear_text()}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="h-auto min-h-11 max-w-full whitespace-normal wrap-anywhere py-2">
+            <AlertDialogCancel className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere">
               {m.library_my_ratings_cancel()}
             </AlertDialogCancel>
             <AlertDialogAction
-              className="h-auto min-h-11 max-w-full whitespace-normal wrap-anywhere py-2"
+              className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
               onClick={(event) => {
                 event.preventDefault();
                 setConfirmingClear(false);

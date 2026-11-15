@@ -158,7 +158,7 @@ function IllustrativeProgress({ current }: { current: () => boolean }) {
       </label>
       <Button
         variant="outline"
-        className="min-h-11 whitespace-normal"
+        className="h-auto min-h-7 whitespace-normal"
         onClick={() => {
           if (current()) setAmount('3');
         }}
@@ -223,7 +223,7 @@ function BookJourney({
                 assertions.
               </p>
               <Button
-                className="min-h-11 justify-self-start text-xs"
+                className="justify-self-start"
                 variant="ghost"
                 onClick={() => runtime.book.replace()}
               >

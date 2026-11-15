@@ -1,3 +1,5 @@
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { recentHistoryDestination } from './recent-replay';
 import { locales } from '../paraglide/runtime.js';
 import { CurrentTrendingSearches } from './trending-section';
@@ -16,8 +18,10 @@ export type SearchDiscovery = {
   trendingQueries?: readonly string[];
   trendingRealms?: readonly SearchRealmDiscovery[];
 };
-const control =
-  'flex min-h-11 items-center gap-3 rounded-xl px-2 text-sm outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring';
+const rowClass = cn(
+  buttonVariants({ variant: 'ghost', size: 'sm' }),
+  'h-auto min-h-6 min-w-0 flex-1 justify-start gap-3 whitespace-normal px-2 text-start',
+);
 export function RecentPanel({
   history,
   recent,
@@ -75,24 +79,25 @@ export function RecentPanel({
             <h2 className="font-semibold">
               {all ? m.header_search_history({}, options) : m.header_search_recent({}, options)}
             </h2>
-            <button type="button" className={control} aria-expanded={all} onClick={() => setAll(!all)}>
+            <Button type="button" variant="ghost" size="sm" aria-expanded={all} onClick={() => setAll(!all)}>
               {all ? m.header_search_recent({}, options) : m.header_search_history({}, options)}
-              <ChevronRight aria-hidden="true" className="size-4" />
-            </button>
+              <ChevronRight aria-hidden="true" />
+            </Button>
           </div>
           {status && <p className="px-2 text-xs text-muted-foreground">{status}</p>}
           {history?.failure && history.retry && (
-            <button
+            <Button
               ref={retry.reloadRef}
               type="button"
-              className={control}
+              variant="ghost"
+              size="sm"
               onClick={(event) => {
                 retry.requestReloadFocus(event.currentTarget);
                 history.retry?.();
               }}
             >
               {m.search_history_reload({}, options)}
-            </button>
+            </Button>
           )}
           {entries.length ? (
             <ul ref={focus.listRef}>
@@ -108,7 +113,7 @@ export function RecentPanel({
                       type={Tag === 'button' ? 'button' : undefined}
                       href={href}
                       disabled={Tag === 'button' && scoped}
-                      className={`${control} min-w-0 flex-1 text-start`}
+                      className={rowClass}
                       onClick={(event) => {
                         if (history?.owner && !history.owner()) {
                           event.preventDefault();
@@ -128,7 +133,7 @@ export function RecentPanel({
                           <UserRound className="size-4" />
                         </span>
                       ) : (
-                        <Clock aria-hidden="true" className="mx-2 size-5 shrink-0 text-muted-foreground" />
+                        <Clock aria-hidden="true" className="mx-2 shrink-0 text-muted-foreground" />
                       )}
                       <span className="min-w-0">
                         <span className="block truncate">
@@ -141,9 +146,10 @@ export function RecentPanel({
                         ) : null}
                       </span>
                     </Tag>
-                    <button
+                    <Button
                       type="button"
-                      className={`${control} shrink-0`}
+                      variant="ghost"
+                      size="icon-sm"
                       aria-label={m.header_search_remove_recent({ name }, options)}
                       data-history-action=""
                       data-history-id={entry.id}
@@ -157,8 +163,8 @@ export function RecentPanel({
                         history?.remove(entry.id);
                       }}
                     >
-                      <X aria-hidden="true" className="size-4" />
-                    </button>
+                      <X aria-hidden="true" />
+                    </Button>
                   </li>
                 );
               })}

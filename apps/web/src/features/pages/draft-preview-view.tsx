@@ -23,7 +23,7 @@ type Owner = { lease: CurationAdmissionLease; read: DraftPreviewRead };
 type Capture = { owner: Owner; input: DraftPreviewInput; digest: string };
 type Kind = 'subject' | 'account' | 'route';
 const sameOwner = (a: Owner, b: Owner) => a.lease === b.lease && a.read === b.read;
-const control = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const control = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const accountPattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
@@ -485,7 +485,7 @@ export function DraftPreviewPanel({
                   ]}
                   onValueChange={(value) => value !== null && setKind(value as Kind)}
                 >
-                  <SharedSelect.SelectTrigger id={`${id}-kind`} className="w-full min-w-0 min-h-11">
+                  <SharedSelect.SelectTrigger id={`${id}-kind`} className="w-full min-w-0">
                     <SharedSelect.SelectValue />
                   </SharedSelect.SelectTrigger>
                   <SharedSelect.SelectContent>
@@ -509,7 +509,7 @@ export function DraftPreviewPanel({
                   id={`${id}-address`}
                   value={address}
                   maxLength={kind === 'route' ? 512 : 64}
-                  className="min-h-11"
+
                   aria-invalid={!!addressError}
                   aria-describedby={`${id}-address-help${addressError ? ` ${id}-address-error` : ''}`}
                   onChange={(event) => setAddress(event.target.value)}
@@ -530,7 +530,7 @@ export function DraftPreviewPanel({
                     id={`${id}-realm`}
                     value={realm}
                     maxLength={36}
-                    className="min-h-11"
+
                     aria-invalid={!!realmError}
                     aria-describedby={`${id}-realm-help${realmError ? ` ${id}-realm-error` : ''}`}
                     onChange={(event) => setRealm(event.target.value)}
@@ -553,7 +553,7 @@ export function DraftPreviewPanel({
                     items={VIEWS.map((name) => ({ value: name, label: views[name] }))}
                     onValueChange={(value) => value !== null && setView(value as View)}
                   >
-                    <SharedSelect.SelectTrigger id={`${id}-view`} className="w-full min-w-0 min-h-11">
+                    <SharedSelect.SelectTrigger id={`${id}-view`} className="w-full min-w-0">
                       <SharedSelect.SelectValue />
                     </SharedSelect.SelectTrigger>
                     <SharedSelect.SelectContent>
@@ -659,7 +659,7 @@ export function DraftPreviewPanel({
                 </div>
               )}
               <details className="text-sm">
-                <summary className="min-h-11 cursor-pointer py-2 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <summary className="cursor-pointer font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   {m.draft_preview_technical_details({}, options)}
                 </summary>
                 <dl className="grid min-w-0 gap-2 pt-2 sm:grid-cols-2">

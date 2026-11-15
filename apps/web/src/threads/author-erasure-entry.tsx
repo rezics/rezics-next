@@ -1,4 +1,5 @@
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { QueryClientContext } from '@tanstack/react-query';
 import { Trash2 } from 'lucide-react';
@@ -255,13 +256,13 @@ function AuthorErasureEntryVisit({
         variant="ghost"
         size="sm"
         id={action}
-        className="h-auto min-h-11 max-w-full whitespace-normal text-left"
+        className="h-auto min-h-6 max-w-full whitespace-normal text-left"
         aria-expanded={open}
         aria-controls={open ? review : undefined}
         onClick={() => toggle(!open)}
         disabled={pending}
       >
-        <Trash2 aria-hidden="true" className="size-4" />
+        <Trash2 aria-hidden="true" />
         {m.author_erasure_action()}
       </Button>
       {open ? (
@@ -295,7 +296,7 @@ function AuthorErasureEntryVisit({
             <a
               className={buttonVariants({
                 variant: 'outline',
-                className: 'h-auto min-h-11 max-w-full whitespace-normal text-left',
+                className: 'h-auto min-h-7 max-w-full whitespace-normal text-left',
               })}
               href={`/${browser.locale}/operations/${encodeURIComponent(result.operationId)}`}
             >
@@ -304,19 +305,18 @@ function AuthorErasureEntryVisit({
           ) : (
             <>
               <label className="relative z-10 flex min-w-0 items-start gap-3 break-words leading-relaxed">
-                <input
-                  type="checkbox"
-                  className="mt-1 size-4 shrink-0 accent-primary"
+                <Checkbox
+                  className="mt-0.5"
                   checked={confirmed}
                   disabled={!allowed || pending || !!request.current}
-                  onChange={(event) => setConfirmed(event.target.checked)}
+                  onCheckedChange={(checked) => setConfirmed(checked === true)}
                 />
                 {m.author_erasure_confirmation()}
               </label>
               <div className="flex flex-wrap gap-2">
                 <Button
                   variant="destructive"
-                  className="h-auto min-h-11 max-w-full whitespace-normal text-left"
+                  className="h-auto min-h-7 max-w-full whitespace-normal text-left"
                   disabled={!canSubmit || !confirmed || pending || !!stopped}
                   onClick={submit}
                 >
@@ -329,7 +329,7 @@ function AuthorErasureEntryVisit({
                 {!suppliedAdmission ? (
                   <Button
                     variant="outline"
-                    className="h-auto min-h-11 max-w-full whitespace-normal text-left"
+                    className="h-auto min-h-7 max-w-full whitespace-normal text-left"
                     disabled={pending || !viewerId}
                     onClick={() => void refresh()}
                   >
@@ -338,7 +338,7 @@ function AuthorErasureEntryVisit({
                 ) : null}
                 <Button
                   variant="outline"
-                  className="h-auto min-h-11 max-w-full whitespace-normal text-left"
+                  className="h-auto min-h-7 max-w-full whitespace-normal text-left"
                   disabled={pending}
                   onClick={() => {
                     document.getElementById(action)?.focus();

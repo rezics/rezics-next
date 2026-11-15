@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
 import { isOrdinarySavedQuery } from '../saved-query-results';
 import { PublicationLink } from '../collection-publication-link';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 
-export const savedQueryPublicationActionClassName =
-  'inline-flex min-h-11 min-w-0 max-w-full items-center justify-center break-words rounded-lg border border-border px-4 py-2 text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2';
+export const savedQueryPublicationActionClassName = buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 max-w-full whitespace-normal break-words' });
 
 export type SavedQueryPublicationCollection = {
   id: string;

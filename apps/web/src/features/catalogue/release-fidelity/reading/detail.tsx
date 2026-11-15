@@ -1,6 +1,7 @@
 import type { SubjectRead } from '@rezics/client';
+import { cn } from '@rezics/ui/utils';
 import { pickText } from '@rezics/composition';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame } from '@rezics/ui/content-item';
 import type { MouseEvent, Ref } from 'react';
 import { ReleasePartValue as PartValue } from './value';
@@ -11,9 +12,9 @@ import type { ReleaseRow } from '../read';
 import type { AdmittedReleasePage, ReleaseOccurrence } from './state';
 
 const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
 const linkClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8';
+  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
 
 type DetailState = 'loading' | 'available' | 'unavailable' | 'concealed' | 'unreadable' | 'stale';
 
@@ -93,7 +94,7 @@ export function ReleaseSelectedDetail({
           ref={headingRef}
           id="release-selected-detail-heading"
           tabIndex={-1}
-          className="break-words font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="break-words font-semibold "
         >
           {m.release_fidelity_inspector_title({}, o)}
         </h3>

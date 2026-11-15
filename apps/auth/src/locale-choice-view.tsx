@@ -39,7 +39,7 @@ export function LocaleChoice() {
   return (
     <Field className="auth-locale-choice">
       <FieldLabel htmlFor={id} className="auth-locale-label">
-        <Languages aria-hidden="true" size={18} />
+        <Languages aria-hidden="true" className="size-3.5" />
         <span>{m.auth_locale_label()}</span>
       </FieldLabel>
       <Select

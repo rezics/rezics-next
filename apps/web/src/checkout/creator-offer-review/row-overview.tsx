@@ -6,7 +6,7 @@ export function CreatorOfferRowOverview({ offer }: { offer: CreatorOffer }) {
   const terms = offer.contentEdition;
   return (
     <details className="min-w-0 space-y-2">
-      <summary className="min-h-11 cursor-pointer content-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+      <summary className="cursor-pointer content-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
         {m.creator_inspect_row_terms()}
       </summary>
       <div className="min-w-0 space-y-4 rounded-lg border p-3 text-sm leading-relaxed">

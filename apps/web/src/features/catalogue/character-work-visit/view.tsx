@@ -1,4 +1,6 @@
 import { m } from '../../../paraglide/messages.js';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { valueExplanationHref } from '../value-explanation';
 import {
   characterWorkRows,
@@ -13,7 +15,7 @@ import {
 } from '../character-reading-port';
 
 const action =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center py-2 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
 
 /** Adapter over the selected section owned by the installed association window, including its existing More/Retry controls. */
 export function CharacterWorkRows({

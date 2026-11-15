@@ -261,8 +261,8 @@ A Collection page supplies its released supported facet roster to `CollectionFil
 searches that roster while the overlay keeps at most eight properties active at once. Its page-local
 launcher opens a desktop Dialog with a 32rem maximum width and viewport-bounded scrolling, or the shared BottomSheet
 on phones below 768px. The sheet supplies its heading, grab handle, localized Done action and safe-area padding.
-Both surfaces return focus to the launcher. Phone controls have at least 44px targets. Shared shadcn sources stay
-unchanged; forms use their supported Dialog composition rather than action Menu custom content.
+Both surfaces return focus to the launcher. Shared shadcn sources stay unchanged; forms use their supported Dialog
+composition rather than action Menu custom content.
 
 Fields are drafts until Apply navigates. Dismissal discards edits; reopening starts from the supplied applied params.
 Clear filters navigates to the same Collection and type with all filter values removed. Apply and Clear retain
@@ -294,7 +294,7 @@ is `bun test apps/web/tests/collection-advanced-facets.test.tsx apps/web/tests/s
 covers retained off-page/off-window operands, preparing/empty/refused feedback and saved-review empty operands.
 Inspect both reader contexts at
 `phone390`/`desktop1280`, with locale and theme globals. The focused `collection-filter-route-story.test.ts`
-regression pins the routed composition; keyboard, 44px and original screenshots remain unmeasured until admitted.
+regression pins the routed composition; keyboard and original screenshots remain unmeasured until admitted.
 Native query semantics stay with Search.
 
 The launcher remains page-local. A future header filter region should open this same editor with the page's supplied
@@ -440,8 +440,8 @@ read; only its admitted restarted result resets accepted coordinates to the firs
 notice. Unavailable, denied, preparing, signed-out and invalid-address states do not admit a window.
 
 Decision: a published snapshot is independently readable after later private session edits. Owner retract confirmation,
-publish open, session-log paging and Undo use 44px (`min-h-11`) targets with visible keyboard focus; confirmation
-receives focus. Exact Undo restores the original snapshot, not the current private session. Ordinary 720-hour
+publish open, session-log paging and Undo use official control sizes, wrap long labels, and keep visible keyboard
+focus; confirmation receives focus. Exact Undo restores the original snapshot, not the current private session. Ordinary 720-hour
 retention removes expired output from API and pages. Return from a public log restores the original My Logs cursor
 and row from this visit's history state with the current session; the public log URL never carries the private cursor.
 Back href is the cursor-free My Logs address. Ordinary click uses history.back() only when this public-log visit

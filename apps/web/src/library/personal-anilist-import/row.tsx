@@ -4,18 +4,10 @@ import { m } from '../../paraglide/messages.js';
 import type { AniListRow, AniListRowMeta, AniListScoreFormat } from './contract';
 import { AniListAction, AniListCheck } from './controls';
 import { AniListEvidencePanel } from './fields';
-import {
-  aniListCanChooseTarget,
-  aniListHasAdmittedStatus,
-  aniListMatchLabel,
-  aniListMediaLabel,
-  aniListMediaType,
-  aniListNeedsReplace,
-  aniListTitle,
-  aniListValidityLabel,
-} from './meaning';
+import { aniListCanChooseTarget, aniListHasAdmittedStatus, aniListMatchLabel, aniListMediaLabel, aniListMediaType, aniListNeedsReplace, aniListTitle, aniListValidityLabel } from './meaning';
 import { AniListTargetSearch } from './target';
 import type { AniListQuestion } from './contract';
+import { Input } from '@rezics/ui/shadcn/input';
 
 export type RowDraft = {
   ordinal: number;
@@ -128,7 +120,7 @@ export function AniListRowReview({
     >
       <header className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(15rem,0.65fr)] sm:items-start">
         <div className="min-w-0 space-y-1">
-          <h3 className="text-lg font-semibold [overflow-wrap:anywhere]">{title}</h3>
+          <h3 className="h-auto text-lg font-semibold [overflow-wrap:anywhere]">{title}</h3>
           <p className="text-sm text-muted-foreground">
             {aniListMediaLabel(mediaType)} · {aniListMatchLabel(match, draft.skip)}
           </p>
@@ -245,7 +237,7 @@ export function AniListRowReview({
               </p>
               {meta.scoreReview.targetId ? (
                 <ImportDetails>
-                  <p className="text-sm [overflow-wrap:anywhere]">
+                  <p className="h-auto text-sm [overflow-wrap:anywhere]">
                     {m.library_anilist_score_target({ target: meta.scoreReview.targetId })}
                     {meta.scoreReview.identityEpoch ? ` · ${meta.scoreReview.identityEpoch}` : ''}
                   </p>
@@ -258,7 +250,7 @@ export function AniListRowReview({
             {(['keep', 'vote', 'clear'] as const).map((action) => {
               const id = `${base}-score-${action}`;
               return (
-                <label key={action} htmlFor={id} className="flex min-h-11 items-center gap-3 [overflow-wrap:anywhere]">
+                <label key={action} htmlFor={id} className="h-auto flex items-center gap-3 [overflow-wrap:anywhere]">
                   <input
                     id={id}
                     type="radio"
@@ -285,13 +277,13 @@ export function AniListRowReview({
             {draft.scoreAction === 'vote' && question ? (
               <label className="grid gap-1 sm:max-w-xs" htmlFor={`${base}-score-units`}>
                 <span>{m.library_anilist_native_units()}</span>
-                <input
+                <Input
                   id={`${base}-score-units`}
                   type="number"
                   min={question.scale.min}
                   max={question.scale.max}
                   step={question.scale.displayStep}
-                  className="min-h-11 rounded-md border bg-background px-3"
+                 
                   value={draft.scoreUnits ?? ''}
                   placeholder={m.library_anilist_choose_native_units()}
                   onChange={(event) =>
@@ -336,7 +328,7 @@ export function AniListRowReview({
       {children}
       <ImportDetails>
         {meta?.groupLabel ? (
-          <p className="[overflow-wrap:anywhere]">
+          <p className="h-auto [overflow-wrap:anywhere]">
             {m.library_anilist_group()}: {meta.groupLabel}
           </p>
         ) : null}

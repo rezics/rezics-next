@@ -64,7 +64,7 @@ export function ProgressIndexWorkspace({
           >
             <summary
               id="start-progress-heading"
-              className="min-h-11 cursor-pointer content-center font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="cursor-pointer font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               {m.library_progress_start_heading()}
             </summary>

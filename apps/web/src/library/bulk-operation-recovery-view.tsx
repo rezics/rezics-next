@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
 import { searchWindowFocus } from '../search/search-window/focus';
 import {
   bulkRecoveryStatus,
@@ -144,14 +145,15 @@ export function LibraryBulkOperationRecoveryView({
       <section aria-live="polite">
         <p role="status">{unavailableLabel(read.state)}</p>
         {read.state === 'unavailable' ? (
-          <button
-            className="min-h-11 min-w-11"
+          <Button
+            variant="outline"
+            size="sm"
             type="button"
             disabled={busy}
             onClick={() => (readFailed && readRetry ? readRetry() : readAgain(addressOperationId))}
           >
             {m.library_bulk_recovery_read_again()}
-          </button>
+          </Button>
         ) : null}
       </section>
     );
@@ -214,41 +216,46 @@ export function LibraryBulkOperationRecoveryView({
       {read.outcomes.length === 0 ? <p>{m.library_bulk_recovery_empty()}</p> : null}
       <nav className="flex flex-wrap gap-2" aria-label={m.library_bulk_recovery_heading()}>
         {previous ? (
-          <button className="min-h-11 min-w-11" disabled={busy} onClick={(event) => activate(event, previous)}>
+          <Button variant="outline"
+            size="sm" disabled={busy} onClick={(event) => activate(event, previous)}>
             {m.library_window_previous()}
-          </button>
+          </Button>
         ) : null}
         {first ? (
-          <button className="min-h-11 min-w-11" disabled={busy} onClick={(event) => activate(event, first)}>
+          <Button variant="outline"
+            size="sm" disabled={busy} onClick={(event) => activate(event, first)}>
             {m.library_window_first()}
-          </button>
+          </Button>
         ) : null}
         {read.next ? (
-          <button
-            className="min-h-11 min-w-11"
+          <Button
+            variant="outline"
+            size="sm"
             disabled={busy}
             onClick={(event) => activate(event, () => readMore(addressOperationId, read.next!))}
           >
             {m.library_bulk_recovery_read_more()}
-          </button>
+          </Button>
         ) : null}
-        <button
-          className="min-h-11 min-w-11"
+        <Button
+          variant="outline"
+            size="sm"
           disabled={busy}
           onClick={(event) => activate(event, () => readAgain(addressOperationId))}
         >
           {m.library_vndb_browse_refresh()}
-        </button>
+        </Button>
         {readFailed ? (
           <>
             <p role="status">{m.library_bulk_recovery_unavailable()}</p>
-            <button
-              className="min-h-11 min-w-11"
+            <Button
+              variant="outline"
+            size="sm"
               disabled={busy}
               onClick={(event) => activate(event, () => readRetry?.())}
             >
               {m.library_bulk_recovery_read_again()}
-            </button>
+            </Button>
           </>
         ) : null}
       </nav>
@@ -256,18 +263,18 @@ export function LibraryBulkOperationRecoveryView({
       {cancelState === 'refused' ? <p role="status">{m.library_bulk_recovery_cancel_refused()}</p> : null}
       {cancelState === 'accepted' ? <p role="status">{m.library_bulk_recovery_cancel_accepted()}</p> : null}
       {cancelState === 'uncertain' && cancelAvailable ? (
-        <button className="min-h-11 min-w-11" type="button" disabled={busy} onClick={retryCancel}>
+        <Button variant="destructive" size="sm" type="button" disabled={busy} onClick={retryCancel}>
           {m.library_bulk_recovery_cancel_retry()}
-        </button>
+        </Button>
       ) : cancelAvailable &&
         canCancelBulkOperation(operation) &&
         cancelState !== 'refused' &&
         cancelState !== 'accepted' ? (
-        <button className="min-h-11 min-w-11" type="button" disabled={busy} onClick={cancel}>
+        <Button variant="destructive" size="sm" type="button" disabled={busy} onClick={cancel}>
           {cancelState === 'capturing' || cancelState === 'pending'
             ? m.library_bulk_recovery_cancel_pending()
             : m.library_bulk_recovery_cancel()}
-        </button>
+        </Button>
       ) : null}
     </main>
   );

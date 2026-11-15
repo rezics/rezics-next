@@ -37,7 +37,7 @@ export function MalTargetSearch({
         }}
       />
       <Field>
-        <FieldLabel htmlFor={id} className="min-h-11 items-center">
+        <FieldLabel htmlFor={id} className="items-center">
           {m.library_mal_target_id()}
         </FieldLabel>
         <Input
@@ -45,7 +45,7 @@ export function MalTargetSearch({
           data-mal-target
           value={typed}
           disabled={disabled}
-          className="min-h-11"
+         
           onChange={(event) => {
             setPicked(null);
             assign(event.target.value);

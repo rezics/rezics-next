@@ -364,7 +364,7 @@ export function LinkMenu({
       <div
         role="group"
         aria-label={labels.link}
-        className="flex w-80 max-w-[calc(100dvw-1rem)] flex-col gap-1 rounded-2xl bg-popover p-2 text-popover-foreground shadow-lg ring-1 ring-foreground/5 dark:ring-foreground/10"
+        className="flex w-80 max-w-[calc(100dvw-1rem)] flex-col gap-1 rounded-lg bg-popover p-2 text-popover-foreground shadow-md ring-1 ring-foreground/10"
         onKeyDown={(event) => {
           if (!isCurrent() || event.nativeEvent.isComposing || event.keyCode === 229) return;
           if (event.key === 'Escape') {

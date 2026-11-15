@@ -146,14 +146,14 @@ export function HomeReactionRecovery({
             {entry.phase === 'pending' ? m.reaction_pending({}, options) : m.reaction_uncertain({}, options)}
           </p>
           {scope.canRetry(entry.command) ? (
-            <a href={entry.href} className="inline-flex min-h-11 items-center text-sm underline underline-offset-4">
+            <a href={entry.href} className="text-sm underline underline-offset-4">
               {m.reaction_original_item({}, options)}
             </a>
           ) : null}
           <Button
             type="button"
             variant="outline"
-            className="min-h-11"
+            size="sm"
             disabled={entry.phase === 'pending' || !scope.canRetry(entry.command)}
             onClick={() => {
               if (!scope.canRetry(entry.command)) return;
@@ -165,7 +165,7 @@ export function HomeReactionRecovery({
           <Button
             type="button"
             variant="ghost"
-            className="min-h-11"
+            size="sm"
             disabled={entry.phase === 'pending'}
             onClick={() => {
               if (entry.phase === 'pending') return;

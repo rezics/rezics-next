@@ -14,7 +14,7 @@ import {
 import type { SnakInput, StatementInput } from './statement-editor';
 
 const wrap =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] md:pointer-fine:min-h-8 md:pointer-fine:min-w-0 md:pointer-fine:py-1';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 function rankLabel(rank: string | undefined, locale: string) {
   const o = { locale: locale as never };

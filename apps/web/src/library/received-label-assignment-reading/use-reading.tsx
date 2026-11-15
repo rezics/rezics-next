@@ -3,22 +3,8 @@ import { Button } from '@rezics/ui/shadcn/button';
 import type { LabelShelfEntry } from '../label-shelf-read';
 import { displayLibraryTitle } from '../title';
 import { m } from '../../paraglide/messages.js';
-import {
-  beginReceivedReplacement,
-  chooseReceivedObservation,
-  emptyReceivedReading,
-  receivedObservation,
-  removeReceivedObservation,
-  type ReceivedObservation,
-  type ReceivedReading,
-} from './selection';
-import {
-  captureReceivedVisit,
-  receivedReadingIsCurrent,
-  receivedVisitMatches,
-  type ReceivedReadSource,
-  type ReceivedReadVisit,
-} from './current';
+import { beginReceivedReplacement, chooseReceivedObservation, emptyReceivedReading, receivedObservation, removeReceivedObservation, type ReceivedObservation, type ReceivedReading } from './selection';
+import { captureReceivedVisit, receivedReadingIsCurrent, receivedVisitMatches, type ReceivedReadSource, type ReceivedReadVisit } from './current';
 import { ReceivedAssignmentReader } from './view';
 
 /** Local selection consumes the parent's read origin; it owns no requests, credentials or mutation selection. */
@@ -113,7 +99,7 @@ export function useReceivedAssignmentReading(source: ReceivedReadSource) {
         type="button"
         variant="outline"
         size="sm"
-        className="relative z-20 h-auto min-h-11 max-w-full whitespace-normal break-words"
+        className="relative z-20 h-auto min-h-6 max-w-full whitespace-normal break-words"
         data-received-assignment-trigger=""
         aria-label={m.library_received_reading_open_named({ position, title })}
         aria-controls={reading.selected.length ? readerId : undefined}

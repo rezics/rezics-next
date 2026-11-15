@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import type { CreatorEditionOriginReceipt, CreatorEditionOriginResolution } from './creator-edition-origin';
 
@@ -34,7 +35,7 @@ export function CreatorEditionOriginPanel({
   return (
     <section
       aria-label={m.creator_edition_origin_heading()}
-      className="my-4 rounded-lg border border-current/20 bg-current/[0.03] p-4"
+      className="my-4 rounded-lg border border-border bg-card p-4"
       data-creator-edition-origin={isCurrent ? 'current' : 'lost'}
     >
       <h2 className="text-lg font-semibold">{m.creator_edition_origin_heading()}</h2>
@@ -57,16 +58,16 @@ export function CreatorEditionOriginPanel({
           ) : null}
         </dl>
       ) : null}
-      <div className="mt-3 flex flex-wrap gap-3">
+      <div className="mt-3 flex flex-wrap items-center gap-2">
         {isCurrent && onReturn ? (
-          <button className="min-h-11 rounded-md border px-4 py-2 font-medium" onClick={onReturn} type="button">
+          <Button variant="outline" onClick={onReturn} type="button">
             {m.creator_edition_origin_return()}
-          </button>
+          </Button>
         ) : null}
         {onRestart ? (
-          <button className="min-h-11 rounded-md border px-4 py-2 font-medium" onClick={onRestart} type="button">
+          <Button variant="outline" onClick={onRestart} type="button">
             {m.creator_edition_origin_restart()}
-          </button>
+          </Button>
         ) : null}
       </div>
       {children}

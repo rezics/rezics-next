@@ -108,7 +108,8 @@ export function ShelfTable({
                 <Button
                   type="button"
                   variant="ghost"
-                  className="min-h-11 min-w-11 gap-1 px-2 font-medium"
+                  size="sm"
+                  className="h-auto min-h-6 max-w-full whitespace-normal font-medium"
                   onClick={() =>
                     onSort(column.id, sort?.field === column.id && sort.direction === 'asc' ? 'desc' : 'asc')
                   }
@@ -449,7 +450,7 @@ export function ShelfColumnPicker({
                     onDragEnd={(event) => endDrag(event, column.id)}
                     onDragOver={(event) => event.preventDefault()}
                     onDrop={(event) => dropOn(event, column.id)}
-                    className="flex min-w-0 flex-wrap items-center gap-1 rounded border p-1"
+                    className="flex min-w-0 flex-wrap items-center gap-1 rounded-md border p-1"
                   >
                     <span
                       className="min-w-0 flex-1 touch-none whitespace-normal break-words px-2 text-sm"
@@ -481,7 +482,7 @@ export function ShelfColumnPicker({
                       disabled={position === 0}
                       onClick={() => move(column.id, peers[position - 1]!.id)}
                     >
-                      ↑
+                      <ArrowUpIcon aria-hidden="true" />
                     </Button>
                     <Button
                       variant="ghost"
@@ -490,7 +491,7 @@ export function ShelfColumnPicker({
                       disabled={position === peers.length - 1}
                       onClick={() => move(column.id, peers[position + 1]!.id)}
                     >
-                      ↓
+                      <ArrowDownIcon aria-hidden="true" />
                     </Button>
                   </li>
                 );

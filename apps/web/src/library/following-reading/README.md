@@ -72,7 +72,7 @@ community navigation remain with their existing owners.
 The bounded journey is one `GET /v1/follows?view=FULL&limit=20`, optionally one deliberate selected
 `GET /v1/spaces/{spaceId}`, then ordinary navigation to the supplied Space address, Realm ID or Zone ID.
 Zone inspection uses only the FULL page. Follow removal uses its existing writer, independently. Navigation, retry
-and inspection controls keep a minimum height of 44px.
+and inspection controls use the official sizes and wrap long labels.
 Native work includes the page producer's [`fullView`](../../../../../services/kernel/src/library/views.ts)
 summary expansion and the Community reader's nested access/admission, not just the HTTP request count; those budgets
 remain with their native owners. Connected stories distinguish selected-read success, denial, retirement, unavailability

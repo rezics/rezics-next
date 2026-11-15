@@ -9,6 +9,7 @@ import { shellErrorReads } from '../kernel/fake/shell-errors';
 import offer from '../kernel/recorded/offer.json';
 import { PatternStory } from './page';
 import { ErrorStory, errorReady, StillUnavailable, Closed as ClosedOutcome, NotFound } from './shell-errors.stories';
+import { Button } from '@rezics/ui/shadcn/button';
 
 const meta = {
   title: 'Site Shell/Route recovery',
@@ -49,9 +50,9 @@ function PreparedLoading({ layout }: { layout: PendingLayout }) {
         <div data-prepared-route-state="true">
           {left ? <RouteState kind="missing" /> : <RouteLoading layout={layout} />}
           <aside aria-label="Prepared fixture controls" className="mt-8 border-t border-border pt-4">
-            <button className="min-h-11 rounded-lg border border-border px-4" onClick={() => setLeft(true)}>
+            <Button type="button" variant="outline" size="sm" onClick={() => setLeft(true)}>
               Prepared fixture: leave loading
-            </button>
+            </Button>
           </aside>
         </div>
       </AppShell>

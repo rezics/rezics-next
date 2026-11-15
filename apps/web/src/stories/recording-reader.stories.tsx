@@ -61,7 +61,7 @@ function RecordingReaderStory({ admitted = true }: { admitted?: boolean }) {
             {title.text}
           </h1>
           <p>
-            <a className="inline-flex min-h-11 min-w-11 items-center underline underline-offset-4" href={returnTo}>
+            <a className="inline-flex items-center underline underline-offset-4" href={returnTo}>
               {m.recording_reader_return({}, { locale: locale as never })}
             </a>
           </p>

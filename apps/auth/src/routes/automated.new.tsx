@@ -1,6 +1,7 @@
 import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { flushSync } from 'react-dom';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { AuthButton as Button } from '../button';
@@ -753,16 +754,17 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
                 </form>
               ) : (
                 <form onSubmit={(event) => void submit(event)} className="space-y-4">
-                  <label className="flex items-start gap-3">
-                    <input
+                  <Field orientation="horizontal" className="items-start">
+                    <Checkbox
                       id="automated-confirm"
-                      type="checkbox"
                       checked={confirmed}
                       disabled={busy}
-                      onChange={(event) => setConfirmed(event.target.checked)}
+                      onCheckedChange={(checked) => setConfirmed(checked === true)}
                     />
-                    {m.auth_automated_confirm_check()}
-                  </label>
+                    <FieldLabel className="min-w-0 font-normal wrap-anywhere" htmlFor="automated-confirm">
+                      {m.auth_automated_confirm_check()}
+                    </FieldLabel>
+                  </Field>
                   <Button type="submit" disabled={busy || !confirmed} aria-busy={busy}>
                     {m.auth_automated_submit()}
                   </Button>

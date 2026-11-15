@@ -302,7 +302,7 @@ export function BookOrganizationCanvas({
               <SelectTrigger
                 id={`${id}-kind`}
                 aria-describedby={draft.kind === 'chapter' ? `${id}-document` : undefined}
-                className="min-h-11 w-full"
+                className="w-full"
               >
                 <SelectValue />
               </SelectTrigger>
@@ -325,14 +325,16 @@ export function BookOrganizationCanvas({
       ) : null}
       {request.kind === 'add' || request.kind === 'rename' ? (
         <>
-          <label htmlFor={`${id}-title`}>{m.studio_book_placement_title({}, { locale })}</label>
-          <Input
-            id={`${id}-title`}
-            value={draft.title}
-            required
-            disabled={fieldsDisabled}
-            onChange={(event) => edit({ title: event.target.value })}
-          />
+          <Field>
+            <FieldLabel htmlFor={`${id}-title`}>{m.studio_book_placement_title({}, { locale })}</FieldLabel>
+            <Input
+              id={`${id}-title`}
+              value={draft.title}
+              required
+              disabled={fieldsDisabled}
+              onChange={(event) => edit({ title: event.target.value })}
+            />
+          </Field>
         </>
       ) : null}
       {request.kind === 'add' || request.kind === 'move' ? (
@@ -434,7 +436,7 @@ function OrganizationSelect({
         disabled={disabled}
         onValueChange={onChange}
       >
-        <SelectTrigger id={id} className="min-h-11 w-full">
+        <SelectTrigger id={id} className="w-full">
           <SelectValue>{items.find((item) => item.value === value)?.label ?? placeholder}</SelectValue>
         </SelectTrigger>
         <SelectContent>

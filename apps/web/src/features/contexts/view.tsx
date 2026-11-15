@@ -53,9 +53,9 @@ import {
 import { CapturedSettings, ContextLabelRows, SettingsPicker, SettingsReview } from './settings-view';
 
 const width = 'mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]';
-const actionClassName = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]';
+const actionClassName = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 const linkClassName =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-md py-2 underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'inline-flex max-w-full items-center underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const options = (locale: string) => ({ locale: locale as never });
 function failureText(kind: Failure['kind'], locale: string) {
   const o = options(locale);

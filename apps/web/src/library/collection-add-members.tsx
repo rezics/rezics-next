@@ -145,7 +145,7 @@ function CollectionAddMembersForm({
     >
       <h2 className="min-w-0 font-semibold">{m.library_collection_add_items()}</h2>
       <EntityPicker
-        className="[&_[data-slot=input-group]]:min-h-11 [&_input]:min-h-11 [&_input]:min-w-0"
+        className="[&_input]:min-w-0"
         label={m.library_collection_find_subject()}
         search={searchContentSubjects}
         src={coverSrc}
@@ -166,7 +166,7 @@ function CollectionAddMembersForm({
       ) : null}
       {selected.length ? (
         <details className="min-w-0" open={textSubmitted && !!collectionTextIssue('note', note) ? true : undefined}>
-          <summary className="min-h-11 cursor-pointer rounded-sm py-2 text-sm text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          <summary className="cursor-pointer rounded-sm text-sm text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             {m.library_member_note()}
           </summary>
           <Field className="min-w-0">
@@ -194,10 +194,10 @@ function CollectionAddMembersForm({
           {failure}
         </p>
       ) : null}
-      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <Button
           type="submit"
-          className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal py-2"
+          className="h-auto min-h-7 min-w-0 max-w-full whitespace-normal"
           disabled={!ready || pending || selected.length === 0}
           aria-busy={pending}
           aria-describedby={failure ? `${noteId}-error` : undefined}
@@ -211,7 +211,7 @@ function CollectionAddMembersForm({
         <Button
           type="button"
           variant="outline"
-          className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal py-2"
+          className="h-auto min-h-7 min-w-0 max-w-full whitespace-normal"
           disabled={pending}
           onClick={() => {
             if (currentCsrf() && !locked.current) close();

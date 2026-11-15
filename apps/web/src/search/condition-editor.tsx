@@ -387,7 +387,7 @@ export function ConditionEditor({
       </p>
       {!embedded && (
         <details className="text-sm">
-          <summary className="min-h-10 cursor-pointer content-center rounded-lg px-2 text-muted-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
+          <summary className="cursor-pointer content-center rounded-sm px-1 text-muted-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
             {m.search_reader_condition_limits_title({}, options)}
           </summary>
           <p className="mt-1 text-muted-foreground">{m.search_reader_condition_limits({}, options)}</p>
@@ -415,13 +415,15 @@ export function ConditionEditor({
             >
               {summaryErrorText(issue, options)}
               {isConditionEditorPointer(issue.pointer) && (
-                <button
+                <Button
                   type="button"
-                  className="ml-2 font-medium underline underline-offset-2"
+                  variant="link"
+                  size="sm"
+                  className="ml-2 h-auto min-h-6 whitespace-normal"
                   onClick={() => findConditionErrorTarget(root.current, issue.pointer)?.element.focus()}
                 >
                   {m.condition_error_jump_target({}, options)}
-                </button>
+                </Button>
               )}
             </p>
           ))}
@@ -597,7 +599,7 @@ function QualifierRangeFields({
                 : replaceUnit(nextSelectValue ?? '')
             }
           >
-            <SelectTrigger {...props}>
+            <SelectTrigger {...props} className="w-full min-w-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -620,7 +622,7 @@ function QualifierRangeFields({
           aria-modal="true"
           aria-labelledby={`${dialogId}-title`}
           aria-describedby={`${dialogId}-description`}
-          className="max-w-lg rounded-lg border border-border bg-background p-4 text-foreground shadow-xl backdrop:bg-black/50"
+          className="max-w-lg rounded-xl bg-popover p-4 text-popover-foreground ring-1 ring-foreground/10 backdrop:bg-black/50"
           onCancel={(event) => {
             event.preventDefault();
             setPendingUnit(undefined);
@@ -929,7 +931,7 @@ function NodeEditor({
                 if (changed) context.announce(m.condition_group_changed({}, options), pointer);
               }}
             >
-              <SelectTrigger {...props}>
+              <SelectTrigger {...props} className="w-full min-w-0">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -954,7 +956,7 @@ function NodeEditor({
             </Select>
           )}
         </EditorField>
-        <Button type="button" variant="ghost" size="sm" onClick={remove}>
+        <Button type="button" variant="ghost" onClick={remove}>
           {m.condition_remove({}, options)}
         </Button>
       </div>
@@ -1063,7 +1065,7 @@ function NodeEditor({
                   selectStatementProperty(nextSelectValue ?? '');
                 }}
               >
-                <SelectTrigger {...props}>
+                <SelectTrigger {...props} className="w-full min-w-0">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1099,7 +1101,7 @@ function NodeEditor({
                     );
                   }}
                 >
-                  <SelectTrigger {...props}>
+                  <SelectTrigger {...props} className="w-full min-w-0">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1222,7 +1224,7 @@ function NodeEditor({
                         } else replaceRangeUnit(nextUnit);
                       }}
                     >
-                      <SelectTrigger {...props}>
+                      <SelectTrigger {...props} className="w-full min-w-0">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1300,7 +1302,7 @@ function NodeEditor({
                     value={qualifier.property === '' ? null : qualifier.property}
                     onValueChange={(nextSelectValue) => selectQualifierProperty(index, nextSelectValue ?? '')}
                   >
-                    <SelectTrigger {...props}>
+                    <SelectTrigger {...props} className="w-full min-w-0">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1408,7 +1410,7 @@ function NodeEditor({
           aria-modal="true"
           aria-labelledby={`${propertyChangeId}-title`}
           aria-describedby={`${propertyChangeId}-description`}
-          className="max-w-lg rounded-lg border border-border bg-background p-4 text-foreground shadow-xl backdrop:bg-black/50"
+          className="max-w-lg rounded-xl bg-popover p-4 text-popover-foreground ring-1 ring-foreground/10 backdrop:bg-black/50"
           onCancel={(event) => {
             event.preventDefault();
             resolvePendingPropertyChange(false);
@@ -1475,7 +1477,7 @@ function NodeEditor({
           aria-modal="true"
           aria-labelledby={`${unitChangeId}-title`}
           aria-describedby={`${unitChangeId}-description`}
-          className="max-w-lg rounded-lg border border-border bg-background p-4 text-foreground shadow-xl backdrop:bg-black/50"
+          className="max-w-lg rounded-xl bg-popover p-4 text-popover-foreground ring-1 ring-foreground/10 backdrop:bg-black/50"
           onCancel={(event) => {
             event.preventDefault();
             resolvePendingUnitChange(false);
@@ -1734,7 +1736,6 @@ function ConditionEntityValues({
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
                 aria-label={m.condition_entity_retry_label({ number: index + 1 }, options)}
                 disabled={resolving}
                 onClick={() => retryLabel(id, index)}
@@ -1745,7 +1746,6 @@ function ConditionEntityValues({
             <Button
               type="button"
               variant="ghost"
-              size="sm"
               aria-label={m.refinement_remove({ value: m.condition_value({ number: index + 1 }, options) }, options)}
               onClick={() => removeValue(index)}
             >
@@ -1876,7 +1876,7 @@ function ValueFields({
                     onChange(values.map((entry, at) => (at === index ? (nextSelectValue ?? '') : entry)))
                   }
                 >
-                  <SelectTrigger {...props}>
+                  <SelectTrigger {...props} className="w-full min-w-0">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1908,7 +1908,6 @@ function ValueFields({
           <Button
             type="button"
             variant="ghost"
-            size="sm"
             aria-label={m.refinement_remove(
               { value: m.condition_value({ number: index + 1 }, context.options) },
               context.options,

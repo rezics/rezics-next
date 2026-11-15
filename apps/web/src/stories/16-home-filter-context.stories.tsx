@@ -15,6 +15,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { pickText } from '@rezics/composition';
 import { selectSharedOption } from './shared-select-interaction';
+import { Button } from '@rezics/ui/shadcn/button';
 
 type State = 'ready' | 'preparing' | 'denied' | 'lost' | 'delayed';
 function PreparedContext({ long = false, initial = 'ready' }: { long?: boolean; initial?: State }) {
@@ -54,28 +55,26 @@ function PreparedContext({ long = false, initial = 'ready' }: { long?: boolean; 
           <div className="flex flex-wrap gap-2">
             <label className="grid gap-1">
               Prepared source state
-              <select
-                className="min-h-11 rounded border bg-background"
-                value={state}
-                onChange={(event) => setState(event.target.value as State)}
+              <select 
+ 
+ value={state}
+ onChange={(event) => setState(event.target.value as State)}
               >
                 {(['ready', 'preparing', 'denied', 'lost', 'delayed'] as const).map((value) => (
                   <option key={value}>{value}</option>
                 ))}
               </select>
             </label>
-            <button className="min-h-11 rounded border px-3" onClick={() => setAccount(account === 'A' ? 'B' : 'A')}>
+            <Button type="button" variant="outline" onClick={() => setAccount(account === 'A' ? 'B' : 'A')}>
               Prepared account {account}: replace
-            </button>
-            <button
-              className="min-h-11 rounded border px-3"
-              onClick={() => {
+            </Button>
+            <Button type="button" variant="outline" onClick={() => {
                 setState('ready');
                 for (const release of pending.current.splice(0)) release();
               }}
             >
               Release prepared selection
-            </button>
+            </Button>
           </div>
           <output aria-label="Prepared feed reads">{reads}</output>
           <output aria-label="Prepared current request" className="block break-all text-xs">

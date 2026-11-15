@@ -40,7 +40,7 @@ export function CreateAuthorityStatus({
   );
   const retry =
     onRetry && (pending || authority?.state === 'unknown' || authority?.state === 'refused') ? (
-      <Button type="button" size="lg" variant="outline" onClick={onRetry}>
+      <Button type="button" variant="outline" onClick={onRetry}>
         {m.identity_intake_authority_retry({}, options)}
       </Button>
     ) : null;
@@ -234,14 +234,13 @@ export function IdentityIntakePanel({
 
       <div className="flex flex-wrap gap-2">
         {!retry ? (
-          <Button type="button" size="lg" disabled={!validIntent || disabled || loading} onClick={() => void search()}>
+          <Button type="button" disabled={!validIntent || disabled || loading} onClick={() => void search()}>
             {loading ? m.identity_intake_searching({}, options) : m.identity_intake_search({}, options)}
           </Button>
         ) : null}
         {retry ? (
           <Button
             type="button"
-            size="lg"
             variant="outline"
             disabled={disabled || loading}
             onClick={() => (page?.status === 'stale' ? onRefreshType() : void search())}
@@ -342,7 +341,7 @@ export function IdentityIntakePanel({
                     )}
 
                     <a
-                      className={buttonVariants({ variant: 'outline', size: 'lg' })}
+                      className={buttonVariants({ variant: 'outline' })}
                       href={href}
                       aria-labelledby={`${candidateId} ${openActionId} ${newTabId}`}
                       target="_blank"
@@ -371,14 +370,13 @@ export function IdentityIntakePanel({
       />
       <div className="flex flex-wrap gap-2">
         {continueWithResults && intentKey ? (
-          <Button type="button" size="lg" disabled={disabled || confirmed} onClick={() => onContinue(intentKey, false)}>
+          <Button type="button" disabled={disabled || confirmed} onClick={() => onContinue(intentKey, false)}>
             {m.identity_intake_continue({}, options)}
           </Button>
         ) : null}
         {continueUnverified && intentKey ? (
           <Button
             type="button"
-            size="lg"
             variant="outline"
             disabled={disabled || confirmed}
             onClick={() => onContinue(intentKey, true)}
@@ -387,12 +385,12 @@ export function IdentityIntakePanel({
           </Button>
         ) : null}
         {confirmed ? (
-          <p role="status" className="min-h-11 content-center text-sm">
+          <p role="status" className="content-center text-sm">
             {confirmedUnverified ? m.identity_intake_unverified({}, options) : m.identity_intake_continue({}, options)}
           </p>
         ) : null}
         {currentState.phase !== 'idle' ? (
-          <Button type="button" size="lg" variant="ghost" disabled={disabled} onClick={returnToTerms}>
+          <Button type="button" variant="ghost" disabled={disabled} onClick={returnToTerms}>
             {m.identity_intake_return({}, options)}
           </Button>
         ) : null}

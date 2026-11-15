@@ -34,7 +34,7 @@ export type PopulationTransport = (input: PopulationInput, signal?: AbortSignal)
 const transport: PopulationTransport = (data, signal) =>
   readSubjectRatingPopulations(signal ? { data, signal } : { data });
 const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
 let serial = 0;
 
 /** Subscribes before a mounted owner starts work. Cache observations retire monotonically before React commits. */
@@ -563,12 +563,12 @@ function PopulationVisit({
               {choices.map((item) => (
                 <Field key={item.id} orientation="horizontal" className="min-w-0">
                   <label
-                    className={`flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md border px-3 py-2 wrap-anywhere ${selected.includes(item.id) ? 'border-primary/50 bg-primary/5' : 'hover:bg-muted/50'}`}
+                    className={`flex min-w-0 flex-1 cursor-pointer items-center gap-3 border px-3 wrap-anywhere ${selected.includes(item.id) ? 'border-primary/50 bg-primary/5' : 'hover:bg-muted/50'}`}
                   >
                     <input
                       type="checkbox"
                       aria-describedby={helpId}
-                      className="size-5 shrink-0 accent-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                      className="size-4 shrink-0 accent-primary"
                       checked={selected.includes(item.id)}
                       disabled={!selected.includes(item.id) && selected.length >= POPULATION_LIMIT}
                       onChange={() => {

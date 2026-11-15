@@ -8,14 +8,7 @@ import { libraryUnitLabel } from '../profiles';
 import type { Release } from '../../subject/definitions';
 import { recordProgressSession, startProgressSession } from '../progress-server';
 import { readConfiguredProgressHistory } from './actions';
-import {
-  createGuardedCommand,
-  dispatchGuardedCommand,
-  progressWriteOutcome,
-  type GuardedCommand,
-  type GuardedOutcome,
-  type GuardedSender,
-} from './commands';
+import { createGuardedCommand, dispatchGuardedCommand, progressWriteOutcome, type GuardedCommand, type GuardedOutcome, type GuardedSender } from './commands';
 import type { VisitProgress } from './visit';
 import type {
   ProgressChange,
@@ -28,11 +21,11 @@ import type {
 } from '../progress-reads';
 import { progressFailureMessage, progressView } from '../progress-label';
 import { useAuthoringDeparture } from '../../threads/authoring-departure';
+import { Button } from '@rezics/ui/shadcn/button';
 
-const target =
-  'min-h-11 min-w-11 max-w-full cursor-pointer whitespace-normal py-2 text-center [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const button = `${target} inline-flex shrink-0 items-center justify-center rounded-lg bg-primary px-4 font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60`;
-const quiet = `${target} inline-flex shrink-0 items-center justify-center rounded-lg border border-border px-4 hover:bg-muted disabled:opacity-60`;
+const target = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const button = `shrink-0`;
+const quiet = `shrink-0`;
 type StartResult = ProgressStarted | ProgressFailure;
 type RecordResult = ProgressRecorded | ProgressFailure;
 const startSender = startProgressSession as GuardedSender<ProgressStartInput, StartResult>;
@@ -279,17 +272,17 @@ export function ConfiguredProgressPanel({
       </Field>
       <div className="flex flex-wrap gap-3">
         <Exposure operation="progress_session.record">
-          <button type="button" className={button} disabled={pending} onClick={() => void save()}>
+          <Button type="button" variant="default" className={button} disabled={pending} onClick={() => void save()}>
             {progress.meaning === 'absent' && !('session' in progress)
               ? m.library_configured_start_progress()
               : m.library_configured_record_progress()}
-          </button>
+          </Button>
         </Exposure>
         {'session' in progress ? (
           <Exposure operation="progress_session.record">
-            <button type="button" className={quiet} disabled={pending} onClick={() => void clearAmount()}>
+            <Button type="button" variant="outline" className={quiet} disabled={pending} onClick={() => void clearAmount()}>
               {m.library_configured_clear_progress()}
-            </button>
+            </Button>
           </Exposure>
         ) : null}
       </div>
@@ -299,7 +292,7 @@ export function ConfiguredProgressPanel({
         <p
           role="alert"
           id={outcome.state === 'unavailable' ? outcomeId : undefined}
-          className="min-w-0 [overflow-wrap:anywhere]"
+          className="h-auto min-w-0 [overflow-wrap:anywhere]"
         >
           {outcome.state === 'unsupported'
             ? m.library_progress_unsupported()
@@ -311,21 +304,21 @@ export function ConfiguredProgressPanel({
         </p>
       ) : null}
       {outcome?.state === 'unavailable' ? (
-        <button
+        <Button
           type="button"
-          className={quiet}
+          variant="outline" className={quiet}
           disabled={pending}
           aria-describedby={outcomeId}
           onClick={() => void retry()}
         >
           {m.library_configured_retry()}
-        </button>
+        </Button>
       ) : null}
       {'session' in progress ? (
         <div>
-          <button type="button" className={quiet} onClick={() => void openHistory()}>
+          <Button type="button" variant="outline" className={quiet} onClick={() => void openHistory()}>
             {m.library_configured_history()}
-          </button>
+          </Button>
           {history.open ? (
             history.error ? (
               <p role="alert" className="mt-2 text-sm">

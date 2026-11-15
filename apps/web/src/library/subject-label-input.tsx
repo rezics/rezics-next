@@ -1,4 +1,5 @@
 import { useId, type Ref } from 'react';
+import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../paraglide/messages.js';
 import type { SubjectLabelInputIssue } from './subject-label-input.ts';
 
@@ -29,7 +30,7 @@ export function SubjectLabelInput({
     <div className="space-y-1">
       <label className="grid gap-1 text-sm font-medium">
         {m.library_subject_label_input()}
-        <input
+        <Input
           ref={inputRef}
           name="name"
           aria-label={m.library_subject_label_name()}
@@ -39,7 +40,6 @@ export function SubjectLabelInput({
           aria-describedby={issue ? `${hintId} ${errorId}` : hintId}
           aria-errormessage={issue ? errorId : undefined}
           onChange={(event) => onChange(event.currentTarget.value)}
-          className="h-11 w-full min-w-0 rounded-md border bg-background px-3 text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
         />
       </label>
       <p id={hintId} className="text-sm text-muted-foreground">

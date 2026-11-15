@@ -209,7 +209,7 @@ export function ProfileAvatar({
           ref={choose}
           type="button"
           variant="outline"
-          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+          className="h-auto max-w-full whitespace-normal break-words min-h-7"
           disabled={chooseDisabled}
           onClick={() => {
             if (upload.canUpload()) input.current?.click();
@@ -235,7 +235,7 @@ export function ProfileAvatar({
             ref={cancel}
             type="button"
             variant="outline"
-            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+            className="h-auto max-w-full whitespace-normal break-words min-h-7"
             disabled={disabled}
             onClick={() => {
               if (disabled) return;
@@ -250,7 +250,7 @@ export function ProfileAvatar({
         {state.phase === 'original-only' ? (
           <Button
             type="button"
-            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+            className="h-auto max-w-full whitespace-normal break-words min-h-7"
             disabled={chooseDisabled}
             onClick={(event) => {
               if (!upload.canUpload()) return;
@@ -265,7 +265,7 @@ export function ProfileAvatar({
           <Button
             type="button"
             variant="outline"
-            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+            className="h-auto max-w-full whitespace-normal break-words min-h-7"
             disabled={disabled || waiting}
             onClick={() => {
               if (disabled) return;
@@ -281,7 +281,7 @@ export function ProfileAvatar({
           <Button
             type="button"
             variant="outline"
-            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+            className="h-auto max-w-full whitespace-normal break-words min-h-7"
             disabled={disabled || adviceWaiting}
             onClick={() => {
               if (disabled || adviceWaiting) return;
@@ -295,7 +295,7 @@ export function ProfileAvatar({
           <Button
             type="button"
             variant="outline"
-            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+            className="h-auto max-w-full whitespace-normal break-words min-h-7"
             disabled={editDisabled}
             onClick={() => {
               if (!upload.canInteract()) return;

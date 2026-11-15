@@ -1434,7 +1434,7 @@ export function SubjectPage({
                   {visitReturn && !framed ? (
                     <p>
                       <a
-                        className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center underline underline-offset-4`}
+                        className={`${linkClass} ${linkColor} inline-flex items-center underline underline-offset-4`}
                         href={visitReturn}
                       >
                         {visitReturn.endsWith('/library/import-vndb#vndb-current-library')
@@ -1490,7 +1490,7 @@ export function SubjectPage({
                       {gameRestart?.href ? (
                         <a
                           data-game-return-restart=""
-                          className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center underline underline-offset-4`}
+                          className={`${linkClass} ${linkColor} inline-flex items-center underline underline-offset-4`}
                           href={gameRestart.href}
                         >
                           {m.game_visit_return({}, { locale: locale as never })}

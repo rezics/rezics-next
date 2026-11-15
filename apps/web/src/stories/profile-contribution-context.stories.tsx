@@ -9,6 +9,7 @@ import { isRecord } from '../features/pages/shared';
 import { subjectPageMessages } from '../features/pages/route-support';
 import { getLocale } from '../paraglide/runtime.js';
 import { PatternStory } from './page';
+import { Button } from '@rezics/ui/shadcn/button';
 
 function Reading({
   state = 'context',
@@ -53,9 +54,9 @@ function Reading({
         <p className="my-3 text-sm text-muted-foreground">
           Prepared native-shaped context; not native eligibility evidence.
         </p>
-        <button className="min-h-11 rounded border px-3" onClick={() => replace(generation + 1)}>
+        <Button type="button" variant="outline" size="sm" onClick={() => replace(generation + 1)}>
           Replace profile visit
-        </button>
+        </Button>
         <PublicProfilePage
           key={generation}
           profile={storyAccountProfileBinding}

@@ -405,7 +405,7 @@ function ReportsView({
       <header className="space-y-4">
         {boardId ? (
           <a
-            className="inline-flex min-h-11 items-center text-sm text-muted-foreground underline-offset-4 hover:underline"
+            className="inline-flex items-center text-sm text-muted-foreground underline-offset-4 hover:underline"
             href={localizeHref(`/boards/${encodeURIComponent(boardId)}`)}
           >
             {m.moderation_queue_back()}
@@ -434,14 +434,14 @@ function ReportsView({
         {tab === 'reports' ? (
           <span
             aria-current="page"
-            className="inline-flex min-h-11 min-w-11 max-w-full items-center border-b-2 border-primary px-3 py-2 font-semibold underline underline-offset-4"
+            className="inline-flex max-w-full items-center border-b-2 border-primary px-3 font-semibold underline underline-offset-4"
           >
             {m.moderation_reports_tab()}
           </span>
         ) : (
           <a
             href={reportsHref}
-            className="inline-flex min-h-11 min-w-11 max-w-full items-center border-b-2 border-transparent px-3 py-2 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="inline-flex max-w-full items-center border-b-2 border-transparent px-3 hover:underline"
           >
             {m.moderation_reports_tab()}
           </a>
@@ -449,14 +449,14 @@ function ReportsView({
         {tab === 'appeals' ? (
           <span
             aria-current="page"
-            className="inline-flex min-h-11 min-w-11 max-w-full items-center border-b-2 border-primary px-3 py-2 font-semibold underline underline-offset-4"
+            className="inline-flex max-w-full items-center border-b-2 border-primary px-3 font-semibold underline underline-offset-4"
           >
             {m.moderation_appeals_tab()}
           </span>
         ) : (
           <a
             href={appealsHref}
-            className="inline-flex min-h-11 min-w-11 max-w-full items-center border-b-2 border-transparent px-3 py-2 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="inline-flex max-w-full items-center border-b-2 border-transparent px-3 hover:underline"
           >
             {m.moderation_appeals_tab()}
           </a>
@@ -470,7 +470,7 @@ function ReportsView({
           {m.moderation_controls_details_summary({ status: selectedStatus, kind: selectedKind, order: selectedOrder })}
         </p>
         <details className="min-w-0 border-y">
-          <summary className="min-h-11 cursor-pointer rounded-sm py-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          <summary className="cursor-pointer text-sm font-medium">
             {m.moderation_filter_label()}
           </summary>
           <fieldset
@@ -491,7 +491,7 @@ function ReportsView({
                 value={selection.status}
                 onValueChange={(value) => select({ ...selection, status: value! as ReportSelection['status'] })}
               >
-                <SelectTrigger id={`${controlsId}-status`} className="w-full min-w-0 max-w-full min-h-11 min-w-11">
+                <SelectTrigger id={`${controlsId}-status`} className="w-full min-w-0 max-w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -516,7 +516,7 @@ function ReportsView({
                 value={selection.targetKind}
                 onValueChange={(value) => select({ ...selection, targetKind: value! as ReportSelection['targetKind'] })}
               >
-                <SelectTrigger id={`${controlsId}-kind`} className="w-full min-w-0 max-w-full min-h-11 min-w-11">
+                <SelectTrigger id={`${controlsId}-kind`} className="w-full min-w-0 max-w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -540,7 +540,7 @@ function ReportsView({
                 value={selection.order}
                 onValueChange={(value) => select({ ...selection, order: value! as ReportSelection['order'] })}
               >
-                <SelectTrigger id={`${controlsId}-order`} className="w-full min-w-0 max-w-full min-h-11 min-w-11">
+                <SelectTrigger id={`${controlsId}-order`} className="w-full min-w-0 max-w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -554,7 +554,7 @@ function ReportsView({
             <Button
               type="button"
               variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+              className="h-auto min-h-7 max-w-full whitespace-normal break-words"
               onClick={() => select(DEFAULT_REPORT_SELECTION)}
             >
               {m.moderation_filter_reset()}

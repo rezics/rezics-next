@@ -54,7 +54,7 @@ export function ReceivedAssignmentReader({
             id={titleId}
             ref={headingRef}
             tabIndex={-1}
-            className="rounded-sm text-xl font-semibold break-words focus-visible:outline-2 focus-visible:outline-ring"
+            className="h-auto rounded-sm text-xl font-semibold break-words focus-visible:outline-2 focus-visible:outline-ring"
           >
             {comparison ? m.library_received_reading_comparison() : m.library_received_reading_heading()}
           </h2>
@@ -65,7 +65,7 @@ export function ReceivedAssignmentReader({
         <Button
           type="button"
           variant="outline"
-          className="h-auto min-h-11 max-w-full whitespace-normal break-words"
+          className="h-auto min-h-7 max-w-full whitespace-normal break-words"
           onClick={() => {
             if (isCurrent()) close();
           }}
@@ -82,13 +82,13 @@ export function ReceivedAssignmentReader({
       </p>
       {reading.replacement ? (
         <div role="status" className="min-w-0 space-y-3 rounded-lg border bg-background p-3">
-          <p className="break-words">
+          <p className="h-auto break-words">
             {m.library_received_reading_replacing({ position: reading.replacement.position })}
           </p>
           <Button
             type="button"
             variant="outline"
-            className="h-auto min-h-11 whitespace-normal"
+            className="h-auto min-h-7 whitespace-normal"
             onClick={() => {
               if (isCurrent()) cancelReplacement();
             }}

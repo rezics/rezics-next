@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { useRouter, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
 import { RelativeTime } from '@rezics/ui/relative-time';
 import { Bell, Flag, Gavel, MessageCircleReply } from 'lucide-react';
@@ -196,7 +197,7 @@ export function InboxRows({
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere px-3 py-2"
+                    className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
                     data-inbox-notice-action="true"
                     disabled={
                       pendingNoticeId === item.id || loading || noticeWaiting || noticeRetryBlocked || !onRetrySeen
@@ -210,7 +211,7 @@ export function InboxRows({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere px-3 py-2"
+                  className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
                   data-inbox-notice-action="true"
                   disabled={
                     acknowledgementBlocked || loading || (pendingNoticeId !== null && pendingNoticeId !== undefined)
@@ -296,7 +297,7 @@ export function InboxRows({
                       <a
                         href={href}
                         aria-label={primaryLinkLabel}
-                        className="inline-block min-h-11 min-w-11 max-w-full whitespace-normal rounded-sm underline decoration-border underline-offset-4 wrap-anywhere hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        className="inline-block max-w-full whitespace-normal rounded-sm underline decoration-border underline-offset-4 wrap-anywhere hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       >
                         {text}
                       </a>
@@ -324,27 +325,16 @@ export function InboxRows({
                 </div>
                 <div className="flex min-w-0 flex-col items-start gap-3 border-t border-border pt-3 sm:items-end sm:border-t-0 sm:pt-0">
                   <div data-content-item-slot="state" className="min-w-0 max-w-full">
-                    <span
+                    <Badge
                       role={confirmedNoticeId === item.id ? 'status' : undefined}
                       aria-hidden={href && confirmedNoticeId !== item.id ? true : undefined}
-                      className={`inline-flex min-h-8 max-w-full items-center gap-2 rounded-full border px-3 py-1 text-sm font-medium ${
-                        item.unread
-                          ? 'border-foreground bg-foreground text-background'
-                          : 'border-border bg-background text-muted-foreground'
-                      }`}
+                      variant={item.unread ? 'default' : 'outline'}
+                      className="h-auto min-h-5 max-w-full whitespace-normal"
                     >
-                      <span
-                        aria-hidden="true"
-                        className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                          item.unread
-                            ? 'bg-current ring-2 ring-current ring-offset-2 ring-offset-background'
-                            : 'border border-current'
-                        }`}
-                      />
                       <span className="min-w-0 wrap-anywhere">
                         {confirmedNoticeId === item.id ? m.inbox_notice_marked_seen() : readState}
                       </span>
-                    </span>
+                    </Badge>
                   </div>
                   {chosenAction ? (
                     <div data-content-item-slot="actions" className="flex min-w-0 max-w-full items-start">
@@ -360,7 +350,7 @@ export function InboxRows({
       {page.next && onLoadMore ? (
         <Button
           variant="outline"
-          className="mt-5 h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+          className="mt-5 h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
           onClick={onLoadMore}
           disabled={loading}
         >
@@ -374,7 +364,7 @@ export function InboxRows({
 export function InboxPreferencesLink() {
   return (
     <a
-      className="mt-3 inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+      className="mt-3 inline-flex items-center text-sm underline underline-offset-4"
       href={`/${getLocale()}/settings#notifications`}
     >
       {m.inbox_notification_preferences()}
@@ -1211,7 +1201,7 @@ export function ViewerInboxPage({
         {cursor !== undefined ? (
           <Button
             variant="outline"
-            className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+            className="h-auto min-h-7 max-w-full whitespace-normal"
             onClick={() => startAtFirstPage()}
             disabled={pageQueryFetching(pageIntent) || checkingAccess || waiting}
           >
@@ -1243,7 +1233,7 @@ export function ViewerInboxPage({
           {noticeFailure ? (
             <Button
               variant="outline"
-              className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+              className="h-auto min-h-7 max-w-full whitespace-normal"
               disabled={
                 noticeWaiting ||
                 noticeMarking.current ||
@@ -1272,7 +1262,7 @@ export function ViewerInboxPage({
           {!failed ? (
             <Button
               variant="outline"
-              className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+              className="h-auto min-h-7 max-w-full whitespace-normal"
               disabled={observationWaiting || pageQueryFetching(pageIntent) || checkingAccess || !episodeOwnerCurrent()}
               onClick={retryPage}
             >
@@ -1297,7 +1287,7 @@ export function ViewerInboxPage({
           <div className="flex flex-wrap items-start gap-3">
             <Button
               variant="outline"
-              className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+              className="h-auto min-h-7 max-w-full whitespace-normal"
               disabled={
                 pageWaitActive(pageIntent) ||
                 checkingAccess ||
@@ -1316,7 +1306,7 @@ export function ViewerInboxPage({
                 </legend>
                 <Button
                   variant="outline"
-                  className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+                  className="h-auto min-h-7 max-w-full whitespace-normal"
                   disabled={
                     seenWaiting ||
                     noticeAttempt.current !== null ||
@@ -1363,7 +1353,7 @@ export function ViewerInboxPage({
           <Button
             type="button"
             variant="outline"
-            className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+            className="h-auto min-h-7 max-w-full whitespace-normal"
             disabled={pageQueryFetching(pageIntent) || checkingAccess || waiting || !episodeOwnerCurrent()}
             onClick={() => startAtFirstPage(true)}
           >
@@ -1381,7 +1371,7 @@ export function ViewerInboxPage({
             {!seenFailure ? (
               <Button
                 variant="outline"
-                className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+                className="h-auto min-h-7 max-w-full whitespace-normal"
                 disabled={checkingAccess || waiting}
                 onClick={() => void checkAccess()}
               >
@@ -1411,7 +1401,7 @@ export function ViewerInboxPage({
                       type="button"
                       variant="outline"
                       aria-pressed={selection === 'all'}
-                      className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal py-2"
+                      className="h-auto min-h-7 min-w-0 max-w-full whitespace-normal"
                       onClick={() => chooseSelection('all')}
                     >
                       {m.inbox_triage_filter_all()}
@@ -1420,7 +1410,7 @@ export function ViewerInboxPage({
                       type="button"
                       variant="outline"
                       aria-pressed={selection === 'unread'}
-                      className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal py-2"
+                      className="h-auto min-h-7 min-w-0 max-w-full whitespace-normal"
                       onClick={() => chooseSelection('unread')}
                     >
                       {m.inbox_triage_filter_unread()}
@@ -1435,7 +1425,7 @@ export function ViewerInboxPage({
                       <Button
                         type="button"
                         variant="outline"
-                        className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+                        className="h-auto min-h-7 max-w-full whitespace-normal"
                         disabled={
                           markingPending ||
                           noticeAttempt.current !== null ||
@@ -1469,7 +1459,7 @@ export function ViewerInboxPage({
                         <Button
                           type="button"
                           variant="outline"
-                          className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+                          className="h-auto min-h-7 max-w-full whitespace-normal"
                           aria-busy={continuing && received.direction === 'previous'}
                           aria-disabled={
                             continuing ||
@@ -1487,7 +1477,7 @@ export function ViewerInboxPage({
                         <Button
                           type="button"
                           variant="outline"
-                          className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+                          className="h-auto min-h-7 max-w-full whitespace-normal"
                           onClick={() => startAtFirstPage()}
                           disabled={pageQueryFetching(pageIntent) || checkingAccess || waiting}
                         >
@@ -1563,7 +1553,7 @@ export function ViewerInboxPage({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+                  className="h-auto min-h-7 max-w-full whitespace-normal"
                   aria-controls={boundaryId}
                   aria-describedby={failed ? `${boundaryId}-failure` : undefined}
                   aria-busy={continuing}

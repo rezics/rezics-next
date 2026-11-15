@@ -1,16 +1,15 @@
 import { pickText } from '@rezics/composition';
 import type { Loan } from '@rezics/client';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import type { LoansPageData, LoanWriteResult } from './loans-read';
 
 export type LoanItem = LoansPageData['items'][number];
-export const loanButton =
-  'min-h-11 min-w-11 inline-flex max-w-full items-center justify-center whitespace-normal rounded-lg bg-primary px-4 py-2 text-center font-medium text-primary-foreground hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60';
-export const loanQuiet =
-  'min-h-11 min-w-11 inline-flex max-w-full items-center justify-center whitespace-normal rounded-lg border border-border px-4 py-2 text-center hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60';
-export const loanField =
-  'min-h-11 min-w-0 w-full rounded-lg border border-border bg-background px-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const loanWrap = 'h-auto min-h-7 max-w-full whitespace-normal text-center';
+export const loanButton = cn(buttonVariants(), loanWrap);
+export const loanQuiet = cn(buttonVariants({ variant: 'outline' }), loanWrap);
 
 export function loanFailure(reason: Extract<LoanWriteResult, { ok: false }>['reason']) {
   if (reason === 'conflict') return m.library_loans_conflict();
@@ -70,7 +69,15 @@ export function LoanFacts({ loan, today }: { loan: Loan; today: string | null })
           {loan.direction === 'lent' ? m.library_loans_lent() : m.library_loans_borrowed()}
         </span>
         <span className="whitespace-pre-wrap">{loanCounterparty(loan)}</span>
-        <span className="rounded-md bg-muted px-2 py-1 text-sm font-medium">{state}</span>
+        <span
+          className={
+            loan.state === 'overdue'
+              ? 'rounded-md bg-destructive/10 px-2 py-0.5 text-sm font-medium text-destructive'
+              : 'rounded-md bg-muted px-2 py-0.5 text-sm font-medium'
+          }
+        >
+          {state}
+        </span>
       </p>
       <dl className="grid gap-3 text-sm sm:grid-cols-3">
         <div>

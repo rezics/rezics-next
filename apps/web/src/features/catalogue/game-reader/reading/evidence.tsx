@@ -82,7 +82,7 @@ export function GameEvidence({
         data-slot="game-fact-evidence"
         className="min-w-0 overflow-hidden rounded-md border border-border text-sm"
       >
-        <summary className={`${action} cursor-pointer px-2 py-1 text-primary`}>
+        <summary className={`${action} cursor-pointer`}>
           {m.game_reader_evidence({}, o)}
         </summary>
         <div className="min-w-0 space-y-3 border-t border-border bg-muted/20 p-3">

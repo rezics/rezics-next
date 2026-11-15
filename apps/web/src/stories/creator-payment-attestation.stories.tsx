@@ -19,6 +19,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { AppShell } from '../shell/shell';
 import { PatternStory, pageReady } from './page';
+import { Button } from '@rezics/ui/shadcn/button';
 
 const meta = {
   title: 'Commerce/Creator Payment Attestation',
@@ -112,16 +113,13 @@ function CreatorPaymentScenario({
         refreshFailed={refreshFailed}
       />
       {retireControl && (
-        <button
-          type="button"
-          className="min-h-11 rounded-md border px-4 text-sm"
-          onClick={() => {
+        <Button type="button" variant="outline" size="sm" onClick={() => {
             authority.current = false;
             updateAuthority((version) => version + 1);
           }}
         >
           Retire current authority (story control)
-        </button>
+        </Button>
       )}
     </>
   );

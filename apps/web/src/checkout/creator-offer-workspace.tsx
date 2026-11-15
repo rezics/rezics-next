@@ -38,7 +38,7 @@ export function CreatorOfferWorkspaceDisclosure({
 }) {
   return (
     <details className={`min-w-0 ${className}`}>
-      <summary className="min-h-11 cursor-pointer content-center break-words text-sm font-medium underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+      <summary className="cursor-pointer content-center break-words text-sm font-medium underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
         {title}
       </summary>
       <div className="min-w-0 space-y-4 py-4 [overflow-wrap:anywhere]">{children}</div>

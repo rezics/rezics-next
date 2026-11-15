@@ -214,7 +214,7 @@ export function ProviderQueue({
                   setStatus(value as QueueScope['status']);
                 }}
               >
-                <SharedSelect.SelectTrigger id={`${id}-status`} className="max-md:min-h-11 pointer-coarse:min-h-11">
+                <SharedSelect.SelectTrigger id={`${id}-status`} className="w-full">
                   <SharedSelect.SelectValue />
                 </SharedSelect.SelectTrigger>
                 <SharedSelect.SelectContent>
@@ -240,7 +240,7 @@ export function ProviderQueue({
               }}
             />
             <div>
-              <Button type="submit" className="min-h-11" disabled={!choice}>
+              <Button type="submit" disabled={!choice}>
                 {m.prq_load()}
               </Button>
             </div>
@@ -685,7 +685,7 @@ function ProviderQueueResults({
             );
           return (
             <Link
-              className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline"
+              className="text-sm font-medium text-primary underline-offset-4 hover:underline"
               to={href as never}
               onClick={(event) => {
                 if (!visit.live()) {
@@ -787,7 +787,7 @@ export function ProviderQueueView({
       ) : (
         <ContentItemFrame as="div" role="alert" className="flex flex-col gap-3 p-4">
           <ContentItemHeading level={2}>{providerOutcomeText(current, locale)}</ContentItemHeading>
-          <Button variant="outline" className="min-h-11" disabled={busy} onClick={() => void retry()}>
+          <Button variant="outline" disabled={busy} onClick={() => void retry()}>
             {m.provider_refresh({}, o)}
           </Button>
         </ContentItemFrame>

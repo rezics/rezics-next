@@ -33,9 +33,7 @@
   gap: 0.5rem;
   inline-size: 100%;
   min-inline-size: 0;
-  min-block-size: 2.75rem;
-  padding: 0.4rem 0.5rem;
-  border-radius: 0.375rem;
+  block-size: auto;
   text-align: start;
   white-space: normal;
   font-weight: 400;
@@ -45,8 +43,6 @@
 .studio-navigation-row > svg,
 .studio-navigation-actions > svg {
   flex: none;
-  inline-size: 1rem;
-  block-size: 1rem;
   color: var(--muted-foreground);
 }
 
@@ -75,21 +71,11 @@
   flex: none;
   align-items: center;
   justify-content: center;
-  inline-size: 2.75rem;
-  min-block-size: 2.75rem;
-  padding: 0;
-  border-radius: 0.375rem;
-  cursor: pointer;
 }
 
 .studio-navigation-actions:hover,
 .studio-navigation-actions[data-popup-open] {
   background: var(--muted);
-}
-
-.studio-navigation-actions:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: -2px;
 }
 
 .studio-navigation .studio-navigation-add {

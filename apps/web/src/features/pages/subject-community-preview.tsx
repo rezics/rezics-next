@@ -89,7 +89,7 @@ export function SubjectCommunityPreview({
                   ).href
                 }
                 lang={target.subject.label?.language}
-                className="inline-flex min-h-11 min-w-11 items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="inline-flex items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
                 <bdi>
                   {m.thread_review_details_selected_subject(

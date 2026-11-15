@@ -75,7 +75,7 @@ export function PublicViewsCard({
                 <label
                   key={view}
                   htmlFor={`${ids}-${view}`}
-                  className="block min-h-14 w-full cursor-pointer px-4 py-3"
+                  className="block w-full cursor-pointer px-3 py-2"
                 >
                   <Field orientation="horizontal">
                     <FieldContent className="min-w-0 flex-1">
@@ -96,7 +96,7 @@ export function PublicViewsCard({
               {profile.kind === 'organization' ? (
                 <label
                   htmlFor={`${ids}-speakers`}
-                  className="block min-h-14 w-full cursor-pointer px-4 py-3"
+                  className="block w-full cursor-pointer px-3 py-2"
                 >
                   <Field orientation="horizontal">
                     <FieldContent className="min-w-0 flex-1">
@@ -130,7 +130,7 @@ export function PublicViewsCard({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-auto min-h-11 w-full max-w-sm justify-start whitespace-normal break-words py-2 text-left sm:w-auto"
+                  className="h-auto w-full max-w-sm justify-start whitespace-normal break-words text-left sm:w-auto min-h-7"
                   disabled={closed || !!state.attempt || commandWaiting || !canSubmitPatch}
                   onClick={() => void editor.submit('views')}
                 >

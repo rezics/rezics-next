@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type MouseEvent } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../paraglide/messages.js';
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import {
@@ -336,7 +337,7 @@ function RealmClaimControlsContent({
           ) : null}
           {orphan && current?.admission === 'signed-out' ? (
             <Button
-              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+              className="h-auto min-h-7 max-w-full whitespace-normal text-start"
               nativeButton={false}
               render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} />}
             >
@@ -346,7 +347,7 @@ function RealmClaimControlsContent({
           <div className="flex flex-wrap gap-2">
             {current?.admission === 'allowed' && mayRequestRealmClaim(state) ? (
               <Button
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                 disabled={!ready}
                 onClick={(event) => activateClaim(event, control.submit)}
               >
@@ -355,7 +356,7 @@ function RealmClaimControlsContent({
             ) : null}
             {current?.admission === 'allowed' && mayRetryRealmClaim(state) ? (
               <Button
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                 disabled={!ready}
                 onClick={(event) => activateClaim(event, control.retry)}
               >
@@ -365,7 +366,7 @@ function RealmClaimControlsContent({
             {state.reviewed && (state.outcome === 'conflict' || state.outcome === 'refused') ? (
               <Button
                 variant="outline"
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                 disabled={state.busy}
                 onClick={() => control.review()}
               >
@@ -374,7 +375,7 @@ function RealmClaimControlsContent({
             ) : null}
             <Button
               variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+              className="h-auto min-h-7 max-w-full whitespace-normal text-start"
               disabled={!ready || state.busy}
               onClick={() => void control.refresh()}
             >
@@ -414,7 +415,7 @@ function RealmClaimControlsContent({
               ) : null}
             </dl>
             <details className="min-w-0">
-              <summary className="min-h-11 cursor-pointer py-2 font-medium underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+              <summary className="cursor-pointer font-medium underline underline-offset-4">
                 {m.community_management_details_claim_summary()}
               </summary>
               <div className="space-y-3 pt-2">
@@ -427,7 +428,7 @@ function RealmClaimControlsContent({
                 <Button
                   ref={copyButton}
                   variant="outline"
-                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                  className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                   onClick={async (event) => {
                     copyFocus.current?.cancel();
                     const read = state.read;
@@ -473,18 +474,18 @@ function RealmClaimControlsContent({
                     <label htmlFor={`${id}-claim-reference-copy`} className="block font-medium">
                       {m.realm_claim_copy_fallback_label()}
                     </label>
-                    <input
+                    <Input
                       ref={copyFallback}
                       id={`${id}-claim-reference-copy`}
                       aria-label={m.realm_claim_copy_fallback_label()}
-                      className="min-h-11 w-full select-all rounded-md border bg-background px-3 font-mono text-sm"
+                      className="font-mono select-all"
                       readOnly
                       value={request.requestId}
                       onFocus={(event) => event.currentTarget.select()}
                     />
                     <Button
                       variant="outline"
-                      className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                      className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                       onClick={() => {
                         copyFocus.current?.cancel();
                         setCopy(null);
@@ -500,7 +501,7 @@ function RealmClaimControlsContent({
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                 nativeButton={false}
                 render={<a href={localizeHref(`/realms/${realmId}/claim-requests/${request.requestId}`)} />}
               >
@@ -513,7 +514,7 @@ function RealmClaimControlsContent({
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+              className="h-auto min-h-7 max-w-full whitespace-normal text-start"
               nativeButton={false}
               render={<a href={localizeHref(`/realms/${realmId}/claim-requests/${receipt.requestId}`)} />}
             >

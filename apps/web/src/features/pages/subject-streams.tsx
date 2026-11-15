@@ -88,7 +88,7 @@ function SubjectStreamNav({
             aria-current={entry.node === streams.selected ? 'page' : undefined}
             className={cn(
               buttonVariants({ variant: entry.node === streams.selected ? 'secondary' : 'outline' }),
-              'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+              'h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
             )}
           >
             {label}

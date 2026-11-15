@@ -6,6 +6,7 @@ import { RuleEditLink } from '../saved-query-results';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { DynamicRuleReview, ruleReviewReleaseFromChoices, type RuleReviewRelease } from './criteria';
+import { Button } from '@rezics/ui/shadcn/button';
 
 type ResultsPage = Pick<
   DynamicCollectionPageData,
@@ -27,8 +28,7 @@ type ReviewState =
   | { binding: string; phase: 'closed' | 'reading' | 'denied' | 'unavailable' }
   | { binding: string; phase: 'ready'; page: Extract<RulePage, { state: 'ready' }> };
 
-const buttonClass =
-  'inline-flex min-h-11 min-w-0 max-w-full items-center justify-center break-words rounded-lg border border-border px-4 py-2 text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
+const buttonClass = 'h-auto min-h-7 min-w-0 max-w-full break-words';
 
 /**
  * An owner-only private read joins the admitted rule basis to this exact dynamic results page.
@@ -145,13 +145,13 @@ export function DynamicRuleResultsReview({
         </div>
         <div className="flex flex-wrap gap-2">
           {visible.phase === 'ready' ? (
-            <button type="button" className={buttonClass} onClick={closeReview}>
+            <Button type="button" variant="outline" className={buttonClass} onClick={closeReview}>
               {m.library_rule_results_close()}
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
               type="button"
-              className={buttonClass}
+              variant="outline" className={buttonClass}
               disabled={visible.phase === 'reading' || !ownerCurrentRef.current()}
               onClick={() => void openReview()}
             >
@@ -160,7 +160,7 @@ export function DynamicRuleResultsReview({
                 : visible.phase === 'unavailable' || visible.phase === 'denied'
                   ? m.library_rule_results_retry()
                   : m.library_rule_results_review()}
-            </button>
+            </Button>
           )}
           <RuleEditLink
             collection={{ id: page.id, curatorAccountId: ownerId, membershipKind: 'dynamic' }}

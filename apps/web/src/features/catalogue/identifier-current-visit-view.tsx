@@ -13,6 +13,7 @@ import {
 import { identifierReturnFocus } from './identifier-current-visit-focus';
 import { m } from '../../paraglide/messages.js';
 import type { IdentifierVisitOrigin } from './identifier-current-visit';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { ViewHeading } from '../pages/view-heading';
 
 export function IdentifierOriginChoice({
@@ -49,23 +50,23 @@ export function IdentifierOriginChoice({
       <p role="status">{originMessage}</p>
       <p>{m.identifiers_global_only_notice({}, o)}</p>
       {originHref ? (
-        <a className="min-h-11 underline underline-offset-4" href={originHref}>
+        <a className={visitLinkClass} href={originHref}>
           {m.identifiers_return_origin({}, o)}
         </a>
       ) : globalHref ? (
-        <a className="min-h-11 underline underline-offset-4" href={globalHref}>
+        <a className={visitLinkClass} href={globalHref}>
           {m.identifiers_open_global_subject({}, o)}
         </a>
       ) : null}
-      <button type="button" className="min-h-11 self-start underline underline-offset-4" onClick={onChooseGlobal}>
+      <Button type="button" variant="link" className="h-auto min-h-7 self-start" onClick={onChooseGlobal}>
         {m.identifiers_global_choice({}, o)}
-      </button>
+      </Button>
     </section>
   );
 }
 
-const visitControl =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-ring';
+const visitControl = 'h-auto min-h-7 max-w-full justify-start whitespace-normal text-start [overflow-wrap:anywhere]';
+const visitLinkClass = buttonVariants({ variant: 'link', className: visitControl });
 let nextSource = 0;
 
 export type IdentifierCurrentVisitProps = {
@@ -154,9 +155,9 @@ function IdentifierVisitReader({
         headingTabIndex={-1}
       />
       {!opened ? (
-        <button className={visitControl} type="button" onClick={() => setOpened(true)}>
+        <Button variant="link" className={visitControl} type="button" onClick={() => setOpened(true)}>
           {m.identifiers_inspect_open({}, o)}
-        </button>
+        </Button>
       ) : (
         <>
           {!evidence && (
@@ -184,7 +185,7 @@ function IdentifierVisitReader({
               ) : (
                 <p role="status">{m.value_not_selected({}, o)}</p>
               )}
-              <button
+              <Button variant="link"
                 className={visitControl}
                 type="button"
                 onClick={() => {
@@ -200,7 +201,7 @@ function IdentifierVisitReader({
                 }}
               >
                 {m.identifiers_inspect_return({}, o)}
-              </button>
+              </Button>
             </>
           ) : evidence ? (
             <>
@@ -224,7 +225,7 @@ function IdentifierVisitReader({
                       <div key={item.id} className="min-w-0 space-y-2 rounded border p-3">
                         <p>{m.facts_selected_value({ number: index + 1 }, o)}</p>
                         <CandidateValue snak={item} related={evidence.related} locale={locale} />
-                        <button
+                        <Button variant="link"
                           type="button"
                           className={visitControl}
                           ref={(node) => {
@@ -238,8 +239,8 @@ function IdentifierVisitReader({
                           }}
                         >
                           {m.identifiers_inspect_exact({}, o)}
-                        </button>
-                        <a className={visitControl} href={identifierInspectionHref(editorHref, address)}>
+                        </Button>
+                        <a className={visitLinkClass} href={identifierInspectionHref(editorHref, address)}>
                           {m.identifiers_inspect_link({}, o)}
                         </a>
                       </div>
@@ -249,7 +250,7 @@ function IdentifierVisitReader({
               ))}
             </>
           ) : null}
-          <button
+          <Button variant="link"
             type="button"
             className={visitControl}
             disabled={query.isFetching}
@@ -261,7 +262,7 @@ function IdentifierVisitReader({
             }}
           >
             {m.identifiers_public_reload({}, o)}
-          </button>
+          </Button>
         </>
       )}
     </section>

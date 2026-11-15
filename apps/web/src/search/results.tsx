@@ -181,7 +181,7 @@ export function MatchEvidenceView({ evidence, locale }: { evidence: MatchEvidenc
       <p data-slot="search-match-primary">{renderReason(primary, 0)}</p>
       {reasons.length > 1 ? (
         <details className="mt-1">
-          <summary className="min-h-11 w-fit cursor-pointer py-2 underline underline-offset-4">
+          <summary className="w-fit cursor-pointer underline underline-offset-4">
             {m.search_match_explanation({}, options)}
           </summary>
           <ul className="list-inside list-disc space-y-1 pb-2">
@@ -308,7 +308,7 @@ export function ResultRow({
                           <a
                             className={cn(
                               buttonVariants({ variant: 'link' }),
-                              'h-auto min-h-11 min-w-11 max-w-full justify-start whitespace-normal px-1 py-1 text-start underline',
+                              'h-auto min-h-7 max-w-full justify-start whitespace-normal text-start underline',
                             )}
                             href={
                               subjectHrefFor?.({ id: fact.id, label: fact.text }) ??

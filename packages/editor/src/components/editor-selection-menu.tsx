@@ -121,7 +121,7 @@ export function SelectionMenu({
           role="toolbar"
           aria-label={labels.formatting}
           data-slot="editor-selection-menu"
-          className="relative flex max-w-[calc(100vw-1rem)] flex-wrap gap-1 rounded-2xl bg-popover p-1 text-popover-foreground shadow-lg ring-1 ring-foreground/5 dark:ring-foreground/10"
+          className="relative flex max-w-[calc(100vw-1rem)] flex-wrap items-center gap-1 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10"
           onKeyDown={moveFocus}
         >
           {linkRange ? (

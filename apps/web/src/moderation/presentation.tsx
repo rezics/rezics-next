@@ -2,12 +2,12 @@ import { useId, type ReactNode } from 'react';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { m } from '../paraglide/messages.js';
 
-/** Shared touch targets also wrap translated labels and long supplied references. */
+/** Long labels wrap on the official control instead of a custom target size. */
 export const moderationControl =
-  'inline-flex h-auto min-h-11 min-w-11 max-w-full items-center justify-center gap-2 whitespace-normal break-words px-3 py-2 text-sm focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'h-auto min-h-7 max-w-full whitespace-normal break-words';
 
 export const moderationLink =
-  'inline-flex min-h-11 max-w-full items-center gap-2 py-2 text-sm underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'inline-flex max-w-full items-center gap-2 text-sm underline underline-offset-4 [overflow-wrap:anywhere]';
 
 export type ModerationReferenceField = { label: string; value: ReactNode };
 
@@ -23,7 +23,7 @@ export function ModerationReference({
 }) {
   return (
     <details className="min-w-0 border-t pt-2">
-      <summary className="min-h-11 cursor-pointer rounded-sm py-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+      <summary className="cursor-pointer text-sm font-medium">
         {label}
       </summary>
       <dl className="grid min-w-0 gap-4 py-3 text-sm sm:grid-cols-2">

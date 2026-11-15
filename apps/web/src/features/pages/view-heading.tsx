@@ -65,7 +65,7 @@ export function ViewHeadingActions({
     <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
       <ViewHeading label={label} {...(headingClassName ? { headingClassName } : {})} />
       {actions ? (
-        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 [&_a]:h-auto [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:wrap-anywhere [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:wrap-anywhere">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 [&_a]:h-auto [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:wrap-anywhere [&_button]:h-auto [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:wrap-anywhere">
           {actions}
         </div>
       ) : null}

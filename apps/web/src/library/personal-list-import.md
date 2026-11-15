@@ -15,7 +15,7 @@ no old page bodies, grants no score consent and sends no write. AniList/Bangumi 
 review metadata; MAL confirms only the displayed page and retains its draft field choices for a later native reread.
 A returned page retires any absent or replaced review authority and consent, while acknowledged outcomes and exact
 uncertain write operands remain independent. Upload replacement, cancellation and reader retirement clear the trail
-and retire late reads, including independent score reads from a replaced upload. Wrapped 44px navigation follows
+and retire late reads, including independent score reads from a replaced upload. Wrapped navigation follows
 First, Previous, Next in keyboard order; each successful read focuses its page status, including a same-page retry.
 Failed movement leaves explicit retry and recovery controls. No prefetch or ordinal
 arithmetic supplies a predecessor.
@@ -92,7 +92,7 @@ selected replacement payload within the provider's file cap. A cleanup refusal o
 that exact cleanup retry; no current read infers deletion. Acknowledgement continues the latest explicitly submitted
 replacement once. Editing its file or format withdraws that pending preview, including while cleanup is in flight;
 discard withdraws it without changing the original cleanup intent. Acknowledged apply receipts survive cleanup,
-which never rolls back Library or score effects. Recovery actions wrap at 44px and own focus when review retires.
+which never rolls back Library or score effects. Recovery actions wrap and own focus when review retires.
 Design sources: this owner; each provider's controller preview/discard/retry paths, contract, port, native lifecycle
 adapter, upload/page components, cost ledger and focused tests. Source-only delivery leaves runtime acceptance to
 the verifier.

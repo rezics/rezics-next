@@ -18,43 +18,23 @@ body {
 }
 
 .auth-shell {
-  /* Error text uses the same ink blue as other interface text. */
-  --destructive: var(--primary);
-  --destructive-foreground: var(--primary);
-  --destructive-solid: var(--primary);
   min-height: 100vh;
+  min-height: 100svh;
   background: var(--background);
-  background-image:
-    radial-gradient(1100px circle at 18% 10%, var(--aura-glow-2) 0%, transparent 58%),
-    radial-gradient(1200px circle at 86% 18%, var(--aura-glow-1) 0%, transparent 55%),
-    radial-gradient(900px circle at 50% 110%, var(--aura-glow-3) 0%, transparent 55%),
-    linear-gradient(to right, var(--aura-grid-strong) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--aura-grid-strong) 1px, transparent 1px),
-    linear-gradient(to right, var(--aura-grid) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--aura-grid) 1px, transparent 1px);
-  background-size:
-    auto,
-    auto,
-    auto,
-    120px 120px,
-    120px 120px,
-    24px 24px,
-    24px 24px;
+  color: var(--foreground);
 }
 
 .auth-header {
-  min-height: 4rem;
-  border-bottom: 1px solid color-mix(in oklab, var(--border) 78%, transparent);
+  border-bottom: 1px solid var(--border);
 }
 
 .auth-header-inner {
   display: flex;
   align-items: center;
-  width: min(100% - 2.5rem, 72rem);
-  min-height: 4rem;
+  width: min(100% - 2rem, 72rem);
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 0.75rem 1.5rem;
+  gap: 0.5rem 1rem;
   padding-block: 0.5rem;
   margin-inline: auto;
 }
@@ -82,7 +62,6 @@ body {
 }
 
 .auth-locale-choice [data-slot='select-trigger'] {
-  min-height: 2.75rem;
   max-width: 13rem;
 }
 
@@ -125,10 +104,11 @@ body {
 .auth-main {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  min-height: calc(100vh - 4rem);
-  min-height: calc(100svh - 4rem);
+  min-height: calc(100vh - 3rem);
+  min-height: calc(100svh - 3rem);
   place-items: center;
-  padding: 3rem 1.25rem;
+  padding: 1.5rem 1rem;
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
 }
 
 .auth-card {
@@ -137,7 +117,7 @@ body {
   min-width: 0;
   max-width: 100%;
   width: min(100%, 34rem);
-  padding: 3.25rem 2rem;
+  padding: 1.5rem 1.25rem;
   text-align: center;
   overflow-wrap: anywhere;
 }
@@ -153,13 +133,17 @@ body {
   max-width: 100%;
 }
 
-.auth-card :where([data-slot='button'], a[data-slot='button'], nav a) {
-  height: auto;
-  min-height: 2.75rem;
+.auth-card :where([data-slot='button'], a[data-slot='button']) {
   min-width: 0;
   max-width: 100%;
   flex-shrink: 1;
   white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.auth-card :where(nav a) {
+  min-width: 0;
+  max-width: 100%;
   overflow-wrap: anywhere;
 }
 
@@ -168,10 +152,9 @@ body {
   white-space: normal;
 }
 
-.auth-card [data-slot='field-label']:has(input[type='checkbox']) {
-  min-height: 2.75rem;
+.auth-card [data-slot='field-label']:has(input[type='checkbox']),
+.auth-card [data-slot='field-label']:has([data-slot='checkbox']) {
   align-items: flex-start;
-  padding-block: 0.625rem;
 }
 
 .auth-card input[type='checkbox'] {
@@ -192,19 +175,10 @@ body {
   text-align: start;
 }
 
-.auth-operation-exit a {
-  display: inline-flex;
-  align-items: center;
-  padding-block: 0.625rem;
+.auth-operation-exit a,
+.auth-account-operation-success a {
   text-decoration: underline;
   text-underline-offset: 0.2em;
-}
-
-.auth-account-operation-success a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 2.75rem;
-  padding-block: 0.625rem;
 }
 
 .auth-operation-exit a:focus-visible,
@@ -220,31 +194,8 @@ body {
 }
 
 .auth-account-operation-requirements a {
-  display: flex;
-  align-items: center;
-  min-height: 2.75rem;
-  padding-block: 0.625rem;
   text-decoration: underline;
   text-underline-offset: 0.2em;
-}
-
-@media (max-width: 639px) {
-  .auth-card :where([data-slot='input'], [data-slot='input-group']) {
-    min-height: 2.75rem;
-  }
-
-  .auth-card [data-slot='input-group'] button {
-    min-height: 2.75rem;
-    min-width: 2.75rem;
-  }
-
-  .auth-card [data-slot='input-group-addon'][data-align='inline-end'] {
-    padding-inline-end: 0;
-  }
-
-  .auth-card [data-slot='input-group-control'] {
-    min-height: 2.625rem;
-  }
 }
 
 .auth-card:has(.auth-security-page) {
@@ -253,13 +204,12 @@ body {
 
 .auth-security-page {
   display: grid;
-  gap: 2.25rem;
+  gap: 1.5rem;
   text-align: start;
 }
 
-/* The heading sits one section gap above the first section, like the sections do from each other. */
 .auth-card:has(.auth-security-page) h1 {
-  margin-bottom: 2.25rem;
+  margin-bottom: 1.5rem;
 }
 
 .auth-security-page h2 {
@@ -276,10 +226,10 @@ body {
 .auth-account-identity {
   display: grid;
   gap: 0.75rem;
-  margin-bottom: 2.25rem;
+  margin-bottom: 1.5rem;
   padding: 1rem;
   border: 1px solid var(--border);
-  border-radius: 0.75rem;
+  border-radius: var(--radius-lg);
   text-align: start;
   overflow-wrap: anywhere;
 }
@@ -302,15 +252,12 @@ body {
 }
 
 .auth-account-identity summary {
-  min-height: 2.75rem;
-  padding-block: 0.625rem;
   cursor: pointer;
 }
 
 .auth-account-identity summary:focus-visible {
   outline: 2px solid var(--ring);
-  outline-offset: 4px;
-  border-radius: 0.25rem;
+  outline-offset: 2px;
 }
 
 .auth-card:has(.auth-account-home) {
@@ -335,8 +282,7 @@ body {
 
 .auth-account-home-status:focus {
   outline: 2px solid var(--ring);
-  outline-offset: 4px;
-  border-radius: 0.25rem;
+  outline-offset: 2px;
 }
 
 .auth-account-home-email {
@@ -378,30 +324,10 @@ body {
 }
 
 .auth-home-link,
-.auth-home-entries nav a {
-  display: flex;
-  min-height: 2.75rem;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.875rem 1rem;
-  border: 1px solid color-mix(in oklab, var(--border) 82%, transparent);
-  border-radius: 0.75rem;
-  background: color-mix(in oklab, var(--card) 92%, transparent);
-  color: var(--foreground);
-  text-decoration: none;
-  overflow-wrap: anywhere;
-}
-
-.auth-home-link:hover,
-.auth-home-entries nav a:hover {
-  background: color-mix(in oklab, var(--accent) 50%, var(--card));
-}
-
-.auth-home-link:focus-visible,
-.auth-home-entries nav a:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 3px;
+.auth-home-entry-link {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: start;
 }
 
 .auth-home-link > span:first-child {
@@ -411,14 +337,8 @@ body {
 }
 
 .auth-home-link small {
-  color: var(--muted-foreground);
   font-size: 0.875rem;
   font-weight: 400;
-}
-
-.auth-home-link[aria-current='page'] {
-  border-color: color-mix(in oklab, var(--ring) 55%, var(--border));
-  background: color-mix(in oklab, var(--accent) 38%, var(--card));
 }
 
 .auth-home-current {
@@ -485,18 +405,18 @@ body {
 .auth-card h1 {
   margin: 0;
   color: var(--foreground);
-  font-size: clamp(2rem, 7vw, 3rem);
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  line-height: 1.2;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
   overflow-wrap: anywhere;
 }
 
 .auth-login-form {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
-  margin-top: 2rem;
+  gap: 1rem;
+  margin-top: 1.5rem;
   text-align: start;
 }
 
@@ -519,10 +439,6 @@ body {
 }
 
 .auth-route-failure nav a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 2.75rem;
-  padding-block: 0.625rem;
   color: var(--foreground);
   text-decoration: underline;
   text-underline-offset: 0.2em;
@@ -535,9 +451,9 @@ body {
 }
 
 .auth-login-alert {
-  padding: 0.875rem 1rem;
+  padding: 0.75rem 1rem;
   border: 1px solid var(--border);
-  border-radius: 0.75rem;
+  border-radius: var(--radius-lg);
   background: var(--muted);
   overflow-wrap: anywhere;
 }
@@ -579,6 +495,6 @@ body {
 
 @media (min-width: 640px) {
   .auth-card {
-    padding: 4.5rem 3rem;
+    padding: 2rem 1.5rem;
   }
 }

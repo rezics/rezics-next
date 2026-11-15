@@ -13,6 +13,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { pickText } from '@rezics/composition';
 import definitions from '../kernel/recorded/definitions-release.json';
+import { Button } from '@rezics/ui/shadcn/button';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const referenceLabels = { en: 'Same name', ja: '同名' };
@@ -153,20 +154,20 @@ function Example({
     <PatternStory visitor={visitor} path={reference?.href ?? returnedTo ?? comparisonAddress(view)}>
       <ComparisonVisit onReference={visit}>
         <div className="flex flex-wrap gap-4">
-          <button type="button" className="min-h-11 underline" onClick={() => recover(true)}>
+          <Button type="button" variant="link" size="sm" onClick={() => recover(true)}>
             Recover same cursor
-          </button>
-          <button type="button" className="min-h-11 underline" onClick={() => replace(true)}>
+          </Button>
+          <Button type="button" variant="link" size="sm" onClick={() => replace(true)}>
             Replace Collection during reference visit
-          </button>
+          </Button>
         </div>
         {reference ? (
           <section className="space-y-4">
             <h1 className="text-xl font-semibold">Supplied reference</h1>
             <a
-              className="inline-flex min-h-11 items-center underline"
-              href={reference.via}
-              onClick={(event) => {
+ 
+ href={reference.via}
+ className="underline" onClick={(event) => {
                 event.preventDefault();
                 returnTo(reference.via);
                 visit(null);

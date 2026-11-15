@@ -167,7 +167,7 @@ export function TechnicalDetails({
   const options = { locale: locale as never };
   return (
     <details className="min-w-0">
-      <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.zone_recovery_details({}, options)}</summary>
+      <summary className="cursor-pointer font-medium">{m.zone_recovery_details({}, options)}</summary>
       {failure ? (
         <p className="break-words">
           <code>
@@ -221,7 +221,7 @@ export function FieldGuidanceList({
               <Button
                 type="button"
                 variant="outline"
-                className="h-auto max-w-full whitespace-normal py-2 text-start"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                 onClick={() => onCorrect(guidance.target!)}
               >
                 {m.zone_recovery_correct({ field: guidance.label }, options)}

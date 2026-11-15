@@ -83,7 +83,7 @@ export function Tombstone({
       data-shape={shape}
       className={cn(
         'min-w-0 rounded-lg bg-card text-card-foreground',
-        shape === 'card' ? 'overflow-hidden shadow-sm' : 'flex items-center border p-4',
+        shape === 'card' ? 'overflow-hidden ring-1 ring-foreground/10' : 'flex items-center border p-4',
         shape === 'post' && 'min-h-32',
         shape === 'row' && 'min-h-16',
         className,

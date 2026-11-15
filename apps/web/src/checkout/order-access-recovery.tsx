@@ -74,7 +74,6 @@ export function OrderAccessRecovery({ order, locale, origin, benefitOrigin, enab
     <section className="space-y-2" aria-label={m.order_access_recovery_action()}>
       <Button
         variant="outline"
-        size="lg"
         className="w-full sm:w-auto"
         disabled={!enabled || !current() || phase === 'pending'}
         onClick={() => void retry()}

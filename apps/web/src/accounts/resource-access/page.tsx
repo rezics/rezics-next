@@ -348,7 +348,7 @@ function GrantForm({
                     value={recipient}
                     onValueChange={(value) => changeRecipient(value!)}
                   >
-                    <SelectTrigger id="access-recipient" className="min-h-11 h-auto w-full min-w-0 whitespace-normal">
+                    <SelectTrigger id="access-recipient" className="w-full min-w-0">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -364,10 +364,10 @@ function GrantForm({
                   <>
                     <Field>
                       <FieldLabel htmlFor="access-handle">{m.access_handle()}</FieldLabel>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Input
                           id="access-handle"
-                          className="min-h-11 min-w-32 flex-1"
+                          className="min-w-32 flex-1"
                           value={handle}
                           onChange={(event) => changeHandle(event.target.value)}
                           autoComplete="off"
@@ -376,7 +376,7 @@ function GrantForm({
                         <Button
                           type="button"
                           variant="outline"
-                          className="min-h-11 h-auto max-w-full whitespace-normal px-3 py-2 text-center"
+                          className="h-auto max-w-full whitespace-normal text-center min-h-7"
                           disabled={finding || !handle.trim()}
                           onClick={() => void lookup()}
                         >
@@ -398,7 +398,7 @@ function GrantForm({
                           value={groupRole}
                           onValueChange={(value) => setGroupRole(value! as 'owner' | 'member')}
                         >
-                          <SelectTrigger id="access-group-role" className="min-h-11 h-auto w-full min-w-0 whitespace-normal">
+                          <SelectTrigger id="access-group-role" className="w-full min-w-0">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -436,7 +436,7 @@ function GrantForm({
                     setPermissionFilter('');
                   }}
                 >
-                  <SelectTrigger id="access-kind" className="min-h-11 h-auto w-full min-w-0 whitespace-normal">
+                  <SelectTrigger id="access-kind" className="w-full min-w-0">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -451,7 +451,6 @@ function GrantForm({
                 <FieldLabel htmlFor="access-role">{kind === 'role' ? m.access_role() : m.access_action()}</FieldLabel>
                 <Input
                   id="access-permission-filter"
-                  className="min-h-11"
                   type="search"
                   value={permissionFilter}
                   onChange={(event) => setPermissionFilter(event.target.value)}
@@ -479,7 +478,7 @@ function GrantForm({
                   onValueChange={(value) => (kind === 'role' ? setRole(value!) : setAction(value!))}
                   required
                 >
-                  <SelectTrigger id="access-role" className="min-h-11 h-auto w-full min-w-0 whitespace-normal">
+                  <SelectTrigger id="access-role" className="w-full min-w-0">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -554,7 +553,6 @@ function GrantForm({
                 <FieldLabel htmlFor="access-start">{m.access_starts()}</FieldLabel>
                 <Input
                   id="access-start"
-                  className="min-h-11"
                   type="datetime-local"
                   step="any"
                   value={startsAt}
@@ -565,7 +563,6 @@ function GrantForm({
                 <FieldLabel htmlFor="access-end">{m.access_ends()}</FieldLabel>
                 <Input
                   id="access-end"
-                  className="min-h-11"
                   type="datetime-local"
                   step="any"
                   value={endsAt}
@@ -585,10 +582,10 @@ function GrantForm({
             </p>
           ) : null}
           <div className="flex flex-wrap gap-2 border-t pt-4">
-            <Button type="submit" className="min-h-11" disabled={finding}>
+            <Button type="submit"  disabled={finding}>
               {m.access_review_title()}
             </Button>
-            <Button type="button" className="min-h-11" variant="ghost" onClick={onCancel}>
+            <Button type="button"  variant="ghost" onClick={onCancel}>
               {m.access_cancel()}
             </Button>
           </div>
@@ -802,7 +799,7 @@ function ResourceAccessEditor({
             {state.pending ? (
               <section
                 aria-labelledby="access-pending-intent-heading"
-                className="min-w-0 space-y-4 rounded-2xl border border-amber-500/30 bg-muted/30 p-4 sm:p-6"
+                className="min-w-0 space-y-4 rounded-2xl border bg-muted/30 p-4 sm:p-6"
               >
                 <div className="space-y-1">
                   <h2 id="access-pending-intent-heading" className="text-lg font-semibold">
@@ -813,7 +810,6 @@ function ResourceAccessEditor({
                 <PendingAccessIntent intent={state.pending} />
                 <Button
                   type="button"
-                  className="min-h-11"
                   disabled={state.busy}
                   onClick={() => void controller.retry()}
                 >
@@ -839,7 +835,6 @@ function ResourceAccessEditor({
                     <Button
                       type="button"
                       variant="outline"
-                      className="min-h-11"
                       disabled={state.busy}
                       onClick={() => {
                         setRevoke(null);
@@ -852,7 +847,6 @@ function ResourceAccessEditor({
                     (page.actions.length > 0 || page.roles.some((item) => item.delegable)) ? (
                       <Button
                         type="button"
-                        className="min-h-11"
                         disabled={state.busy || !!state.pending}
                         onClick={() =>
                           move(() => {
@@ -883,7 +877,7 @@ function ResourceAccessEditor({
                     <Button
                       type="button"
                       variant="outline"
-                      className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal px-3 py-2 text-center"
+                      className="h-auto max-w-full whitespace-normal text-center min-h-7"
                       disabled={state.busy}
                       onClick={() => void controller.retryPage()}
                     >
@@ -979,7 +973,6 @@ function ResourceAccessEditor({
                                     <Button
                                       size="icon-sm"
                                       variant="ghost"
-                                      className="min-h-11 min-w-11"
                                       aria-label={m.access_grant_actions()}
                                       disabled={state.busy || !!state.pending}
                                     >
@@ -1035,7 +1028,8 @@ function ResourceAccessEditor({
                       <Button
                         type="button"
                         variant="outline"
-                        className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal px-3 py-2 text-center"
+                        size="sm"
+                        className="h-auto min-h-6 max-w-full whitespace-normal text-center"
                         disabled={state.busy || !!state.pending}
                         onClick={(event) =>
                           requestPageMove(
@@ -1052,7 +1046,8 @@ function ResourceAccessEditor({
                       <Button
                         type="button"
                         variant="outline"
-                        className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal px-3 py-2 text-center"
+                        size="sm"
+                        className="h-auto min-h-6 max-w-full whitespace-normal text-center"
                         disabled={state.busy || !!state.pending}
                         onClick={(event) =>
                           requestPageMove(
@@ -1069,7 +1064,8 @@ function ResourceAccessEditor({
                       <Button
                         type="button"
                         variant="outline"
-                        className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal px-3 py-2 text-center"
+                        size="sm"
+                        className="h-auto min-h-6 max-w-full whitespace-normal text-center"
                         disabled={state.busy || !!state.pending}
                         onClick={(event) =>
                           requestPageMove(

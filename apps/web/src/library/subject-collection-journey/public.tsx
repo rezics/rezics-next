@@ -1,25 +1,11 @@
 import { ContentItem } from '@rezics/ui/content-item';
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { buttonVariants, Button } from '@rezics/ui/shadcn/button';
 import { useEffect, useRef, useState } from 'react';
 import { AccountRef } from '../account-ref';
 import { m } from '../../paraglide/messages.js';
-import {
-  collectionReadFailure,
-  firstCollectionVisit,
-  nextCollectionVisit,
-  previousCollectionVisit,
-  publicCountOf,
-  replaceCollectionPage,
-  type BoundCollectionPage,
-  type ExactPublicCount,
-  type PublicCollectionRow,
-  type SubjectCollectionVisit,
-} from './model';
+import { collectionReadFailure, firstCollectionVisit, nextCollectionVisit, previousCollectionVisit, publicCountOf, replaceCollectionPage, type BoundCollectionPage, type ExactPublicCount, type PublicCollectionRow, type SubjectCollectionVisit } from './model';
 
-const buttonClass = buttonVariants({ variant: 'outline' });
-const controlClass =
-  'h-auto min-h-[44px] min-w-0 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const linkClass = 'text-sm text-primary underline-offset-4 hover:underline';
+const controlClass = 'h-auto min-h-7 min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 export type PublicCollectionsRead = {
   collections: PublicCollectionRow[] | null;
@@ -104,7 +90,7 @@ export function PublicCollectionsPanel({
   const previous = previousCollectionVisit(page.visit);
   return (
     <details data-public-collections className="relative">
-      <summary className={`${buttonClass} cursor-pointer list-none`}>
+      <summary className={buttonVariants({ variant: 'outline', className: `${controlClass} cursor-pointer list-none` })}>
         {total.kind === 'exact'
           ? m.library_subject_public_collections({ count: total.value })
           : m.library_subject_public_collections_unknown()}
@@ -125,14 +111,15 @@ export function PublicCollectionsPanel({
                   ? m.library_subject_closed()
                   : m.library_subject_public_unavailable()}
             </p>
-            <button
+            <Button
               type="button"
-              className={`${buttonClass} ${controlClass}`}
+              variant="outline"
+              className={controlClass}
               disabled={busy}
               onClick={() => void load(firstCollectionVisit(), true)}
             >
               {m.library_subject_continuation_restart()}
-            </button>
+            </Button>
           </div>
         ) : null}
         {!issue && !busy && rows.length === 0 ? (
@@ -174,34 +161,37 @@ export function PublicCollectionsPanel({
         {!issue ? (
           <div className="flex min-w-0 flex-wrap gap-2">
             {previous ? (
-              <button
+              <Button
                 type="button"
-                className={`${buttonClass} ${controlClass}`}
+                variant="outline"
+                className={controlClass}
                 disabled={busy}
                 onClick={() => void load(previous, true)}
               >
                 {m.library_subject_continuation_previous()}
-              </button>
+              </Button>
             ) : null}
             {page.visit.page > 1 ? (
-              <button
+              <Button
                 type="button"
-                className={`${buttonClass} ${controlClass}`}
+                variant="outline"
+                className={controlClass}
                 disabled={busy}
                 onClick={() => void load(firstCollectionVisit(), true)}
               >
                 {m.library_subject_continuation_restart()}
-              </button>
+              </Button>
             ) : null}
             {page.next ? (
-              <button
+              <Button
                 type="button"
-                className={`${buttonClass} ${controlClass}`}
+                variant="outline"
+                className={controlClass}
                 disabled={busy}
                 onClick={() => void load(nextCollectionVisit(page.visit, page.next), true)}
               >
                 {m.library_subject_continuation_next()}
-              </button>
+              </Button>
             ) : null}
           </div>
         ) : null}
@@ -214,7 +204,7 @@ export function PublicCollectionsPanel({
           ? rows.map((collection) => (
               <a
                 key={`return-${collection.id}`}
-                className={`${linkClass} sr-only`}
+               className={buttonVariants({ variant: 'link', className: 'sr-only' })}
                 href={`/${encodeURIComponent(locale)}/collections/${encodeURIComponent(collection.id)}`}
               >
                 {collection.title}

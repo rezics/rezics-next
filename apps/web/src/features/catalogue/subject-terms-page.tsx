@@ -60,9 +60,8 @@ import {
 } from './subject-terms-resolution';
 import { TermsConflictResolution } from './subject-terms-resolution-view';
 
-// Keep dense fine-pointer controls while allowing translated actions to grow onto multiple lines.
-const actionClassName =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+// Translated actions may wrap; official control height stays in the variant.
+const actionClassName = 'h-auto min-h-7 max-w-full whitespace-normal break-words text-center';
 
 let nextTermsTransportKey = 0;
 const termsTransportKeys = new WeakMap<TermsTransport, number>();
@@ -74,13 +73,13 @@ function termsTransportKey(transport: TermsTransport): number {
   termsTransportKeys.set(transport, key);
   return key;
 }
-const inputClassName = 'min-h-11 md:pointer-fine:min-h-8';
 // Leave room for the shared frame's focus/hover surface within the phone column.
 const frameClassName = 'm-1 flex min-w-0 flex-col gap-4 p-3 sm:p-4';
-// Keep the shared Select trigger at the same phone target size as its neighboring fields.
-const selectClassName = 'min-w-0 max-w-full min-h-11 min-w-11 md:pointer-fine:min-h-8';
-const linkClassName =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm underline [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8';
+const selectClassName = 'w-full min-w-0 max-w-full';
+const linkClassName = buttonVariants({
+  variant: 'link',
+  className: 'h-auto min-h-7 max-w-full justify-start whitespace-normal [overflow-wrap:anywhere]',
+});
 
 export const SubjectTermsPage = catalogueEditor(SubjectTermsPageLive);
 
@@ -1260,7 +1259,6 @@ function SubjectTermsPageLive({
                       {m.catalogue_terms_new_language({}, options)}
                     </FieldLabel>
                     <Input
-                      className={inputClassName}
                       id={domId('new-language')}
                       value={newLanguage}
                       disabled={locked}
@@ -1358,7 +1356,7 @@ function SubjectTermsPageLive({
                               }
                             >
                               <SelectTrigger
-                                className={`${selectClassName} [&:focus]:outline-2 [&:focus]:outline-offset-2 [&:focus]:outline-ring`}
+                                className={selectClassName}
                                 ref={(element) => {
                                   controls.current[`${field}-mode`] = element;
                                 }}
@@ -1382,7 +1380,7 @@ function SubjectTermsPageLive({
                               <FieldLabel htmlFor={domId(field)}>{fieldLabel(field)}</FieldLabel>
                               {field === 'aliases' ? (
                                 <Textarea
-                                  className="min-w-0 [overflow-wrap:anywhere] focus:outline-2 focus:outline-offset-2 focus:outline-ring"
+                                  className="min-w-0 [overflow-wrap:anywhere]"
                                   ref={(element) => {
                                     controls.current[field] = element;
                                   }}
@@ -1396,7 +1394,7 @@ function SubjectTermsPageLive({
                                 />
                               ) : (
                                 <Input
-                                  className={`${inputClassName} focus:outline-2 focus:outline-offset-2 focus:outline-ring`}
+                                  className="min-w-0"
                                   ref={(element) => {
                                     controls.current[field] = element;
                                   }}

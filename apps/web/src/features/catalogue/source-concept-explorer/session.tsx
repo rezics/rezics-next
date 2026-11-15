@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { subjectReaderQuery } from '../../pages/subject-queries';
 import { candidateSession, useCandidateReading } from '../../pages/candidate-reading-application';
 import { useSession } from '../../../session/query';
@@ -10,6 +11,11 @@ import { readSubjectConcept } from './actions';
 import type { ConceptWorksRoutePatch, ConceptWorksRouteState } from '../concept-works/view';
 import type { ConceptHierarchyAddress, ConceptVisitDescriptor } from '../../pages/source-concept-reading/navigation';
 import { conceptGlobalVisitHref, type ConceptPublicVisit } from './public-visit';
+
+const compactAction = cn(
+  buttonVariants({ variant: 'outline', size: 'sm' }),
+  'h-auto min-h-6 max-w-full justify-start whitespace-normal text-start [overflow-wrap:anywhere]',
+);
 
 type SourceConceptSessionProps = {
   id: string;
@@ -126,11 +132,11 @@ export function SourceConceptPublicSession({
       <section className="mx-auto w-full max-w-4xl space-y-3" aria-live="polite">
         <p role="status">{message}</p>
         <div className="flex flex-wrap gap-2">
-          <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={publicVisit.origin.returnHref}>
+          <a className={compactAction} href={publicVisit.origin.returnHref}>
             {m.concept_public_origin_return({}, options)}
           </a>
           <a
-            className={buttonVariants({ variant: 'outline', size: 'sm' })}
+            className={compactAction}
             href={conceptGlobalVisitHref(pathname, publicVisit.origin.returnHref)}
           >
             {m.concept_public_origin_global({}, options)}
@@ -142,7 +148,7 @@ export function SourceConceptPublicSession({
   const returnHref = publicVisit.kind === 'origin' ? publicVisit.origin.returnHref : publicVisit.returnHref;
   return (
     <div className="mx-auto w-full max-w-4xl space-y-4">
-      <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={returnHref}>
+      <a className={compactAction} href={returnHref}>
         {m.concept_public_origin_return({}, options)}
       </a>
       <SourceConceptSession {...sessionProps} publicVisitKey={JSON.stringify(publicVisit)} />

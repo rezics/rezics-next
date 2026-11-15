@@ -51,7 +51,7 @@ export function WorkReleaseComparison({
       className="mt-4 min-w-0 space-y-3 border-t border-border pt-3"
       data-slot="work-release-comparison"
     >
-      <summary className={`${action} cursor-pointer font-medium text-primary`}>
+      <summary className={`${action} cursor-pointer font-medium`}>
         {m.game_reader_compare_title({}, o)}
       </summary>
       <dl className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">

@@ -29,7 +29,7 @@ import {
 } from './character-classification-review';
 
 const wrap =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 function reuseReasonText(reason: NonNullable<ReturnType<typeof classificationReuseReason>>, locale: string) {
   const o = { locale: locale as never };

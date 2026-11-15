@@ -1,4 +1,5 @@
 import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { catalogueEntries } from '../catalogue-entry';
 import type { Release } from '@rezics/definitions';
 
@@ -30,7 +31,13 @@ export function ReleaseFidelityEntry({
   });
   if (!entry) return null;
   return (
-    <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={entry.href}>
+    <a
+      className={cn(
+        buttonVariants({ variant: 'outline', size: 'sm' }),
+        'h-auto min-h-6 max-w-full justify-start whitespace-normal text-start [overflow-wrap:anywhere]',
+      )}
+      href={entry.href}
+    >
       {entry.label}
     </a>
   );

@@ -74,7 +74,7 @@ export function HomeFeedQuestionControl({
             if (question) void choices.select(question);
           }}
         >
-          <SharedSelect.SelectTrigger id={id} className="max-w-full min-h-11 max-w-full">
+          <SharedSelect.SelectTrigger id={id} className="max-w-full">
             <SharedSelect.SelectValue />
           </SharedSelect.SelectTrigger>
           <SharedSelect.SelectContent>
@@ -96,7 +96,7 @@ export function HomeFeedQuestionControl({
           </SharedSelect.SelectContent>
         </SharedSelect.Select>
         <Button
-          className="min-h-11 whitespace-normal"
+          className="whitespace-normal"
           variant="outline"
           disabled={snapshot.status === 'loading' || (snapshot.status === 'ready' && !snapshot.page?.next)}
           onClick={() => void choices.load(failure ? choices.retryCursor() : (snapshot.page?.next ?? undefined))}
@@ -112,14 +112,14 @@ export function HomeFeedQuestionControl({
         {selected || selectedId ? (
           <>
             <Button
-              className="min-h-11 whitespace-normal"
+              className="whitespace-normal"
               variant="outline"
               onClick={() => void choices.select(undefined)}
             >
               {m.home_question_clear({}, options)}
             </Button>
             <Button
-              className="min-h-11 whitespace-normal"
+              className="whitespace-normal"
               variant="outline"
               disabled={snapshot.selection === 'loading'}
               onClick={() => (selected ? void choices.refresh() : onRestore?.())}
@@ -132,7 +132,7 @@ export function HomeFeedQuestionControl({
       <p className="text-sm text-muted-foreground">{m.home_question_help({}, options)}</p>
       {selected ? (
         <details className="text-sm text-muted-foreground">
-          <summary className="min-h-11 cursor-pointer py-2">
+          <summary className="cursor-pointer">
             {m.home_presentation_question_information({}, options)}
           </summary>
           <p className="pb-2">

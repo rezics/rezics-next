@@ -1,13 +1,4 @@
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@rezics/ui/shadcn/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@rezics/ui/shadcn/alert-dialog';
 import { useBlocker } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';

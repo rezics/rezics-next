@@ -77,7 +77,7 @@ export function CatalogueSecondary({
                     href={href}
                     lang={name.lang || undefined}
                     locale={value.locale}
-                    className="inline-flex min-h-11 items-center rounded-sm underline underline-offset-4"
+                    className="inline-flex items-center underline underline-offset-4"
                   >
                     {catalogueText(name.text)}
                   </CatalogueTargetLink>
@@ -131,7 +131,7 @@ export function CatalogueSecondary({
             <CatalogueTargetLink
               href={target}
               locale={value.locale}
-              className="inline-flex min-h-11 items-center rounded-sm underline underline-offset-4"
+              className="inline-flex items-center underline underline-offset-4"
             >
               {m.library_more({}, o)}
             </CatalogueTargetLink>

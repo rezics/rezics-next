@@ -124,7 +124,7 @@ function OwnerShelfTypes({
       }}
     >
       <DialogTrigger
-        render={<Button variant="outline" className="min-h-11 h-auto max-w-full whitespace-normal break-words" />}
+        render={<Button variant="outline" className="h-auto min-h-7 max-w-full whitespace-normal break-words" />}
         disabled={!hydrated}
         onClick={() => {
           if (currentChoice() && !page && !busy) void read();
@@ -144,7 +144,10 @@ function OwnerShelfTypes({
           <p className="text-sm text-muted-foreground">{m.library_type_name_unavailable()}</p>
         ) : null}
         <a
-          className={`${buttonVariants({ variant: 'outline' })} min-h-11`}
+          className={buttonVariants({
+            variant: 'outline',
+            className: 'h-auto min-h-7 max-w-full whitespace-normal break-words',
+          })}
           href={href()}
           onClick={(event) => {
             if (!currentChoice()) event.preventDefault();
@@ -161,7 +164,10 @@ function OwnerShelfTypes({
                 {page.types.map((choice, index) => (
                   <a
                     key={choice.type}
-                    className={`${buttonVariants({ variant: choice.type === view.type ? 'secondary' : 'outline' })} min-h-11 h-auto whitespace-normal break-words`}
+                    className={buttonVariants({
+                      variant: choice.type === view.type ? 'secondary' : 'outline',
+                      className: 'h-auto min-h-7 max-w-full whitespace-normal break-words',
+                    })}
                     href={href(choice.type)}
                     onClick={(event) => {
                       if (!currentChoice()) event.preventDefault();
@@ -179,7 +185,7 @@ function OwnerShelfTypes({
               <p className="text-sm">{m.library_type_name_unavailable()}</p>
             ) : null}
             {page.next ? (
-              <Button variant="outline" className="min-h-11" onClick={() => void read('next', page.next!)}>
+              <Button variant="outline" onClick={() => void read('next', page.next!)}>
                 {m.library_types_next()}
               </Button>
             ) : null}
@@ -197,18 +203,18 @@ function OwnerShelfTypes({
                       ? m.library_types_preparing()
                       : m.library_types_unavailable()}
             </p>
-            <Button variant="outline" className="min-h-11" onClick={() => void read('retry')}>
+            <Button variant="outline" onClick={() => void read('retry')}>
               {m.library_types_retry()}
             </Button>
           </div>
         ) : null}
         {navigation.current.hasPrevious && !busy ? (
-          <Button variant="outline" className="min-h-11" onClick={() => void read('previous')}>
+          <Button variant="outline" onClick={() => void read('previous')}>
             {m.library_collections_previous()}
           </Button>
         ) : null}
         {navigation.current.hasFirst && !busy ? (
-          <Button variant="outline" className="min-h-11" onClick={() => void read('first')}>
+          <Button variant="outline" onClick={() => void read('first')}>
             {m.library_types_first()}
           </Button>
         ) : null}

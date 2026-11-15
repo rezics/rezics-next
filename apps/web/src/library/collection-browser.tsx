@@ -3,7 +3,7 @@ import { CoverCard } from '@rezics/ui/cover-card';
 import { ContentItem } from '@rezics/ui/content-item';
 import { ListRowControl } from '@rezics/ui/list-row';
 import { Menu } from '@rezics/ui/menu';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { Link, useLinkProps } from '@tanstack/react-router';
 import {
@@ -124,8 +124,8 @@ function CopyMenu({ title, onCopy }: { title: string; onCopy: () => void | Promi
     <Menu
       title={`${m.library_collection_actions()}: ${title}`}
       trigger={
-        <Button type="button" aria-label={`${m.library_collection_actions()}: ${title}`} variant="ghost" size="icon-sm">
-          <EllipsisIcon aria-hidden="true" className="size-4" />
+        <Button type="button" aria-label={`${m.library_collection_actions()}: ${title}`} variant="ghost" size="icon">
+          <EllipsisIcon aria-hidden="true" />
         </Button>
       }
       entries={[{ type: 'item', label: m.library_collection_copy(), onSelect: onCopy }]}
@@ -164,13 +164,13 @@ export function CollectionBrowseRow({
       actions={menu}
       trailing={
         readable ? (
-          <Link to="/collections/$id" params={{ id: collection.id }} className={buttonVariants({ size: 'lg' })}>
+          <Link to="/collections/$id" params={{ id: collection.id }} className={buttonVariants()}>
             {action}
           </Link>
         ) : (
           <a
             href={`/${getLocale()}/auth/sign-in?return_to=${encodeURIComponent(collectionHref(collection.id))}`}
-            className={buttonVariants({ size: 'lg' })}
+            className={buttonVariants()}
           >
             {action}
           </a>

@@ -130,17 +130,17 @@ export function SubjectOffersView({
   const controls = (
     <div className="flex flex-wrap gap-2">
       {page.kind === 'ready' && page.projectionState === 'ready' && page.next && onNext ? (
-        <Button type="button" variant="outline" className="min-h-11" onClick={() => onNext(page.next!)}>
+        <Button type="button" variant="outline" onClick={() => onNext(page.next!)}>
           {m.subject_purchase_next({}, { locale: language })}
         </Button>
       ) : null}
       {onRestart ? (
-        <Button type="button" variant="outline" className="min-h-11" onClick={onRestart}>
+        <Button type="button" variant="outline" onClick={onRestart}>
           {m.subject_purchase_restart({}, { locale: language })}
         </Button>
       ) : null}
       {(page.kind === 'pending' || page.kind === 'unavailable' || page.kind === 'preparing' || preparing) && onRetry ? (
-        <Button type="button" variant="outline" className="min-h-11" onClick={onRetry}>
+        <Button type="button" variant="outline" onClick={onRetry}>
           {m.subject_purchase_retry({}, { locale: language })}
         </Button>
       ) : null}
@@ -306,7 +306,7 @@ export function SubjectOwnedBenefitsRegion({ locale }: SubjectPurchaseContext) {
   const href = purchaseHref('/entitlements', locale);
   return href ? (
     <div className="mt-4 flex min-w-0 flex-col gap-1 text-sm">
-      <a href={href} className="inline-flex min-h-11 items-center underline underline-offset-4">
+      <a href={href} className="inline-flex items-center underline underline-offset-4">
         {m.subject_purchase_records({}, { locale: language })}
       </a>
       <p className="max-w-prose text-muted-foreground">{m.subject_purchase_records_hint({}, { locale: language })}</p>

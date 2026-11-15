@@ -48,7 +48,7 @@ export function IdentityFacts({ entries }: { entries: ReadonlyArray<readonly [st
 export function IdentityDetails({ entries }: { entries: ReadonlyArray<readonly [string, string | number]> }) {
   return (
     <details className="min-w-0" aria-label={m.access_identity_details()}>
-      <summary className="min-h-11 cursor-pointer content-center py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">
+      <summary className="cursor-pointer content-center py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">
         {m.access_identity_details()}
       </summary>
       <IdentityFacts entries={entries} />

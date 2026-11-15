@@ -80,7 +80,7 @@ export function ZoneNameFields({
               id="zone-primary-language"
               aria-invalid={!!descriptions?.['zone-primary-language']}
               aria-describedby={['zone-name-help', descriptions?.['zone-primary-language']].filter(Boolean).join(' ')}
-              className="max-md:min-h-11 pointer-coarse:min-h-11"
+              className="w-full"
             >
               <SharedSelect.SelectValue />
             </SharedSelect.SelectTrigger>
@@ -110,7 +110,7 @@ export function ZoneNameFields({
         </Field>
       </div>
       <details ref={translations} className="min-w-0 space-y-4 rounded-lg border border-border bg-background p-4">
-        <summary className="min-h-11 cursor-pointer break-words py-2 font-medium pointer-coarse:min-h-12">
+        <summary className="cursor-pointer break-words font-medium">
           {m.zone_name_translations({}, options)}
         </summary>
         <p className="text-sm text-muted-foreground">{m.zone_name_translation_help({}, options)}</p>
@@ -130,7 +130,7 @@ export function ZoneNameFields({
             <Button
               type="button"
               variant="outline"
-              className="h-auto min-h-11 max-w-full whitespace-normal break-words text-start pointer-coarse:min-h-12"
+              className="h-auto min-h-7 max-w-full whitespace-normal break-words text-start"
               onClick={() => {
                 const next = { ...labels };
                 delete next[language];
@@ -157,7 +157,7 @@ export function ZoneNameFields({
               change({ ...labels, [language]: '' });
             }}
           >
-            <SharedSelect.SelectTrigger id="zone-add-translation" className="max-md:min-h-11 pointer-coarse:min-h-11">
+            <SharedSelect.SelectTrigger id="zone-add-translation" className="w-full">
               <SharedSelect.SelectValue />
             </SharedSelect.SelectTrigger>
             <SharedSelect.SelectContent>
@@ -187,7 +187,7 @@ export function ZoneNameFields({
         .filter(([id]) => id === 'zone-names' || id === 'zone-primary-language' || id.startsWith('zone-label-'))
         .map(([, value]) => value)
         .join(' ')}
-      className="min-w-0 rounded-xl border border-border bg-card p-4 shadow-sm sm:p-6 xl:col-start-1 xl:row-start-1"
+      className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-6 xl:col-start-1 xl:row-start-1"
     >
       {fields}
     </section>

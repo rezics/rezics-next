@@ -9,7 +9,10 @@ export function ThreadPageError({ threadId, boardReturn }: { threadId: string; b
       <h1>{m.error_heading()}</h1>
       <p>{m.thread_page_invalid_cursor()}</p>
       <a
-        className={buttonVariants({ variant: 'outline', size: 'lg' })}
+        className={buttonVariants({
+          variant: 'outline',
+          className: 'h-auto min-h-7 max-w-full whitespace-normal',
+        })}
         href={threadLocation(getLocale(), { id: threadId }, undefined, undefined, undefined, boardReturn)}
       >
         {m.thread_page_restart()}

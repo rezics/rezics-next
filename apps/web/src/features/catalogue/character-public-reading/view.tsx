@@ -1,4 +1,6 @@
 import { useContext, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { QueryClientContext } from '@tanstack/react-query';
 import { browserObservation } from '../../../session';
 import { defaultReader } from '../../../subject/reader';
@@ -18,7 +20,7 @@ import { CharacterAssociationContext } from './bridge';
 const groups = ['characters', 'credits'] as const;
 const noSubscribe = () => () => {};
 const noBinding = () => undefined;
-const action = 'inline-flex min-h-11 min-w-11 items-center py-2 underline focus-visible:outline-2';
+const action = cn(buttonVariants({ variant: 'outline' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]');
 
 export type CharacterAssociations = { source: object; viewer: string | null; read?: CharacterConnectionRead };
 

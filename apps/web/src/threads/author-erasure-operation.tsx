@@ -432,7 +432,7 @@ export function AuthorErasureOperationPage({
           {manual && !operation?.done ? (
             <Button
               variant="outline"
-              className="h-auto min-h-11 max-w-full whitespace-normal text-left"
+              className="h-auto min-h-7 max-w-full whitespace-normal text-left"
               disabled={pending || !canManuallyRead}
               onClick={() => {
                 visit.stopAutomatic();
@@ -446,11 +446,11 @@ export function AuthorErasureOperationPage({
             <a
               className={buttonVariants({
                 variant: 'ghost',
-                className: 'h-auto min-h-11 max-w-full whitespace-normal text-left',
+                className: 'h-auto min-h-7 max-w-full whitespace-normal text-left',
               })}
               href={threadLocation(getLocale(), { id: operation.metadata.threadId, title: null })}
             >
-              <ArrowLeft aria-hidden="true" className="size-4" />
+              <ArrowLeft aria-hidden="true" />
               {m.author_erasure_back_thread()}
             </a>
           ) : null}

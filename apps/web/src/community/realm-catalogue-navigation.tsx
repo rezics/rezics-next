@@ -1,11 +1,12 @@
 import { useId, useRef, useState, type SyntheticEvent } from 'react';
 import { ArrowRight, Search } from 'lucide-react';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../paraglide/messages.js';
 import type { Locale } from '../paraglide/runtime.js';
 import { realmCatalogueEntry, realmCatalogueQueryAdmitted, realmCatalogueQueryHref } from './realm-catalogue-entry';
 
-const control =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-medium whitespace-normal focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const actionClass = 'h-auto min-h-7 max-w-full whitespace-normal sm:justify-start';
 
 /** Entry only: Search owns results, supported populations, preparation, facets and ranking. */
 export function RealmCatalogueNavigation({
@@ -57,29 +58,35 @@ export function RealmCatalogueNavigation({
       {entry && realm ? (
         <>
           <div className="flex min-w-0 flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-start">
-            <a
-              href={entry.browseHref}
-              onClick={guard}
-              onAuxClick={guard}
-              onContextMenu={guard}
-              aria-describedby={context}
-              className={`${control} bg-primary text-primary-foreground hover:bg-primary/90 sm:justify-start`}
+            <Button
+              className={actionClass}
+              nativeButton={false}
+              render={
+                <a
+                  href={entry.browseHref}
+                  onClick={guard}
+                  onAuxClick={guard}
+                  onContextMenu={guard}
+                  aria-describedby={context}
+                />
+              }
             >
               <span>{m.realm_catalogue_browse({}, options)}</span>
-              <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
-            </a>
-            <button
+              <ArrowRight aria-hidden="true" className="shrink-0" />
+            </Button>
+            <Button
               type="button"
+              variant="outline"
               aria-expanded={expanded}
               aria-controls={panel}
-              className={`${control} border border-input bg-background hover:bg-accent sm:justify-start`}
+              className={actionClass}
               onClick={(event) => {
                 if (guard(event)) setExpanded((value) => !value);
               }}
             >
-              <Search aria-hidden="true" className="size-4 shrink-0" />
+              <Search aria-hidden="true" className="shrink-0" />
               <span>{m.realm_catalogue_query_entry({}, options)}</span>
-            </button>
+            </Button>
           </div>
           <div id={panel} hidden={!expanded} inert={!expanded} className="min-w-0 space-y-4 border-t pt-5">
             <form
@@ -114,7 +121,7 @@ export function RealmCatalogueNavigation({
                 <label htmlFor={field} className="block text-sm font-medium">
                   {m.realm_catalogue_query_label({}, options)}
                 </label>
-                <input
+                <Input
                   ref={input}
                   id={field}
                   name="q"
@@ -124,7 +131,6 @@ export function RealmCatalogueNavigation({
                   autoComplete="off"
                   aria-invalid={draft.overflow}
                   aria-describedby={`${hint}${draft.overflow ? ` ${error}` : ''}`}
-                  className="block min-h-11 w-full min-w-0 rounded-lg border border-input bg-background px-3 py-2 text-base text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   onChange={(event) => {
                     if (!guard(event)) return;
                     const query = event.currentTarget.value;
@@ -157,16 +163,12 @@ export function RealmCatalogueNavigation({
                     : m.realm_catalogue_empty_destination({ realm: realm.name }, options)}
               </p>
               <div className="flex min-w-0 flex-wrap gap-3">
-                <button
-                  type="submit"
-                  disabled={!queryHref}
-                  className={`${control} bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50`}
-                >
+                <Button type="submit" disabled={!queryHref} className={actionClass}>
                   {m.realm_catalogue_query_submit({}, options)}
-                </button>
-                <button type="reset" className={`${control} border border-input bg-background hover:bg-accent`}>
+                </Button>
+                <Button type="reset" variant="outline" className={actionClass}>
                   {m.realm_catalogue_query_clear({}, options)}
-                </button>
+                </Button>
               </div>
               <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
                 {m.realm_catalogue_return({}, options)}
@@ -178,17 +180,23 @@ export function RealmCatalogueNavigation({
             <p id={ratings} className="max-w-prose text-sm leading-relaxed text-muted-foreground">
               {m.realm_catalogue_ratings_context({}, options)}
             </p>
-            <a
-              href={entry.browseHref}
-              aria-describedby={ratings}
-              onClick={guard}
-              onAuxClick={guard}
-              onContextMenu={guard}
-              className={`${control} justify-start px-0 text-primary underline underline-offset-4`}
+            <Button
+              variant="link"
+              className={actionClass}
+              nativeButton={false}
+              render={
+                <a
+                  href={entry.browseHref}
+                  aria-describedby={ratings}
+                  onClick={guard}
+                  onAuxClick={guard}
+                  onContextMenu={guard}
+                />
+              }
             >
               {m.realm_catalogue_ratings_entry({}, options)}
-              <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
-            </a>
+              <ArrowRight aria-hidden="true" className="shrink-0" />
+            </Button>
           </div>
         </>
       ) : null}

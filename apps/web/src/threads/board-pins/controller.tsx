@@ -446,7 +446,6 @@ export function BoardPinPageStatus({ state, onRetry }: { state: BoardPinFeedStat
           {
             type: 'button',
             variant: 'outline',
-            className: 'min-h-11 min-w-11',
             onClick: onRetry,
           },
           m.board_community_retry(),
@@ -531,7 +530,7 @@ export function BoardPinThreadControls({
             ref: toggleRef,
             type: 'button',
             variant: 'outline',
-            className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal',
+            className: 'h-auto min-h-7 max-w-full whitespace-normal',
             ...{ 'data-board-pin-focus': 'toggle' },
             'aria-expanded': pending === action,
             'aria-controls': confirmationId,
@@ -565,7 +564,7 @@ export function BoardPinThreadControls({
               {
                 type: 'button',
                 variant: 'outline',
-                className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal',
+                className: 'h-auto min-h-7 max-w-full whitespace-normal',
                 onClick: () => setPending(null),
               },
               m.board_pin_cancel(),
@@ -574,7 +573,7 @@ export function BoardPinThreadControls({
               Button,
               {
                 type: 'button',
-                className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal',
+                className: 'h-auto min-h-7 max-w-full whitespace-normal',
                 onClick: () => {
                   const confirmed = pending;
                   if (!confirmed) return;
@@ -600,7 +599,6 @@ export function BoardPinThreadControls({
           {
             type: 'button',
             variant: 'outline',
-            className: 'min-h-11 min-w-11',
             ...{ 'data-board-pin-focus': 'retry' },
             onClick: onRetry,
           },
@@ -612,7 +610,6 @@ export function BoardPinThreadControls({
             {
               type: 'button',
               variant: 'outline',
-              className: 'min-h-11 min-w-11',
               ...{ 'data-board-pin-focus': 'refresh' },
               onClick: onRefresh,
             },

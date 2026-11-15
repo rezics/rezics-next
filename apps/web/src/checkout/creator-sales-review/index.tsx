@@ -57,7 +57,7 @@ export function CreatorSalesReview({ sales, locale, reading }: Props) {
           <p className="text-sm text-muted-foreground">{m.creator_review_hidden_inspection()}</p>
           <Button
             variant="outline"
-            className="min-h-11 whitespace-normal"
+            className="h-auto min-h-7 whitespace-normal"
             onClick={() => {
               if (!reading.isCurrent() || !reading.selectedId) return;
               reveal.current = reading.selectedId;

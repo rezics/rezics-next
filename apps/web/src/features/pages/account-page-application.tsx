@@ -144,12 +144,12 @@ export function AccountList({ props, spec }: { props: Record<string, unknown>; s
           <CollectionControls locale={value.locale} failed invalid={failure === 'invalid-cursor'} />
         ) : failure === 'invalid-cursor' ? (
           canOpenView && view ? (
-            <a data-slot="restart" href={view} className={`${linkClass} inline-flex min-h-11 items-center`}>
+            <a data-slot="restart" href={view} className={`${linkClass} inline-flex items-center`}>
               {m.public_account_start_again({}, options)}
             </a>
           ) : null
         ) : failure !== 'denied' ? (
-          <a data-slot="retry" href="" className={`${linkClass} inline-flex min-h-11 items-center`}>
+          <a data-slot="retry" href="" className={`${linkClass} inline-flex items-center`}>
             {m.public_account_retry({}, options)}
           </a>
         ) : null}
@@ -258,7 +258,7 @@ export function AccountList({ props, spec }: { props: Record<string, unknown>; s
               data-slot="continuation"
               rel="next"
               href={`?cursor=${encodeURIComponent(next)}`}
-              className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center text-sm font-medium hover:underline`}
+              className={`${linkClass} ${linkColor} inline-flex items-center text-sm font-medium hover:underline`}
             >
               {m.threads_next_page({}, { locale: value.locale as never })}
             </a>

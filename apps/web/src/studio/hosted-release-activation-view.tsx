@@ -6,8 +6,7 @@ import { releaseCopy } from './hosted-release-preparation-copy';
 import { HostedReleaseReaderLink } from './hosted-release-reader-link-action';
 import type { HostedReleaseActivationVisit } from './hosted-release-activation';
 
-const control =
-  'min-h-11 max-w-full whitespace-normal text-start focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring';
+const control = 'h-auto min-h-7 max-w-full whitespace-normal text-start';
 const valueStyle = 'min-w-0 break-all text-sm';
 
 /** Composes inside preparation's existing workspace; no nested page, modal or additional private locator. */

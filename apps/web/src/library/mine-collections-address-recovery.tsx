@@ -1,6 +1,7 @@
 import { useId } from 'react';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
@@ -10,6 +11,7 @@ import type { MineCollectionsSearch } from './mine-collections-address';
 /** GET recovery requires an explicit submission; no private reader is mounted here. */
 export function MineCollectionsAddressRecovery({ address }: { address: MineCollectionsSearch }) {
   const layoutSelectId = useId();
+  const cursorId = useId();
   const errors = address.addressError!;
   const badLayout = errors.layout !== undefined;
   const action = `/${getLocale()}/library/collections`;
@@ -45,11 +47,7 @@ export function MineCollectionsAddressRecovery({ address }: { address: MineColle
               {m.library_owned_collections_address_layout()}
             </FieldLabel>
             <Select<string, false> items={layoutOptions} name="layout" defaultValue="rows">
-              <SelectTrigger
-                id={layoutSelectId}
-                aria-labelledby={`${layoutSelectId}-label`}
-                className="w-fit block rounded border p-2"
-              >
+              <SelectTrigger id={layoutSelectId} aria-labelledby={`${layoutSelectId}-label`} className="w-fit">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent alignItemWithTrigger={false}>
@@ -66,21 +64,15 @@ export function MineCollectionsAddressRecovery({ address }: { address: MineColle
         ) : (
           <>
             <input type="hidden" name="layout" value={address.layout} />
-            <label>
-              {m.library_owned_collections_address_cursor()}
-              <input
-                name="cursor"
-                type="text"
-                maxLength={4096}
-                autoComplete="off"
-                className="block rounded border p-2"
-              />
-            </label>
+            <Field className="w-fit gap-1">
+              <FieldLabel htmlFor={cursorId}>{m.library_owned_collections_address_cursor()}</FieldLabel>
+              <Input id={cursorId} name="cursor" type="text" maxLength={4096} autoComplete="off" className="w-64" />
+            </Field>
           </>
         )}
-        <button type="submit" className={buttonVariants({ variant: 'outline' })}>
+        <Button type="submit" variant="outline">
           {m.library_owned_collections_address_correct()}
-        </button>
+        </Button>
       </form>
       <a href={restart} className={buttonVariants({ variant: 'outline' })}>
         {badLayout ? m.library_owned_collections_address_restart_rows() : m.library_owned_collections_address_restart()}

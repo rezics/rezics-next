@@ -41,9 +41,9 @@ type Props = {
   onStartOver?: () => void;
 };
 const actionClassName =
-  'relative z-10 h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'relative z-10 h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const currentLinkClassName =
-  'relative z-10 inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'relative z-10 inline-flex max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 function Failure({ failure, locale }: { failure: ChangesFailure; locale: string }) {
   const o = { locale: locale as never };

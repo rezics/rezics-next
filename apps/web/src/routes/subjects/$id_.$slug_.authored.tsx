@@ -269,7 +269,7 @@ function AuthoredEditorRoute({
           </h1>
           <p role="status">{m.subject_synopsis_visit_changed()}</p>
           <EditorFailure reason={query.data.reason} locale={locale} />
-          <a className="inline-flex min-h-11 items-center underline underline-offset-4" href={currentFieldHref}>
+          <a className="underline underline-offset-4" href={currentFieldHref}>
             {m.subject_synopsis_current_field()}
           </a>
           {returnLink}
@@ -346,7 +346,7 @@ function AuthoredEditorRoute({
       />
       {selectedVia && (
         <p className="px-6 text-sm">
-          <a className="inline-flex min-h-11 items-center underline underline-offset-4" href={currentFieldHref}>
+          <a className="underline underline-offset-4" href={currentFieldHref}>
             {m.subject_synopsis_current_field()}
           </a>
         </p>

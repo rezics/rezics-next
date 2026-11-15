@@ -206,7 +206,7 @@ function ContextNavigationRegion({
       <h2 id={headingId} className="mb-2 px-2 text-xs font-semibold wrap-anywhere text-muted-foreground">
         {label}
       </h2>
-      <div className="min-w-0 [&_a]:min-h-11 [&_button]:min-h-11">{children}</div>
+      <div className="min-w-0">{children}</div>
     </Region>
   );
 }

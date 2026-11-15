@@ -1,6 +1,7 @@
 import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { useId, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { pickText } from '@rezics/composition';
@@ -123,10 +124,7 @@ export function ProviderPersonReview({
                       { value: source, label: source },
                     ]}
                   >
-                    <SharedSelect.SelectTrigger
-                      id={`${id}-${source}-source`}
-                      className="min-h-11 w-full rounded border bg-background px-3"
-                    >
+                    <SharedSelect.SelectTrigger id={`${id}-${source}-source`} className="w-full">
                       <SharedSelect.SelectValue />
                     </SharedSelect.SelectTrigger>
                     <SharedSelect.SelectContent>
@@ -153,7 +151,7 @@ export function ProviderPersonReview({
               </fieldset>
             ))}
           </div>
-          <Button type="submit" className="min-h-11">
+          <Button type="submit">
             {m.person_review_compare({}, o)}
           </Button>
         </fieldset>
@@ -174,7 +172,7 @@ export function ProviderPersonReview({
                   >
                     <h3>
                       <a
-                        className="inline-flex min-h-11 items-center underline"
+                        className="underline underline-offset-4"
                         href={subjectHref({ id: read.subject.id, label: label.text }, locale).href}
                       >
                         {label.text || read.subject.id}
@@ -218,7 +216,7 @@ export function ProviderPersonReview({
             </label>
             {/^https?:\/\//.test(citation) && (
               <a
-                className="inline-flex min-h-11 items-center underline"
+                className="underline underline-offset-4"
                 href={citation}
                 target="_blank"
                 rel="noreferrer"
@@ -226,20 +224,20 @@ export function ProviderPersonReview({
                 {m.person_review_open_evidence({}, o)}
               </a>
             )}
-            <label className="flex min-h-11 items-center gap-3">
-              <input
-                type="checkbox"
-                checked={consent}
-                disabled={locked || !comparison.merge || !canWrite || !/^https?:\/\//.test(citation)}
-                onChange={(event) => {
-                  if (visit.live()) setConsent(event.target.checked);
-                }}
-              />
-              <span>{m.person_review_consent({}, o)}</span>
-            </label>
+            <Field orientation="horizontal" className="w-fit">
+              <FieldLabel>
+                <Checkbox
+                  checked={consent}
+                  disabled={locked || !comparison.merge || !canWrite || !/^https?:\/\//.test(citation)}
+                  onCheckedChange={(value) => {
+                    if (visit.live()) setConsent(value === true);
+                  }}
+                />
+                <span>{m.person_review_consent({}, o)}</span>
+              </FieldLabel>
+            </Field>
             <Button
               type="button"
-              className="min-h-11"
               disabled={locked || !comparison.merge || !canWrite || !consent}
               onClick={() => {
                 if (!visit.live() || !comparison.merge || !consent || locked) return;
@@ -260,7 +258,6 @@ export function ProviderPersonReview({
         <div className="space-y-3">
           <Button
             type="button"
-            className="min-h-11"
             disabled={busy}
             onClick={async () => {
               if (!visit.live() || held.current) return;
@@ -288,7 +285,7 @@ export function ProviderPersonReview({
               <p role="status">
                 {m.person_review_published({}, o)}{' '}
                 <a
-                  className="inline-flex min-h-11 items-center underline"
+                  className="underline underline-offset-4"
                   href={
                     subjectHref(
                       {
@@ -316,7 +313,6 @@ export function ProviderPersonReview({
           <p role="status">{m.person_review_uncertain({}, o)}</p>
           <Button
             type="button"
-            className="min-h-11"
             onClick={() => {
               if (intent) void merge(intent);
             }}

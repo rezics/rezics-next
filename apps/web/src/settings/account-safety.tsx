@@ -291,7 +291,6 @@ function AccountSignOut({
           ref={submitControl}
           type="submit"
           variant="outline"
-          size="lg"
           className={actionClass}
           disabled={unavailable || phase !== 'idle' || recovering}
           aria-describedby={`${id}-sign-out${unavailable || phase !== 'idle' ? ` ${id}-csrf` : ''}`}
@@ -354,7 +353,7 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
     renameReload.current?.focus();
   }, [read?.loading, isCurrent]);
   const actionClass =
-    'h-auto min-h-11 w-full min-w-0 max-w-full whitespace-normal py-2 text-center [overflow-wrap:anywhere] sm:max-w-sm';
+    'h-auto w-full min-w-0 max-w-full whitespace-normal text-center [overflow-wrap:anywhere] sm:max-w-sm min-h-7';
   return (
     <ContentSection className="min-w-0 max-w-full">
       <ContentSectionHeader>
@@ -416,7 +415,7 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
                   href={links.security}
                   referrerPolicy="no-referrer"
                   aria-describedby={`${id}-security`}
-                  className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), actionClass)}
+                  className={cn(buttonVariants({ variant: 'outline' }), actionClass)}
                 >
                   {m.account_security_settings()}
                 </a>
@@ -440,7 +439,7 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
                   href={links.deletion}
                   referrerPolicy="no-referrer"
                   aria-describedby={`${id}-deletion`}
-                  className={cn(buttonVariants({ variant: 'destructive', size: 'lg' }), actionClass)}
+                  className={cn(buttonVariants({ variant: 'destructive' }), actionClass)}
                 >
                   {m.settings_account_delete_continue()}
                 </a>

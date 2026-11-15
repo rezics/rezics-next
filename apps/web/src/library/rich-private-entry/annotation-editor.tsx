@@ -2,6 +2,9 @@ import { useId, type RefObject } from 'react';
 import { m } from '../../paraglide/messages.js';
 import type { AnnotationDraft, AnnotationField, AnnotationIssues } from './contract';
 import { annotationNoteBytes } from './contract';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
 
 export type AnnotationEditorRefs = {
   note: RefObject<HTMLTextAreaElement | null>;
@@ -60,10 +63,10 @@ export function AnnotationEditor({
           <label htmlFor={id + '-note'} className="block text-sm font-medium">
             {m.library_rich_entry_note()}
           </label>
-          <textarea
+          <Textarea
             ref={refs.note}
             id={id + '-note'}
-            className="min-h-40 w-full rounded-md border bg-background p-3 [overflow-wrap:anywhere]"
+            className='min-h-40 w-full'
             value={draft.note}
             readOnly={disabled}
             aria-invalid={!!issues.note}
@@ -81,9 +84,9 @@ export function AnnotationEditor({
               {m.library_annotation_note_error()}
             </p>
           ) : null}
-          <button
+          <Button
             type="button"
-            className="min-h-11 rounded-md border px-3 disabled:opacity-50"
+            variant="outline"
             disabled={disabled || draft.note === ''}
             onClick={() => {
               onChange({ ...draft, note: '' });
@@ -91,17 +94,17 @@ export function AnnotationEditor({
             }}
           >
             {m.library_rich_entry_clear_note()}
-          </button>
+          </Button>
           <p className="text-xs text-muted-foreground">{m.library_annotation_clear_note_help()}</p>
         </div>
         <div className="min-w-0 space-y-2">
           <label htmlFor={id + '-priority'} className="block text-sm font-medium">
             {m.library_rich_entry_priority()}
           </label>
-          <input
+          <Input
             ref={refs.priority}
             id={id + '-priority'}
-            className="min-h-11 w-full rounded-md border bg-background px-3"
+            className='w-full'
             type="text"
             autoComplete="off"
             inputMode="numeric"
@@ -120,9 +123,9 @@ export function AnnotationEditor({
             </p>
           ) : null}
           {draft.priority === '' ? <p className="text-sm">{m.library_rich_entry_unranked()}</p> : null}
-          <button
+          <Button
             type="button"
-            className="min-h-11 rounded-md border px-3 disabled:opacity-50"
+            variant="outline"
             disabled={disabled || draft.priority === ''}
             onClick={() => {
               onChange({ ...draft, priority: '' });
@@ -130,22 +133,22 @@ export function AnnotationEditor({
             }}
           >
             {m.library_rich_entry_clear_priority()}
-          </button>
+          </Button>
           <p className="text-xs text-muted-foreground">{m.library_annotation_clear_priority_help()}</p>
         </div>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <button
+        <Button
           ref={refs.review}
           type="submit"
-          className="min-h-11 w-full rounded-md bg-primary px-4 text-primary-foreground disabled:opacity-50 sm:w-auto"
+          variant="default" className='w-full sm:w-auto'
           disabled={disabled || reviewDisabled}
         >
           {m.library_annotation_review()}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="min-h-11 w-full rounded-md border px-3 disabled:opacity-50 sm:w-auto"
+          variant="outline" className='w-full sm:w-auto'
           disabled={disabled}
           aria-disabled={!canDiscard}
           onClick={(event) => {
@@ -153,7 +156,7 @@ export function AnnotationEditor({
           }}
         >
           {m.library_annotation_discard()}
-        </button>
+        </Button>
       </div>
       <p className="text-sm text-muted-foreground">{m.library_annotation_review_help()}</p>
     </form>

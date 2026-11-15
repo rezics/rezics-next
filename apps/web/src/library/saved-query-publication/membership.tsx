@@ -19,8 +19,8 @@ export function SavedQueryAcceptedMeaning({ meaning }: { meaning: AcceptedPublic
     >
       <p className="font-medium">{m.library_publication_meaning()}</p>
       <p>{m.library_publication_revision({ revision: String(meaning.revision) })}</p>
-      <p className="break-words">{meaning.title}</p>
-      {meaning.description ? <p className="whitespace-pre-wrap break-words">{meaning.description}</p> : null}
+      <p className="h-auto break-words">{meaning.title}</p>
+      {meaning.description ? <p className="h-auto whitespace-pre-wrap break-words">{meaning.description}</p> : null}
     </div>
   );
 }

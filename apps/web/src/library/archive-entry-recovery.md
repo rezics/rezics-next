@@ -43,7 +43,7 @@ Locked operations retain their exact reviewed items, original retry and cancella
 even when viewing records or results. Cancellation cannot release an uncertain started command. Partial acknowledgement,
 unread results, an empty selected result page, failure and expiry remain distinct. Expiry removes editable private
 evidence while retaining accepted destinations; viewer replacement and retirement remove private content and callbacks.
-Area changes focus the visible heading; controls wrap, retain visible focus and use at least 44px targets in every locale.
+Area changes focus the visible heading; controls wrap and retain visible focus in every locale.
 
 ## Upload and inventory
 

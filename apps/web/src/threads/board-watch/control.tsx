@@ -22,7 +22,7 @@ export type BoardWatchControlProps = Readonly<{
 }>;
 
 const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full shrink whitespace-normal px-3 py-2 text-start leading-snug [overflow-wrap:anywhere]';
+  'h-auto min-h-6 max-w-full shrink whitespace-normal text-start leading-snug [overflow-wrap:anywhere]';
 
 function phaseMessage(view: BoardWatchView): string {
   if (view.command === 'sending') return m.board_watch_sending();

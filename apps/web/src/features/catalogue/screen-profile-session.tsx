@@ -5,7 +5,7 @@ import { PAGE_GLOBAL_CONTEXT, pickText } from '@rezics/composition';
 import { releaseDigest } from '@rezics/definitions';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useId } from 'react';
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { useSession } from '../../session/query';
 import { csrfHeaders } from '../../threads/composer';
@@ -158,9 +158,9 @@ export function ScreenCurrentVisitRecovery({
             : m.screen_reader_unavailable({}, o)}
       </p>
       {retry ? (
-        <button type="button" className={buttonVariants({ variant: 'outline' })} onClick={retry}>
+        <Button type="button" variant="outline" onClick={retry}>
           {m.correction_retry({}, o)}
-        </button>
+        </Button>
       ) : null}
       {globalHref ? (
         <a className={buttonVariants({ variant: 'outline' })} href={globalHref}>

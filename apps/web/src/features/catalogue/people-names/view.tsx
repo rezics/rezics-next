@@ -1,5 +1,6 @@
 import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Button } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../../../paraglide/messages.js';
 import { languageName } from '../../../subject/language';
@@ -16,8 +17,8 @@ import {
 } from './model';
 
 const control =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 text-primary underline underline-offset-4 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const wrapTarget = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2';
+  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
+const wrapTarget = 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
 const live = () => true;
 
 export function PeopleNamesView({
@@ -118,7 +119,7 @@ export function PeopleNamesView({
                     maxLength={PEOPLE_NAME_FILTER_LENGTH}
                     aria-describedby={`${id}-scope`}
                     type="search"
-                    className="h-auto min-h-11 min-w-11 w-full"
+                    className="w-full"
                     onChange={(event) => {
                       setQuery(event.target.value.slice(0, PEOPLE_NAME_FILTER_LENGTH));
                       setPage(0);

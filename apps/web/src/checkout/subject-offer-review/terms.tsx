@@ -35,7 +35,7 @@ export function OfferReviewLink({
   return (
     <a
       href={href}
-      className={buttonVariants({ className: 'h-auto min-h-11 max-w-full whitespace-normal text-start' })}
+      className={buttonVariants({ className: 'h-auto min-h-7 max-w-full whitespace-normal text-start' })}
       aria-label={m.subject_choice_review_label(
         { title: offer.title, revision: offer.revision, id: offer.id },
         { locale },
@@ -135,7 +135,7 @@ export function OfferTermsReading({
         </p>
       </div>
       <details className="min-w-0 rounded-lg border px-4">
-        <summary className="min-h-11 cursor-pointer content-center py-3 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        <summary className="cursor-pointer content-center font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
           {m.subject_choice_money_references({}, { locale })}
         </summary>
         <dl className="min-w-0 space-y-4 pb-4 text-sm [&_dd]:mt-1 [&_dd]:break-words [&_dd]:[overflow-wrap:anywhere] [&_dt]:font-medium">

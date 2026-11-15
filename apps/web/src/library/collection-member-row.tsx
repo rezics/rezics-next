@@ -1,3 +1,5 @@
+import { cn } from '@rezics/ui/utils';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import type { ReactNode } from 'react';
 import {
   collectionComparisonFacts,
@@ -20,8 +22,10 @@ import {
   type CollectionViewerProjection,
 } from './collection-viewer/model';
 
-const wrappingLink =
-  'inline-flex min-h-11 min-w-0 max-w-full flex-wrap items-center whitespace-normal text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const wrappingLink = cn(
+  buttonVariants({ variant: 'link' }),
+  'h-auto min-h-7 min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere]',
+);
 
 export function CollectionMemberNoteSaved({ memberId }: { memberId: string }) {
   return (
@@ -84,7 +88,7 @@ export function CollectionMemberDetails({
                     <a
                       href={collectionComparisonHref(fact.targetId, fact.text, locale, currentHref, member.id)}
                       data-comparison-reference={fact.targetId}
-                      className={`relative z-10 rounded-sm ${wrappingLink}`}
+                      className={`relative z-10 min-w-0 ${wrappingLink}`}
                       onClick={(event) => onReferenceNavigate?.(event.currentTarget)}
                     >
                       {fact.text}

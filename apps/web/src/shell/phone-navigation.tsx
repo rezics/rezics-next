@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { House, Inbox, Library, LogIn, Plus } from 'lucide-react';
+import { Button } from '@rezics/ui/shadcn/button';
 import { Menu } from '@rezics/ui/menu';
 import { UnreadBadgeView, useInboxUnreadCount, type UnreadCount } from '../inbox';
 import { useOperation } from '../kernel/exposure';
@@ -64,9 +65,9 @@ export function PhoneUnreadDot({ session }: { session: Session }) {
   return session === 'signed-in' ? <PhoneUnreadDotView data={data} failed={isError} /> : null;
 }
 export const phoneTabClass =
-  'relative flex min-h-14 w-full min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1 text-center text-[11px] leading-tight wrap-anywhere font-medium text-muted-foreground outline-none transition-colors duration-150 motion-reduce:transition-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-accent aria-[current=page]:text-primary';
+  'relative flex w-full min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-md px-1 py-1 text-center text-xs leading-tight wrap-anywhere font-medium text-muted-foreground outline-none transition-colors duration-150 motion-reduce:transition-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30 aria-[current=page]:bg-accent aria-[current=page]:text-primary';
 const creationLinkClass =
-  'flex min-h-11 min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-sm wrap-anywhere whitespace-normal outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring [&_svg]:shrink-0';
+  'flex min-h-7 min-w-0 items-center gap-1 rounded-md px-2 text-xs wrap-anywhere whitespace-normal outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30 [&_svg]:size-3.5 [&_svg]:shrink-0';
 type CreationMenuState = {
   actions: readonly PhoneCreationAction[];
   pathname: string;
@@ -97,7 +98,7 @@ export function PhoneCreationLinks({ actions, pathname, session, returnTo }: Cre
           </p>
         )}
         <a className={creationLinkClass} href={shellSignInHref(pathname, returnTo)}>
-          <LogIn aria-hidden="true" className="size-4" />
+          <LogIn aria-hidden="true" className="size-3.5" />
           <span className="min-w-0">{m.account_sign_in()}</span>
         </a>
       </div>
@@ -116,13 +117,13 @@ export function PhoneCreationLinks({ actions, pathname, session, returnTo }: Cre
           if (entry.unavailable)
             return (
               <span role="link" aria-disabled="true" className={`${creationLinkClass} text-muted-foreground`}>
-                {Icon && <Icon aria-hidden="true" className="size-4" />}
+                {Icon && <Icon aria-hidden="true" className="size-3.5" />}
                 <span className="min-w-0">{entry.label}</span>
               </span>
             );
           return (
             <a href={entry.href} className={creationLinkClass} aria-current={entry.current ? 'page' : undefined}>
-              {Icon && <Icon aria-hidden="true" className="size-4" />}
+              {Icon && <Icon aria-hidden="true" className="size-3.5" />}
               <span className="min-w-0">{entry.label}</span>
             </a>
           );
@@ -167,7 +168,7 @@ export function PhoneNavigationView({
   const inboxContent = (
     <>
       <span className="relative">
-        <Inbox aria-hidden="true" className="size-5 shrink-0" />
+        <Inbox aria-hidden="true" className="size-3.5 shrink-0" />
         {signedInSession && (
           <span className="absolute -end-4 -top-2">
             <UnreadBadgeView data={unread} failed={failed ?? false} />
@@ -188,7 +189,7 @@ export function PhoneNavigationView({
         href={`/${locale}`}
         aria-current={navigationPathMatches(navigationContext, '/', 'exact') ? 'page' : undefined}
       >
-        <House aria-hidden="true" className="size-5 shrink-0" />
+        <House aria-hidden="true" className="size-3.5 shrink-0" />
         <span>{m.nav_home()}</span>
       </a>
       {signedInSession && library ? (
@@ -202,12 +203,12 @@ export function PhoneNavigationView({
               : undefined
           }
         >
-          <Library aria-hidden="true" className="size-5 shrink-0" />
+          <Library aria-hidden="true" className="size-3.5 shrink-0" />
           <span>{m.nav_library()}</span>
         </a>
       ) : (
         <span className={phoneTabClass} role="link" aria-disabled="true">
-          <Library aria-hidden="true" className="size-5 shrink-0" />
+          <Library aria-hidden="true" className="size-3.5 shrink-0" />
           <span>{m.nav_library()}</span>
         </span>
       )}
@@ -217,12 +218,12 @@ export function PhoneNavigationView({
         session={session}
         {...(returnTo ? { returnTo } : {})}
         trigger={
-          <button type="button" className={`${phoneTabClass} group`}>
-            <span className="grid h-9 w-12 place-items-center rounded-2xl bg-primary text-primary-foreground transition-transform duration-150 group-active:scale-95 motion-reduce:transform-none motion-reduce:transition-none">
-              <Plus aria-hidden="true" className="size-5 shrink-0" />
+          <Button type="button" variant="ghost" className={`${phoneTabClass} group h-auto min-h-7 shrink whitespace-normal`}>
+            <span className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground transition-transform duration-150 group-active:scale-95 motion-reduce:transform-none motion-reduce:transition-none">
+              <Plus aria-hidden="true" className="size-3.5 shrink-0" />
             </span>
             <span>{m.shell_create()}</span>
-          </button>
+          </Button>
         }
       />
       {session === 'unknown' || session === 'unavailable' ? (
@@ -249,7 +250,7 @@ export function PhoneNavigationView({
         </a>
       )}
       <a data-phone-inbox-fallback className={`${phoneTabClass} hidden`} href={`/${locale}/inbox`}>
-        <Inbox aria-hidden="true" className="size-5 shrink-0" />
+        <Inbox aria-hidden="true" className="size-3.5 shrink-0" />
         <span>{m.nav_inbox()}</span>
       </a>
       <div data-phone-you-js className="contents">

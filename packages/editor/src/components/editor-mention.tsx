@@ -490,7 +490,7 @@ export function MentionMenu({
           shouldFilter={false}
           label={labels.mentionAccounts}
           value={account?.accountId ?? ''}
-          className="rounded-2xl p-1 shadow-lg ring-1 ring-foreground/5 dark:ring-foreground/10"
+          className="shadow-md ring-1 ring-foreground/10"
         >
           <CommandList label={labels.mentionAccounts} style={{ maxHeight: place.maxHeight }}>
             <CommandItem value={account.accountId} onSelect={() => choose(shownAttempt, account)}>
@@ -509,7 +509,7 @@ export function MentionMenu({
       ) : (
         <p
           role="status"
-          className="rounded-2xl bg-popover px-3 py-2 text-sm text-popover-foreground shadow-lg ring-1 ring-foreground/5 dark:ring-foreground/10"
+          className="rounded-xl bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-md ring-1 ring-foreground/10"
         >
           {labels.mentionLoading}
         </p>
