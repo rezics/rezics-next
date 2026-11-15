@@ -10,7 +10,7 @@ import {
   principalCommandIdentity,
   runCommand,
 } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { discardConnection, withBoundedReadOnlyTransaction, withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { requestDigest } from '../command/request.ts';
@@ -54,21 +54,30 @@ async function atPartition<T>(
   route: number,
   write: boolean,
   work: (client: AccessClient) => Promise<T>,
+  deadline?: number,
 ): Promise<T> {
+  const partitionNo = partitionOf(route);
+  const run = async (client: AccessClient) => {
+    const partition = await readPartition(client, partitionNo);
+    if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
+    if (partition.writeState === 'moved' || (write && partition.writeState !== 'active'))
+      throw new CommandUnavailableError(
+        partition.writeState === 'moved' ? 'moved' : 'fenced',
+        partitionNo,
+        partition.movedTo,
+      );
+    return work(client);
+  };
+  if (!write)
+    return withBoundedReadOnlyTransaction(pool, deadline ?? Date.now() + 30_000, run, {
+      deadlineError: () => new CommandUnavailableError('deadline', partitionNo),
+    });
+
   return withConnection(pool, async (connection) => {
     const client = deadlineClient(connection, Date.now() + 30_000);
-    await client.query(write ? 'BEGIN' : 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    await client.query('BEGIN');
     try {
-      const partitionNo = partitionOf(route);
-      const partition = await readPartition(client, partitionNo);
-      if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
-      if (partition.writeState === 'moved' || (write && partition.writeState !== 'active'))
-        throw new CommandUnavailableError(
-          partition.writeState === 'moved' ? 'moved' : 'fenced',
-          partitionNo,
-          partition.movedTo,
-        );
-      const result = await work(client);
+      const result = await run(client);
       await client.query('COMMIT');
       return result;
     } catch (error) {
@@ -82,10 +91,10 @@ async function atPartition<T>(
   });
 }
 
-async function report(pool: Pool, id: string) {
+async function report(pool: Pool, id: string, deadline?: number) {
   const route = routeOf(id);
   if (route === null) throw new ReportUnavailableError();
-  return atPartition(pool, route, false, (client) => read.run(client, { route, report_id: id }));
+  return atPartition(pool, route, false, (client) => read.run(client, { route, report_id: id }), deadline);
 }
 
 /** The immutable resolution and native event are committed together. A replay
@@ -117,7 +126,7 @@ async function notify(pool: Pool, id: string) {
 
 export async function dismissReport(deps: ReportDependencies, actor: Actor, id: string, context: RequestContext) {
   if (actor.kind !== 'account') throw new ReportUnavailableError();
-  const reference = await report(deps.pool, id);
+  const reference = await report(deps.pool, id, context.deadline);
   if (!reference) throw new ReportUnavailableError();
   const route = routeOf(id)!;
   const targetRoute = routeOf(reference.target_id)!;
