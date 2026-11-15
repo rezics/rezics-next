@@ -7225,6 +7225,7 @@ async function boundedSsh(
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
+    env: process.env,
   });
   const streams = Promise.all([
     new Response(child.stdout).text(),
@@ -8158,7 +8159,7 @@ async function cleanupPreparedRun(prepared: PreparedRun): Promise<RemoteCleanupR
           prepared.host.address,
           cleanupScript(prepared.id, prepared.directory),
         ],
-        { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' },
+        { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', env: process.env },
       );
       const [cleaned, output] = await boundedTextChild(
         cleanup,
