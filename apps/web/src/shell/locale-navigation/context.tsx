@@ -1,7 +1,9 @@
-import { createContext, useCallback, useContext, useMemo, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useRef, type ReactNode } from 'react';
 import { isNotFound, useRouter, useRouterState } from '@tanstack/react-router';
 import { getLocale, locales } from '../../paraglide/runtime.js';
-import type { Locale, LocaleNavigationLocation } from './routing';
+import { isSameLocaleVisit, type Locale, type LocaleNavigationLocation } from './routing';
+
+type LocaleDepartureBlocker = () => boolean | Promise<boolean>;
 
 type RouterSnapshot = {
   location: {
@@ -25,6 +27,7 @@ export type LocaleNavigationContextValue = Readonly<{
   navigate: (href: string) => Promise<LocaleNavigationLocation>;
   revalidate: () => Promise<void>;
   commitLocale?: (locale: Locale) => Promise<void> | void;
+  registerDepartureBlocker?: (blocker: LocaleDepartureBlocker) => () => void;
 }>;
 
 const LocaleNavigationContext = createContext<LocaleNavigationContextValue | null>(null);
@@ -56,12 +59,27 @@ function routeLocation(state: RouterSnapshot): LocaleNavigationLocation {
 
 function RouterLocaleNavigationProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const departureBlockers = useRef(new Set<LocaleDepartureBlocker>());
   const location = useRouterState({
     select: (state) => routeLocation(state as unknown as RouterSnapshot),
   });
   const readCurrentLocation = useCallback(() => routeLocation(router.state as unknown as RouterSnapshot), [router]);
+  const registerDepartureBlocker = useCallback((blocker: LocaleDepartureBlocker) => {
+    const blockers = departureBlockers.current;
+    blockers.add(blocker);
+    return () => {
+      blockers.delete(blocker);
+    };
+  }, []);
   const navigate = useCallback(
     async (href: string) => {
+      const source = readCurrentLocation();
+      for (const blocker of departureBlockers.current) {
+        const blocked = await blocker();
+        const current = readCurrentLocation();
+        if (blocked || !isSameLocaleVisit(source, current)) return current;
+      }
+
       // SPA rewrites would strip the requested locale and restore the current one.
       // Document navigation retains the public URL and the router's leave-page blockers.
       await router.navigate({ href, reloadDocument: true });
@@ -71,8 +89,8 @@ function RouterLocaleNavigationProvider({ children }: { children: ReactNode }) {
   );
   const revalidate = useCallback(() => router.invalidate(), [router]);
   const value = useMemo(
-    () => ({ location, readCurrentLocation, navigate, revalidate }),
-    [location, navigate, readCurrentLocation, revalidate],
+    () => ({ location, readCurrentLocation, navigate, revalidate, registerDepartureBlocker }),
+    [location, navigate, readCurrentLocation, registerDepartureBlocker, revalidate],
   );
   return <LocaleNavigationContext.Provider value={value}>{children}</LocaleNavigationContext.Provider>;
 }

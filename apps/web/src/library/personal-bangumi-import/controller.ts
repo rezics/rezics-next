@@ -1,3 +1,4 @@
+import { m } from '../../paraglide/messages.js';
 import { ImportPageCoordinates, type ImportPagePosition } from '../personal-list-import/page-navigation';
 import {
   BANGUMI_UPLOAD_BYTES,
@@ -549,13 +550,13 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
       if (row.choice.skip || row.outcome?.status !== 'applied' || row.sourceAdmission) continue;
       const preview = row.sourcePreview;
       const body = preview ? sourceAdmissionBody(preview) : null;
-      const blocked = preview ? sourceAdmissionBlock(preview) : 'This provider record has no stable identity.';
+      const blocked = preview ? sourceAdmissionBlock(preview) : m.library_import_source_record_unidentified();
       if (!body || !row.target) {
         row.sourceAdmission = {
           status: 'unsupported',
           reason: row.target
-            ? (blocked ?? 'This provider record has no stable identity.')
-            : 'This row has no canonical Subject.',
+            ? (blocked ?? m.library_import_source_record_unidentified())
+            : m.library_import_source_subject_unmatched(),
         };
         continue;
       }

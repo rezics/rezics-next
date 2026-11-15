@@ -603,7 +603,7 @@ function ListView({ controls }: { controls: Controls }) {
                 </EntryMenu>
               </span>
             }
-            labels={{ select: title, menu: m.library_entry_actions({ title }) }}
+            labels={{ select: title, menu: m.library_entry_actions({ title }), status: m.library_entry_status() }}
           />
         );
       })}
@@ -1267,7 +1267,7 @@ function LabelShelfTiles({
               }
               {...(entry.state ? { status: entry.stateLabel ?? m.library_other() } : {})}
               {...(progress ? { progress } : {})}
-              labels={{ select: title(entry), menu: m.library_menu_open() }}
+              labels={{ select: title(entry), menu: m.library_menu_open(), status: m.library_entry_status() }}
               {...(removeAdmitted
                 ? {
                     menu: (

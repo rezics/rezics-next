@@ -502,8 +502,8 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
         setRowAdmission(row.index, {
           status: 'unsupported',
           reason: target
-            ? (blocked ?? 'This provider record has no stable identity.')
-            : 'This row has no canonical Subject.',
+            ? (blocked ?? m.library_import_source_record_unidentified())
+            : m.library_import_source_subject_unmatched(),
         });
         continue;
       }

@@ -1,5 +1,7 @@
 import { HostedSourceConsentVisit } from './hosted-source-consent';
 import * as v from 'valibot';
+import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { bookTocRows } from './book-toc';
 import {
   sameExact,
@@ -45,10 +47,9 @@ type Attempt = {
     | { kind: 'revise'; catalogueId: string; body: HostedRevise }
     | { kind: 'publish'; catalogueId: string; body: HostedPublish };
 };
-const stale = () => hostedFailure('stale', 'Reload the book structure before preparing this operation.');
-const invalid = () =>
-  hostedFailure('invalid', 'The selected placement or exact document is not valid for this operation.');
-const ended = () => hostedFailure('denied', 'This Studio visit has ended. Reopen the workspace.');
+const stale = () => hostedFailure('stale', m.studio_reload_structure({}, { locale: getLocale() }));
+const invalid = () => hostedFailure('invalid', m.studio_placement_invalid({}, { locale: getLocale() }));
+const ended = () => hostedFailure('denied', m.studio_visit_ended({}, { locale: getLocale() }));
 
 /** One private visit. Only placement metadata is retained; drafts and document bodies stay with StudioPort. */
 export class HostedBookAdapter implements BookOrganizerPort {
@@ -88,23 +89,20 @@ export class HostedBookAdapter implements BookOrganizerPort {
 
   private async exclusive<T>(signal: AbortSignal, run: () => Promise<StudioResult<T>>): Promise<StudioResult<T>> {
     if (!this.current() || signal.aborted) return ended();
-    if (this.busy) return hostedFailure('unavailable', 'Finish the current book operation first.');
+    if (this.busy) return hostedFailure('unavailable', m.studio_book_busy({}, { locale: getLocale() }));
     this.busy = true;
     try {
       const result = await run();
       if (!this.current() || signal.aborted) {
         this.book = null;
         if (this.current() && this.attempt?.unresolved)
-          return hostedFailure(
-            'uncertain',
-            'The command was interrupted. Retry the same operation to recover its result.',
-          );
+          return hostedFailure('uncertain', m.studio_command_interrupted({}, { locale: getLocale() }));
         return ended();
       }
       return result;
     } catch {
       return this.attempt?.unresolved
-        ? hostedFailure('uncertain', 'The command result is unknown. Retry the same operation.')
+        ? hostedFailure('uncertain', m.studio_result_unknown({}, { locale: getLocale() }))
         : invalid();
     } finally {
       this.busy = false;
@@ -114,7 +112,7 @@ export class HostedBookAdapter implements BookOrganizerPort {
   load = (catalogueId: string, signal: AbortSignal, revisionId?: string): Promise<StudioResult<BookStructure>> =>
     this.exclusive(signal, async () => {
       if (this.hasUnresolvedCommand())
-        return hostedFailure('uncertain', 'Recover the pending book command before reloading.');
+        return hostedFailure('uncertain', m.studio_recover_pending({}, { locale: getLocale() }));
       this.book = null;
       const result = await this.native.read(
         { catalogueId, kind: 'structure', ...(revisionId ? { revisionId } : {}) },
@@ -153,9 +151,9 @@ export class HostedBookAdapter implements BookOrganizerPort {
     if (this.attempt?.key === key)
       return this.attempt.signature === signature
         ? { ok: true, value: this.attempt }
-        : hostedFailure('invalid', 'An operation key cannot be reused for different changes.');
+        : hostedFailure('invalid', m.studio_operation_mismatch({}, { locale: getLocale() }));
     if (this.hasUnresolvedCommand())
-      return hostedFailure('uncertain', 'Retry the pending operation with its original key and input.');
+      return hostedFailure('uncertain', m.studio_pending_operation({}, { locale: getLocale() }));
     return { ok: true, value: null };
   }
 
@@ -191,7 +189,7 @@ export class HostedBookAdapter implements BookOrganizerPort {
       result.value.revision.kind !== expectedKind ||
       result.value.revision.sourceRevisionId !== (command.kind === 'publish' ? command.body.expectedRevisionId : null)
     )
-      return hostedFailure('uncertain', 'The acknowledged book revision could not be read. Retry the same operation.');
+      return hostedFailure('uncertain', m.studio_book_read_failed({}, { locale: getLocale() }));
     hostedBookStructure(result.value);
     attempt.unresolved = false;
     if (expectedKind === 'structure') this.book = structuredClone(result.value);

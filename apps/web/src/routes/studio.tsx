@@ -94,9 +94,14 @@ export const Route = createFileRoute('/studio')({
   }),
   loader: ({ deps }) =>
     deps.catalogueId
-      ? readOwnedHostedBook({ data: { catalogueId: deps.catalogueId, expectedViewer: deps.expectedViewer } })
+      ? readOwnedHostedBook({
+          data: { catalogueId: deps.catalogueId, expectedViewer: deps.expectedViewer, locale: getLocale() },
+        })
       : Promise.resolve(null),
-  head: ({ match }) => pageHead({ title: 'Studio', robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
+  head: ({ match }) => {
+    const context = pageHeadContext(match.pathname);
+    return pageHead({ title: m.studio_title({}, { locale: context.locale }), robots: 'noindex, nofollow' }, context);
+  },
   component: StudioRoute,
 });
 
@@ -162,7 +167,7 @@ function StudioRoute() {
 function StudioMessage({ message }: { message: string }) {
   return (
     <main className="mx-auto w-full max-w-4xl space-y-4 px-4 py-8">
-      <h1>Studio</h1>
+      <h1>{m.studio_title({}, { locale: getLocale() })}</h1>
       <p role="alert">{message}</p>
     </main>
   );

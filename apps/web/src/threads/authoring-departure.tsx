@@ -24,6 +24,7 @@ import {
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { sessionQueryKey, type BrowserSession } from '../reader/lifetime/index';
+import { useLocaleNavigation } from '../shell/locale-navigation/context';
 
 type DepartureKind = 'realm-claim' | 'realm-ban' | 'container-lifecycle';
 type Draft = {
@@ -259,6 +260,7 @@ export function AuthoringDepartureProvider({
   const [navigation] = useState(() => new AuthoringDepartureState(() => leave.current?.()));
   const revision = useSyncExternalStore(navigation.subscribe, navigation.snapshot, navigation.snapshot);
   const router = useRouter({ warn: false });
+  const registerLocaleDeparture = useLocaleNavigation()?.registerDepartureBlocker;
   const client = useContext(QueryClientContext);
   const sessionSubscribe = useCallback(
     (listener: () => void) => client?.getQueryCache().subscribe(listener) ?? (() => {}),
@@ -280,6 +282,18 @@ export function AuthoringDepartureProvider({
   useLayoutEffect(() => {
     if (retired.current) navigation.deactivate();
   }, [navigation, session]);
+
+  useLayoutEffect(
+    () =>
+      registerLocaleDeparture?.(() =>
+        navigation.block(
+          'current locale',
+          'different locale',
+          document.activeElement instanceof HTMLElement ? document.activeElement : null,
+        ),
+      ),
+    [navigation, registerLocaleDeparture],
+  );
 
   useEffect(() => {
     if (!navigation.needsDecision()) return;

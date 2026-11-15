@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../../paraglide/messages.js';
 import type { MalAssignment, MalLabelReview, MalLabelSelection, MalPreviewRow } from './contract';
+import { malReviewedLabelStatus, malTagEvidenceLabel } from './meaning';
 import { useMalImportPort } from './port';
 import { MalAction } from './controls';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -29,7 +30,8 @@ export function MalLabelsReview({
       <p>{m.library_mal_label_help()}</p>
       <ImportDetails>
         <p>
-          {evidence.grammar} · {evidence.kind} · {evidence.reason}
+          {evidence.grammar} · {malTagEvidenceLabel(evidence.kind)}
+          {evidence.reason ? ` · ${evidence.reason}` : null}
         </p>
         {evidence.raw !== undefined ? (
           <pre className="h-auto whitespace-pre-wrap [overflow-wrap:anywhere]">{evidence.raw}</pre>
@@ -158,7 +160,9 @@ export function MalReviewedLabels({ review }: { review: MalLabelReview | undefin
     <ul className="h-auto space-y-2 [overflow-wrap:anywhere]" aria-label={m.library_mal_label_adoption()}>
       {review.selections.map((selection) => (
         <li key={selection.value}>
-          #{selection.value}: {selection.sourceValue} · {selection.status} · {selection.reason}
+          #{selection.value}: {selection.sourceValue ?? m.library_mal_missing()} ·{' '}
+          {malReviewedLabelStatus(selection.status)}
+          {selection.reason ? ` · ${selection.reason}` : null}
           {selection.target ? (
             <p>
               {'name' in selection.target

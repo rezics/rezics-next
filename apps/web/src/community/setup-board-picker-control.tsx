@@ -179,10 +179,11 @@ export function SetupBoardPicker({
         {label}
       </FieldLabel>
       <FieldDescription id={`${id}-hint`} className="min-w-0 text-start leading-relaxed">
-        {kind === 'scheme' ? m.space_setup_board_scheme_choices_hint() : m.space_setup_concept_hint()}
-        {kind === 'concept' && source.conceptQuery === 'loaded-page'
-          ? ` ${m.space_setup_board_choice_local_hint()}`
-          : ''}
+        {kind === 'scheme'
+          ? m.space_setup_board_scheme_choices_hint()
+          : source.conceptQuery === 'loaded-page'
+            ? m.space_setup_board_choice_local_hint()
+            : m.space_setup_concept_hint()}
       </FieldDescription>
       {value ? (
         <div

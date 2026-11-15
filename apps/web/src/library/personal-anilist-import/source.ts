@@ -22,7 +22,7 @@ function anilistPrivacy(evidence: AniListRecord): SourceAdmissionPreview['privac
   if (typeof value === 'boolean') return booleanPrivacy(value);
   if (value === null) return unknownPrivacy();
   if (typeof value === 'string') return unknownPrivacy(value);
-  return unsupportedField('AniList private must be a retained boolean.');
+  return unsupportedField('anilist-privacy');
 }
 
 function anilistTimestamp(
@@ -34,7 +34,7 @@ function anilistTimestamp(
   if (value === null) return { kind: 'ready', value: { status: 'unknown' } };
   if (typeof value === 'number') return timestampFromUnix(value);
   if (typeof value === 'string') return timestampFromText(value, 'unknown');
-  return unsupportedField('The retained timestamp cannot keep its original precision.');
+  return unsupportedField('timestamp-precision');
 }
 
 function recordIdOf(row: AniListRow): string {

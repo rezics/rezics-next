@@ -31,7 +31,7 @@ export interface ShelfListRowProps extends ShelfSelectionProps {
   date?: ReactNode;
   menu?: ReactNode;
   menuEntries?: MenuEntry[];
-  labels: { select: string; menu: string };
+  labels: { select: string; menu: string; status?: string };
 }
 /** A shelf list landmark without separators between items. */
 export function ShelfList({ children }: { children: ReactNode }) {
@@ -67,7 +67,7 @@ export function ShelfListRow({
     status != null &&
     (statusMenu != null || statusMenuEntries != null ? (
       <Menu
-        title="Status"
+        title={labels.status ?? 'Status'}
         trigger={
           <Button variant="outline" size="sm" className="h-auto min-h-6 max-w-full whitespace-normal wrap-anywhere">
             {status}

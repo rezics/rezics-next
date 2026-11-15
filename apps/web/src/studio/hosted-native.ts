@@ -1,5 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
+import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import type { StudioFailure, StudioResult } from './contract';
 import {
   hostedCommand,
@@ -40,35 +42,37 @@ export const hostedFailure = (kind: StudioFailure['kind'], message: string): Stu
   ok: false,
   error: { kind, message },
 });
-const unavailable = () => hostedFailure('unavailable', 'The complete book structure could not be read. Try again.');
-const uncertain = () =>
-  hostedFailure('uncertain', 'The book command may have committed. Retry the same operation to recover its result.');
-
-function failure(status: number, mutation: boolean): StudioResult<never> {
-  if (status === 401 || status === 403)
-    return hostedFailure('denied', 'Your current session cannot perform this book action.');
-  if (status === 404)
-    return hostedFailure('unavailable', 'This book or one of its exact chapter versions is unavailable.');
-  if (status === 409)
-    return hostedFailure('stale', 'The book inventory continuation is no longer valid. Reopen your books.');
-  if (status === 412)
-    return hostedFailure('stale', 'The structure or publication changed. Reload before preparing another operation.');
-  if (status === 400 || status === 413 || status === 422)
-    return hostedFailure(
-      'invalid',
-      'The book command was rejected. Check the structure, selected versions, and operation key.',
-    );
-  return mutation ? uncertain() : unavailable();
-}
-
 /** Uses the existing credential-bearing client and its read-your-writes session-token handling. */
 export function createHostedBookNative(
   client: KernelClient,
+  locale = getLocale(),
 ): HostedBookNative &
   HostedOutlineWindowNative &
   HostedRootAppendNative &
   HostedDraftPointNative &
   HostedPublicationPointNative {
+  const options = { locale };
+  const unavailable = () => hostedFailure('unavailable', m.studio_book_structure_unavailable({}, options));
+  const uncertain = () =>
+    hostedFailure('uncertain', m.studio_book_may_committed({}, options));
+
+  function failure(status: number, mutation: boolean): StudioResult<never> {
+    if (status === 401 || status === 403)
+      return hostedFailure('denied', m.studio_book_denied({}, options));
+    if (status === 404)
+      return hostedFailure('unavailable', m.studio_book_chapter_unavailable({}, options));
+    if (status === 409)
+      return hostedFailure('stale', 'The book inventory continuation is no longer valid. Reopen your books.');
+    if (status === 412)
+      return hostedFailure('stale', m.studio_book_stale({}, options));
+    if (status === 400 || status === 413 || status === 422)
+      return hostedFailure(
+        'invalid',
+        m.studio_book_rejected({}, options),
+      );
+    return mutation ? uncertain() : unavailable();
+  }
+
   const fetchOptions = (signal: AbortSignal) => ({ signal, cache: 'no-store' as const, redirect: 'manual' as const });
   const queryOptions = (signal: AbortSignal, query: Record<string, string>) => ({ query, fetch: fetchOptions(signal) });
   const commandOptions = (signal: AbortSignal, key: string) => ({
@@ -156,10 +160,7 @@ export function createHostedBookNative(
           return unavailable();
         for (const item of page.items) {
           if (item.availability !== 'available')
-            return hostedFailure(
-              'unavailable',
-              'A chapter is unavailable. The incomplete table of contents cannot be rewritten.',
-            );
+            return hostedFailure('unavailable', m.studio_chapter_missing({}, options));
           if (ids.has(item.occurrenceId) || placements.length >= 512) return unavailable();
           ids.add(item.occurrenceId);
           if (item.kind === 'chapter' && item.selectedLanguage !== undefined)

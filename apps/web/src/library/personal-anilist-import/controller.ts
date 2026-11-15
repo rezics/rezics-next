@@ -1,3 +1,4 @@
+import { m } from '../../paraglide/messages.js';
 import { ImportPageCoordinates, type ImportPagePosition } from '../personal-list-import/page-navigation';
 import {
   ANILIST_UPLOAD_BYTES,
@@ -150,7 +151,7 @@ function scoreSourceMeta(row: AniListRow, scoreFormat: AniListScoreFormat | null
           : null,
     scale: scoreFormat,
     validity: field?.validity ?? 'unknown',
-    reason: field?.reason ?? 'The source score was retained without a field mapping.',
+    reason: field?.reason ?? m.library_anilist_score_without_mapping(),
   };
 }
 
@@ -806,13 +807,13 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       if (row.skip || row.outcome?.status !== 'applied' || row.sourceAdmission) continue;
       const preview = row.sourcePreview;
       const body = preview ? sourceAdmissionBody(preview) : null;
-      const blocked = preview ? sourceAdmissionBlock(preview) : 'This provider record has no stable identity.';
+      const blocked = preview ? sourceAdmissionBlock(preview) : m.library_import_source_record_unidentified();
       if (!body || !row.target) {
         row.sourceAdmission = {
           status: 'unsupported',
           reason: row.target
-            ? (blocked ?? 'This provider record has no stable identity.')
-            : 'This row has no canonical Subject.',
+            ? (blocked ?? m.library_import_source_record_unidentified())
+            : m.library_import_source_subject_unmatched(),
         };
         continue;
       }

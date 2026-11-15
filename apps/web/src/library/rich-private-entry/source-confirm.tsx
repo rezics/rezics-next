@@ -1,15 +1,16 @@
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { m } from '../../paraglide/messages.js';
-import type {
-  SourceAdmissionOutcome,
-  SourceAdmissionPreview,
-  SourcePrivacyField,
-  SourceTimestampField,
+import {
+  sourceFieldIssueText,
+  type SourceAdmissionOutcome,
+  type SourceAdmissionPreview,
+  type SourcePrivacyField,
+  type SourceTimestampField,
 } from './admission';
 
 export function sourcePreviewFieldText(field: SourcePrivacyField | SourceTimestampField): string {
-  if (field.kind === 'unsupported') return field.reason;
+  if (field.kind === 'unsupported') return sourceFieldIssueText(field.reason);
   const value = field.value;
   if (value.status === 'absent') return m.library_rich_source_not_supplied();
   if (value.status === 'unknown')

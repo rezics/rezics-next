@@ -303,6 +303,7 @@ export function ZoneConfigurationEditor({
         <p className="max-w-3xl text-muted-foreground">{m.zone_editor_live_note()}</p>
         {saved ? (
           <ZoneLifecycleControls
+            locale={locale}
             deleted={saved.zone.deletedAt !== null}
             withheld={false}
             busy={state.busy || !writeEnabled}

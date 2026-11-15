@@ -3,6 +3,7 @@ import type {
   PersonalEntrySourceAdmission,
   PersonalEntryTimestampInput,
 } from '@rezics/client';
+import { m } from '../../paraglide/messages.js';
 
 export const SOURCE_PROVIDER_MAX = 64;
 export const SOURCE_RECORD_BYTES = 192;
@@ -15,7 +16,17 @@ export type SourceAdmissionCustody = Readonly<{ viewer: string; csrfToken: strin
 
 export type ReadyPrivacy = { kind: 'ready'; value: PersonalEntryPrivacyValue };
 export type ReadyTimestamp = { kind: 'ready'; value: PersonalEntryTimestampInput };
-export type UnsupportedSourceField = { kind: 'unsupported'; reason: string };
+const sourceFieldMessages = {
+  privacy: m.library_import_source_privacy_unsupported,
+  'anilist-privacy': m.library_import_source_anilist_privacy_format,
+  'blank-timestamp': m.library_import_source_timestamp_empty,
+  'timestamp-precision': m.library_import_source_timestamp_precision,
+  'timestamp-format': m.library_import_source_timestamp_format,
+  'multiple-updated': m.library_import_source_updated_ambiguous,
+} as const;
+
+type SourceFieldIssue = keyof typeof sourceFieldMessages;
+export type UnsupportedSourceField = { kind: 'unsupported'; reason: SourceFieldIssue };
 export type SourcePrivacyField = ReadyPrivacy | UnsupportedSourceField;
 export type SourceTimestampField = ReadyTimestamp | UnsupportedSourceField;
 
@@ -96,9 +107,7 @@ export function booleanPrivacy(value: boolean): ReadyPrivacy {
 export function unknownPrivacy(sourceValue?: string): SourcePrivacyField {
   if (sourceValue === undefined) return { kind: 'ready', value: { status: 'unknown' } };
   const token = boundedToken(sourceValue, SOURCE_PRIVACY_BYTES);
-  return token
-    ? { kind: 'ready', value: { status: 'unknown', sourceValue: token } }
-    : { kind: 'unsupported', reason: 'The retained privacy token cannot fit native evidence.' };
+  return token ? { kind: 'ready', value: { status: 'unknown', sourceValue: token } } : unsupportedField('privacy');
 }
 
 export function privacyFromToken(raw: string): SourcePrivacyField {
@@ -109,22 +118,25 @@ export function privacyFromToken(raw: string): SourcePrivacyField {
 }
 
 export function timestampFromText(raw: string, mode: 'parse' | 'unknown'): SourceTimestampField {
-  if (raw.length === 0) return { kind: 'unsupported', reason: 'An empty timestamp is not an absent timestamp.' };
+  if (raw.length === 0) return unsupportedField('blank-timestamp');
   if (mode === 'parse' && isKnownSourceTimestamp(raw)) return { kind: 'ready', value: { status: 'known', value: raw } };
   const token = boundedToken(raw, SOURCE_TIMESTAMP_BYTES);
   if (token && (mode === 'unknown' || !/^\d{4}(?:-\d{2})?(?:-\d{2})?(?:T|$)/.test(raw)))
     return { kind: 'ready', value: { status: 'unknown', sourceValue: token } };
-  return { kind: 'unsupported', reason: 'The retained timestamp cannot keep its original precision.' };
+  return unsupportedField('timestamp-precision');
 }
 
 export function timestampFromUnix(value: number): SourceTimestampField {
-  if (!Number.isSafeInteger(value) || value < 0)
-    return { kind: 'unsupported', reason: 'The retained timestamp cannot keep its original precision.' };
+  if (!Number.isSafeInteger(value) || value < 0) return unsupportedField('timestamp-precision');
   return timestampFromText(String(value), 'unknown');
 }
 
-export function unsupportedField(reason: string): UnsupportedSourceField {
+export function unsupportedField(reason: SourceFieldIssue): UnsupportedSourceField {
   return { kind: 'unsupported', reason };
+}
+
+export function sourceFieldIssueText(reason: SourceFieldIssue): string {
+  return sourceFieldMessages[reason]();
 }
 
 export function sourceAdmissionBody(preview: SourceAdmissionPreview): PersonalEntrySourceAdmission | null {
@@ -147,10 +159,10 @@ export function sourceAdmissionBody(preview: SourceAdmissionPreview): PersonalEn
 
 export function sourceAdmissionBlock(preview: SourceAdmissionPreview): string | null {
   if (!validProviderKey(preview.provider) || !validRecordId(preview.recordId))
-    return 'This provider record has no stable identity.';
-  if (preview.privacy.kind === 'unsupported') return preview.privacy.reason;
-  if (preview.sourceCreated.kind === 'unsupported') return preview.sourceCreated.reason;
-  if (preview.sourceUpdated.kind === 'unsupported') return preview.sourceUpdated.reason;
+    return m.library_import_source_record_unidentified();
+  if (preview.privacy.kind === 'unsupported') return sourceFieldIssueText(preview.privacy.reason);
+  if (preview.sourceCreated.kind === 'unsupported') return sourceFieldIssueText(preview.sourceCreated.reason);
+  if (preview.sourceUpdated.kind === 'unsupported') return sourceFieldIssueText(preview.sourceUpdated.reason);
   return null;
 }
 

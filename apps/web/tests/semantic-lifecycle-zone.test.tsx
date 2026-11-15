@@ -221,6 +221,7 @@ test('moderator takedown maps denial and the controls stay usable on a narrow la
   const markup = renderToStaticMarkup(
     <div className="max-w-xs">
       <ZoneLifecycleControls
+        locale="ja"
         deleted={false}
         withheld
         last={last}
@@ -230,8 +231,8 @@ test('moderator takedown maps denial and the controls stay usable on a narrow la
       />
     </div>,
   );
-  expect(markup).toContain('Not allowed');
-  expect(markup).toContain('Delete zone');
+  expect(markup).toContain('許可されていません');
+  expect(markup).toContain('Zone を削除');
 });
 
 const { Window } = await import(

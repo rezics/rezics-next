@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { m } from '../../paraglide/messages.js';
 import type { VndbReviewInput, VndbRow } from './contract';
 import { VndbAction, VndbCheck } from './controls';
+import { vndbProgressAmount, vndbProgressOutcome } from './progress-copy';
 import { readVndbOccurrences } from './server';
 import { useVndbVisit } from './visit';
 
@@ -68,11 +69,15 @@ export function VndbProgressReview({
     { value: 'start', label: m.library_vndb_progress_start() },
     ...eligible.map((session) => ({
       value: session.id,
-      label: `${session.startedAt} · ${
-        (session.unit === 'minute'
-          ? session.amount
-          : session.measures?.find((measure) => measure.unit === 'minute')?.amount) ?? '—'
-      } minute · ${session.id}`,
+      label: m.library_vndb_progress_occurrence_option({
+        startedAt: session.startedAt,
+        duration: vndbProgressAmount(
+          session.unit === 'minute'
+            ? session.amount
+            : session.measures?.find((measure) => measure.unit === 'minute')?.amount,
+        ),
+        id: session.id,
+      }),
     })),
   ];
   const progressActionOptions = [
@@ -178,7 +183,7 @@ export function VndbProgressReview({
         <ul className="space-y-1" data-vndb-progress-outcomes>
           {progress.measures.map((measure) => (
             <li key={measure.field}>
-              {measure.field}: {measure.status} · {measure.currentAmount ?? '—'} {measure.unit}
+              {vndbProgressOutcome(measure)}
               {measure.reason ? ` · ${measure.reason}` : ''}
             </li>
           ))}

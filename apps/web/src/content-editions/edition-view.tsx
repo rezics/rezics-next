@@ -78,10 +78,12 @@ export function ContentEditionReader({
           </p>
         ) : null}
         <p className="text-sm font-medium text-muted-foreground">{m.content_edition_fixed()}</p>
-        <p className="text-sm text-muted-foreground">
-          <span className="font-medium">{m.content_edition_identifier()}:</span>{' '}
-          <span className="break-all font-mono">{editionId}</span>
-        </p>
+        {published ? null : (
+          <p className="text-sm text-muted-foreground">
+            <span className="font-medium">{m.content_edition_identifier()}:</span>{' '}
+            <span className="break-all font-mono">{editionId}</span>
+          </p>
+        )}
         {returnContext ? <p className="text-sm text-muted-foreground">{returnContext}</p> : null}
         {subject ? (
           <a

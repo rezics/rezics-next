@@ -1,5 +1,7 @@
 import { checkDocument, hasDocumentContent, serializeDocument } from '@rezics/document';
 import { editionDocumentDigest } from '../content-editions/edition-model';
+import { m } from '../paraglide/messages.js';
+import { getLocale, isLocale, type Locale } from '../paraglide/runtime.js';
 import {
   readSelectedOwnDraft,
   type OwnDraftCommands,
@@ -23,41 +25,46 @@ import {
   type StudioSelection,
 } from './contract';
 
-const unavailable: StudioFailure = {
-  kind: 'unavailable',
-  message: 'This Studio operation is unavailable. Retry the same operation.',
-};
-const uncertain: StudioFailure = {
-  kind: 'uncertain',
-  message: 'The result is unknown. Retry the same operation to recover its result.',
-};
-
 function failure(error: StudioFailure['kind'], message: string): StudioResult<never> {
   return { ok: false, error: { kind: error, message } };
 }
 
-function readFailure(value: string): StudioResult<never> {
-  if (value === 'denied') return failure('denied', 'This account can no longer open this Studio visit.');
-  if (value === 'stale') return failure('stale', 'This draft changed. Reload its current version before continuing.');
-  if (value === 'concealed') return failure('withdrawn', 'This draft is no longer available to this account.');
-  return { ok: false, error: unavailable };
+function accountOptions(locale: string): { locale: Locale } {
+  return { locale: isLocale(locale) ? locale : getLocale() };
 }
 
-function writeFailure(reason: string): StudioResult<never> {
-  if (reason === 'forbidden') return failure('denied', 'The current account cannot write this draft.');
+function unavailable(locale: string): StudioFailure {
+  return { kind: 'unavailable', message: m.studio_operation_unavailable({}, accountOptions(locale)) };
+}
+
+function uncertain(locale: string): StudioFailure {
+  return { kind: 'uncertain', message: m.studio_result_unknown({}, accountOptions(locale)) };
+}
+
+function readFailure(value: string, locale: string): StudioResult<never> {
+  const options = accountOptions(locale);
+  if (value === 'denied') return failure('denied', m.studio_account_visit_closed({}, options));
+  if (value === 'stale') return failure('stale', m.studio_draft_changed({}, options));
+  if (value === 'concealed') return failure('withdrawn', m.studio_draft_withdrawn({}, options));
+  return { ok: false, error: unavailable(locale) };
+}
+
+function writeFailure(reason: string, locale: string): StudioResult<never> {
+  const options = accountOptions(locale);
+  if (reason === 'forbidden') return failure('denied', m.studio_draft_write_denied({}, options));
   if (reason === 'stale' || reason === 'conflict')
-    return failure('stale', 'The saved revision changed. Reopen the draft before writing.');
+    return failure('stale', m.studio_draft_revision_changed({}, options));
   if (reason === 'invalid' || reason === 'media-unavailable')
-    return failure('invalid', 'The native command refused these draft details.');
+    return failure('invalid', m.studio_draft_refused({}, options));
   if (reason === 'unavailable' || reason === 'rate-limited' || reason === 'closed')
-    return { ok: false, error: uncertain };
-  return failure('withdrawn', 'This draft is no longer available to this account.');
+    return { ok: false, error: uncertain(locale) };
+  return failure('withdrawn', m.studio_draft_withdrawn({}, options));
 }
 
-function summary(entry: OwnDraftEntry): StudioDocument {
+function summary(entry: OwnDraftEntry, locale: string): StudioDocument {
   return {
     postId: entry.id,
-    title: entry.title ?? 'Untitled draft',
+    title: entry.title ?? m.own_drafts_no_title({}, accountOptions(locale)),
     revisionId: entry.revisionId,
     updatedAt: entry.savedAt,
     state: 'draft',
@@ -99,7 +106,7 @@ export function createStudioAccountPort(
     isCurrent: () => boolean;
   }>,
 ): StudioPort {
-  const { identity, reader, commands, source } = input;
+  const { identity, reader, commands, source, locale } = input;
   const accountId = identity.accountId;
   const projectId = accountId;
   let authnEpoch = identity.authnEpoch ?? input.initialPage.viewer.authnEpoch;
@@ -120,12 +127,12 @@ export function createStudioAccountPort(
   async function open(postId: string, signal: AbortSignal): Promise<StudioResult<StudioSelection>> {
     const entry = visibleEntries.get(postId) ?? selectedEntries.get(postId);
     if (!entry || entry.documentKind !== 'opening' || entry.kind !== 'discussion')
-      return failure('withdrawn', 'Only an account-owned discussion draft can open in Studio.');
+      return failure('withdrawn', m.studio_discussion_only({}, accountOptions(locale)));
     const currentIdentity = { ...identity, authnEpoch };
     const resumed = await readSelectedOwnDraft(reader, currentIdentity, entry, signal, isCurrent);
-    if (typeof resumed === 'string') return readFailure(resumed);
+    if (typeof resumed === 'string') return readFailure(resumed, locale);
     if (!isCurrent() || resumed.revision !== entry.revisionId)
-      return failure('stale', 'The selected draft changed. Reload the inventory.');
+      return failure('stale', m.studio_inventory_stale({}, accountOptions(locale)));
     const result = await documents.open({ projectId, postId }, signal);
     if (!result.ok) return result;
     const selection = result.value;
@@ -134,7 +141,7 @@ export function createStudioAccountPort(
       serializeDocument(selection.revision.body) !== serializeDocument(resumed.post.body) ||
       !sameList(selection.revision.mediaIds, resumed.post.mediaIds)
     )
-      return failure('stale', 'The selected draft changed while it was opening. Select its current inventory row.');
+      return failure('stale', m.studio_opening_stale({}, accountOptions(locale)));
     const admitted = { ...selection, permissions: { edit: true, publish: true } };
     selectedEntries.clear();
     selections.clear();
@@ -148,10 +155,10 @@ export function createStudioAccountPort(
     signal: AbortSignal,
   ): Promise<StudioResult<StudioSelection>> {
     if (!isCurrent() || !commands?.create)
-      return failure('denied', 'Creating drafts requires the current account write session.');
+      return failure('denied', m.studio_create_session({}, accountOptions(locale)));
     const result = await commands.create(draft, signal);
-    if (!result.ok) return writeFailure(result.reason);
-    if (!isCurrent()) return { ok: false, error: uncertain };
+    if (!result.ok) return writeFailure(result.reason, locale);
+    if (!isCurrent()) return { ok: false, error: uncertain(locale) };
     const thread = result.thread;
     const post = thread.firstPost;
     if (
@@ -172,7 +179,7 @@ export function createStudioAccountPort(
       !/^[a-f0-9]{64}$/.test(post.sha256) ||
       (await editionDocumentDigest(post.body)) !== post.sha256
     )
-      return { ok: false, error: uncertain };
+      return { ok: false, error: uncertain(locale) };
     const selection: StudioSelection = {
       revision: {
         exact: { postId: post.id, revisionId: post.revisionId, sha256: post.sha256 },
@@ -228,7 +235,7 @@ export function createStudioAccountPort(
   ): Promise<StudioResult<StudioSelection>> {
     const prior = selections.get(save.postId);
     if (!prior?.native || prior.revision.exact.revisionId !== save.expectedRevisionId)
-      return failure('stale', 'Reopen the selected account draft before saving.');
+      return failure('stale', m.studio_reopen_before_save({}, accountOptions(locale)));
     const result = await documents.saveDraft(
       {
         ...save,
@@ -267,10 +274,10 @@ export function createStudioAccountPort(
     _signal: AbortSignal,
   ): Promise<StudioResult<PublicationReview>> {
     if (request.target.kind !== 'article')
-      return failure('invalid', 'Account article review requires one selected Post.');
+      return failure('invalid', m.studio_article_review_one({}, accountOptions(locale)));
     const selection = selections.get(request.target.document.postId);
     if (!selection?.native || !sameExact(selection.revision.exact, request.target.document))
-      return failure('stale', 'Reload the saved account draft before reviewing it.');
+      return failure('stale', m.studio_reload_before_review({}, accountOptions(locale)));
     const review: PublicationReview = {
       reviewId: '',
       authority: 'local',
@@ -303,12 +310,12 @@ export function createStudioAccountPort(
       !commands ||
       !commands.revise
     )
-      return failure('invalid', 'This account publication intent is unavailable. Review the saved version again.');
+      return failure('invalid', m.studio_publish_intent_unavailable({}, accountOptions(locale)));
     const target = review.target.document;
     const prior = selections.get(target.postId);
     const snapshot = review.articleSnapshot;
     if (!prior?.native || !sameExact(prior.revision.exact, target))
-      return failure('stale', 'The acknowledged draft changed after review. Review its current revision again.');
+      return failure('stale', m.studio_review_stale({}, accountOptions(locale)));
     const result = await commands.revise(
       {
         postId: target.postId,
@@ -323,8 +330,8 @@ export function createStudioAccountPort(
       },
       signal,
     );
-    if (!result.ok) return writeFailure(result.reason);
-    if (!isCurrent()) return { ok: false, error: uncertain };
+    if (!result.ok) return writeFailure(result.reason, locale);
+    if (!isCurrent()) return { ok: false, error: uncertain(locale) };
     const post = result.post;
     if (
       post.id !== target.postId ||
@@ -338,7 +345,7 @@ export function createStudioAccountPort(
       !sameList(post.subjectIds, snapshot.subjectIds) ||
       (await editionDocumentDigest(post.body)) !== post.sha256
     )
-      return { ok: false, error: uncertain };
+      return { ok: false, error: uncertain(locale) };
     const readback = await commands.readback(post.id, signal);
     if (
       typeof readback === 'string' ||
@@ -350,7 +357,7 @@ export function createStudioAccountPort(
       !sameList(readback.mediaIds, snapshot.mediaIds) ||
       !isCurrent()
     )
-      return { ok: false, error: uncertain };
+      return { ok: false, error: uncertain(locale) };
     const revision = {
       exact: { postId: post.id, revisionId: readback.revision, sha256: post.sha256 },
       title: review.entries[0]?.title ?? prior.revision.title,
@@ -385,7 +392,7 @@ export function createStudioAccountPort(
     isCurrent,
     async documents(request, signal) {
       if (!isCurrent() || request.projectId !== projectId)
-        return failure('denied', 'Open Studio with its current account.');
+        return failure('denied', m.studio_open_current_account({}, accountOptions(locale)));
       const page = await reader.list(
         {
           accountId,
@@ -394,23 +401,23 @@ export function createStudioAccountPort(
         },
         signal,
       );
-      if (typeof page === 'string') return readFailure(page);
-      if (!isCurrent() || page.drafts.length > 20) return { ok: false, error: unavailable };
+      if (typeof page === 'string') return readFailure(page, locale);
+      if (!isCurrent() || page.drafts.length > 20) return { ok: false, error: unavailable(locale) };
       if (authnEpoch !== null && authnEpoch !== page.viewer.authnEpoch)
-        return failure('denied', 'The account authorization changed. Reopen Studio.');
+        return failure('denied', m.studio_authorization_changed({}, accountOptions(locale)));
       authnEpoch = page.viewer.authnEpoch;
       visibleEntries.clear();
       for (const entry of page.drafts) visibleEntries.set(entry.id, entry);
       return {
         ok: true,
-        value: { items: page.drafts.map(summary), nextCursor: page.next },
+        value: { items: page.drafts.map((entry) => summary(entry, locale)), nextCursor: page.next },
       };
     },
     open: (request, signal) =>
       request.projectId === projectId
         ? open(request.postId, signal)
-        : Promise.resolve(failure('denied', 'Open Studio with its current account.')),
-    createDraft: async () => failure('unavailable', 'Use the native account draft form to create this document.'),
+        : Promise.resolve(failure('denied', m.studio_open_current_account({}, accountOptions(locale)))),
+    createDraft: async () => failure('unavailable', m.studio_use_account_form({}, accountOptions(locale))),
     createNativeDraft,
     saveDraft,
     versions: (request, signal) => documents.versions(request, signal),

@@ -1,5 +1,7 @@
 import { checkDocument, hasDocumentContent, serializeDocument, type DocumentSnapshot } from '@rezics/document';
 import { editionDocumentDigest } from '../content-editions/edition-model';
+import { m } from '../paraglide/messages.js';
+import { getLocale, isLocale, type Locale } from '../paraglide/runtime.js';
 import { draftFetch, readExactRevision, revisePost, type EditFailure } from '../threads/studio-document';
 import {
   createHistoricalReadBinding,
@@ -54,29 +56,34 @@ const digest = /^[a-f0-9]{64}$/;
 function failure(kind: StudioFailure['kind'], message: string): { ok: false; error: StudioFailure } {
   return { ok: false, error: { kind, message } };
 }
-const unavailable = () => failure('unavailable', 'This document operation is unavailable. Try again.');
-const uncertain = () => failure('uncertain', 'The save result is unknown. Retry the same save to recover its result.');
-const stale = () => failure('stale', 'The saved revision changed. Reopen the document before editing.');
+function documentOptions(locale: string): { locale: Locale } {
+  return { locale: isLocale(locale) ? locale : getLocale() };
+}
+const unavailable = (locale: string) =>
+  failure('unavailable', m.studio_document_operation_unavailable({}, documentOptions(locale)));
+const uncertain = (locale: string) => failure('uncertain', m.studio_save_unknown({}, documentOptions(locale)));
+const stale = (locale: string) => failure('stale', m.studio_document_stale({}, documentOptions(locale)));
 
-function writeFailure(result: EditFailure): { ok: false; error: StudioFailure } {
+function writeFailure(result: EditFailure, locale: string): { ok: false; error: StudioFailure } {
+  const options = documentOptions(locale);
   switch (result.reason) {
     case 'stale':
     case 'conflict':
-      return stale();
+      return stale(locale);
     case 'forbidden':
-      return failure('denied', 'You cannot edit this document with the current account.');
+      return failure('denied', m.studio_document_edit_denied({}, options));
     case 'invalid':
-      return failure('invalid', 'The document could not be saved. Check its contents.');
+      return failure('invalid', m.studio_document_invalid({}, options));
     case 'media-unavailable':
-      return failure('unavailable', 'Document media is unavailable. Retry this save when it is ready.');
+      return failure('unavailable', m.studio_media_unavailable({}, options));
     case 'rate-limited':
-      return failure('unavailable', 'Saving is temporarily limited. Retry the same save later.');
+      return failure('unavailable', m.studio_save_limited({}, options));
     case 'closed':
-      return failure('unavailable', 'Saving is currently closed. Retry the same save later.');
+      return failure('unavailable', m.studio_save_closed({}, options));
     case 'not-found':
-      return unavailable();
+      return unavailable(locale);
     case 'unavailable':
-      return uncertain();
+      return uncertain(locale);
   }
 }
 
@@ -103,6 +110,7 @@ async function projectRevision(post: NativeDocument, title: string): Promise<Stu
  * the same conditional revision writer; Content's erased-Post restoration is a different operation.
  */
 export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPort {
+  const options = documentOptions(visit.locale);
   const origin = visit.source.read();
   let retired = false;
   let reads = 0;
@@ -138,15 +146,18 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
     input: Parameters<StudioPort['open']>[0],
     signal: AbortSignal,
   ): Promise<StudioResult<StudioSelection>> {
-    if (!admitted(input.projectId, input.postId, signal)) return unavailable();
+    if (!admitted(input.projectId, input.postId, signal)) return unavailable(visit.locale);
     try {
-      const result = await readPostDocumentHead({ data: { postId: input.postId, accountId: visit.accountId }, signal });
-      if (!admitted(input.projectId, input.postId, signal)) return unavailable();
+      const result = await readPostDocumentHead({
+        data: { postId: input.postId, accountId: visit.accountId, locale: options.locale },
+        signal,
+      });
+      if (!admitted(input.projectId, input.postId, signal)) return unavailable(visit.locale);
       if (!result.ok) return result;
       const { post, title, viewerId } = result.value;
-      if (post.id !== input.postId || viewerId !== visit.accountId) return unavailable();
+      if (post.id !== input.postId || viewerId !== visit.accountId) return unavailable(visit.locale);
       const revision = await projectRevision(post, title);
-      if (!revision || !admitted(input.projectId, input.postId, signal)) return unavailable();
+      if (!revision || !admitted(input.projectId, input.postId, signal)) return unavailable(visit.locale);
       return {
         ok: true,
         value: {
@@ -167,18 +178,18 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
         },
       };
     } catch {
-      return unavailable();
+      return unavailable(visit.locale);
     }
   }
 
   return {
     isCurrent,
-    documents: async () => failure('unavailable', 'Content has no project document inventory.'),
-    createDraft: async () => failure('unavailable', 'Content has no title-only private draft creation operation.'),
+    documents: async () => failure('unavailable', m.studio_no_inventory({}, options)),
+    createDraft: async () => failure('unavailable', m.studio_no_title_draft({}, options)),
     open,
     async saveDraft(input, signal) {
-      if (!admitted(input.projectId, input.postId, signal)) return unavailable();
-      if (!visit.csrfToken || !origin.csrfReady) return failure('denied', 'Editing requires a current write session.');
+      if (!admitted(input.projectId, input.postId, signal)) return unavailable(visit.locale);
+      if (!visit.csrfToken || !origin.csrfReady) return failure('denied', m.studio_write_session({}, options));
       if (
         !uuid.test(input.idempotencyKey) ||
         !checkDocument(input.body) ||
@@ -188,7 +199,7 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
         input.mediaIds.some((id) => typeof id !== 'string' || !id) ||
         new Set(input.mediaIds).size !== input.mediaIds.length
       )
-        return failure('invalid', 'The draft contents or save key are invalid.');
+        return failure('invalid', m.studio_draft_invalid({}, options));
       const intent = JSON.stringify([
         input.projectId,
         input.postId,
@@ -199,18 +210,18 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
         input.native ?? null,
       ]);
       if (attempt?.key === input.idempotencyKey && attempt.intent !== intent)
-        return failure('invalid', 'A save key cannot be reused for different edits.');
+        return failure('invalid', m.studio_save_key_mismatch({}, options));
       if (attempt && attempt.key !== input.idempotencyKey)
-        return failure('uncertain', 'Retry the pending save before starting another one.');
+        return failure('uncertain', m.studio_pending_save({}, options));
       if (!attempt) {
         const current = await open(input, signal);
         if (!current.ok) return current;
-        if (current.value.revision.exact.revisionId !== input.expectedRevisionId) return stale();
+        if (current.value.revision.exact.revisionId !== input.expectedRevisionId) return stale(visit.locale);
         if (!current.value.permissions.edit)
-          return failure('unavailable', 'Only existing private drafts can be saved privately.');
+          return failure('unavailable', m.studio_private_only({}, options));
         attempt = { key: input.idempotencyKey, intent, title: current.value.revision.title };
       }
-      if (!admitted(input.projectId, input.postId, signal)) return unavailable();
+      if (!admitted(input.projectId, input.postId, signal)) return unavailable(visit.locale);
       const command = attempt;
       try {
         // revisePost delegates to post-writes.ts: original If-Match, key, media and native refusal behavior.
@@ -235,9 +246,9 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
           signal,
           fetch: draftFetch(input.body),
         });
-        if (!admitted(input.projectId, input.postId, signal)) return uncertain();
+        if (!admitted(input.projectId, input.postId, signal)) return uncertain(visit.locale);
         if (!result.ok) {
-          const mapped = writeFailure(result);
+          const mapped = writeFailure(result, visit.locale);
           if (mapped.error.kind !== 'uncertain' && mapped.error.kind !== 'unavailable') attempt = null;
           return mapped;
         }
@@ -248,7 +259,7 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
           post.visibility !== 'draft' ||
           post.authorId !== visit.accountId
         )
-          return uncertain();
+          return uncertain(visit.locale);
         const currentHead = await open(input, signal);
         if (
           !currentHead.ok ||
@@ -263,15 +274,15 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
               JSON.stringify(currentHead.value.native?.subjectIds) !== JSON.stringify(input.native.subjectIds))) ||
           !admitted(input.projectId, input.postId, signal)
         )
-          return uncertain();
+          return uncertain(visit.locale);
         attempt = null;
         return { ok: true, value: currentHead.value };
       } catch {
-        return uncertain();
+        return uncertain(visit.locale);
       }
     },
     async versions(input, signal) {
-      if (!admitted(input.projectId, input.postId, signal)) return unavailable();
+      if (!admitted(input.projectId, input.postId, signal)) return unavailable(visit.locale);
       const request = binding({
         kind: 'post-revision-headers',
         postId: input.postId,
@@ -290,15 +301,15 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
           },
           signal,
         });
-        if (!admitted(input.projectId, input.postId, signal) || !accepts(request, response)) return unavailable();
+        if (!admitted(input.projectId, input.postId, signal) || !accepts(request, response)) return unavailable(visit.locale);
         return response.data;
       } catch {
-        return unavailable();
+        return unavailable(visit.locale);
       }
     },
     async revision(input, signal) {
       const exact: ExactDocument = input.document;
-      if (!admitted(input.projectId, exact.postId, signal)) return unavailable();
+      if (!admitted(input.projectId, exact.postId, signal)) return unavailable(visit.locale);
       const request = binding({
         kind: 'exact-revision',
         postId: exact.postId,
@@ -317,16 +328,16 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
           },
           signal,
         });
-        if (!admitted(input.projectId, exact.postId, signal) || !accepts(request, response)) return unavailable();
+        if (!admitted(input.projectId, exact.postId, signal) || !accepts(request, response)) return unavailable(visit.locale);
         const page = response.data;
-        if (page.state !== 'ready' || page.thread.title === null) return unavailable();
+        if (page.state !== 'ready' || page.thread.title === null) return unavailable(visit.locale);
         const revision = await projectRevision(page.revision, page.thread.title);
         if (!revision || !sameExact(revision.exact, exact))
-          return failure('invalid', 'The response did not match the selected exact revision.');
-        if (!admitted(input.projectId, exact.postId, signal)) return unavailable();
+          return failure('invalid', m.studio_revision_mismatch({}, options));
+        if (!admitted(input.projectId, exact.postId, signal)) return unavailable(visit.locale);
         return { ok: true, value: revision };
       } catch {
-        return unavailable();
+        return unavailable(visit.locale);
       }
     },
   };

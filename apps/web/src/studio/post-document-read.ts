@@ -1,6 +1,8 @@
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
+import { m } from '../paraglide/messages.js';
+import { getLocale, isLocale, type Locale } from '../paraglide/runtime.js';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
@@ -14,16 +16,22 @@ const accountId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[
 
 /** Current Content disclosure only. Project membership remains the mounted consumer's native admission. */
 export const readPostDocumentHead = createServerFn({ method: 'GET' })
-  .validator((input: { postId: string; accountId: string }) => {
-    if (!input || !contentId.test(input.postId) || !accountId.test(input.accountId))
+  .validator((input: { postId: string; accountId: string; locale?: Locale }) => {
+    if (
+      !input ||
+      !contentId.test(input.postId) ||
+      !accountId.test(input.accountId) ||
+      (input.locale !== undefined && !isLocale(input.locale))
+    )
       throw new Error('Invalid Studio document address');
-    return { postId: input.postId, accountId: input.accountId };
+    return { postId: input.postId, accountId: input.accountId, locale: input.locale };
   })
   .handler(async ({ data }): Promise<StudioResult<PostDocumentHead>> => {
     setResponseHeader('cache-control', 'private, no-store');
+    const messageOptions = { locale: data.locale ?? getLocale() };
     const unavailable = (): StudioResult<PostDocumentHead> => ({
       ok: false,
-      error: { kind: 'unavailable', message: 'This document is unavailable. Try again.' },
+      error: { kind: 'unavailable', message: m.studio_document_unavailable({}, messageOptions) },
     });
     try {
       const request = getRequest();
@@ -31,8 +39,8 @@ export const readPostDocumentHead = createServerFn({ method: 'GET' })
       const authorization = viewerCredential(request);
       const viewerId = sessionSubject(request);
       if (!authorization || viewerId !== data.accountId)
-        return { ok: false, error: { kind: 'denied', message: 'Open this workspace with its original account.' } };
-      const client = kernelClient();
+        return { ok: false, error: { kind: 'denied', message: m.studio_original_account({}, messageOptions) } };
+      const client = kernelClient(data.locale);
       const options = { headers: { authorization }, fetch: { cache: 'no-store' as const, signal: request.signal } };
       const result = await client.posts({ id: data.postId }).get(options);
       if (result.error || !result.data) return unavailable();

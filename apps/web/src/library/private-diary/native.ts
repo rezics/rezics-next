@@ -18,7 +18,11 @@ function readFailure(status: number, problem: unknown): DiaryReadFailure {
   return { kind: status === 403 ? 'denied' : 'unavailable' };
 }
 
-export type DiaryRead = { kind: 'ready'; page: DiaryPage } | { kind: 'stale' } | DiaryReadFailure;
+export type DiaryRead =
+  | { kind: 'ready'; page: DiaryPage }
+  | { kind: 'stale' }
+  | { kind: 'conflict' }
+  | DiaryReadFailure;
 
 export async function readDiaryPage(
   client: KernelClient,
@@ -40,7 +44,11 @@ export async function readDiaryPage(
   });
   signal?.throwIfAborted();
   if (!result.error && result.data) return { kind: 'ready', page: result.data };
-  return result.status === 409 ? { kind: 'stale' } : readFailure(result.status, result.error?.value);
+  const problem: unknown = result.error?.value;
+  const code = typeof problem === 'object' && problem !== null && 'code' in problem ? problem.code : undefined;
+  if (result.status === 409) return { kind: code === 'conflict' ? 'conflict' : 'stale' };
+  if (result.status === 400 && code === 'invalid_cursor') return { kind: 'stale' };
+  return readFailure(result.status, problem);
 }
 
 export type SummaryRead = { kind: 'ready'; summary: ConsumptionSummary } | DiaryReadFailure;

@@ -1,5 +1,53 @@
 import { m } from '../../paraglide/messages.js';
-import type { MalFailureKind, MalMatch, MalOutcomeStatus, MalPreviewRow, MalScoreOutcome, MalValue } from './contract';
+import type {
+  MalFailureKind,
+  MalLabelOutcome,
+  MalLabelReview,
+  MalMatch,
+  MalOutcomeStatus,
+  MalPreviewRow,
+  MalScoreOutcome,
+  MalTagEvidence,
+  MalValue,
+} from './contract';
+
+const tagEvidenceStatuses = {
+  missing: m.library_mal_missing,
+  empty: m.library_mal_tag_empty,
+  unknown: m.library_mal_unknown,
+  invalid: m.library_bangumi_label_outcome_invalid,
+  unsupported: m.library_mal_tag_unsupported,
+  supported: m.library_mal_tag_supported,
+} as const;
+
+const reviewedLabelStatuses = {
+  ready: m.library_bangumi_label_item_ready,
+  duplicate: m.library_bangumi_label_outcome_duplicate,
+  invalid: m.library_bangumi_label_outcome_invalid,
+  collision: m.library_bangumi_label_outcome_conflict,
+  unavailable: m.library_mal_tag_unavailable,
+  unsupported: m.library_mal_tag_unsupported,
+} as const;
+
+const labelOutcomeStatuses = {
+  accepted: m.library_mal_label_result_accepted,
+  unchanged: m.library_bangumi_label_outcome_unchanged,
+  stale: m.library_bangumi_label_outcome_stale,
+  unsupported: m.library_mal_tag_unsupported,
+  failed: m.library_bangumi_label_outcome_failed,
+} as const;
+
+export function malTagEvidenceLabel(kind: MalTagEvidence['kind']): string {
+  return tagEvidenceStatuses[kind]();
+}
+
+export function malReviewedLabelStatus(status: MalLabelReview['selections'][number]['status']): string {
+  return reviewedLabelStatuses[status]();
+}
+
+export function malLabelOutcomeStatus(status: MalLabelOutcome['status']): string {
+  return labelOutcomeStatuses[status]();
+}
 
 export function malValueLabel(value: MalValue): string {
   if (value.kind === 'missing') return m.library_mal_missing();

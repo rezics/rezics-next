@@ -517,7 +517,7 @@ export function AppShell({ children, navigation, subjectPurchase, search, commun
       <InboxShellProvider port={inboxShell}>
         <NavigationProvider {...(navigation ? { contributions: navigation } : {})}>
           <FeatureSlotsProvider {...(subjectPurchase ? { subjectPurchase } : {})}>
-            <Toaster>
+            <Toaster closeLabel={m.shell_dismiss_notification()} viewportLabel={m.settings_notifications_heading()}>
               <AppearancePreferenceSync />
               <SideNavProvider communities={communities}>
                 <ShellContextNavigationProvider>

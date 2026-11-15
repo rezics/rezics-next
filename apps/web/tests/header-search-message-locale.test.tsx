@@ -36,7 +36,7 @@ test('header messages follow each locale when locales coexist', async () => {
       ['aria-label="Close search"', 'aria-label="关闭搜索"'],
       ['aria-label="Remove Reading list scope"', 'aria-label="移除 Reading list 范围"'],
       ['placeholder="Search in Reading list"', 'placeholder="在 Reading list 中搜索"'],
-      ['title="Filters are not available on this page."', 'title="此页面暂不提供筛选。"'],
+      ['title="Filters are not available on this page."', 'title="此页面不提供筛选。"'],
       ['Filters', '筛选条件'],
       ['aria-label="Search"', 'aria-label="搜索"'],
       ['aria-label="Suggestions"', 'aria-label="搜索建议"'],

@@ -3,6 +3,7 @@ import { m } from '../../paraglide/messages.js';
 import type { VndbJourneySnapshot } from './controller';
 import { VndbAction } from './controls';
 import { VndbStage } from './vndb-workspace';
+import { vndbProgressReview } from './progress-copy';
 
 function selectionLabel(status: string, state: string | null, replace: boolean): string {
   if (status === 'skipped') return m.library_vndb_action_skip();
@@ -73,18 +74,17 @@ export function VndbConfirmPage({
                     </p>
                     {effect.kind === 'score' && score?.reviewId === effect.reviewId ? (
                       <p>
-                        {score.action === 'vote'
-                          ? m.library_vndb_score_selected_vote({ units: score.units ?? 0 })
-                          : m.library_vndb_score_selected_clear()}
+                        {score.action === 'clear'
+                          ? m.library_vndb_score_selected_clear()
+                          : score.units === null
+                            ? m.library_vndb_score_apply_unavailable()
+                            : m.library_vndb_score_selected_vote({ units: score.units })}
                       </p>
                     ) : null}
                     {effect.kind === 'entry-state' && row.decision?.progress ? (
                       <ul>
                         {row.decision.progress.measures.map((measure) => (
-                          <li key={measure.field}>
-                            {measure.field}: {measure.sourceAmount ?? '—'} {measure.unit} · {measure.action} ·{' '}
-                            {measure.status}
-                          </li>
+                          <li key={measure.field}>{vndbProgressReview(measure)}</li>
                         ))}
                       </ul>
                     ) : null}

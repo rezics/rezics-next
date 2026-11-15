@@ -274,8 +274,9 @@ export function PrivateDiaryPage({
       },
     }).catch(() => 'unavailable' as const);
     const current = binding.current;
+    if (!live.current) return;
+    setClosing(false);
     if (
-      !live.current ||
       current.href !== expected.href ||
       current.loaded !== expected.loaded ||
       current.source !== expected.source ||
@@ -284,7 +285,6 @@ export function PrivateDiaryPage({
       !sameDiaryAddress(current.address, expected.address)
     )
       return;
-    setClosing(false);
     if (result === 'unavailable') {
       setCloseRetry(identity);
       return;
@@ -494,7 +494,9 @@ export function PrivateDiaryPage({
               <p role="status" className="h-auto min-w-0 rounded-md border p-4 [overflow-wrap:anywhere]">
                 {pageRefusal === 'closed' ? m.platform_closed_message() : m.ctxw_denied()}
               </p>
-            ) : authorizedLoad?.diary.kind === 'unavailable' || (page && !currentPage) ? (
+            ) : authorizedLoad?.diary.kind === 'unavailable' ||
+              authorizedLoad?.diary.kind === 'conflict' ||
+              (page && !currentPage) ? (
               <section className="min-w-0 rounded-md border p-4">
                 <p>{m.library_diary_read_unavailable()}</p>
                 <Button

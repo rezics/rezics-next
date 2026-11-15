@@ -54,8 +54,11 @@ test('published, refused, withdrawn, mismatched and unavailable editions keep th
     expect(markup).toContain(`href="${href.replaceAll('&', '&amp;')}"`);
     expect(markup).toContain(m.content_edition_return_entitlement());
     expect(markup).toContain(m.content_edition_from_entitlement());
-    expect(markup).toContain(m.content_edition_identifier());
     expect(markup).toContain(editionId);
+    if (page.state === 'published') {
+      expect(markup).not.toContain(m.content_edition_identifier());
+      expect(markup).toContain(m.content_edition_details());
+    } else expect(markup).toContain(m.content_edition_identifier());
   }
   expect(render(published, { kind: 'order', href: '/en/orders/order-0123' })).toContain(
     m.content_edition_return_order(),

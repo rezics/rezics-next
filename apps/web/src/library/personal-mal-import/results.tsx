@@ -5,7 +5,13 @@ import { ImportSourceEvidence, ImportSourceOutcome } from '../rich-private-entry
 import type { MalApplyPage, MalOutcome, MalOwnVoteReadback, MalPreviewRow } from './contract';
 import { MalCurrentAssignments } from './labels';
 import { MalAction } from './controls';
-import { malOriginalScoreLabel, malOutcomeLabel, malScoreOutcomeLabel, malVoteReadKey } from './meaning';
+import {
+  malLabelOutcomeStatus,
+  malOriginalScoreLabel,
+  malOutcomeLabel,
+  malScoreOutcomeLabel,
+  malVoteReadKey,
+} from './meaning';
 import { malSourcePreview } from './source';
 
 function currentVoteLabel(row: MalPreviewRow | undefined, readback?: MalOwnVoteReadback): string {
@@ -74,7 +80,8 @@ function Outcome({
         <ul className="h-auto space-y-2 [overflow-wrap:anywhere]" aria-label={m.library_mal_label_results()}>
           {outcome.labels.map((label) => (
             <li key={label.value}>
-              #{label.value}: {label.status} · {label.reason}
+              #{label.value}: {malLabelOutcomeStatus(label.status)}
+              {label.reason ? ` · ${label.reason}` : null}
               <p>
                 {label.labelId} · {label.assignment?.id} · {label.assignment?.revision}
               </p>
