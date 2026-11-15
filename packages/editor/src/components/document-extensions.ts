@@ -1,8 +1,10 @@
 import { Mark, Node, mergeAttributes, type Extensions } from '@tiptap/core';
-import type { TagParseRule } from '@tiptap/pm/model';
+import type { TagParseRule, ParseRule } from '@tiptap/pm/model';
 import type { DocumentProfile } from '@rezics/document';
 import { blocksNodeNames, markAttributes, textNodeNames } from '@rezics/document';
 import { safeDocumentUrl } from './document-url.ts';
+import { componentDOMAttributes, parseComponentAttributes, imageDOMAttributes, parseImageAttributes, mediaDOMAttributes, parseMediaAttributes } from './document-component-data.ts';
+import { parseFormattingData, parseCodeLanguage, safeAlignment, safeHeadingLevel, textStyleCSS, textEmphasisCSS } from './document-style.ts';
 
 type Attribute = Record<string, unknown>;
 
@@ -82,22 +84,33 @@ const block = (name: string, tag: string, extra: Attribute = {}, parseHTML: TagP
     ...(name === 'codeBlock' ? { marks: '' } : {}),
     atom: isLeaf,
     draggable: isDraggable,
+    ...(isLeaf ? { renderText: ({ node }: { node: import('@tiptap/pm/model').Node }) => String(
+      name === 'image' ? node.attrs.alt ?? '' : name === 'media' ? node.attrs.caption ?? '' : node.attrs.fallback ?? '',
+    ) } : {}),
     addAttributes: () => ({ ...common, ...extra }),
     parseHTML: () => parseHTML.map((rule) => ({ ...rule, preserveWhitespace: 'full' })),
     renderHTML: ({ node, HTMLAttributes }) => {
-      const outputTag = name === 'heading' ? `h${node.attrs.level}` : tag;
+      const outputTag = name === 'heading' ? `h${safeHeadingLevel(node.attrs.level)}` : tag;
       const attributes = {
         ...HTMLAttributes,
         ...(isDraggable ? { draggable: 'true' } : {}),
         ...(['taskList', 'taskItem'].includes(name) ? { 'data-type': name } : {}),
+        ...(['paragraph', 'heading'].includes(name) && safeAlignment(node.attrs.textAlign) ? { style: `text-align:${safeAlignment(node.attrs.textAlign)}` } : {}),
       };
       if (name === 'table') return ['table', attributes, ['tbody', 0]];
       if (name === 'codeBlock')
-        return ['pre', attributes, ['code', node.attrs.language ? { 'data-language': node.attrs.language } : {}, 0]];
+        return ['pre', attributes, ['code', node.attrs.language != null ? { 'data-language': node.attrs.language, 'data-document-code-language': JSON.stringify(node.attrs.language) } : {}, 0]];
+      if (name === 'image') return ['figure', { ...commonRendered(attributes), ...imageDOMAttributes(node.attrs) }, ['span', {}, node.attrs.alt || 'Image']];
+      if (name === 'media') return ['figure', { ...commonRendered(attributes), ...mediaDOMAttributes(node.attrs) }, ['figcaption', {}, node.attrs.caption || 'Media unavailable']];
+      if (name === 'extensionBlock') return ['div', { ...commonRendered(attributes), ...componentDOMAttributes(node.attrs) }, node.attrs.fallback || 'Embedded component unavailable'];
       return isLeaf ? [outputTag, attributes] : [outputTag, attributes, 0];
     },
   });
 };
+
+function commonRendered(attributes: Attribute): Attribute {
+  return Object.fromEntries(Object.entries(attributes).filter(([name]) => ['data-block-id', 'data-id', 'lang', 'dir', 'draggable'].includes(name)));
+}
 
 const Doc = Node.create({ name: 'doc', topNode: true, content: '(block | footnoteDefinition)+' });
 const Text = Node.create({ name: 'text', group: 'inline' });
@@ -173,7 +186,7 @@ const Ruby = Node.create({
     'ruby',
     mergeAttributes(HTMLAttributes, {
       'data-ruby-position': node.attrs.position,
-      style: `ruby-position: ${node.attrs.position}`,
+      style: ['over', 'under', 'inter-character'].includes(node.attrs.position) ? `ruby-position:${node.attrs.position}` : '',
     }),
     ['span', { 'data-ruby-base': '' }, 0],
     ['rp', {}, '('],
@@ -187,25 +200,23 @@ const InlineExtension = Node.create({
   group: 'inline',
   inline: true,
   atom: true,
+  renderText: ({ node }) => String(node.attrs.fallback ?? ''),
   addAttributes: () => ({
-    id: { default: null },
-    definition: { default: '' },
-    version: { default: '1' },
-    payload: { default: null },
-    fallback: { default: '' },
+    id: { default: null, rendered: false, parseHTML: () => null },
+    definition: { default: '', rendered: false, parseHTML: () => null },
+    version: { default: '1', rendered: false, parseHTML: () => null },
+    payload: { default: null, rendered: false, parseHTML: () => null },
+    fallback: { default: '', rendered: false, parseHTML: () => null },
   }),
   parseHTML: () => [
     {
       tag: 'span[data-document-component]',
-      getAttrs: (element) => {
-        const definition = (element as HTMLElement).getAttribute('data-document-component') ?? '';
-        return definition ? { definition, version: '1', payload: null, fallback: element.textContent ?? '' } : false;
-      },
+      getAttrs: (element) => parseComponentAttributes(element as HTMLElement),
     },
   ],
   renderHTML: ({ node, HTMLAttributes }) => [
     'span',
-    mergeAttributes(HTMLAttributes, { 'data-document-component': node.attrs.definition }),
+    mergeAttributes(HTMLAttributes, componentDOMAttributes(node.attrs)),
     node.attrs.fallback,
   ],
 });
@@ -265,7 +276,7 @@ const FootnoteDefinition = Node.create({
   ],
 });
 
-const mark = (name: string, tag: string, parse = tags(tag)) =>
+const mark = (name: string, tag: string, parse: ParseRule[] = tags(tag)) =>
   Mark.create({
     name,
     parseHTML: () => parse,
@@ -309,16 +320,20 @@ const TextStyle = Mark.create({
     color: { default: null },
     backgroundColor: { default: null },
   }),
-  parseHTML: () => [],
+  parseHTML: () => [{ tag: '[data-document-text-style], [style]', priority: 70, consuming: false,
+    getAttrs: (element) => {
+      const node = element as HTMLElement;
+      const own = parseFormattingData(node, 'text-style');
+      if (own !== undefined) return own;
+      const color = node.style.getPropertyValue('color'), backgroundColor = node.style.getPropertyValue('background-color');
+      return color || backgroundColor ? { color: color || null, backgroundColor: backgroundColor || null } : false;
+    },
+  }],
   renderHTML: ({ mark: current }) => [
     'span',
     {
-      style: [
-        current.attrs.color && `color:${current.attrs.color}`,
-        current.attrs.backgroundColor && `background-color:${current.attrs.backgroundColor}`,
-      ]
-        .filter(Boolean)
-        .join(';'),
+      'data-document-text-style': JSON.stringify(current.attrs),
+      style: textStyleCSS(current.attrs),
     },
     0,
   ],
@@ -334,14 +349,16 @@ const TextEmphasis = Mark.create({
   }),
   parseHTML: () => [
     {
-      tag: 'span[data-text-emphasis]',
+      tag: '[data-document-text-emphasis], span[data-text-emphasis], [style]', priority: 71, consuming: false,
       getAttrs: (element) => {
         const span = element as HTMLElement;
-        const shape = span.dataset.textEmphasis;
+        const own = parseFormattingData(span, 'text-emphasis');
+        if (own !== undefined) return own;
+        const shape = span.dataset.textEmphasis ?? span.style.textEmphasisStyle.split(' ').find((value) => ['dot', 'sesame', 'circle', 'double-circle', 'triangle'].includes(value));
         const fill = span.style.textEmphasisStyle.includes('open') ? 'open' : 'filled';
         const position = span.style.textEmphasisPosition.includes('under') ? 'under' : 'over';
         return ['dot', 'sesame', 'circle', 'double-circle', 'triangle'].includes(shape ?? '')
-          ? { shape, fill, color: null, position }
+          ? { shape, fill, color: span.style.textEmphasisColor || null, position }
           : false;
       },
     },
@@ -350,7 +367,8 @@ const TextEmphasis = Mark.create({
     'span',
     {
       'data-text-emphasis': current.attrs.shape,
-      style: `text-emphasis-style:${current.attrs.fill} ${current.attrs.shape};text-emphasis-position:${current.attrs.position};${current.attrs.color ? `text-emphasis-color:${current.attrs.color}` : ''}`,
+      'data-document-text-emphasis': JSON.stringify(current.attrs),
+      style: textEmphasisCSS(current.attrs),
     },
     0,
   ],
@@ -359,7 +377,7 @@ const TextEmphasis = Mark.create({
 const paragraph = block('paragraph', 'p', { textAlign: { default: null, rendered: false } }, [
   {
     tag: 'p',
-    getAttrs: (element) => commonAttrs(element as HTMLElement),
+    getAttrs: (element) => ({ ...commonAttrs(element as HTMLElement), textAlign: safeAlignment((element as HTMLElement).style.textAlign) ?? null }),
   },
 ]);
 
@@ -372,7 +390,7 @@ const heading = block(
   },
   Array.from({ length: 6 }, (_, index) => ({
     tag: `h${index + 1}`,
-    getAttrs: (element) => ({ ...commonAttrs(element as HTMLElement), level: index + 1 }),
+    getAttrs: (element) => ({ ...commonAttrs(element as HTMLElement), level: index + 1, textAlign: safeAlignment((element as HTMLElement).style.textAlign) ?? null }),
   })),
 );
 
@@ -418,14 +436,17 @@ const taskItem = block(
   },
   [{ tag: 'li[data-type="taskItem"]', getAttrs: (element) => commonAttrs(element as HTMLElement) }],
 );
-const codeBlock = block('codeBlock', 'pre', { language: { default: null, rendered: false } }, [
+const codeBlock = block('codeBlock', 'pre', { language: { default: null, rendered: false, parseHTML: () => null } }, [
   {
     tag: 'pre',
     getAttrs: (element) => {
       const pre = element as HTMLElement;
+      const code = pre.querySelector('code');
+      const language = code ? parseCodeLanguage(code) : undefined;
+      if (language === false) return false;
       return {
         ...commonAttrs(pre),
-        language: pre.querySelector('code')?.getAttribute('data-language') ?? null,
+        language: language === undefined ? code?.getAttribute('data-language') ?? null : language,
       };
     },
   },
@@ -461,11 +482,10 @@ const cellAttrs = {
   align: {
     default: null,
     parseHTML: (element: HTMLElement) => {
-      const align = element.getAttribute('align') ?? element.style.textAlign;
-      return ['left', 'center', 'right', 'justify'].includes(align) ? align : null;
+      return safeAlignment(element.style.textAlign) ?? safeAlignment(element.getAttribute('align')?.trim().toLowerCase()) ?? null;
     },
     renderHTML: (attributes: Attribute) =>
-      attributes.align ? { align: attributes.align, style: `text-align:${attributes.align}` } : {},
+      safeAlignment(attributes.align) ? { align: attributes.align, style: `text-align:${safeAlignment(attributes.align)}` } : {},
   },
 };
 const tableCell = block('tableCell', 'td', cellAttrs);
@@ -474,27 +494,28 @@ const image = block(
   'image',
   'img',
   {
-    src: { default: '' },
+    src: { default: '', parseHTML: (element: HTMLElement) => element.hasAttribute('data-document-image') ? null : element.getAttribute('src') },
     variant: { default: 'original', rendered: false },
-    alt: { default: null },
-    title: { default: null },
+    alt: { default: null, parseHTML: (element: HTMLElement) => element.hasAttribute('data-document-image') ? null : element.getAttribute('alt') },
+    title: { default: null, parseHTML: (element: HTMLElement) => element.hasAttribute('data-document-image') ? null : element.getAttribute('title') },
     width: {
       default: null,
-      parseHTML: (element: HTMLElement) => toPositiveNumber(element.getAttribute('width')),
+      parseHTML: (element: HTMLElement) => element.hasAttribute('data-document-image') ? null : toPositiveNumber(element.getAttribute('width')),
       renderHTML: (attributes: Attribute) => (attributes.width ? { width: attributes.width } : {}),
     },
     height: {
       default: null,
-      parseHTML: (element: HTMLElement) => toPositiveNumber(element.getAttribute('height')),
+      parseHTML: (element: HTMLElement) => element.hasAttribute('data-document-image') ? null : toPositiveNumber(element.getAttribute('height')),
       renderHTML: (attributes: Attribute) => (attributes.height ? { height: attributes.height } : {}),
     },
     conceal: {
       default: false,
-      parseHTML: (element: HTMLElement) => element.getAttribute('data-conceal') === 'true',
+      parseHTML: (element: HTMLElement) => element.hasAttribute('data-document-image') ? null : element.getAttribute('data-conceal') === 'true',
       renderHTML: (attributes: Attribute) => (attributes.conceal ? { 'data-conceal': 'true' } : {}),
     },
   },
   [
+    { tag: 'figure[data-document-image]', getAttrs: (element) => parseImageAttributes(element as HTMLElement) },
     {
       tag: 'img[src]',
       getAttrs: (element) => {
@@ -516,11 +537,12 @@ const media = block(
   'media',
   'figure',
   {
-    src: { default: '' },
-    kind: { default: 'file' },
-    caption: { default: '' },
+    src: { default: '', parseHTML: () => null },
+    kind: { default: 'file', parseHTML: () => null },
+    caption: { default: '', parseHTML: () => null },
   },
   [
+    { tag: 'figure[data-document-media]', getAttrs: (element) => parseMediaAttributes(element as HTMLElement) },
     {
       tag: 'figure[data-media]',
       getAttrs: (element) => {
@@ -543,26 +565,17 @@ const extensionBlock = block(
   'extensionBlock',
   'div',
   {
-    definition: { default: '' },
-    version: { default: '1' },
-    payload: { default: null },
-    fallback: { default: '' },
+    definition: { default: '', rendered: false, parseHTML: () => null },
+    version: { default: '1', rendered: false, parseHTML: () => null },
+    payload: { default: null, rendered: false, parseHTML: () => null },
+    fallback: { default: '', rendered: false, parseHTML: () => null },
   },
   [
     {
       tag: 'div[data-document-component]',
       getAttrs: (element) => {
-        const blockElement = element as HTMLElement;
-        const definition = blockElement.getAttribute('data-document-component') ?? '';
-        return definition
-          ? {
-              ...commonAttrs(blockElement),
-              definition,
-              version: '1',
-              payload: null,
-              fallback: element.textContent ?? '',
-            }
-          : false;
+        const component = parseComponentAttributes(element as HTMLElement);
+        return component ? { ...commonAttrs(element as HTMLElement), ...component } : false;
       },
     },
   ],
@@ -595,10 +608,10 @@ export const documentExtensions: Extensions = [
   InlineExtension,
   FootnoteDefinition,
   FootnoteReference,
-  mark('bold', 'strong'),
-  mark('italic', 'em'),
-  mark('underline', 'u'),
-  mark('strike', 's'),
+  mark('bold', 'strong', [{ tag: 'strong' }, { tag: 'b' }, { style: 'font-weight', getAttrs: (value) => /^(?:bold|bolder|[6-9]00)$/.test(value) ? {} : false }]),
+  mark('italic', 'em', [{ tag: 'em' }, { tag: 'i' }, { style: 'font-style=italic' }]),
+  mark('underline', 'u', [{ tag: 'u' }, { style: 'text-decoration-line', getAttrs: (value) => value.includes('underline') ? {} : false }]),
+  mark('strike', 's', [{ tag: 's' }, { tag: 'del' }, { style: 'text-decoration-line', getAttrs: (value) => value.includes('line-through') ? {} : false }]),
   mark('code', 'code'),
   Mark.create({
     name: 'spoiler',

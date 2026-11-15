@@ -2,6 +2,9 @@
 
 ## ProseMirror Transform
 
+`src/components/editor-native-marks.ts` adapts version 1.12.4's `src/mark.ts` (`removeMark`) collector,
+indexing the previous inline atom's matches while preserving native emitted step order and ranges.
+
 The native sequence evaluator in `src/components/editor-native-mapping.ts` adapts the leaf/recovery semantics of
 `prosemirror-transform` **1.12.4**, `src/map.ts` (`Mapping._map`), from the exact installed dependency source at
 `node_modules/.bun/prosemirror-transform@1.12.4/node_modules/prosemirror-transform/src/map.ts`.

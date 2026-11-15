@@ -250,7 +250,18 @@ export type StudioPresentation = Readonly<{
   /** Bind media and mention presentation to this document's current native admission. */
   editor?: (
     document: ExactDocument,
-  ) => Pick<RichTextEditorProps, 'labels' | 'upload' | 'lookupMention' | 'renderUpload' | 'lang' | 'dir'>;
+  ) => Pick<
+    RichTextEditorProps,
+    | 'labels'
+    | 'upload'
+    | 'lookupMention'
+    | 'renderUpload'
+    | 'renderImage'
+    | 'renderMedia'
+    | 'mediaVisitKey'
+    | 'lang'
+    | 'dir'
+  >;
   reader?: (
     document: ExactDocument,
   ) => Pick<ComponentProps<typeof DocumentBody>, 'renderImage' | 'mentions' | 'labels' | 'locale'>;

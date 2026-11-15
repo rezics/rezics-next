@@ -109,10 +109,11 @@ export function ExactRevisionView({
             document={page.revision.body}
             mentions={page.mentions}
             locale={locale}
-            renderImage={({ mediaId, alt }) => (
+            renderImage={(occurrence) => (
               <NativeDocumentImage
-                image={revisionDocumentImage(page.documentMedia, page.revision, mediaId)}
-                alt={alt}
+                image={revisionDocumentImage(page.documentMedia, page.revision, occurrence.mediaId)}
+                occurrence={occurrence}
+                alt={occurrence.alt}
                 locale={locale}
               />
             )}

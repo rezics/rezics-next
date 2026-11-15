@@ -6,7 +6,9 @@ import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { RichTextEditor } from './rich-text-editor.tsx';
 import type { ImageUploader, UploadedImage, UploadState } from './editor-uploads.ts';
 
-const file = (name = 'landscape.png', type = 'image/png') => new File(['image'], name, { type });
+const png = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAAEUlEQVR4AWN0ypr8f4HfIwYAEqMEEAbZV98AAAAASUVORK5CYII=';
+const file = (name = 'landscape.png', type = 'image/png') =>
+  new File([Uint8Array.from(atob(png), (byte) => byte.charCodeAt(0))], name, { type });
 function demo(profile: 'blocks' | 'text' = 'blocks', delayed = false) {
   const initial = fromPlainText('Before after', profile);
   const latest = { current: initial };
@@ -134,42 +136,43 @@ export const AltText: Story = {
   render: () => <altText.Demo />,
   async play({ canvasElement }) {
     const canvas = await choose(canvasElement, 'Original description');
+    const page = within(canvasElement.ownerDocument.body);
     await canvas.findByRole('img', { name: 'Original description' });
-    await userEvent.click(canvas.getByRole('button', { name: 'Edit alt text' }));
-    const field = canvas.getByRole('textbox', { name: 'Alt text' });
+    await userEvent.click(canvas.getByRole('button', { name: 'Image properties' }));
+    const field = page.getByRole('textbox', { name: 'Alt text' });
     expect(field).toHaveValue('Original description');
     await userEvent.clear(field);
     await userEvent.type(field, 'A ridge above the clouds');
-    await userEvent.click(canvas.getByRole('button', { name: 'Apply' }));
+    await userEvent.click(page.getByRole('button', { name: 'Apply' }));
     await canvas.findByRole('img', { name: 'A ridge above the clouds' });
     await waitFor(() => expect(images(altText.latest.current)[0]?.attrs?.alt).toBe('A ridge above the clouds'));
-    expect(canvas.getByRole('button', { name: 'Edit alt text' })).toHaveFocus();
+    expect(canvas.getByRole('button', { name: 'Image properties' })).toHaveFocus();
 
     await userEvent.keyboard('{Enter}');
-    const reopened = canvas.getByRole('textbox', { name: 'Alt text' });
+    const reopened = page.getByRole('textbox', { name: 'Alt text' });
     expect(reopened).toHaveValue('A ridge above the clouds');
     await userEvent.clear(reopened);
     await userEvent.type(reopened, 'A ridge above the clouds at dawn');
     await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(images(altText.latest.current)[0]?.attrs?.alt).toBe('A ridge above the clouds at dawn'));
-    expect(canvas.getByRole('button', { name: 'Edit alt text' })).toHaveFocus();
+    expect(canvas.getByRole('button', { name: 'Image properties' })).toHaveFocus();
 
     await userEvent.keyboard('{Enter}');
-    const cancelDraft = canvas.getByRole('textbox', { name: 'Alt text' });
+    const cancelDraft = page.getByRole('textbox', { name: 'Alt text' });
     expect(cancelDraft).toHaveValue('A ridge above the clouds at dawn');
     await userEvent.clear(cancelDraft);
     await userEvent.type(cancelDraft, 'Discard this draft');
-    await userEvent.click(canvas.getByRole('button', { name: 'Cancel' }));
-    expect(canvas.getByRole('button', { name: 'Edit alt text' })).toHaveFocus();
+    await userEvent.click(page.getAllByRole('button', { name: 'Cancel' }).at(-1)!);
+    expect(canvas.getByRole('button', { name: 'Image properties' })).toHaveFocus();
     expect(images(altText.latest.current)[0]?.attrs?.alt).toBe('A ridge above the clouds at dawn');
 
     await userEvent.keyboard('{Enter}');
-    const escapeDraft = canvas.getByRole('textbox', { name: 'Alt text' });
+    const escapeDraft = page.getByRole('textbox', { name: 'Alt text' });
     expect(escapeDraft).toHaveValue('A ridge above the clouds at dawn');
     await userEvent.clear(escapeDraft);
     await userEvent.type(escapeDraft, 'Discard with Escape');
     await userEvent.keyboard('{Escape}');
-    expect(canvas.getByRole('button', { name: 'Edit alt text' })).toHaveFocus();
+    expect(canvas.getByRole('button', { name: 'Image properties' })).toHaveFocus();
     expect(images(altText.latest.current)[0]?.attrs?.alt).toBe('A ridge above the clouds at dawn');
 
     await userEvent.keyboard('{Enter}');

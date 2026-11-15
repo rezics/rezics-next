@@ -10,12 +10,16 @@ import {
   useState,
   type ReactNode,
   type Ref,
+  type CSSProperties,
 } from 'react';
 import { DocumentSpoiler } from './document-spoiler.tsx';
 import { Prose } from './prose.tsx';
 import { documentExtensions } from './document-extensions.ts';
 import { safeDocumentUrl } from './document-url.ts';
+import { safeAlignment, safeHeadingLevel } from './document-style.ts';
 import { NativeCheckbox } from '@rezics/ui/native-checkbox';
+import { DocumentImageView, DocumentMediaView, documentImageOccurrence, documentMediaOccurrence, imageOccurrenceKey,
+  type DocumentImageRenderer, type DocumentMediaRenderer } from './document-media.tsx';
 
 export { safeDocumentUrl } from './document-url.ts';
 
@@ -25,15 +29,22 @@ type AuthoredBlockAttributes = {
   'data-block-id'?: string;
   lang?: string;
   dir?: string;
+  style?: CSSProperties;
 };
 
 /** Project only the document's common block fields onto rendered output. */
 function authoredBlockAttributes(node: DocumentNode): AuthoredBlockAttributes {
+  const type: unknown = node.type;
+  const name = typeof type === 'string' ? type : (type as { name?: string } | null)?.name;
   const attrs = node.attrs as { id?: string | null; lang?: string | null; dir?: string | null } | undefined;
   return {
     ...(attrs?.id == null ? {} : { 'data-block-id': attrs.id }),
     ...(attrs?.lang == null ? {} : { lang: attrs.lang }),
     ...(attrs?.dir == null ? {} : { dir: attrs.dir }),
+    ...(['paragraph', 'heading'].includes(name ?? '') && safeAlignment(node.attrs?.textAlign)
+      ? { style: { textAlign: safeAlignment(node.attrs?.textAlign) } }
+      : ['tableCell', 'tableHeader'].includes(name ?? '') && safeAlignment(node.attrs?.align)
+        ? { style: { textAlign: safeAlignment(node.attrs?.align) } } : {}),
   };
 }
 
@@ -62,6 +73,8 @@ export const documentBodyLabels = {
   taskStatus: 'Task status',
   embeddedComponent: 'Embedded component',
   imageUnavailable: 'Image unavailable',
+  mediaUnavailable: 'Media unavailable',
+  revealImage: 'Reveal image',
 } as const;
 
 export type DocumentBodyLabels = {
@@ -72,6 +85,8 @@ export type DocumentBodyLabels = {
   readonly taskStatus?: string;
   readonly embeddedComponent?: string;
   readonly imageUnavailable?: string;
+  readonly mediaUnavailable?: string;
+  readonly revealImage?: string;
 };
 
 export type DocumentMentions = Readonly<Record<string, { handle: string }>>;
@@ -172,7 +187,8 @@ export type DocumentBodyProps = {
   /** Reader-owned key for retiring disclosure state when an equal snapshot changes source or revision. */
   visitKey?: string;
   /** A reader without current native derivative summaries must render explicit unavailability, never guess a URL. */
-  renderImage?: (image: { mediaId: string; alt: string }) => ReactNode;
+  renderImage?: DocumentImageRenderer;
+  renderMedia?: DocumentMediaRenderer;
   /** Optional published-reader ports. Occurrence is zero-based among authored nodes of the same type. */
   renderCodeBlock?: (
     node: DocumentNode,
@@ -192,6 +208,7 @@ export function DocumentBody({
   locale = 'en',
   visitKey,
   renderImage,
+  renderMedia,
   renderCodeBlock,
   renderTable,
   headingAttributes,
@@ -276,7 +293,7 @@ export function DocumentBody({
               heading: ({ node, children }: any) => {
                 const attributes = headingAttributes(node.attrs.id ?? '');
                 return createElement(
-                  `h${node.attrs.level}`,
+                  `h${safeHeadingLevel(node.attrs.level)}`,
                   {
                     ...authoredBlockAttributes(node),
                     draggable: 'true',
@@ -306,30 +323,13 @@ export function DocumentBody({
         footnoteReference: ({ node }: any) => <FootnoteReference node={node} />,
         horizontalRule: ({ node }: any) => <hr {...authoredBlockAttributes(node)} />,
         image: ({ node }: any) => {
-          const id = typeof node.attrs?.src === 'string' ? node.attrs.src : '';
-          if (renderImage)
-            return (
-              <div {...authoredBlockAttributes(node)}>{renderImage({ mediaId: id, alt: node.attrs?.alt ?? '' })}</div>
-            );
-          const alt = node.attrs?.alt ?? '';
-          return (
-            <span
-              className="block rounded-xl bg-muted p-5 text-sm text-muted-foreground"
-              {...authoredBlockAttributes(node)}
-              role="img"
-              aria-label={alt || resolved.imageUnavailable}
-            >
-              {resolved.imageUnavailable}
-              {alt ? ` — ${alt}` : ''}
-            </span>
-          );
+          const image = documentImageOccurrence(node);
+          return <div {...authoredBlockAttributes(node)}><DocumentImageView key={`${visitId}:${imageOccurrenceKey(image)}`}
+            image={image} {...(renderImage ? { renderImage } : {})} unavailable={resolved.imageUnavailable}
+            reveal={resolved.revealImage} /></div>;
         },
-        media: ({ node, children }: any) => (
-          <figure {...authoredBlockAttributes(node)}>
-            {children}
-            <figcaption>{node.attrs?.caption}</figcaption>
-          </figure>
-        ),
+        media: ({ node }: any) => <div {...authoredBlockAttributes(node)}><DocumentMediaView
+          media={documentMediaOccurrence(node)} {...(renderMedia ? { renderMedia } : {})} unavailable={resolved.mediaUnavailable} /></div>,
         taskItem: ({ node, children }: any) => (
           <li {...authoredBlockAttributes(node)}>
             <NativeCheckbox checked={node.attrs?.checked ?? false} disabled aria-label={resolved.taskStatus} />
@@ -344,7 +344,7 @@ export function DocumentBody({
           }
           const defaultContent = (
             <pre {...authoredBlockAttributes(node)}>
-              <code data-language={node.attrs?.language ?? undefined}>{children}</code>
+              <code data-language={node.attrs?.language ?? undefined} data-document-code-language={node.attrs?.language == null ? undefined : JSON.stringify(node.attrs.language)}>{children}</code>
             </pre>
           );
           return renderCodeBlock
@@ -382,12 +382,12 @@ export function DocumentBody({
         ),
         extensionBlock: ({ node }: any) => (
           <div data-document-component={node.attrs?.definition} {...authoredBlockAttributes(node)}>
-            {node.attrs?.fallback ?? resolved.embeddedComponent}
+            {node.attrs?.fallback || resolved.embeddedComponent}
           </div>
         ),
         extensionInline: ({ node }: any) => (
           <span data-document-component={node.attrs?.definition} {...authoredBlockAttributes(node)}>
-            {node.attrs?.fallback ?? resolved.embeddedComponent}
+            {node.attrs?.fallback || resolved.embeddedComponent}
           </span>
         ),
       },
@@ -444,6 +444,7 @@ export function DocumentBody({
                             locale={locale}
                             visitKey={JSON.stringify([visitId, visitKey, 'footnote', label])}
                             {...(renderImage ? { renderImage } : {})}
+                            {...(renderMedia ? { renderMedia } : {})}
                             {...(renderCodeBlock ? { renderCodeBlock } : {})}
                             {...(renderTable ? { renderTable } : {})}
                           />

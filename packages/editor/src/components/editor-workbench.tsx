@@ -30,6 +30,8 @@ import { EditorFind, type EditorFindHandle } from './editor-find.tsx';
 import { EditorOutline } from './editor-outline.tsx';
 import { BlockActions } from './editor-block-actions.tsx';
 import { DomainTextControls } from './editor-domain-controls.tsx';
+import { AuthorFormattingControls } from './editor-formatting-controls.tsx';
+import { EditorMediaControls } from './editor-image.tsx';
 import { EditorPreferencesPanel, type EditorPreferencesPanelProps } from './editor-preferences.tsx';
 import type { EditorBehaviorAction } from './editor-behavior-actions.ts';
 import { ActionButton } from './editor-upstream/reactjs-tiptap-editor/action-button.tsx';
@@ -102,8 +104,15 @@ export function EditorWorkbench({
   const outlineOpen = outlineOverride ?? resolvedPreferences.outline;
   const [domainActions, setDomainActions] = useState<readonly EditorBehaviorAction[]>([]);
   const [blockActions, setBlockActions] = useState<readonly EditorBehaviorAction[]>([]);
+  const [formattingActions, setFormattingActions] = useState<readonly EditorBehaviorAction[]>([]);
+  const [mediaActions, setMediaActions] = useState<readonly EditorBehaviorAction[]>([]);
   const acceptDomainActions = useCallback((actions: readonly EditorBehaviorAction[]) => setDomainActions(actions), []);
   const acceptBlockActions = useCallback((actions: readonly EditorBehaviorAction[]) => setBlockActions(actions), []);
+  const acceptFormattingActions = useCallback(
+    (actions: readonly EditorBehaviorAction[]) => setFormattingActions(actions),
+    [],
+  );
+  const acceptMediaActions = useCallback((actions: readonly EditorBehaviorAction[]) => setMediaActions(actions), []);
   const find = useRef<EditorFindHandle>(null);
   const state = useCommandState(editor);
   const tableAvailability = useEditorState({
@@ -152,6 +161,8 @@ export function EditorWorkbench({
       ...tables,
       ...domainActions,
       ...blockActions,
+      ...formattingActions,
+      ...mediaActions,
       { id: 'find', label: text.find, run: () => setFindOpen(true) },
       {
         id: 'replace',
@@ -198,6 +209,8 @@ export function EditorWorkbench({
     onTable,
     domainActions,
     blockActions,
+    formattingActions,
+    mediaActions,
     text,
     resolvedPreferences.keyboardBindings,
   ]);
@@ -262,7 +275,7 @@ export function EditorWorkbench({
   return (
     <div
       data-slot="editor-workbench"
-      className="mb-3 flex min-w-0 flex-col gap-3"
+      className="mb-3 flex min-w-0 flex-col gap-1 md:gap-3"
       onKeyDown={(event) => {
         // These inputs can be nested in a publish form. Native composition still owns its Enter.
         if (
@@ -276,63 +289,94 @@ export function EditorWorkbench({
           event.preventDefault();
       }}
     >
-      <div className="flex flex-wrap items-center gap-1" role="group" aria-label={text.commandPalette}>
+      <div
+        className="flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto overscroll-x-contain py-1 md:flex-wrap"
+        role="group"
+        aria-label={text.commandPalette}
+      >
         {preset !== 'compact' ? (
           <Button
             type="button"
             variant="ghost"
+            className="size-11 shrink-0 p-0 md:w-auto md:px-3"
+            aria-label={text.find}
+            title={text.find}
             onClick={() => {
               if (isCurrent()) setFindOpen((open) => !open);
             }}
             aria-expanded={findOpen}
           >
             <Search data-icon="inline-start" />
-            {text.find}
+            <span className="hidden md:inline">{text.find}</span>
           </Button>
         ) : null}
         <Button
           type="button"
           variant="ghost"
+          className="size-11 shrink-0 p-0 md:w-auto md:px-3"
+          aria-label={text.commandPalette}
+          title={text.commandPalette}
           onClick={() => {
             if (isCurrent()) setPaletteOpen(true);
           }}
         >
           <CommandIcon data-icon="inline-start" />
-          {text.commandPalette}
+          <span className="hidden md:inline">{text.commandPalette}</span>
         </Button>
         {preset !== 'compact' ? (
           <Button
             type="button"
             variant="ghost"
+            className="size-11 shrink-0 p-0 md:w-auto md:px-3"
+            aria-label={text.outline}
+            title={text.outline}
             onClick={() => {
               if (isCurrent()) setOutlineOverride(!outlineOpen);
             }}
             aria-expanded={outlineOpen}
           >
             <ListTree data-icon="inline-start" />
-            {text.outline}
+            <span className="hidden md:inline">{text.outline}</span>
           </Button>
         ) : null}
         <Button
           type="button"
           variant="ghost"
+          className="size-11 shrink-0 p-0 md:w-auto md:px-3"
+          aria-label={text.editorSettings}
+          title={text.editorSettings}
           onClick={() => {
             if (isCurrent()) setSettingsOpen(true);
           }}
         >
           <Settings2 data-icon="inline-start" />
-          {text.editorSettings}
+          <span className="hidden md:inline">{text.editorSettings}</span>
         </Button>
-        <div hidden={toolbarHidden || preset === 'compact'}>
+        <div className="max-md:hidden" hidden={toolbarHidden || preset === 'compact'}>
           <DomainTextControls editor={editor} labels={labels} isCurrent={isCurrent} onCommands={acceptDomainActions} />
         </div>
-        <div hidden={toolbarHidden || preset === 'compact'}>
+        <div className="max-md:hidden" hidden={toolbarHidden || preset === 'compact'}>
           <BlockActions editor={editor} labels={labels} isCurrent={isCurrent} onCommands={acceptBlockActions} />
+        </div>
+        <div className="max-md:hidden" hidden={toolbarHidden || preset === 'compact'}>
+          <AuthorFormattingControls
+            editor={editor}
+            labels={labels}
+            isCurrent={isCurrent}
+            onCommands={acceptFormattingActions}
+          />
+        </div>
+        <div className="max-md:hidden">
+          <EditorMediaControls editor={editor} labels={labels} isCurrent={isCurrent} onCommands={acceptMediaActions} />
         </div>
       </div>
       {pinned.length && !toolbarHidden ? (
         <TooltipProvider>
-          <div role="toolbar" aria-label={text.pinnedCommands} className="flex flex-wrap gap-1">
+          <div
+            role="toolbar"
+            aria-label={text.pinnedCommands}
+            className="flex min-w-0 flex-nowrap gap-1 overflow-x-auto overscroll-x-contain md:flex-wrap"
+          >
             {pinned.map((command) => (
               <ActionButton
                 key={command.id}

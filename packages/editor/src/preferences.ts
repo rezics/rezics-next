@@ -4,6 +4,9 @@ export const editorCommandIds = [
   'heading1',
   'heading2',
   'heading3',
+  'heading4',
+  'heading5',
+  'heading6',
   'bulletList',
   'orderedList',
   'taskList',
@@ -60,7 +63,57 @@ export const editorCommandIds = [
   'findPrevious',
   'replace',
   'commandPalette',
+  'textStyle',
+  'textEmphasis',
+  'codeLanguage',
+  'alignLeft',
+  'alignCenter',
+  'alignRight',
+  'alignJustify',
+  'alignDefault',
+  'imageProperties',
+  'mediaProperties',
 ] as const;
+export const editorPreferenceLimits = Object.freeze({
+  commands: editorCommandIds.length,
+  chordLength: 80,
+  storageBytes: 16_384,
+});
+function jsonbTextBytes(value: unknown): number {
+  const bytes = (text: string) => new TextEncoder().encode(text).byteLength;
+  if (Array.isArray(value))
+    return 2 + value.reduce((sum, entry) => sum + jsonbTextBytes(entry), 0) + Math.max(0, value.length - 1) * 2;
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value);
+    return (
+      2 +
+      entries.reduce((sum, [key, entry]) => sum + bytes(JSON.stringify(key)) + 2 + jsonbTextBytes(entry), 0) +
+      Math.max(0, entries.length - 1) * 2
+    );
+  }
+  return bytes(JSON.stringify(value));
+}
+/** PostgreSQL JSONB adds spaces after separators; valid font units take at most3 UTF8 bytes each.
+ * The longest canonical chord uses all four explicit modifiers and ArrowRight (no escaped key).
+ * Repeating that chord overestimates a valid unique binding map, so this remains an upper bound.
+ */
+export const editorPreferenceJSONBUpperBytes = jsonbTextBytes({
+  typeface: 'custom',
+  customFont: '漢'.repeat(128),
+  textSize: 32,
+  lineSpacing: 1.0000000000000002,
+  writingWidth: 120,
+  toolbar: 'floating',
+  outline: false,
+  markdownShortcuts: false,
+  spellcheck: false,
+  pasteMode: 'plain',
+  autoLink: false,
+  pinnedCommands: editorCommandIds,
+  hiddenCommands: editorCommandIds,
+  commandOrder: editorCommandIds,
+  keyboardBindings: Object.fromEntries(editorCommandIds.map((id) => [id, 'Ctrl-Meta-Alt-Shift-ArrowRight'])),
+});
 export type EditorPreferenceCommand = (typeof editorCommandIds)[number];
 export type EditorTypeface = 'sans' | 'serif' | 'mono' | 'custom';
 export type EditorToolbarMode = 'auto' | 'fixed' | 'floating' | 'hidden';
@@ -141,7 +194,21 @@ const bounded = (value: unknown, minimum: number, maximum: number, integer = fal
   value <= maximum &&
   (!integer || Number.isInteger(value));
 const commandArray = (value: unknown) =>
-  Array.isArray(value) && value.length <= 64 && value.every(command) && new Set(value).size === value.length;
+  Array.isArray(value) &&
+  value.length <= editorPreferenceLimits.commands &&
+  value.every(command) &&
+  new Set(value).size === value.length;
+
+function wellFormedFont(value: string): boolean {
+  for (let index = 0; index < value.length; index++) {
+    const unit = value.charCodeAt(index);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const low = value.charCodeAt(++index);
+      if (!(low >= 0xdc00 && low <= 0xdfff)) return false;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) return false;
+  }
+  return true;
+}
 
 /** JSON object order is immaterial; command array order and explicit sparse overrides are meaningful. */
 export function editorPreferencesEqual(left: unknown, right: unknown): boolean {
@@ -166,7 +233,7 @@ export function editorPreferencesEqual(left: unknown, right: unknown): boolean {
 
 /** A canonical, platform-independent chord. Plain text and native editing keys cannot be rebound. */
 export function normalizeEditorShortcut(value: string): string | undefined {
-  if (!value || value.length > 80) return undefined;
+  if (!value || value.length > editorPreferenceLimits.chordLength) return undefined;
   const parts = value.trim().split('-');
   const key = parts.pop();
   if (
@@ -239,7 +306,12 @@ function validField(key: string, value: unknown, patch: boolean): boolean {
     case 'typeface':
       return ['sans', 'serif', 'mono', 'custom'].includes(value as string);
     case 'customFont':
-      return typeof value === 'string' && value.length <= 128 && !/[\u0000-\u001f\u007f;{}<>]/.test(value);
+      return (
+        typeof value === 'string' &&
+        value.length <= 128 &&
+        wellFormedFont(value) &&
+        !/[\u0000-\u001f\u007f;{}<>]/.test(value)
+      );
     case 'textSize':
       return bounded(value, 12, 32, true);
     case 'lineSpacing':
@@ -262,7 +334,7 @@ function validField(key: string, value: unknown, patch: boolean): boolean {
     case 'keyboardBindings':
       return (
         record(value) &&
-        Object.keys(value).length <= 64 &&
+        Object.keys(value).length <= editorPreferenceLimits.commands &&
         Object.entries(value).every(
           ([id, chord]) =>
             command(id) &&

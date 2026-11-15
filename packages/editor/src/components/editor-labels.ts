@@ -4,6 +4,8 @@ import {
   type ProductControlLabels,
 } from './editor-upstream/reactjs-tiptap-editor/control-labels.ts';
 import { behaviorControlLabels, type BehaviorControlLabels } from './editor-behavior-labels.ts';
+import { formattingControlLabels, type FormattingControlLabels } from './editor-formatting-labels.ts';
+import { editorMediaLabels, type EditorMediaLabels } from './editor-media-labels.ts';
 
 /** English defaults for the editor's controls and upload announcements. */
 const baseEditorLabels = {
@@ -61,11 +63,17 @@ export const richTextEditorLabels = {
   ...tableControlLabels,
   ...productControlLabels,
   ...behaviorControlLabels,
+  ...formattingControlLabels,
+  ...editorMediaLabels,
 };
-export type EditorCommandLabel = keyof typeof baseEditorLabels | keyof BehaviorControlLabels;
+export type EditorCommandLabel =
+  | keyof typeof baseEditorLabels
+  | keyof BehaviorControlLabels
+  | keyof FormattingControlLabels
+  | keyof EditorMediaLabels;
 // New control labels remain optional for existing callers that supply a complete original label map.
 export type RichTextEditorLabels = { readonly [K in keyof typeof baseEditorLabels]: string } & Partial<
-  TableControlLabels & ProductControlLabels & BehaviorControlLabels
+  TableControlLabels & ProductControlLabels & BehaviorControlLabels & FormattingControlLabels & EditorMediaLabels
 >;
 
 export function editorCommandLabel(labels: RichTextEditorLabels, key: EditorCommandLabel): string {

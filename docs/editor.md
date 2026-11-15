@@ -35,6 +35,10 @@ required to represent an admitted document. All commands derive availability fro
 capabilities. Fixed, floating and touch toolbars, slash insertion, block actions, command search and shortcuts use
 one command vocabulary and operate on the same editor, selection and undo history.
 
+On narrow screens, global actions occupy one compact row and the fixed formatting tools scroll horizontally.
+Advanced annotation, block and formatting actions remain available through command search without stacking
+additional control rows above the writing surface. Accessible names and touch targets remain intact.
+
 Supported authoring includes headings, lists/tasks, quotations, code, links, emphasis/underline/spoilers, language
 and direction, ruby, footnotes, and admitted Blocks tables/media/components. Existing opaque components preserve
 their complete payload and fallback when their implementation is unavailable. Unsupported input is reported

@@ -21,6 +21,9 @@ import { documentExtensionsForProfile } from './document-extensions.ts';
 import { EditorTables } from './editor-table-commands.ts';
 import { EditorLists, withTaskItemView } from './editor-list-behavior.ts';
 import { Prose } from './prose.tsx';
+import { sanitizeFormattingStyle } from './document-style.ts';
+import { StructuredDocumentClipboard } from './editor-clipboard.ts';
+import { normalizeMediaClipboardDOM } from './document-component-data.ts';
 
 function textLength(doc: Editor['state']['doc']): number {
   return Array.from(doc.textBetween(0, doc.content.size, '\n', ' ')).length;
@@ -59,7 +62,7 @@ const EditorInput = Extension.create<Record<string, never>, EditorInputSettings>
                 ? '\n'
                 : node.type.name === 'footnoteReference'
                   ? `[^${node.attrs.label}]`
-                  : (node.attrs.fallback ?? node.attrs.alt ?? ''),
+                  : (node.attrs.fallback ?? node.attrs.alt ?? node.attrs.caption ?? ''),
             );
             if (!text) return Slice.empty;
             if (!text.includes('\n')) return new Slice(Fragment.from(editor.schema.text(text)), 0, 0);
@@ -197,7 +200,7 @@ export function editorExtensions(
     maxLength?: number;
     readOnly?: boolean;
     taskStatus?: () => string;
-    onInvalidContent?: () => void;
+    onInvalidContent?: (reason?: 'structuredPaste') => void;
   } = {},
 ): Extensions {
   const profileNodeNames = profile === 'text' ? textNodeNames : blocksNodeNames;
@@ -206,6 +209,8 @@ export function editorExtensions(
   return [
     ...withTaskItemView(documentExtensionsForProfile(profile), options.taskStatus ?? (() => 'Task status')),
     EditorInput,
+    StructuredDocumentClipboard.configure({ profile, plainText: (editor) => editorInputSettings(editor).paste === 'plain',
+      ...(options.onInvalidContent ? { onInvalidContent: options.onInvalidContent } : {}) }),
     ...(options.readOnly ? [] : [EditorLists]),
     ...(profile === 'blocks' && !options.readOnly
       ? [EditorTables.configure(options.onInvalidContent ? { onInvalidContent: options.onInvalidContent } : {})]
@@ -223,15 +228,19 @@ export function editorExtensions(
 
 /** Remove executable and non-document markup before ProseMirror parses pasted HTML. */
 export function sanitizePastedHTML(html: string): string {
-  const parsed = new DOMParser().parseFromString(html, 'text/html');
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  const parsed = template.content;
   parsed
     .querySelectorAll('script,style,iframe,object,embed,svg,math,form,template,base,meta,link')
     .forEach((node) => node.remove());
+  normalizeMediaClipboardDOM(parsed);
 
-  for (const element of parsed.body.querySelectorAll('*')) {
+  for (const element of parsed.querySelectorAll('*')) {
+    if (element.hasAttribute('style')) sanitizeFormattingStyle(element as HTMLElement);
     for (const attribute of Array.from(element.attributes)) {
       const name = attribute.name.toLowerCase();
-      if (name.startsWith('on') || ['style', 'srcdoc', 'formaction', 'action', 'srcset', 'xlink:href'].includes(name)) {
+      if (name.startsWith('on') || ['srcdoc', 'formaction', 'action', 'srcset', 'xlink:href'].includes(name)) {
         element.removeAttribute(attribute.name);
       } else if (name === 'href' && !safeDocumentUrl(attribute.value)) {
         element.removeAttribute(attribute.name);
@@ -241,7 +250,7 @@ export function sanitizePastedHTML(html: string): string {
     }
   }
 
-  return parsed.body.innerHTML;
+  return template.innerHTML;
 }
 
 export interface EditorSurfaceProps {

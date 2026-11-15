@@ -2,12 +2,14 @@ import { DocumentBody as SharedDocumentBody } from '@rezics/editor/reader';
 import type { ComponentProps } from 'react';
 import { m } from './paraglide/messages.js';
 import { getLocale } from './paraglide/runtime.js';
+import { localizedMediaLabels } from './editor/media-labels';
 
 export type { DocumentMentions } from '@rezics/editor/reader';
 
 /** Supply Web's reader locale and messages while retaining the caller's image renderer. */
 export function DocumentBody({ locale = getLocale(), labels, ...props }: ComponentProps<typeof SharedDocumentBody>) {
   const options = { locale: locale as never };
+  const media = localizedMediaLabels(locale);
   return (
     <SharedDocumentBody
       {...props}
@@ -17,6 +19,8 @@ export function DocumentBody({ locale = getLocale(), labels, ...props }: Compone
         taskStatus: m.document_task_status({}, options),
         embeddedComponent: m.document_embedded_component({}, options),
         imageUnavailable: m.content_edition_image_unavailable({}, options),
+        mediaUnavailable: media.mediaUnavailable,
+        revealImage: media.revealImage,
         goToFootnote: m.document_go_to_footnote({}, options),
         footnote: m.document_footnote({}, options),
         footnotes: m.document_footnotes({}, options),

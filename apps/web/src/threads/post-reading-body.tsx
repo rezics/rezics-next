@@ -214,8 +214,14 @@ export function ThreadPostReadingBody({
       document={post.body}
       mentions={mentions}
       locale={locale}
-      renderImage={({ mediaId, alt }) => (
-        <NativeDocumentImage image={images.get(mediaId) ?? null} mediaId={mediaId} alt={alt} locale={locale} />
+      renderImage={(occurrence) => (
+        <NativeDocumentImage
+          image={images.get(occurrence.mediaId) ?? null}
+          mediaId={occurrence.mediaId}
+          occurrence={occurrence}
+          alt={occurrence.alt}
+          locale={locale}
+        />
       )}
     />
   );
