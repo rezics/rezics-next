@@ -38,10 +38,16 @@ function noticeText(notice: VndbNotice): string | null {
 function download(xml: string) {
   const url = URL.createObjectURL(new Blob([xml], { type: 'application/xml' }));
   const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = 'vndb-export.xml';
-  anchor.click();
-  URL.revokeObjectURL(url);
+  try {
+    anchor.href = url;
+    anchor.download = 'vndb-export.xml';
+    document.body.appendChild(anchor);
+    anchor.click();
+  } finally {
+    anchor.remove();
+    // Let the browser consume the download before releasing this short-lived, local URL.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 }
 
 export function PersonalVndbImportPage({
