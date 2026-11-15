@@ -701,26 +701,46 @@ export function createSearchGenerationPublication(
     );
     return row?.partition ?? 4096;
   }
-  async function rememberEmptyHomes(job: Job, fromExclusive: number, toExclusive: number, client: PoolClient) {
+  async function rememberEmptyHomes(
+    job: Job,
+    fromExclusive: number,
+    toExclusive: number,
+    client: PoolClient,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+  ) {
+    if (registry || job.family !== 'subjects') throw new Pending('registration_missing');
     if (toExclusive <= fromExclusive + 1) return;
+    check(context);
     const expected = toExclusive - fromExclusive - 1;
-    const owners = await client.query<{ write_state: string }>(
-      `SELECT write_state FROM core.partition WHERE partition_no>$1 AND partition_no<$2 ORDER BY partition_no`,
-      [fromExclusive, toExclusive],
-    );
-    if (owners.rows.length !== expected) throw new Pending('routing_incomplete');
-    if (owners.rows.some((row) => row.write_state !== 'active')) throw new Pending('source_pending');
+    // One statement snapshot: epoch/position, active owner, and visible=0 emptiness.
+    // Occupied, moved, or missing homes drop the count; insert nothing and stay pending.
     const inserted = await client.query(
-      `INSERT INTO search.generation_publication_home
-        (partition_no,job,epoch,position,account_revision,claim_revision,pass)
-       SELECT partition_no,$1,epoch,position,0,0,$2 FROM core.partition
-       WHERE partition_no>$3 AND partition_no<$4
+      `WITH homes AS (
+         SELECT generate_series($3::integer + 1, $4::integer - 1) AS partition_no
+       ),
+       observed AS (
+         SELECT p.partition_no, p.epoch, p.position, p.write_state, coalesce(s.visible, 0) AS visible
+         FROM homes h
+         JOIN core.partition p ON p.partition_no = h.partition_no
+         LEFT JOIN semantic.partition_subjects s ON s.partition_no = p.partition_no
+       ),
+       certified AS (
+         SELECT partition_no, epoch, position
+         FROM observed
+         WHERE (SELECT COUNT(*) FROM observed) = $5::integer
+           AND (SELECT BOOL_AND(write_state = 'active' AND visible = 0) FROM observed)
+       )
+       INSERT INTO search.generation_publication_home
+         (partition_no,job,epoch,position,account_revision,claim_revision,pass)
+       SELECT partition_no,$1,epoch,position,0,0,$2 FROM certified
        ON CONFLICT(partition_no,job) DO UPDATE SET epoch=EXCLUDED.epoch,position=EXCLUDED.position,
          account_revision=EXCLUDED.account_revision,claim_revision=EXCLUDED.claim_revision,pass=EXCLUDED.pass
        RETURNING partition_no`,
-      [job.job, job.pass, fromExclusive, toExclusive],
+      [job.job, job.pass, fromExclusive, toExclusive, expected],
     );
-    if (inserted.rowCount !== expected) throw new Pending('routing_incomplete');
+    meter.frontierWrites += inserted.rowCount ?? 0;
+    if (inserted.rowCount !== expected) throw new Pending('source_pending');
   }
   async function remember(job: Job, before: Home, client: PoolClient) {
     const {
@@ -904,7 +924,7 @@ export function createSearchGenerationPublication(
             after === null
           ) {
             const nextHome = await nextVisibleSubjectHome(job.home, context);
-            await rememberEmptyHomes(job, job.home, nextHome, client);
+            await rememberEmptyHomes(job, job.home, nextHome, client, context, meter);
             job.after_route = null;
             job.after_id = null;
             job.home = nextHome;
