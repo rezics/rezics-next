@@ -1820,7 +1820,13 @@ test('a merged canonical target invalidates the reviewed observation identity', 
     }),
   );
   const merged = await send(identityOwner, 'POST', '/v1/subjects:merge', { subjects: [survivor, redirected] });
-  expect(merged.status).toBe(200);
+  expect([200, 202]).toContain(merged.status);
+  if (merged.status === 202) {
+    const admission = (await merged.json()) as { operation?: { id?: string } };
+    if (typeof admission.operation?.id !== 'string') throw new Error('Native merge admission has no operation');
+    await f.drainIdentityMerge(admission.operation.id);
+  }
+  for (const id of [survivor, redirected]) await f.awaitCurrentIdentity(id);
   expect(await merged.json()).toMatchObject({ survivor, redirected });
   const applied = await json(await send(identityOwner, 'POST', `${mergePath}/${id}/apply`, selected([row.ordinal])));
   expect(applied.applied).toMatchObject([{ status: 'stale' }]);
