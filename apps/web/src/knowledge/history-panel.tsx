@@ -21,6 +21,7 @@ import {
   type KnowledgeHistoryOperations,
   type KnowledgeHistoryPage,
   type KnowledgeHistoryPair,
+  type KnowledgeHistoryRevision,
 } from './history';
 import { KnowledgeHistoryComparisonView } from './history-comparison';
 import {
@@ -47,6 +48,8 @@ export function KnowledgeHistoryPanel({
   locale,
   isCurrent,
   onRetire,
+  onRestore,
+  workingRevisionId,
 }: {
   address: KnowledgePrivateAddress;
   binding: KnowledgeHistoryBinding;
@@ -58,6 +61,8 @@ export function KnowledgeHistoryPanel({
   locale: string;
   isCurrent: () => boolean;
   onRetire: (state: 'retired' | 'denied' | 'signed-out') => void;
+  onRestore?: ((revision: KnowledgeHistoryRevision) => boolean) | undefined;
+  workingRevisionId?: string;
 }) {
   const options = { locale: locale as never };
   const id = useId();
@@ -254,8 +259,7 @@ export function KnowledgeHistoryPanel({
     timeStyle: 'long',
     timeZone: 'UTC',
   });
-  const formatHistoryDate = (createdAt: string) =>
-    historyDateFormatter.format(new Date(createdAt));
+  const formatHistoryDate = (createdAt: string) => historyDateFormatter.format(new Date(createdAt));
   const leftSelectId = `${id}-history-left`;
   const rightSelectId = `${id}-history-right`;
   const historyIntroId = `${id}-history-intro`;
@@ -477,17 +481,12 @@ export function KnowledgeHistoryPanel({
                   !rightRevisionId ||
                   leftRevisionId === rightRevisionId
                 }
-                onClick={(event) =>
-                  void compare({ leftRevisionId, rightRevisionId }, compareTrigger.current, event)
-                }
+                onClick={(event) => void compare({ leftRevisionId, rightRevisionId }, compareTrigger.current, event)}
               >
                 {m.knowledge_history_compare({}, options)}
               </Button>
               {!showComparison && compareAdmission === 'available' ? (
-                <p
-                  id={compareHelpId}
-                  className="min-w-0 flex-1 basis-48 text-sm leading-relaxed text-muted-foreground"
-                >
+                <p id={compareHelpId} className="min-w-0 flex-1 basis-48 text-sm leading-relaxed text-muted-foreground">
                   {m.knowledge_history_difference_help({}, options)}
                 </p>
               ) : pair && !pending && compareState !== 'ready' && compareAdmission === 'available' ? (
@@ -505,7 +504,19 @@ export function KnowledgeHistoryPanel({
           </section>
           {showComparison ? (
             comparison ? (
-              <KnowledgeHistoryComparisonView comparison={comparison} draft={draft} locale={locale} />
+              <KnowledgeHistoryComparisonView
+                comparison={comparison}
+                draft={draft}
+                locale={locale}
+                {...(workingRevisionId ? { workingRevisionId } : {})}
+                onRestore={
+                  onRestore && !conflictPair
+                    ? (revision, event) => {
+                        if (current(sequence.current) && onRestore(revision)) close(event);
+                      }
+                    : undefined
+                }
+              />
             ) : null
           ) : null}
           <div hidden={showComparison} className="min-w-0 space-y-5">
@@ -562,13 +573,7 @@ export function KnowledgeHistoryPanel({
                   type="button"
                   variant="outline"
                   className={control}
-                  disabled={
-                    pending ||
-                    admission !== 'available' ||
-                    !operations ||
-                    !page ||
-                    !navigation.previous.length
-                  }
+                  disabled={pending || admission !== 'available' || !operations || !page || !navigation.previous.length}
                   onClick={(event) => void load(previousKnowledgeHistoryPage(navigation), event)}
                 >
                   {m.knowledge_history_previous({}, options)}

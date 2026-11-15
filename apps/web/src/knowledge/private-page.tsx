@@ -6,7 +6,7 @@ import { KnowledgeDetails, KnowledgeValue, knowledgeControl, knowledgeLink } fro
 import { KnowledgeWorkspaceNavigation } from './workspace-navigation';
 import { KnowledgeReferenceAuthoring } from './reference-authoring';
 import { KnowledgeReferenceBody } from './reference-view';
-import { referenceIssues, type KnowledgeReference } from './reference-model';
+import { admitReferenceManifest, referenceIssues, type KnowledgeReference } from './reference-model';
 import type { ReferenceInspector } from './reference-read';
 import { KnowledgeTransferCaller } from './transfer-caller';
 import { useKnowledgeLifecycle } from './lifecycle-controller';
@@ -97,7 +97,7 @@ import type { KnowledgePublicationIntent, KnowledgePublicationResult } from './p
 import { KnowledgeNavigationReturnLink } from './navigation-return-link';
 import { knowledgeNavigationBinding } from './navigation-return';
 import { KnowledgeHistoryPanel } from './history-panel';
-import type { KnowledgeHistoryOperations } from './history';
+import type { KnowledgeHistoryOperations, KnowledgeHistoryRevision } from './history';
 
 const controlClass = knowledgeControl;
 const inputClass = 'min-w-0 max-w-full text-foreground';
@@ -654,6 +654,7 @@ function PrivateKnowledgeEditor({
   const [acknowledgedDraft, setAcknowledgedDraft] = useState<DocumentDraft | null>(null);
   const [readbackState, setReadbackState] = useState('idle');
   const [conflictReadFailure, setConflictReadFailure] = useState<string | null>(null);
+  const [versionRestored, setVersionRestored] = useState(false);
   const [reviewHead, setReviewHead] = useState<KnowledgePrivateHead | null>(null);
   const [requiresHeadReview, setRequiresHeadReview] = useState(false);
   const [retired, setRetired] = useState(false);
@@ -956,13 +957,14 @@ function PrivateKnowledgeEditor({
           }
         }
       } else {
-        if (result.state === 'retired' || result.state === 'signed-out' || result.state === 'denied') {
-          retire(result.state);
+        const state = result.state === 'ready' ? 'retired' : result.state;
+        if (state === 'retired' || state === 'signed-out' || state === 'denied') {
+          retire(state);
           return;
         }
-        if (purpose === 'initial' || result.state === 'not-found') setReadState(result.state);
-        else if (purpose === 'conflict') setConflictReadFailure(result.state);
-        else setReadbackState(result.state);
+        if (purpose === 'initial' || state === 'not-found') setReadState(state);
+        else if (purpose === 'conflict') setConflictReadFailure(state);
+        else setReadbackState(state);
       }
     } catch {
       if (active.current && readSequence.current === sequence) {
@@ -1144,9 +1146,9 @@ function PrivateKnowledgeEditor({
         setDraft(copyDraft(result.head));
         setReadState('ready');
       } else {
-        if (result.state === 'retired' || result.state === 'signed-out' || result.state === 'denied')
-          retire(result.state);
-        setReadState(result.state);
+        const state = result.state === 'ready' ? 'retired' : result.state;
+        if (state === 'retired' || state === 'signed-out' || state === 'denied') retire(state);
+        setReadState(state);
       }
     } catch {
       if (active.current && readSequence.current === sequence) setReadState('unavailable');
@@ -1336,6 +1338,7 @@ function PrivateKnowledgeEditor({
     if (commandInFlight.current || publicationBusy || !active.current || revisionIntentRef.current) return;
     const intent = startRevisionIntent();
     if (!intent) return;
+    setVersionRestored(false);
     setRevisionReceipt(null);
     setAcknowledgedDraft(null);
     setReadbackState('idle');
@@ -1409,6 +1412,7 @@ function PrivateKnowledgeEditor({
   }
 
   function discardDraft() {
+    setVersionRestored(false);
     setEditorPending(false);
     setEditorGeneration((version) => version + 1);
     setNotebookIntent(null);
@@ -1825,6 +1829,40 @@ function PrivateKnowledgeEditor({
   const canReplay = !!revisionIntent && !pending && !publicationBusy && !lifecycle.locked;
   const showRevisionFailure = !['idle', 'pending', 'acknowledged'].includes(revisionState);
   const formLocked = !!revisionIntent || revisionBusy || lifecycle.locked || access.revise !== 'available';
+  const canRestoreVersion =
+    !dirty &&
+    !editorPending &&
+    !formLocked &&
+    !readBusy &&
+    !publicationBusy &&
+    !requiresHeadReview &&
+    (!revisionReceipt || readbackState === 'ready');
+  function restoreVersion(revision: KnowledgeHistoryRevision): boolean {
+    if (
+      !head ||
+      !active.current ||
+      !canRestoreVersion ||
+      editorPendingRef.current ||
+      commandInFlight.current ||
+      !sameDraft(draftRef.current, copyDraft(head)) ||
+      revision.documentId !== head.documentId ||
+      revision.revisionId === head.revisionId
+    )
+      return false;
+    const restored = structuredClone(revision);
+    const references = admitReferenceManifest(restored.body, restored.references);
+    if (references === null) return false;
+    setDraft({
+      title: restored.title,
+      language: restored.language,
+      licence: restored.licence,
+      body: restored.body,
+      references,
+    });
+    setEditorGeneration((version) => version + 1);
+    setVersionRestored(true);
+    return true;
+  }
   return (
     <PrivatePageFrame
       title={head.title}
@@ -1841,9 +1879,11 @@ function PrivateKnowledgeEditor({
                 ? m.knowledge_private_review_before_save({}, options)
                 : editorPending
                   ? m.studio_workspace_snapshot_pending({}, options)
-                  : dirty
-                    ? m.knowledge_workspace_unsaved({}, options)
-                    : m.knowledge_private_current_head({}, options)}
+                  : dirty && versionRestored
+                    ? m.studio_workspace_restored({}, options)
+                    : dirty
+                      ? m.knowledge_workspace_unsaved({}, options)
+                      : m.knowledge_private_current_head({}, options)}
         </p>
       }
       navigation={
@@ -2025,6 +2065,8 @@ function PrivateKnowledgeEditor({
           locale={locale}
           isCurrent={() => active.current}
           onRetire={retire}
+          onRestore={canRestoreVersion ? restoreVersion : undefined}
+          workingRevisionId={head.revisionId}
         />
         <KnowledgeTransferCaller
           source={{

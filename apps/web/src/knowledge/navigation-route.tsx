@@ -1,8 +1,10 @@
 import { useMemo, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { useOperationAdmission } from '../kernel/exposure';
 import { viewerExposureLifetime, viewerExposureQuery } from '../kernel/viewer-exposure';
 import { getLocale } from '../paraglide/runtime.js';
+import { m } from '../paraglide/messages.js';
 import { readerSessionSource } from '../reader/lifetime';
 import { useSession } from '../session/query';
 import { isKnowledgeId } from './private-knowledge';
@@ -20,9 +22,10 @@ import {
 import type { KnowledgeNavigationAddress } from './navigation-read';
 import { knowledgeNavigationBinding } from './navigation-return';
 import { useKnowledgeNavigationReturn } from './navigation-return-link';
+import { knowledgeLink } from './workspace';
 
 /** Public SSR renders preparation only. Account-private operands start after browser session/exposure admission. */
-export function KnowledgeNavigationRoute({ notebookId }: { notebookId?: string }) {
+export function KnowledgeNavigationRoute({ notebookId, subjectId }: { notebookId?: string; subjectId?: string }) {
   const client = useQueryClient();
   const returning = useKnowledgeNavigationReturn();
   const session = useSession();
@@ -34,6 +37,7 @@ export function KnowledgeNavigationRoute({ notebookId }: { notebookId?: string }
   const outline = useOperationAdmission('knowledge_notebook.outline');
   const move = useOperationAdmission('knowledge_notebook.move_placement');
   const history = useOperationAdmission('knowledge_notebook.structure_history');
+  const create = useOperationAdmission('knowledge_notebook.create');
   const admission = notebookId === undefined ? owned : outline;
   const locale = getLocale();
   const viewer = session.state === 'signed-in' ? session.subject : null;
@@ -116,21 +120,39 @@ export function KnowledgeNavigationRoute({ notebookId }: { notebookId?: string }
     [binding, notebookId, move, history],
   );
   const address = useMemo<KnowledgeNavigationAddress>(
-    () => (notebookId === undefined ? { kind: 'owned' } : { kind: 'outline', notebookId, parentPlacementId: null }),
-    [notebookId],
+    () =>
+      notebookId === undefined
+        ? { kind: 'owned', ...(subjectId === undefined ? {} : { subjectId }) }
+        : { kind: 'outline', notebookId, parentPlacementId: null },
+    [notebookId, subjectId],
   );
-  return (
+  const attached = subjectId !== undefined;
+  if (attached && (session.state !== 'signed-in' || !viewer || !isKnowledgeId(subjectId))) return null;
+  const navigation = (
     <KnowledgeNavigationEntry
       address={address}
       locale={locale}
       binding={binding}
       access={access}
       operations={operations}
-      returning={returning}
+      embedded={attached}
+      returning={attached ? undefined : returning}
       retryAccess={() => {
         void client.invalidateQueries({ queryKey: ['session'], exact: true });
         if (exposureKey) void client.invalidateQueries({ queryKey: exposureKey, exact: true });
       }}
     />
+  );
+  if (!attached) return navigation;
+  return (
+    <section className="min-w-0 space-y-3" aria-label={m.knowledge_navigation_heading({}, { locale })}>
+      <h2 className="text-base font-semibold">{m.knowledge_navigation_heading({}, { locale })}</h2>
+      {create === 'available' ? (
+        <Link to="/knowledge/new" search={{ subjectId }} preload={false} className={knowledgeLink}>
+          {m.knowledge_private_create_kind({}, { locale })}
+        </Link>
+      ) : null}
+      {navigation}
+    </section>
   );
 }

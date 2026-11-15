@@ -27,6 +27,7 @@ export type KnowledgeDependencies = ContentCommandDependencies & ContentReadDepe
 export type KnowledgeCommandContext = Readonly<{ idempotencyKey: string; deadline: number; requestId: string }>;
 export type KnowledgeReadContext = Readonly<{ actor: import('../request/access.ts').Actor; deadline: number }>;
 export type KnowledgePageInput = Readonly<{ limit?: number; cursor?: string }>;
+export type KnowledgeOwnedNotebookPageInput = KnowledgePageInput & Readonly<{ subjectId?: string }>;
 export type KnowledgeOutlinePageInput = KnowledgePageInput &
   Readonly<{ parentPlacementId?: string; revisionId?: string }>;
 export type KnowledgeStructureHistoryInput = KnowledgePageInput;

@@ -1,7 +1,8 @@
 import { knowledgeAuthoringImageSelection } from './media';
 import { useKnowledgeImageRenderer } from './media-view';
-import { KnowledgeDetails } from './workspace';
-import { useId, useMemo, useState } from 'react';
+import { KnowledgeDetails, knowledgeControl } from './workspace';
+import { useId, useMemo, useState, type MouseEvent } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
 import type { DocumentSnapshot } from '@rezics/document';
 import { DocumentBody } from '../document-body';
 import { Field, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
@@ -26,10 +27,12 @@ function RevisionMetadata({
   revision,
   side,
   locale,
+  onRestore,
 }: {
   revision: KnowledgeHistoryRevision;
   side: 'left' | 'right';
   locale: string;
+  onRestore?: ((revision: KnowledgeHistoryRevision, event: MouseEvent<HTMLButtonElement>) => void) | undefined;
 }) {
   const options = { locale: locale as never };
   return (
@@ -42,6 +45,16 @@ function RevisionMetadata({
         {' · '}
         {revision.title}
       </h3>
+      {onRestore ? (
+        <Button
+          type="button"
+          variant="outline"
+          className={knowledgeControl}
+          onClick={(event) => onRestore(revision, event)}
+        >
+          {m.studio_revision_copy({}, options)}
+        </Button>
+      ) : null}
       <KnowledgeDetails label={m.knowledge_workspace_details({}, options)}>
         <dl className="min-w-0 space-y-3">
           <Value label={m.knowledge_private_revision({}, options)}>{revision.revisionId}</Value>
@@ -129,10 +142,14 @@ export function KnowledgeHistoryComparisonView({
   comparison,
   draft,
   locale,
+  onRestore,
+  workingRevisionId,
 }: {
   comparison: KnowledgeHistoryComparison;
   draft: DocumentSnapshot | null;
   locale: string;
+  onRestore?: ((revision: KnowledgeHistoryRevision, event: MouseEvent<HTMLButtonElement>) => void) | undefined;
+  workingRevisionId?: string;
 }) {
   const options = { locale: locale as never };
   const viewId = useId();
@@ -176,8 +193,18 @@ export function KnowledgeHistoryComparisonView({
         {m.knowledge_history_difference_help({}, options)}
       </p>
       <div className="grid min-w-0 gap-8 lg:grid-cols-2">
-        <RevisionMetadata revision={comparison.left} side="left" locale={locale} />
-        <RevisionMetadata revision={comparison.right} side="right" locale={locale} />
+        <RevisionMetadata
+          revision={comparison.left}
+          side="left"
+          locale={locale}
+          onRestore={comparison.left.revisionId === workingRevisionId ? undefined : onRestore}
+        />
+        <RevisionMetadata
+          revision={comparison.right}
+          side="right"
+          locale={locale}
+          onRestore={comparison.right.revisionId === workingRevisionId ? undefined : onRestore}
+        />
       </div>
       <FieldSet className="sticky top-0 z-10 min-w-0 border-y border-border bg-background/95 py-2">
         <FieldLegend variant="label">{m.knowledge_history_comparison({}, options)}</FieldLegend>

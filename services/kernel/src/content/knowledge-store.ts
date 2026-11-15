@@ -262,7 +262,30 @@ export async function knowledgeOwnedNotebookPage(
   ownerId: string,
   after: Readonly<{ createdAt: string; notebookId: string }> | null,
   limit: number,
+  subjectId?: string,
 ): Promise<readonly KnowledgeOwnedNotebookRow[]> {
+  if (subjectId !== undefined) {
+    const where = `FROM content.knowledge_notebook
+      WHERE route=$1 AND owner_account_id=$2 AND subject_id=$3 AND NOT account_erased`;
+    const columns = 'notebook_id,owner_account_id,subject_id,title,structure_revision_id,created_at';
+    // The mixed sort directions need two index ranges at a continuation. Each range pays its own limit.
+    const page = after
+      ? `(SELECT ${columns} ${where} AND created_at=$4::timestamptz AND notebook_id>$5::uuid
+           ORDER BY created_at DESC,notebook_id LIMIT $6)
+         UNION ALL
+         (SELECT ${columns} ${where} AND created_at<$4::timestamptz
+           ORDER BY created_at DESC,notebook_id LIMIT $6)`
+      : `SELECT ${columns} ${where} ORDER BY created_at DESC,notebook_id LIMIT $4`;
+    const result = await tx.query<KnowledgeOwnedNotebookRow>(
+      `SELECT page.*,
+         to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_key
+       FROM (${page}) page ORDER BY created_at DESC,notebook_id LIMIT ${after ? '$6' : '$4'}`,
+      after
+        ? [route, ownerId, subjectId, after.createdAt, after.notebookId, limit]
+        : [route, ownerId, subjectId, limit],
+    );
+    return result.rows.map((row) => ({ ...row, created_at: new Date(row.created_at) }));
+  }
   const rows = after
     ? await ownedNotebooksAfter.run(tx, {
         route,
