@@ -1040,8 +1040,8 @@ if (script.includes('/proc/loadavg')) {
   if (existsSync(statusFile) && config.recoveredOutput) {
     const runId = readFileSync(dir + '/' + hostKey + '.run-id', 'utf8');
     process.stderr.write(
-      'remote-check: recovered command output after disconnect run=' + runId + '\n' +
-      config.recoveredOutput + '\nremote-check: end recovered command output run=' + runId + '\n',
+      'remote-check: recovered command output after disconnect run=' + runId + '\\n' +
+      config.recoveredOutput + '\\nremote-check: end recovered command output run=' + runId + '\\n',
     );
     if (config.cleanupError) process.stderr.write(config.cleanupError + '\n');
   }
