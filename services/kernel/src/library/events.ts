@@ -85,6 +85,10 @@ export const LIBRARY_EVENTS = {
   'com.rezics.library.published_log.deleted.v1': Type.Object({ logId: id }, { additionalProperties: false }),
   'com.rezics.library.collection.updated.v1': Type.Object({ collectionId: id }, { additionalProperties: false }),
   'com.rezics.library.collection.deleted.v1': Type.Object({ collectionId: id }, { additionalProperties: false }),
+  'com.rezics.library.collection.output.reclaimed.v1': Type.Object(
+    { collectionId: id, generation: id, removed: Type.Integer({ minimum: 1, maximum: 100 }) },
+    { additionalProperties: false },
+  ),
   'com.rezics.library.collection.member.changed.v1': Type.Object(
     { collectionId: id, memberId: id, subjectId: id },
     { additionalProperties: false },

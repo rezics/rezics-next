@@ -824,7 +824,10 @@ selected seal, checks live original and terminal disclosure, and binds cursors t
 A pending capture keeps members unavailable, including when a publication declares zero members. The existing
 Source sweep resumes COMPLETE built-in publications with missing seals. It advances cancellation of a superseded
 capture from the newer monotone Collection source generation and preserves the generation selected for terminal
-public retention. Cancellation releases the exact hold only after the persisted gate and retained cuts close.
+public retention. Cancellation releases the exact hold only after the persisted gate and retained cuts close. The sweep reclaims
+the obsolete output in 100-key pages only after it rereads the matching committed native and Semantic cancellation,
+the newer source generation, and the absence of other retained references. The selected or frozen generation and
+the immutable disposition remain available.
 Once terminal retention selects a public built-in generation, the ordinary reader can use its still-held seal
 through the exact retained publication receipt and terminal account fence. The frozen branch supplies read
 authority only. Account-free successor custody and the remaining physical de-identification stay pending.
