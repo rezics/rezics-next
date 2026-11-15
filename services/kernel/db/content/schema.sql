@@ -1034,8 +1034,13 @@ BEGIN
         IF TG_TABLE_NAME='knowledge_revision' AND TG_OP='UPDATE' THEN
           IF NEW.author_account_id IS NULL
             AND (NEW.copy_provenance IS NULL OR NEW.copy_provenance=OLD.copy_provenance AND NEW.copy_provenance->>'representation'='public')
-            AND (to_jsonb(NEW)-'author_account_id'-'copy_provenance') IS NOT DISTINCT FROM
-                (to_jsonb(OLD)-'author_account_id'-'copy_provenance') THEN RETURN NEW; END IF;
+            AND ROW(NEW.route, NEW.document_id, NEW.revision_id, NEW.title, NEW.language, NEW.canonical_bytes,
+                    NEW.body_sha256, NEW.licence, NEW.subject_ids, NEW.recorded_transaction_id, NEW.created_at,
+                    NEW.reference_manifest, NEW.media_ids) IS NOT DISTINCT FROM
+                ROW(OLD.route, OLD.document_id, OLD.revision_id, OLD.title, OLD.language, OLD.canonical_bytes,
+                    OLD.body_sha256, OLD.licence, OLD.subject_ids, OLD.recorded_transaction_id, OLD.created_at,
+                    OLD.reference_manifest, OLD.media_ids)
+          THEN RETURN NEW; END IF;
         END IF;
         IF TG_OP='DELETE' AND NOT EXISTS (
           SELECT 1 FROM content.knowledge_publication_selection s
