@@ -66,6 +66,14 @@ const serverIndependentTests = [
   'tests/local-web-startup.test.ts',
   'tests/first-public-journeys-walk.test.ts',
   'tests/focused-runner.test.ts',
+  // These mounted editor consumers own their DOM and transports; none uses the shared Web server.
+  'tests/editor-preferences.test.ts',
+  'tests/studio-native-drafts.test.tsx',
+  'tests/studio-workspace-continuity.test.tsx',
+  'tests/studio-workspace-language.test.tsx',
+  'tests/knowledge-private.test.tsx',
+  'tests/authored-field-family.test.tsx',
+  'tests/composer-lifetime.test.tsx',
   // This journey owns a server with private issuer/client bindings.
   'tests/post-editing.test.ts',
   'tests/root-application-shell.test.tsx',

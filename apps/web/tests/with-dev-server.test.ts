@@ -167,3 +167,21 @@ test('server-independent suites do not start an unused default server', () => {
   expect(commandNeedsSharedDevServer(['bun', 'test', 'tests'])).toBe(true);
   expect(commandNeedsSharedDevServer(['bun', 'test'])).toBe(true);
 });
+
+test('mounted editor consumers retain their own DOM and transports without starting Vite', () => {
+  const files = [
+    'tests/editor-preferences.test.ts',
+    'tests/studio-native-drafts.test.tsx',
+    'tests/studio-workspace-continuity.test.tsx',
+    'tests/studio-workspace-language.test.tsx',
+    'tests/knowledge-private.test.tsx',
+    'tests/authored-field-family.test.tsx',
+    'tests/composer-lifetime.test.tsx',
+  ];
+  for (const file of files) {
+    expect(commandNeedsSharedDevServer(['bun', 'test', file])).toBe(false);
+    expect(commandNeedsSharedDevServer(['bun', 'test', `apps/web/${file}`])).toBe(false);
+  }
+  expect(commandNeedsSharedDevServer(['bun', 'test', ...files])).toBe(false);
+  expect(commandNeedsSharedDevServer(['bun', 'test', ...files, 'tests/thread-reading.test.ts'])).toBe(true);
+});
