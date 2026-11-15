@@ -26,6 +26,25 @@ import { RealmLastOwnerError } from '../access/resource-access-errors.ts';
 import { extensionMembers, fieldErrorCodes } from './problem-schema.ts';
 export { problemSchema } from './problem-schema.ts';
 
+class AppliedCommandResponseError extends Error {
+  constructor(cause: unknown) {
+    super('Committed command response failed', { cause });
+    this.name = 'AppliedCommandResponseError';
+  }
+}
+
+/** Enter only after the command returned its committed outcome. A failed response
+ * read retains its ordinary problem code without claiming the write rolled back.
+ */
+export async function withAppliedCommandEffect<T>(read: () => Promise<T>): Promise<T> {
+  try {
+    return await read();
+  } catch (error) {
+    if (error instanceof AppliedCommandResponseError) throw error;
+    throw new AppliedCommandResponseError(error);
+  }
+}
+
 function isSafePointer(pointer: string): boolean {
   return /^(?:\/(?:[^~/]|~[01])*)*$/.test(pointer);
 }
@@ -116,6 +135,9 @@ export function problemResponse(
   error: unknown,
   context: { method: string; id: string; action?: string; route?: string | undefined },
 ): Response {
+  const appliedError = error instanceof AppliedCommandResponseError ? error : undefined;
+  const applied = appliedError !== undefined;
+  if (appliedError) error = appliedError.cause;
   let code: ProblemCode = 'internal_error';
   let detail: string | undefined;
   let errors: readonly FieldError[] | undefined;
@@ -186,7 +208,7 @@ export function problemResponse(
     retryable: definition.retryable,
     effect_status: lastOwner
       ? 'not_applied'
-      : error instanceof CommandResultErasedError
+      : applied || error instanceof CommandResultErasedError
         ? 'applied'
         : error instanceof ProblemError && error.effectStatus
           ? error.effectStatus
