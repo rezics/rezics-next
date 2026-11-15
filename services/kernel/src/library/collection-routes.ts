@@ -113,13 +113,13 @@ function dynamicCollectionSchema() {
         builtinLabels: t.Optional(t.Record(t.String(), t.String())),
         title: nullableString,
         description: nullableString,
-        visibility: t.Literal('private'),
+        visibility,
         allowedVisibilityActions: t.Optional(t.Array(visibility, { uniqueItems: true })),
         revision: t.Integer({ minimum: 0 }),
         presentationKind: collectionSchema().properties.presentationKind,
         presentationKindSource: collectionSchema().properties.presentationKindSource,
         cover: t.Null(),
-        coverSource: t.Literal('none'),
+        coverSource: t.Union([t.Literal('none'), t.Literal('pending')]),
       },
       closed,
     ),
@@ -160,7 +160,14 @@ function dynamicMetadata() {
 }
 export function savedDynamicCollectionSchema() {
   return memoizedValue(savedDynamicCollectionSchema, () =>
-    t.Object({ ...dynamicMetadata(), membershipKind: t.Literal('dynamic') }, closed),
+    t.Object(
+      {
+        ...dynamicMetadata(),
+        membershipKind: t.Literal('dynamic'),
+        builtinKind: t.Optional(t.Union([t.Literal('everything'), t.Literal('state'), t.Literal('liked')])),
+      },
+      closed,
+    ),
   );
 }
 export const collectionPublicationSchema = t.Object(
@@ -532,6 +539,9 @@ function collectionView(value: Collection) {
       visibility,
       revision,
       membershipKind: 'dynamic' as const,
+      ...(value.builtinKind === 'everything' || value.builtinKind === 'state' || value.builtinKind === 'liked'
+        ? { builtinKind: value.builtinKind }
+        : {}),
       ...collectionPresentation(value),
     };
   return {
@@ -1322,10 +1332,18 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           ...(query.filter === undefined ? {} : { filter: query.filter }),
           ...(query.sort === undefined ? {} : { sort: query.sort }),
           ...(query.view === undefined ? {} : { view: query.view }),
+          ...(query.view === 'FULL' ? { languages } : {}),
         };
         const listFactsAttached = query.filter === undefined && query.sort === undefined && query.view === 'FULL';
         const sourcePage = () =>
-          admission.run('normal', job, () => read().readMembers(actor, params.collectionId, memberQuery, job.deadline));
+          admission.run('normal', job, () =>
+            read().readMembers(
+              actor,
+              params.collectionId,
+              listFactsAttached ? { ...memberQuery, view: 'BASIC' } : memberQuery,
+              job.deadline,
+            ),
+          );
         const finalSource =
           query.view === 'FULL' && actor.kind === 'account'
             ? await read().observeMemberSource(actor, params.collectionId, job.deadline)

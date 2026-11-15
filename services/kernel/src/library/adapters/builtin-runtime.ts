@@ -28,14 +28,14 @@ export type BuiltinCollectionView = {
   builtinKind: 'everything' | 'state' | 'liked';
   builtin: BuiltinCollectionKey;
   builtinLabels?: Readonly<Record<string, string>>;
-  visibility: 'private';
+  visibility: 'private' | 'public' | 'unlisted';
   title: string | null;
   description: string | null;
   revision: number;
   presentationKind: CollectionKind['presentationKind'];
   presentationKindSource: CollectionKind['presentationKindSource'];
   cover: null;
-  coverSource: 'none';
+  coverSource: 'none' | 'pending';
 };
 export type DynamicMemberView = { kind: 'dynamic'; subjectId: string };
 
@@ -122,6 +122,7 @@ export function createNativeBuiltinRuntime(
     id: string,
     scope: ReadScope = 'collection:read',
     deadline = deadlineFor(WORK_STEP_DEADLINE_MS),
+    forMembers = false,
   ): Promise<BuiltinCollectionView | null> {
     if (routeOf(id) === null) return null;
     return snapshot(async (client) => {
@@ -140,6 +141,15 @@ export function createNativeBuiltinRuntime(
           collectionId: id,
         });
         if (!reference || reference.accountId !== owner.accountId) return null;
+        key = reference.key;
+      }
+      const stored = await storedDescriptor(client, owner.accountId, key);
+      // Public materialized headers and membership go through the same Access and publication path for every reader.
+      if (stored && scope === 'collection:read') {
+        if (stored.visibility !== 'private') return null;
+        if (!forMembers && (stored.presentationKind !== null || stored.coverMediaId !== null)) return null;
+      }
+      if (key.kind === 'state') {
         const coverage = await readOwnerIndexFrontier(client, owner.accountId);
         if (coverage?.phase !== 'ready' || (await nextOwnerPin(client, owner.accountId)) !== undefined)
           throw new ProblemError('dependency_unavailable');
@@ -149,24 +159,12 @@ export function createNativeBuiltinRuntime(
           [routeOf(owner.accountId), owner.accountId, id],
         );
         if (!supported.rows.length) return null;
-        key = reference.key;
       }
-      return present(client, owner.accountId, key);
+      return present(client, owner.accountId, key, stored);
     }, deadline);
   }
-  async function present(client: Client, accountId: string, key: BuiltinCollectionKey): Promise<BuiltinCollectionView> {
-    const value = descriptor(accountId, key);
-    let labels: Readonly<Record<string, string>> | undefined;
-    if (key.kind === 'state') {
-      // The index chooses presentation only, never state membership or disclosure.
-      const meaning = await client.query<{ labels: Record<string, string> }>(
-        `SELECT labels FROM library.owner_index_state WHERE route=$1 AND account_id=$2 AND collection_id=$3
-         ORDER BY pin->>'releaseDigest',pin LIMIT 1`,
-        [routeOf(accountId), accountId, value.id],
-      );
-      if (!meaning.rows[0]) throw new ProblemError('semantic_not_ready');
-      labels = meaning.rows[0].labels;
-    }
+
+  async function storedDescriptor(client: Client, accountId: string, key: BuiltinCollectionKey) {
     const stored = (
       await client.query<{
         kind: string | null;
@@ -183,28 +181,53 @@ export function createNativeBuiltinRuntime(
         `SELECT builtin_kind AS kind,curator_account_id AS owner,membership_kind AS membership,state,visibility,
         title,description,revision,presentation_kind AS "presentationKind",cover_media_id AS "coverMediaId"
        FROM library.collection WHERE route=$1 AND collection_id=$2`,
-        [routeOf(value.id), value.id],
+        [routeOf(accountId), builtinCollectionId(accountId, key)],
       )
     ).rows[0];
-    if (stored) {
-      if (stored.owner !== accountId || stored.kind !== key.kind || stored.membership !== 'dynamic')
-        throw new ProblemError('dependency_unavailable');
-      if (stored.state !== 'active') throw new ProblemError('not_found');
-      // Published output and configured covers use their owning current readers, never a private fallback.
-      if (stored.visibility !== 'private' || stored.presentationKind !== null || stored.coverMediaId !== null)
-        throw new ProblemError('dependency_unavailable', {
-          detail: 'The configured built-in presentation reader is unavailable.',
-        });
-      return {
-        ...value,
-        title: stored.title,
-        description: stored.description,
-        revision: stored.revision,
-        ...(labels === undefined ? {} : { builtinLabels: labels }),
-      };
-    }
+    if (!stored) return null;
+    if (stored.owner !== accountId || stored.kind !== key.kind || stored.membership !== 'dynamic')
+      throw new ProblemError('dependency_unavailable');
+    if (stored.state !== 'active') throw new ProblemError('not_found');
+    const visibility = stored.visibility;
+    if (
+      (visibility !== 'private' && visibility !== 'public' && visibility !== 'unlisted') ||
+      (key.kind === 'liked' && visibility !== 'private')
+    )
+      throw new ProblemError('dependency_unavailable');
+    return { ...stored, visibility };
+  }
+
+  async function present(
+    client: Client,
+    accountId: string,
+    key: BuiltinCollectionKey,
+    stored: Awaited<ReturnType<typeof storedDescriptor>>,
+  ): Promise<BuiltinCollectionView> {
+    const value = descriptor(accountId, key);
+    const labels =
+      key.kind === 'state'
+        ? (
+            await client.query<{ labels: Record<string, string> }>(
+              `SELECT labels FROM library.owner_index_state WHERE route=$1 AND account_id=$2 AND collection_id=$3
+                ORDER BY pin->>'releaseDigest',pin LIMIT 1`,
+              [routeOf(accountId), accountId, value.id],
+            )
+          ).rows[0]?.labels
+        : undefined;
+    if (key.kind === 'state' && labels === undefined) throw new ProblemError('semantic_not_ready');
     return {
       ...value,
+      ...(stored
+        ? {
+            title: stored.title,
+            description: stored.description,
+            visibility: stored.visibility,
+            revision: stored.revision,
+            presentationKind: stored.presentationKind,
+            presentationKindSource: stored.presentationKind === null ? ('mixed' as const) : ('owner' as const),
+            coverSource: stored.coverMediaId === null ? ('none' as const) : ('pending' as const),
+          }
+        : {}),
       ...(labels === undefined ? {} : { builtinLabels: labels }),
     };
   }
@@ -252,7 +275,10 @@ export function createNativeBuiltinRuntime(
         .sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
         .slice(0, limit);
       const values: BuiltinCollectionView[] = [];
-      for (const value of selected) values.push(await present(client, owner.accountId, value.key));
+      for (const value of selected) {
+        const stored = await storedDescriptor(client, owner.accountId, value.key);
+        values.push(await present(client, owner.accountId, value.key, stored));
+      }
       return values;
     });
   }
@@ -261,7 +287,7 @@ export function createNativeBuiltinRuntime(
     { filter: FilterDocument; releaseDigest: string },
     DynamicMemberView
   >({
-    read: (actor, id, deadline) => read(actor, id, 'collection:read', deadline),
+    read: (actor, id, deadline) => read(actor, id, 'collection:read', deadline, true),
     async proveEmpty(actor, source, deadline) {
       return snapshot(async (client) => {
         const owner = await admitted(client, actor);
@@ -294,6 +320,8 @@ export function createNativeBuiltinRuntime(
           deadline: options.deadline,
           ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
           ...(options.query ? { query: options.query } : {}),
+          ...(options.view === undefined ? {} : { view: options.view }),
+          ...(options.languages === undefined ? {} : { languages: options.languages }),
           revalidateOwner: options.revalidateOwner,
           readSourceVersion: options.readSourceVersion,
         },

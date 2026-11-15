@@ -26,9 +26,10 @@ export function assertMemberPageCurrent(
 ): asserts current is MemberPage {
   if (typeof current !== 'object' || current === null || !('members' in current) || !Array.isArray(current.members))
     throw new ProblemError('semantic_not_ready');
+  const compareNativeRows = options.listFactsAttached ?? false;
   if (
-    JSON.stringify(sourcePage(observed, options.listFactsAttached ?? false)) !==
-    JSON.stringify(sourcePage(current as MemberPage, false))
+    JSON.stringify(sourcePage(observed, compareNativeRows)) !==
+    JSON.stringify(sourcePage(current as MemberPage, compareNativeRows))
   )
     throw new ProblemError('stale_cursor');
 }

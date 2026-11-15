@@ -165,6 +165,12 @@ candidates. A private or unknown Collection has the same not-found response for 
 visibility continue to use the existing direct-read and listing rules. A pending saved Publication supplies no
 shared members until complete output exists, including on the curator's ordinary shared read.
 
+An owner reads a published or unlisted built-in through the same current selected output as other readers.
+The shared descriptor keeps the built-in kind while its owner-only tuple stays private. Its full members page
+uses the admitted subject presentation and compares the native member rows again before returning private viewer
+overlays. Returning the built-in to private uses the owner fact source. A configured cover or presentation kind
+uses the stored Collection reader without changing membership.
+
 The curator's private descriptor may identify the built-in profile and state. It never appears for another viewer. A public or
 unlisted members page returns only its ordinary Collection metadata and subject summaries that pass the current viewer's native original AND terminal eligibility, Access, consent, foreign target and source-tuple fence checks. It returns no state, label, progress, holding, query body, predicate, profile pin, private candidate count, or
 private member count. Collection membership never grants subject access. Filtering by an owner's personal facts remains owner-only.

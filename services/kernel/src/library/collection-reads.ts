@@ -121,6 +121,7 @@ export type SavedDynamicCollectionView = Omit<
   'membershipKind' | 'memberCount' | 'orderEpoch' | 'createdAt' | 'updatedAt'
 > & {
   membershipKind: 'dynamic';
+  builtinKind?: BuiltinCollectionView['builtinKind'];
 };
 export type CollectionResourceView =
   | CollectionView
@@ -223,6 +224,7 @@ function collectionView(row: {
   visibility: string;
   presentationKind: string | null;
   membershipKind?: string;
+  builtinKind?: string | null;
   revision: number;
   memberCount: number;
   orderEpoch: number;
@@ -240,6 +242,9 @@ function collectionView(row: {
       visibility: row.visibility,
       revision: row.revision,
       membershipKind: 'dynamic',
+      ...(row.builtinKind === 'everything' || row.builtinKind === 'state' || row.builtinKind === 'liked'
+        ? { builtinKind: row.builtinKind }
+        : {}),
     };
   return {
     ...collectionPresentation(row),
@@ -787,7 +792,9 @@ export function createCollectionReads(
       ...(owner
         ? {
             allowedVisibilityActions: editor
-              ? (['private', 'unlisted', 'public'] as const).filter((value) => value !== row.visibility)
+              ? (row.builtinKind ? (['private'] as const) : (['private', 'unlisted', 'public'] as const)).filter(
+                  (value) => value !== row.visibility,
+                )
               : [],
           }
         : {}),
@@ -963,9 +970,22 @@ export function createCollectionReads(
               : null,
       };
     });
-    const collections: CollectionDirectoryPage['collections'] = shownLogical.map((collection) =>
-      ownerManagement ? { ...collection, allowedVisibilityActions: [] } : collection,
-    );
+    const collections: CollectionDirectoryPage['collections'] = [];
+    for (const collection of shownLogical) {
+      if (
+        collection.visibility !== 'private' ||
+        collection.presentationKind !== null ||
+        collection.coverSource === 'pending'
+      ) {
+        const stored = await loadCollection(viewer, collection.id, deadline);
+        if (!stored) throw notFound();
+        if (stored.revision !== collection.revision || stored.visibility !== collection.visibility)
+          throw new ProblemError('dependency_unavailable');
+        collections.push(await present(viewer, stored, deadline, ownerManagement));
+      } else {
+        collections.push(ownerManagement ? { ...collection, allowedVisibilityActions: [] } : collection);
+      }
+    }
     for (const row of result.collections) collections.push(await present(viewer, row, deadline, ownerManagement));
     if (preview) {
       const previews = await readCollectionPreviews(
@@ -1032,6 +1052,20 @@ export function createCollectionReads(
     return presented;
   }
 
+  async function readBuiltinMembers(viewer: Actor, id: string, options: CollectionMemberQuery, deadline: number) {
+    if (options.filter === undefined && options.sort === undefined) {
+      return builtins.members(viewer, id, { ...options, deadline });
+    }
+    const admission = await admitCollectionMemberQuery(dependencies, viewer, options, deadline);
+    return builtins.members(viewer, id, {
+      ...options,
+      deadline,
+      ...(admission.filter && admission.releaseDigest
+        ? { query: { filter: admission.filter, releaseDigest: admission.releaseDigest } }
+        : {}),
+    });
+  }
+
   /** Common dynamic/curated reader; the native curated primitive retains its occurrence DTO. */
   async function readMembers(
     viewer: Actor,
@@ -1039,37 +1073,22 @@ export function createCollectionReads(
     options: CollectionMemberQuery = {},
     deadline: number = deadlineFor(WORK_STEP_DEADLINE_MS),
   ) {
-    pageRequest(options, ['cursor', 'limit', 'filter', 'sort', 'view']);
+    pageRequest(options, ['cursor', 'limit', 'filter', 'sort', 'view', 'languages']);
     const logical = await builtins.read(viewer, collectionId, 'collection:read', deadline);
-    const collection = logical ? null : await loadCollection(viewer, collectionId, deadline);
-    if (!logical && !collection) throw notFound();
-    if (collection?.membershipKind === 'dynamic') return readDynamicMembers(viewer, collection, options, deadline);
-    if (options.filter !== undefined || options.sort !== undefined) {
-      if (logical) {
-        const admission = await admitCollectionMemberQuery(dependencies, viewer, options, deadline);
-        if (!admission.filter || !admission.releaseDigest)
-          return builtins.members(viewer, collectionId, {
-            ...options,
-            deadline,
-          });
-        return builtins.members(viewer, collectionId, {
-          ...options,
-          deadline,
-          query: {
-            filter: admission.filter,
-            releaseDigest: admission.releaseDigest,
-          },
-        });
-      }
-      return readOwnerFilterPage(dependencies, viewer, collectionId, options, deadline);
+    if (logical) return readBuiltinMembers(viewer, collectionId, options, deadline);
+    const collection = await loadCollection(viewer, collectionId, deadline);
+    if (!collection) throw notFound();
+    if (collection.membershipKind === 'dynamic') {
+      if (collection.visibility === 'private' && collection.builtinKind)
+        return readBuiltinMembers(viewer, collectionId, options, deadline);
+      return readDynamicMembers(viewer, collection, options, deadline);
     }
-    const page = {
+    if (options.filter !== undefined || options.sort !== undefined)
+      return readOwnerFilterPage(dependencies, viewer, collectionId, options, deadline);
+    return listMembers(viewer, collectionId, {
       ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
       ...(options.limit === undefined ? {} : { limit: options.limit }),
-    };
-    return logical
-      ? builtins.members(viewer, collectionId, { ...page, deadline })
-      : listMembers(viewer, collectionId, page, deadline);
+    }, deadline);
   }
 
   /** Capture native source and reader lifetime with every home released before foreign work. */
@@ -1173,6 +1192,7 @@ export function createCollectionReads(
         limit: options.limit ?? DEFAULT_PAGE_SIZE,
         ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
         ...(options.view === undefined ? {} : { view: options.view }),
+        ...(options.languages === undefined ? {} : { languages: options.languages }),
         deadline,
         revalidateOwner: revalidate,
         async readSourceVersion() {
