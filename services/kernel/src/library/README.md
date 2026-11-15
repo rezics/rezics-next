@@ -1113,10 +1113,12 @@ cancelling and cancelled jobs are refused before Library effects. Complete recei
 before Store reconciliation. `createLibraryIdentityEpochReceiver({pool})` is the exact default binding for the
 Source owner: `advanceScope(key, after, context)` reads one prepaid sealed-manifest page at limit 1 and enrolls only
 operations reread from that manifest; `step(job, context)` applies at most one queued receiver effect and returns
-an explicit pending proof state. An unexhausted scope, unresolved owner handoff or missing follow closure never
-becomes a complete receipt, a ready zero or permission to publish. The ordinary step still refuses to complete
-until a committed 16-route original scan finds no building plans and no members of this job's originals, or until
-Semantic composes and independently reconciles the Source, owner, follow and six-driver receipts.
+an explicit pending proof state. An unexhausted scope, unresolved owner handoff or missing follow closure keeps
+completion pending.
+The empty-directory path requires the committed first-and-final pre-arm page for every input generation and a
+16-route check for building plans, affected members and selected or held outputs in the completion command.
+A lost completion response recovers the same native step before control reconciliation. Nonempty scopes require
+Semantic to compose and independently reconcile the Source, owner, follow and six-driver receipts.
 
 The Source owner can call `prepareLibraryIdentitySourceInvalidation(pool, selection)` using the existing
 `IdentityReceivingSelection`, or recover a retained receiving locator with
