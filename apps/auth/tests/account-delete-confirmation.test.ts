@@ -223,8 +223,12 @@ test(
         expect(await warning.isVisible()).toBe(true);
         const copy = await Bun.file(join(app, 'messages', `${locale}.json`)).json();
         const main = await page.locator('main').innerText();
-        expect(main).toContain(copy.auth_account_delete_cleanup_explanation);
-        expect(main.replace(copy.auth_account_delete_cleanup_explanation, '')).not.toMatch(
+        expect(main).toContain(copy.auth_account_delete_description);
+        expect(main).toContain(copy.auth_account_delete_erased_heading);
+        expect(main).toContain(copy.auth_account_delete_retained_heading);
+        expect(main).toContain(copy.auth_account_delete_retention_limits);
+        expect(main).not.toContain(copy.auth_account_delete_cleanup_explanation);
+        expect(main).not.toMatch(
           /\b(immediately|instantly|at once|within \d+|by \d{4}|sofort|unverzüglich|inmediatamente|de inmediato|immédiatement)\b|即時|立即|马上|馬上|すぐに|直ちに|즉시/iu,
         );
         const input = page.getByRole('textbox', { name: label, exact: true });
