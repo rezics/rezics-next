@@ -1864,14 +1864,15 @@ $$;
 -- Name: prepare_shelf_score(integer, uuid); Type: FUNCTION; Schema: library; Owner: -
 --
 
-CREATE FUNCTION library.prepare_shelf_score(owner_route integer, owner_id uuid) RETURNS TABLE(ready boolean, prepared integer)
+CREATE FUNCTION library.prepare_shelf_score(owner_route integer, owner_id uuid) RETURNS TABLE(ready boolean, prepared integer, changed boolean)
     LANGUAGE plpgsql
     AS $$
-DECLARE head library.shelf_score_head; ids uuid[]; subject uuid; n integer;
+DECLARE head library.shelf_score_head; ids uuid[]; subject uuid; n integer; initialized integer;
 BEGIN
   INSERT INTO library.shelf_score_head(route, account_id) VALUES(owner_route, owner_id) ON CONFLICT DO NOTHING;
+  GET DIAGNOSTICS initialized = ROW_COUNT;
   SELECT * INTO STRICT head FROM library.shelf_score_head WHERE route=owner_route AND account_id=owner_id FOR UPDATE;
-  IF head.ready THEN RETURN QUERY SELECT true, 0; RETURN; END IF;
+  IF head.ready THEN RETURN QUERY SELECT true, 0, initialized > 0; RETURN; END IF;
   IF head.after_subject IS NULL THEN
     SELECT array_agg(p.subject_id ORDER BY p.subject_id) INTO ids FROM (
       SELECT e.subject_id FROM library.entry e WHERE e.route=owner_route AND e.account_id=owner_id
@@ -1892,7 +1893,7 @@ BEGIN
   UPDATE library.shelf_score_head SET ready=COALESCE(cardinality(ids),0)<=100,
     after_subject=CASE WHEN n>0 THEN ids[n] ELSE after_subject END, revision=revision+1
     WHERE route=owner_route AND account_id=owner_id RETURNING shelf_score_head.ready INTO head.ready;
-  RETURN QUERY SELECT head.ready,n;
+  RETURN QUERY SELECT head.ready,n,true;
 END;
 $$;
 
