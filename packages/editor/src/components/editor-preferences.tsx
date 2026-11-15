@@ -9,6 +9,7 @@ import {
   Field,
   FieldContent,
   FieldDescription,
+  FieldError,
   FieldGroup,
   FieldLabel,
   FieldLegend,
@@ -125,6 +126,7 @@ function ShortcutField({
   labels,
   disabled,
   commandLabel,
+  describedBy,
 }: {
   id: EditorPreferenceCommand;
   value: string;
@@ -134,6 +136,7 @@ function ShortcutField({
   labels: EditorPreferencesLabels;
   disabled: boolean;
   commandLabel: (id: EditorPreferenceCommand) => string;
+  describedBy?: string;
 }) {
   const inputId = useId();
   const [draft, setDraft] = useState(value);
@@ -147,9 +150,12 @@ function ShortcutField({
         : issue
           ? labels.invalidShortcut
           : '';
+  const errorId = `${inputId}-error`;
   return (
-    <Field data-invalid={!!issue} data-disabled={disabled}>
-      <FieldLabel htmlFor={inputId}>{labels.shortcut}</FieldLabel>
+    <Field className="min-w-0" data-invalid={!!issue} data-disabled={disabled}>
+      <FieldLabel htmlFor={inputId} className="max-w-full whitespace-normal break-words">
+        {labels.shortcut}
+      </FieldLabel>
       <div className="flex min-w-0 flex-wrap gap-2">
         <Input
           id={inputId}
@@ -157,8 +163,8 @@ function ShortcutField({
           maxLength={80}
           disabled={disabled}
           aria-invalid={!!issue}
-          aria-describedby={message ? `${inputId}-error` : undefined}
-          className="min-w-32 flex-1"
+          aria-describedby={[describedBy, message ? errorId : undefined].filter(Boolean).join(' ') || undefined}
+          className="min-w-0 flex-1 basis-40"
           onChange={(event) => setDraft(event.target.value)}
           onBlur={() => {
             if (!issue && draft !== value) onChange(draft === '' ? '' : normalizeEditorShortcut(draft)!);
@@ -171,15 +177,17 @@ function ShortcutField({
             }
           }}
         />
-        <Button type="button" variant="outline" disabled={disabled} onClick={onReset}>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled}
+          className="h-auto min-h-8 max-w-full shrink-0 whitespace-normal text-start"
+          onClick={onReset}
+        >
           {labels.resetShortcut}
         </Button>
       </div>
-      {message ? (
-        <FieldDescription id={`${inputId}-error`} role="alert">
-          {message}
-        </FieldDescription>
-      ) : null}
+      {message ? <FieldError id={errorId}>{message}</FieldError> : null}
     </Field>
   );
 }
@@ -223,8 +231,10 @@ function NumericPreferenceField({
     .replace('{min}', String(min))
     .replace('{max}', String(max));
   return (
-    <Field data-disabled={disabled} data-invalid={invalid}>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+    <Field className="min-w-0" data-disabled={disabled} data-invalid={invalid}>
+      <FieldLabel htmlFor={id} className="max-w-full whitespace-normal break-words">
+        {label}
+      </FieldLabel>
       <Input
         id={id}
         type="number"
@@ -236,6 +246,7 @@ function NumericPreferenceField({
         disabled={disabled}
         aria-invalid={invalid}
         aria-describedby={invalid ? `${id}-error` : undefined}
+        className="min-w-0"
         onChange={(event) => {
           const next = event.target.value;
           setDraft(next);
@@ -248,11 +259,7 @@ function NumericPreferenceField({
           if (valid) onChange(Number(draft));
         }}
       />
-      {invalid ? (
-        <FieldDescription id={`${id}-error`} role="alert">
-          {error}
-        </FieldDescription>
-      ) : null}
+      {invalid ? <FieldError id={`${id}-error`}>{error}</FieldError> : null}
     </Field>
   );
 }
@@ -282,13 +289,17 @@ export function EditorPreferencesPanel({
     const next = { ...value, ...patch };
     if (validateEditorPreferences(next)) onChange(next);
   };
-  const select = (key: 'typeface' | 'toolbar' | 'pasteMode', options: readonly string[]) => (
-    <Field data-disabled={disabled}>
-      <FieldLabel htmlFor={`${id}-${key}`}>{text[key]}</FieldLabel>
+  const select = (key: 'typeface' | 'toolbar' | 'pasteMode', options: readonly string[], description?: string) => (
+    <Field className="min-w-0" data-disabled={disabled}>
+      <FieldLabel htmlFor={`${id}-${key}`} className="max-w-full whitespace-normal break-words">
+        {text[key]}
+      </FieldLabel>
       <NativeSelect
         id={`${id}-${key}`}
+        className="w-full min-w-0 max-w-full"
         value={resolved[key]}
         disabled={disabled}
+        aria-describedby={description ? `${id}-${key}-description` : undefined}
         onChange={(event) => change({ [key]: event.target.value })}
       >
         {options.map((option) => (
@@ -297,19 +308,32 @@ export function EditorPreferencesPanel({
           </NativeSelectOption>
         ))}
       </NativeSelect>
-      {key === 'pasteMode' ? <FieldDescription>{text.pasteDescription}</FieldDescription> : null}
+      {description ? (
+        <FieldDescription id={`${id}-${key}-description`} className="max-w-full whitespace-normal break-words">
+          {description}
+        </FieldDescription>
+      ) : null}
     </Field>
   );
   const toggle = (key: 'outline' | 'markdownShortcuts' | 'spellcheck' | 'autoLink', description?: string) => (
-    <Field orientation="horizontal" data-disabled={disabled}>
-      <FieldContent>
-        <FieldLabel id={`${id}-${key}-label`} htmlFor={`${id}-${key}`}>
+    <Field orientation="horizontal" className="min-w-0" data-disabled={disabled}>
+      <FieldContent className="min-w-0">
+        <FieldLabel
+          id={`${id}-${key}-label`}
+          htmlFor={`${id}-${key}`}
+          className="max-w-full whitespace-normal break-words"
+        >
           {text[key]}
         </FieldLabel>
-        {description ? <FieldDescription id={`${id}-${key}-description`}>{description}</FieldDescription> : null}
+        {description ? (
+          <FieldDescription id={`${id}-${key}-description`} className="max-w-full whitespace-normal break-words">
+            {description}
+          </FieldDescription>
+        ) : null}
       </FieldContent>
       <Switch
         id={`${id}-${key}`}
+        className="shrink-0"
         aria-labelledby={`${id}-${key}-label`}
         aria-describedby={description ? `${id}-${key}-description` : undefined}
         checked={resolved[key]}
@@ -359,14 +383,18 @@ export function EditorPreferencesPanel({
           : 'var(--font-sans)';
   return (
     <section aria-label={text.heading} className="flex min-w-0 flex-col gap-5" data-slot="editor-preferences">
-      <p className="text-sm text-muted-foreground">{text.private}</p>
+      <p className="max-w-full text-sm text-pretty text-muted-foreground">{text.private}</p>
       <FieldGroup>
         {onScopeChange ? (
-          <Field>
-            <FieldLabel htmlFor={`${id}-scope`}>{text.scope}</FieldLabel>
+          <Field className="min-w-0">
+            <FieldLabel htmlFor={`${id}-scope`} className="max-w-full whitespace-normal break-words">
+              {text.scope}
+            </FieldLabel>
             <NativeSelect
               id={`${id}-scope`}
+              className="w-full min-w-0 max-w-full"
               value={scope}
+              aria-describedby={`${id}-scope-description`}
               onChange={(event) => onScopeChange(event.target.value as EditorPreferencesScope)}
             >
               {availableScopes.map((option) => (
@@ -375,33 +403,52 @@ export function EditorPreferencesPanel({
                 </NativeSelectOption>
               ))}
             </NativeSelect>
-            <FieldDescription>{text[`${scope}Description`]}</FieldDescription>
+            <FieldDescription id={`${id}-scope-description`} className="max-w-full whitespace-normal break-words">
+              {text[`${scope}Description`]}
+            </FieldDescription>
           </Field>
         ) : (
-          <p className="text-sm text-muted-foreground">
+          <p className="max-w-full text-sm text-pretty text-muted-foreground">
             {text[scope]} · {text[`${scope}Description`]}
           </p>
         )}
-        <Field>
-          <FieldLabel htmlFor={`${id}-search`}>{text.search}</FieldLabel>
-          <Input id={`${id}-search`} type="search" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <Field className="min-w-0">
+          <FieldLabel htmlFor={`${id}-search`} className="max-w-full whitespace-normal break-words">
+            {text.search}
+          </FieldLabel>
+          <Input
+            id={`${id}-search`}
+            type="search"
+            className="min-w-0"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
         </Field>
         {typography ? (
-          <FieldSet>
-            <FieldLegend>{text.typography}</FieldLegend>
+          <FieldSet className="min-w-0">
+            <FieldLegend className="max-w-full whitespace-normal break-words">{text.typography}</FieldLegend>
             <FieldGroup>
               {select('typeface', ['sans', 'serif', 'mono', 'custom'])}
               {resolved.typeface === 'custom' ? (
-                <Field>
-                  <FieldLabel htmlFor={`${id}-custom-font`}>{text.customFont}</FieldLabel>
+                <Field className="min-w-0">
+                  <FieldLabel htmlFor={`${id}-custom-font`} className="max-w-full whitespace-normal break-words">
+                    {text.customFont}
+                  </FieldLabel>
                   <Input
                     id={`${id}-custom-font`}
+                    className="min-w-0"
                     value={resolved.customFont}
                     maxLength={128}
                     disabled={disabled}
+                    aria-describedby={`${id}-custom-font-description`}
                     onChange={(event) => change({ customFont: event.target.value })}
                   />
-                  <FieldDescription>{text.customFontDescription}</FieldDescription>
+                  <FieldDescription
+                    id={`${id}-custom-font-description`}
+                    className="max-w-full whitespace-normal break-words"
+                  >
+                    {text.customFontDescription}
+                  </FieldDescription>
                 </Field>
               ) : null}
               {(['textSize', 'lineSpacing', 'writingWidth'] as const).map((key) => (
@@ -422,8 +469,8 @@ export function EditorPreferencesPanel({
           </FieldSet>
         ) : null}
         {workspace ? (
-          <FieldSet>
-            <FieldLegend>{text.layout}</FieldLegend>
+          <FieldSet className="min-w-0">
+            <FieldLegend className="max-w-full whitespace-normal break-words">{text.layout}</FieldLegend>
             <FieldGroup>
               {select('toolbar', ['auto', 'fixed', 'floating', 'hidden'])}
               {toggle('outline')}
@@ -431,34 +478,45 @@ export function EditorPreferencesPanel({
           </FieldSet>
         ) : null}
         {input ? (
-          <FieldSet>
-            <FieldLegend>{text.input}</FieldLegend>
+          <FieldSet className="min-w-0">
+            <FieldLegend className="max-w-full whitespace-normal break-words">{text.input}</FieldLegend>
             <FieldGroup>
               {toggle('markdownShortcuts', text.markdownDescription)}
               {toggle('spellcheck', text.spellcheckDescription)}
-              {select('pasteMode', ['rich', 'plain'])}
+              {select('pasteMode', ['rich', 'plain'], text.pasteDescription)}
               {toggle('autoLink')}
             </FieldGroup>
           </FieldSet>
         ) : null}
         {filtered.length ? (
-          <FieldSet>
-            <FieldLegend>{text.commands}</FieldLegend>
-            <FieldDescription>
+          <FieldSet className="min-w-0">
+            <FieldLegend className="max-w-full whitespace-normal break-words">{text.commands}</FieldLegend>
+            <FieldDescription id={`${id}-commands-help`} className="max-w-full whitespace-normal break-words">
               {text.commandsDescription} {text.shortcutDescription}
             </FieldDescription>
-            <details open={query.trim() ? true : undefined}>
-              <summary className="cursor-pointer py-2 text-sm">
+            <details
+              className="min-w-0"
+              open={
+                query.trim() ||
+                filtered.some((entry) =>
+                  editorShortcutIssue(entry.id, resolved.keyboardBindings[entry.id] ?? '', value.keyboardBindings),
+                )
+                  ? true
+                  : undefined
+              }
+            >
+              <summary className="cursor-pointer rounded-md py-2 text-sm whitespace-normal break-words outline-none focus-visible:ring-3 focus-visible:ring-ring/30">
                 {text.commands} ({filtered.length})
               </summary>
               <FieldGroup>
                 {filtered.map((entry) => (
-                  <FieldSet key={entry.id} className="rounded-xl border p-3">
-                    <FieldLegend>{entry.label}</FieldLegend>
-                    <div className="flex flex-wrap items-center gap-2">
+                  <FieldSet key={entry.id} className="min-w-0 rounded-xl border p-3">
+                    <FieldLegend className="max-w-full whitespace-normal break-words">{entry.label}</FieldLegend>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <Button
                         type="button"
                         variant="outline"
+                        className="h-auto min-h-8 max-w-full whitespace-normal text-start"
                         disabled={disabled}
                         aria-pressed={resolved.pinnedCommands.includes(entry.id)}
                         onClick={() => toggleCommand('pinnedCommands', entry.id)}
@@ -468,6 +526,7 @@ export function EditorPreferencesPanel({
                       <Button
                         type="button"
                         variant="outline"
+                        className="h-auto min-h-8 max-w-full whitespace-normal text-start"
                         disabled={disabled}
                         aria-pressed={!resolved.hiddenCommands.includes(entry.id)}
                         onClick={() => toggleCommand('hiddenCommands', entry.id)}
@@ -477,6 +536,7 @@ export function EditorPreferencesPanel({
                       <Button
                         type="button"
                         variant="ghost"
+                        className="h-auto min-h-8 max-w-full whitespace-normal text-start"
                         disabled={disabled || ordered[0]?.id === entry.id}
                         aria-label={`${text.moveUp}: ${entry.label}`}
                         onClick={() => move(entry.id, -1)}
@@ -486,6 +546,7 @@ export function EditorPreferencesPanel({
                       <Button
                         type="button"
                         variant="ghost"
+                        className="h-auto min-h-8 max-w-full whitespace-normal text-start"
                         disabled={disabled || ordered.at(-1)?.id === entry.id}
                         aria-label={`${text.moveDown}: ${entry.label}`}
                         onClick={() => move(entry.id, 1)}
@@ -500,6 +561,7 @@ export function EditorPreferencesPanel({
                       commandLabel={(command) => commands.find((control) => control.id === command)?.label ?? command}
                       labels={text}
                       disabled={disabled}
+                      describedBy={`${id}-commands-help`}
                       onChange={(chord) =>
                         change({ keyboardBindings: { ...value.keyboardBindings, [entry.id]: chord } })
                       }
@@ -516,24 +578,30 @@ export function EditorPreferencesPanel({
           </FieldSet>
         ) : null}
       </FieldGroup>
-      {!typography && !workspace && !input && !filtered.length ? <p role="status">{text.noMatches}</p> : null}
-      <div className="flex flex-col gap-2 rounded-xl border p-4" aria-label={text.preview}>
+      {!typography && !workspace && !input && !filtered.length ? (
+        <p role="status" className="max-w-full text-pretty">
+          {text.noMatches}
+        </p>
+      ) : null}
+      <div className="flex min-w-0 flex-col gap-2 rounded-xl border p-4" aria-label={text.preview}>
         <span className="text-xs text-muted-foreground">{text.preview}</span>
         <p
+          className="min-w-0 max-w-full wrap-break-word"
           style={{
             fontFamily,
             fontSize: `${resolved.textSize}px`,
             lineHeight: resolved.lineSpacing,
-            maxWidth: `${resolved.writingWidth}ch`,
+            maxWidth: `min(100%, ${resolved.writingWidth}ch)`,
           }}
         >
           {text.previewText}
         </p>
       </div>
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex min-w-0 flex-wrap items-center gap-3">
         <Button
           type="button"
           variant="outline"
+          className="h-auto min-h-8 max-w-full whitespace-normal"
           disabled={disabled}
           onClick={() => {
             setResetVersion((version) => version + 1);
@@ -543,12 +611,22 @@ export function EditorPreferencesPanel({
           {text.reset}
         </Button>
         {status?.state === 'error' && onRetry ? (
-          <Button type="button" variant="outline" onClick={onRetry}>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-auto min-h-8 max-w-full whitespace-normal"
+            onClick={onRetry}
+          >
             {text.retry}
           </Button>
         ) : null}
         {status?.state === 'conflict' && onReload ? (
-          <Button type="button" variant="outline" onClick={onReload}>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-auto min-h-8 max-w-full whitespace-normal"
+            onClick={onReload}
+          >
             {text.reload}
           </Button>
         ) : null}
@@ -556,7 +634,7 @@ export function EditorPreferencesPanel({
           <p
             role={status.state === 'error' || status.state === 'conflict' ? 'alert' : 'status'}
             aria-live="polite"
-            className="text-sm text-muted-foreground"
+            className="min-w-0 max-w-full text-sm text-pretty text-muted-foreground"
           >
             {status.message ?? text[status.state]}
           </p>
