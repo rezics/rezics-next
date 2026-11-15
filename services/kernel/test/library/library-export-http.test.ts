@@ -8,6 +8,7 @@ import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lif
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { purgeOwnedGraphPage as purge } from '../../src/library/erasure-owned-graph.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import type { Access } from '../../src/request/access.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
 import { stepIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap.ts';
@@ -22,6 +23,9 @@ import { exportSections } from '../../src/library/library-export-format.ts';
 import { decodeLibraryArchive, type ArchiveRecord } from '../../src/library/library-archive.ts';
 import { createLibraryArchiveCollectionRecovery } from '../../src/library/library-archive-collection-recovery.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { bindNativeLibraryFixture } from './support/native-library-fixture-binding.ts';
+let restoreLibraryBinding: (() => void) | undefined;
+let nativeAccess: Access;
 let workClient: WorkClient;
 let db: GrowthDatabase, app: ReturnType<typeof createKernel>;
 let fixture: Awaited<ReturnType<typeof createRealAccess<{ owner: string; other: string }>>>;
@@ -120,6 +124,10 @@ beforeAll(async () => {
     clock: () => new Date(now),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(29)]]) },
     access: fixture.access,
+    onAccessReady(access) {
+      nativeAccess = access;
+      restoreLibraryBinding = bindNativeLibraryFixture({ pool: db.pool, access, routeKey, clock: () => new Date(now) });
+    },
     writeRate: createWriteRateLimiter({
       secret: 'library-export-fixture-rate-secret',
       overrides: JSON.stringify({ 'new-account': { write: { maximum: 100000, seconds: 86400 } } }),
@@ -192,6 +200,7 @@ beforeAll(async () => {
     await sql`INSERT INTO library.list_import_anilist(route,account_id,import_id,ordinal,payload) VALUES(${route},${owner},${copy},${ordinal},${{ source, review: { id: 'never-export-review-id' }, outcome: { receipt: 'never-export-receipt' } }})`;
 });
 afterAll(async () => {
+  restoreLibraryBinding?.();
   await workClient?.close();
   await db?.close();
 });
@@ -403,9 +412,7 @@ test('native owner export streams independent persisted facts, preserves dates, 
     404,
   );
 
-  const recoveryAccess = fixture.access({
-    actions: new Map([...scopes.map((action) => [action, { anonymous: false }] as const), ...LIFECYCLE_ACTIONS]),
-  });
+  const recoveryAccess = nativeAccess;
   const ownerActor = await recoveryAccess.authenticate(fixture.bearer('owner'), {
     pool: db.pool,
     deadline: Date.now() + 10_000,

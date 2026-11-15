@@ -261,7 +261,8 @@ if (import.meta.main) {
     await startWorker(readWorkerConfig(process.env));
     console.info('Worker ready');
   } catch (error) {
-    console.error(error instanceof ConfigError ? error.message : 'Worker startup failed');
+    if (error instanceof ConfigError) console.error(error.message);
+    else console.error('Worker startup failed', error);
     process.exitCode = 1;
   }
 }

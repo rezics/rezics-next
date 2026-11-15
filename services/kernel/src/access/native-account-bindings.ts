@@ -215,11 +215,8 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
   const { pool, access, actions, referenceKeys, proofs } = config;
   if (config.clock) installAccessClock(access, config.clock);
   const workflow = proofs.workflow as AuthWorkflowProofPorts;
-  const readSessionRevocationResult = workflow.readSessionRevocationResult?.bind(workflow);
-  installLifecycleSessionRevocationResults(
-    access,
-    readSessionRevocationResult ? { readSessionRevocationResult } : undefined,
-  );
+  // Clear an older binding without inspecting Auth; only consumed workflow ports can install its reader.
+  installLifecycleSessionRevocationResults(access, undefined);
   const internalLifecycle = createLifecycleInternals({
     pool,
     routeKey: config.routeKey,
@@ -493,7 +490,16 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     accountOperations: management.accountOperations,
     accountManagementReads: management.accountManagementReads,
     trustedAccess,
-    workflowPorts,
+    get workflowPorts() {
+      // Auth consumes these ports after pure assembly. Only then inspect its
+      // optional native reader; absence remains an unavailable proof capability.
+      const readSessionRevocationResult = workflow.readSessionRevocationResult?.bind(workflow);
+      installLifecycleSessionRevocationResults(
+        access,
+        readSessionRevocationResult ? { readSessionRevocationResult } : undefined,
+      );
+      return workflowPorts;
+    },
     lifecycle,
     internalLifecycle,
     operators,

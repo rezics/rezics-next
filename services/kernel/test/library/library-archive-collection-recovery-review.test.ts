@@ -6,12 +6,15 @@ import { createLibraryArchiveCollectionRecovery } from '../../src/library/librar
 import type { ArchiveRecord } from '../../src/library/library-archive.ts';
 import { exportSections, libraryExportManifest } from '../../src/library/library-export-format.ts';
 import { newId } from '../../src/route/route.ts';
-import type { Actor } from '../../src/request/access.ts';
+import type { Access, Actor } from '../../src/request/access.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { bindNativeLibraryFixture } from './support/native-library-fixture-binding.ts';
+let restoreLibraryBinding: (() => void) | undefined;
+let nativeAccess: Access;
 
 let db: GrowthDatabase;
 let work: Awaited<ReturnType<typeof createWorkClient>>;
@@ -53,6 +56,10 @@ beforeAll(async () => {
     pool: db.pool,
     workClient: work,
     access: fixture.access,
+    onAccessReady(access) {
+      nativeAccess = access;
+      restoreLibraryBinding = bindNativeLibraryFixture({ pool: db.pool, access, routeKey });
+    },
     writeRate: fixture.writeRate,
     receiptKeys: testReceiptKeys(),
     routeKey,
@@ -122,7 +129,7 @@ beforeAll(async () => {
     recordBytes: records.reduce((n, record) => n + Buffer.byteLength(JSON.stringify(record)), 0),
   };
   archive = Buffer.from(JSON.stringify({ manifest, records })).toString('base64');
-  const access = fixture.access({ actions: new Map(scopes.map((action) => [action, { anonymous: false }])) });
+  const access = nativeAccess;
   actor = await access.authenticate(fixture.bearer('owner'), { pool: db.pool, deadline: Date.now() + 10_000 });
   dependencies = { pool: db.pool, access, routeKey, tokens, clock: () => new Date(now) };
   service = createLibraryArchiveCollectionRecovery(dependencies);
@@ -133,6 +140,7 @@ beforeAll(async () => {
   };
 }, 120_000);
 afterAll(async () => {
+  restoreLibraryBinding?.();
   await work?.close();
   await db?.close();
 });

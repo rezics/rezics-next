@@ -2510,6 +2510,13 @@ capture observation with revision, source hash, invocation and physical run. Dir
 remain allowed with observed source unknown. An observation describes its captured checks, not every command in a
 composed wrapper. Newer local source remains unverified, and generated outputs retain source-matching restoration.
 
+The direct Kernel/Auth `stack-run` remote path forwards native-unit context but does not itself create the committed
+check-run invocation/final binding. Its physical exit/resource receipt alone carries no source revision or prepared
+input fingerprint, so these runs may retain unknown source even after a terminal command. Logs naming a revision,
+a requested checkpoint or a current HEAD cannot fill that gap. Preserve those observations without backfilling or
+rerunning merely to populate telemetry. This reporting limitation adds no source-admission or acceptance gate;
+future coverage must use the existing immutable capture/settlement contract, not a second attestation system.
+
 #### Resident event delivery
 
 The resident watchdog service runs `bun tools/goal/scripts/supermanager-watch.ts --db <store> --tmux-socket

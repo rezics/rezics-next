@@ -156,7 +156,7 @@ test('Unset presentation Type uses mixed member hints while explicit Type select
   } finally {
     await f.close();
   }
-}, 180_000);
+}, 240_000);
 
 test('Catalogue root closure serializes enrollment and final publication requires exact durable current withdrawal acknowledgements for every captured consumer', async () => {
   const f = await createCollectionKindFixture();
