@@ -5,8 +5,7 @@ import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
-import { insightsSearch } from '../../library/reading-insights/address';
-import { ReadingInsightsPage } from '../../library/reading-insights/page';
+import { insightsSearch, ReadingInsightsPage } from '../../library/reading-insights/route';
 
 export const Route = createFileRoute('/library/insights')({
   beforeLoad: async (context) => {

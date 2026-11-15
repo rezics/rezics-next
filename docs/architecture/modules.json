@@ -1337,7 +1337,8 @@
         "apps/web/src/library/yearly-goal-page.tsx",
         "apps/web/src/library/yearly-goal-native.ts",
         "apps/web/src/library/yearly-goal-current.tsx",
-        "apps/web/src/library/copies-query.ts"
+        "apps/web/src/library/copies-query.ts",
+        "apps/web/src/library/reading-insights/route.ts"
       ],
       "allowedDependencies": [
         "client",
