@@ -1,6 +1,10 @@
 export { PROBLEM_TYPE_BASE, PROBLEMS, ProblemError, type ProblemCode, type FieldErrorCode, type FieldError, } from './problem-error.ts';
 export { issuePointers } from '@rezics/definitions/validate';
 export { problemSchema } from './problem-schema.ts';
+/** Enter only after the command returned its committed outcome. A failed response
+ * read retains its ordinary problem code without claiming the write rolled back.
+ */
+export declare function withAppliedCommandEffect<T>(read: () => Promise<T>): Promise<T>;
 export declare function logInternalError(options: {
     requestId: string;
     method: string;

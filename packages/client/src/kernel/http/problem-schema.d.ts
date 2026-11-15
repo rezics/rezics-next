@@ -20,7 +20,7 @@ declare function schemaFor(codes: readonly ProblemCode[], status: number): impor
     status: import("typebox").TLiteral<number>;
     code: TSchema;
     retryable: TSchema;
-    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
     request_id: import("typebox").TString;
     detail?: import("typebox").TOptional<import("typebox").TString>;
     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -34,7 +34,7 @@ declare function extendedSchema<Extensions extends Record<string, TSchema>>(code
     status: import("typebox").TLiteral<number>;
     code: TSchema;
     retryable: TSchema;
-    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
     request_id: import("typebox").TString;
     detail?: import("typebox").TOptional<import("typebox").TString>;
     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
