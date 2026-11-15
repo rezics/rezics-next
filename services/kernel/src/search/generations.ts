@@ -1918,8 +1918,18 @@ export async function assertNativeGenerationActionsVisible(
       !hit ||
       String(hit._version) !== action.version.toString() ||
       !nativeGenerationDocumentMatches(hit._source, action.document)
-    )
+    ) {
+      const actual = record(hit?._source) ? hit._source : {};
+      const expected = action.document as Record<string, unknown>;
+      const fields = [...new Set([...Object.keys(actual), ...Object.keys(expected)])];
+      console.warn('Search publication projection trace', {
+        hit: Boolean(hit),
+        actualVersion: hit?._version,
+        expectedVersion: action.version.toString(),
+        fields: fields.filter((field) => !isDeepStrictEqual(actual[field], expected[field])),
+      });
       throw new GenerationReconciliationMismatch();
+    }
     hits.delete(action.id);
   }
   if (hits.size) throw new GenerationReconciliationMismatch();
