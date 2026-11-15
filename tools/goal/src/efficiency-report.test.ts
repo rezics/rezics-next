@@ -1,4 +1,4 @@
-import { expect, setSystemTime, test } from 'bun:test';
+import { expect, setSystemTime, test, spyOn } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawn, execFileSync } from 'node:child_process';
@@ -126,7 +126,14 @@ test('scheduled native reports omit the legacy lifetime census while manual repo
       .query('INSERT INTO native_execution_units VALUES (?, ?, ?, ?, ?)')
       .run(unit.id, unit.threadId, '%1', unit.worktree, JSON.stringify(unit));
     stages.length = 0;
-    const scheduled = await renderHourlyEfficiencyReport(h.db, { ...options, view: 'native-scheduled' });
+    const queries = spyOn(h.db, 'query');
+    let scheduled = '';
+    try {
+      scheduled = await renderHourlyEfficiencyReport(h.db, { ...options, view: 'native-scheduled' });
+      expect(queries.mock.calls.some(([sql]) => /\bFROM\s+worker_promotions\b/i.test(sql))).toBe(false);
+    } finally {
+      queries.mockRestore();
+    }
     expect(stages).not.toContain('lifecycle');
     expect(stages).toContain('native');
     expect(stages).not.toContain('promotion');
