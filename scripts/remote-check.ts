@@ -2337,6 +2337,8 @@ RUN_SCRATCH_PATHS=set(${REMOTE_CHECK_RUN_SCRATCH_PATHS_JSON})
 PREPARATION_IO_ROOT = None
 PREPARATION_IO_NEXT = 0
 PREPARATION_IO_PHASE = None
+PREPARATION_PHASE_AT = None
+PREPARATION_PHASE_SECONDS = {}
 
 
 def preparation_io_gate():
@@ -2402,7 +2404,7 @@ def digest(path):
     return value.hexdigest()
 
 
-def inventory(root, allocated=None):
+def inventory(root, allocated=None, digest_cache=None):
     result = {}
     # These belong to the transport/supervisor, or are disposable runtime caches, never lifecycle outputs.
     excluded = {'.git'} | CONTROL_ROOT_FILES | CONTROL_ROOT_DIRECTORIES | RUN_SCRATCH_PATHS
@@ -2428,7 +2430,12 @@ def inventory(root, allocated=None):
             elif path.is_dir():
                 result[relative] = ['directory', mode]
             elif path.is_file():
-                result[relative] = ['file', mode, digest(path)]
+                identity = (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns, mode)
+                prior = digest_cache.get(relative) if digest_cache is not None else None
+                value = prior[-1] if prior is not None and prior[:-1] == identity else digest(path)
+                if digest_cache is not None:
+                    digest_cache[relative] = (*identity, value)
+                result[relative] = ['file', mode, value]
             else:
                 raise RuntimeError('unsupported preparation output: ' + relative)
     return result
@@ -3846,6 +3853,7 @@ def install():
         manifest = verified(entry, key)
         hit = manifest is not None
         native_hit = None
+        installer_seconds = None
         if not hit:
             native_key = key
             native_cache = cache / 'native'
@@ -3869,19 +3877,26 @@ def install():
                         raise RuntimeError('restored native package identity mismatch')
                 # No ignore-scripts: workspace/source lifecycle outputs are always rebuilt on a source-key miss.
                 preparation_progress(root, 'frozen-install')
+                installer_started = time.monotonic()
                 completed = subprocess.run([os.environ['REMOTE_CHECK_REAL_BUN'], *sys.argv[2:]])
+                installer_seconds = time.monotonic() - installer_started
                 if completed.returncode:
                     return completed.returncode if completed.returncode > 0 else 128 - completed.returncode
-                preparation_progress(root, 'native-artifact-publication')
-                native_outputs = native_entries(root, inventory(root))
+                preparation_progress(root, 'postinstall-inventory')
+                postinstall_digests = {}
+                after = inventory(root, digest_cache=postinstall_digests)
+                native_outputs = native_entries(root, after)
                 native_checks = verify_native_packages(root, native_outputs)
+                preparation_progress(root, 'native-artifact-publication')
                 if not native_hit:
                     publish_artifacts(root, native_entry, {'schema': 2, 'key': native_key,
                         'entries': native_outputs, 'removed': [], 'nativeChecks': native_checks})
             if owned_processes():
                 raise RuntimeError('installer left owned descendants')
             preparation_progress(root, 'source-artifact-publication')
-            after = inventory(root)
+            # Native publication only writes excluded control staging. Reuse the immutable postinstall hashes;
+            # re-stat the tree so additions, links, modes or changed inode/ctime/mtime/size invalidate that reuse.
+            after = inventory(root, digest_cache=postinstall_digests)
             native_checks = verify_native_packages(root, after)
             outputs = {name: value for name, value in after.items() if before.get(name) != value}
             # Include parent directories so the payload has a complete independently verifiable inventory.
@@ -3910,12 +3925,17 @@ def install():
         receipt = {'schema': 1, 'host': os.environ['REMOTE_CHECK_HOST'],
                    'run': os.environ['REZICS_CHECK_RUN'],
                    'cache': 'hit' if hit else 'miss', 'nativeCache': None if hit else ('hit' if native_hit else 'miss'),
-                   'key': key, 'packages': packages, 'nativeChecks': manifest['nativeChecks']}
+                   'key': key, 'packages': packages, 'nativeChecks': manifest['nativeChecks'],
+                   'installerSeconds': None if installer_seconds is None else round(installer_seconds, 3),
+                   'phaseSeconds': preparation_phase_seconds()}
         (root / 'preparation-install.json').write_text(json.dumps(receipt, sort_keys=True))
         if time.monotonic() >= deadline:
             raise RuntimeError('absolute preparation deadline exceeded')
         (root / '.bun-install-complete').touch()
         print('remote-check: dependency artifacts ' + receipt['cache'] + ' ' + key, file=sys.stderr, flush=True)
+        print('remote-check: dependency preparation timing ' + json.dumps(
+            {'installerSeconds': receipt['installerSeconds'], 'phaseSeconds': receipt['phaseSeconds']}, sort_keys=True),
+            file=sys.stderr, flush=True)
         return 0
 
 
@@ -3982,13 +4002,24 @@ def active_packages(root):
 
 
 def preparation_progress(root, phase):
-    global PREPARATION_IO_PHASE
+    global PREPARATION_IO_PHASE, PREPARATION_PHASE_AT
+    now = time.monotonic()
+    if PREPARATION_IO_PHASE is not None and PREPARATION_PHASE_AT is not None:
+        PREPARATION_PHASE_SECONDS[PREPARATION_IO_PHASE] = PREPARATION_PHASE_SECONDS.get(PREPARATION_IO_PHASE, 0) + now - PREPARATION_PHASE_AT
+    PREPARATION_PHASE_AT = now
     PREPARATION_IO_PHASE = phase
     path = root / '.temp/check-host/preparation-progress.json'
     path.parent.mkdir(parents=True, exist_ok=True)
     pending = path.with_name(path.name + '.pending')
-    pending.write_text(json.dumps({'phase': phase, 'at': time.monotonic()}))
+    pending.write_text(json.dumps({'phase': phase, 'at': now}))
     pending.replace(path)
+
+
+def preparation_phase_seconds():
+    result = dict(PREPARATION_PHASE_SECONDS)
+    if PREPARATION_IO_PHASE is not None and PREPARATION_PHASE_AT is not None:
+        result[PREPARATION_IO_PHASE] = result.get(PREPARATION_IO_PHASE, 0) + time.monotonic() - PREPARATION_PHASE_AT
+    return {phase: round(elapsed, 3) for phase, elapsed in result.items()}
 
 
 def preparation_diagnostics(root):

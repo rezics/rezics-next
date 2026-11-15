@@ -89,11 +89,11 @@ async function publisher(f: CollectionKindFixture) {
     }
     if (!execute) return pin;
     let progress = await call('/v1/definitions/catalogues', { pin });
-    expect(progress.status).toBe(200);
+    expect(progress.status, JSON.stringify(progress.body)).toBe(200);
     // Finite test input and one real bounded native continuation per call; no test scheduler.
     for (let page = 0; page < 2048 && progress.body.state === 'building'; page++) {
       progress = await call(`/v1/definitions/catalogues/${pin.rootDigest}:step`, {});
-      expect(progress.status).toBe(200);
+      expect(progress.status, JSON.stringify(progress.body)).toBe(200);
     }
     expect(progress.body.state).toBe('ready');
     return pin;
@@ -323,7 +323,7 @@ test('Catalogue build and activation recover the same committed result after a l
       pin = await p.build(`replay-${randomUUID()}`, false);
     const key = JSON.stringify(randomUUID());
     const started = await p.call('/v1/definitions/catalogues', { pin }, key);
-    expect(started.status).toBe(200);
+    expect(started.status, JSON.stringify(started.body)).toBe(200);
     p.restart();
     expect(await p.call('/v1/definitions/catalogues', { pin }, key)).toEqual(started);
     const first = await runCatalogueBuildStep(f.database.pool, pin, () => new Date(), '0');
