@@ -1,10 +1,11 @@
+import { parseKnowledgeMediaSelection, type KnowledgeMediaSelection } from '@rezics/definitions/knowledge-media';
 import type { KernelClient } from '@rezics/client';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import * as v from 'valibot';
 
 export { NativeDocumentImage } from './document-media-image';
 
-// Consumer-local declaration until content/media-presentation.ts is delivered. No producer implementation lives here.
+// Native presentation metadata; source and byte authority remain with Media.
 export type DocumentImagePresentation = Readonly<{
   id: string;
   containerId: string;
@@ -65,9 +66,11 @@ export async function loadDocumentMedia(
   ids: readonly string[],
   authorization?: string | null,
   signal?: AbortSignal,
+  knowledge?: KnowledgeMediaSelection,
 ): Promise<DocumentMediaRead> {
   if (ids.length > DOCUMENT_MEDIA_LIMIT || new Set(ids).size !== ids.length || ids.some((value) => !v.is(id, value)))
     return { kind: 'unavailable' };
+  if (knowledge !== undefined && !parseKnowledgeMediaSelection(knowledge)) return { kind: 'unavailable' };
   if (!ids.length) return { kind: 'ready', images: new Map() };
   try {
     // The exact declared POST /v1/media/presentations, through the original client's native transport.
@@ -76,7 +79,7 @@ export async function loadDocumentMedia(
     const post = member(endpoint, 'post');
     if (typeof post !== 'function') return { kind: 'unavailable' };
     const result: unknown = await Reflect.apply(post, endpoint, [
-      { ids: [...ids] },
+      { ids: [...ids], ...(knowledge ? { knowledge } : {}) },
       {
         ...(authorization ? { headers: { authorization } } : {}),
         fetch: { cache: 'no-store', redirect: 'manual', ...(signal ? { signal } : {}) },
@@ -87,7 +90,8 @@ export async function loadDocumentMedia(
     if (!page.success) return { kind: 'unavailable' };
     const images = new Map<string, DocumentImagePresentation>();
     for (const image of page.output.images) {
-      if (!ids.includes(image.id) || images.has(image.id)) return { kind: 'unavailable' };
+      if (!ids.includes(image.id) || images.has(image.id) ||
+          (knowledge !== undefined && image.containerId !== knowledge.documentId)) return { kind: 'unavailable' };
       const variants = new Set(image.variants.map((variant) => `${variant.format}:${variant.width}`));
       if (variants.size !== image.variants.length) return { kind: 'unavailable' };
       images.set(image.id, image);
@@ -96,4 +100,15 @@ export async function loadDocumentMedia(
   } catch {
     return { kind: 'unavailable' };
   }
+}
+
+/** Knowledge keeps its exact source tuple while sharing the native metadata decoder. */
+export function loadKnowledgeDocumentMedia(
+  client: KernelClient,
+  ids: readonly string[],
+  knowledge: KnowledgeMediaSelection,
+  authorization?: string | null,
+  signal?: AbortSignal,
+): Promise<DocumentMediaRead> {
+  return loadDocumentMedia(client, ids, authorization, signal, knowledge);
 }

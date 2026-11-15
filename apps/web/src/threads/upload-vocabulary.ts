@@ -26,7 +26,7 @@ export type UploadReservationBody = Readonly<
     | { realmId: string }
     | { newThread: Readonly<{ boardId: string; idempotencyKey: string }> }
   ) & {
-    purpose: 'post-image' | 'avatar' | 'realm-icon' | 'realm-banner';
+    purpose: 'post-image' | 'knowledge-image' | 'avatar' | 'realm-icon' | 'realm-banner';
     mediaType: string;
     byteCount: number;
   }
