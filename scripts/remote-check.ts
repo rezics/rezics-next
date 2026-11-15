@@ -461,6 +461,13 @@ export type RemotePreparationAbortEvidence = {
   run: string;
   status: 'infrastructure-failure';
   phase: 'abort';
+  diagnostics?: {
+    signal: 1 | 2 | 15;
+    stalledPhase: string;
+    phaseElapsedMs: number | null;
+    ownedProcesses: Array<{ pid: number; state: string; wait: string }>;
+    logTail: string;
+  };
   preparationReceiptSha256: string;
   resourcesReceiptSha256: string;
   resources: {
@@ -795,6 +802,7 @@ export function parseRemotePreparationAbortEvidence(
       'preparationReceiptSha256',
       'resourcesReceiptSha256',
       'resources',
+      ...(value && typeof value === 'object' && 'diagnostics' in value ? ['diagnostics'] : []),
     ])
   )
     return null;
@@ -824,6 +832,18 @@ export function parseRemotePreparationAbortEvidence(
     ])
   )
     return null;
+  if (item.diagnostics !== undefined) {
+    const detail = item.diagnostics;
+    if (!exactKeys(detail, ['signal', 'stalledPhase', 'phaseElapsedMs', 'ownedProcesses', 'logTail']) ||
+        ![1, 2, 15].includes(Number(detail.signal)) || typeof detail.signal !== 'number' ||
+        typeof detail.stalledPhase !== 'string' || !/^[a-z-]{1,64}$/.test(detail.stalledPhase) ||
+        !(detail.phaseElapsedMs === null || (Number.isSafeInteger(detail.phaseElapsedMs) && Number(detail.phaseElapsedMs) >= 0)) ||
+        typeof detail.logTail !== 'string' || Buffer.byteLength(detail.logTail) > 8192 ||
+        !Array.isArray(detail.ownedProcesses) || detail.ownedProcesses.length > 16 ||
+        !detail.ownedProcesses.every((entry) => exactKeys(entry, ['pid', 'state', 'wait']) &&
+          Number.isSafeInteger(entry.pid) && Number(entry.pid) > 0 && typeof entry.state === 'string' &&
+          /^[A-Za-z]$/.test(entry.state) && typeof entry.wait === 'string' && entry.wait.length <= 128)) return null;
+  }
   const resources = item.resources;
   const supervisor = resources.supervisor;
   const finite = (number: unknown): number is number => typeof number === 'number' && Number.isFinite(number);
@@ -4210,7 +4230,7 @@ def supervise():
             block = os.read(event.fileobj.fileno(), 65536)
             if block:
                 last_test = remember_test_file(root, block, last_test)
-                if not preparation_done:
+                if not (root / 'command-started').exists():
                     tail.extend(block)
                     del tail[:-8192]
                     # The independent host deadline can reap this supervisor, including while SSH output blocks.
@@ -4476,6 +4496,7 @@ class Resources:
                 self.identity = (stat.st_dev, stat.st_ino)
                 self.receipt['cgroup'] = {'path': group if not RESOURCE_CGROUP_OVERRIDE else str(path),
                     'device': stat.st_dev, 'inode': stat.st_ino, 'invocation': invocation}
+                durable(self.root / 'physical-resources.json', json.dumps(self.receipt, sort_keys=True))
                 return
             except (OSError, ValueError, StopIteration, subprocess.TimeoutExpired):
                 return
@@ -4709,6 +4730,9 @@ def lifetime():
         receipt = {'schema': 1, 'status': 'infrastructure-failure', 'phase': reason, 'host': host, 'run': run,
                    'limitMs': 15000 if reason == 'host-pressure' else limit_ms, 'elapsedMs': elapsed, 'command': command[:256]}
         if reason == 'host-pressure': receipt['pressure'] = pressure_evidence
+        if reason == 'abort':
+            receipt['diagnostics'] = {'signal': interrupted[0], 'logTail': preparation_log_tail(root),
+                                      **(diagnostics or preparation_diagnostics(root))}
         result_code = 124 if reason in ['run-lifetime', 'host-pressure'] else 128 + interrupted[0] if interrupted else 70
         if reason == 'install/preparation':
             receipt.update({'reason': 'absolute preparation deadline exceeded', 'activePackages': packages,
@@ -5298,6 +5322,7 @@ host=$REMOTE_CHECK_HOST
     reclaim_run_inactive_file
     if [ "$code" -eq 0 ]; then
       export PATH="$(dirname "$bun"):$PWD/node_modules/.bin:$PATH"
+      python3 -c ${quote(`import json,time; from pathlib import Path; Path(${JSON.stringify(`${directory}/.temp/check-host/preparation-progress.json`)}).write_text(json.dumps({'phase':'generation','at':time.monotonic()}))`)}
       ${preparationScript}
     fi
     ${preparedInputsEvidence}
@@ -5608,7 +5633,7 @@ def read(name,limit):
     if p.is_symlink() or not p.is_file() or p.stat().st_size>limit: raise ValueError('receipt unavailable')
     return json.loads(p.read_bytes())
 try:
-    abort=read('preparation-status.json',8192)
+    abort=read('preparation-status.json',65536)
     resources=read('physical-resources.json',500000)
     if (abort.get('schema')!=1 or abort.get('host')!=host or abort.get('run')!=run or
             abort.get('status')!='infrastructure-failure' or abort.get('phase')!='abort' or
@@ -5637,6 +5662,48 @@ except (OSError,ValueError,TypeError,KeyError,AttributeError,IndexError):
     sys.exit(1)
 `;
   return `# REMOTE_CHECK_RETAINED_ABORT\npython3 -c ${quote(reader)}`;
+}
+
+/** Classify pre-command ownership without confusing live generation with a command that never started. */
+export function preparationStatusScript(directory: string, host: string, run: string): string {
+  const reader = String.raw`import json,os,sys
+from pathlib import Path
+root=Path(${JSON.stringify(directory)})
+try:
+    marker=json.loads((root/'.remote-check-supervisor').read_text())
+    if marker.get('schema')!=1 or marker.get('host')!=${JSON.stringify(host)} or marker.get('run')!=${JSON.stringify(run)}:
+        raise ValueError('foreign supervisor')
+    if type(marker.get('pid')) is not int or marker['pid']<=0 or type(marker.get('started')) is not str:
+        raise ValueError('invalid supervisor')
+    group=Path('/sys/fs/cgroup/rezics.slice/rezics-check.slice/rezics-check-'+${JSON.stringify(run)}.replace('-','_')+'.slice')
+    process=Path('/proc')/str(marker['pid'])
+    live=False
+    if process.exists():
+        fields=(process/'stat').read_text().rsplit(')',1)[1].split()
+        live=(fields[19]==marker['started'] and fields[0] not in ['Z','X'] and
+              int(fields[2])==marker.get('group') and process.stat().st_uid==marker.get('uid'))
+    if live:
+        resource=json.loads((root/'physical-resources.json').read_text())
+        cgroup=resource['cgroup']; info=group.stat()
+        if (resource.get('schema')!=1 or resource.get('host')!=${JSON.stringify(host)} or resource.get('run')!=${JSON.stringify(run)} or
+                resource.get('boot')!=Path('/proc/sys/kernel/random/boot_id').read_text().strip() or
+                resource['supervisor']!={'pid':marker['pid'],'start':marker['started'],'group':marker['group']} or
+                cgroup['path']!=str(group).removeprefix('/sys/fs/cgroup') or
+                (info.st_dev,info.st_ino)!=(cgroup['device'],cgroup['inode'])): raise ValueError('unverified resource identity')
+        events=dict(line.split() for line in (group/'cgroup.events').read_text().splitlines())
+        if events.get('populated')!='1': raise ValueError('unverified cgroup state')
+        print('PREPARING')
+    elif not (root/'.preparation-started').exists():
+        if group.exists():
+            events=dict(line.split() for line in (group/'cgroup.events').read_text().splitlines())
+            if events.get('populated')!='0': raise ValueError('owned processes remain')
+        print('NOT_STARTED')
+    else:
+        print('UNKNOWN')
+except (OSError,ValueError,TypeError,KeyError,IndexError,AttributeError):
+    print('UNKNOWN')
+`;
+  return `python3 -c ${quote(reader)}`;
 }
 
 /** Reads status only from the exact host/run supervisor and optionally returns its bounded command output tail. */
@@ -5669,10 +5736,12 @@ if [ -e ${quote(`${directory}/exit-status`)} ]; then
 ${recoveredOutput}
 elif [ -e ${quote(`${directory}/.owned-cleanup-incomplete.json`)} ] || [ -e ${quote(`${directory}/.owned-resources-incomplete.json`)} ] || [ -e ${quote(`${directory}/run-lifetime-status.json`)} ] || [ -e ${quote(`${directory}/.command-result`)} ]; then printf 'CLEANING\\n'
 elif [ -e ${quote(`${directory}/command-started`)} ]; then printf 'STARTED\\n'
-else printf 'NOT_STARTED\\n'; fi`;
+else ${preparationStatusScript(directory, host, run)}; fi`;
 }
 
 type RemoteCommandStatus =
+  | { kind: 'preparing' }
+  | { kind: 'unknown' }
   | { kind: 'not-started' }
   | { kind: 'started' }
   | { kind: 'cleaning' }
@@ -5687,10 +5756,12 @@ export function parseRemoteCommandStatus(
   const parsed = /^(?:0|[1-9]\d{0,2})$/.test(recorded) ? Number(recorded) : Number.NaN;
   const invalid =
     status.code !== 0 ||
-    (!Number.isInteger(parsed) && recorded !== 'NOT_STARTED' && recorded !== 'STARTED' && recorded !== 'CLEANING' && recorded !== 'PREPARATION_ABORTED') ||
+    (!Number.isInteger(parsed) && recorded !== 'NOT_STARTED' && recorded !== 'STARTED' && recorded !== 'CLEANING' && recorded !== 'PREPARATION_ABORTED' && recorded !== 'PREPARING' && recorded !== 'UNKNOWN') ||
     parsed > 255;
   if (invalid)
     throw new RemoteTransportError(host.name, 'remote command', status.code || REMOTE_TRANSPORT_FAILURE, false);
+  if (recorded === 'PREPARING') return { kind: 'preparing' };
+  if (recorded === 'UNKNOWN') return { kind: 'unknown' };
   if (recorded === 'PREPARATION_ABORTED') return { kind: 'preparation-aborted' };
   if (recorded === 'NOT_STARTED') return { kind: 'not-started' };
   if (recorded === 'STARTED') return { kind: 'started' };
@@ -5719,7 +5790,7 @@ async function waitForRemoteCommandStatus(
       response = await boundedSsh(
         host,
         connectionId,
-        statusScript(directory, host.name, run),
+        `${retainedPreparationAbortScript(directory, host.name, run)} || { ${statusScript(directory, host.name, run)}; }`,
         'remote command status',
         timeoutMs,
       );
@@ -5752,7 +5823,7 @@ async function waitForRemoteCommandStatus(
     assertExecutionAllowed(options, signal);
     const remainingMs = deadlineAt - Date.now();
     const status = await probe(Math.max(1, Math.min(5_000, remainingMs)));
-    if (status && status.kind !== 'started' && status.kind !== 'cleaning') return status;
+    if (status && ['completed', 'not-started', 'preparation-aborted'].includes(status.kind)) return status;
     const delay = status ? pollMs : Math.min(30_000, retryBaseMs * 2 ** Math.min(consecutiveDrops - 1, 5));
     await sleep(Math.max(1, Math.min(delay, deadlineAt - Date.now())), signal);
   }
@@ -8444,7 +8515,7 @@ def read_json(name,limit=8192):
     try: return json.loads(raw)
     except (UnicodeDecodeError,ValueError): return None
 def preparation_abort():
-    preparation_raw=read_bytes('preparation-status.json',8192)
+    preparation_raw=read_bytes('preparation-status.json',65536)
     if preparation_raw is None: return None,'matching preparation abort receipt is unavailable'
     resources_raw=read_bytes('physical-resources.json',500000)
     if resources_raw is None: return None,'terminal physical resource receipt is unavailable'
@@ -8467,6 +8538,7 @@ def preparation_abort():
         terminal_sample=samples[-1]
         return ({'schema':1,'host':${JSON.stringify(hostName)},'run':${JSON.stringify(runId)},
                  'status':'infrastructure-failure','phase':'abort',
+                 **({'diagnostics':preparation['diagnostics']} if 'diagnostics' in preparation else {}),
                  'preparationReceiptSha256':hashlib.sha256(preparation_raw).hexdigest(),
                  'resourcesReceiptSha256':hashlib.sha256(resources_raw).hexdigest(),
                  'resources':{'schema':1,'host':${JSON.stringify(hostName)},'run':${JSON.stringify(runId)},
@@ -9008,7 +9080,7 @@ async function runLeased(
     if (code === 255) {
       const status = await waitForRemoteCommandStatus(host, id, connectionId, directory, deadlineAt, options, signal);
       assertExecutionAllowed(options, signal);
-      if (status.kind === 'unreachable') {
+      if (status.kind === 'unreachable' || status.kind === 'unknown') {
         preserveRemoteRun = true;
         throw new RemoteTransportError(host.name, 'remote command', REMOTE_TRANSPORT_FAILURE, false);
       }
@@ -9033,7 +9105,7 @@ async function runLeased(
           'the host retained its root result but has not published terminal cleanup; the physical run remains owned',
         );
       }
-      if (status.kind === 'started') {
+      if (status.kind === 'started' || status.kind === 'preparing') {
         console.error(`remote-check: deadline reached after ${maxMs} ms`);
         const stopped = await boundedSsh(host, connectionId, stopRunScript(id), 'remote command stop', 15_000);
         if (stopped.code !== 0 || !stopped.output.includes('STOPPED'))
