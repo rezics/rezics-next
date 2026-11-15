@@ -129,11 +129,14 @@ test('scheduled native reports omit the legacy lifetime census while manual repo
     const scheduled = await renderHourlyEfficiencyReport(h.db, { ...options, view: 'native-scheduled' });
     expect(stages).not.toContain('lifecycle');
     expect(stages).toContain('native');
+    expect(stages).not.toContain('promotion');
+    expect(scheduled).toContain('Legacy managed promotion: unmeasured');
     expect(scheduled).toContain('Legacy managed lifecycle census: unmeasured');
     expect(scheduled).toContain('unknown (lifetime census omitted)');
     stages.length = 0;
     const manual = await renderHourlyEfficiencyReport(h.db, options);
     expect(stages).toContain('lifecycle');
+    expect(stages).toContain('promotion');
     expect(manual).not.toContain('lifetime census omitted');
   } finally {
     h.close();
