@@ -5,6 +5,7 @@ import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { createKernelClient } from '../../../../packages/client/src/index.ts';
 import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { purgeOwnedGraphPage as purge } from '../../src/library/erasure-owned-graph.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -21,6 +22,8 @@ import { exportSections } from '../../src/library/library-export-format.ts';
 import { decodeLibraryArchive, type ArchiveRecord } from '../../src/library/library-archive.ts';
 import { createLibraryArchiveCollectionRecovery } from '../../src/library/library-archive-collection-recovery.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { bindNativeLibraryFixture } from './support/native-library-fixture-binding.ts';
+let restoreLibraryBinding: (() => void) | undefined;
 let workClient: WorkClient;
 let db: GrowthDatabase, app: ReturnType<typeof createKernel>;
 let fixture: Awaited<ReturnType<typeof createRealAccess<{ owner: string; other: string }>>>;
@@ -33,6 +36,7 @@ const collection = newId(route),
   copy = newId(route),
   version = newId(route);
 const scopes = [
+  'library_archive:read',
   'library_entry:list',
   'library_entry:read',
   'library_entry:update',
@@ -118,7 +122,13 @@ beforeAll(async () => {
     clock: () => new Date(now),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(29)]]) },
     access: fixture.access,
-    writeRate: fixture.writeRate,
+    onAccessReady(access) {
+      restoreLibraryBinding = bindNativeLibraryFixture({ pool: db.pool, access, routeKey, clock: () => new Date(now) });
+    },
+    writeRate: createWriteRateLimiter({
+      secret: 'library-export-fixture-rate-secret',
+      overrides: JSON.stringify({ 'new-account': { write: { maximum: 100000, seconds: 86400 } } }),
+    }),
     ratePeer: () => '127.0.0.1',
   });
   await sql`INSERT INTO access.exposure_opening("group",valid,transaction_id) SELECT g,tstzrange('2020-01-01',NULL,'[)'),${owner} FROM unnest(${['personal_library', 'reading_progress', 'collections']}::text[]) g`;
@@ -187,6 +197,7 @@ beforeAll(async () => {
     await sql`INSERT INTO library.list_import_anilist(route,account_id,import_id,ordinal,payload) VALUES(${route},${owner},${copy},${ordinal},${{ source, review: { id: 'never-export-review-id' }, outcome: { receipt: 'never-export-receipt' } }})`;
 });
 afterAll(async () => {
+  restoreLibraryBinding?.();
   await workClient?.close();
   await db?.close();
 });
