@@ -1,6 +1,18 @@
 {
   "reports": [
     {
+      "path": "docs/research/cross-goal-model-boundaries-astra.md",
+      "topic": "cross-goal-model-boundaries",
+      "researcher": "gpt-6-astra",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/work-reference-concept-book-catalogue-astra.md",
+      "topic": "work-reference-concept-book-catalogue",
+      "researcher": "gpt-6-astra",
+      "state": "open"
+    },
+    {
       "path": "docs/research/editor-native-mapping-gpt-6.md",
       "topic": "editor-native-mapping",
       "researcher": "gpt-6",
