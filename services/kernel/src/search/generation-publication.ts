@@ -1302,9 +1302,15 @@ export function createSearchGenerationPublication(
             else if (error instanceof Pending && error.reason === 'source_pending') await save(client, job, meter);
             throw error;
           }
+          // Fencing and intent do no step work; the existing scheduler must resume activate.
           return {
             status:
-              job.phase === 'reconciled' || job.phase === 'active' ? ('reconciled' as const) : ('progress' as const),
+              job.phase === 'reconciled' ||
+              job.phase === 'fencing' ||
+              job.phase === 'intent' ||
+              job.phase === 'active'
+                ? ('reconciled' as const)
+                : ('progress' as const),
             job: reference(job),
             cost: meter,
           };
