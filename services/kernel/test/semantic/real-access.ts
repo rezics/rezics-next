@@ -3,6 +3,7 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { Pool } from 'pg';
 import { createAccess, type AccessConfig } from '../../src/access/index.ts';
 import { deriveAccess } from '../../src/access/derived-access.ts';
+import { validResource } from '../../src/access/grant-command.ts';
 import type { AuthenticationConfig } from '../../src/access/authenticate.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import type { Access, Resource } from '../../src/request/access.ts';
@@ -133,6 +134,7 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
     });
   };
   async function grant(resource: Resource, persona: Persona, action: string): Promise<void> {
+    if (!validResource(resource)) throw new TypeError('Fixture grant requires the resource ID home route');
     const accountId = accounts[persona];
     await admin.query(
       `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
@@ -141,6 +143,7 @@ VALUES ($1,$2,$3,$4,'(,)',$3) ON CONFLICT DO NOTHING`,
     );
   }
   async function revoke(resource: Resource, persona: Persona, action: string): Promise<void> {
+    if (!validResource(resource)) throw new TypeError('Fixture revoke requires the resource ID home route');
     await admin.query(
       `DELETE FROM access.resource_grant
 WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action=$4`,

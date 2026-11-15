@@ -43,10 +43,20 @@ function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error('Bounded database read connection became uncertain');
 }
 
-function isPostgresServerError(error: unknown): boolean {
+function isPostgresServerError(error: unknown): error is { code: string; severity: 'ERROR' } {
   if (typeof error !== 'object' || error === null) return false;
-  const details = error as { code?: unknown; severity?: unknown };
-  return typeof details.code === 'string' && /^[0-9A-Z]{5}$/.test(details.code) && details.severity === 'ERROR';
+  return (
+    'code' in error &&
+    typeof error.code === 'string' &&
+    /^[0-9A-Z]{5}$/.test(error.code) &&
+    'severity' in error &&
+    error.severity === 'ERROR'
+  );
+}
+
+/** Native serialization and deadlock errors confirm rollback, including at COMMIT. */
+export function isPostgresTransactionAbort(error: unknown): boolean {
+  return isPostgresServerError(error) && (error.code === '40001' || error.code === '40P01');
 }
 
 /** Savepoint rollback and transaction chaining retain the current checkout's custody. */
