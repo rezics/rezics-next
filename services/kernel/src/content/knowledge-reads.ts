@@ -24,6 +24,7 @@ import {
   KnowledgeStaleCursorError,
   knowledgeSubjectTargets,
   type KnowledgeOutlinePageInput,
+  type KnowledgeOwnedNotebookPageInput,
   type KnowledgePageInput,
   type KnowledgeStructureHistoryInput,
   type KnowledgeStructureChangeAction,
@@ -256,10 +257,10 @@ export async function readKnowledgePrivateDocument(
 export async function readKnowledgeOwnedNotebooks(
   deps: KnowledgeDependencies,
   accountId: string,
-  query: KnowledgePageInput,
+  query: KnowledgeOwnedNotebookPageInput,
   context: ReadContext,
 ) {
-  const request = { limit: query.limit ?? KNOWLEDGE_PAGE_LIMIT, cursor: query.cursor };
+  const request = { limit: query.limit ?? KNOWLEDGE_PAGE_LIMIT, cursor: query.cursor, subjectId: query.subjectId };
   const readContext = { actor: context.actor, deadline: context.deadline };
   const sourceRoute = route(accountId);
   const limit = request.limit;
@@ -268,6 +269,7 @@ export async function readKnowledgeOwnedNotebooks(
   const binding = knowledgeCursorBinding('GET /v1/accounts/:accountId/knowledge/notebooks', accountId, {
     limit,
     route: sourceRoute,
+    ...(request.subjectId ? { subjectId: request.subjectId } : {}),
   });
   const cursor = await readCursor(deps, binding, request.cursor);
   if (
@@ -295,6 +297,7 @@ export async function readKnowledgeOwnedNotebooks(
       accountId,
       after ? { createdAt: after[0]!, notebookId: after[1]! } : null,
       limit + 1,
+      request.subjectId,
     );
     return rows;
   });
@@ -613,7 +616,11 @@ export async function readKnowledgeStructureHistory(
   const page = { limit: query.limit ?? KNOWLEDGE_PAGE_LIMIT, cursor: query.cursor };
   const readContext = { actor: context.actor, deadline: context.deadline };
   const sourceRoute = route(notebookId);
-  if (readContext.actor.kind !== 'account' || readContext.actor.accountId !== accountId || route(accountId) !== sourceRoute)
+  if (
+    readContext.actor.kind !== 'account' ||
+    readContext.actor.accountId !== accountId ||
+    route(accountId) !== sourceRoute
+  )
     throw new KnowledgeNotFoundError();
   const limit = page.limit;
   const binding = knowledgeCursorBinding(

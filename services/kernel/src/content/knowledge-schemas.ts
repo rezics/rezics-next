@@ -55,6 +55,10 @@ export const KnowledgePageQuerySchema = t.Object(
   },
   { additionalProperties: false },
 );
+export const KnowledgeOwnedNotebookPageQuerySchema = t.Object(
+  { ...KnowledgePageQuerySchema.properties, subjectId: t.Optional(UUID) },
+  { additionalProperties: false },
+);
 export const KnowledgeOutlinePageQuerySchema = t.Object(
   { ...KnowledgePageQuerySchema.properties, parentPlacementId: t.Optional(UUID), revisionId: t.Optional(UUID) },
   { additionalProperties: false },

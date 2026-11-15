@@ -7,6 +7,7 @@ import { readerSessionSource } from '../reader/lifetime';
 import { useSession } from '../session/query';
 import { knowledgeDiscoveryExactHref, type KnowledgeDiscoveryDocument } from './discovery';
 import { readKnowledgeDiscoveryPage } from './discovery-read';
+import { KnowledgeNavigationRoute } from './navigation-route';
 import {
   KnowledgeDiscoveryReading,
   parseKnowledgeDiscoveryReturn,
@@ -364,13 +365,7 @@ export function KnowledgeDiscoveryPanel({
           message={m.knowledge_discovery_restart_needed({}, options)}
           descriptionId={descriptionId}
           alert
-          action={actionButton(
-            'restart',
-            onRestart,
-            m.knowledge_discovery_restart({}, options),
-            null,
-            descriptionId,
-          )}
+          action={actionButton('restart', onRestart, m.knowledge_discovery_restart({}, options), null, descriptionId)}
         />
       ) : null}
       {preparingContinuation ? (
@@ -515,17 +510,22 @@ export function KnowledgeDiscoverySlot({ subjectId, locale, visitHref }: Knowled
     };
   }, [source, sessionRevision, subjectId, locale, returnTo]);
   return (
-    <KnowledgeDiscoveryCaller
-      key={`${subjectId}:${locale}:${returnTo}:${sessionRevision}`}
-      binding={binding}
-      returnTo={returnTo}
-      current={current}
-      read={(request) =>
-        readKnowledgeDiscoveryPage({
-          data: request,
-          ...(csrfToken ? { headers: { 'X-CSRF-Token': csrfToken } } : {}),
-        })
-      }
-    />
+    <>
+      <KnowledgeDiscoveryCaller
+        key={`${subjectId}:${locale}:${returnTo}:${sessionRevision}`}
+        binding={binding}
+        returnTo={returnTo}
+        current={current}
+        read={(request) =>
+          readKnowledgeDiscoveryPage({
+            data: request,
+            ...(csrfToken ? { headers: { 'X-CSRF-Token': csrfToken } } : {}),
+          })
+        }
+      />
+      {session.state === 'signed-in' && session.subject && csrfToken ? (
+        <KnowledgeNavigationRoute key={JSON.stringify([subjectId, locale, visitHref])} subjectId={subjectId} />
+      ) : null}
+    </>
   );
 }

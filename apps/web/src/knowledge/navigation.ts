@@ -75,7 +75,7 @@ export type KnowledgeOutlineWire = Readonly<{
   parentPlacementId?: string;
 }>;
 
-const positionPattern = /^(?:0|[1-9][0-9]{0,18})$/;
+const positionPattern = /^(?:0|[1-9][0-9]{0,37})$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

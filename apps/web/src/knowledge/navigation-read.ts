@@ -2,7 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import { isKnowledgeId } from './private-knowledge';
 
 export type KnowledgeNavigationAddress =
-  | { kind: 'owned' }
+  | { kind: 'owned'; subjectId?: string }
   | { kind: 'outline'; notebookId: string; parentPlacementId: string | null };
 export type KnowledgeNavigationRequest = KnowledgeNavigationAddress & { cursor?: string };
 export type KnowledgeNotebookRow = Readonly<{
@@ -41,7 +41,10 @@ const cursor = (v: unknown): v is string | null => v === null || text(v, 4096);
 export function parseKnowledgeNavigationRequest(value: unknown): KnowledgeNavigationRequest | null {
   if (!record(value) || (value.cursor !== undefined && !text(value.cursor, 4096))) return null;
   const frontier = value.cursor === undefined ? {} : { cursor: value.cursor as string };
-  if (value.kind === 'owned') return { kind: 'owned', ...frontier };
+  if (value.kind === 'owned') {
+    if (value.subjectId !== undefined && !isKnowledgeId(value.subjectId)) return null;
+    return { kind: 'owned', ...frontier, ...(value.subjectId === undefined ? {} : { subjectId: value.subjectId }) };
+  }
   if (value.kind !== 'outline' || !isKnowledgeId(value.notebookId)) return null;
   if (value.parentPlacementId !== null && !isKnowledgeId(value.parentPlacementId)) return null;
   return { kind: 'outline', notebookId: value.notebookId, parentPlacementId: value.parentPlacementId, ...frontier };
@@ -64,6 +67,7 @@ export function admitKnowledgeNavigationPage(
         !record(row) ||
         !isKnowledgeId(row.notebookId) ||
         !isKnowledgeId(row.subjectId) ||
+        (request.subjectId !== undefined && row.subjectId !== request.subjectId) ||
         !isKnowledgeId(row.structureRevisionId) ||
         !text(row.title, 256) ||
         typeof row.createdAt !== 'string' ||
@@ -128,7 +132,11 @@ export async function readKnowledgeNavigation(
 ): Promise<KnowledgeNavigationResult> {
   const { request } = input;
   const options = {
-    query: { limit: 20, ...(request.cursor === undefined ? {} : { cursor: request.cursor }) },
+    query: {
+      limit: 20,
+      ...(request.cursor === undefined ? {} : { cursor: request.cursor }),
+      ...(request.kind === 'owned' && request.subjectId !== undefined ? { subjectId: request.subjectId } : {}),
+    },
     headers: { authorization: input.authorization },
     fetch: { cache: 'no-store', redirect: 'manual' } as const,
   };

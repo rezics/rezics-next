@@ -62,6 +62,7 @@ import {
   KnowledgeOutlineSchema,
   KnowledgeHistoricalOutlineSchema,
   KnowledgeOwnedNotebooksSchema,
+  KnowledgeOwnedNotebookPageQuerySchema,
   KnowledgePageQuerySchema,
   KnowledgePlacementMoveSchema,
   KnowledgePrivateDocumentSchema,
@@ -275,7 +276,7 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
       '/v1/accounts/:accountId/knowledge/notebooks',
       {
         params: accountParams(),
-        query: strictContentSchema(KnowledgePageQuerySchema),
+        query: strictContentSchema(KnowledgeOwnedNotebookPageQuerySchema),
         response: {
           200: withHeaders(strictContentSchema(KnowledgeOwnedNotebooksSchema), responseHeaders),
           ...failures(),
@@ -290,10 +291,12 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
       async ({ params: { accountId }, query, actor, admission, job, session, set }) => {
         const result = await operation(() =>
           admission.run('normal', job, () =>
-            readKnowledgeOwnedNotebooks(deps, accountId, knowledgePageInput(query), {
-              actor,
-              deadline: job.deadline,
-            }),
+            readKnowledgeOwnedNotebooks(
+              deps,
+              accountId,
+              { ...knowledgePageInput(query), ...(query.subjectId ? { subjectId: query.subjectId } : {}) },
+              { actor, deadline: job.deadline },
+            ),
           ),
         );
         for (const anchor of result.anchors) session.record(sessionComponent(anchor));
