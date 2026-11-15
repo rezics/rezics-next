@@ -11,7 +11,8 @@ import {
   runIdentityTerminalCommand,
 } from '../../src/semantic/identity-terminal-closure-command.ts';
 import { IdentityTerminalClaimReleaseError } from '../../src/semantic/identity-terminal-closure-errors.ts';
-import { home, seedLegacyRoot } from './support/identity-epoch.ts';
+import { digest, epochFixture, home, release, seedLegacyRoot } from './support/identity-epoch.ts';
+import { admitMergeSubjects } from '../../src/semantic/merges.ts';
 import {
   appendEdge,
   assertRetained,
@@ -23,6 +24,66 @@ import {
   sourceHead,
   type Boundary,
 } from './support/identity-terminal-closure.ts';
+
+test('bootstrap and admission replay preserve PREPARE-pinned native births beside a legacy source', async () => {
+  const db = await isolatedDeployment();
+  let fixture: Awaited<ReturnType<typeof epochFixture>> | undefined;
+  try {
+    fixture = await epochFixture(db.url, { pool: db.pool });
+    const route = 0x7a10;
+    const legacy = await seedLegacyRoot(db, route);
+    const born = await fixture.create('Already native birth', route);
+    const destination = await fixture.create('Native destination', route);
+    const key = randomUUID();
+    const options = {
+      subjects: [born.id, destination.id],
+      survivor: destination.id,
+      actor: await fixture.actor(),
+      idempotencyKey: key,
+      digest: digest(key),
+      release,
+      authorization: await fixture.authorization('subject:merge'),
+      authorizationFor: async () => {
+        if (!fixture) throw new Error('Native fixture is unavailable');
+        return fixture.authorization('subject:merge');
+      },
+    };
+    const admitted = await admitMergeSubjects(db.pool, options);
+    const birthCustody = () => db.admin.query(
+      `SELECT to_jsonb(m) AS mapping,to_jsonb(g) AS gate,to_jsonb(o) AS original,to_jsonb(b) AS bridge
+       FROM semantic.identity_epoch_mapping m
+       JOIN semantic.identity_epoch_home_gate g
+         ON (g.route,g.destination,g.original)=(m.route,m.original,m.original)
+       JOIN semantic.identity_epoch_group h ON h.partition_no=m.route/16 AND h.terminal=m.original
+       JOIN semantic.identity_epoch_original o
+         ON o.partition_no=h.partition_no AND o.generation=h.generation AND o.original=m.original
+       JOIN semantic.identity_epoch_prearm_bridge b ON b.partition_no=h.partition_no AND b.generation=h.generation
+       WHERE m.route=$1 AND m.original=$2 AND b.job_id=$3`,
+      [route, born.id, admitted.operation.id],
+    );
+    const before = (await birthCustody()).rows;
+    expect(before).toHaveLength(1);
+    expect(await admitMergeSubjects(db.pool, options)).toEqual(admitted);
+    expect((await birthCustody()).rows).toEqual(before);
+    await db.install();
+    await stepIdentityEpochBootstrap(db.pool, home(born.id));
+    expect((await birthCustody()).rows).toEqual(before);
+    expect((await db.admin.query(
+      'SELECT 1 FROM semantic.identity_epoch_bootstrap_row WHERE partition_no=$1 AND original=ANY($2::uuid[])',
+      [home(born.id), [born.id, destination.id]],
+    )).rows).toEqual([]);
+    expect((await db.admin.query(
+      'SELECT origin FROM semantic.identity_epoch_mapping WHERE route=$1 AND original=$2',
+      [route, legacy],
+    )).rows).toEqual([{ origin: 'published' }]);
+  } finally {
+    try {
+      await fixture?.close();
+    } finally {
+      await db.close();
+    }
+  }
+});
 
 test('terminal directory preserves caller order, duplicate originals and positive epochs', async () => {
   const db = await isolatedDeployment();

@@ -53,6 +53,7 @@ import type { CommandTransaction } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readIdentityEpochCutover } from './identity-epoch-bootstrap.ts';
+import { currentNativeIdentityBirths } from './identity-epoch-bootstrap-native-birth.ts';
 import { IDENTITY_EPOCH_ADMITTED } from './events.ts';
 import { IdentityEpochStoreError } from './contract/identity-errors.ts';
 import { serializeIdentityValue as json } from './identity-core/index.ts';
@@ -186,7 +187,18 @@ export function createIdentityAdmissionOperations(
         if (!group || group.closure_state !== 'open') throw unavailable();
         if (group.pending_job)
           throw new IdentityEpochStoreError('identity_epoch_busy', 'An input group is already claimed');
-        if (!group.ready) {
+        // Active mappings already passed current source/owner/dirty validation above.
+        // A legacy mapping retains the startup fast path only with exact native birth custody.
+        const nativeCustody = point.closure_state === 'active' ||
+          (await capabilities.read.withReadTransaction(pool, (tx) =>
+            currentNativeIdentityBirths(tx, point.route >> 4, [{
+              route: point.route,
+              original: point.original,
+              source_revision: String(point.source_revision),
+              present: true,
+            }]),
+          )).has(point.original);
+        if (!group.ready || !nativeCustody) {
           const ready = await capabilities.read.withReadTransaction(
             pool,
             async (tx) =>

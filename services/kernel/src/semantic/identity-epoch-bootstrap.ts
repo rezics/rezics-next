@@ -7,6 +7,7 @@ import {
 } from './identity-terminal-closure.ts';
 import { reserveIdentityTerminalClosure } from './identity-epoch-mapping.ts';
 import { runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
+import { currentNativeIdentityBirths } from './identity-epoch-bootstrap-native-birth.ts';
 import selectFrontier from './identity-epoch-bootstrap-select-frontier.sql';
 import takeClosures from './identity-epoch-bootstrap-take-closures.sql';
 import receivingBasis from './identity-epoch-bootstrap-basis.sql';
@@ -349,6 +350,12 @@ async function stepBootstrapHome(
             next === phase && last && phase === 'members' ? last.original : NIL,
             generation.toString(),
           ]);
+          // Advance using the full selected page before excluding already-native births.
+          // This preserves the bounded keyset even when every selected row is proven native.
+          if ((phase === 'subjects' || phase === 'dirty') && rows.length) {
+            const nativeBirths = await currentNativeIdentityBirths(tx, partition, rows, work);
+            rows = rows.filter((row) => !nativeBirths.has(row.original));
+          }
           recordIdentityEpochNativeCommit(tx, 'bootstrap');
           registerCommandCallback(tx, async (transactionId) => {
             const allocation = rows.length
@@ -401,7 +408,7 @@ async function stepBootstrapHome(
   if (identityPage)
     await bootstrapOperation(
       { partition, frontier, phase: retained.phase, operation: 'step-terminal-directory-closure' },
-      () => stepIdentityTerminalClosure(pool, retained.native, retained.rows),
+      () => stepIdentityTerminalClosure(pool, retained.native, retained.rows, work),
     );
   const mappingEpochs = new Map<string, string>();
   const withdrawals = new Map<number, Row[]>();
