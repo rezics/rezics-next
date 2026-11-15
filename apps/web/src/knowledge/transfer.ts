@@ -36,12 +36,14 @@ const representation = (v: unknown) => v === 'public' || v === 'authoring';
 const closed = (v: Record<string, unknown>, keys: string[]) => Object.keys(v).every((key) => keys.includes(key));
 const provenance = (v: unknown): boolean =>
   record(v) &&
-  closed(v, ['documentId', 'revisionId', 'representation', 'sha256', 'publicationId']) &&
+  closed(v, ['documentId', 'revisionId', 'representation', 'sha256', 'sourceSha256', 'publicationId']) &&
   isKnowledgeId(v.documentId) &&
   isKnowledgeId(v.revisionId) &&
   representation(v.representation) &&
   digest(v.sha256) &&
-  (v.publicationId === undefined || isKnowledgeId(v.publicationId));
+  (v.representation === 'public'
+    ? isKnowledgeId(v.publicationId) && digest(v.sourceSha256)
+    : v.publicationId === undefined && v.sourceSha256 === undefined);
 
 /** HTTP source union: no head/live shortcut, extra account operand or implicit representation upgrade. */
 export function parseKnowledgeTransferSource(value: unknown): KnowledgeTransferSource | null {

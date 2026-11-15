@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
+import { afterAll, beforeAll, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
 import { fromPlainText, normalizeDocument, serializeDocument } from '@rezics/document';
 import {
   canonicalKnowledgeJson,
@@ -6,6 +6,10 @@ import {
   parseKnowledgeExport,
 } from '../../src/content/knowledge-portable.ts';
 import { postPublicationFixture } from './support/post-publication-fixture.ts';
+import { copyKnowledgeDocument, exportKnowledgeDocument } from '../../src/content/knowledge-transfer.ts';
+import * as knowledgeReads from '../../src/content/knowledge-reads.ts';
+import { routeOf } from '../../src/route/route.ts';
+import { ACCESS_EVIDENCE_TTL_MS } from '../../src/access/evidence-deadline.ts';
 
 setDefaultTimeout(180_000);
 let fixture: Awaited<ReturnType<typeof postPublicationFixture>>;
@@ -23,6 +27,39 @@ function ownDocument(notebookId: string, documentId: string) {
   return `/v1/accounts/${fixture.author.actor.accountId}/knowledge/notebooks/${notebookId}/documents/${documentId}`;
 }
 
+async function pausePublicRead<T>(start: () => Promise<T>, mutateCaller: () => void | Promise<void>): Promise<T> {
+  const original = knowledgeReads.readKnowledgePublicDocument;
+  let enter!: () => void, release!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    enter = resolve;
+  });
+  const wait = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const reader = spyOn(knowledgeReads, 'readKnowledgePublicDocument').mockImplementation(async (...args) => {
+    const selected = await original(...args);
+    enter();
+    await wait;
+    return selected;
+  });
+  const pending = start();
+  try {
+    await Promise.race([
+      entered,
+      pending.then(() => {
+        throw new Error('The native source read was not observed');
+      }),
+    ]);
+    await mutateCaller();
+    release();
+    return await pending;
+  } finally {
+    release();
+    await pending.catch(() => undefined);
+    reader.mockRestore();
+  }
+}
+
 test('exact owner export/copy and anonymous publication export share permitted selection without sibling or head disclosure', async () => {
   const { subject } = await fixture.command('/v1/subjects', {
     type: 'skos:Concept',
@@ -34,6 +71,20 @@ test('exact owner export/copy and anonymous publication export share permitted s
   });
   const target = await fixture.command(`/v1/knowledge/notebooks/${notebook.notebookId}/documents`, {
     ...input('Referenced theorem'),
+    body: normalizeDocument({
+      version: 'rezics-document-v1',
+      profile: 'blocks',
+      doc: {
+        type: 'doc',
+        content: [
+          { type: 'paragraph', attrs: { id: 'theorem' }, content: [{ type: 'text', text: 'Referenced theorem' }] },
+          {
+            type: 'image',
+            attrs: { id: 'private-theorem-figure', src: 'https://private.example/theorem?token=hidden' },
+          },
+        ],
+      },
+    }),
     expectedStructureRevisionId: notebook.structureRevisionId,
     parentPlacementId: null,
   });
@@ -47,6 +98,9 @@ test('exact owner export/copy and anonymous publication export share permitted s
     200,
   );
   const targetRead = await fixture.call('GET', `/v1/knowledge/documents/${target.documentId}`);
+  const targetOwn = await fixture.call('GET', ownDocument(notebook.notebookId, target.documentId));
+  expect(targetRead.value.document.sourceSha256).toBe(targetOwn.value.document.sha256);
+  expect(targetRead.value.document.sha256).not.toBe(targetRead.value.document.sourceSha256);
   const references = [
     {
       id: 'theorem-reference',
@@ -56,7 +110,7 @@ test('exact owner export/copy and anonymous publication export share permitted s
         kind: 'revision' as const,
         documentId: target.documentId,
         revisionId: target.revisionId,
-        sha256: targetRead.value.document.sha256,
+        sha256: targetRead.value.document.sourceSha256,
         blockId: JSON.parse(Buffer.from(targetRead.value.document.canonicalBytes, 'base64').toString()).doc.content[0]
           .attrs.id,
       },
@@ -163,7 +217,10 @@ test('exact owner export/copy and anonymous publication export share permitted s
   const publicEnvelope = parseKnowledgeExport(JSON.parse(canonical));
   expect(canonical).toBe(canonicalKnowledgeJson(publicEnvelope));
   expect(publicEnvelope.representation).toBe('public');
+  if (publicEnvelope.selection.representation !== 'public') throw new Error('Expected the exact public selection');
   expect(publicEnvelope.selection.publicationId).toBe(published.publicationId);
+  expect(publicEnvelope.selection.sourceSha256).toBe(authoring.selection.sha256);
+  expect(publicEnvelope.selection.sha256).not.toBe(publicEnvelope.selection.sourceSha256);
   expect(publicEnvelope.references[0]).toEqual(references[0]);
   expect(publicEnvelope.references[1]!.target).toBeNull();
   expect(canonical).not.toContain('private.example');
@@ -256,7 +313,10 @@ test('exact owner export/copy and anonymous publication export share permitted s
     expectedStructureRevisionId: copied.structureRevisionId,
     parentPlacementId: copied.placementId,
   };
-  const publicCopy = await fixture.command(copyPath, publicCopyInput);
+  const publicCopyKey = crypto.randomUUID();
+  const publicCopyResult = await fixture.call('POST', copyPath, publicCopyInput, { key: publicCopyKey });
+  expect(publicCopyResult.status, JSON.stringify(publicCopyResult.value)).toBe(201);
+  const publicCopy = publicCopyResult.value;
   const publicCopyRead = await fixture.call('GET', ownDocument(destination.notebookId, publicCopy.documentId));
   expect(publicCopyRead.value.document.references[0].target).toBeNull();
   expect(Buffer.from(publicCopyRead.value.document.canonicalBytes, 'base64').toString()).not.toContain(
@@ -273,6 +333,11 @@ test('exact owner export/copy and anonymous publication export share permitted s
     [fixture.author.actor.accountId],
   );
   expect(receipts.rows).toEqual([{ count: 2 }]);
+  const laterDestination = await fixture.command(`/v1/knowledge/notebooks/${destination.notebookId}/documents`, {
+    ...input('A later independent destination edit'),
+    expectedStructureRevisionId: publicCopy.structureRevisionId,
+    parentPlacementId: null,
+  });
   await fixture.command(
     `/v1/knowledge/documents/${source.documentId}/publication:select`,
     {
@@ -287,8 +352,134 @@ test('exact owner export/copy and anonymous publication export share permitted s
     (
       await fixture.call('POST', copyPath, {
         ...publicCopyInput,
-        expectedStructureRevisionId: publicCopy.structureRevisionId,
+        expectedStructureRevisionId: laterDestination.structureRevisionId,
       })
     ).status,
   ).toBe(404);
+  const unavailableSource = spyOn(knowledgeReads, 'readKnowledgePublicDocument').mockImplementation(async () => {
+    throw new Error('Receipt replay must not re-export the withdrawn source');
+  });
+  try {
+    const replay = await fixture.call('POST', copyPath, publicCopyInput, { key: publicCopyKey });
+    expect(replay).toEqual(publicCopyResult);
+    const lifecycle = await fixture.call('GET', `${ownDocument(destination.notebookId, copied.documentId)}/lifecycle`);
+    expect(lifecycle.status).toBe(200);
+    await fixture.command(
+      `/v1/knowledge/documents/${copied.documentId}:trash`,
+      {
+        expectedStructureRevisionId: laterDestination.structureRevisionId,
+        expectedGeneration: lifecycle.value.generation,
+      },
+      200,
+    );
+    expect((await fixture.call('POST', copyPath, publicCopyInput, { key: publicCopyKey })).status).toBe(404);
+  } finally {
+    unavailableSource.mockRestore();
+  }
+});
+
+test('export and copy retain their selected representation and destination when caller objects change during a native read', async () => {
+  const { subject } = await fixture.command('/v1/subjects', {
+    type: 'skos:Concept',
+    labels: { en: 'Exact transfer intent' },
+  });
+  const notebookIntent = { subjectId: subject.id, title: 'Sources with an uncertain first acknowledgement' };
+  const notebookKey = crypto.randomUUID();
+  const firstNotebook = await fixture.call('POST', '/v1/knowledge/notebooks', notebookIntent, { key: notebookKey });
+  expect(firstNotebook.status, JSON.stringify(firstNotebook.value)).toBe(201);
+  const recoveredNotebook = await fixture.call('POST', '/v1/knowledge/notebooks', notebookIntent, { key: notebookKey });
+  expect(recoveredNotebook).toEqual(firstNotebook);
+  expect(
+    (
+      await fixture.call(
+        'POST',
+        '/v1/knowledge/notebooks',
+        { ...notebookIntent, title: 'Changed intent' },
+        { key: notebookKey },
+      )
+    ).status,
+  ).toBe(422);
+  const notebookCount = await fixture.pool.query<{ count: number }>(
+    'SELECT count(*)::integer AS count FROM content.knowledge_notebook WHERE route=$1 AND owner_account_id=$2 AND subject_id=$3',
+    [routeOf(fixture.author.actor.accountId), fixture.author.actor.accountId, subject.id],
+  );
+  expect(notebookCount.rows[0]?.count).toBe(1);
+  const sourceNotebook = recoveredNotebook.value;
+  const source = await fixture.command(`/v1/knowledge/notebooks/${sourceNotebook.notebookId}/documents`, {
+    ...input('Selected source'),
+    expectedStructureRevisionId: sourceNotebook.structureRevisionId,
+    parentPlacementId: null,
+  });
+  const publication = await fixture.command(
+    `/v1/knowledge/documents/${source.documentId}/publication:select`,
+    {
+      expectedHeadRevisionId: source.revisionId,
+      expectedPublicationId: null,
+      revisionId: source.revisionId,
+    },
+    200,
+  );
+  const destination = await fixture.command('/v1/knowledge/notebooks', { subjectId: subject.id, title: 'Destination' });
+  const parent = await fixture.command(`/v1/knowledge/notebooks/${destination.notebookId}/documents`, {
+    ...input('Independent parent'),
+    expectedStructureRevisionId: destination.structureRevisionId,
+    parentPlacementId: null,
+  });
+  const deps = {
+    pool: fixture.pool,
+    access: fixture.system.access,
+    tokens: fixture.system.tokenKeys,
+    routeKey: fixture.system.routeKey,
+    clock: () => new Date(),
+  };
+  const sourceSelection = {
+    representation: 'public' as const,
+    documentId: source.documentId as string,
+    revisionId: source.revisionId as string,
+  };
+  const exported = await pausePublicRead(
+    async () => {
+      const deadline = Date.now() + 120_000;
+      const actor = await fixture.system.access.authenticate(fixture.author.bearer, { pool: fixture.pool, deadline });
+      return exportKnowledgeDocument(deps, sourceSelection, { actor, deadline });
+    },
+    () => {
+      Object.assign(sourceSelection, { representation: 'authoring' });
+    },
+  );
+  expect(exported.value.representation).toBe('public');
+  expect(exported.value.selection).toMatchObject({
+    representation: 'public',
+    publicationId: publication.publicationId,
+  });
+  const copyingInput = {
+    source: {
+      representation: 'public' as const,
+      documentId: source.documentId as string,
+      revisionId: source.revisionId as string,
+    },
+    expectedStructureRevisionId: parent.structureRevisionId as string,
+    parentPlacementId: null as string | null,
+  };
+  const copied = await pausePublicRead(
+    async () => {
+      const deadline = Date.now() + 120_000;
+      const actor = await fixture.system.access.authenticate(fixture.author.bearer, { pool: fixture.pool, deadline });
+      return copyKnowledgeDocument(deps, actor, destination.notebookId, copyingInput, {
+        deadline,
+        idempotencyKey: crypto.randomUUID(),
+        requestId: crypto.randomUUID(),
+      });
+    },
+    async () => {
+      copyingInput.parentPlacementId = parent.placementId;
+      await Bun.sleep(ACCESS_EVIDENCE_TTL_MS + 50);
+    },
+  );
+  const location = await fixture.pool.query<{ parent_id: string | null }>(
+    'SELECT parent_id FROM content.knowledge_placement WHERE route=$1 AND notebook_id=$2 AND document_id=$3',
+    [routeOf(copied.value.documentId), destination.notebookId, copied.value.documentId],
+  );
+  expect(location.rows[0]?.parent_id).toBeNull();
+  expect(copied.value.documentId).not.toBe(source.documentId);
 });

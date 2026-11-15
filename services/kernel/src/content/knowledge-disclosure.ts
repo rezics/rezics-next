@@ -7,6 +7,7 @@ import type { ReadContext } from './model.ts';
 import { knowledgeSubjectTargets, type KnowledgeDependencies } from './knowledge-model.ts';
 import {
   KNOWLEDGE_REFERENCE_DEFINITION,
+  knowledgeProvenanceOrNull,
   type KnowledgeReference,
   type KnowledgeReferenceTarget,
   type KnowledgeProvenance,
@@ -99,6 +100,7 @@ export async function projectKnowledgePublicProvenance(
   provenance: KnowledgeProvenance | null,
   deadline: number,
 ): Promise<KnowledgeProvenance | null> {
+  provenance = knowledgeProvenanceOrNull(provenance);
   if (provenance?.representation !== 'public') return null;
   const context = { actor: { kind: 'anonymous' as const }, deadline };
   const route = routeOf(provenance.documentId);
@@ -108,7 +110,8 @@ export async function projectKnowledgePublicProvenance(
   );
   if (
     selected.value?.revision_id !== provenance.revisionId ||
-    selected.value.publication_id !== provenance.publicationId
+    selected.value.publication_id !== provenance.publicationId ||
+    selected.value.publication_sha256.toString('hex') !== provenance.sourceSha256
   )
     return null;
   // The exported representation digest may differ from the immutable source digest.
@@ -120,7 +123,7 @@ export async function projectKnowledgePublicProvenance(
       kind: 'revision',
       documentId: provenance.documentId,
       revisionId: provenance.revisionId,
-      sha256: selected.value.publication_sha256.toString('hex'),
+      sha256: provenance.sourceSha256,
     },
     context,
     provenance.publicationId,

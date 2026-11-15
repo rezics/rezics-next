@@ -17,6 +17,7 @@ import { strictContentSchema } from './schema-validation.ts';
 import { ContentForbiddenError, RevisionPreconditionError } from './commands.ts';
 import { ContentNotFoundError as ReadNotFoundError } from './reads.ts';
 import { DocumentTooLargeError, InvalidDocumentError } from './document.ts';
+import { InvalidMediaClaimError, MediaUnavailableError } from './media.ts';
 import {
   KnowledgeInvalidCursorError,
   KnowledgeInvalidInputError,
@@ -107,7 +108,7 @@ function failures() {
     403: problemSchema('forbidden', 'platform_closed'),
     404: problemSchema('not_found'),
     412: problemSchema('precondition_failed'),
-    409: problemSchema('stale_cursor'),
+    409: problemSchema('stale_cursor', 'media_unavailable'),
     413: problemSchema('content_too_large'),
     422: problemSchema('idempotency_conflict', 'too_many_events'),
     429: problemSchema('rate_limited'),
@@ -131,6 +132,8 @@ async function operation<T>(run: () => Promise<T>): Promise<T> {
       throw new ProblemError('not_found');
     if (error instanceof KnowledgeInvalidInputError || error instanceof InvalidDocumentError)
       throw new ProblemError('invalid_request');
+    if (error instanceof InvalidMediaClaimError) throw new ProblemError('invalid_request');
+    if (error instanceof MediaUnavailableError) throw new ProblemError('media_unavailable');
     if (error instanceof KnowledgeInvalidCursorError) throw new ProblemError('invalid_cursor');
     if (error instanceof KnowledgeStaleCursorError) throw new ProblemError('stale_cursor');
     if (error instanceof DocumentTooLargeError) throw new ProblemError('content_too_large');

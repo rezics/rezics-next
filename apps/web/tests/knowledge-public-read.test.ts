@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import * as start from '../.storybook/react-start';
@@ -62,6 +63,9 @@ test('route and query boundaries admit only native identifiers', () => {
 
 test('live and exact public reads admit the supplied canonical body once with anonymous no-store transport', async () => {
   const dto = knowledgePublicDto();
+  dto.document.sha256 = createHash('sha256')
+    .update(Buffer.from(String(dto.document.canonicalBytes), 'base64'))
+    .digest('hex');
   const { calls, client } = clientFor((request) => {
     expect(request.method).toBe('GET');
     expect(request.cache).toBe('no-store');
@@ -120,6 +124,8 @@ test('native outcome states and malformed HTTP stay unavailable at the exact add
     knowledgePublicDto({ canonicalBytes: '@@@' }),
     knowledgePublicDto({ canonicalBytes: Buffer.from('{', 'utf8').toString('base64') }),
     knowledgePublicDto({ sha256: 'gg' }),
+    knowledgePublicDto({ sourceSha256: undefined }),
+    knowledgePublicDto({ sourceSha256: 'gg' }),
     knowledgePublicDto({ title: '' }),
     knowledgePublicDto({ language: 1 }),
     knowledgePublicDto({ authorId: 'Anonymous' }),
@@ -170,4 +176,22 @@ test('the mounted reader binds one anonymous public_read with private no-store p
   expect(route).toContain('gcTime: 0');
   expect(route).toContain('shouldReload: true');
   expect(route).not.toContain('publicCache');
+});
+
+test('public wire verifies disclosed bytes while retaining a different immutable source citation digest', async () => {
+  const dto = knowledgePublicDto({ sourceSha256: 'b'.repeat(64) });
+  dto.document.sha256 = createHash('sha256')
+    .update(Buffer.from(String(dto.document.canonicalBytes), 'base64'))
+    .digest('hex');
+  const native = clientFor(() => Response.json(dto));
+  const read = await readKnowledgePublicDocument(native.client, knowledgeExactRequest);
+  expect(read.state).toBe('ready');
+  if (read.state !== 'ready') throw new Error('Expected admitted disclosed bytes');
+  expect(read.document.sourceSha256).toBe('b'.repeat(64));
+  expect(read.document.sha256).toBe(dto.document.sha256);
+  const corrupt = clientFor(() => Response.json({ ...dto, document: { ...dto.document, sha256: 'f'.repeat(64) } }));
+  expect(await readKnowledgePublicDocument(corrupt.client, knowledgeExactRequest)).toEqual({
+    state: 'unavailable',
+    status: 502,
+  });
 });

@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { knowledgeMediaQuery } from '@rezics/definitions/knowledge-media';
 import type { DownloadDecision } from '../src/media/kernel.ts';
 import { mediaRequest, type MediaEnv } from '../src/media/index.ts';
 import type { MediaStorage } from '../src/media/storage.ts';
@@ -39,6 +40,7 @@ function fixture(options: FixtureOptions = {}) {
     path: string;
     variant: string | null;
     authorization: string | null;
+    knowledge?: Record<string, string>;
   }> = [];
   const headCalls: string[] = [];
   const getCalls: GetCall[] = [];
@@ -51,7 +53,9 @@ function fixture(options: FixtureOptions = {}) {
   globalThis.fetch = async (input, init) => {
     const outgoing = new Request(input, init);
     const url = new URL(outgoing.url);
+    const knowledge = Object.fromEntries([...url.searchParams].filter(([name]) => name.startsWith('knowledge')));
     authorizationCalls.push({
+      ...(Object.keys(knowledge).length ? { knowledge } : {}),
       method: outgoing.method,
       path: url.pathname,
       variant: url.searchParams.get('variant'),
@@ -108,10 +112,10 @@ function fixture(options: FixtureOptions = {}) {
     authorizationCalls,
     headCalls,
     getCalls,
-    send(request: { method?: string; headers?: HeadersInit; variant?: string } = {}) {
+    send(request: { method?: string; headers?: HeadersInit; variant?: string; query?: string } = {}) {
       const path = `/media/${id}/${request.variant ?? 'original'}`;
       return mediaRequest(
-        new Request(`https://site.test${path}`, {
+        new Request(`https://site.test${path}${request.query ? `?${request.query}` : ''}`, {
           method: request.method ?? 'GET',
           headers: request.headers,
         }),
@@ -160,6 +164,55 @@ function expectOneFreshAuthorization(
     authorization: credential,
   });
 }
+
+test('Knowledge source coordinates reach native authorization before conditional, HEAD and withdrawn responses', async () => {
+  await withFixture(async (value) => {
+    const selection = {
+      representation: 'public' as const,
+      documentId: '00000000-0000-7000-8000-000000000002',
+      revisionId: '00000000-0000-7000-8000-000000000003',
+      sourceSha256: 'b'.repeat(64),
+      publicationId: '00000000-0000-7000-8000-000000000004',
+    };
+    const query = new URLSearchParams(knowledgeMediaQuery(selection)).toString();
+    value.setDecision({ ...allowedDecision(), key: `m/${id}/webp-320`, mediaType: 'image/webp' }, 'webp-320');
+    const cases: Array<{ method?: string; headers: Record<string, string>; status: number }> = [
+      { headers: {}, status: 200 },
+      { headers: { 'if-none-match': etag }, status: 304 },
+      { method: 'HEAD', headers: { range: 'bytes=3-6' }, status: 200 },
+    ];
+    for (const request of cases) {
+      const response = await value.send({ ...request, variant: 'webp-320', query });
+      expect(response.status).toBe(request.status);
+      expect(value.authorizationCalls.at(-1)?.knowledge).toEqual({
+        knowledgeRepresentation: 'public', knowledgeDocumentId: selection.documentId,
+        knowledgeRevisionId: selection.revisionId, knowledgeSourceSha256: selection.sourceSha256,
+        knowledgePublicationId: selection.publicationId,
+      });
+    }
+    expect(value.authorizationCalls).toHaveLength(3);
+    const stored = { heads: value.headCalls.length, gets: value.getCalls.length };
+    value.setKernelProblem(404, 'not_found');
+    const withdrawn = await value.send({ variant: 'webp-320', query, headers: { 'if-none-match': etag } });
+    expect(withdrawn.status).toBe(404);
+    expect(value.authorizationCalls).toHaveLength(4);
+    expect({ heads: value.headCalls.length, gets: value.getCalls.length }).toEqual(stored);
+  });
+});
+
+test('incomplete or duplicated Knowledge coordinates cannot fall through to a bare byte request', async () => {
+  await withFixture(async (value) => {
+    const documentId = '00000000-0000-7000-8000-000000000002';
+    for (const query of [
+      `knowledgeDocumentId=${documentId}`,
+      `knowledgeRepresentation=public&knowledgeDocumentId=${documentId}`,
+      `knowledgeDocumentId=${documentId}&knowledgeDocumentId=${documentId}`,
+    ]) expect((await value.send({ query })).status).toBe(404);
+    expect(value.authorizationCalls).toEqual([]);
+    expect(value.headCalls).toEqual([]);
+    expect(value.getCalls).toEqual([]);
+  });
+});
 
 test('the explicit native store serves current authorized AVIF and WebP derivatives ahead of a MEDIA binding', async () => {
   const variants = [

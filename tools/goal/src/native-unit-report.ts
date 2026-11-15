@@ -1,4 +1,5 @@
-import { Database } from 'bun:sqlite';
+import type { Database } from 'bun:sqlite';
+import { openReadOnlyDb } from './db.ts';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { codexUsageAccumulator } from './agents/codex-events.ts';
@@ -120,8 +121,8 @@ export function nativeUnitReportLines(
         else if (check.exit_code === 0) passedChecks++;
         else failedChecks++;
       }
-      native = new Database(join(unit.codexHome, 'state_5.sqlite'), { readonly: true });
-      goals = new Database(join(unit.codexHome, 'goals_1.sqlite'), { readonly: true });
+      native = openReadOnlyDb(join(unit.codexHome, 'state_5.sqlite'));
+      goals = openReadOnlyDb(join(unit.codexHome, 'goals_1.sqlite'));
       const goal = goals
         .query('SELECT status FROM thread_goals WHERE thread_id=? AND goal_id=?')
         .get(unit.threadId, unit.goalId) as { status: string } | null;

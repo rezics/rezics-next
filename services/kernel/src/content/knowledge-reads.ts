@@ -1,6 +1,11 @@
 import { parseDocument, serializeDocument } from '@rezics/document';
 import { projectKnowledgePublicBody, projectKnowledgePublicProvenance } from './knowledge-disclosure.ts';
-import { knowledgeDigest, type KnowledgeReference, type KnowledgeProvenance } from './knowledge-portable.ts';
+import {
+  knowledgeDigest,
+  knowledgeProvenanceOrNull,
+  type KnowledgeReference,
+  type KnowledgeProvenance,
+} from './knowledge-portable.ts';
 import { createHash } from 'node:crypto';
 import { accessCheck } from './access-port.ts';
 import { prepareEditionSubjectIdentities } from './edition-subject.ts';
@@ -65,7 +70,7 @@ function baseDocument(row: {
     licence: row.licence,
     subjectIds: [...row.subject_ids],
     references: [...row.reference_manifest],
-    provenance: row.copy_provenance,
+    provenance: knowledgeProvenanceOrNull(row.copy_provenance),
   };
 }
 
@@ -174,6 +179,7 @@ export async function readKnowledgePublicDocument(
       ...baseDocument(final.value),
       canonicalBytes: Buffer.from(canonical).toString('base64'),
       sha256: knowledgeDigest(canonical),
+      sourceSha256: final.value.publication_sha256.toString('hex'),
       references: [...projection.references],
       provenance,
       publicationId: final.value.publication_id,
