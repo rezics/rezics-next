@@ -7249,6 +7249,7 @@ async function boundedSsh(
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
+    env: process.env,
   });
   const streams = Promise.all([
     new Response(child.stdout).text(),
