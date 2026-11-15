@@ -44,6 +44,7 @@ export async function readCollectionSourceMembers(
     deadline: number;
     query?: { filter: FilterDocument; releaseDigest: string };
     view?: 'BASIC' | 'FULL';
+    languages?: readonly string[];
     /** Actual owner-home reread after releasing all foreign source homes. */
     revalidateOwner: () => Promise<void>;
     /** Actual native source version, independent of identity and permission. */
@@ -269,7 +270,7 @@ export async function readCollectionSourceMembers(
         ? await attachCollectionListFacts(
             { ...deps, routeKey: requiredRouteKey(deps.routeKey), actor: input.actor, deadline: input.deadline },
             shown,
-            { revalidate },
+            { revalidate, ...(input.languages === undefined ? {} : { languages: input.languages }) },
           )
         : shown;
     if (disclosed.length !== shown.length) throw new ProblemError('dependency_unavailable');

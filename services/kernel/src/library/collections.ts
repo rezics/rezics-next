@@ -903,6 +903,9 @@ export function createCollectionCommands(config: {
       input,
       async (tx, command, route) => {
         const current = await activeCollection(tx, route, id);
+        // Built-in membership becomes shareable only through the explicit publication workflow.
+        if (current.builtinKind && visibility && visibility !== 'private' && visibility !== current.visibility)
+          throw new ProblemError('unsupported_query');
         const wasListed = listed(current);
         const changes = {
           title: title ?? current.title,
@@ -958,7 +961,7 @@ export function createCollectionCommands(config: {
         const shelfWrite = { client: tx, route, accountId: ownerRow.curatorAccountId };
         await enterShelfWrite(shelfWrite);
         const current = await activeCollection(tx, route, id);
-        if (current.revision !== expected) throw new ProblemError('conflict');
+        if (current.builtinKind || current.revision !== expected) throw new ProblemError('conflict');
         const value = await tombstoneCollection(tx, route, id, command);
         if (!value) throw notFound();
         if (listed(current)) await recordPublicCollectionReduction(tx, route, id, command.transactionId);

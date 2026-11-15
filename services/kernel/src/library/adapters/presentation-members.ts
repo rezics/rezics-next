@@ -24,7 +24,7 @@ export async function readNativeFullMembers(
 ) {
   const builtins = createBuiltinRuntime(deps);
   if (await builtins.read(actor, collectionId, 'collection:read', deadline))
-    return builtins.members(actor, collectionId, { ...options, deadline });
+    return builtins.members(actor, collectionId, { ...options, view: 'FULL', deadline });
   const parsedRoute = routeOf(collectionId);
   if (parsedRoute === null) throw new ProblemError('not_found');
   const route = parsedRoute;

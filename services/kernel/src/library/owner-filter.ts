@@ -431,6 +431,7 @@ export type CollectionMemberQuery = {
   filter?: string;
   sort?: string;
   view?: 'BASIC' | 'FULL';
+  languages?: readonly string[];
 };
 
 type Dependencies = { pool: Pool; access: Access; clock?: KernelClock };
