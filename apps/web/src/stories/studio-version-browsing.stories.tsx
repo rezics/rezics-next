@@ -338,10 +338,10 @@ export const DirtyDraftCopyReview: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('group', { name: m.studio_revision_copy_review() });
-    await userEvent.click(canvas.getByRole('button', { name: m.studio_workspace_write(), exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: m.studio_workspace_write() }));
     const title = canvas.getByRole('textbox', { name: m.studio_workspace_title() });
     await userEvent.type(title, ' · another edit');
-    await userEvent.click(canvas.getByRole('button', { name: m.studio_revision_heading(), exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: m.studio_revision_heading() }));
     await canvas.findByText(m.studio_revision_review_changed());
     await expect(canvas.queryByRole('button', { name: m.studio_revision_copy() })).toBeNull();
     await userEvent.click(canvas.getByRole('button', { name: m.studio_revision_use() }));

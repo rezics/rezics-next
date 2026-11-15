@@ -197,7 +197,7 @@ export const FollowsScrolledCaret: Story = {
     expect(scrolling.calls).toHaveLength(1);
     expectWithinViewport(menu);
 
-    host.scrollTop = 32;
+    host.scrollTop += 32;
     await waitFor(() => {
       const caret = caretRect(editor);
       const rect = menu.getBoundingClientRect();

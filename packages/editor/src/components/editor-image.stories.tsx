@@ -80,7 +80,7 @@ async function choose(canvasElement: HTMLElement, alt = '') {
   const canvas = within(canvasElement);
   await caret(canvasElement);
   await userEvent.click(canvas.getByRole('button', { name: 'Image' }));
-  const panel = within(await within(canvasElement.ownerDocument.body).findByRole('dialog', { name: 'Image' }));
+  const panel = within(await within(canvasElement.ownerDocument.body).findByRole('dialog', { name: 'Insert image' }));
   await userEvent.upload(panel.getByLabelText('Choose image file'), file());
   if (alt) await userEvent.type(panel.getByRole('textbox', { name: 'Alt text' }), alt);
   await userEvent.click(panel.getByRole('button', { name: 'Insert image' }));
@@ -414,7 +414,7 @@ async function chooseLifetimeFile(canvasElement: HTMLElement, name: string, alt:
   } else {
     await userEvent.click(canvas.getByRole('button', { name: 'Image' }));
   }
-  const panel = within(await within(canvasElement.ownerDocument.body).findByRole('dialog', { name: 'Image' }));
+  const panel = within(await within(canvasElement.ownerDocument.body).findByRole('dialog', { name: 'Insert image' }));
   await userEvent.upload(panel.getByLabelText('Choose image file'), file(name));
   if (alt) await userEvent.type(panel.getByRole('textbox', { name: 'Alt text' }), alt);
   await userEvent.click(panel.getByRole('button', { name: 'Insert image' }));
@@ -437,15 +437,15 @@ export const UploadImage: Story = {
 
     await lifetimeCaret(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Image' }));
-    await page.findByRole('dialog', { name: 'Image' });
+    await page.findByRole('dialog', { name: 'Insert image' });
     await userEvent.click(canvas.getByRole('button', { name: 'Disable editor' }));
-    expect(page.queryByRole('dialog', { name: 'Image' })).toBeNull();
+    expect(page.queryByRole('dialog', { name: 'Insert image' })).toBeNull();
     await userEvent.click(canvas.getByRole('button', { name: 'Enable editor' }));
     await lifetimeCaret(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Image' }));
-    await page.findByRole('dialog', { name: 'Image' });
+    await page.findByRole('dialog', { name: 'Insert image' });
     await userEvent.click(canvas.getByRole('button', { name: 'Make read only' }));
-    expect(page.queryByRole('dialog', { name: 'Image' })).toBeNull();
+    expect(page.queryByRole('dialog', { name: 'Insert image' })).toBeNull();
     await userEvent.click(canvas.getByRole('button', { name: 'Allow editing' }));
 
     let textbox = await chooseLifetimeFile(canvasElement, 'button.png', 'Button description');
