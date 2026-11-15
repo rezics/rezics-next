@@ -2,7 +2,7 @@
 
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
-import { Field, FieldGroup, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { ResponsiveDialog } from '@rezics/ui/responsive-dialog';
@@ -34,6 +34,190 @@ import {
 } from './editor-media-runtime.ts';
 import type { RichTextEditorLabels } from './editor-labels.ts';
 import type { EditorBehaviorAction } from './editor-behavior-actions.ts';
+
+export type EditorMediaPropertiesDraft = {
+  alt: string;
+  title: string;
+  width: string;
+  height: string;
+  conceal: boolean;
+  caption: string;
+};
+
+function controlLabel(labels: RichTextEditorLabels, key: keyof EditorMediaLabels) {
+  return (labels as Partial<EditorMediaLabels>)[key] ?? editorMediaLabels[key];
+}
+
+/** Occurrence property form. Apply still goes through the captured target in MediaView. */
+export function EditorMediaPropertiesDialog({
+  image,
+  labels,
+  draft,
+  onDraftChange,
+  composing,
+  touched,
+  onSubmit,
+  onCancel,
+}: {
+  image: boolean;
+  labels: RichTextEditorLabels;
+  draft: EditorMediaPropertiesDraft;
+  onDraftChange: (draft: EditorMediaPropertiesDraft) => void;
+  composing: { current: boolean };
+  touched: { current: { alt: boolean; title: boolean } };
+  onSubmit: () => void;
+  onCancel: () => void;
+}) {
+  const field = useId();
+  const invalidWidth = imageDimension(draft.width) === false;
+  const invalidHeight = imageDimension(draft.height) === false;
+  const validDimensions = !invalidWidth && !invalidHeight;
+  const dimensionsHelp = `${field}-dimensions-help`;
+  const dimensionsError = `${field}-dimensions-error`;
+  const dimensionsDescribedBy = validDimensions ? dimensionsHelp : `${dimensionsHelp} ${dimensionsError}`;
+  return (
+    <ResponsiveDialog
+      open
+      title={controlLabel(labels, image ? 'imageProperties' : 'mediaProperties')}
+      description={controlLabel(labels, image ? 'imagePropertiesHelp' : 'mediaPropertiesHelp')}
+      closeLabel={labels.cancel}
+      onOpenChange={(open) => {
+        if (!open) onCancel();
+      }}
+      finalFocus={() => false}
+    >
+      <form
+        className="flex min-w-0 flex-col gap-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (!composing.current) onSubmit();
+        }}
+        onCompositionStart={() => {
+          composing.current = true;
+        }}
+        onCompositionEnd={() => {
+          composing.current = false;
+        }}
+        onKeyDown={(event) => {
+          if (
+            event.nativeEvent.isComposing ||
+            event.keyCode === 229 ||
+            composing.current ||
+            ['Process', 'Dead'].includes(event.key) ||
+            event.getModifierState('AltGraph')
+          )
+            return;
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            onCancel();
+          }
+          if (event.key === 'Enter') {
+            event.stopPropagation();
+            if ((event.target as HTMLElement).tagName === 'INPUT') {
+              event.preventDefault();
+              onSubmit();
+            }
+          }
+        }}
+      >
+        <FieldGroup className="min-w-0 gap-3">
+          {image ? (
+            <>
+              <Field className="min-w-0">
+                <FieldLabel htmlFor={`${field}-alt`}>{labels.imageAlt}</FieldLabel>
+                <Textarea
+                  id={`${field}-alt`}
+                  autoFocus
+                  className="min-w-0"
+                  value={draft.alt}
+                  onChange={(event) => {
+                    touched.current.alt = true;
+                    onDraftChange({ ...draft, alt: event.target.value });
+                  }}
+                />
+              </Field>
+              <Field className="min-w-0">
+                <FieldLabel htmlFor={`${field}-title`}>{controlLabel(labels, 'imageTitle')}</FieldLabel>
+                <Input
+                  id={`${field}-title`}
+                  className="min-w-0"
+                  value={draft.title}
+                  onChange={(event) => {
+                    touched.current.title = true;
+                    onDraftChange({ ...draft, title: event.target.value });
+                  }}
+                />
+              </Field>
+              <Field className="min-w-0" data-invalid={invalidWidth || undefined}>
+                <FieldLabel htmlFor={`${field}-width`}>{controlLabel(labels, 'imageWidth')}</FieldLabel>
+                <Input
+                  id={`${field}-width`}
+                  type="number"
+                  min="0"
+                  step="any"
+                  className="min-w-0"
+                  value={draft.width}
+                  aria-invalid={invalidWidth || undefined}
+                  aria-describedby={dimensionsDescribedBy}
+                  onChange={(event) => onDraftChange({ ...draft, width: event.target.value })}
+                />
+              </Field>
+              <Field className="min-w-0" data-invalid={invalidHeight || undefined}>
+                <FieldLabel htmlFor={`${field}-height`}>{controlLabel(labels, 'imageHeight')}</FieldLabel>
+                <Input
+                  id={`${field}-height`}
+                  type="number"
+                  min="0"
+                  step="any"
+                  className="min-w-0"
+                  value={draft.height}
+                  aria-invalid={invalidHeight || undefined}
+                  aria-describedby={dimensionsDescribedBy}
+                  onChange={(event) => onDraftChange({ ...draft, height: event.target.value })}
+                />
+              </Field>
+              <FieldDescription id={dimensionsHelp}>{controlLabel(labels, 'imageDimensionsHelp')}</FieldDescription>
+              {validDimensions ? null : (
+                <FieldError id={dimensionsError}>{controlLabel(labels, 'invalidImageDimensions')}</FieldError>
+              )}
+              <Field orientation="horizontal" className="min-w-0">
+                <Checkbox
+                  id={`${field}-conceal`}
+                  checked={draft.conceal}
+                  onCheckedChange={(checked) => onDraftChange({ ...draft, conceal: checked === true })}
+                />
+                <FieldLabel htmlFor={`${field}-conceal`} className="min-w-0 text-wrap">
+                  {controlLabel(labels, 'imageConceal')}
+                </FieldLabel>
+              </Field>
+            </>
+          ) : (
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${field}-caption`}>{controlLabel(labels, 'mediaCaption')}</FieldLabel>
+              <Textarea
+                id={`${field}-caption`}
+                autoFocus
+                className="min-w-0"
+                value={draft.caption}
+                onChange={(event) => onDraftChange({ ...draft, caption: event.target.value })}
+              />
+            </Field>
+          )}
+          <Field orientation="horizontal" className="flex-wrap">
+            <Button type="submit" variant="secondary" disabled={image && !validDimensions}>
+              {labels.apply}
+            </Button>
+            <Button type="button" variant="ghost" onClick={onCancel}>
+              {labels.cancel}
+            </Button>
+          </Field>
+        </FieldGroup>
+      </form>
+    </ResponsiveDialog>
+  );
+}
 
 function OpaqueView({ node, editor, selected, fallback }: NodeViewProps & { fallback: () => EditorMediaPorts }) {
   const runtime = editorMediaRuntime(editor);
@@ -91,9 +275,15 @@ function MediaView({ node, editor, getPos, selected, fallback }: NodeViewProps &
   const image = node.type.name === 'image';
   const occurrence = documentImageOccurrence(node);
   const media = documentMediaOccurrence(node);
-  const field = useId();
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState({ alt: '', title: '', width: '', height: '', conceal: false, caption: '' });
+  const [draft, setDraft] = useState<EditorMediaPropertiesDraft>({
+    alt: '',
+    title: '',
+    width: '',
+    height: '',
+    conceal: false,
+    caption: '',
+  });
   const [failedPreview, setFailedPreview] = useState<string>();
   const target = useRef<MediaEditTarget | null>(null);
   const returning = useRef<{ target: MediaEditTarget; owner: Element | null } | null>(null);
@@ -223,7 +413,6 @@ function MediaView({ node, editor, getPos, selected, fallback }: NodeViewProps &
     if (current() && admitted.current && local && runtime.previews.get(occurrence.id)?.url === local.url)
       discardEditorImagePreview(editor, occurrence.id);
   });
-  const validDimensions = imageDimension(draft.width) !== false && imageDimension(draft.height) !== false;
   return (
     <NodeViewWrapper
       as="figure"
@@ -252,139 +441,16 @@ function MediaView({ node, editor, getPos, selected, fallback }: NodeViewProps &
       </div>
       {editor.isEditable ? (
         editingCurrent ? (
-          <ResponsiveDialog
-            open
-            title={label(image ? 'imageProperties' : 'mediaProperties')}
-            description={label(image ? 'imagePropertiesHelp' : 'mediaPropertiesHelp')}
-            closeLabel={ports.labels.cancel}
-            onOpenChange={(open) => {
-              if (!open) finish(false);
-            }}
-            finalFocus={() => false}
-          >
-            <form
-              className="space-y-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                if (!composing.current) finish(true);
-              }}
-              onCompositionStart={() => {
-                composing.current = true;
-              }}
-              onCompositionEnd={() => {
-                composing.current = false;
-              }}
-              onKeyDown={(event) => {
-                if (
-                  event.nativeEvent.isComposing ||
-                  event.keyCode === 229 ||
-                  composing.current ||
-                  ['Process', 'Dead'].includes(event.key) ||
-                  event.getModifierState('AltGraph')
-                )
-                  return;
-                if (event.key === 'Escape') {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  finish(false);
-                }
-                if (event.key === 'Enter') {
-                  event.stopPropagation();
-                  if ((event.target as HTMLElement).tagName === 'INPUT') {
-                    event.preventDefault();
-                    finish(true);
-                  }
-                }
-              }}
-            >
-              <FieldGroup className="gap-3">
-                {image ? (
-                  <>
-                    <Field>
-                      <FieldLabel htmlFor={`${field}-alt`}>{ports.labels.imageAlt}</FieldLabel>
-                      <Input
-                        id={`${field}-alt`}
-                        autoFocus
-                        value={draft.alt}
-                        onChange={(event) => {
-                          touched.current.alt = true;
-                          setDraft({ ...draft, alt: event.target.value });
-                        }}
-                      />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor={`${field}-title`}>{label('imageTitle')}</FieldLabel>
-                      <Input
-                        id={`${field}-title`}
-                        value={draft.title}
-                        onChange={(event) => {
-                          touched.current.title = true;
-                          setDraft({ ...draft, title: event.target.value });
-                        }}
-                      />
-                    </Field>
-                    <div className="grid grid-cols-2 gap-3">
-                      <Field>
-                        <FieldLabel htmlFor={`${field}-width`}>{label('imageWidth')}</FieldLabel>
-                        <Input
-                          id={`${field}-width`}
-                          type="number"
-                          min="0"
-                          step="any"
-                          value={draft.width}
-                          onChange={(event) => setDraft({ ...draft, width: event.target.value })}
-                        />
-                      </Field>
-                      <Field>
-                        <FieldLabel htmlFor={`${field}-height`}>{label('imageHeight')}</FieldLabel>
-                        <Input
-                          id={`${field}-height`}
-                          type="number"
-                          min="0"
-                          step="any"
-                          value={draft.height}
-                          onChange={(event) => setDraft({ ...draft, height: event.target.value })}
-                        />
-                      </Field>
-                    </div>
-                    <p className="text-xs text-muted-foreground">{label('imageDimensionsHelp')}</p>
-                    {!validDimensions ? (
-                      <p role="alert" className="text-destructive">
-                        {label('invalidImageDimensions')}
-                      </p>
-                    ) : null}
-                    <Field orientation="horizontal">
-                      <Checkbox
-                        id={`${field}-conceal`}
-                        checked={draft.conceal}
-                        onCheckedChange={(checked) => setDraft({ ...draft, conceal: checked === true })}
-                      />
-                      <FieldLabel htmlFor={`${field}-conceal`}>{label('imageConceal')}</FieldLabel>
-                    </Field>
-                  </>
-                ) : (
-                  <Field>
-                    <FieldLabel htmlFor={`${field}-caption`}>{label('mediaCaption')}</FieldLabel>
-                    <Textarea
-                      id={`${field}-caption`}
-                      autoFocus
-                      value={draft.caption}
-                      onChange={(event) => setDraft({ ...draft, caption: event.target.value })}
-                    />
-                  </Field>
-                )}
-                <Field orientation="horizontal">
-                  <Button type="submit" variant="secondary" disabled={image && !validDimensions}>
-                    {ports.labels.apply}
-                  </Button>
-                  <Button type="button" variant="ghost" onClick={() => finish(false)}>
-                    {ports.labels.cancel}
-                  </Button>
-                </Field>
-              </FieldGroup>
-            </form>
-          </ResponsiveDialog>
+          <EditorMediaPropertiesDialog
+            image={image}
+            labels={ports.labels}
+            draft={draft}
+            onDraftChange={setDraft}
+            composing={composing}
+            touched={touched}
+            onSubmit={() => finish(true)}
+            onCancel={() => finish(false)}
+          />
         ) : (
           <Button ref={editButton} type="button" variant="outline" className="min-h-11" onClick={open}>
             {label(image ? 'imageProperties' : 'mediaProperties')}
