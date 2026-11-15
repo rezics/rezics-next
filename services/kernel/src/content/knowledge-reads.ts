@@ -162,6 +162,13 @@ export async function readKnowledgePublicDocument(
     parseDocument(JSON.parse(final.value.canonical_bytes.toString('utf8'))),
     final.value.reference_manifest,
     context.deadline,
+    {
+      representation: 'public',
+      documentId,
+      revisionId: final.value.revision_id,
+      sourceSha256: final.value.publication_sha256.toString('hex'),
+      publicationId: final.value.publication_id,
+    },
   );
   const canonical = serializeDocument(projection.snapshot);
   const provenance = await projectKnowledgePublicProvenance(deps, final.value.copy_provenance, context.deadline);
