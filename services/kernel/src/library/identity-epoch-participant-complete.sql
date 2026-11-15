@@ -16,5 +16,17 @@ WHERE c.partition_no=input.partition_no AND c.transaction_id=input.transaction_i
  AND NOT EXISTS (
    SELECT 1 FROM library.identity_epoch_participant_work w
    WHERE w.partition_no=input.partition_no AND w.job_id=input.job_id AND w.job_epoch=input.job_epoch
-     AND NOT w.custodied AND NOT w.handed_off)
+     AND NOT w.custodied)
+ AND NOT EXISTS (
+   SELECT 1 FROM library.identity_epoch_participant_work w
+   WHERE w.partition_no=input.partition_no AND w.job_id=input.job_id AND w.job_epoch=input.job_epoch
+     AND NOT w.follow_complete)
+ AND NOT EXISTS (
+   SELECT 1 FROM library.identity_epoch_participant_scope s
+   WHERE s.partition_no=input.partition_no AND s.job_id=input.job_id AND s.job_epoch=input.job_epoch
+     AND NOT s.exhausted)
+ AND NOT EXISTS (
+   SELECT 1 FROM library.identity_epoch_participant_handoff h
+   WHERE h.partition_no=input.partition_no AND h.job_id=input.job_id AND h.job_epoch=input.job_epoch
+     AND NOT h.resolved)
 RETURNING transaction_id;
