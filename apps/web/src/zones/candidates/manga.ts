@@ -1,6 +1,7 @@
 import type { CompositionDocument, ZoneConfiguration } from '@rezics/composition';
 import mangaStarter from '../../../../../packages/definitions/presentation/manga/zone.json';
 import type { ZonePublic } from '../appearance';
+import { copyStarterIntro } from './starter-document';
 
 /** Choice: Manga stays a synthetic, gated/deferred preview until Web and Semantic approve an official instance mapping. */
 const starter = mangaStarter as unknown as ZoneConfiguration;
@@ -29,32 +30,9 @@ const previewCopy =
 const volumesCopy = 'This is a static guide route; it does not list individual volumes or read Manga source data.';
 
 function appendIntroCopy(document: CompositionDocument, copy: string): CompositionDocument {
-  const [stack, ...remaining] = document.content;
-  if (!stack || stack.type !== 'Stack') return document;
-
-  return {
-    ...document,
-    content: [
-      {
-        ...stack,
-        props: {
-          ...stack.props,
-          children: stack.props.children.map((child) =>
-            child.type === 'Text' && child.props.id === 'intro'
-              ? {
-                  ...child,
-                  props: {
-                    ...child.props,
-                    text: `${String(child.props.text)} ${copy}`,
-                  },
-                }
-              : child,
-          ),
-        },
-      },
-      ...remaining,
-    ],
-  };
+  const authored = copyStarterIntro(document, 'Manga');
+  authored.intro.props['text'] = `${authored.intro.props['text']} ${copy}`;
+  return authored.document;
 }
 
 export const mangaCandidateConfiguration: ZoneConfiguration = {

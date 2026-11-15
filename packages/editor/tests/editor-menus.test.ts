@@ -33,7 +33,7 @@ test('the rich-text editor formats a selection from a keyboard-reachable menu an
         `${assertion.title}: ${assertion.status} ${assertion.failureMessages[0]?.split('\n')[0] ?? ''}`.trim(),
       )
       .sort();
-    expect(code, browserFailureDetails(result) || `${stdout.slice(-2000)}\n${stderr.slice(-4000)}`).toBe(0);
+    expect(code, browserFailureDetails(result, `${stdout.slice(-2000)}\n${stderr.slice(-4000)}`)).toBe(0);
     expect(outcomes).toEqual([
       'Block Commands: passed',
       'Edit And Remove Link: passed',

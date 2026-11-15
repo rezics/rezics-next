@@ -19,16 +19,15 @@ import type {
 import { installPostReadingDom } from './post-reading-dom';
 
 const dom = installPostReadingDom();
-const { mountAuthoringFixture } = await import('./helpers/authoring-mount');
+const { mountAuthoringFixture, setAuthoringFixtureLocale } = await import('./helpers/authoring-mount');
 const { getByRole, getByText, queryByRole, waitFor } = await import('@testing-library/dom');
 const { StudioWorkspace } = await import('../src/studio/workspace');
 const { m } = await import('../src/paraglide/messages.js');
 const { workbenchCopy } = await import('../src/studio/workbench-copy');
 const { getLocale } = await import('../src/paraglide/runtime.js');
-const { setLocale } = await import('../src/paraglide/runtime.js');
-setLocale('en', { reload: false });
+setAuthoringFixtureLocale('en');
 afterAll(async () => {
-  setLocale('en', { reload: false });
+  setAuthoringFixtureLocale('en');
   await dom.restore();
 });
 
@@ -535,7 +534,7 @@ test.each(['references', 'code'] as const)(
           if (departure === 'write') await act(async () => write.click());
           else if (departure === 'body') await v.paste('<p>A newer working snapshot</p>', editor);
           else {
-            if (departure === 'locale') setLocale('ja', { reload: false });
+            if (departure === 'locale') setAuthoringFixtureLocale('ja');
             await v.replace({ ...input(), visitKey: departure });
           }
           await waitFor(() => expect(queryByRole(document.body, 'dialog')).toBeNull());
@@ -547,7 +546,7 @@ test.each(['references', 'code'] as const)(
           expect(f.createCalls).toHaveLength(0);
         } finally {
           await v.close();
-          setLocale('en', { reload: false });
+          setAuthoringFixtureLocale('en');
         }
       }
     } finally {
@@ -639,7 +638,7 @@ test('visit and locale replacement retire the unsent editor, old creation result
     try {
       await v.fill();
       await v.click(m.studio_account_create());
-      if (replacement === 'locale') setLocale('ja', { reload: false });
+      if (replacement === 'locale') setAuthoringFixtureLocale('ja');
       await v.replace({ ...input(), visitKey: replacement === 'locale' ? input().visitKey : 'replacement-visit' });
       expect(signal?.aborted).toBe(true);
       const destination = v.field(m.studio_account_board());
@@ -654,7 +653,7 @@ test('visit and locale replacement retire the unsent editor, old creation result
     } finally {
       release();
       await v.close();
-      setLocale('en', { reload: false });
+      setAuthoringFixtureLocale('en');
     }
   }
 });

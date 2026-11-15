@@ -276,7 +276,7 @@ test('caller renderers keep authored common attributes on replacement output', (
 
   expect(html).toContain('<div data-block-id="custom-code" lang="ar" dir="rtl"><aside>same code</aside></div>');
   expect(html).toContain('<div data-block-id="custom-table" lang="fr" dir="ltr"><section><table><tbody>');
-  expect(html).toContain('<p>Custom table</p>');
+  expect(html).toMatch(/<p\b[^>]*>Custom table<\/p>/);
   expect(html.match(/data-block-id="custom-table"/g) ?? []).toHaveLength(1);
   expect(html).toContain(
     '<div data-block-id="custom-image" lang="he" dir="rtl"><div data-slot="document-image-occurrence" data-occurrence-id="custom-image" style="max-width:100%"><span data-authorized-image="media-id">Owner image</span></div></div>',

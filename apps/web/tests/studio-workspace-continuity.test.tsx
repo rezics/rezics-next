@@ -3,7 +3,7 @@ import { act } from 'react';
 import { installPostReadingDom } from './post-reading-dom';
 
 const dom = installPostReadingDom();
-const { mountAuthoringFixture } = await import('./helpers/authoring-mount');
+const { mountAuthoringFixture, setAuthoringFixtureLocale } = await import('./helpers/authoring-mount');
 const { default: userEvent } = await import('@testing-library/user-event');
 const { getByRole, getAllByRole, queryByRole, waitFor } = await import('@testing-library/dom');
 const { serializeDocument } = await import('@rezics/document');
@@ -11,15 +11,14 @@ const { StudioWorkbench } = await import('../src/studio/workspace');
 const { studioWorkbenchFixture } = await import('../src/kernel/fake/studio-workbench');
 const { workbenchCopy } = await import('../src/studio/workbench-copy');
 const { m } = await import('../src/paraglide/messages.js');
-const { setLocale } = await import('../src/paraglide/runtime.js');
 
 afterAll(async () => {
-  setLocale('en', { reload: false });
+  setAuthoringFixtureLocale('en');
   await dom.restore();
 });
 
 async function mount(profile: 'book' | 'column', scenario: 'populated' | 'dirty' | 'comparison' = 'populated') {
-  setLocale('en', { reload: false });
+  setAuthoringFixtureLocale('en');
   const fixture = await studioWorkbenchFixture(profile, scenario, 'en');
   const mounted = await mountAuthoringFixture(
     <StudioWorkbench {...fixture.props} controller={fixture.controller} />,

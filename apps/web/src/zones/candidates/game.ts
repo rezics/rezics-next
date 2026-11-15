@@ -8,6 +8,7 @@ import {
 import platformProfileJson from '@rezics/composition/profiles/platform.json' with { type: 'json' };
 import type { ZonePageResponse, ZonePublic } from '../appearance';
 import starterJson from '../../../../../packages/definitions/presentation/game/zone.json' with { type: 'json' };
+import { copyStarterIntro } from './starter-document';
 
 type Starter = {
   labels: ZonePublic['labels'];
@@ -63,11 +64,9 @@ const routeCopy: Record<string, string> = {
 };
 
 function withIntro(document: CompositionDocument, copy: string): CompositionDocument {
-  const authored = structuredClone(document);
-  const intro = authored.content.find((node) => node.type === 'Text' && node.props.id === 'intro');
-  if (!intro || typeof intro.props.text !== 'string') throw new Error('The Video games starter intro is missing.');
-  intro.props.text = copy;
-  return authored;
+  const authored = copyStarterIntro(document, 'Video games');
+  authored.intro.props['text'] = copy;
+  return authored.document;
 }
 
 const routeDocuments = Object.fromEntries(
@@ -75,7 +74,7 @@ const routeDocuments = Object.fromEntries(
 ) as Record<string, CompositionDocument>;
 
 const homePlan = planReads(platformRegistry, routeDocuments['']!, { subject: null });
-const homeReadKey = homePlan.nodes.works;
+const homeReadKey = homePlan.nodes['works'];
 if (!homeReadKey) throw new Error('The Video games starter no longer plans its works list.');
 
 export const videoGameCandidate = {

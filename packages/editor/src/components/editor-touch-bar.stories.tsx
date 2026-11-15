@@ -287,16 +287,25 @@ export const UndoRedo: Story = {
     expect(retiredInput(view, staleInput)).toBe(false);
     expect(textbox.textContent).toBe('History');
     await waitFor(() => expect(history.latest.current).toEqual(original));
-    const bold = toolbar.getByRole('button', { name: 'Bold' });
     const blocksButton = toolbar.getByRole('button', { name: 'Blocks' });
     const tabEntries = () =>
       [...toolbarElement.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')].filter(
         (button) => button.tabIndex === 0,
       );
+    const runToolbar = async (name: string) => {
+      const target = toolbar.getByRole('button', { name });
+      await userEvent.keyboard('{Alt>}{F10}{/Alt}{Home}');
+      const enabled = [...toolbarElement.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
+      const index = enabled.indexOf(target as HTMLButtonElement);
+      expect(index).toBeGreaterThanOrEqual(0);
+      for (let step = 0; step < index; step++) await userEvent.keyboard('{ArrowRight}');
+      expect(target).toHaveFocus();
+      await userEvent.keyboard('{Enter}');
+    };
     await userEvent.keyboard('{Alt>}{F10}{/Alt}');
     expect(blocksButton).toHaveFocus();
     expect(tabEntries()).toEqual([blocksButton]);
-    await userEvent.keyboard('{End}{ArrowLeft}{Enter}');
+    await runToolbar('Undo');
     await waitFor(() => expect(plainText(history.latest.current)).toBe(''));
     expect(textbox).toHaveFocus();
     await waitFor(() => {
@@ -307,7 +316,7 @@ export const UndoRedo: Story = {
     await userEvent.keyboard('{Alt>}{F10}{/Alt}');
     expect(blocksButton).toHaveFocus();
     expect(tabEntries()).toEqual([blocksButton]);
-    await userEvent.keyboard('{End}{ArrowLeft}{Enter}');
+    await runToolbar('Redo');
     await waitFor(() => expect(plainText(history.latest.current)).toBe('History'));
     expect(textbox).toHaveFocus();
     await waitFor(() => {
@@ -316,14 +325,12 @@ export const UndoRedo: Story = {
     });
     expect(tabEntries()).toEqual([blocksButton]);
     await userEvent.keyboard('{Shift>}{Home}{/Shift}');
-    await userEvent.keyboard('{Alt>}{F10}{/Alt}{ArrowRight}');
-    expect(bold).toHaveFocus();
-    await userEvent.keyboard('{Enter}');
+    await runToolbar('Bold');
     await waitFor(() =>
       expect(checked(history.latest.current)?.content?.[0]?.marks?.some((mark) => mark.type === 'bold')).toBe(true),
     );
     expect(plainText(history.latest.current)).toBe('History');
-    await userEvent.keyboard('{Alt>}{F10}{/Alt}{Home}{Enter}');
+    await runToolbar('Blocks');
     const page = within(canvasElement.ownerDocument.body);
     const dialog = within(await page.findByRole('dialog', { name: 'Blocks' }));
     const query = dialog.getByRole('combobox', { name: 'Find a block' });
@@ -356,20 +363,18 @@ export const ToolbarKeyboard: Story = {
     const toolbar = within(await canvas.findByRole('toolbar', { name: 'Formatting toolbar' }));
     await userEvent.keyboard('{Alt>}{F10}{/Alt}');
     const blocksButton = toolbar.getByRole('button', { name: 'Blocks' });
-    const bold = toolbar.getByRole('button', { name: 'Bold' });
+    const enabled = toolbar.getAllByRole('button').filter((button) => !(button as HTMLButtonElement).disabled);
     expect(blocksButton).toHaveFocus();
     expect(toolbar.getAllByRole('button').filter((button) => button.tabIndex === 0)).toEqual([blocksButton]);
     await userEvent.keyboard('{ArrowRight}');
-    expect(bold).toHaveFocus();
-    const italic = toolbar.getByRole('button', { name: 'Italic' });
-    await userEvent.keyboard('{ArrowRight}');
-    await waitFor(() => expect(italic).toHaveFocus());
+    await waitFor(() => expect(enabled[1]).toHaveFocus());
+    expect(toolbar.getAllByRole('button').filter((button) => button.tabIndex === 0)).toEqual([enabled[1]]);
     await userEvent.keyboard('{ArrowLeft}');
-    await waitFor(() => expect(bold).toHaveFocus());
-    await userEvent.keyboard('{End}');
-    await waitFor(() => expect(toolbar.getByRole('button', { name: 'Hide keyboard' })).toHaveFocus());
-    await userEvent.keyboard('{Home}');
     await waitFor(() => expect(blocksButton).toHaveFocus());
+    await userEvent.keyboard('{End}');
+    await waitFor(() => expect(enabled.at(-1)).toHaveFocus());
+    await userEvent.keyboard('{Home}');
+    await waitFor(() => expect(enabled[0]).toHaveFocus());
     expect(textbox).toBeInTheDocument();
   },
 };
