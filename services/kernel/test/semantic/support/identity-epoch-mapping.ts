@@ -91,32 +91,37 @@ export async function createIdentityMappingFixture(options: { poolMax: number; p
         return { job, survivor, redirectedOriginals: [redirected] };
       },
       /** Admission only: mapping drain proves the Accounts job without Search/Library resume.
-       * Native appendEdge builds the redirected graph; ordinary bootstrap then ACKs the foreign original. */
+       * Native appendEdge enrolls the Access merge original (the account agent) under foreign control 0x9e10; ordinary bootstrap then ACKs. */
       async admitAccountAgentVerify() {
         const catalogue = (await f.create('Accounts mapping catalogue', 0x9d10)).subject.id;
         const control = (await f.create('Accounts mapping control', 0x9e10)).subject.id;
-        if (home(catalogue) === home(control))
-          throw new Error('Accounts mapping control must occupy a distinct native home');
         const approved = await approvedVerification(f, catalogue);
         const agent = await ensureAccountAgent(f.pool, {
           account: approved.account,
           kind: 'person',
           name: 'Accounts mapping agent',
         });
+        const redirected = agent.subject.id;
+        if (redirected !== accountAgentId(approved.account))
+          throw new Error('Accounts mapping agent must retain its derived native original');
+        if (home(redirected) === home(control))
+          throw new Error('Accounts mapping control must occupy a distinct native home from the admitted original');
         await appendEdge(terminalWriter, control, control);
-        await appendEdge(terminalWriter, catalogue, control);
-        await this.bootstrapHomes([catalogue, control, agent.subject.id, accountAgentId(approved.account)]);
+        await appendEdge(terminalWriter, redirected, control);
+        await this.bootstrapHomes([catalogue, control, redirected]);
         const receipt = {
           kind: 'account-agent.verify' as const,
           account: approved.account,
           receipt: approved.workflow.receiptId,
         };
         const source = await loadAccountIdentitySource(f.pool, receipt);
+        if (source.input.intent.kind !== 'merge' || source.input.intent.redirected !== redirected)
+          throw new Error('Accounts mapping original must be the native account agent');
         const job = await identityEpochStore().prepareAdmission(f.pool, {}, source.input);
         for (let attempt = 0; attempt < 16; attempt++) {
           const progress = await stepIdentityEpochAdmission(f.pool, job);
           if (progress.state === 'pending')
-            return { job, catalogue, control, account: approved.account, agent: agent.subject.id, receipt, source };
+            return { job, catalogue, control, account: approved.account, agent: redirected, receipt, source };
           expect(progress.state).toBe('preparing');
         }
         throw new Error('Native Accounts admission did not finish within sixteen bounded steps');
