@@ -8,7 +8,7 @@ import { DocumentBody } from '../document-body';
 import { subjectHref } from '../subject/subject-href';
 import { knowledgeExactHref, knowledgeLiveHref } from './public-read';
 import { referenceCopy } from './reference-copy';
-import { referenceLabel, type KnowledgeReference } from './reference-model';
+import { referenceLabel, type KnowledgeReference, type KnowledgeReferenceTarget } from './reference-model';
 import type { ReferenceInspection, ReferenceInspector } from './reference-read';
 import { inspectKnowledgePublicReferenceRequest } from './reference-server';
 
@@ -17,6 +17,16 @@ export const referenceControl =
 export const referenceInput =
   'min-w-0 w-full max-w-full text-foreground';
 const publicInspector: ReferenceInspector = (input) => inspectKnowledgePublicReferenceRequest({ data: input });
+type InspectionContext = {
+  reference: KnowledgeReference;
+  target: KnowledgeReferenceTarget;
+  notebookId: string | null;
+};
+type ReferenceWorkspace = {
+  sourceKey: string;
+  context: InspectionContext;
+  result: ReferenceInspection | { state: 'loading' };
+};
 
 /** The native source manifest is the disclosure authority. No target metadata is inferred or cached here. */
 export function ReferenceIdentity({ reference, locale }: { reference: KnowledgeReference; locale: string }) {
@@ -100,46 +110,60 @@ export function KnowledgeReferenceList({
   const copy = referenceCopy(locale);
   const heading = useId();
   const notebookField = useId();
-  const [selected, setSelected] = useState<string | null>(null);
-  const [result, setResult] = useState<ReferenceInspection | { state: 'loading' } | null>(null);
+  const [workspace, setWorkspace] = useState<ReferenceWorkspace | null>(null);
   const [notebookId, setNotebookId] = useState('');
-  const current = useRef({ key: '', generation: 0, active: true });
-  const key = JSON.stringify([body, references, locale]);
-  const [selectionKey, setSelectionKey] = useState(key);
+  const key = JSON.stringify([body, references, locale, privateTargets, inspectable]);
+  const current = useRef({ key: '', generation: 0, active: true, context: null as InspectionContext | null });
   if (current.current.key !== key) {
     current.current.key = key;
     current.current.generation++;
-    setSelected(null);
-    setResult(null);
+    current.current.context = null;
+    setWorkspace(null);
     setNotebookId('');
-    setSelectionKey(key);
   }
   useLayoutEffect(() => {
     current.current.active = true;
     return () => {
       current.current.active = false;
       current.current.generation++;
+      current.current.context = null;
     };
   }, []);
-  const reference = selectionKey === key ? references.find((item) => item.id === selected) : undefined;
+  const activeWorkspace = workspace?.sourceKey === key ? workspace : null;
+  const reference = activeWorkspace?.context.reference;
+  const result = activeWorkspace?.result ?? null;
+  function currentInspection(generation: number, context: InspectionContext) {
+    return (
+      current.current.active &&
+      current.current.generation === generation &&
+      current.current.key === key &&
+      current.current.context === context
+    );
+  }
   async function read(item: KnowledgeReference, privateNotebook: string | null) {
     if (!current.current.active || current.current.key !== key || !item.target || item.target.kind === 'subject')
       return;
+    const target: KnowledgeReferenceTarget = { ...item.target };
+    const context: InspectionContext = {
+      reference: { ...item, target },
+      target,
+      notebookId: privateNotebook,
+    };
     const generation = ++current.current.generation;
-    setSelected(item.id);
-    setSelectionKey(key);
-    setResult({ state: 'loading' });
+    current.current.context = context;
+    setWorkspace({ sourceKey: key, context, result: { state: 'loading' } });
     try {
-      const next = await inspect({ target: item.target, locale, notebookId: privateNotebook });
-      if (current.current.active && current.current.generation === generation) setResult(next);
+      const next = await inspect({ target: context.target, locale, notebookId: context.notebookId });
+      if (currentInspection(generation, context)) setWorkspace({ sourceKey: key, context, result: next });
     } catch {
-      if (current.current.active && current.current.generation === generation) setResult({ state: 'unavailable' });
+      if (currentInspection(generation, context))
+        setWorkspace({ sourceKey: key, context, result: { state: 'unavailable' } });
     }
   }
   function close() {
     current.current.generation++;
-    setSelected(null);
-    setResult(null);
+    current.current.context = null;
+    setWorkspace(null);
     setNotebookId('');
   }
   if (!references.length) return null;
@@ -236,6 +260,7 @@ export function KnowledgeReferenceList({
                 locale={locale}
                 inspectable={false}
                 mediaSelection={result.mediaSelection ?? null}
+                visitKey={`${reference.id}:${result.documentId}:${result.revisionId}`}
               />
             </div>
           ) : result ? (
@@ -254,6 +279,7 @@ export function KnowledgeReferenceBody({
   references,
   inspectable = true,
   mediaSelection = null,
+  visitKey,
   ...props
 }: {
   document: DocumentSnapshot;
@@ -261,11 +287,12 @@ export function KnowledgeReferenceBody({
   locale: string;
   inspectable?: boolean;
   mediaSelection?: KnowledgeMediaSelection | null;
+  visitKey?: string;
 }) {
   const renderImage = useKnowledgeImageRenderer(props.document, mediaSelection, props.locale);
   return (
     <>
-      <DocumentBody {...props} renderImage={renderImage} />
+      <DocumentBody {...props} {...(visitKey === undefined ? {} : { visitKey })} renderImage={renderImage} />
       <KnowledgeReferenceList
         body={props.document}
         references={references}
