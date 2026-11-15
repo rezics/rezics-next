@@ -77,12 +77,12 @@
       "bytes": 3500
     },
     {
-      "path": "tools/goal/prompts/manager.md",
+      "path": "tools/goal/prompts/unit.md",
       "kind": "file",
-      "bytes": 5000
+      "bytes": 3500
     },
     {
-      "path": "tools/goal/prompts/researcher.md",
+      "path": "tools/goal/prompts/research.md",
       "kind": "file",
       "bytes": 2500
     },
@@ -92,9 +92,9 @@
       "bytes": 8000
     },
     {
-      "path": "tools/goal/prompts/conditions/**/*.md",
-      "kind": "directory",
-      "bytes": 1500
+      "path": "tools/goal/prompts/goal-author.md",
+      "kind": "file",
+      "bytes": 3500
     },
     {
       "path": "tools/goal/prompts/**/*.md",

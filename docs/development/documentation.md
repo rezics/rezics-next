@@ -79,9 +79,9 @@ Owner documents are authoritative, tracked and budgeted:
 
 Research reports, `tools/goal/reports/`, `.temp/` and memory are not owners.
 
-Owner documents state current rules and contracts only. They hold no dated headings, history or superseded
-sections, no receipts of past attempts, no task IDs and no `.temp/` paths. A brief cites owner documents as authority.
-It may link research only as background.
+Owner documents state current rules and contracts, without dated history, receipts or live task identities.
+They do not rely on private temporary state as authority. Runbook commands may show temporary output paths and
+protocol examples. Briefs cite owner documents as authority and research only as background.
 
 During closeout or incident review, keep a lesson only if it changes what someone should do in a future case.
 Write the rule, when it applies, and how to recognize success in the existing owner document. Replace obsolete
@@ -121,7 +121,10 @@ Untracking local state changes the Git index only; preserve existing working fil
 
 ### Budgets
 
-Budget rules use versioned path, kind and byte entries; the baseline maps those exact file paths or directory globs to observed bytes. Existing research decisions keep their state while newly indexed reports start open. Generated blocks use `<!-- generated: path -->` and `<!-- /generated -->` markers and must match the source bytes.
+Budget rules use versioned path, kind and byte entries; the baseline maps those paths or globs to observed bytes.
+Generated blocks use standalone `<!-- generated: path -->` and `<!-- /generated -->` lines outside code examples;
+their body matches the source bytes. Combined condition budgets apply to rendered prompts, checked by the existing
+prompt tests, rather than the sum of every condition template. Research registration preserves adopted decisions.
 
 Budgets are bytes. A file or directory already over its cap is recorded in the baseline. It may not grow, and
 shrinking it lowers the baseline. Raising a baseline requires a `Budget-Raise:` commit trailer giving the reason.
@@ -148,10 +151,14 @@ or rewrite documents to satisfy it. The supermanager reads its report daily and 
 
 - the caps and the baseline;
 - a valid research registry;
-- owner-document hygiene: no dated headings, task IDs or `.temp/` paths;
+- owner-document hygiene: no dated history, task IDs or dependencies on private temporary state;
 - relative links that resolve, including links into a deleted file;
 - generated blocks that equal their render;
 - no tracked `.temp/` files.
+
+Shrinking a baseline, pending registration of untracked reports and unavailable links in historical reports are
+informational. Current-document links and tracked research registration still report defects. Preserve historical
+reports rather than rewriting their original evidence; update baselines only for reviewed changes.
 
 The same module checks briefs at dispatch:
 

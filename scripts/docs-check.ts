@@ -100,20 +100,56 @@ function ownerDocument(file: string): boolean {
   return false;
 }
 
+function proseLines(text: string): string[] {
+  let fence: string | undefined;
+  return text.split(/\r?\n/).map((line) => {
+    const marker = /^\s{0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    if (marker) {
+      if (!fence) fence = marker[1];
+      else if (marker[1][0] === fence[0] && marker[1].length >= fence.length && !marker[2].trim()) fence = undefined;
+      return '';
+    }
+    return fence || /^(?: {4}|\t)/.test(line) ? '' : line;
+  });
+}
+
+function generatedBlocks(text: string) {
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  const blocks: { source: string; body: string }[] = [];
+  let pending: { source: string; line: number } | undefined;
+  let incomplete = false;
+  for (const [index, line] of proseLines(text).entries()) {
+    const opening = /^\s{0,3}<!-- generated: (\S+) -->\s*$/.exec(line);
+    if (opening) {
+      if (pending) incomplete = true;
+      pending = { source: opening[1], line: index };
+    } else if (/^\s{0,3}<!-- \/generated -->\s*$/.test(line)) {
+      if (!pending) incomplete = true;
+      else blocks.push({ source: pending.source, body: lines.slice(pending.line + 1, index).join('\n') });
+      pending = undefined;
+    }
+  }
+  return { blocks, incomplete: incomplete || pending !== undefined };
+}
+
 function extractOwnerViolations(text: string): { rule: string; detail: string }[] {
   const errors: { rule: string; detail: string }[] = [];
-  const lines = text.split(/\r?\n/);
+  const lines = proseLines(text);
   for (const [index, line] of lines.entries()) {
     if (/^\s{0,3}#{1,6}\s+.*\b\d{4}-\d{2}-\d{2}\b/.test(line)) {
       errors.push({ rule: 'owner-dated-heading', detail: `line ${index + 1} has a dated heading` });
     }
     if (
-      /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i.test(line) ||
-      /\b(?:TASK|GOAL|TICKET|ISSUE)[-_][A-Z0-9]{4,}(?:-[A-Z0-9]+)*\b/i.test(line)
+      /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i.test(line.replace(/`+[^`]*`+/g, '')) ||
+      /\b(?:TASK|GOAL|TICKET|ISSUE)[-_][A-Z0-9]{4,}(?:-[A-Z0-9]+)*\b/.test(line)
     ) {
       errors.push({ rule: 'owner-task-id', detail: `line ${index + 1} contains a task ID` });
     }
-    if (/(?:^|[\s(`'"=])\.temp\//.test(line)) {
+    if (
+      line.includes('.temp/') &&
+      (/\b(?:read|see|load|consult)\s+(?:the\s+)?[`'"]?(?:\.\.\/)*\.temp\//i.test(line) ||
+        parseMarkdown(line).links.some(({ target }) => /(?:^|\/)\.temp\//.test(target)))
+    ) {
       errors.push({ rule: 'owner-temp-path', detail: `line ${index + 1} contains a temporary path` });
     }
   }
@@ -744,7 +780,7 @@ export async function runDocsCheck(
     if (!registryPaths.has(file))
       violations.push(
         safeLine(
-          'research-unregistered',
+          untracked.includes(file) ? 'research-pending' : 'research-unregistered',
           file,
           'research report is missing from the registry',
           'add it to docs/research/registry.json with state open',
@@ -777,11 +813,8 @@ export async function runDocsCheck(
         violations.push(
           safeLine(error.rule, file, error.detail, 'remove the dated heading, task ID or temporary path'),
         );
-      const marker = /<!-- generated: ([^\s]+) -->\r?\n([\s\S]*?)<!-- \/generated -->/g;
-      const generatedBlocks = [...text.matchAll(marker)];
-      const openMarkers = [...text.matchAll(/<!-- generated:/g)].length;
-      const closeMarkers = [...text.matchAll(/<!-- \/generated -->/g)].length;
-      if (openMarkers !== generatedBlocks.length || closeMarkers !== generatedBlocks.length) {
+      const generated = generatedBlocks(text);
+      if (generated.incomplete) {
         violations.push(
           safeLine(
             'generated-block',
@@ -791,8 +824,8 @@ export async function runDocsCheck(
           ),
         );
       }
-      for (const match of generatedBlocks) {
-        const source = match[1];
+      for (const block of generated.blocks) {
+        const source = block.source;
         const sourcePath = path.resolve(root, source);
         const sourceRelative = path.relative(root, sourcePath);
         if (source.startsWith('/') || sourceRelative.startsWith('..') || source.startsWith('.temp/')) {
@@ -810,7 +843,7 @@ export async function runDocsCheck(
           const sourceInfo = await lstat(sourcePath);
           if (!sourceInfo.isFile() || sourceInfo.isSymbolicLink()) throw new Error('source must be a regular file');
           const sourceText = (await readFile(sourcePath, 'utf8')).replace(/\r\n/g, '\n').trimEnd();
-          const body = match[2].replace(/\r\n/g, '\n').replace(/^\n|\n$/g, '');
+          const body = block.body.replace(/^\n|\n$/g, '');
           if (sourceText !== body) {
             violations.push(
               safeLine(
@@ -857,6 +890,8 @@ export async function runDocsCheck(
   for (const source of sourceSet) {
     const parsed = await parsedMarkdown(root, source, markdownMemory, io.markdownStat);
     const inboundOnly = changedMode && !changedMarkdown.has(source) ? linkSources.get(source) : undefined;
+    const linkRule = (rule: string) =>
+      source.startsWith('docs/research/') || source.startsWith('tools/goal/reports/') ? `historical-${rule}` : rule;
     for (const link of parsed.links) {
       if (inboundOnly && !inboundOnly.has(link.target)) continue;
       const resolved = linkTarget(root, source, link.target);
@@ -864,7 +899,7 @@ export async function runDocsCheck(
       if (resolved.file.startsWith('..') || path.isAbsolute(resolved.file)) {
         violations.push(
           safeLine(
-            'link-target',
+            linkRule('link-target'),
             source,
             `target ${link.target} leaves the worktree (line ${link.line})`,
             'use a repository-relative link',
@@ -882,7 +917,7 @@ export async function runDocsCheck(
       if (!targetStat?.isFile() || targetStat.isSymbolicLink()) {
         violations.push(
           safeLine(
-            'link-target',
+            linkRule('link-target'),
             source,
             `target ${link.target} does not resolve (line ${link.line})`,
             'fix the relative link or restore the target',
@@ -898,7 +933,7 @@ export async function runDocsCheck(
         ) {
           violations.push(
             safeLine(
-              'link-anchor',
+              linkRule('link-anchor'),
               source,
               `target ${link.target} has no matching anchor (line ${link.line})`,
               'use an existing heading anchor or add the intended heading',
@@ -910,7 +945,9 @@ export async function runDocsCheck(
   }
 
   const unique = [...new Set(violations)].sort((a, b) => a.localeCompare(b));
-  const failures = unique.filter((line) => !line.startsWith('baseline-lowered |'));
+  const failures = unique.filter(
+    (line) => !/^(?:baseline-lowered|budget-shrank|research-pending|historical-link-(?:target|anchor)) \|/.test(line),
+  );
   return { exitCode: failures.length ? 1 : 0, lines: unique };
 }
 
