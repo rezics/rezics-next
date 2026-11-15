@@ -173,12 +173,16 @@ export type EditorFindHandle = {
   focusReplacement: () => void;
 };
 
+const findActionClassName =
+  'h-auto min-w-0 max-w-full shrink whitespace-normal wrap-break-word text-start';
+
 export function EditorFind({
   editor,
   labels,
   isCurrent,
   onClose,
   onInvalidContent,
+  defaultQuery,
   ref,
 }: {
   editor: Editor;
@@ -186,14 +190,20 @@ export function EditorFind({
   isCurrent: () => boolean;
   onClose: () => void;
   onInvalidContent?: () => void;
+  defaultQuery?: string;
   ref?: Ref<EditorFindHandle>;
 }) {
   const id = useId();
+  const descriptionId = `${id}-description`;
+  const statusId = `${id}-status`;
   const search = useRef<HTMLInputElement>(null);
   const replacementInput = useRef<HTMLInputElement>(null);
-  const [query, setQuery] = useState(() =>
-    editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to).slice(0, 256),
-  );
+  const [query, setQuery] = useState(() => {
+    const selected = editor.state.doc
+      .textBetween(editor.state.selection.from, editor.state.selection.to)
+      .slice(0, 256);
+    return selected || (defaultQuery ?? '').slice(0, 256);
+  });
   const [replacement, setReplacement] = useState('');
   const [matchCase, setMatchCase] = useState(false);
   const [wholeWord, setWholeWord] = useState(false);
@@ -281,7 +291,7 @@ export function EditorFind({
   return (
     <section
       aria-label={labels.find}
-      className="flex flex-col gap-3 rounded-xl border bg-background p-3"
+      className="flex min-w-0 flex-col gap-3 rounded-xl border bg-background p-3"
       onKeyDown={(event) => {
         if (event.nativeEvent.isComposing || editor.view.composing) return;
         if (event.key === 'Escape') {
@@ -290,14 +300,17 @@ export function EditorFind({
         }
       }}
     >
-      <FieldGroup>
-        <Field>
-          <FieldLabel htmlFor={`${id}-query`}>{labels.searchFor}</FieldLabel>
+      <FieldGroup className="min-w-0">
+        <Field className="min-w-0">
+          <FieldLabel htmlFor={`${id}-query`} className="min-w-0 wrap-break-word">
+            {labels.searchFor}
+          </FieldLabel>
           <Input
             ref={search}
             id={`${id}-query`}
             value={query}
             maxLength={256}
+            aria-describedby={`${descriptionId} ${statusId}`}
             onChange={(event) => {
               setQuery(event.target.value);
               setCurrent(0);
@@ -309,10 +322,14 @@ export function EditorFind({
               }
             }}
           />
-          <FieldDescription>{labels.findDescription}</FieldDescription>
+          <FieldDescription id={descriptionId} className="min-w-0 wrap-break-word">
+            {labels.findDescription}
+          </FieldDescription>
         </Field>
-        <Field>
-          <FieldLabel htmlFor={`${id}-replacement`}>{labels.replaceWith}</FieldLabel>
+        <Field className="min-w-0">
+          <FieldLabel htmlFor={`${id}-replacement`} className="min-w-0 wrap-break-word">
+            {labels.replaceWith}
+          </FieldLabel>
           <Input
             ref={replacementInput}
             id={`${id}-replacement`}
@@ -321,8 +338,8 @@ export function EditorFind({
             onChange={(event) => setReplacement(event.target.value)}
           />
         </Field>
-        <div className="flex flex-wrap gap-4">
-          <Field orientation="horizontal">
+        <div className="flex min-w-0 flex-wrap gap-4">
+          <Field orientation="horizontal" className="min-w-0">
             <Checkbox
               id={`${id}-case`}
               checked={matchCase}
@@ -331,9 +348,11 @@ export function EditorFind({
                 setCurrent(0);
               }}
             />
-            <FieldLabel htmlFor={`${id}-case`}>{labels.caseSensitive}</FieldLabel>
+            <FieldLabel htmlFor={`${id}-case`} className="min-w-0 whitespace-normal wrap-break-word">
+              {labels.caseSensitive}
+            </FieldLabel>
           </Field>
-          <Field orientation="horizontal">
+          <Field orientation="horizontal" className="min-w-0">
             <Checkbox
               id={`${id}-word`}
               checked={wholeWord}
@@ -342,23 +361,43 @@ export function EditorFind({
                 setCurrent(0);
               }}
             />
-            <FieldLabel htmlFor={`${id}-word`}>{labels.wholeWord}</FieldLabel>
+            <FieldLabel htmlFor={`${id}-word`} className="min-w-0 whitespace-normal wrap-break-word">
+              {labels.wholeWord}
+            </FieldLabel>
           </Field>
         </div>
       </FieldGroup>
-      <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+      <p
+        id={statusId}
+        role="status"
+        aria-live="polite"
+        className="min-w-0 text-sm wrap-break-word text-muted-foreground"
+      >
         {result.total ? editorLabel(labels.matchCount, { current: index + 1, total: result.total }) : labels.noMatches}
       </p>
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" disabled={!result.total} onClick={() => next(true)}>
+      <div className="flex min-w-0 flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className={findActionClassName}
+          disabled={!result.total}
+          onClick={() => next(true)}
+        >
           {labels.previousMatch}
         </Button>
-        <Button type="button" variant="outline" disabled={!result.total} onClick={() => next()}>
+        <Button
+          type="button"
+          variant="outline"
+          className={findActionClassName}
+          disabled={!result.total}
+          onClick={() => next()}
+        >
           {labels.nextMatch}
         </Button>
         <Button
           type="button"
           variant="outline"
+          className={findActionClassName}
           disabled={!result.total || !editor.isEditable}
           onClick={() => replace()}
         >
@@ -367,12 +406,13 @@ export function EditorFind({
         <Button
           type="button"
           variant="outline"
+          className={findActionClassName}
           disabled={!result.total || !editor.isEditable}
           onClick={() => replace(true)}
         >
           {labels.replaceAll}
         </Button>
-        <Button type="button" variant="ghost" onClick={close}>
+        <Button type="button" variant="ghost" className={findActionClassName} onClick={close}>
           {labels.closeFind}
         </Button>
       </div>
