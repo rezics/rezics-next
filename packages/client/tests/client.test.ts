@@ -262,7 +262,10 @@ test('hosted publication preparation exposes all mounted commands with typed ope
     ];
     for (const result of activation) {
       if (result.error) {
-        expectTypeOf(result.error.status).toEqualTypeOf<400 | 401 | 403 | 404 | 412 | 413 | 422 | 429 | 500 | 503>();
+        expectTypeOf(result.status).toEqualTypeOf<number>();
+        expectTypeOf(result.error.status).toEqualTypeOf<
+          '400' | '401' | '403' | '404' | '412' | '413' | '422' | '429' | '500' | '503'
+        >();
       } else {
         expectTypeOf(result.data).toEqualTypeOf<HostedPublicationActivationProgress>();
         expectTypeOf(result.data.state).toEqualTypeOf<'checking' | 'ready' | 'restart' | 'activated'>();
