@@ -6,11 +6,15 @@ import { readThreadPersonal } from './reads';
 
 export type CredentialMode = ReadCredentialMode;
 
-export function threadSlugQuery(id: string, credentialMode: CredentialMode) {
+export function threadSlugQuery(id: string, credentialMode: CredentialMode, expectedReaderSubject?: string) {
+  const reader = expectedReaderSubject === undefined ? {} : { expectedReaderSubject };
   return queryOptions({
     ...publicRead,
-    queryKey: readQueryKey(['thread-slug', id], credentialMode),
-    queryFn: () => readThreadSlug({ data: { id, credentialMode } }),
+    queryKey: readQueryKey(
+      ['thread-slug', id, ...(expectedReaderSubject ? [expectedReaderSubject] : [])],
+      credentialMode,
+    ),
+    queryFn: () => readThreadSlug({ data: { id, credentialMode, ...reader } }),
   });
 }
 
@@ -20,11 +24,19 @@ export function threadPageQuery(
   credentialMode: CredentialMode,
   expectedSlug?: string,
   post?: string,
+  expectedReaderSubject?: string,
 ) {
   return queryOptions({
     ...publicRead,
     queryKey: readQueryKey(
-      ['thread-page', id, cursor ?? null, expectedSlug ?? null, ...(post === undefined ? [] : [post])],
+      [
+        'thread-page',
+        id,
+        cursor ?? null,
+        expectedSlug ?? null,
+        ...(post === undefined ? [] : [post]),
+        ...(expectedReaderSubject === undefined ? [] : ['reader', expectedReaderSubject]),
+      ],
       credentialMode,
     ),
     queryFn: () =>
@@ -34,6 +46,7 @@ export function threadPageQuery(
           ...(cursor === undefined ? {} : { cursor }),
           ...(expectedSlug === undefined ? {} : { expectedSlug }),
           ...(post === undefined ? {} : { post }),
+          ...(expectedReaderSubject === undefined ? {} : { expectedReaderSubject }),
           credentialMode,
         },
       }),

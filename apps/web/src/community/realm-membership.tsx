@@ -104,10 +104,7 @@ export function RealmMembership({
         data-member-state="none"
       >
         <div className="flex flex-wrap items-center gap-3">
-          <Button
-            nativeButton={false}
-            render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} />}
-          >
+          <Button nativeButton={false} render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} />}>
             {m.realm_join()}
           </Button>
         </div>
@@ -305,7 +302,7 @@ function NativeMembership({
     if (source.viewer.state === 'unavailable') return m.realm_membership_unavailable();
     if (source.actions.participate === 'denied') return m.realm_native_access_denied();
     if (source.actions.participate === 'unavailable') return m.realm_membership_unavailable();
-    if (source.actions.participate === 'sign-in') return m.realm_sign_in_to_join();
+    if (source.actions.participate === 'sign-in') return session === 'signed-out' ? m.realm_sign_in_to_join() : null;
     if (source.actions.participate === 'admitted' && source.viewer.state === 'member') return null;
     if (joinCandidate && !attempt) {
       if (visibility === 'protected') return m.realm_protected_admission();
@@ -425,7 +422,9 @@ function NativeMembership({
           <>
             <Button
               className="h-auto min-h-7 max-w-full whitespace-normal text-start"
-              disabled={busyNow || !current() || !caller.isCurrent() || session !== 'signed-in' || !subject || !csrfToken}
+              disabled={
+                busyNow || !current() || !caller.isCurrent() || session !== 'signed-in' || !subject || !csrfToken
+              }
               onClick={(event) => void submit(null, event, attempt)}
             >
               {m.realm_membership_command_retry()}
@@ -450,7 +449,9 @@ function NativeMembership({
         ) : action ? (
           <Button
             className="h-auto min-h-7 max-w-full whitespace-normal text-start"
-            disabled={session !== 'signed-in' || !subject || !csrfToken || !current() || (action === 'join' && !canJoin)}
+            disabled={
+              session !== 'signed-in' || !subject || !csrfToken || !current() || (action === 'join' && !canJoin)
+            }
             onClick={(event) => void submit(action, event)}
           >
             {action === 'join' ? m.realm_join() : m.realm_leave()}

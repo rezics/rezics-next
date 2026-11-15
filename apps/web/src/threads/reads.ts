@@ -59,6 +59,7 @@ type PageInput = {
   post?: string;
   sort?: 'hot' | 'new';
   expectedSlug?: string;
+  expectedReaderSubject?: string;
   credentialMode?: ReadCredentialMode;
 };
 function validatePageInput(input: unknown): PageInput {
@@ -72,6 +73,13 @@ function validatePageInput(input: unknown): PageInput {
     ('post' in input && input.post !== undefined && (typeof input.post !== 'string' || input.post.length > 128)) ||
     ('sort' in input && input.sort !== undefined && input.sort !== 'hot' && input.sort !== 'new') ||
     ('expectedSlug' in input && input.expectedSlug !== undefined && typeof input.expectedSlug !== 'string') ||
+    ('expectedReaderSubject' in input &&
+      input.expectedReaderSubject !== undefined &&
+      (!('credentialMode' in input) ||
+        input.credentialMode !== 'session' ||
+        typeof input.expectedReaderSubject !== 'string' ||
+        input.expectedReaderSubject.length === 0 ||
+        input.expectedReaderSubject.length > 128)) ||
     ('credentialMode' in input &&
       input.credentialMode !== undefined &&
       input.credentialMode !== 'anonymous' &&
@@ -84,6 +92,9 @@ function validatePageInput(input: unknown): PageInput {
     ...('post' in input && typeof input.post === 'string' ? { post: input.post } : {}),
     ...('sort' in input && (input.sort === 'hot' || input.sort === 'new') ? { sort: input.sort } : {}),
     ...('expectedSlug' in input && typeof input.expectedSlug === 'string' ? { expectedSlug: input.expectedSlug } : {}),
+    ...('expectedReaderSubject' in input && typeof input.expectedReaderSubject === 'string'
+      ? { expectedReaderSubject: input.expectedReaderSubject }
+      : {}),
     ...('credentialMode' in input && (input.credentialMode === 'anonymous' || input.credentialMode === 'session')
       ? { credentialMode: input.credentialMode }
       : {}),
@@ -171,6 +182,11 @@ export const readThreadSlug = createServerFn({ method: 'GET' })
         authorization = null;
       }
     }
+    if (
+      data.expectedReaderSubject !== undefined &&
+      (!authorization || sessionSubject(request) !== data.expectedReaderSubject)
+    )
+      throw notFound();
     const result = authorization
       ? await kernelClient().threads({ id: data.id }).get({ headers: { authorization } })
       : await kernelClient().threads({ id: data.id }).get();

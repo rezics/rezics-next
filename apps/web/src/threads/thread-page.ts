@@ -32,7 +32,7 @@ export type ThreadPageObservation = Pick<
   'target' | 'viewer' | 'query' | 'actions' | 'watch' | 'slowMode' | 'currentness' | 'reactionsAsOf' | 'reviewContext'
 >;
 
-type PageInput = { id: string; cursor?: string; post?: string };
+type PageInput = { id: string; cursor?: string; post?: string; expectedReaderSubject?: string };
 type CanonicalPageInput = PageInput & { expectedSlug: string };
 
 export type ThreadSlugRedirect = { redirect: { id: string; title: string | null } };
@@ -105,6 +105,8 @@ export async function loadThreadPage(
     }
   }
   signal.throwIfAborted();
+  if (data.expectedReaderSubject !== undefined && (!authorization || viewerId !== data.expectedReaderSubject))
+    throw notFound();
   let linkedPostUnavailable = false;
   const readReadingPage = async () => {
     let cursor = data.cursor;
