@@ -1,6 +1,7 @@
 import { type FilterRelease } from '@rezics/filter';
 import { type ReleaseSearchNameCut, type ReleaseSearchNamePool, type ReleaseSearchNameReservation } from './release-search-name-stream.ts';
 import { type ReleaseGroupingBasis, type ReleaseGroupingRequest, type ReleaseGroupingSource } from './release-search-grouping.ts';
+import { type ReleaseSearchRelevanceState } from './release-search-relevance-state.ts';
 import { type SubjectSource } from './source.ts';
 export type ReleaseSearchCandidatePool = ReleaseSearchNamePool & Readonly<{
     source: Pick<SubjectSource, 'read' | 'readCompleteWorkLinks'>;
@@ -49,6 +50,12 @@ export type ReleaseSearchNativePage = Readonly<{
     after: string;
     exhausted: boolean;
 }>;
+type RelevanceProgress = Readonly<{
+    principal: string;
+    generation: number;
+    now: number;
+    state: ReleaseSearchRelevanceState;
+}>;
 /** Retain full authority around the name population observation, including empty pools. */
 export declare function observeReleaseSearchCandidates(pools: readonly ReleaseSearchCandidatePool[], context: Context): Promise<ReleaseSearchCandidateCut>;
 /** Native name-order group and independent child streams. These are private candidate keys,
@@ -62,6 +69,7 @@ export declare function createReleaseSearchCandidateStreams(input: {
     cut: ReleaseSearchCandidateCut;
     context: Context;
     relevance?: (request: ReleaseGroupingRequest, after: string | null, size: number) => Promise<ReleaseSearchNativePage>;
+    relevanceProgress?: RelevanceProgress;
     currentMatches?: (request: ReleaseGroupingRequest, keys: readonly ReleaseSearchNativeCandidate[]) => Promise<ReadonlySet<string>>;
 }): Pick<ReleaseGroupingSource<never, never>, 'groups' | 'children'>;
 export {};

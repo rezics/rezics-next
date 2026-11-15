@@ -77,7 +77,7 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
     moneyPolicy?: CommerceMoneyPolicy;
     content?: ContentRuntime & Partial<Pick<ContentBoardDependencies, 'cursorNow'>> & {
         readConsent?: CurrentConsentReader;
-        /** Complete-input title observations; absent until Content installs its native producer. */
+        /** Explicit host override; ordinary Kernel composition installs the native producer when absent. */
         shelfTitleInputs?: ContentShelfTitleInputs;
         now?: () => number;
         id?: () => string;

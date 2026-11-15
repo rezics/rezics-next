@@ -5375,7 +5375,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                 post: {
                     body: {
                         pin: {
-                            format: "https://rezics.com/definitions/catalogue/2";
+                            format: "https://rezics.com/definitions/catalogue/1";
                             rootDigest: string;
                             kindSpec: "https://rezics.com/definitions/kind/1";
                             reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5389,7 +5389,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                     response: {
                         200: {
                             pin: {
-                                format: "https://rezics.com/definitions/catalogue/2";
+                                format: "https://rezics.com/definitions/catalogue/1";
                                 rootDigest: string;
                                 kindSpec: "https://rezics.com/definitions/kind/1";
                                 reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5506,7 +5506,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                             response: {
                                 200: {
                                     pin: {
-                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        format: "https://rezics.com/definitions/catalogue/1";
                                         rootDigest: string;
                                         kindSpec: "https://rezics.com/definitions/kind/1";
                                         reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5627,7 +5627,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                             response: {
                                 200: {
                                     pin: {
-                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        format: "https://rezics.com/definitions/catalogue/1";
                                         rootDigest: string;
                                         kindSpec: "https://rezics.com/definitions/kind/1";
                                         reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5731,7 +5731,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                     response: {
                         200: {
                             pin: {
-                                format: "https://rezics.com/definitions/catalogue/2";
+                                format: "https://rezics.com/definitions/catalogue/1";
                                 rootDigest: string;
                                 kindSpec: "https://rezics.com/definitions/kind/1";
                                 reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5815,7 +5815,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                             response: {
                                 200: {
                                     pin: {
-                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        format: "https://rezics.com/definitions/catalogue/1";
                                         rootDigest: string;
                                         kindSpec: "https://rezics.com/definitions/kind/1";
                                         reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -12446,12 +12446,33 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                 };
                                 items: ({
                                     id: string;
-                                    kind: "board" | "thread";
                                     revision: number;
                                     createdAt: string;
+                                    kind: "thread";
                                     state: "available";
                                     resourceId: string;
                                     title: string | null;
+                                    place: {
+                                        boardId: string;
+                                        title: string | null;
+                                    };
+                                    command: {
+                                        watchId: string;
+                                        kind: "board" | "thread";
+                                        expectedRevision: number;
+                                    };
+                                } | {
+                                    id: string;
+                                    revision: number;
+                                    createdAt: string;
+                                    kind: "board";
+                                    state: "available";
+                                    resourceId: string;
+                                    title: string | null;
+                                    place: {
+                                        realmId: string;
+                                        title: string;
+                                    } | null;
                                     command: {
                                         watchId: string;
                                         kind: "board" | "thread";

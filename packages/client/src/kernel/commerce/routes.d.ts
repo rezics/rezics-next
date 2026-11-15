@@ -5390,7 +5390,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                 post: {
                     body: {
                         pin: {
-                            format: "https://rezics.com/definitions/catalogue/2";
+                            format: "https://rezics.com/definitions/catalogue/1";
                             rootDigest: string;
                             kindSpec: "https://rezics.com/definitions/kind/1";
                             reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5404,7 +5404,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                     response: {
                         200: {
                             pin: {
-                                format: "https://rezics.com/definitions/catalogue/2";
+                                format: "https://rezics.com/definitions/catalogue/1";
                                 rootDigest: string;
                                 kindSpec: "https://rezics.com/definitions/kind/1";
                                 reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5521,7 +5521,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             response: {
                                 200: {
                                     pin: {
-                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        format: "https://rezics.com/definitions/catalogue/1";
                                         rootDigest: string;
                                         kindSpec: "https://rezics.com/definitions/kind/1";
                                         reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5642,7 +5642,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             response: {
                                 200: {
                                     pin: {
-                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        format: "https://rezics.com/definitions/catalogue/1";
                                         rootDigest: string;
                                         kindSpec: "https://rezics.com/definitions/kind/1";
                                         reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5746,7 +5746,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                     response: {
                         200: {
                             pin: {
-                                format: "https://rezics.com/definitions/catalogue/2";
+                                format: "https://rezics.com/definitions/catalogue/1";
                                 rootDigest: string;
                                 kindSpec: "https://rezics.com/definitions/kind/1";
                                 reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5830,7 +5830,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             response: {
                                 200: {
                                     pin: {
-                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        format: "https://rezics.com/definitions/catalogue/1";
                                         rootDigest: string;
                                         kindSpec: "https://rezics.com/definitions/kind/1";
                                         reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -7091,6 +7091,23 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         acquisition: "one-time-account-bound";
                                         quantity: 1;
                                     } | null;
+                                    contentPost: {
+                                        benefit: {
+                                            kind: "content-post";
+                                            resourceType: "content.post";
+                                            resource: {
+                                                route: number;
+                                                id: string;
+                                            };
+                                            action: "post:read";
+                                        };
+                                        creatorAccountId: string;
+                                        targetSubjectId: string;
+                                        saleTermsReference: "content-post-revisions-v1";
+                                        delivery: "eligible-post-revisions";
+                                        acquisition: "one-time-account-bound";
+                                        quantity: 1;
+                                    } | null;
                                 }[];
                                 next: string | null;
                                 projectionState: "preparing" | "ready";
@@ -7383,6 +7400,23 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 acquisition: "one-time-account-bound";
                                 quantity: 1;
                             } | null;
+                            contentPost: {
+                                benefit: {
+                                    kind: "content-post";
+                                    resourceType: "content.post";
+                                    resource: {
+                                        route: number;
+                                        id: string;
+                                    };
+                                    action: "post:read";
+                                };
+                                creatorAccountId: string;
+                                targetSubjectId: string;
+                                saleTermsReference: "content-post-revisions-v1";
+                                delivery: "eligible-post-revisions";
+                                acquisition: "one-time-account-bound";
+                                quantity: 1;
+                            } | null;
                         }[];
                         next: string | null;
                     };
@@ -7507,6 +7541,23 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     acquisition: "one-time-account-bound";
                                     quantity: 1;
                                 } | null;
+                                contentPost: {
+                                    benefit: {
+                                        kind: "content-post";
+                                        resourceType: "content.post";
+                                        resource: {
+                                            route: number;
+                                            id: string;
+                                        };
+                                        action: "post:read";
+                                    };
+                                    creatorAccountId: string;
+                                    targetSubjectId: string;
+                                    saleTermsReference: "content-post-revisions-v1";
+                                    delivery: "eligible-post-revisions";
+                                    acquisition: "one-time-account-bound";
+                                    quantity: 1;
+                                } | null;
                                 id: string;
                                 revision: number;
                                 targetSubjectId: string;
@@ -7622,6 +7673,13 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
         offers: {
             post: {
                 body: {
+                    postId: string;
+                    targetSubjectId?: string;
+                    title: string;
+                    currency: string;
+                    unitAmountMinor: number;
+                    taxCode: string;
+                } | {
                     contentEditionId: string;
                     title: string;
                     currency: string;
@@ -7667,6 +7725,15 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 acquisition: 'one-time-account-bound';
                                 quantity: 1;
                             } | null;
+                            contentPost: {
+                                benefit: import("./model.ts").ContentPostBenefit;
+                                creatorAccountId: string;
+                                targetSubjectId: string;
+                                saleTermsReference: 'content-post-revisions-v1';
+                                delivery: 'eligible-post-revisions';
+                                acquisition: 'one-time-account-bound';
+                                quantity: 1;
+                            } | null;
                         };
                     };
                     201: {
@@ -7698,6 +7765,23 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 };
                                 saleTermsReference: string;
                                 delivery: "fixed-content-edition";
+                                acquisition: "one-time-account-bound";
+                                quantity: 1;
+                            } | null;
+                            contentPost: {
+                                benefit: {
+                                    kind: "content-post";
+                                    resourceType: "content.post";
+                                    resource: {
+                                        route: number;
+                                        id: string;
+                                    };
+                                    action: "post:read";
+                                };
+                                creatorAccountId: string;
+                                targetSubjectId: string;
+                                saleTermsReference: "content-post-revisions-v1";
+                                delivery: "eligible-post-revisions";
                                 acquisition: "one-time-account-bound";
                                 quantity: 1;
                             } | null;
@@ -7851,6 +7935,23 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     };
                                     saleTermsReference: string;
                                     delivery: "fixed-content-edition";
+                                    acquisition: "one-time-account-bound";
+                                    quantity: 1;
+                                } | null;
+                                contentPost: {
+                                    benefit: {
+                                        kind: "content-post";
+                                        resourceType: "content.post";
+                                        resource: {
+                                            route: number;
+                                            id: string;
+                                        };
+                                        action: "post:read";
+                                    };
+                                    creatorAccountId: string;
+                                    targetSubjectId: string;
+                                    saleTermsReference: "content-post-revisions-v1";
+                                    delivery: "eligible-post-revisions";
                                     acquisition: "one-time-account-bound";
                                     quantity: 1;
                                 } | null;
@@ -8030,6 +8131,23 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         acquisition: "one-time-account-bound";
                                         quantity: 1;
                                     } | null;
+                                    contentPost: {
+                                        benefit: {
+                                            kind: "content-post";
+                                            resourceType: "content.post";
+                                            resource: {
+                                                route: number;
+                                                id: string;
+                                            };
+                                            action: "post:read";
+                                        };
+                                        creatorAccountId: string;
+                                        targetSubjectId: string;
+                                        saleTermsReference: "content-post-revisions-v1";
+                                        delivery: "eligible-post-revisions";
+                                        acquisition: "one-time-account-bound";
+                                        quantity: 1;
+                                    } | null;
                                     id: string;
                                     targetSubjectId: string;
                                     summary: {
@@ -8187,6 +8305,15 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 acquisition: 'one-time-account-bound';
                                 quantity: 1;
                             } | null;
+                            contentPost: {
+                                benefit: import("./model.ts").ContentPostBenefit;
+                                creatorAccountId: string;
+                                targetSubjectId: string;
+                                saleTermsReference: 'content-post-revisions-v1';
+                                delivery: 'eligible-post-revisions';
+                                acquisition: 'one-time-account-bound';
+                                quantity: 1;
+                            } | null;
                             createdAt: string;
                         };
                     };
@@ -8219,6 +8346,23 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 };
                                 saleTermsReference: string;
                                 delivery: "fixed-content-edition";
+                                acquisition: "one-time-account-bound";
+                                quantity: 1;
+                            } | null;
+                            contentPost: {
+                                benefit: {
+                                    kind: "content-post";
+                                    resourceType: "content.post";
+                                    resource: {
+                                        route: number;
+                                        id: string;
+                                    };
+                                    action: "post:read";
+                                };
+                                creatorAccountId: string;
+                                targetSubjectId: string;
+                                saleTermsReference: "content-post-revisions-v1";
+                                delivery: "eligible-post-revisions";
                                 acquisition: "one-time-account-bound";
                                 quantity: 1;
                             } | null;
@@ -8369,6 +8513,23 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 acquisition: "one-time-account-bound";
                                 quantity: 1;
                             } | null;
+                            contentPost: {
+                                benefit: {
+                                    kind: "content-post";
+                                    resourceType: "content.post";
+                                    resource: {
+                                        route: number;
+                                        id: string;
+                                    };
+                                    action: "post:read";
+                                };
+                                creatorAccountId: string;
+                                targetSubjectId: string;
+                                saleTermsReference: "content-post-revisions-v1";
+                                delivery: "eligible-post-revisions";
+                                acquisition: "one-time-account-bound";
+                                quantity: 1;
+                            } | null;
                             id: string;
                             offerId: string;
                             settlement: "failed" | "paid" | "pending" | "unknown";
@@ -8504,6 +8665,23 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     };
                                     saleTermsReference: string;
                                     delivery: "fixed-content-edition";
+                                    acquisition: "one-time-account-bound";
+                                    quantity: 1;
+                                } | null;
+                                contentPost: {
+                                    benefit: {
+                                        kind: "content-post";
+                                        resourceType: "content.post";
+                                        resource: {
+                                            route: number;
+                                            id: string;
+                                        };
+                                        action: "post:read";
+                                    };
+                                    creatorAccountId: string;
+                                    targetSubjectId: string;
+                                    saleTermsReference: "content-post-revisions-v1";
+                                    delivery: "eligible-post-revisions";
                                     acquisition: "one-time-account-bound";
                                     quantity: 1;
                                 } | null;
@@ -8788,6 +8966,23 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 acquisition: "one-time-account-bound";
                                 quantity: 1;
                             } | null;
+                            contentPost: {
+                                benefit: {
+                                    kind: "content-post";
+                                    resourceType: "content.post";
+                                    resource: {
+                                        route: number;
+                                        id: string;
+                                    };
+                                    action: "post:read";
+                                };
+                                creatorAccountId: string;
+                                targetSubjectId: string;
+                                saleTermsReference: "content-post-revisions-v1";
+                                delivery: "eligible-post-revisions";
+                                acquisition: "one-time-account-bound";
+                                quantity: 1;
+                            } | null;
                             id: string;
                             offerId: string;
                             orderId: string;
@@ -8962,6 +9157,23 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                     acquisition: import("typebox").TLiteral<"one-time-account-bound">;
                     quantity: import("typebox").TLiteral<1>;
                 }>]>;
+                contentPost: import("typebox").TUnion<[import("typebox").TNull, import("typebox").TObject<{
+                    benefit: import("typebox").TObject<{
+                        kind: import("typebox").TLiteral<"content-post">;
+                        resourceType: import("typebox").TLiteral<"content.post">;
+                        resource: import("typebox").TObject<{
+                            route: import("typebox").TInteger;
+                            id: import("typebox").TString;
+                        }>;
+                        action: import("typebox").TLiteral<"post:read">;
+                    }>;
+                    creatorAccountId: import("typebox").TString;
+                    targetSubjectId: import("typebox").TString;
+                    saleTermsReference: import("typebox").TLiteral<"content-post-revisions-v1">;
+                    delivery: import("typebox").TLiteral<"eligible-post-revisions">;
+                    acquisition: import("typebox").TLiteral<"one-time-account-bound">;
+                    quantity: import("typebox").TLiteral<1>;
+                }>]>;
                 id: import("typebox").TString;
                 offerId: import("typebox").TString;
                 orderId: import("typebox").TString;
@@ -9109,6 +9321,23 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                     acquisition: "one-time-account-bound";
                     quantity: 1;
                 } | null;
+                contentPost: {
+                    benefit: {
+                        kind: "content-post";
+                        resourceType: "content.post";
+                        resource: {
+                            route: number;
+                            id: string;
+                        };
+                        action: "post:read";
+                    };
+                    creatorAccountId: string;
+                    targetSubjectId: string;
+                    saleTermsReference: "content-post-revisions-v1";
+                    delivery: "eligible-post-revisions";
+                    acquisition: "one-time-account-bound";
+                    quantity: 1;
+                } | null;
                 id: string;
                 offerId: string;
                 orderId: string;
@@ -9224,6 +9453,23 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                     };
                     saleTermsReference: string;
                     delivery: "fixed-content-edition";
+                    acquisition: "one-time-account-bound";
+                    quantity: 1;
+                } | null;
+                contentPost: {
+                    benefit: {
+                        kind: "content-post";
+                        resourceType: "content.post";
+                        resource: {
+                            route: number;
+                            id: string;
+                        };
+                        action: "post:read";
+                    };
+                    creatorAccountId: string;
+                    targetSubjectId: string;
+                    saleTermsReference: "content-post-revisions-v1";
+                    delivery: "eligible-post-revisions";
                     acquisition: "one-time-account-bound";
                     quantity: 1;
                 } | null;
@@ -9346,6 +9592,23 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         }>;
                         saleTermsReference: import("typebox").TString;
                         delivery: import("typebox").TLiteral<"fixed-content-edition">;
+                        acquisition: import("typebox").TLiteral<"one-time-account-bound">;
+                        quantity: import("typebox").TLiteral<1>;
+                    }>]>;
+                    contentPost: import("typebox").TUnion<[import("typebox").TNull, import("typebox").TObject<{
+                        benefit: import("typebox").TObject<{
+                            kind: import("typebox").TLiteral<"content-post">;
+                            resourceType: import("typebox").TLiteral<"content.post">;
+                            resource: import("typebox").TObject<{
+                                route: import("typebox").TInteger;
+                                id: import("typebox").TString;
+                            }>;
+                            action: import("typebox").TLiteral<"post:read">;
+                        }>;
+                        creatorAccountId: import("typebox").TString;
+                        targetSubjectId: import("typebox").TString;
+                        saleTermsReference: import("typebox").TLiteral<"content-post-revisions-v1">;
+                        delivery: import("typebox").TLiteral<"eligible-post-revisions">;
                         acquisition: import("typebox").TLiteral<"one-time-account-bound">;
                         quantity: import("typebox").TLiteral<1>;
                     }>]>;
@@ -9526,6 +9789,15 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             acquisition: 'one-time-account-bound';
             quantity: 1;
         } | null;
+        contentPost: {
+            benefit: import("./model.ts").ContentPostBenefit;
+            creatorAccountId: string;
+            targetSubjectId: string;
+            saleTermsReference: 'content-post-revisions-v1';
+            delivery: 'eligible-post-revisions';
+            acquisition: 'one-time-account-bound';
+            quantity: 1;
+        } | null;
         summary: SubjectSummary | null;
     };
 }>, {
@@ -9556,6 +9828,23 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                     }>;
                     saleTermsReference: import("typebox").TString;
                     delivery: import("typebox").TLiteral<"fixed-content-edition">;
+                    acquisition: import("typebox").TLiteral<"one-time-account-bound">;
+                    quantity: import("typebox").TLiteral<1>;
+                }>]>;
+                contentPost: import("typebox").TUnion<[import("typebox").TNull, import("typebox").TObject<{
+                    benefit: import("typebox").TObject<{
+                        kind: import("typebox").TLiteral<"content-post">;
+                        resourceType: import("typebox").TLiteral<"content.post">;
+                        resource: import("typebox").TObject<{
+                            route: import("typebox").TInteger;
+                            id: import("typebox").TString;
+                        }>;
+                        action: import("typebox").TLiteral<"post:read">;
+                    }>;
+                    creatorAccountId: import("typebox").TString;
+                    targetSubjectId: import("typebox").TString;
+                    saleTermsReference: import("typebox").TLiteral<"content-post-revisions-v1">;
+                    delivery: import("typebox").TLiteral<"eligible-post-revisions">;
                     acquisition: import("typebox").TLiteral<"one-time-account-bound">;
                     quantity: import("typebox").TLiteral<1>;
                 }>]>;

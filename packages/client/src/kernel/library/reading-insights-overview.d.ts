@@ -39,9 +39,12 @@ export type ReadingInsightsOverview = Readonly<{
         unallocatedMonth: ReadingInsightsDiaryAction;
     }>;
 }>;
+type ReadingInsightsOverviewReads = Readonly<{
+    overview(actor: Actor, year: number, deadline: number, signal?: AbortSignal): Promise<ReadingInsightsOverview>;
+    overview<T>(actor: Actor, year: number, deadline: number, signal: AbortSignal | undefined, deliver: (value: ReadingInsightsOverview, encoded: string) => T): Promise<T>;
+}>;
 /** Composes separately identified pure reads; each keeps its own authority and source revision. */
 export declare function createReadingInsightsOverviewReads(deps: {
     pool: Pool;
-}): {
-    overview<T = ReadingInsightsOverview>(actor: Actor, year: number, deadline: number, signal?: AbortSignal, deliver?: (value: ReadingInsightsOverview, encoded: string) => T): Promise<T>;
-};
+}): ReadingInsightsOverviewReads;
+export {};

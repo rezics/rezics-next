@@ -16,3 +16,6 @@ export type { SubjectReadingFenceTuple, SubjectReadingFence, SubjectReadingNativ
 export { CoverSummarySchema, SubjectSummarySchema, RelatedSubjectSummarySchema } from './summaries.ts';
 export type { CoverCredit, CoverSummary, SubjectSummary, RelatedSubjectSummary, PublicSummaryQuery, PublicSummaryRead, } from './summaries.ts';
 export type { SummarySources, SummaryCoverState, SubjectSummaryObservation } from './summaries.ts';
+export { SEMANTIC_TITLE_INPUT_MAX_BYTES, SEMANTIC_TITLE_INPUT_MAX_ORIGINALS, type SemanticTitleInputEntry, type SemanticTitleInputs, type SemanticTitleInputsObservation, } from './title-inputs.ts';
+export type { SemanticTitleProvenanceOrigin, SemanticTitleProvenanceSupport, SemanticTitleFieldBinding, SemanticTitleProvenanceEntry, SemanticTitleProvenanceObservation, SemanticTitleProvenance, } from './title-inputs-provenance.ts';
+export { SEMANTIC_TITLE_PROVENANCE_MAX_BYTES } from './title-inputs-provenance.ts';

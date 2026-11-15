@@ -79,6 +79,7 @@ export type KnowledgeDocumentView = Readonly<{
     subjectIds: readonly string[];
 }>;
 export type KnowledgePublicDocumentView = Omit<KnowledgeDocumentView, 'notebookId' | 'publicationId'> & Readonly<{
+    sourceSha256: string;
     publicationId: string;
     subjectId: string;
     publishedAt: string;

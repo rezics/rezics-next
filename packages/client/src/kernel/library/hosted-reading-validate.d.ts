@@ -4,6 +4,8 @@ export type HostedReadingRow = Readonly<{
     catalogue_id: string;
     publication_revision_id: string;
     occurrence_id: string;
+    body_language: string | null;
+    target_post_id: string;
     target_revision_id: string;
     target_sha256: string;
     document_block_id: string | null;

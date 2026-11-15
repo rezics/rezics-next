@@ -5390,7 +5390,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 post: {
                     body: {
                         pin: {
-                            format: "https://rezics.com/definitions/catalogue/2";
+                            format: "https://rezics.com/definitions/catalogue/1";
                             rootDigest: string;
                             kindSpec: "https://rezics.com/definitions/kind/1";
                             reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5404,7 +5404,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     response: {
                         200: {
                             pin: {
-                                format: "https://rezics.com/definitions/catalogue/2";
+                                format: "https://rezics.com/definitions/catalogue/1";
                                 rootDigest: string;
                                 kindSpec: "https://rezics.com/definitions/kind/1";
                                 reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5521,7 +5521,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                             response: {
                                 200: {
                                     pin: {
-                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        format: "https://rezics.com/definitions/catalogue/1";
                                         rootDigest: string;
                                         kindSpec: "https://rezics.com/definitions/kind/1";
                                         reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5642,7 +5642,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                             response: {
                                 200: {
                                     pin: {
-                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        format: "https://rezics.com/definitions/catalogue/1";
                                         rootDigest: string;
                                         kindSpec: "https://rezics.com/definitions/kind/1";
                                         reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5746,7 +5746,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     response: {
                         200: {
                             pin: {
-                                format: "https://rezics.com/definitions/catalogue/2";
+                                format: "https://rezics.com/definitions/catalogue/1";
                                 rootDigest: string;
                                 kindSpec: "https://rezics.com/definitions/kind/1";
                                 reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5830,7 +5830,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                             response: {
                                 200: {
                                     pin: {
-                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        format: "https://rezics.com/definitions/catalogue/1";
                                         rootDigest: string;
                                         kindSpec: "https://rezics.com/definitions/kind/1";
                                         reduction: "https://rezics.com/definitions/kind-reduction/1";

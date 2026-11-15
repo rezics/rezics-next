@@ -24,14 +24,20 @@ export type CollectionKindWorkDefinition = Readonly<{
 export declare function bindCollectionKindPreparationStep(tx: OperationalTransaction, locator: CollectionKindPreparationLocator, work: NativeCollectionWork): void;
 /** Locks the exact current enrolled episode, committed Source scope and retained custody. */
 export declare function admitCollectionKindPreparationStep(tx: OperationalTransaction, locator: CollectionKindPreparationLocator, work: NativeCollectionWork): Promise<boolean>;
-/** Reread Source custody; missing independent audience/identity results remain unavailable. */
+/** Reread the original Source, then hold its real committed identity receipt through this home. */
 export declare function readCollectionKindWorkDefinition(tx: OperationalTransaction, locator: CollectionKindPreparationLocator, work: NativeCollectionWork): Promise<CollectionKindWorkDefinition | null>;
-/** Pre-Type owner operands only. No repair receipt, release or disclosure closure. */
+/** Retained pre-Type owner operands only; no repair receipt or disclosure closure. */
 export declare function currentCollectionKindInputAdmission(tx: OperationalTransaction, locator: CollectionKindPreparationLocator, work: NativeCollectionWork): Readonly<{
     tx: OperationalTransaction;
     locator: CollectionKindPreparationLocator;
     originId: string;
     referenceId: string;
+    committed: boolean;
+    releaseDigest: string;
+    audience: string;
+    expiresAt: number;
+    sourceFence: string;
+    identityObservation: IdentityScopeObservation;
     sourceIdentity: NativeSourceIdentity;
     custody: NativeSourceCustody;
     pool: import("pg").Pool;

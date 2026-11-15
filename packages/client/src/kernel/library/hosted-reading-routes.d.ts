@@ -5376,7 +5376,7 @@ export declare function hostedReadingRoutes(app: DefinitionRoutes, dependencies:
                 post: {
                     body: {
                         pin: {
-                            format: "https://rezics.com/definitions/catalogue/2";
+                            format: "https://rezics.com/definitions/catalogue/1";
                             rootDigest: string;
                             kindSpec: "https://rezics.com/definitions/kind/1";
                             reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5390,7 +5390,7 @@ export declare function hostedReadingRoutes(app: DefinitionRoutes, dependencies:
                     response: {
                         200: {
                             pin: {
-                                format: "https://rezics.com/definitions/catalogue/2";
+                                format: "https://rezics.com/definitions/catalogue/1";
                                 rootDigest: string;
                                 kindSpec: "https://rezics.com/definitions/kind/1";
                                 reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5507,7 +5507,7 @@ export declare function hostedReadingRoutes(app: DefinitionRoutes, dependencies:
                             response: {
                                 200: {
                                     pin: {
-                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        format: "https://rezics.com/definitions/catalogue/1";
                                         rootDigest: string;
                                         kindSpec: "https://rezics.com/definitions/kind/1";
                                         reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5628,7 +5628,7 @@ export declare function hostedReadingRoutes(app: DefinitionRoutes, dependencies:
                             response: {
                                 200: {
                                     pin: {
-                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        format: "https://rezics.com/definitions/catalogue/1";
                                         rootDigest: string;
                                         kindSpec: "https://rezics.com/definitions/kind/1";
                                         reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5732,7 +5732,7 @@ export declare function hostedReadingRoutes(app: DefinitionRoutes, dependencies:
                     response: {
                         200: {
                             pin: {
-                                format: "https://rezics.com/definitions/catalogue/2";
+                                format: "https://rezics.com/definitions/catalogue/1";
                                 rootDigest: string;
                                 kindSpec: "https://rezics.com/definitions/kind/1";
                                 reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5816,7 +5816,7 @@ export declare function hostedReadingRoutes(app: DefinitionRoutes, dependencies:
                             response: {
                                 200: {
                                     pin: {
-                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        format: "https://rezics.com/definitions/catalogue/1";
                                         rootDigest: string;
                                         kindSpec: "https://rezics.com/definitions/kind/1";
                                         reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -7044,6 +7044,8 @@ export declare function hostedReadingRoutes(app: DefinitionRoutes, dependencies:
                                     catalogueId: string;
                                     publicationRevisionId: string;
                                     occurrenceId: string;
+                                    bodyLanguage?: string;
+                                    targetPostId: string;
                                     targetRevisionId: string;
                                     targetSha256: string;
                                     documentPosition: {
@@ -7059,6 +7061,7 @@ export declare function hostedReadingRoutes(app: DefinitionRoutes, dependencies:
                                     position: number;
                                     kind: "chapter";
                                     title: string;
+                                    bodyLanguage?: string;
                                     target: {
                                         threadId: string;
                                         postId: string;
@@ -7171,6 +7174,8 @@ export declare function hostedReadingRoutes(app: DefinitionRoutes, dependencies:
                             catalogueId: string;
                             publicationRevisionId: string;
                             occurrenceId: string;
+                            bodyLanguage?: string;
+                            targetPostId: string;
                             targetRevisionId: string;
                             targetSha256: string;
                             documentPosition: {
@@ -7185,6 +7190,7 @@ export declare function hostedReadingRoutes(app: DefinitionRoutes, dependencies:
                             position: number;
                             kind: "chapter";
                             title: string;
+                            bodyLanguage?: string;
                             target: {
                                 threadId: string;
                                 postId: string;
@@ -7291,6 +7297,8 @@ export declare function hostedReadingRoutes(app: DefinitionRoutes, dependencies:
                                 catalogueId: string;
                                 publicationRevisionId: string;
                                 occurrenceId: string;
+                                bodyLanguage?: string;
+                                targetPostId: string;
                                 targetRevisionId: string;
                                 targetSha256: string;
                                 documentPosition: {
@@ -7305,6 +7313,7 @@ export declare function hostedReadingRoutes(app: DefinitionRoutes, dependencies:
                                 position: number;
                                 kind: "chapter";
                                 title: string;
+                                bodyLanguage?: string;
                                 target: {
                                     threadId: string;
                                     postId: string;
@@ -7392,7 +7401,9 @@ export declare function hostedReadingRoutes(app: DefinitionRoutes, dependencies:
                     publicationRevisionId: string;
                     occurrenceId: string;
                     targetRevisionId: string;
+                    targetPostId: string;
                     targetSha256: string;
+                    bodyLanguage?: string;
                     documentPosition?: {
                         blockId: string;
                         offset: number;
@@ -7412,6 +7423,8 @@ export declare function hostedReadingRoutes(app: DefinitionRoutes, dependencies:
                             catalogueId: string;
                             publicationRevisionId: string;
                             occurrenceId: string;
+                            bodyLanguage?: string;
+                            targetPostId: string;
                             targetRevisionId: string;
                             targetSha256: string;
                             documentPosition: {

@@ -24,7 +24,7 @@ export declare function realmParticipationAnchor(resource: Resource): {
         eligibility: import("../access/eligibility.ts").ResourceEligibility;
         route: number;
         id: string;
-        authenticatedBenefit?: import("../access/authenticated-benefit.ts").ContentEditionBenefit;
+        authenticatedBenefit?: import("../access/authenticated-benefit.ts").AuthenticatedContentBenefit;
         anonymousEligibility?: import("../access/eligibility.ts").ResourceEligibility;
     };
     visibility: () => "protected" | "public" | null;

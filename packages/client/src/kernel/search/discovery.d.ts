@@ -8,19 +8,11 @@ import type { SubjectDocument } from './document.ts';
 import type { IndexedSubject, SubjectSource, SubjectSnapshot } from './source.ts';
 import type { AccountDiscoverySource, AccountDiscoverySummary, AccountSnapshot, DiscoveryKey, DiscoveryKindMetadata, DiscoveryOwnerAdapterSlots, DiscoveryOwnerKind, DiscoveryOwnerKey, DiscoveryOwnerRegistration, DiscoveryOmittedKind, DiscoveryReadContext, DiscoveryUnionKey, IndexedAccount } from './discovery-api.ts';
 export type { AccountDiscoverySource, AccountDiscoverySummary, CollectionDirectorySelection, AccountFrontier, AccountPage, AccountPageKey, AccountSnapshot, CharacterPersonDiscoveryContexts, DiscoveryAdapterSlot, DiscoveryApplicability, DiscoveryConsumerCaptureInput, DiscoveryContextList, DiscoveryContextSubject, DiscoveryHit, DiscoveryKey, DiscoveryKindMetadata, DiscoveryOwnerAdapter, DiscoveryOwnerAdapterSlots, DiscoveryOwnerHit, DiscoveryOwnerKey, DiscoveryOwnerKind, DiscoveryOwnerMetadataSummary, DiscoveryOwnerRegistration, DiscoveryOmittedKind, DiscoveryOwnerSummary, DiscoveryFilterApplicability, DiscoveryPage, DiscoveryPublicOwnerKey, DiscoveryReadContext, DiscoveryRequest, DiscoverySummary, DiscoveryUnionHit, DiscoveryUnionKey, DiscoveryUnionSummary, IndexedAccount, KindCountEvidence, PublicCollectionDiscoverySummary, PublicReviewDiscoverySummary, PublicSpaceDiscoverySummary, } from './discovery-api.ts';
-/** This format is opt-in; legacy Subject IDs and generation receipts retain their meaning. */
+/** Canonical native discovery documents retain all current owner projections. */
 export declare const DISCOVERY_DOCUMENT_FORMAT = 1;
-/** Successor requires a complete native rebuild; format 1 retains its original reader. */
-export declare const MIXED_DISCOVERY_DOCUMENT_FORMAT = 2;
-/** Calendar facts are written only to a physical generation using the matching successor mapping. */
-export declare const MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT = 3;
-/** Calendar and credited-name successor: Subject documents carry complete credit projections. */
-export declare const MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT = 4;
 export declare const ACCOUNT_DISCOVERY_BATCH_SIZE = 100;
 export declare const MAX_ACCOUNT_DISCOVERY_BATCH = 100;
 export declare function discoveryPartition(id: string): number;
-/** Compatibility for the earlier projection adapter; native mixed writers use discoveryDocumentId. */
-export declare function discoveryIdentity(owner: DiscoveryKey['owner'], id: string): string;
 export type DiscoveryDocument = {
     owner: 'semantic';
     kind: string;
@@ -102,8 +94,8 @@ export type DiscoverySnapshot = {
     snapshot: AccountSnapshot;
 };
 type DocumentIdentity = {
-    document_format: typeof DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT;
-    identity?: string;
+    document_format: typeof DISCOVERY_DOCUMENT_FORMAT;
+    identity: string;
     id: string;
     kind: string;
     route: number;
@@ -120,9 +112,9 @@ export type IndexedDiscoveryDocument = (DocumentIdentity & SubjectDocument & {
     handle: string | null;
     display_name: string | null;
     revision: string;
-    names?: string[];
-    descriptions?: string[];
-    name_sort?: string | null;
+    names: string[];
+    descriptions: string[];
+    name_sort: string | null;
 });
 export type DiscoveryIndexAction = {
     op: 'index';
@@ -139,7 +131,7 @@ export type DiscoveryIndexDefinition = {
     settings: Record<string, unknown>;
     mappings: {
         _meta: {
-            discovery_document_format: typeof DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT;
+            discovery_document_format: typeof DISCOVERY_DOCUMENT_FORMAT;
             identity?: string;
             name_sort_format: number;
             document_identity: string;

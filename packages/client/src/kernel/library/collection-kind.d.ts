@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
-import type { AuthoritativeTime } from '../command/command.ts';
+import { type AuthoritativeTime } from '../command/command.ts';
 import type { OperationalTransaction } from '../command/operational.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { IdentityScopedObservations, IdentityScopeObservation } from '../semantic/identity-scope-types.ts';

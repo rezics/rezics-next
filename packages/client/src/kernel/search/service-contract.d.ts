@@ -15,7 +15,7 @@ import type { PublicRatingSource } from './rating-source.ts';
 import type { RealmRatingQuery, RealmRatingSource } from './realm-rating-order.ts';
 import type { SearchLibraryScopePort } from './library-scope-port.ts';
 import type { SubjectSource } from './source.ts';
-import type { PublicFilterConsumerJob } from './public-filter-consumer-contract.ts';
+import type { PublicFilterConsumerContext, PublicFilterConsumerJob } from './public-filter-consumer-contract.ts';
 import type { DefaultPublicFilterRuntime } from './public-runtime.ts';
 import type { PublicSearchHit } from './public-figures.ts';
 import type { KindValue } from './query.ts';
@@ -191,7 +191,7 @@ export type SearchServiceOptions = Readonly<{
     publicFilters?: () => DefaultPublicFilterRuntime;
     preparePublic?: (job: PublicFilterConsumerJob) => Promise<void>;
     /** Trusted native owner composition. Missing native ports fail closed. */
-    facetProvider?: () => Promise<FacetDiscoveryProvider | undefined>;
+    facetProvider?: (context: PublicFilterConsumerContext) => Promise<FacetDiscoveryProvider | undefined>;
     /** Optional batched handoff to the qualified work-context owner. */
     suggestionWorkContext?: SuggestionWorkContextReader;
     /** Composition-bound Access observation for scoped Collection/Realm facet execution. */

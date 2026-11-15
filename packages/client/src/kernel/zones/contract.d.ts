@@ -8,7 +8,7 @@ export declare function ZonePublicSchema(): import("typebox").TObject<{
     id: import("typebox").TString;
     revision: import("typebox").TString;
     labels: import("typebox").TObject<OptionalLocaleProperties<readonly ["en", "zh-Hant", "zh-Hans", "ja", "ko", "de", "fr", "es"], import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>>;
-    primaryLanguage: TOptional<TUnion<[TLiteral<"en">, TLiteral<"zh-Hant">, TLiteral<"zh-Hans">, TLiteral<"ja">, TLiteral<"ko">, TLiteral<"de">, TLiteral<"fr">, TLiteral<"es">]>>;
+    primaryLanguage: TOptional<TUnion<[TUnion<[TLiteral<"en">, TLiteral<"zh-Hant">, TLiteral<"zh-Hans">, TLiteral<"ja">, TLiteral<"ko">, TLiteral<"de">, TLiteral<"fr">, TLiteral<"es">]>, import("typebox").TNull]>>;
     visibility: TUnion<[TLiteral<"private">, TLiteral<"unlisted">, TLiteral<"public">]>;
     appearance: import("typebox").TObject<{
         density: TOptional<TUnion<[TLiteral<"compact">, TLiteral<"comfortable">]>>;
@@ -140,7 +140,7 @@ export declare function ZonePageResponseSchema(): import("typebox").TObject<{
         id: import("typebox").TString;
         revision: import("typebox").TString;
         labels: import("typebox").TObject<OptionalLocaleProperties<readonly ["en", "zh-Hant", "zh-Hans", "ja", "ko", "de", "fr", "es"], import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>>;
-        primaryLanguage: TOptional<TUnion<[TLiteral<"en">, TLiteral<"zh-Hant">, TLiteral<"zh-Hans">, TLiteral<"ja">, TLiteral<"ko">, TLiteral<"de">, TLiteral<"fr">, TLiteral<"es">]>>;
+        primaryLanguage: TOptional<TUnion<[TUnion<[TLiteral<"en">, TLiteral<"zh-Hant">, TLiteral<"zh-Hans">, TLiteral<"ja">, TLiteral<"ko">, TLiteral<"de">, TLiteral<"fr">, TLiteral<"es">]>, import("typebox").TNull]>>;
         visibility: TUnion<[TLiteral<"private">, TLiteral<"unlisted">, TLiteral<"public">]>;
         appearance: import("typebox").TObject<{
             density: TOptional<TUnion<[TLiteral<"compact">, TLiteral<"comfortable">]>>;
@@ -174,7 +174,7 @@ export declare function ZoneOwnedSchema(): import("typebox").TObject<{
     id: import("typebox").TString;
     revision: import("typebox").TString;
     labels: import("typebox").TObject<OptionalLocaleProperties<readonly ["en", "zh-Hant", "zh-Hans", "ja", "ko", "de", "fr", "es"], import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>>;
-    primaryLanguage: TOptional<TUnion<[TLiteral<"en">, TLiteral<"zh-Hant">, TLiteral<"zh-Hans">, TLiteral<"ja">, TLiteral<"ko">, TLiteral<"de">, TLiteral<"fr">, TLiteral<"es">]>>;
+    primaryLanguage: TOptional<TUnion<[TUnion<[TLiteral<"en">, TLiteral<"zh-Hant">, TLiteral<"zh-Hans">, TLiteral<"ja">, TLiteral<"ko">, TLiteral<"de">, TLiteral<"fr">, TLiteral<"es">]>, import("typebox").TNull]>>;
     visibility: TUnion<[TLiteral<"private">, TLiteral<"unlisted">, TLiteral<"public">]>;
     appearance: import("typebox").TObject<{
         density: TOptional<TUnion<[TLiteral<"compact">, TLiteral<"comfortable">]>>;
@@ -195,7 +195,7 @@ export declare function ZoneResponseSchema(): import("typebox").TObject<{
         id: import("typebox").TString;
         revision: import("typebox").TString;
         labels: import("typebox").TObject<OptionalLocaleProperties<readonly ["en", "zh-Hant", "zh-Hans", "ja", "ko", "de", "fr", "es"], import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>>;
-        primaryLanguage: TOptional<TUnion<[TLiteral<"en">, TLiteral<"zh-Hant">, TLiteral<"zh-Hans">, TLiteral<"ja">, TLiteral<"ko">, TLiteral<"de">, TLiteral<"fr">, TLiteral<"es">]>>;
+        primaryLanguage: TOptional<TUnion<[TUnion<[TLiteral<"en">, TLiteral<"zh-Hant">, TLiteral<"zh-Hans">, TLiteral<"ja">, TLiteral<"ko">, TLiteral<"de">, TLiteral<"fr">, TLiteral<"es">]>, import("typebox").TNull]>>;
         visibility: TUnion<[TLiteral<"private">, TLiteral<"unlisted">, TLiteral<"public">]>;
         appearance: import("typebox").TObject<{
             density: TOptional<TUnion<[TLiteral<"compact">, TLiteral<"comfortable">]>>;
@@ -217,7 +217,7 @@ export declare function ZoneMetadataResponseSchema(): import("typebox").TObject<
         id: import("typebox").TString;
         revision: import("typebox").TString;
         labels: import("typebox").TObject<OptionalLocaleProperties<readonly ["en", "zh-Hant", "zh-Hans", "ja", "ko", "de", "fr", "es"], import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>>;
-        primaryLanguage: TOptional<TUnion<[TLiteral<"en">, TLiteral<"zh-Hant">, TLiteral<"zh-Hans">, TLiteral<"ja">, TLiteral<"ko">, TLiteral<"de">, TLiteral<"fr">, TLiteral<"es">]>>;
+        primaryLanguage: TOptional<TUnion<[TUnion<[TLiteral<"en">, TLiteral<"zh-Hant">, TLiteral<"zh-Hans">, TLiteral<"ja">, TLiteral<"ko">, TLiteral<"de">, TLiteral<"fr">, TLiteral<"es">]>, import("typebox").TNull]>>;
         visibility: TUnion<[TLiteral<"private">, TLiteral<"unlisted">, TLiteral<"public">]>;
         appearance: import("typebox").TObject<{
             density: TOptional<TUnion<[TLiteral<"compact">, TLiteral<"comfortable">]>>;
@@ -236,7 +236,7 @@ export declare function ZoneConfigurationResponseSchema(): import("typebox").TOb
         id: import("typebox").TString;
         revision: import("typebox").TString;
         labels: import("typebox").TObject<OptionalLocaleProperties<readonly ["en", "zh-Hant", "zh-Hans", "ja", "ko", "de", "fr", "es"], import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>>;
-        primaryLanguage: TOptional<TUnion<[TLiteral<"en">, TLiteral<"zh-Hant">, TLiteral<"zh-Hans">, TLiteral<"ja">, TLiteral<"ko">, TLiteral<"de">, TLiteral<"fr">, TLiteral<"es">]>>;
+        primaryLanguage: TOptional<TUnion<[TUnion<[TLiteral<"en">, TLiteral<"zh-Hant">, TLiteral<"zh-Hans">, TLiteral<"ja">, TLiteral<"ko">, TLiteral<"de">, TLiteral<"fr">, TLiteral<"es">]>, import("typebox").TNull]>>;
         visibility: TUnion<[TLiteral<"private">, TLiteral<"unlisted">, TLiteral<"public">]>;
         appearance: import("typebox").TObject<{
             density: TOptional<TUnion<[TLiteral<"compact">, TLiteral<"comfortable">]>>;
@@ -260,7 +260,7 @@ export declare function ZoneListSchema(): import("typebox").TObject<{
         id: import("typebox").TString;
         revision: import("typebox").TString;
         labels: import("typebox").TObject<OptionalLocaleProperties<readonly ["en", "zh-Hant", "zh-Hans", "ja", "ko", "de", "fr", "es"], import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>>;
-        primaryLanguage: TOptional<TUnion<[TLiteral<"en">, TLiteral<"zh-Hant">, TLiteral<"zh-Hans">, TLiteral<"ja">, TLiteral<"ko">, TLiteral<"de">, TLiteral<"fr">, TLiteral<"es">]>>;
+        primaryLanguage: TOptional<TUnion<[TUnion<[TLiteral<"en">, TLiteral<"zh-Hant">, TLiteral<"zh-Hans">, TLiteral<"ja">, TLiteral<"ko">, TLiteral<"de">, TLiteral<"fr">, TLiteral<"es">]>, import("typebox").TNull]>>;
         visibility: TUnion<[TLiteral<"private">, TLiteral<"unlisted">, TLiteral<"public">]>;
         appearance: import("typebox").TObject<{
             density: TOptional<TUnion<[TLiteral<"compact">, TLiteral<"comfortable">]>>;

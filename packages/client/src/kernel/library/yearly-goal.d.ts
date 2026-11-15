@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { Access, Actor } from '../request/access.ts';
+import { type ReportedYearSummary } from './reported-year-summary.ts';
 export declare const YEARLY_COMPLETION_GOAL_METRIC: 'completed_consumption_occurrences';
 export declare const YEARLY_COMPLETION_GOAL_TARGET_MIN = 1;
 export declare const YEARLY_COMPLETION_GOAL_TARGET_MAX = 1000;
@@ -21,6 +22,16 @@ export type YearlyCompletionGoalTargetRead = Readonly<{
     state: 'unavailable';
     reason: 'not_installed';
 }>;
+export type YearlyCompletionGoalRead = Readonly<{
+    target: YearlyCompletionGoalTargetRead;
+    progress: Readonly<{
+        state: 'available';
+        summary: ReportedYearSummary;
+    }> | Readonly<{
+        state: 'unavailable';
+        reason: 'summary_unavailable';
+    }>;
+}>;
 export type YearlyCompletionGoalChangeResult = Readonly<{
     year: number;
     metric: typeof YEARLY_COMPLETION_GOAL_METRIC;
@@ -33,6 +44,8 @@ export declare function createYearlyCompletionGoalReads(dependencies: {
     pool: Pool;
 }): {
     target(actor: Actor, year: number, deadline: number, signal?: AbortSignal): Promise<YearlyCompletionGoalTargetRead>;
+    /** Delivery is synchronous so HTTP encoding remains inside final admission. */
+    read<T = YearlyCompletionGoalRead>(actor: Actor, year: number, deadline: number, signal?: AbortSignal, deliver?: (value: YearlyCompletionGoalRead) => T): Promise<T>;
 };
 export declare function createYearlyCompletionGoalCommands(dependencies: {
     pool: Pool;

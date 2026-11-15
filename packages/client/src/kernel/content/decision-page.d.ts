@@ -95,10 +95,10 @@ export declare function readDecisionPage(deps: ContentReadDependencies, id: stri
         };
         targetContext: TargetContext;
     };
-    anchor: {
+    anchor: Readonly<{
         partition: number;
         epoch: number;
         position: bigint;
-    };
+    }>;
 } | null>;
 export {};

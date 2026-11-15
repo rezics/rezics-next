@@ -1,5 +1,6 @@
+import type { Release } from '@rezics/definitions';
 import { type SubjectSummary } from './summaries.ts';
-import { type Statement } from './item.ts';
+import { type FactRow, type Statement } from './item.ts';
 import type { WorkReleaseCardsInput } from './copy-work-reader-port.ts';
 import { workReleaseCardProperties } from './copy-work-reader-port.ts';
 export { workReleaseCardFieldLimit, workReleaseCardLimit, workReleaseCardProperties, workReleaseCardQualifierLimit, workReleaseCardReferenceLimit, workReleaseCardReferencePartLimit, workReleaseCardResponseBytes, workReleaseCardStatementBytes, } from './copy-work-reader-port.ts';
@@ -24,6 +25,12 @@ export type WorkReleaseCards = {
     state: 'available';
     cards: WorkReleaseCard[];
 };
+export type WorkReleaseCardFactProjection = {
+    statements: Statement[];
+    unavailable: boolean;
+};
+/** Project one selected native batch through the canonical item resolver without filling missing row evidence. */
+export declare function projectWorkReleaseCardFacts(subject: string, type: string, release: Release, context: string, fields: ReadonlyMap<string, readonly FactRow[] | null>): Map<string, WorkReleaseCardFactProjection>;
 /** Read only the finite selected facts used by public release comparison cards for the supplied page. */
 export declare function readNativeWorkReleaseCards(input: WorkReleaseCardsInput): Promise<WorkReleaseCards>;
 export { readWorkReleaseCards } from './copy-work-application.ts';

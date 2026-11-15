@@ -42,9 +42,9 @@ export declare const WatchManagementCommandSchema: import("typebox").TObject<{
 }>;
 export declare const WatchManagementItemSchema: import("typebox").TUnion<[import("typebox").TObject<{
     id: import("typebox").TString;
-    kind: import("typebox").TLiteral<"thread">;
     revision: import("typebox").TInteger;
     createdAt: import("typebox").TString;
+    kind: import("typebox").TLiteral<"thread">;
     state: import("typebox").TLiteral<"available">;
     resourceId: import("typebox").TString;
     title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -59,9 +59,9 @@ export declare const WatchManagementItemSchema: import("typebox").TUnion<[import
     }>;
 }>, import("typebox").TObject<{
     id: import("typebox").TString;
-    kind: import("typebox").TLiteral<"board">;
     revision: import("typebox").TInteger;
     createdAt: import("typebox").TString;
+    kind: import("typebox").TLiteral<"board">;
     state: import("typebox").TLiteral<"available">;
     resourceId: import("typebox").TString;
     title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -96,9 +96,9 @@ export declare const WatchManagementPageSchema: import("typebox").TObject<{
     }>;
     items: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
         id: import("typebox").TString;
-        kind: import("typebox").TLiteral<"thread">;
         revision: import("typebox").TInteger;
         createdAt: import("typebox").TString;
+        kind: import("typebox").TLiteral<"thread">;
         state: import("typebox").TLiteral<"available">;
         resourceId: import("typebox").TString;
         title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -113,9 +113,9 @@ export declare const WatchManagementPageSchema: import("typebox").TObject<{
         }>;
     }>, import("typebox").TObject<{
         id: import("typebox").TString;
-        kind: import("typebox").TLiteral<"board">;
         revision: import("typebox").TInteger;
         createdAt: import("typebox").TString;
+        kind: import("typebox").TLiteral<"board">;
         state: import("typebox").TLiteral<"available">;
         resourceId: import("typebox").TString;
         title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -2760,7 +2760,31 @@ export declare function AuthorPostsResponseSchema(): import("typebox").TObject<{
     posts: import("typebox").TArray<import("typebox").TUnsafe<AuthorPostEntry>>;
     next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
 }>;
+export declare const KnowledgeMediaSelectionSchema: import("typebox").TUnion<[import("typebox").TObject<{
+    representation: import("typebox").TLiteral<"authoring">;
+    documentId: import("typebox").TString;
+    revisionId: import("typebox").TString;
+    sourceSha256: import("typebox").TString;
+}>, import("typebox").TObject<{
+    representation: import("typebox").TLiteral<"public">;
+    documentId: import("typebox").TString;
+    revisionId: import("typebox").TString;
+    sourceSha256: import("typebox").TString;
+    publicationId: import("typebox").TString;
+}>]>;
 export declare const DocumentMediaInputSchema: import("typebox").TObject<{
+    knowledge: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+        representation: import("typebox").TLiteral<"authoring">;
+        documentId: import("typebox").TString;
+        revisionId: import("typebox").TString;
+        sourceSha256: import("typebox").TString;
+    }>, import("typebox").TObject<{
+        representation: import("typebox").TLiteral<"public">;
+        documentId: import("typebox").TString;
+        revisionId: import("typebox").TString;
+        sourceSha256: import("typebox").TString;
+        publicationId: import("typebox").TString;
+    }>]>>;
     ids: import("typebox").TArray<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
 }>;
 export declare function DocumentImagePresentationSchema(): import("typebox").TUnsafe<Readonly<{
@@ -2792,7 +2816,7 @@ export declare const MediaReservationInputSchema: import("typebox").TUnion<[impo
     byteCount: import("typebox").TInteger;
     sha256: import("typebox").TOptional<import("typebox").TString>;
     containerId: import("typebox").TString;
-    purpose: import("typebox").TUnion<[import("typebox").TLiteral<"post-image">, import("typebox").TLiteral<"avatar">]>;
+    purpose: import("typebox").TUnion<[import("typebox").TLiteral<"post-image">, import("typebox").TLiteral<"knowledge-image">, import("typebox").TLiteral<"avatar">]>;
 }>, import("typebox").TObject<{
     mediaType: import("typebox").TUnion<[import("typebox").TLiteral<"image/avif">, import("typebox").TLiteral<"image/gif">, import("typebox").TLiteral<"image/jpeg">, import("typebox").TLiteral<"image/png">, import("typebox").TLiteral<"image/webp">]>;
     byteCount: import("typebox").TInteger;
@@ -2836,7 +2860,7 @@ export declare const MediaReservationResponseSchema: import("typebox").TObject<{
         uploaderId: import("typebox").TString;
         key: import("typebox").TString;
         reservationRequestId: import("typebox").TString;
-        purpose: import("typebox").TUnion<[import("typebox").TLiteral<"avatar">, import("typebox").TLiteral<"realm-icon">, import("typebox").TLiteral<"realm-banner">]>;
+        purpose: import("typebox").TUnion<[import("typebox").TLiteral<"knowledge-image">, import("typebox").TLiteral<"avatar">, import("typebox").TLiteral<"realm-icon">, import("typebox").TLiteral<"realm-banner">]>;
     }>]>;
 }>;
 export declare const MediaCompletionResponseSchema: import("typebox").TObject<{
@@ -2847,6 +2871,11 @@ export declare const MediaCompletionResponseSchema: import("typebox").TObject<{
 }>;
 export declare const MediaDownloadQuerySchema: import("typebox").TObject<{
     variant: import("typebox").TString;
+    knowledgeRepresentation: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"authoring">, import("typebox").TLiteral<"public">]>>;
+    knowledgeDocumentId: import("typebox").TOptional<import("typebox").TString>;
+    knowledgeRevisionId: import("typebox").TOptional<import("typebox").TString>;
+    knowledgeSourceSha256: import("typebox").TOptional<import("typebox").TString>;
+    knowledgePublicationId: import("typebox").TOptional<import("typebox").TString>;
 }>;
 export declare const MediaDownloadResponseSchema: import("typebox").TObject<{
     allowed: import("typebox").TLiteral<true>;
@@ -2879,7 +2908,7 @@ export declare const OwnMediaInventoryQuerySchema: import("typebox").TObject<{
 }>;
 export declare const OwnMediaInventoryEntrySchema: import("typebox").TObject<{
     id: import("typebox").TString;
-    purpose: import("typebox").TUnion<[import("typebox").TLiteral<"post-image">, import("typebox").TLiteral<"avatar">, import("typebox").TLiteral<"realm-icon">, import("typebox").TLiteral<"realm-banner">, import("typebox").TLiteral<"cover">]>;
+    purpose: import("typebox").TUnion<[import("typebox").TLiteral<"post-image">, import("typebox").TLiteral<"knowledge-image">, import("typebox").TLiteral<"avatar">, import("typebox").TLiteral<"realm-icon">, import("typebox").TLiteral<"realm-banner">, import("typebox").TLiteral<"cover">]>;
     state: import("typebox").TUnion<[import("typebox").TLiteral<"reserved">, import("typebox").TLiteral<"uploaded">, import("typebox").TLiteral<"available">, import("typebox").TLiteral<"rejected">, import("typebox").TLiteral<"erased">]>;
     declaredMediaType: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     actualMediaType: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -2917,7 +2946,7 @@ export declare const OwnMediaInventoryPageSchema: import("typebox").TObject<{
     availability: import("typebox").TLiteral<"available">;
     entries: import("typebox").TArray<import("typebox").TObject<{
         id: import("typebox").TString;
-        purpose: import("typebox").TUnion<[import("typebox").TLiteral<"post-image">, import("typebox").TLiteral<"avatar">, import("typebox").TLiteral<"realm-icon">, import("typebox").TLiteral<"realm-banner">, import("typebox").TLiteral<"cover">]>;
+        purpose: import("typebox").TUnion<[import("typebox").TLiteral<"post-image">, import("typebox").TLiteral<"knowledge-image">, import("typebox").TLiteral<"avatar">, import("typebox").TLiteral<"realm-icon">, import("typebox").TLiteral<"realm-banner">, import("typebox").TLiteral<"cover">]>;
         state: import("typebox").TUnion<[import("typebox").TLiteral<"reserved">, import("typebox").TLiteral<"uploaded">, import("typebox").TLiteral<"available">, import("typebox").TLiteral<"rejected">, import("typebox").TLiteral<"erased">]>;
         declaredMediaType: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
         actualMediaType: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;

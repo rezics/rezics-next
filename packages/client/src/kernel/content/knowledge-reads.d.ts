@@ -1,3 +1,4 @@
+import { type KnowledgeProvenance } from './knowledge-portable.ts';
 import type { ReadContext } from './model.ts';
 import { type KnowledgeOutlinePageInput, type KnowledgePageInput, type KnowledgeStructureHistoryInput, type KnowledgeStructureChangeAction, type KnowledgeStructureChangeKind, type KnowledgeDependencies } from './knowledge-model.ts';
 /** A public read selects the live pointer or an exact revision retained in the current publication generation.
@@ -15,6 +16,7 @@ export declare function readKnowledgePublicDocument(deps: KnowledgeDependencies,
             subjectIds: string[];
             canonicalBytes: string;
             sha256: string;
+            sourceSha256: string;
             references: Readonly<{
                 id: string;
                 role: "about" | "cites" | "explains" | "inspired-by" | "uses";
@@ -33,13 +35,7 @@ export declare function readKnowledgePublicDocument(deps: KnowledgeDependencies,
                     blockId?: string;
                 } | null;
             }>[];
-            provenance: Readonly<{
-                documentId: string;
-                revisionId: string;
-                representation: "authoring" | "public";
-                sha256: string;
-                publicationId?: string;
-            }> | null;
+            provenance: KnowledgeProvenance | null;
             publicationId: string;
             subjectId: string;
             publishedAt: string;
@@ -83,13 +79,7 @@ export declare function readKnowledgePrivateDocument(deps: KnowledgeDependencies
                     blockId?: string;
                 } | null;
             }>[];
-            provenance: Readonly<{
-                documentId: string;
-                revisionId: string;
-                representation: "authoring" | "public";
-                sha256: string;
-                publicationId?: string;
-            }> | null;
+            provenance: KnowledgeProvenance | null;
             notebookId: string;
             publicationId: string | null;
         };
@@ -236,13 +226,7 @@ export declare function readKnowledgeDocumentCompare(deps: KnowledgeDependencies
                     blockId?: string;
                 } | null;
             }>[];
-            provenance: Readonly<{
-                documentId: string;
-                revisionId: string;
-                representation: "authoring" | "public";
-                sha256: string;
-                publicationId?: string;
-            }> | null;
+            provenance: KnowledgeProvenance | null;
         };
         right: {
             documentId: string;
@@ -271,13 +255,7 @@ export declare function readKnowledgeDocumentCompare(deps: KnowledgeDependencies
                     blockId?: string;
                 } | null;
             }>[];
-            provenance: Readonly<{
-                documentId: string;
-                revisionId: string;
-                representation: "authoring" | "public";
-                sha256: string;
-                publicationId?: string;
-            }> | null;
+            provenance: KnowledgeProvenance | null;
         };
     };
     anchors: Readonly<{

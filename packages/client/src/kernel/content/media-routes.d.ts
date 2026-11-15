@@ -5369,7 +5369,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                 post: {
                     body: {
                         pin: {
-                            format: "https://rezics.com/definitions/catalogue/2";
+                            format: "https://rezics.com/definitions/catalogue/1";
                             rootDigest: string;
                             kindSpec: "https://rezics.com/definitions/kind/1";
                             reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5383,7 +5383,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                     response: {
                         200: {
                             pin: {
-                                format: "https://rezics.com/definitions/catalogue/2";
+                                format: "https://rezics.com/definitions/catalogue/1";
                                 rootDigest: string;
                                 kindSpec: "https://rezics.com/definitions/kind/1";
                                 reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5500,7 +5500,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             response: {
                                 200: {
                                     pin: {
-                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        format: "https://rezics.com/definitions/catalogue/1";
                                         rootDigest: string;
                                         kindSpec: "https://rezics.com/definitions/kind/1";
                                         reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5621,7 +5621,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             response: {
                                 200: {
                                     pin: {
-                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        format: "https://rezics.com/definitions/catalogue/1";
                                         rootDigest: string;
                                         kindSpec: "https://rezics.com/definitions/kind/1";
                                         reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5725,7 +5725,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                     response: {
                         200: {
                             pin: {
-                                format: "https://rezics.com/definitions/catalogue/2";
+                                format: "https://rezics.com/definitions/catalogue/1";
                                 rootDigest: string;
                                 kindSpec: "https://rezics.com/definitions/kind/1";
                                 reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5809,7 +5809,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             response: {
                                 200: {
                                     pin: {
-                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        format: "https://rezics.com/definitions/catalogue/1";
                                         rootDigest: string;
                                         kindSpec: "https://rezics.com/definitions/kind/1";
                                         reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -7031,7 +7031,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                         availability: "available";
                         entries: {
                             id: string;
-                            purpose: "avatar" | "cover" | "post-image" | "realm-banner" | "realm-icon";
+                            purpose: "avatar" | "cover" | "knowledge-image" | "post-image" | "realm-banner" | "realm-icon";
                             state: "available" | "erased" | "rejected" | "reserved" | "uploaded";
                             declaredMediaType: string | null;
                             actualMediaType: string | null;
@@ -7148,6 +7148,18 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
             presentations: {
                 post: {
                     body: {
+                        knowledge?: {
+                            representation: "authoring";
+                            documentId: string;
+                            revisionId: string;
+                            sourceSha256: string;
+                        } | {
+                            representation: "public";
+                            documentId: string;
+                            revisionId: string;
+                            sourceSha256: string;
+                            publicationId: string;
+                        };
                         ids: string[];
                     };
                     params: {};
@@ -7242,7 +7254,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                     byteCount: number;
                     sha256?: string;
                     containerId: string;
-                    purpose: "avatar" | "post-image";
+                    purpose: "avatar" | "knowledge-image" | "post-image";
                 } | {
                     mediaType: "image/avif" | "image/gif" | "image/jpeg" | "image/png" | "image/webp";
                     byteCount: number;
@@ -7280,7 +7292,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             uploaderId: string;
                             key: string;
                             reservationRequestId: string;
-                            purpose: "avatar" | "realm-banner" | "realm-icon";
+                            purpose: "avatar" | "knowledge-image" | "realm-banner" | "realm-icon";
                         };
                     };
                     400: Response | {
@@ -7428,7 +7440,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     uploaderId: string;
                                     key: string;
                                     reservationRequestId: string;
-                                    purpose: "avatar" | "realm-banner" | "realm-icon";
+                                    purpose: "avatar" | "knowledge-image" | "realm-banner" | "realm-icon";
                                 };
                             };
                             400: Response | {
@@ -7671,7 +7683,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 uploaderId: string;
                                 key: string;
                                 reservationRequestId: string;
-                                purpose: "avatar" | "realm-banner" | "realm-icon";
+                                purpose: "avatar" | "knowledge-image" | "realm-banner" | "realm-icon";
                             };
                         };
                         400: Response | {
@@ -8034,14 +8046,29 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
             types: {
                 input: {
                     variant: string;
+                    knowledgeRepresentation?: "authoring" | "public";
+                    knowledgeDocumentId?: string;
+                    knowledgeRevisionId?: string;
+                    knowledgeSourceSha256?: string;
+                    knowledgePublicationId?: string;
                 };
                 output: {
                     variant: string;
+                    knowledgeRepresentation?: "authoring" | "public";
+                    knowledgeDocumentId?: string;
+                    knowledgeRevisionId?: string;
+                    knowledgeSourceSha256?: string;
+                    knowledgePublicationId?: string;
                 };
             } | undefined;
             validate(value: unknown): {
                 value: {
                     variant: string;
+                    knowledgeRepresentation?: "authoring" | "public";
+                    knowledgeDocumentId?: string;
+                    knowledgeRevisionId?: string;
+                    knowledgeSourceSha256?: string;
+                    knowledgePublicationId?: string;
                 };
                 issues?: never;
             } | {
@@ -8053,9 +8080,19 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
             jsonSchema: {
                 input: () => import("typebox").TObject<{
                     variant: import("typebox").TString;
+                    knowledgeRepresentation: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"authoring">, import("typebox").TLiteral<"public">]>>;
+                    knowledgeDocumentId: import("typebox").TOptional<import("typebox").TString>;
+                    knowledgeRevisionId: import("typebox").TOptional<import("typebox").TString>;
+                    knowledgeSourceSha256: import("typebox").TOptional<import("typebox").TString>;
+                    knowledgePublicationId: import("typebox").TOptional<import("typebox").TString>;
                 }>;
                 output: () => import("typebox").TObject<{
                     variant: import("typebox").TString;
+                    knowledgeRepresentation: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"authoring">, import("typebox").TLiteral<"public">]>>;
+                    knowledgeDocumentId: import("typebox").TOptional<import("typebox").TString>;
+                    knowledgeRevisionId: import("typebox").TOptional<import("typebox").TString>;
+                    knowledgeSourceSha256: import("typebox").TOptional<import("typebox").TString>;
+                    knowledgePublicationId: import("typebox").TOptional<import("typebox").TString>;
                 }>;
             };
         };
@@ -8357,14 +8394,29 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                 types: {
                     input: {
                         variant: string;
+                        knowledgeRepresentation?: "authoring" | "public";
+                        knowledgeDocumentId?: string;
+                        knowledgeRevisionId?: string;
+                        knowledgeSourceSha256?: string;
+                        knowledgePublicationId?: string;
                     };
                     output: {
                         variant: string;
+                        knowledgeRepresentation?: "authoring" | "public";
+                        knowledgeDocumentId?: string;
+                        knowledgeRevisionId?: string;
+                        knowledgeSourceSha256?: string;
+                        knowledgePublicationId?: string;
                     };
                 } | undefined;
                 validate(value: unknown): {
                     value: {
                         variant: string;
+                        knowledgeRepresentation?: "authoring" | "public";
+                        knowledgeDocumentId?: string;
+                        knowledgeRevisionId?: string;
+                        knowledgeSourceSha256?: string;
+                        knowledgePublicationId?: string;
                     };
                     issues?: never;
                 } | {
@@ -8376,9 +8428,19 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                 jsonSchema: {
                     input: () => import("typebox").TObject<{
                         variant: import("typebox").TString;
+                        knowledgeRepresentation: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"authoring">, import("typebox").TLiteral<"public">]>>;
+                        knowledgeDocumentId: import("typebox").TOptional<import("typebox").TString>;
+                        knowledgeRevisionId: import("typebox").TOptional<import("typebox").TString>;
+                        knowledgeSourceSha256: import("typebox").TOptional<import("typebox").TString>;
+                        knowledgePublicationId: import("typebox").TOptional<import("typebox").TString>;
                     }>;
                     output: () => import("typebox").TObject<{
                         variant: import("typebox").TString;
+                        knowledgeRepresentation: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"authoring">, import("typebox").TLiteral<"public">]>>;
+                        knowledgeDocumentId: import("typebox").TOptional<import("typebox").TString>;
+                        knowledgeRevisionId: import("typebox").TOptional<import("typebox").TString>;
+                        knowledgeSourceSha256: import("typebox").TOptional<import("typebox").TString>;
+                        knowledgePublicationId: import("typebox").TOptional<import("typebox").TString>;
                     }>;
                 };
             };
@@ -8554,6 +8616,11 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
     body: unknown;
     query: {
         variant: string;
+        knowledgeRepresentation?: "authoring" | "public";
+        knowledgeDocumentId?: string;
+        knowledgeRevisionId?: string;
+        knowledgeSourceSha256?: string;
+        knowledgePublicationId?: string;
     };
     params: {
         id: string;
@@ -8593,14 +8660,29 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
             types: {
                 input: {
                     variant: string;
+                    knowledgeRepresentation?: "authoring" | "public";
+                    knowledgeDocumentId?: string;
+                    knowledgeRevisionId?: string;
+                    knowledgeSourceSha256?: string;
+                    knowledgePublicationId?: string;
                 };
                 output: {
                     variant: string;
+                    knowledgeRepresentation?: "authoring" | "public";
+                    knowledgeDocumentId?: string;
+                    knowledgeRevisionId?: string;
+                    knowledgeSourceSha256?: string;
+                    knowledgePublicationId?: string;
                 };
             } | undefined;
             validate(value: unknown): {
                 value: {
                     variant: string;
+                    knowledgeRepresentation?: "authoring" | "public";
+                    knowledgeDocumentId?: string;
+                    knowledgeRevisionId?: string;
+                    knowledgeSourceSha256?: string;
+                    knowledgePublicationId?: string;
                 };
                 issues?: never;
             } | {
@@ -8612,9 +8694,19 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
             jsonSchema: {
                 input: () => import("typebox").TObject<{
                     variant: import("typebox").TString;
+                    knowledgeRepresentation: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"authoring">, import("typebox").TLiteral<"public">]>>;
+                    knowledgeDocumentId: import("typebox").TOptional<import("typebox").TString>;
+                    knowledgeRevisionId: import("typebox").TOptional<import("typebox").TString>;
+                    knowledgeSourceSha256: import("typebox").TOptional<import("typebox").TString>;
+                    knowledgePublicationId: import("typebox").TOptional<import("typebox").TString>;
                 }>;
                 output: () => import("typebox").TObject<{
                     variant: import("typebox").TString;
+                    knowledgeRepresentation: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"authoring">, import("typebox").TLiteral<"public">]>>;
+                    knowledgeDocumentId: import("typebox").TOptional<import("typebox").TString>;
+                    knowledgeRevisionId: import("typebox").TOptional<import("typebox").TString>;
+                    knowledgeSourceSha256: import("typebox").TOptional<import("typebox").TString>;
+                    knowledgePublicationId: import("typebox").TOptional<import("typebox").TString>;
                 }>;
             };
         };

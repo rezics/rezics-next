@@ -18,16 +18,6 @@ export type CreditDependentQuery = {
 export declare function validateAccountSnapshot(value: unknown, partition: number, ids: readonly string[], atLeast: bigint): AccountSnapshot;
 /** Native keyset order/exhaustion is retained even when the exact claim produces a null handle. */
 export declare function validateAccountPage(value: unknown, partition: number, after: AccountFrontier | null, limit: number): AccountPage;
-/** One native bootstrap page. Persist next only after the existing writer settles all returned actions. */
-export declare function prepareAccountPopulationPage(source: AccountDiscoverySource, partition: number, after: AccountFrontier | null, limit?: number): Promise<{
-    snapshot: AccountPage;
-    actions: import("./document.ts").IndexAction<import("./document.ts").AccountDocument>[];
-}>;
-/** Event keys only; reread current native rows, retaining every tail within the same checkpoint obligation. */
-export declare function prepareAccountCatchup(source: AccountDiscoverySource, partition: number, ids: readonly string[], atLeast: bigint): AsyncGenerator<{
-    snapshot: AccountSnapshot;
-    actions: import("./document.ts").IndexAction<import("./document.ts").AccountDocument>[];
-}, void, unknown>;
 export type DiscoveryCensus = {
     partition: number;
     position: bigint;
@@ -51,6 +41,16 @@ export type DiscoveryTarget = {
     incarnation: string;
 };
 export type DiscoveryProjection = ReturnType<typeof createDiscoveryProjection>;
+export type DiscoveryProjectionContext = Readonly<{
+    deadline: number;
+    signal?: AbortSignal;
+}>;
+type HeldDiscoveryTarget = {
+    client: PoolClient;
+    index: string;
+    acknowledge(): Promise<void>;
+    context?: DiscoveryProjectionContext;
+};
 export declare class DiscoveryPhysicalTargetChangedError extends Error {
     constructor();
 }
@@ -77,7 +77,7 @@ export declare function readDiscoveryRepairWinner(search: OpenSearch, index: str
 /** The original search-visible winner remains part of the retained native repair provenance. */
 export declare function validateDiscoveryRepairWinner(index: string, action: AnyDiscoveryIndexAction, body: unknown): void;
 /** Session custody spans the external effect, but no database transaction/row lock does. */
-export declare function withDiscoveryTarget<T>(pool: Pool, search: OpenSearch, target: DiscoveryTarget, work: (client: PoolClient, index: string) => Promise<T>, purge?: boolean): Promise<T>;
+export declare function withDiscoveryTarget<T>(pool: Pool, search: OpenSearch, target: DiscoveryTarget, work: (client: PoolClient, index: string) => Promise<T>, purge?: boolean, context?: DiscoveryProjectionContext): Promise<T>;
 export declare const copyLocator: (target: DiscoveryTarget) => string;
 /** One writer for population, replay and repair, with durable native deletion high water. */
 export declare function createDiscoveryProjection(options: {
@@ -103,12 +103,8 @@ export declare function createDiscoveryProjection(options: {
             refresh: unknown;
         }>;
     }>[]>;
-    prepareReviews: (refresh: ReviewDiscoveryRefresh, ids: readonly string[]) => Promise<SecondScopeDiscoveryIndexAction[]>;
-    applyReviews: (actions: readonly SecondScopeDiscoveryIndexAction[], held: {
-        client: PoolClient;
-        index: string;
-        acknowledge(): Promise<void>;
-    }) => Promise<void>;
+    prepareReviews: (refresh: ReviewDiscoveryRefresh, ids: readonly string[], context?: DiscoveryProjectionContext) => Promise<SecondScopeDiscoveryIndexAction[]>;
+    applyReviews: (actions: readonly SecondScopeDiscoveryIndexAction[], held: HeldDiscoveryTarget) => Promise<void>;
     applyNativeActions: (actions: readonly AnyDiscoveryIndexAction[]) => Promise<Readonly<{
         key: DiscoveryKey;
         action: DiscoveryIndexAction;
@@ -187,3 +183,4 @@ export declare function createDiscoveryProjection(options: {
 export declare function eraseDiscoveryAccount(pool: Pool, search: OpenSearch, registry: DiscoveryRegistry, accountId: string, inputLimit?: number): Promise<void>;
 /** A physically deleted generation may still own an open erasure locator. */
 export declare function registerRetiredErasure(pool: Pool, target: DiscoveryTarget, accountId: string): Promise<import("../command/command.ts").CommandOutcome<boolean>>;
+export {};
