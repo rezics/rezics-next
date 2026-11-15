@@ -374,7 +374,7 @@ function supportedRecord(row: ObjectValue, section: MergeSection) {
         'lastChangedAt',
         'journal',
       ]) ||
-      !exactKeys(journal, ['sessionId', 'revision', 'startDate', 'finishDate', 'reflection', 'assessment']) ||
+      !exactKeys(journal, ['sessionId', 'revision', 'assessment'], ['startDate', 'finishDate', 'reflection']) ||
       !uuid(row.accountId) ||
       !uuid(row.sessionId) ||
       !uuid(row.subjectId) ||
