@@ -1,7 +1,5 @@
 import type { Pool } from 'pg';
 import {
-  deadlineClient,
-  within,
   accessCheck,
   readDiscoveryOperation,
   readDiscoveryOutcome,
@@ -9,8 +7,8 @@ import {
   prepareDiscoverySourceApply,
 } from './domain-ports.ts';
 import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
-import { CommandUnavailableError } from '../access/unavailable.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { classifyUnavailability, CommandUnavailableError } from '../access/unavailable.ts';
+import { withBoundedReadConnection, withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Access, AccessClient } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -46,14 +44,17 @@ export async function prepareRealmDiscoverySource(
     { ...realm, eligibility: realmReadEligibility(realm) },
     context,
   );
-  const current = await within(deadline, () =>
-    withConnection(deps.pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      const partition = await readPartition(client, partitionOf(route));
+  const realmPartition = partitionOf(route);
+  const current = await withBoundedReadConnection(
+    deps.pool,
+    deadline,
+    async (client) => {
+      const partition = await readPartition(client, realmPartition);
       if (!partition || partition.writeState === 'moved') return null;
       const row = await read.run(client, { route, realm_id: realmId, at: authoritativeTimeValue(time) });
       return row && (await realmCheck(client, time)) ? row : null;
-    }),
+    },
+    discoveryReadLifetimeOptions(realmPartition),
   );
   if (!current) return null;
   const spaceRoute = routeOf(current.space_id);
@@ -66,12 +67,15 @@ export async function prepareRealmDiscoverySource(
     { ...space, eligibility: spaceReadEligibility(space) },
     context,
   );
-  const readable = await within(deadline, () =>
-    withConnection(deps.pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      const partition = await readPartition(client, partitionOf(spaceRoute));
+  const spacePartition = partitionOf(spaceRoute);
+  const readable = await withBoundedReadConnection(
+    deps.pool,
+    deadline,
+    async (client) => {
+      const partition = await readPartition(client, spacePartition);
       return !!partition && partition.writeState !== 'moved' && (await spaceCheck(client, time));
-    }),
+    },
+    discoveryReadLifetimeOptions(spacePartition),
   );
   return readable ? Object.freeze({ realmId, spaceId: current.space_id, realmEpoch: current.realm_epoch }) : null;
 }
@@ -95,6 +99,21 @@ import changes from './discovery-source-changes.sql';
 import bindTransaction from './discovery-source-transaction.sql';
 import project from './discovery-source-project.sql';
 import projectBoard from './discovery-source-board.sql';
+
+function discoveryReadLifetimeOptions(partitionNo: number) {
+  return {
+    deadlineError: () => new CommandUnavailableError('deadline', partitionNo),
+    mapError: (error: unknown) => {
+      if (error instanceof CommandUnavailableError) return error;
+      const reason = classifyUnavailability(error);
+      return reason === undefined ? error : new CommandUnavailableError(reason, partitionNo);
+    },
+    isUncertainError: (error: unknown) => {
+      const reason = classifyUnavailability(error);
+      return reason === 'deadline' || reason === 'overloaded';
+    },
+  };
+}
 
 /** Same-home container writers can read this exact binding in their own command.
  * Space/Realm lifecycle owners must advance the epoch/generation atomically with
@@ -170,53 +189,44 @@ export async function readRealmDiscoveryChanges(
   )
     throw new RangeError('Invalid Realm discovery change range');
   const partitionNo = partitionOf(route);
-  return within(deadline, () =>
-    withConnection(pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      try {
-        const partition = await readPartition(client, partitionNo);
-        if (!partition) throw new CommandUnavailableError('contention', partitionNo);
-        if (partition.writeState === 'moved')
-          throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
-        if (partition.writeState !== 'active') throw new CommandUnavailableError('fenced', partitionNo);
-        const head = await readRealmDiscoveryGate(client, realmId);
-        const rows = head
-          ? await changes.run(client, {
-              route,
-              realm_id: realmId,
-              after_generation: afterGeneration,
-              limit,
-            })
-          : [];
-        const records = rows.map((row): RealmDiscoveryCommittedChange =>
-          Object.freeze({
-            realmId,
-            realmEpoch: row.realm_epoch,
-            generation: row.generation,
-            previousGeneration: row.previous_generation,
-            transactionId: row.transaction_id,
-            value: row.value as RealmDiscoveryChangeValue,
-          }),
-        );
-        const last = records.at(-1)?.generation ?? afterGeneration;
-        if (head && BigInt(last) < BigInt(head.generation) && records.length === 0)
-          throw new Error('Realm discovery committed change range unavailable');
-        await client.query('COMMIT');
-        return Object.freeze({
-          changes: Object.freeze(records),
-          head,
-          next: head && BigInt(last) < BigInt(head.generation) ? last : null,
-        });
-      } catch (error) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(connection, rollbackError as Error);
-        }
-        throw error;
-      }
-    }),
+  return withBoundedReadOnlyTransaction(
+    pool,
+    deadline,
+    async (client) => {
+      const partition = await readPartition(client, partitionNo);
+      if (!partition) throw new CommandUnavailableError('contention', partitionNo);
+      if (partition.writeState === 'moved')
+        throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
+      if (partition.writeState !== 'active') throw new CommandUnavailableError('fenced', partitionNo);
+      const head = await readRealmDiscoveryGate(client, realmId);
+      const rows = head
+        ? await changes.run(client, {
+            route,
+            realm_id: realmId,
+            after_generation: afterGeneration,
+            limit,
+          })
+        : [];
+      const records = rows.map((row): RealmDiscoveryCommittedChange =>
+        Object.freeze({
+          realmId,
+          realmEpoch: row.realm_epoch,
+          generation: row.generation,
+          previousGeneration: row.previous_generation,
+          transactionId: row.transaction_id,
+          value: row.value as RealmDiscoveryChangeValue,
+        }),
+      );
+      const last = records.at(-1)?.generation ?? afterGeneration;
+      if (head && BigInt(last) < BigInt(head.generation) && records.length === 0)
+        throw new Error('Realm discovery committed change range unavailable');
+      return Object.freeze({
+        changes: Object.freeze(records),
+        head,
+        next: head && BigInt(last) < BigInt(head.generation) ? last : null,
+      });
+    },
+    discoveryReadLifetimeOptions(partitionNo),
   );
 }
 

@@ -3,7 +3,7 @@ import * as SharedSelect from '@rezics/ui/shadcn/select';
 import type { MemberPageTarget } from './member-list-query';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
 import { PAGE_GLOBAL_CONTEXT, type SelectedContext } from '@rezics/composition';
-import { OverviewContext } from './overview-context';
+import { OverviewContext, viewHref } from './overview-context';
 import { ScreenReadingBinding } from './screen-reading-binding';
 import type { ScreenReadingPort } from '../catalogue/screen-reading-port';
 import { BookOverviewRating, RatingsSection } from './subject-ratings-view';
@@ -169,7 +169,7 @@ export type OverviewValue = {
   memberHref?: (subject: { id: string; label: string }) => string;
 };
 
-export { BookOverviewRating, OverviewContext };
+export { BookOverviewRating, OverviewContext, viewHref };
 
 /** Page composition installs Screen reading capabilities beside the ordinary overview value. */
 export function OverviewRoot({
@@ -190,8 +190,8 @@ export function OverviewRoot({
 
 const SUMMARY_PROPERTY = 'schema:abstract';
 
-import { headingClass, sectionClass, useOverview, viewHref, Preview, Failed } from './overview-section';
-export { headingClass, sectionClass, useOverview, viewHref, Preview, Failed } from './overview-section';
+import { headingClass, sectionClass, useOverview, Preview, Failed } from './overview-section';
+export { headingClass, sectionClass, useOverview, Preview, Failed } from './overview-section';
 const anchorClass = 'scroll-mt-32';
 
 /** What a row of related subjects needs from its page; the full relations view supplies the same fields. */

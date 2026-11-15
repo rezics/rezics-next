@@ -7,7 +7,7 @@ import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
 import { catalogueEntries } from '../catalogue/catalogue-entry';
 import { valueExplanationHref } from '../catalogue/value-explanation';
-import { OverviewContext } from './overview';
+import { OverviewContext } from './overview-context';
 import {
   canEditClassification,
   retryableClassificationCommand,

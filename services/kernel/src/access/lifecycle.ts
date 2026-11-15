@@ -8,11 +8,11 @@ import { ProblemError } from '../http/problem-error.ts';
 import { accessClock } from './access-clock.ts';
 import { workflowApprovalBinding } from './workflow-approvals.ts';
 import tombstoneOperator from './workflow-approvals-tombstone-operator.sql';
-import { throwAccessUnavailable } from './unavailable.ts';
+import { AccessUnavailableError, throwAccessUnavailable } from './unavailable.ts';
 import { LifecycleDeniedError, lifecycleExecutor } from './lifecycle-20261025094010-command.ts';
 export { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 import { createHash } from 'node:crypto';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import {
   authoritativeTimeValue,
   currentCommand,
@@ -20,7 +20,7 @@ import {
   type CommandAuthorization,
   type CommandTransaction,
 } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection, withConnection } from '../database/pool.ts';
 import {
   accessCommandAuthorization,
   type Access,
@@ -32,6 +32,7 @@ import { anchorRoute, derivedId, partitionOf, routeOf } from '../route/route.ts'
 import type { PermissionContext } from './permission.ts';
 import { readAccount } from './account-data.ts';
 import { accountProfileAuthorityAnchor } from './account-viewer-actions.ts';
+import { accessCheckout, accessNativeWork } from './work.ts';
 import accountRead from './lifecycle-account.sql';
 import handleRead from './lifecycle-handle-read.sql';
 import handleReserve from './lifecycle-handle-reserve.sql';
@@ -158,6 +159,7 @@ export type AuthenticationBarrierReceipt = {
   minimumAuthnEpoch: number;
 };
 export type LifecycleRequest = Omit<PermissionContext, 'pool'> & { actor: AccountActor };
+type LifecycleReadBoundary = Pick<LifecycleRequest, 'deadline' | 'work'>;
 export type LifecycleCommand = { accountId: string; key: string };
 export type AuthenticationBarrierCommand = LifecycleCommand & {
   purpose: 'consent-reduction' | 'recovery';
@@ -212,8 +214,34 @@ const transitionParameters = (input: HandleTransition) => ({
   operation_id: input.operationId,
   expected_handle: input.expectedHandle ?? '',
 });
-async function readClaim(pool: Pool, handle: string) {
-  return withConnection(pool, (client) => handleRead.run(client, { route: handleRoute(handle), handle }));
+function uncertainLifecycleQueryError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return true;
+  const details = error as { code?: unknown; severity?: unknown };
+  return !(
+    typeof details.code === 'string' &&
+    /^[0-9A-Z]{5}$/.test(details.code) &&
+    details.severity === 'ERROR'
+  );
+}
+
+function withLifecycleReadConnection<T>(
+  pool: Pool,
+  boundary: LifecycleReadBoundary | undefined,
+  read: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  if (!boundary) return withConnection(pool, read);
+  return accessCheckout(boundary.work, () =>
+    withBoundedReadConnection(pool, boundary.deadline, read, {
+      deadlineError: () => new AccessUnavailableError('deadline'),
+      isUncertainError: uncertainLifecycleQueryError,
+    }),
+  );
+}
+
+async function readClaim(pool: Pool, handle: string, boundary?: LifecycleReadBoundary) {
+  return withLifecycleReadConnection(pool, boundary, (client) =>
+    handleRead.run(client, { route: handleRoute(handle), handle }),
+  );
 }
 async function readOperation(pool: Pool, input: HandleTransition) {
   return withConnection(pool, (client) =>
@@ -232,10 +260,14 @@ function matchesOperation(operation: Awaited<ReturnType<typeof readOperation>>, 
     operation.expectedHandle === input.expectedHandle
   );
 }
-async function publicationEvidence(pool: Pool, input: HandleTransition) {
+async function publicationEvidence(
+  pool: Pool,
+  input: HandleTransition,
+  boundary?: LifecycleReadBoundary,
+) {
   // Every separately anchored read ends before checkout of the account anchor.
-  const claim = await readClaim(pool, input.handle);
-  const old = input.expectedHandle === null ? null : await readClaim(pool, input.expectedHandle);
+  const claim = await readClaim(pool, input.handle, boundary);
+  const old = input.expectedHandle === null ? null : await readClaim(pool, input.expectedHandle, boundary);
   return { claim, old };
 }
 async function publishHandle(
@@ -305,17 +337,26 @@ async function lockAccounts(tx: AccessClient, ids: readonly string[]): Promise<M
   for (const id of ordered) rows.set(id, await locked(tx, id));
   return rows;
 }
-async function memberReservation(pool: Pool, accountId: string, organizationId: string, reservationId: string) {
+async function memberReservation(
+  pool: Pool,
+  accountId: string,
+  organizationId: string,
+  reservationId: string,
+  boundary?: LifecycleReadBoundary,
+) {
   requireAllowed(accountRoute(reservationId) === accountRoute(accountId));
-  return withConnection(pool, async (client) => {
+  const input = {
+    route: accountRoute(accountId),
+    account_id: accountId,
+    group_id: organizationId,
+    reservation_id: reservationId,
+  };
+  return withLifecycleReadConnection(pool, boundary, async (client) => {
     // This is an independent actor-anchor read before organization checkout.
     // Holds never expire and prevent subsequent deletion/automation on that actor.
-    return membershipEvidence.run(client, {
-      route: accountRoute(accountId),
-      account_id: accountId,
-      group_id: organizationId,
-      reservation_id: reservationId,
-    });
+    return accessNativeWork(boundary?.work, 'membership', input, { groups: 1 }, () =>
+      membershipEvidence.run(client, input),
+    );
   });
 }
 async function grants(
@@ -1540,7 +1581,7 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
     async transitionAccountHandle(context: LifecycleRequest, value: HandleTransition) {
       const input = transitionInput(value);
       context = snapshotRequest(context);
-      const evidence = await publicationEvidence(pool, input);
+      const evidence = await publicationEvidence(pool, input, context);
       const authorization = await authorize(context, 'account:update', input.accountId);
       return execute(
         {
@@ -1567,7 +1608,9 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
       context = snapshotRequest(context);
       const route = accountRoute(input.accountId);
       const patch = validatePatch(input.patch);
-      const subject = await withConnection(pool, (client) => readAccount(client, route, input.accountId));
+      const subject = await withLifecycleReadConnection(pool, context, (client) =>
+        readAccount(client, route, input.accountId, context.work),
+      );
       const anchor = accountProfileAuthorityAnchor(subject, input.accountId);
       const authorization = await authorize(context, anchor.action, anchor.id);
       const allowed = authorization.check;
@@ -1646,6 +1689,7 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
         input.memberAccountId,
         input.organizationId,
         input.reservationId,
+        context,
       );
       const authorization = await authorize(context, 'organization:membership', input.organizationId);
       const allowed = authorization.check;
@@ -1721,11 +1765,13 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
       // fixed again under the account lock. Only the account itself holds its own delete action.
       const subject =
         context.actor.kind === 'account' && context.actor.accountId !== input.accountId
-          ? await withConnection(pool, (client) => readAccount(client, route, input.accountId))
+          ? await withLifecycleReadConnection(pool, context, (client) =>
+              readAccount(client, route, input.accountId, context.work),
+            )
           : null;
       const replayOperator =
         subject?.kind === 'actor' && subject.state === 'deleted'
-          ? await withConnection(pool, (client) =>
+          ? await withLifecycleReadConnection(pool, context, (client) =>
               tombstoneOperator.run(client, {
                 route,
                 account_id: input.accountId,
@@ -1749,14 +1795,17 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
       const organization =
         subject?.kind === 'organization' &&
         (
-          await withConnection(pool, (client) =>
-            ownersRead.run(client, {
+          await withLifecycleReadConnection(pool, context, (client) => {
+            const ownersInput = {
               route,
               organization_id: input.accountId,
               member_id: context.actor.accountId,
               at: iso(config.clock ?? accessClock(access)),
-            }),
-          )
+            };
+            return accessNativeWork(context.work, 'membership', ownersInput, { groups: 1 }, () =>
+              ownersRead.run(client, ownersInput),
+            );
+          })
         )?.owners !== 0;
       const authorization =
         operatorId || organization

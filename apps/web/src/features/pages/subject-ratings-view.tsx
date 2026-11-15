@@ -23,7 +23,7 @@ import {
 import { admitRatingRetry } from './rating-retry-admission';
 import { PublicRatingFigure } from './public-rating-figure';
 import { RatingDistribution } from './rating-distribution';
-import { OverviewContext, viewHref } from './overview';
+import { OverviewContext, viewHref } from './overview-context';
 import { useRatingSourceRetryFocus, type RatingRetryOwner } from './subject-rating-retry-focus';
 import {
   ClassificationAssessmentHandlerContext,
