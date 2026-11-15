@@ -1,9 +1,11 @@
 import { existsSync, readlinkSync } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { expect } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { resolve } from 'node:path';
 import {
   currentNativeLifecycle,
+  NativeLifecycleTimeoutError,
+  NativeTestLifecycle,
   inspectNativeProcess,
   inspectNativeProcessGroup,
   nativeProcessGroupIsGone,
@@ -17,6 +19,128 @@ import {
 
 const worktreeRoot = resolve(import.meta.dir, '../../..');
 const injectionRunner = resolve(import.meta.dir, 'native/lifecycle-injection.ts');
+
+function gate() {
+  let release!: () => void;
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { promise, release };
+}
+
+for (const settlement of ['reject', 'resolve'] as const) {
+  test(`lifecycle expiry survives an operation that ${settlement}s during deadline cleanup`, async () => {
+    const lifecycle = new NativeTestLifecycle('deadline ordering', undefined, {
+      cleanupGraceMs: 500,
+      forceGraceMs: 50,
+    });
+    const entered = gate(),
+      cleanup = gate();
+    lifecycle.register({
+      label: 'held cleanup',
+      close: async () => {
+        entered.release();
+        await cleanup.promise;
+        if (settlement === 'reject') throw new Error('Independent cleanup failure');
+      },
+    });
+    let settled = false;
+    const observed = lifecycle
+      .run(
+        'setup',
+        90,
+        (signal) =>
+          new Promise<string>((resolve, reject) => {
+            signal.addEventListener(
+              'abort',
+              () => {
+                if (settlement === 'reject') reject(new Error('Worker stopped during setup'));
+                else resolve('late Worker ready');
+              },
+              { once: true },
+            );
+          }),
+        false,
+      )
+      .then(
+        (value) => {
+          settled = true;
+          return { status: 'resolved' as const, value };
+        },
+        (error: unknown) => {
+          settled = true;
+          return { status: 'rejected' as const, error };
+        },
+      );
+    try {
+      await entered.promise;
+      // Flush the task settlement caused by abort, while cleanup remains held.
+      for (let turn = 0; turn < 8; turn++) await Promise.resolve();
+      expect(settled).toBe(false);
+      cleanup.release();
+      const result = await observed;
+      expect(result.status).toBe('rejected');
+      if (result.status !== 'rejected') throw new Error('Expired operation returned a value');
+      expect(result.error).toBeInstanceOf(NativeLifecycleTimeoutError);
+      if (!(result.error instanceof NativeLifecycleTimeoutError)) throw result.error;
+      expect(result.error.phase).toBe('setup');
+      expect(result.error.timeoutMs).toBe(90);
+      if (settlement === 'reject') expect(result.error.cleanupFailures).toContain('Error');
+    } finally {
+      cleanup.release();
+      await observed;
+      await lifecycle.close().catch(() => {});
+    }
+  });
+}
+
+test('operation timer is cleared before reserved cleanup and preserves the first settled result or failure', async () => {
+  for (const fail of [false, true]) {
+    const lifecycle = new NativeTestLifecycle('settled operation', undefined, {
+      cleanupGraceMs: 500,
+      forceGraceMs: 50,
+    });
+    const entered = gate(),
+      cleanup = gate();
+    lifecycle.register({
+      label: 'successful held cleanup',
+      close: async () => {
+        entered.release();
+        await cleanup.promise;
+      },
+    });
+    const close = lifecycle.close.bind(lifecycle);
+    const reasons: unknown[] = [];
+    const observer = spyOn(lifecycle, 'close').mockImplementation((reason) => {
+      reasons.push(reason);
+      return close(reason);
+    });
+    const original = new Error('Original setup refusal');
+    const observed = lifecycle
+      .run('setup', 90, async () => {
+        if (fail) throw original;
+        return 'ready';
+      })
+      .then(
+        (value) => ({ status: 'resolved' as const, value }),
+        (error: unknown) => ({ status: 'rejected' as const, error }),
+      );
+    try {
+      await entered.promise;
+      await Bun.sleep(100); // Cross the operation deadline while owned cleanup is deliberately held.
+      expect(reasons.some((reason) => reason instanceof NativeLifecycleTimeoutError)).toBe(false);
+      cleanup.release();
+      const result = await observed;
+      if (fail) expect(result).toEqual({ status: 'rejected', error: original });
+      else expect(result).toEqual({ status: 'resolved', value: 'ready' });
+    } finally {
+      cleanup.release();
+      await observed;
+      observer.mockRestore();
+      await lifecycle.close().catch(() => {});
+    }
+  }
+});
 
 type LifecycleReceipt = {
   listenerPort: number;

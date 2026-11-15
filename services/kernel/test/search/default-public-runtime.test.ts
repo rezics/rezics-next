@@ -152,9 +152,10 @@ test('the default real Search journey provides useful current-authorized filled 
   } catch (error) {
     let output: string;
     try {
-      output = (await client.inspect()).workerOutput;
+      const observed = await client.inspect({ preparation: true });
+      output = `Worker state: ${JSON.stringify(observed.workerStats)}\n${observed.workerOutput}`;
     } catch (inspection) {
-      throw new AggregateError([error, inspection], 'Search journey failed and its native Worker output was unavailable');
+      output = `Failure inspection was unavailable: ${String(inspection).slice(0, 1000)}`;
     }
     throw new Error(`Search journey failed. Native Worker output:\n${output}`, { cause: error });
   } finally {

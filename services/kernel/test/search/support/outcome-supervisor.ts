@@ -704,6 +704,13 @@ function supervise(parent: OutcomeRpc) {
       await (params.state === 'down' ? proxy!.down() : proxy!.up());
       return null;
     }
+    if (method === 'inspect' && params !== undefined) {
+      exact(params, ['preparation']);
+      if (params.preparation !== true) throw new Error('Invalid failure inspection options');
+      observation.lostAliasResponses = proxy!.lostAliasResponses();
+      observation.workerStats = await workerRpc!.request<WorkerStats>('stats', params);
+      return snapshot();
+    }
     empty(params);
     if (method === 'nativeCoverage') return nativeCoverage!();
     if (method === 'requestRebuild') return workerRpc!.request('requestRebuild');

@@ -3,6 +3,8 @@ import type { WorkContext, WorkModule } from '../../../src/work/registry.ts';
 import { rebuildSubjects, RebuildError } from '../../../src/search/generations.ts';
 import { createOpenSearch } from '../../../src/search/opensearch.ts';
 import { readSearchConfig } from '../../../src/search/work.ts';
+import { subjectGenerations } from '../../../src/search/indices.ts';
+import { PUBLIC_PREPARATION_WORKFLOW } from '../../../src/search/public-preparation-store.ts';
 import { createRatedSubjectSource } from '../../../src/search/rated-source.ts';
 import { readMembershipRouteKey } from '../../../src/access/membership-work-config.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
@@ -20,6 +22,8 @@ export interface WorkerStats {
   stopped: boolean;
   /** Sampled from the actual WorkerConfig.clock; never readiness or Source lag evidence. */
   clockInstant: number;
+  /** Requested only by the selected failure inspection; no execution or readiness claim. */
+  preparation?: Record<string, unknown>;
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -194,6 +198,75 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
     }
   }
 
+  async function inspectPreparation(): Promise<Record<string, unknown>> {
+    const context = searchContext!;
+    const config = readSearchConfig(context.env);
+    if (!config) throw new Error('Default search configuration is missing');
+    const failure = (error: unknown) => String(error).slice(0, 1000);
+    let runner: unknown;
+    try {
+      await slot.withRunner(async () => {});
+      runner = { present: true };
+    } catch (error) {
+      runner = { present: false, error: failure(error) };
+    }
+    let generations: unknown;
+    try {
+      generations = await subjectGenerations(createOpenSearch(config.url), config.prefix);
+    } catch (error) {
+      generations = { error: failure(error) };
+    }
+    let workflows: unknown;
+    try {
+      const sample = await context.client.listWorkflows({
+        workflowName: PUBLIC_PREPARATION_WORKFLOW,
+        queueName: 'maintenance',
+        limit: 8,
+        sortDesc: true,
+        loadInput: true,
+        loadOutput: false,
+      });
+      const matching = sample.filter((workflow) => {
+        const input = workflow.input?.[0];
+        return record(input) && input.prefix === config.prefix;
+      });
+      const entries = [];
+      for (const workflow of matching) {
+        let steps: unknown;
+        try {
+          steps = (await context.client.listWorkflowSteps(workflow.workflowID, { limit: 3 }))?.map((step) => ({
+            functionID: step.functionID,
+            name: step.name,
+            startedAt: step.startedAtEpochMs,
+            completedAt: step.completedAtEpochMs,
+            error: step.error === null ? null : failure(step.error),
+          }));
+        } catch (error) {
+          steps = { error: failure(error) };
+        }
+        entries.push({
+          workflowID: workflow.workflowID,
+          status: workflow.status,
+          queueName: workflow.queueName,
+          executorId: workflow.executorId,
+          createdAt: workflow.createdAt,
+          updatedAt: workflow.updatedAt,
+          dequeuedAt: workflow.dequeuedAt,
+          completedAt: workflow.completedAt,
+          delayUntil: workflow.delayUntilEpochMS,
+          recoveryAttempts: workflow.recoveryAttempts,
+          error: workflow.error == null ? null : failure(workflow.error),
+          steps,
+        });
+      }
+      // A bounded empty sample cannot establish that preparation was never scheduled.
+      workflows = { limit: 8, sampled: sample.length, mayBeTruncated: sample.length === 8, entries };
+    } catch (error) {
+      workflows = { error: failure(error) };
+    }
+    return { prefix: config.prefix, runner, generations, workflows };
+  }
+
   function control(method: string, params: unknown): unknown | Promise<unknown> {
     if (closing) throw new Error('Outcome worker is closing');
     if (!['init', 'indexing', 'rebuild', 'requestRebuild', 'stats', 'clock', 'close'].includes(method))
@@ -221,8 +294,13 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
       }
       return (params.state === 'paused' ? slot.pause() : slot.resume()).then(stats);
     }
+    if (method === 'stats') {
+      if (params === undefined) return stats();
+      if (!record(params) || Object.keys(params).length !== 1 || params.preparation !== true)
+        throw new Error('Invalid failure inspection options');
+      return inspectPreparation().then((preparation) => ({ ...stats(), preparation }));
+    }
     noParams(params);
-    if (method === 'stats') return stats();
     return slot.withRunner(async (runner) => {
       const context = searchContext!;
       const config = readSearchConfig(context.env);
