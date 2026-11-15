@@ -222,14 +222,19 @@ export function collectOutputTree(root: string): { members: OutputTreeMember[]; 
         if (stat.isDirectory()) visit(full, key);
         else {
           if (collected.length >= KERNEL_CLIENT_OUTPUT.maxMembers)
-            fail(`member count bound at ${key}: ${collected.length + 1} > ${KERNEL_CLIENT_OUTPUT.maxMembers}`);
-          if (!stat.isFile() || stat.nlink !== 1)
-            fail(`unsafe member ${key}: regular=${stat.isFile()}, links=${stat.nlink}`);
+            fail(
+              `member count bound: count=${collected.length + 1}, max=${KERNEL_CLIENT_OUTPUT.maxMembers}, path=${JSON.stringify(key)}`,
+            );
+          if (!stat.isFile() || stat.nlink !== 1) fail(`unsafe member: path=${JSON.stringify(key)}`);
           if (stat.size > KERNEL_CLIENT_OUTPUT.maxMemberBytes)
-            fail(`per-member bound for ${key}: ${stat.size} > ${KERNEL_CLIENT_OUTPUT.maxMemberBytes} bytes`);
+            fail(
+              `per-member byte bound: bytes=${stat.size}, max=${KERNEL_CLIENT_OUTPUT.maxMemberBytes}, path=${JSON.stringify(key)}`,
+            );
           total += stat.size;
           if (total > KERNEL_CLIENT_OUTPUT.maxBytes)
-            fail(`aggregate decoded byte bound at ${key}: ${total} > ${KERNEL_CLIENT_OUTPUT.maxBytes} bytes`);
+            fail(
+              `aggregate decoded byte bound: bytes=${total}, max=${KERNEL_CLIENT_OUTPUT.maxBytes}, count=${collected.length + 1}, path=${JSON.stringify(key)}`,
+            );
           const bytes = readOutputTreeFile(root, relative, stat.size);
           if (bytes.length !== stat.size) fail('member changed during capture');
           collected.push({ member: { path: key, size: bytes.length, sha256: outputTreeDigest(bytes) }, bytes });
@@ -249,15 +254,17 @@ export function encodeOutputTree(root: string, source: OutputTreeBinding, produc
   const { members, contents } = collectOutputTree(root);
   if (producerExitCode === 0) {
     const largest = members.reduce<OutputTreeMember | null>(
-      (current, member) => !current || member.size > current.size ? member : current,
+      (current, member) => (!current || member.size > current.size ? member : current),
       null,
     );
-    process.stdout.write(`Kernel client output tree: ${JSON.stringify({
-      count: members.length,
-      totalBytes: contents.reduce((sum, bytes) => sum + bytes.length, 0),
-      maxMemberPath: largest?.path ?? null,
-      maxMemberBytes: largest?.size ?? 0,
-    })}\n`);
+    process.stdout.write(
+      `Kernel client output tree: ${JSON.stringify({
+        count: members.length,
+        totalBytes: contents.reduce((sum, bytes) => sum + bytes.length, 0),
+        maxMemberPath: largest?.path ?? null,
+        maxMemberBytes: largest?.size ?? 0,
+      })}\n`,
+    );
   }
   const catalogue = Buffer.from(members.map((member) => `${JSON.stringify(member)}\n`).join(''));
   for (const member of members)
@@ -315,16 +322,13 @@ export function validateOutputTree(bytes: Buffer, authority: OutputTreeAuthority
     header.status !== 'complete'
   )
     fail('wrong source/run/profile or incomplete output');
-  if (
-    !Number.isSafeInteger(header.count) ||
-    header.count < 0 ||
-    header.count > KERNEL_CLIENT_OUTPUT.maxMembers ||
-    !Number.isSafeInteger(header.totalBytes) ||
-    header.totalBytes < 0 ||
-    header.totalBytes > KERNEL_CLIENT_OUTPUT.maxBytes ||
-    !HASH.test(header.catalogueSha256)
-  )
-    fail('manifest count or decoded byte bound');
+  if (!Number.isSafeInteger(header.count) || header.count < 0) fail('invalid manifest count');
+  if (header.count > KERNEL_CLIENT_OUTPUT.maxMembers)
+    fail(`manifest count bound: count=${header.count}, max=${KERNEL_CLIENT_OUTPUT.maxMembers}`);
+  if (!Number.isSafeInteger(header.totalBytes) || header.totalBytes < 0) fail('invalid manifest decoded byte count');
+  if (header.totalBytes > KERNEL_CLIENT_OUTPUT.maxBytes)
+    fail(`manifest decoded byte bound: bytes=${header.totalBytes}, max=${KERNEL_CLIENT_OUTPUT.maxBytes}`);
+  if (!HASH.test(header.catalogueSha256)) fail('invalid catalogue hash');
   const catalogueStart = offset;
   const members: OutputTreeMember[] = [];
   let total = 0;
@@ -332,15 +336,17 @@ export function validateOutputTree(bytes: Buffer, authority: OutputTreeAuthority
     const member = JSON.parse(line(OUTPUT_TREE_MEMBER_RECORD_BYTES).toString('utf8')) as OutputTreeMember;
     keys(member, 'path,sha256,size');
     outputTreeMemberPath(member.path);
-    if (
-      !Number.isSafeInteger(member.size) ||
-      member.size < 0 ||
-      member.size > KERNEL_CLIENT_OUTPUT.maxMemberBytes ||
-      !HASH.test(member.sha256)
-    )
-      fail('invalid member size/hash');
+    if (!Number.isSafeInteger(member.size) || member.size < 0) fail('invalid member size');
+    if (member.size > KERNEL_CLIENT_OUTPUT.maxMemberBytes)
+      fail(
+        `member size bound: bytes=${member.size}, max=${KERNEL_CLIENT_OUTPUT.maxMemberBytes}, path=${JSON.stringify(member.path)}`,
+      );
+    if (!HASH.test(member.sha256)) fail('invalid member hash');
     total += member.size;
-    if (total > KERNEL_CLIENT_OUTPUT.maxBytes) fail('aggregate decoded byte bound');
+    if (total > KERNEL_CLIENT_OUTPUT.maxBytes)
+      fail(
+        `aggregate decoded byte bound: bytes=${total}, max=${KERNEL_CLIENT_OUTPUT.maxBytes}, count=${index + 1}, path=${JSON.stringify(member.path)}`,
+      );
     members.push(member);
   }
   if (outputTreeDigest(bytes.subarray(catalogueStart, offset)) !== header.catalogueSha256)
