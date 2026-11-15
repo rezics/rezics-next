@@ -1,3 +1,6 @@
+import type { KnowledgeMediaSelection } from '@rezics/definitions/knowledge-media';
+import { useKnowledgeImageUploader, type KnowledgeImageUploadBinding } from './media-upload';
+import { useKnowledgeImageRenderer } from './media-view';
 import { KnowledgeDetails, KnowledgeValue, knowledgeControl, knowledgeLink } from './workspace';
 import { KnowledgeWorkspaceNavigation } from './workspace-navigation';
 import { KnowledgeReferenceAuthoring } from './reference-authoring';
@@ -350,6 +353,17 @@ function immutable<T>(value: T): T {
   if (typeof value !== 'object' || value === null || Object.isFrozen(value)) return value;
   for (const nested of Object.values(value)) immutable(nested);
   return Object.freeze(value);
+}
+
+function knowledgePrivateMediaSelection(head: KnowledgePrivateHead): KnowledgeMediaSelection | null {
+  return typeof head.sha256 === 'string' && /^[0-9a-f]{64}$/.test(head.sha256)
+    ? {
+        representation: 'authoring',
+        documentId: head.documentId,
+        revisionId: head.revisionId,
+        sourceSha256: head.sha256,
+      }
+    : null;
 }
 
 function copyDraft(head: KnowledgePrivateHead): DocumentDraft {
@@ -1625,6 +1639,18 @@ function PrivateKnowledgeEditor({
             onPendingChange={setEditorPending}
             inspect={operations.inspectReference ? (input) => operations.inspectReference!(input, binding) : undefined}
             subjectIds={head.subjectIds}
+            mediaSelection={knowledgePrivateMediaSelection(head)}
+            uploadBinding={
+              binding && access.revise === 'available'
+                ? {
+                    documentId: head.documentId,
+                    viewer: binding.viewer,
+                    csrfToken: binding.csrfToken,
+                    lifetime: access.owner,
+                    current: () => active.current,
+                  }
+                : null
+            }
           />
           {access.revise !== 'available' ? <FailureNotice state={access.revise} locale={locale} /> : null}
           {requiresHeadReview ? (
@@ -1676,6 +1702,7 @@ function PrivateKnowledgeEditor({
                     document={reviewHead.body}
                     references={reviewHead.references}
                     locale={locale}
+                    mediaSelection={knowledgePrivateMediaSelection(reviewHead)}
                   />
                 </div>
                 <div className="min-w-0 space-y-2">
@@ -1685,6 +1712,7 @@ function PrivateKnowledgeEditor({
                     document={draft.body}
                     references={draft.references}
                     locale={locale}
+                    mediaSelection={knowledgePrivateMediaSelection(head)}
                   />
                 </div>
               </div>
@@ -1803,7 +1831,11 @@ function DocumentDraftFields({
   subjectIds,
   inspect,
   onPendingChange,
+  uploadBinding = null,
+  mediaSelection = null,
 }: {
+  uploadBinding?: KnowledgeImageUploadBinding | null;
+  mediaSelection?: KnowledgeMediaSelection | null;
   ids: { notebookTitle: string; documentTitle: string; language: string; licence: string };
   locale: string;
   draft: DocumentDraft;
@@ -1819,6 +1851,10 @@ function DocumentDraftFields({
   const [referencePending, setReferencePending] = useState(false);
   const [snapshotError, setSnapshotError] = useState(false);
   const [editorVersion, setEditorVersion] = useState(0);
+  const imagePending = useRef(false);
+  const [imageBusy, setImageBusy] = useState(false);
+  const media = useKnowledgeImageUploader(draft.body, uploadBinding);
+  const renderImage = useKnowledgeImageRenderer(draft.body, mediaSelection, locale, media.ownedOriginal);
   return (
     <div className="min-w-0 space-y-5">
       <Field id={ids.documentTitle} label={m.knowledge_private_document_title({}, options)}>
@@ -1850,17 +1886,27 @@ function DocumentDraftFields({
           onChange={(body) => {
             setSnapshotError(false);
             setPendingSnapshot(false);
-            onPendingChange(referencePending);
+            onPendingChange(referencePending || imagePending.current);
             onChange({ ...draft, body });
           }}
           label={m.knowledge_private_body({}, options)}
           labels={labels}
+          upload={media.upload}
+          renderImage={renderImage}
+          onUploadState={(state, _count, attachments) => {
+            imagePending.current = state === 'pending' || (attachments ?? 0) > 0;
+            setImageBusy(imagePending.current);
+            onPendingChange(imagePending.current || pendingSnapshot || referencePending);
+          }}
           {...(draft.language ? { lang: draft.language } : {})}
           toolbar="always"
           disabled={disabled || referencePending}
           className="min-w-0 [overflow-wrap:anywhere]"
         />
       </div>
+      {!uploadBinding ? (
+        <p className="text-sm text-muted-foreground">{m.knowledge_media_save_first({}, options)}</p>
+      ) : null}
       {snapshotError ? (
         <div className="space-y-3" role="alert">
           <p>{m.knowledge_reference_repairReview({}, options)}</p>
@@ -1872,7 +1918,7 @@ function DocumentDraftFields({
               setEditorVersion(editorVersion + 1);
               setSnapshotError(false);
               setPendingSnapshot(false);
-              onPendingChange(referencePending);
+              onPendingChange(referencePending || imagePending.current);
             }}
           >
             {m.knowledge_reference_restore({}, options)}
@@ -1913,11 +1959,11 @@ function DocumentDraftFields({
       <KnowledgeReferenceAuthoring
         onEditingChange={(editing) => {
           setReferencePending(editing);
-          onPendingChange(editing || pendingSnapshot);
+          onPendingChange(editing || pendingSnapshot || imagePending.current);
         }}
         draft={draft}
         locale={locale}
-        disabled={disabled || pendingSnapshot}
+        disabled={disabled || pendingSnapshot || imageBusy}
         onChange={(next) => onChange({ ...draft, ...next })}
         inspect={inspect}
       />

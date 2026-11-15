@@ -30,6 +30,7 @@ Each execution unit owns its source and manually merges each coherent committed 
 branch immediately. Preserve current target history, source identity and both sides' required behavior; repair
 conflicts in the owning module. Do not wait for a landing queue, another unit or the shared publisher before merging.
 This applies to product, urgent, control-plane, stabilize, specification and verification-source work.
+Unresolved Git merges stop dependent ref publication; Main and Dev preserve all integrated history, a structural loss-prevention rule rather than an acceptance gate.
 
 Source admission has no premerge verification: do not run tests, typechecks, transpilation, generators, architecture,
 schema or Kernel-import checks before merging. Preserve existing tests and record acceptance as deferred. The

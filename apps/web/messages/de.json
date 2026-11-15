@@ -13277,5 +13277,6 @@
   "editor_formatting_under": "Darunter",
   "editor_formatting_text_emphasis": "Betonungszeichen",
   "editor_formatting_code_language_help": "Die Programmiersprache dieses Codeblocks einstellen. Sie ist unabhängig von der natürlichen Sprache des Texts.",
-  "editor_formatting_text_style_help": "Text- und Hintergrundfarben im Dokument ändern. Persönliche Schriftart und Textgröße bleiben Editor-Einstellungen."
+  "editor_formatting_text_style_help": "Text- und Hintergrundfarben im Dokument ändern. Persönliche Schriftart und Textgröße bleiben Editor-Einstellungen.",
+  "knowledge_media_save_first": "Speichere das Dokument, bevor du Bilder hinzufügst. Ein leeres privates Dokument genügt."
 }

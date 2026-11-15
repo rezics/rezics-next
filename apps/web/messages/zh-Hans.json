@@ -13277,5 +13277,6 @@
   "editor_formatting_under": "下方",
   "editor_formatting_text_emphasis": "着重号",
   "editor_formatting_code_language_help": "设置此代码块的编程语言，与正文的自然语言分别保存。",
-  "editor_formatting_text_style_help": "调整文档中的文字和背景颜色。个人字体和字号仍属于编辑器偏好。"
+  "editor_formatting_text_style_help": "调整文档中的文字和背景颜色。个人字体和字号仍属于编辑器偏好。",
+  "knowledge_media_save_first": "请先保存文档，再添加图片。空白的私人文档也可以。"
 }

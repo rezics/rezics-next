@@ -11,7 +11,7 @@ export async function lockKnowledgeNotebook(
 ): Promise<string> {
   const result = await tx.query<{ owner_account_id: string; structure_revision_id: string }>(
     `SELECT owner_account_id,structure_revision_id FROM content.knowledge_notebook
-     WHERE route=$1 AND notebook_id=$2 FOR UPDATE`,
+     WHERE route=$1 AND notebook_id=$2 AND NOT account_erased FOR UPDATE`,
     [route, notebookId],
   );
   const row = result.rows[0];
