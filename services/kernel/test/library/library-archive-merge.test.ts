@@ -11,6 +11,7 @@ import { purgeOwnedGraphPage } from '../../src/library/erasure-owned-graph.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { identityEpochStore } from '../../src/semantic/identity-adapters/index.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
 type Identity = Awaited<ReturnType<NativeProfileFixture['identity']>>;
@@ -1795,7 +1796,9 @@ test('a merged canonical target invalidates the reviewed observation identity', 
   for (const label of ['archive identity first', 'archive identity second']) {
     const response = await send(identityOwner, 'POST', '/v1/subjects', { type: 'ex:Child', labels: { en: label } });
     expect(response.status).toBe(201);
-    subjectIds.push(((await response.json()) as { subject: { id: string } }).subject.id);
+    const subjectId = ((await response.json()) as { subject: { id: string } }).subject.id;
+    await f.awaitCurrentIdentity(subjectId);
+    subjectIds.push(subjectId);
   }
   const sortedSubjects = [...subjectIds].sort();
   const survivor = sortedSubjects[0]!;
@@ -1820,8 +1823,14 @@ test('a merged canonical target invalidates the reviewed observation identity', 
     }),
   );
   const merged = await send(identityOwner, 'POST', '/v1/subjects:merge', { subjects: [survivor, redirected] });
-  expect(merged.status).toBe(200);
-  expect(await merged.json()).toMatchObject({ survivor, redirected });
+  expect([200, 202]).toContain(merged.status);
+  const admission = (await merged.json()) as { operation?: { id?: string }; survivor?: string; redirected?: string };
+  if (merged.status === 202) {
+    if (typeof admission.operation?.id !== 'string') throw new Error('Native merge admission has no operation');
+    await f.drainIdentityMerge(admission.operation.id);
+  } else expect(admission).toMatchObject({ survivor, redirected });
+  for (const id of [survivor, redirected]) await f.awaitCurrentIdentity(id);
+  expect(await identityEpochStore().readMapping(f.pool, redirected)).toMatchObject({ state: 'mapped', terminal: survivor });
   const applied = await json(await send(identityOwner, 'POST', `${mergePath}/${id}/apply`, selected([row.ordinal])));
   expect(applied.applied).toMatchObject([{ status: 'stale' }]);
   const personal = createEntryPersonalCommands({ pool: f.pool, access: f.access });
