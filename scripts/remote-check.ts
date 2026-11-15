@@ -76,6 +76,13 @@ import {
   writeSync,
 } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import {
+  currentCheckSourceManifest,
+  workspaceFiles,
+  EMPTY_DIRECTORY_DIGEST,
+  REMOTE_TRANSPORT_FAILURE,
+} from './check-source.ts';
+export { workspaceFiles, EMPTY_DIRECTORY_DIGEST, REMOTE_TRANSPORT_FAILURE } from './check-source.ts';
 import type { CheckGitPublication } from './check-git.ts';
 import {
   CHECK_ARTIFACTS_MAX_BYTES,
@@ -188,8 +195,6 @@ const REMOTE_CHECK_PRODUCER_CONTROL_FILES_JSON = JSON.stringify(REMOTE_CHECK_PRO
 const REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES_JSON = JSON.stringify(REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES);
 const REMOTE_CHECK_RUN_SCRATCH_PATHS_JSON = JSON.stringify(REMOTE_CHECK_RUN_SCRATCH_PATHS);
 const REMOTE_CHECK_SUPERVISOR_MARKER_SCHEMA_JSON = JSON.stringify(CHECK_HOST_SUPERVISOR_MARKER_SCHEMA);
-/** Source and result manifests hash an empty directory as this digest so the transferred tree compares equal. */
-export const EMPTY_DIRECTORY_DIGEST = createHash('sha256').update('directory\0').digest('hex');
 
 type ExpectedSourceManifest = NonNullable<RemoteCheck['expectedSourceManifest']>;
 
@@ -1097,7 +1102,6 @@ export async function transportLifecycleControl(
 }
 const SLICE = 'rezics-check.slice';
 const SLOT_BUSY = 75;
-export const REMOTE_TRANSPORT_FAILURE = 75;
 export const REMOTE_DEADLINE_EXIT = 124;
 export const HARD_RUN_LIFETIME_MS = 2 * 60 * 60 * 1000;
 // Admission's estimate saturation is separate from execution's effective deadline. Keep the generated shell and
@@ -5697,34 +5701,6 @@ async function waitForRemoteCommandStatus(
   return (await probe(1_000)) ?? { kind: 'unreachable' };
 }
 
-/** Tracked and untracked files that exist, without Git's own data, installed packages and local scratch space. */
-export function workspaceFiles(workspace: string): string[] {
-  const listed = Bun.spawnSync(['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], {
-    cwd: workspace,
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  if (listed.exitCode !== 0) throw new Error(`git ls-files failed in ${workspace}: ${listed.stderr.toString()}`);
-  const files = listed.stdout.toString().split('\0').filter(Boolean);
-  return [...new Set(files)].filter((file) => {
-    const parts = file.split('/');
-    if (
-      parts[0] === '.git' ||
-      parts.includes('.temp') ||
-      parts.includes('node_modules') ||
-      parts.some((part) =>
-        ['build', 'dist', 'out', 'coverage', '.next', '.turbo', 'playwright-report', 'test-results'].includes(part),
-      )
-    )
-      return false;
-    try {
-      return lstatSync(resolve(workspace, file)).isFile() || lstatSync(resolve(workspace, file)).isSymbolicLink();
-    } catch {
-      return false;
-    }
-  });
-}
-
 function commandUsesBun(command: string[]): boolean {
   return command.some((part) => part === 'bun' || basename(part) === 'bun');
 }
@@ -7838,7 +7814,6 @@ async function copyReturns(
   }
   const treeReturn = hasOutputTreeReturn(paths) || candidates.length > 0;
   if (terminal && treeReturn) {
-    const { currentCheckSourceManifest } = await import('./check-run.ts');
     if ((await currentCheckSourceManifest(options.workspace, paths)).sourceSha256 !== terminal.sourceSha256)
       throw new Error('remote-check: source changed before output tree receiving');
     receiveOutputTrees(options.workspace, options.workspace, result, terminal, paths);
@@ -9186,7 +9161,7 @@ export async function withOutputTreeSource(
   if (options.expectedSourceManifest) return options;
   const manifest = sourceForWorkspace
     ? await sourceForWorkspace(options.workspace, declarations)
-    : await (await import('./check-run.ts')).currentCheckSourceManifest(options.workspace, declarations);
+    : await currentCheckSourceManifest(options.workspace, declarations);
   return { ...options, expectedSourceSha256: manifest.sourceSha256, expectedSourceManifest: manifest };
 }
 
