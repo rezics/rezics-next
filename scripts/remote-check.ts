@@ -155,6 +155,23 @@ export const REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES = ['bun-runtime-transpile
 /** Run-local scratch paths are excluded separately from the root control namespace. */
 const REMOTE_CHECK_RUN_SCRATCH_PATHS = ['.temp/check-host', '.temp/node-compile-cache'] as const;
 
+/** One v1 producer receipt contract is embedded in both install and prepared-source verification. */
+const installReceiptContractPython = String.raw`import math,re
+INSTALL_RECEIPT_FIELDS=('schema','host','run','cache','nativeCache','key','packages','nativeChecks','installerSeconds','phaseSeconds')
+
+def make_install_receipt(host,run,cache,native_cache,key,packages,native_checks,installer_seconds,phase_seconds):
+    return dict(zip(INSTALL_RECEIPT_FIELDS,(1,host,run,cache,native_cache,key,packages,native_checks,installer_seconds,phase_seconds)))
+
+def valid_install_timing(installed):
+    def duration(value):
+        return type(value) in (int,float) and math.isfinite(value) and value>=0
+    phases=installed.get('phaseSeconds')
+    return ((installed.get('installerSeconds') is None or duration(installed['installerSeconds'])) and
+        isinstance(phases,dict) and len(phases)<=64 and all(
+            isinstance(name,str) and re.fullmatch(r'[a-z-]{1,64}',name) and duration(elapsed)
+            for name,elapsed in phases.items()))
+`;
+
 const REMOTE_CHECK_PRODUCER_CONTROL_FILES_JSON = JSON.stringify(REMOTE_CHECK_PRODUCER_CONTROL_FILES);
 const REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES_JSON = JSON.stringify(REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES);
 const REMOTE_CHECK_RUN_SCRATCH_PATHS_JSON = JSON.stringify(REMOTE_CHECK_RUN_SCRATCH_PATHS);
@@ -2078,6 +2095,7 @@ sys.exit(0 if fields[19]==started and fields[0] not in ['Z','X'] else 1)
 
 /** Shared exact-path and owner validation used at both source and prepared-input lifecycle boundaries. */
 const producerControlValidationPython = String.raw`import math,re
+${installReceiptContractPython}
 SUPERVISOR_SCHEMA=${REMOTE_CHECK_SUPERVISOR_MARKER_SCHEMA_JSON}
 CONTROL_ROOT_FILES=set(${REMOTE_CHECK_PRODUCER_CONTROL_FILES_JSON})
 CONTROL_ROOT_DIRECTORIES=set(${REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES_JSON})
@@ -2201,8 +2219,10 @@ def validate_producer_controls(root,run,host,stage):
         if control_info(root,'.bun-install-complete',0,required=True,empty=True) is None:
             raise SystemExit('producer install completion is missing')
         installed=read_control_json(root,'preparation-install.json')
-        if set(installed)!={'schema','host','run','cache','nativeCache','key','packages','nativeChecks'}:
+        if set(installed)!=set(INSTALL_RECEIPT_FIELDS):
             raise SystemExit('producer install receipt has an invalid shape')
+        if not valid_install_timing(installed):
+            raise SystemExit('producer install receipt timing is malformed')
         if (installed.get('schema')!=1 or installed.get('host')!=host or installed.get('run')!=run or
                 installed.get('cache') not in ('hit','miss') or
                 installed.get('nativeCache') not in (None,'hit','miss') or
@@ -2309,6 +2329,7 @@ stop_owned_check_unit "$run_slice" || exit $?
 export const dependencyPreparationProgram = String.raw`# Linux check-host dependency preparation. The supervising process is a subreaper in the run's systemd scope.
 SUPERVISOR_SCHEMA = ${REMOTE_CHECK_SUPERVISOR_MARKER_SCHEMA_JSON}
 ${checkHostPressureProgram}
+${installReceiptContractPython}
 import contextlib
 import ctypes
 import errno
@@ -3922,12 +3943,10 @@ def install():
                         packages.append({'name': package['name'], 'version': package['version']})
                 except (OSError, ValueError):
                     pass
-        receipt = {'schema': 1, 'host': os.environ['REMOTE_CHECK_HOST'],
-                   'run': os.environ['REZICS_CHECK_RUN'],
-                   'cache': 'hit' if hit else 'miss', 'nativeCache': None if hit else ('hit' if native_hit else 'miss'),
-                   'key': key, 'packages': packages, 'nativeChecks': manifest['nativeChecks'],
-                   'installerSeconds': None if installer_seconds is None else round(installer_seconds, 3),
-                   'phaseSeconds': preparation_phase_seconds()}
+        receipt = make_install_receipt(os.environ['REMOTE_CHECK_HOST'], os.environ['REZICS_CHECK_RUN'],
+                   'hit' if hit else 'miss', None if hit else ('hit' if native_hit else 'miss'),
+                   key, packages, manifest['nativeChecks'],
+                   None if installer_seconds is None else round(installer_seconds, 3), preparation_phase_seconds())
         (root / 'preparation-install.json').write_text(json.dumps(receipt, sort_keys=True))
         if time.monotonic() >= deadline:
             raise RuntimeError('absolute preparation deadline exceeded')
