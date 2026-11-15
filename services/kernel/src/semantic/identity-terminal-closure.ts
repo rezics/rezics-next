@@ -11,6 +11,10 @@ import { bindSemanticProducerRoles } from './erasure-producer.ts';
 import { IDENTITY_EPOCH_PROGRESS } from './events.ts';
 import { IDENTITY_EPOCH_BOOTSTRAP } from './events.ts';
 import bootstrapHome from './identity-epoch-bootstrap-insert-bootstrap-home.sql';
+import {
+  currentNativeIdentityBirths,
+  type NativeIdentityBirthProofWork,
+} from './identity-epoch-bootstrap-native-birth.ts';
 import deleteEmptySlot from './identity-terminal-closure-delete-empty-slot.sql';
 
 export type TerminalClosureSource = Readonly<{
@@ -121,6 +125,7 @@ async function exportSource(
   pool: Pool,
   exported: IdentityNativeReceipt,
   row: TerminalClosureSource,
+  work?: NativeIdentityBirthProofWork,
 ): Promise<Source | null> {
   const result = await native(pool, exported.partition, async (tx) => {
     const retained = (
@@ -168,6 +173,16 @@ async function exportSource(
         [exported.partition, exported.transactionId, row.route, row.original],
       );
       return null; // Only h is acknowledged by the caller; h+1 remains dirty.
+    }
+    // A retained page from an earlier writer may contain an unchanged native birth.
+    // ACK only its exact source head; converted or dirty sources retain their existing custody.
+    if ((await currentNativeIdentityBirths(tx, exported.partition, [row], work)).has(row.original)) {
+      await tx.query(
+        `UPDATE semantic.identity_epoch_bootstrap_row SET closure_complete=true
+        WHERE partition_no=$1 AND transaction_id=$2 AND route=$3 AND original=$4`,
+        [exported.partition, exported.transactionId, row.route, row.original],
+      );
+      return null;
     }
     if (
       current.original &&
@@ -538,11 +553,12 @@ export async function stepIdentityTerminalClosure(
   pool: Pool,
   exported: IdentityNativeReceipt,
   rows: readonly TerminalClosureSource[],
+  work?: NativeIdentityBirthProofWork,
 ): Promise<boolean> {
   if (rows.length > 100) throw new RangeError('Closure source page exceeds 100');
   for (const row of rows) {
     if (row.closure_complete) continue;
-    const original = await exportSource(pool, exported, row);
+    const original = await exportSource(pool, exported, row, work);
     if (!original) continue;
     if (original.closure_state === 'active') {
       const current = await directory(pool, original.terminal, original.original, original.closure_enrollment);
