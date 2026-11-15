@@ -212,12 +212,17 @@ test('local and Episode unit facts retain equal IDs and independent counters und
     await sql`INSERT INTO library.progress_unit(route,session_id,unit_id,added_at) SELECT ${route},${sparse},u,'2020-02-03 04:05:06.123456+00' FROM unnest(${unitIds}::text[]) u`;
     await sql`INSERT INTO library.progress_episode(route,session_id,episode_subject_id,added_at) SELECT ${route},${sparse},u,'2021-03-04 05:06:07.654321+00' FROM unnest(${unitIds}::uuid[]) u`;
     await sql`UPDATE library.progress_session SET completed_unit_count=19,episode_completed_count=17 WHERE route=${route} AND session_id=${sparse}`;
-    captured = await capture();
+    const selected = await capture();
+    expect(selected?.exportId).toBeString();
+    expect(selected?.first).toBeString();
+    if (!selected?.exportId || selected.first == null)
+      throw new Error('Native library export capture returned no page cursor');
+    captured = selected;
     const records: ArchiveRecord[] = [];
-    let next: string | null = captured.first;
+    let next: string | null = selected.first;
     let manifest: unknown;
     while (next) {
-      const page = await get(`/v1/libraryExports/${captured.exportId}/pages?cursor=${encodeURIComponent(next)}`);
+      const page = await get(`/v1/libraryExports/${selected.exportId}/pages?cursor=${encodeURIComponent(next)}`);
       records.push(...page.records);
       next = page.next;
       if (page.manifest) manifest = page.manifest;
@@ -235,8 +240,8 @@ test('local and Episode unit facts retain equal IDs and independent counters und
     expect(decoded.records.find((row) => row.session_id === sparse && row.section === 'sessions'))
       .toMatchObject({ completed_unit_count: 19, episode_completed_count: 17 });
     await sql`UPDATE library.progress_episode SET added_at=added_at+interval '1 second' WHERE route=${route} AND session_id=${sparse} AND episode_subject_id=${unitId}`;
-    expect(await get(`/v1/libraryExports/${captured.exportId}`)).toMatchObject({ state: 'stale', first: null });
-    expect(await get(`/v1/libraryExports/${captured.exportId}/pages?cursor=${encodeURIComponent(captured.first)}`))
+    expect(await get(`/v1/libraryExports/${selected.exportId}`)).toMatchObject({ state: 'stale', first: null });
+    expect(await get(`/v1/libraryExports/${selected.exportId}/pages?cursor=${encodeURIComponent(selected.first)}`))
       .toMatchObject({ state: 'stale', records: [], manifest: null });
   } finally {
     if (captured) expect((await request('DELETE', `/v1/libraryExports/${captured.exportId}`)).status).toBe(200);
