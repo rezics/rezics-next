@@ -15,6 +15,7 @@ import {
 import { createHash, randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { isDeepStrictEqual } from 'node:util';
+import { catalogueFacetPredicate } from './catalogue-facet-predicate.ts';
 import canonicalize from 'canonicalize';
 import { systemClock } from '../clock.ts';
 import { SEARCH_GLOBAL_CONTEXT as GLOBAL_CONTEXT } from './global-context.ts';
@@ -1730,9 +1731,17 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
           const languages = validateHitOptions({ languages: scopedRequest.languages }).languages;
           const current = await release();
           if (!current) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
-          // The native facet population is pinned to schema:Thing by its registered provider meaning.
-          const predicate = normalized.filter ?? { type: { in: ['schema:Thing'] } };
-          const admitted = await admitQuery(normalized.text, predicate, current, false, undefined, true);
+          let universe: ReturnType<typeof catalogueFacetPredicate>;
+          try {
+            universe = catalogueFacetPredicate(current, normalized.filter);
+          } catch (error) {
+            if (error instanceof FilterError) throw new ProblemError(error.problem, { errors: error.errors });
+            throw error;
+          }
+          // Empty is never undefined-as-all. Native empty-scope exhaustion must establish
+          // the authorization and Source frame before this path can publish an empty page.
+          if (universe.kind === 'empty') throw indexNotReady();
+          const admitted = await admitQuery(normalized.text, universe.predicate, current, false, undefined, true);
           if (!admitted) throw indexNotReady();
           const catalogue = catalogueFilter(admitted);
 
