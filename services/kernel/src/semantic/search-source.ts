@@ -353,10 +353,10 @@ export function subjectSource(
         throw new CommandUnavailableError('contention', partition);
       }
       // Release the source owner before independently anchoring foreign identities or tuples.
-      const relation =
-        'relation' in snapshot
-          ? await withRequestDeadline(deadline, () => relations.finish(snapshot.relation))
-          : new Map();
+      const preparedRelation = snapshot.relation;
+      const relation = preparedRelation
+        ? await withRequestDeadline(deadline, () => relations.finish(preparedRelation))
+        : new Map();
       requireAccessDeadline(deadline);
       for (const subject of snapshot.subjects) {
         const selected = relation.get(subject.id);
