@@ -56,6 +56,7 @@ import consumeSQL from './native-public-output-consume.sql';
 import fenceSQL from './native-public-output-fence.sql';
 import retainedSQL from './native-public-output-retained.sql';
 import frozenLockSQL from './native-public-output-frozen-lock.sql';
+import frozenSuccessorSQL from './native-public-output-frozen-successor.sql';
 
 type Client = Pick<PoolClient, 'query'>;
 type OutputContext = PublicOutputCommandContext<Pool, AuthoritativeTime>;
@@ -545,6 +546,7 @@ async function lockNativeFrozenCollectionOutput(
   tx: CommandTransaction,
   binding: NativePublicOutputBinding,
   context: OutputContext,
+  hold: 'predecessor' | 'successor' = 'predecessor',
 ) {
   return frame(context, async (work) => {
     const selected = decodeBinding(json(binding));
@@ -552,13 +554,20 @@ async function lockNativeFrozenCollectionOutput(
     const current = command(tx, context, partitionOf(id.route));
     if (current.basis !== null) return refusal(work);
     const client = nativePublicOutputClient(tx, work, context.deadline);
+    const key = [current.partition, selected.captureId];
+    if (hold === 'successor') {
+      const stored = await load(client, selected.accepted.partition, selected.captureId, false);
+      if (!stored || !isDeepStrictEqual(stored.binding, selected) || !(await committed(client, stored)))
+        return refusal(work);
+      if (!(await client.query(frozenSuccessorSQL.sql, key)).rows.length) return refusal(work, 'changed');
+      return { status: 'locked' as const, binding: stored.binding, work: work.receipt() };
+    }
     const original = await owner(client, id.route, id.collectionId);
     if (!original || original.epoch !== id.ownerEpoch || original.incarnation !== id.incarnation)
       return refusal(work, 'changed');
     const stored = await load(client, selected.accepted.partition, selected.captureId, true);
     if (!stored || !open(stored) || !isDeepStrictEqual(stored.binding, selected) || !(await committed(client, stored)))
       return refusal(work);
-    const key = [current.partition, selected.captureId];
     if (!(await client.query(frozenLockSQL.sql, key)).rows.length) return refusal(work, 'changed');
     if (!(await client.query(retainedSQL.sql, key)).rows.length) return refusal(work, 'changed');
     return { status: 'locked' as const, binding: stored.binding, work: work.receipt() };

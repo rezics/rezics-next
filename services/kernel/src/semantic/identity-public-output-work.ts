@@ -297,7 +297,7 @@ export function publicOutputReadWork(visits: number): WorkDimensions {
   const native = NATIVE_PUBLIC_OUTPUT_JOURNEYS();
   return nativePublicOutputWorkDimensions(
     repeatBound(
-      sumBounds(native.revalidate, native.lock, native.frozenRead, {
+      sumBounds(native.revalidate, native.lock, native.frozenRead, native.frozenSuccessor, {
         candidateKeys: 101,
         nativeRows: 1024,
         identityMetadataRows: 132,
@@ -345,4 +345,14 @@ export function publicOutputRetireWork(): WorkDimensions {
       NATIVE_PUBLIC_OUTPUT_JOURNEYS().release,
     ),
   );
+}
+
+export function publicOutputFreezeWork(): WorkDimensions {
+  const native = NATIVE_PUBLIC_OUTPUT_JOURNEYS();
+  return nativePublicOutputWorkDimensions(sumBounds(
+    { ...publicOutputAdvanceWork(), engineRequests: 0 },
+    native.frozenRead,
+    native.frozenSuccessor,
+    native.transfer,
+  ));
 }

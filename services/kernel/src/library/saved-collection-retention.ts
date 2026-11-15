@@ -163,9 +163,18 @@ export async function purgeSavedCollectionPage(
     WHERE route=$1 AND collection_id=$2 AND consumed_by IS NULL LIMIT 1`,
     keys,
   );
-  if (held.rowCount)
+  if (
+    held.rowCount &&
+    (!frozen ||
+      !(
+        await tx.query(
+          'SELECT 1 WHERE library.may_deidentify_frozen_output($1,$2,$3)',
+          [...keys, frozen],
+        )
+      ).rowCount)
+  )
     return { status: 'retained', removed: 0, custody: 'collection_source_and_destination_disposition' };
-  // No capture/hold can now lose its owner or publication authority.
+  // Either the hold is gone or the frozen successor can resolve its publication without the curator.
   const history = await tx.query(
     'DELETE FROM library.collection_listing_history WHERE route=$1 AND collection_id=$2',
     keys,

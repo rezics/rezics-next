@@ -153,11 +153,12 @@ export type NativePublicOutputApplication<Tx, PoolLike, Time> = Readonly<{
   ): Promise<
     PublicOutputRefusal | Readonly<{ status: 'locked'; binding: NativePublicOutputBinding; work: WorkReceipt }>
   >;
-  /** Read-only terminal freeze. Retains the original live hold and supplies no mutation or release authority. */
+  /** Read-only terminal freeze under the original hold or its independently committed successor. */
   lockNativeFrozenCollectionOutput?(
     tx: Tx,
     binding: NativePublicOutputBinding,
     context: PublicOutputCommandContext<PoolLike, Time>,
+    hold?: 'predecessor' | 'successor',
   ): Promise<PublicOutputRefusal | Readonly<{ status: 'locked'; binding: NativePublicOutputBinding; work: WorkReceipt }>>;
   transferNativePublicCollectionOutputHold(
     tx: Tx,

@@ -28,6 +28,7 @@ import consume from './native-public-output-consume.sql';
 import fence from './native-public-output-fence.sql';
 import retained from './native-public-output-retained.sql';
 import frozenLock from './native-public-output-frozen-lock.sql';
+import frozenSuccessor from './native-public-output-frozen-successor.sql';
 
 export const NATIVE_PUBLIC_OUTPUT_PAGE_LIMIT = 100;
 export const PUBLIC_OUTPUT_PARTITION_SIZE_SQL =
@@ -424,6 +425,15 @@ function frozenLockStatement() {
     }),
   );
 }
+function frozenSuccessorStatement() {
+  return memoizedValue(frozenSuccessorStatement, () =>
+    statement('frozen-successor', frozenSuccessor, captureBinds, { present: 1 }, {
+      nativeRows: 176,
+      nativePoints: 22,
+      relationBytes: 128,
+    }),
+  );
+}
 function bindStatement() {
   return memoizedValue(bindStatement, () =>
     statement(
@@ -699,6 +709,7 @@ function staticStatements() {
       provenanceStatement(),
       retainedStatement(),
       frozenLockStatement(),
+      frozenSuccessorStatement(),
       bindStatement(),
       receivingStatement(),
       holdPredecessorStatement(),
@@ -880,6 +891,7 @@ export function NATIVE_PUBLIC_OUTPUT_JOURNEYS() {
         retainedStatement().bound,
         frozenLockStatement().bound,
       ),
+      frozenSuccessor: sumBounds(bindingStatement().bound, committedProof(), frozenSuccessorStatement().bound),
       transfer: sumBounds(
         bindingStatement().bound,
         ownerStatement().bound,
@@ -921,6 +933,7 @@ export function NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING() {
       NATIVE_PUBLIC_OUTPUT_JOURNEYS().bindNew,
       NATIVE_PUBLIC_OUTPUT_JOURNEYS().revalidate,
       NATIVE_PUBLIC_OUTPUT_JOURNEYS().frozenRead,
+      NATIVE_PUBLIC_OUTPUT_JOURNEYS().frozenSuccessor,
       NATIVE_PUBLIC_OUTPUT_JOURNEYS().transfer,
       NATIVE_PUBLIC_OUTPUT_JOURNEYS().release,
       NATIVE_PUBLIC_OUTPUT_JOURNEYS().retention,

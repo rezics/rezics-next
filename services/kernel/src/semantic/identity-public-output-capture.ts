@@ -287,7 +287,7 @@ async function eligible(
   work: NativeCollectionWork,
   deadline: number,
   nativeOutput: NativePublicOutputPort,
-  allowFrozenRead = false,
+  mode: 'live' | 'frozen-read' | 'frozen-transfer' = 'live',
 ): Promise<void> {
   const l = locator(a),
     pool = currentCommandResources(tx).pool;
@@ -306,18 +306,28 @@ async function eligible(
     s.capture_id !== l.captureId
   )
     return refuse('closure', 'changed');
-  if (await one(tx, fenceSQL, [l.partition, l.captureId])) return refuse('fenced', 'changed');
+  const lockFrozen = async (role: 'predecessor' | 'successor') => {
+    const lock = nativeOutput.lockNativeFrozenCollectionOutput;
+    if (!lock) return false;
+    const frozen = await work.compose((allowance) =>
+      lock(tx, a.binding, context(tx, pool, deadline, allowance), role),
+    );
+    return frozen.status === 'locked' && equal(frozen.binding, a.binding);
+  };
+  const fence = await one<{ kind: string }>(tx, fenceSQL, [l.partition, l.captureId]);
+  if (fence) {
+    if (mode === 'frozen-read' && fence.kind === 'applied' && (await lockFrozen('successor'))) return;
+    return refuse('fenced', 'changed');
+  }
+  if (mode === 'frozen-transfer') {
+    if (await lockFrozen('predecessor')) return;
+    return refuse('current', 'changed');
+  }
   const held = await work.compose(async (allowance) =>
     nativeOutput.revalidateNativePublicCollectionOutputHold(tx, a.binding, context(tx, pool, deadline, allowance)),
   );
   if (held.status !== 'locked' || !equal(held.binding, a.binding)) {
-    const lockFrozen = nativeOutput.lockNativeFrozenCollectionOutput;
-    if (allowFrozenRead && lockFrozen) {
-      const frozen = await work.compose((allowance) =>
-        lockFrozen(tx, a.binding, context(tx, pool, deadline, allowance)),
-      );
-      if (frozen.status === 'locked' && equal(frozen.binding, a.binding)) return;
-    }
+    if (mode === 'frozen-read' && (await lockFrozen('predecessor'))) return;
     return refuse('current', 'changed');
   }
   const current = await work.compose(async (allowance) =>
@@ -1088,6 +1098,7 @@ export function createPublicIdentityOutputCapture(
     kind: 'applied' | 'cancelled',
     work: NativeCollectionWork,
     deadline: number,
+    frozen = false,
   ) {
     const l = locator(a);
     const replay = await one<{ native_epoch: number; native_position: string; transaction_id: string; kind: string }>(
@@ -1097,6 +1108,11 @@ export function createPublicIdentityOutputCapture(
     );
     if (replay) {
       if (replay.kind !== kind) return refuse('fenced');
+      if (frozen) {
+        await eligible(tx, a, work, deadline, nativeOutput, 'frozen-read');
+        await component(tx);
+        return { status: kind, capture: l, disposition: receipt(l.partition, replay) };
+      }
       const original: PublicOutputDispositionSelection = {
         captureId: l.captureId,
         holdId: a.binding.holdId,
@@ -1133,7 +1149,7 @@ export function createPublicIdentityOutputCapture(
     const seal = await one<Seal>(tx, sealSQL, [l.partition, l.captureId]);
     if (kind === 'applied') {
       if (!seal) return refuse('closure');
-      await eligible(tx, a, work, deadline, nativeOutput);
+      await eligible(tx, a, work, deadline, nativeOutput, frozen ? 'frozen-transfer' : 'live');
     } else if (BigInt(p.closure_after) < BigInt(p.version) + (p.pending ? 1n : 0n)) return refuse('closure');
     const fence = await one<{ kind: string }>(tx, fenceSQL, [l.partition, l.captureId]);
     if (fence && fence.kind !== kind) return refuse('fenced');
@@ -1262,6 +1278,12 @@ export function createPublicIdentityOutputCapture(
     retireSuperseded: (capture: T.PublicIdentityOutputCapture, options: T.PublicIdentityOutputWork) =>
       cancel(capture, options, true),
     apply,
+    retainFrozen: (capture: T.PublicIdentityOutputCapture, options: T.PublicIdentityOutputWork) =>
+      execute(options, (work) =>
+        command(capture.partition, options.deadline, capture.captureId, async (tx) =>
+          transition(tx, await load(tx, capture), 'applied', work, options.deadline, true),
+        ),
+      ),
   };
 }
 
@@ -1539,7 +1561,7 @@ export async function readSelectedPublicIdentityOutput(
             const identity = a.binding.tuple.identity;
             if (identity.collectionId !== collectionId || identity.generation !== sourceGeneration)
               return refuse('binding', 'changed');
-            await eligible(tx, a, work, options.deadline, nativeOutput, true);
+            await eligible(tx, a, work, options.deadline, nativeOutput, 'frozen-read');
             const seal = await one<Seal>(tx, sealSQL, [home, a.capture_id]);
             if (!seal || seal.raw_count !== a.binding.tuple.publication.members) return refuse('closure');
 
