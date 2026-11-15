@@ -186,28 +186,30 @@ export function TableControls({
         aria-label={labels.table}
         aria-orientation="horizontal"
         data-slot="editor-table-controls"
-        className="mb-2 flex min-w-0 items-center gap-1 rounded-xl border border-border/60 bg-popover p-1 text-popover-foreground"
+        className="mb-2 flex w-full min-w-0 max-w-full items-center gap-1 rounded-xl border border-border/60 bg-popover p-1 text-popover-foreground"
         onKeyDown={moveFocus}
       >
-        <Menu
-          key={`${state.tableId}:${renderedRevision}`}
-          title={labels.table}
-          entries={entries}
-          trigger={
-            <Button
-              type="button"
-              variant="ghost"
-              className="min-h-11 gap-2 md:hidden"
-              aria-label={labels.table}
-              onMouseDown={(event) => event.preventDefault()}
-            >
-              <Table aria-hidden="true" />
-              {labels.table}
-              <ChevronDown aria-hidden="true" />
-            </Button>
-          }
-        />
-        <div className="hidden min-w-0 flex-1 items-center gap-0.5 overflow-x-auto overscroll-x-contain md:flex">
+        <div className="min-w-0 max-w-full flex-1 md:hidden">
+          <Menu
+            key={`${state.tableId}:${renderedRevision}`}
+            title={labels.table}
+            entries={entries}
+            trigger={
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-auto min-h-11 w-full min-w-0 justify-start gap-2 whitespace-normal"
+                aria-label={labels.table}
+                onMouseDown={(event) => event.preventDefault()}
+              >
+                <Table aria-hidden="true" />
+                <span className="min-w-0 flex-1 text-start break-words">{labels.table}</span>
+                <ChevronDown aria-hidden="true" />
+              </Button>
+            }
+          />
+        </div>
+        <div className="hidden min-w-0 max-w-full flex-1 items-center gap-0.5 overflow-x-auto overscroll-x-contain md:flex">
           {groups.map((group, index) => (
             <Fragment key={group[0]}>
               {index ? <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-border" /> : null}

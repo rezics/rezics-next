@@ -151,12 +151,14 @@ function TableSizePicker({
           </div>
         ))}
       </div>
-      <p id={`${id}-size`} role="status" className="text-center text-sm tabular-nums">
+      <p id={`${id}-size`} role="status" className="min-w-0 text-center text-sm leading-snug break-words tabular-nums">
         {rowLabel}: {rows || '—'} · {columnLabel}: {cols || '—'}
       </p>
-      <div className="grid grid-cols-2 gap-3">
-        <Field>
-          <FieldLabel htmlFor={`${id}-rows`}>{rowLabel}</FieldLabel>
+      <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field className="min-w-0">
+          <FieldLabel htmlFor={`${id}-rows`} className="max-w-full min-w-0 whitespace-normal leading-snug break-words">
+            {rowLabel}
+          </FieldLabel>
           <Input
             id={`${id}-rows`}
             type="number"
@@ -169,8 +171,10 @@ function TableSizePicker({
             onChange={(event) => setRows(event.target.value)}
           />
         </Field>
-        <Field>
-          <FieldLabel htmlFor={`${id}-cols`}>{columnLabel}</FieldLabel>
+        <Field className="min-w-0">
+          <FieldLabel htmlFor={`${id}-cols`} className="max-w-full min-w-0 whitespace-normal leading-snug break-words">
+            {columnLabel}
+          </FieldLabel>
           <Input
             id={`${id}-cols`}
             type="number"
@@ -184,19 +188,24 @@ function TableSizePicker({
           />
         </Field>
       </div>
-      <Field orientation="horizontal">
+      <Field orientation="horizontal" className="min-w-0 items-start">
         <Checkbox
           id={`${id}-header`}
           checked={withHeaderRow}
           onCheckedChange={(value) => setWithHeaderRow(value === true)}
         />
-        <FieldLabel htmlFor={`${id}-header`}>{labels.tableHeader ?? productControlLabels.tableHeader}</FieldLabel>
+        <FieldLabel
+          htmlFor={`${id}-header`}
+          className="min-w-0 flex-1 whitespace-normal leading-snug break-words"
+        >
+          {labels.tableHeader ?? productControlLabels.tableHeader}
+        </FieldLabel>
       </Field>
-      <div className="flex flex-wrap justify-end gap-2">
-        <Button type="button" variant="ghost" onClick={onCancel}>
+      <div className="flex min-w-0 flex-wrap justify-end gap-2">
+        <Button type="button" variant="ghost" className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal" onClick={onCancel}>
           {labels.cancel}
         </Button>
-        <Button type="submit" disabled={!valid}>
+        <Button type="submit" disabled={!valid} className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal">
           {labels.insertTable ?? productControlLabels.insertTable}
         </Button>
       </div>
