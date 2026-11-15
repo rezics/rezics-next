@@ -5,7 +5,7 @@ import { createReviewedCatalogueLookup, inspectReviewedBangumiBinding } from './
 import type { ReviewedCataloguePort } from './reviewed-catalogue.ts';
 import { reviewedCatalogueSource } from './reviewed-catalogue.ts';
 import { releasedReviewedVocabulary } from './reviewed-vocabulary-port.ts';
-import type { RecordBindings } from './record-bindings.ts';
+import type { Candidate, Owner, RecordBindings } from './record-bindings.ts';
 import type { ImportIdentifierLookup, ImportIdentifierResolution } from './importer.ts';
 import { ImportTransportError, type ReviewedCandidatePage } from './import-client.ts';
 import { readCurrentCandidatePages } from './showcase-current-reads.ts';
@@ -16,7 +16,7 @@ import {
   type ShowcaseAssertion,
   type ShowcaseVocabularyRecord,
 } from './showcase-contract.ts';
-import { showcaseDigest } from './showcase-contract.ts';
+import { showcaseDigest, showcaseLimits } from './showcase-contract.ts';
 
 const HAREM_EDITOR_TAG = '后宫';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
@@ -131,6 +131,24 @@ export function createShowcaseBangumiGenreLookup(
   };
 }
 
+/** A partial owner/facts history cannot establish a unique exact keyword candidate. */
+function readOwnedKeywordCandidates(bindings: Pick<RecordBindings, 'candidates'>, owner: Owner): Candidate[] | null {
+  const candidates: Candidate[] = [];
+  const pageCount = Math.ceil(showcaseLimits.candidates / showcaseLimits.reviewPage);
+  let after: string | undefined;
+  for (let index = 0; index < pageCount; index += 1) {
+    const page = bindings.candidates(owner, 'facts', {
+      limit: showcaseLimits.reviewPage,
+      ...(after === undefined ? {} : { after }),
+    });
+    if (candidates.length + page.length > showcaseLimits.candidates) return null;
+    candidates.push(...page);
+    if (page.length < showcaseLimits.reviewPage) return candidates;
+    after = page[page.length - 1]!.candidate;
+  }
+  return null;
+}
+
 /** Compose only current tagged proposals and the finite reviewed inventory's exact journal candidates. */
 export async function prepareShowcaseBangumiGenres(input: {
   sourceAlias: string;
@@ -196,8 +214,13 @@ export async function prepareShowcaseBangumiGenres(input: {
         command.statement.value.type === 'value' &&
         command.statement.value.content === current.evidence.binding.sourceConcept,
     );
+    if (!proposals.length) continue;
+    const local = readOwnedKeywordCandidates(input.bindings, owner);
+    if (!local) {
+      diagnostics.set(row.key, { sourceKey: row.key, code: 'reviewed-binding-unavailable' });
+      continue;
+    }
     for (const proposal of proposals) {
-      const local = input.bindings.candidates(owner, 'facts', { limit: 100 });
       const exact = local.flatMap((candidate) => {
         if (candidate.subject !== claim.subject) return [];
         try {

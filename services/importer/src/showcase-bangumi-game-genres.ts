@@ -5,16 +5,16 @@ import {
   bangumiGameSourceGenreScheme,
   bangumiGameSourceGenres,
 } from '@rezics/conversion/bangumi';
-import type { RecordBindings } from './record-bindings.ts';
-import { ImportTransportError, type ReviewedCandidatePage, type ReviewedSubjectRead } from './import-client.ts';
+import type { Owner, RecordBindings } from './record-bindings.ts';
+import { ImportTransportError, type ReviewedSubjectRead } from './import-client.ts';
 import {
   isUnavailableIdentifierResolution,
   type ImportIdentifierLookup,
   type ImportIdentifierResolution,
 } from './importer.ts';
 import { createSelectedFamilySourceRegistration } from './source-registry.ts';
-import { type ShowcaseAcknowledgement } from './showcase-contract.ts';
-import { showcaseDigest } from './showcase-contract.ts';
+import { showcaseDigest, showcaseLimits, type ShowcaseAcknowledgement } from './showcase-contract.ts';
+import { readCurrentCandidatePages, type CandidatePage } from './showcase-current-reads.ts';
 import type { ReviewedCataloguePort } from './reviewed-catalogue.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
@@ -86,7 +86,6 @@ export function composeBangumiImportIdentifierLookups(
   };
 }
 
-type CurrentCandidate = Extract<ReviewedCandidatePage['candidates'][number], { statement: unknown }>;
 type CurrentSubject = {
   id: string;
   type: string;
@@ -97,7 +96,7 @@ type CurrentSubject = {
   >;
 };
 type CurrentSubjectRead = { subject: CurrentSubject | null } | { error: unknown };
-type AssociationRead = { page: ReviewedCandidatePage } | { error: unknown };
+type AssociationRead = { page: CandidatePage } | { error: unknown };
 type LookupRun = {
   currentReads: Map<string, Promise<CurrentSubjectRead>>;
   associationReads: Map<string, Promise<AssociationRead>>;
@@ -276,7 +275,14 @@ export function createShowcaseBangumiGameGenreLookup(
     const key = `${id}\0${property}\0${value}`;
     let pending = run.associationReads.get(key);
     if (!pending) {
-      pending = port.reviewedCandidates(id, { property, target: value, context: globalContext, limit: 100 }).then(
+      pending = readCurrentCandidatePages(
+        {
+          reviewedCandidates: (subjectId, query) =>
+            port.reviewedCandidates(subjectId, { ...query, target: value }),
+        },
+        id,
+        property,
+      ).then(
         (page) => ({ page }),
         (error) => ({ error }),
       );
@@ -284,10 +290,10 @@ export function createShowcaseBangumiGameGenreLookup(
     }
     const read = await pending;
     if ('error' in read) return failure(read.error);
-    if (read.page.next !== null) return 'binding-unavailable';
+    if (!read.page.complete) return 'binding-unavailable';
     const exact = read.page.candidates.filter(
       (candidate) =>
-        'statement' in candidate &&
+        candidate.statement.property.id === property &&
         candidate.statement.value.type === 'value' &&
         candidate.statement.value.content === value,
     );
@@ -374,6 +380,52 @@ export function createShowcaseBangumiGameGenreLookup(
 }
 
 type SourceRecord = Readonly<{ key: string; revision: string | null; payload: Record<string, unknown> }>;
+type GenreProposal = Extract<BatchCommand, { op: 'propose' }>;
+type OwnedGenreProposal = { candidateId: string; command: GenreProposal };
+
+/** Only a complete bounded owner/group listing can establish the exact saved proposal matches. */
+function readOwnedGenreProposals(
+  bindings: Pick<RecordBindings, 'candidates'>,
+  owner: Owner,
+  subjectId: string,
+  proposals: readonly GenreProposal[],
+): Map<string, OwnedGenreProposal[]> | null {
+  const expected = new Map(proposals.map((proposal) => [proposal.key, proposal]));
+  const exact = new Map<string, OwnedGenreProposal[]>();
+  const pageCount = Math.ceil(showcaseLimits.candidates / showcaseLimits.reviewPage);
+  let after: string | undefined;
+  let count = 0;
+  for (let index = 0; index < pageCount; index += 1) {
+    const page = bindings.candidates(owner, 'facts', {
+      limit: showcaseLimits.reviewPage,
+      ...(after === undefined ? {} : { after }),
+    });
+    count += page.length;
+    if (count > showcaseLimits.candidates) return null;
+    for (const candidate of page) {
+      if (candidate.subject !== subjectId) continue;
+      try {
+        const command = (JSON.parse(candidate.bytes) as { commands?: BatchCommand[] }).commands?.[0];
+        if (command?.op !== 'propose') continue;
+        const proposal = expected.get(command.key);
+        if (
+          !proposal ||
+          !isDeepStrictEqual(command.source, proposal.source) ||
+          !isDeepStrictEqual(command.statement, proposal.statement)
+        )
+          continue;
+        const matches = exact.get(proposal.key) ?? [];
+        matches.push({ candidateId: candidate.candidate, command });
+        exact.set(proposal.key, matches);
+      } catch {
+        continue;
+      }
+    }
+    if (page.length < showcaseLimits.reviewPage) return exact;
+    after = page[page.length - 1]!.candidate;
+  }
+  return null;
+}
 
 export async function prepareShowcaseBangumiGameGenres(input: {
   sourceAlias: string;
@@ -413,18 +465,18 @@ export async function prepareShowcaseBangumiGameGenres(input: {
       { source: input.sourceAlias, subjectId: claim.subject, resolvedReferences },
     );
     const proposals = conversion.proposals.filter(
-      (command): command is Extract<BatchCommand, { op: 'propose' }> =>
+      (command): command is GenreProposal =>
         command.op === 'propose' && command.statement.property.id === 'schema:genre',
     );
     if (!proposals.length) continue;
-    const local = input.bindings.candidates(owner, 'facts', { limit: 100 });
-    let page: ReviewedCandidatePage;
+    const local = readOwnedGenreProposals(input.bindings, owner, claim.subject, proposals);
+    if (!local) {
+      diagnostics.set(`${row.key}\0/candidate`, diagnostic(row.key, '/candidate', 'candidate-unavailable'));
+      continue;
+    }
+    let page: CandidatePage;
     try {
-      page = await input.port.reviewedCandidates(claim.subject, {
-        property: 'schema:genre',
-        context: globalContext,
-        limit: 100,
-      });
+      page = await readCurrentCandidatePages(input.port, claim.subject, 'schema:genre');
     } catch (error) {
       if (error instanceof ImportTransportError || error instanceof TypeError) {
         diagnostics.set(`${row.key}\0/candidate`, diagnostic(row.key, '/candidate', 'candidate-unavailable'));
@@ -432,36 +484,26 @@ export async function prepareShowcaseBangumiGameGenres(input: {
       }
       throw error;
     }
-    if (page.next !== null) {
+    if (!page.complete) {
       diagnostics.set(`${row.key}\0/candidate`, diagnostic(row.key, '/candidate', 'candidate-unavailable'));
       continue;
     }
+    const current = new Map(page.candidates.map((candidate) => [candidate.id, candidate]));
     for (const proposal of proposals) {
-      const exact = local.flatMap((candidate) => {
-        if (candidate.subject !== claim.subject) return [];
-        try {
-          const command = (JSON.parse(candidate.bytes) as { commands?: BatchCommand[] }).commands?.[0];
-          return command?.op === 'propose' &&
-            command.key === proposal.key &&
-            isDeepStrictEqual(command.source, proposal.source) &&
-            isDeepStrictEqual(command.statement, proposal.statement)
-            ? [{ candidate, command }]
-            : [];
-        } catch {
-          return [];
-        }
-      });
-      const live = page.candidates.filter(
-        (candidate): candidate is CurrentCandidate =>
-          'statement' in candidate &&
-          exact.some((entry) => entry.candidate.candidate === candidate.id) &&
+      const live = (local.get(proposal.key) ?? []).filter((entry) => {
+        const candidate = current.get(entry.candidateId);
+        return (
+          candidate !== undefined &&
           isDeepStrictEqual(candidate.source, proposal.source) &&
           isDeepStrictEqual(candidate.statement, proposal.statement) &&
+          'retracted' in candidate &&
           candidate.retracted === null &&
+          'retraction' in candidate &&
           candidate.retraction === null &&
           candidate.decision !== 'rejected' &&
-          candidate.rank !== 'deprecated',
-      );
+          candidate.rank !== 'deprecated'
+        );
+      });
       if (live.length !== 1) {
         const path = mapping.requirements.find(
           (item) =>
@@ -474,11 +516,11 @@ export async function prepareShowcaseBangumiGameGenres(input: {
         );
         continue;
       }
-      const owned = exact.find((entry) => entry.candidate.candidate === live[0]!.id)!;
+      const owned = live[0]!;
       acknowledgements.push({
         command: owned.command,
         subjectId: claim.subject,
-        candidateId: live[0]!.id,
+        candidateId: owned.candidateId,
         commandDigest: showcaseDigest(owned.command),
       });
       for (const requirement of mapping.requirements)
