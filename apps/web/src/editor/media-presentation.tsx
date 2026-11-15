@@ -25,7 +25,10 @@ function imageIds(document: DocumentSnapshot): string[] {
 }
 
 /** One bounded read per changed image set/viewer; ordinary typing and occurrence styling do not refetch. */
-export function useEditorImagePresentation(document: DocumentSnapshot): {
+export function useEditorImagePresentation(
+  document: DocumentSnapshot,
+  enabled = true,
+): {
   renderImage: DocumentImageRenderer;
   visitKey: string;
 } {
@@ -36,7 +39,7 @@ export function useEditorImagePresentation(document: DocumentSnapshot): {
     session.state === 'signed-in' ? session.subject : null,
     session.state === 'signed-in' ? session.csrfToken : null,
   ]);
-  const ids = useMemo(() => imageIds(document), [document]);
+  const ids = useMemo(() => (enabled ? imageIds(document) : []), [document, enabled]);
   const idsKey = JSON.stringify(ids);
   const key = `${identity}:${idsKey}`;
   const live = useRef(key);

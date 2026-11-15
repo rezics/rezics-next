@@ -1,4 +1,5 @@
 import type { StudioResult, StudioRevision, StudioSelection } from './contract';
+import { m } from '../paraglide/messages.js';
 import type {
   HostedDraftPointNative,
   HostedDraftPointRequest,
@@ -14,6 +15,10 @@ import {
 import { hostedOccurrenceId } from './hosted-structure';
 
 type AvailableOccurrence = Extract<HostedOutlineWindowPage['items'][number], { availability: 'available' }>;
+export type EditableHostedChapter = Readonly<{
+  revisionId: string;
+  item: Extract<AvailableOccurrence, { kind: 'chapter' }>;
+}>;
 export type DraftPointAnchor = Readonly<{ revisionId: string; confirmed: boolean; item: AvailableOccurrence }>;
 export type DraftPointChoices = Readonly<{
   kind: 'part' | 'chapter' | 'remove' | 'update' | 'move';
@@ -32,6 +37,7 @@ type Options = Omit<
 > & {
   native: DraftPointTransport;
   readTarget?(target: HostedTarget, signal: AbortSignal): Promise<StudioResult<StudioRevision>>;
+  readDraft?(postId: string, signal: AbortSignal): Promise<StudioResult<StudioSelection>>;
   readVersion(selection: StudioSelection, signal: AbortSignal): Promise<StudioResult<StudioRevision>>;
 };
 
@@ -198,6 +204,61 @@ export class HostedDraftPointVisit extends HostedDraftCommandVisit<HostedDraftPo
     this.state.kind === 'active' &&
     this.state.choice.update?.item.kind === 'chapter' &&
     this.state.choice.update.item.target.postId === postId;
+
+  chapterForEditor = (occurrenceId: string): EditableHostedChapter | null => {
+    if (!this.current() || !this.canEdit() || this.state.kind !== 'active' || this.state.phase === 'review')
+      return null;
+    const page = this.state.outline.snapshot();
+    if (page.kind !== 'ready' || page.page.revisionId !== this.state.head) return null;
+    const item = page.page.items.find((row) => row.occurrenceId === occurrenceId);
+    return item?.availability === 'available' && item.kind === 'chapter' ? { revisionId: this.state.head, item } : null;
+  };
+
+  canReadDraft = () => this.pointOptions.readDraft !== undefined;
+
+  readCurrentDraft = async () => {
+    if (!this.current() || !this.canEdit() || this.state.kind !== 'active') return;
+    const state = this.state;
+    const anchor = state.choice.update;
+    const readDraft = this.pointOptions.readDraft;
+    if (!readDraft || !anchor?.confirmed || anchor.revisionId !== state.head || anchor.item.kind !== 'chapter') return;
+    const target = anchor.item.target;
+    const request = new AbortController();
+    this.request = request;
+    this.update({ ...state, phase: 'preparing', selection: null, intent: null, error: null });
+    try {
+      const opened = await readDraft(target.postId, request.signal);
+      if (!this.current(request)) return;
+      if (
+        opened.ok &&
+        opened.value.revision.exact.postId === target.postId &&
+        opened.value.native?.threadId === target.threadId &&
+        opened.value.permissions.edit &&
+        opened.value.visibility === 'draft'
+      ) {
+        this.update({
+          ...state,
+          phase: 'idle',
+          selection: opened.value,
+          choice: { ...state.choice, versionHead: state.head },
+          intent: null,
+          error: null,
+        });
+      } else {
+        this.update({
+          ...state,
+          phase: 'rejected',
+          selection: null,
+          intent: null,
+          error: opened.ok
+            ? { kind: 'unavailable', message: m.studio_workspace_open_saved({}, { locale: this.options.locale }) }
+            : opened.error,
+        });
+      }
+    } finally {
+      if (this.request === request) this.request = null;
+    }
+  };
 
   readUpdateVersion = async () => {
     if (!this.current() || !this.canEdit() || this.state.kind !== 'active') return;

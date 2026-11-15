@@ -1,19 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ownDraftNativeReader } from '../threads';
 import type { HistoricalReaderSource } from '../threads/historical-reader-provenance';
 import { m } from '../paraglide/messages.js';
 import type { Locale } from '../paraglide/runtime.js';
 import type { HostedOwnedBook } from './hosted-contract';
-import { hostedDraftPointNative, hostedPublicationPointNative } from './hosted-actions';
+import { hostedBookNative, hostedDraftPointNative, hostedPublicationPointNative } from './hosted-actions';
 import { HostedDraftPicker } from './hosted-draft-picker';
 import { createPostDocumentPort } from './post-document-port';
-import { HostedDraftPointVisit } from './hosted-draft-points';
+import { HostedDraftPointVisit, type EditableHostedChapter } from './hosted-draft-points';
 import { HostedDraftPointView } from './hosted-draft-point-view';
 import { HostedPublicationPointVisit } from './hosted-publication-point';
 import { HostedPublicationPointView } from './hosted-publication-point-view';
 import { admitPublicHostedRelease } from './hosted-release-reader-link-public';
 import { hostedSourceConsentTransport } from './hosted-source-consent-actions';
+import { HostedChapterStudio } from './hosted-chapter-studio';
+import { hostedOwnerBookHref } from './hosted-inventory';
 
 type Props = {
   owner: HostedOwnedBook;
@@ -99,6 +101,7 @@ export function HostedDraftPointEntry(props: Props) {
             documents.revision({ projectId: owner.item.catalogueId, document: selection.revision.exact }, signal),
           readTarget: (target, signal) =>
             documents.revision({ projectId: owner.item.catalogueId, document: target }, signal),
+          readDraft: (postId, signal) => documents.open({ projectId: owner.item.catalogueId, postId }, signal),
         });
         setMounted({ props, publication, kind: 'draft', visit: draftVisit });
         const state = draftVisit.snapshot();
@@ -121,9 +124,26 @@ export function HostedDraftPointEntry(props: Props) {
     mounted.props.locale === locale
   ) {
     if (mounted.kind === 'publication')
-      return <HostedPublicationPointView visit={mounted.visit} locale={locale} onBack={() => setPublication(false)} />;
-    if (mounted.kind === 'draft')
-      return <HostedDraftPointView visit={mounted.visit} locale={locale} onPublication={() => setPublication(true)} />;
+      return (
+        <HostedPublicationPointView
+          visit={mounted.visit}
+          locale={locale}
+          onBack={() => setPublication(false)}
+          preparationHref={`${hostedOwnerBookHref(owner.item, owner.viewer)}&prepare=1`}
+        />
+      );
+    if (mounted.kind === 'draft' && source && csrfToken)
+      return (
+        <HostedDraftPointWorkspace
+          key={JSON.stringify([owner.item.catalogueId, owner.item.headRevisionId, owner.viewer, locale, retry])}
+          visit={mounted.visit}
+          owner={owner}
+          source={source}
+          csrfToken={csrfToken}
+          locale={locale}
+          onPublication={() => setPublication(true)}
+        />
+      );
     return (
       <div className="studio-workspace studio-stack" role="alert">
         <p>{m.studio_point_recovery({}, { locale })}</p>
@@ -136,4 +156,68 @@ export function HostedDraftPointEntry(props: Props) {
     );
   }
   return <p role="status">{m.studio_draft_point_loading({}, { locale })}</p>;
+}
+
+function HostedDraftPointWorkspace({
+  visit,
+  owner,
+  source,
+  csrfToken,
+  locale,
+  onPublication,
+}: {
+  visit: HostedDraftPointVisit;
+  owner: HostedOwnedBook;
+  source: HistoricalReaderSource;
+  csrfToken: string;
+  locale: Locale;
+  onPublication: () => void;
+}) {
+  const [selection, setSelection] = useState<{ visit: HostedDraftPointVisit; chapter: EditableHostedChapter }>();
+  const chapter = selection?.visit === visit ? selection.chapter : null;
+  const returnFocus = useRef<HTMLButtonElement | null>(null);
+  const history = useMemo(
+    () => ({
+      native: hostedBookNative,
+      accountId: owner.viewer.accountId,
+      catalogueId: owner.item.catalogueId,
+      isCurrent: visit.isCurrent,
+    }),
+    [owner.viewer.accountId, owner.item.catalogueId, visit],
+  );
+  useLayoutEffect(() => {
+    if (chapter || !returnFocus.current) return;
+    const target = returnFocus.current;
+    returnFocus.current = null;
+    if (visit.isCurrent() && target.isConnected) target.focus();
+  }, [chapter, visit]);
+  return (
+    <>
+      <div hidden={chapter !== null} inert={chapter !== null}>
+        <HostedDraftPointView
+          visit={visit}
+          locale={locale}
+          onPublication={onPublication}
+          history={history}
+          onOpenChapter={(occurrenceId, opener) => {
+            const selected = visit.chapterForEditor(occurrenceId);
+            if (!selected) return;
+            returnFocus.current = opener;
+            setSelection({ visit, chapter: selected });
+          }}
+        />
+      </div>
+      {chapter ? (
+        <HostedChapterStudio
+          chapter={chapter}
+          outline={visit}
+          owner={owner}
+          source={source}
+          csrfToken={csrfToken}
+          locale={locale}
+          onBack={() => setSelection(undefined)}
+        />
+      ) : null}
+    </>
+  );
 }

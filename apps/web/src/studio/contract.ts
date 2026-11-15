@@ -112,7 +112,7 @@ export type BookStructureChange =
   | { kind: 'remove'; occurrenceId: string };
 
 export type StudioProfile =
-  | Readonly<{ kind: 'book'; structure: BookStructure }>
+  | Readonly<{ kind: 'book'; structure: BookStructure | null }>
   | Readonly<{ kind: 'articles'; seriesTitle: string | null }>;
 export type PublicationTarget =
   | Readonly<{

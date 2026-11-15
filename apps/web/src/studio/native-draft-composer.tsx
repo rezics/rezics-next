@@ -236,11 +236,20 @@ export function NativeDraftComposer({
       onSubmit={(event) => void submit(event)}
       onKeyDown={(event) => {
         // The workspace shortcut saves an acknowledged selection; this form has its own private create action.
-        if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 's') {
-          const handledByEditor = event.defaultPrevented;
+        if (
+          !event.defaultPrevented &&
+          !event.nativeEvent.isComposing &&
+          event.nativeEvent.keyCode !== 229 &&
+          (event.ctrlKey || event.metaKey) &&
+          !event.altKey &&
+          !event.shiftKey &&
+          event.key.toLowerCase() === 's' &&
+          event.target instanceof HTMLInputElement &&
+          event.target.form === event.currentTarget
+        ) {
           event.preventDefault();
           event.stopPropagation();
-          if (!handledByEditor) formElement.current?.requestSubmit();
+          formElement.current?.requestSubmit();
         }
       }}
       onInvalidCapture={(event) => {

@@ -8,6 +8,8 @@ import { localizeHref, type Locale } from '../paraglide/runtime.js';
 import { HostedDraftPickerView } from './hosted-draft-picker-view';
 import { draftPointReady, type DraftPointAnchor, type HostedDraftPointVisit } from './hosted-draft-points';
 import type { HostedOutlineWindow } from './hosted-outline-window';
+import { HostedHistoryDisclosure } from './hosted-history-view';
+import type { HostedHistoryBinding } from './hosted-history';
 import './studio.css';
 
 function Anchor({ anchor, fallback, locale }: { anchor: DraftPointAnchor | null; fallback: string; locale: Locale }) {
@@ -31,11 +33,13 @@ function Outline({
   window,
   locale,
   locked,
+  onOpenChapter,
 }: {
   visit: HostedDraftPointVisit;
   window: HostedOutlineWindow;
   locale: Locale;
   locked: boolean;
+  onOpenChapter?: (occurrenceId: string, opener: HTMLButtonElement) => void;
 }) {
   const state = useSyncExternalStore(window.subscribe, window.snapshot, window.snapshot);
   const command = useSyncExternalStore(visit.subscribe, visit.snapshot, visit.snapshot);
@@ -82,6 +86,16 @@ function Outline({
                 </p>
                 {item.availability === 'available' ? (
                   <div className="studio-action-row">
+                    {item.kind === 'chapter' && onOpenChapter ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={locked}
+                        onClick={(event) => onOpenChapter(item.occurrenceId, event.currentTarget)}
+                      >
+                        {m.studio_book_edit_chapter({ title: item.title }, options)}
+                      </Button>
+                    ) : null}
                     <Button
                       type="button"
                       variant="outline"
@@ -156,10 +170,14 @@ export function HostedDraftPointView({
   visit,
   locale,
   onPublication,
+  onOpenChapter,
+  history,
 }: {
   visit: HostedDraftPointVisit;
   locale: Locale;
   onPublication?: () => void;
+  onOpenChapter?: (occurrenceId: string, opener: HTMLButtonElement) => void;
+  history?: HostedHistoryBinding;
 }) {
   const state = useSyncExternalStore(visit.subscribe, visit.snapshot, visit.snapshot);
   const options = { locale };
@@ -241,7 +259,12 @@ export function HostedDraftPointView({
         <p className="studio-help max-w-prose">{m.studio_draft_point_help({}, options)}</p>
         <div className="studio-action-row">
           {onPublication ? (
-            <Button type="button" variant="outline" onClick={onPublication}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={locked && phase !== 'acknowledged'}
+              onClick={onPublication}
+            >
               {m.studio_point_publication_heading({}, options)}
             </Button>
           ) : null}
@@ -373,6 +396,16 @@ export function HostedDraftPointView({
             <h2>{m.studio_draft_point_version({}, options)}</h2>
             {choice.kind === 'update' ? (
               <div className="studio-action-row">
+                {visit.canReadDraft() ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={locked || !choice.update?.confirmed}
+                    onClick={() => void visit.readCurrentDraft()}
+                  >
+                    {m.studio_book_select_current_chapter_draft({}, options)}
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   variant="outline"
@@ -542,7 +575,14 @@ export function HostedDraftPointView({
             ) : null}
           </div>
         </section>
-        <Outline visit={visit} window={state.outline} locale={locale} locked={locked} />
+        <Outline
+          visit={visit}
+          window={state.outline}
+          locale={locale}
+          locked={locked}
+          {...(onOpenChapter ? { onOpenChapter } : {})}
+        />
+        {history ? <HostedHistoryDisclosure binding={history} /> : null}
       </div>
     </main>
   );
