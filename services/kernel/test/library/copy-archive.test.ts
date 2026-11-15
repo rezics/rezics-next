@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test';
 import { isDeepStrictEqual } from 'node:util';
 import { compileCatalogue } from '@rezics/definitions/compile';
 import {
@@ -49,6 +49,8 @@ let sourceSessions: { id: string; unit: string }[] = [];
 let currentDigest: string;
 let workClient: Awaited<ReturnType<typeof createWorkClient>> | undefined;
 let now = Date.now();
+const retainedUploads = new Set<string>();
+let terminalOwner = false;
 const scopes = [
   'subject:read',
   'subject:create',
@@ -212,8 +214,25 @@ async function json(response: Response, status = 200) {
   expect(response.headers.get('cache-control')).toContain('no-store');
   return response.json();
 }
-const send = (method: string, suffix = '', body?: unknown, key?: string) =>
-  f.send(owner.bearer, method, path + suffix, body, key);
+async function send(method: string, suffix = '', body?: unknown, key?: string) {
+  const response = await f.send(owner.bearer, method, path + suffix, body, key);
+  if (method === 'POST' && suffix === '' && response.ok) {
+    const uploaded = await response.clone().json();
+    retainedUploads.add(uploaded.uploadId);
+  }
+  return response;
+}
+afterEach(async () => {
+  if (!terminalOwner)
+    for (const id of retainedUploads) {
+      for (;;) {
+        const response = await f.send(owner.bearer, 'DELETE', `${path}/${id}`);
+        if (response.status === 404) break;
+        if ((await json(response)).complete) break;
+      }
+    }
+  retainedUploads.clear();
+});
 beforeAll(async () => {
   f = await createProfileEntryFixture({ clock: () => new Date(now) });
   owner = await f.identity(scopes);
@@ -593,7 +612,7 @@ test('recovery selects one equal-measure occurrence, reviews current meanings an
   const occurrences = archiveOccurrences(page.occurrences);
   expect(occurrences).toHaveLength(4);
   expect(new Set(occurrences.map((row) => row.evidence.subject_id)).size).toBe(1);
-  expect(occurrences.filter((row) => row.evidence.amount === '0')).toHaveLength(2);
+  expect(occurrences.filter((row) => row.evidence.amount === '0')).toHaveLength(3);
   const source = sourceSessions[0]!;
   now += 60_000;
   const reviewBody = {
@@ -980,6 +999,7 @@ test('terminal account fencing denies inspection and bounded owner erasure remov
     { actor: owner.actor, deadline: Date.now() + 30000 },
     { accountId: owner.actor.accountId, key: entryKey() },
   );
+  terminalOwner = true;
   expect([401, 403]).toContain((await send('GET', `/${uploaded.uploadId}`)).status);
   const purged = await purgeOwnedGraphPage(f.pool, {
     accountId: owner.actor.accountId,

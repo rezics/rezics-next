@@ -5,6 +5,9 @@ with their original manifests and validated section totals. It is not another im
 progress engine. Each reviewed archive occurrence creates one fresh native Session. Existing Sessions, Entry state,
 entitlement, repeat history, publication and ownership are untouched.
 
+The ordinary native Session commands advance existing Entry activity and finish timestamps. Recovery keeps those
+current native effects; it never copies archived timestamps or changes the Entry state or revision.
+
 Decision: recovery is per occurrence: the owner maps the source Subject to its current canonical Subject, and each
 review creates a distinct fresh Session. A new review ID is a new review epoch; a previous apply key cannot be reused
 for it.
