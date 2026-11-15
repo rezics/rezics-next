@@ -31,8 +31,8 @@ import { useAuthoringDeparture } from '../../threads/authoring-departure';
 
 const target =
   'min-h-11 min-w-11 max-w-full cursor-pointer whitespace-normal py-2 text-center [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const button = `${target} inline-flex items-center justify-center rounded-lg bg-primary px-4 font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60`;
-const quiet = `${target} inline-flex items-center justify-center rounded-lg border border-border px-4 hover:bg-muted disabled:opacity-60`;
+const button = `${target} inline-flex shrink-0 items-center justify-center rounded-lg bg-primary px-4 font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60`;
+const quiet = `${target} inline-flex shrink-0 items-center justify-center rounded-lg border border-border px-4 hover:bg-muted disabled:opacity-60`;
 type StartResult = ProgressStarted | ProgressFailure;
 type RecordResult = ProgressRecorded | ProgressFailure;
 const startSender = startProgressSession as GuardedSender<ProgressStartInput, StartResult>;
@@ -60,6 +60,7 @@ export function ConfiguredProgressPanel({
   const headingId = useId();
   const inputId = useId();
   const errorId = useId();
+  const outcomeId = useId();
   const stored =
     progress.meaning === 'unsupported' ? '' : progress.meaning === 'absent' ? '' : (progress.session.amount ?? '');
   const [draft, setDraft] = useState(stored);
@@ -295,7 +296,11 @@ export function ConfiguredProgressPanel({
       {outcome?.state === 'conflict' ? <p role="alert">{m.library_configured_conflict()}</p> : null}
       {outcome?.state === 'acknowledged' ? <p role="status">{m.library_configured_saved()}</p> : null}
       {outcome && outcome.state !== 'acknowledged' && outcome.state !== 'conflict' ? (
-        <p role="alert">
+        <p
+          role="alert"
+          id={outcome.state === 'unavailable' ? outcomeId : undefined}
+          className="min-w-0 [overflow-wrap:anywhere]"
+        >
           {outcome.state === 'unsupported'
             ? m.library_progress_unsupported()
             : outcome.state === 'refused'
@@ -306,7 +311,13 @@ export function ConfiguredProgressPanel({
         </p>
       ) : null}
       {outcome?.state === 'unavailable' ? (
-        <button type="button" className={quiet} disabled={pending} onClick={() => void retry()}>
+        <button
+          type="button"
+          className={quiet}
+          disabled={pending}
+          aria-describedby={outcomeId}
+          onClick={() => void retry()}
+        >
           {m.library_configured_retry()}
         </button>
       ) : null}

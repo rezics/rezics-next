@@ -9,8 +9,9 @@ import { csrfHeaders } from '../../threads/composer';
 
 const target =
   'min-h-11 min-w-11 max-w-full cursor-pointer whitespace-normal py-2 text-center [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const quiet = `${target} inline-flex items-center justify-center rounded-lg border border-border px-4 hover:bg-muted disabled:opacity-60`;
-const linkClass = 'text-sm text-primary underline-offset-4 hover:underline';
+const quiet = `${target} inline-flex shrink-0 items-center justify-center rounded-lg border border-border px-4 hover:bg-muted disabled:opacity-60`;
+const linkClass =
+  'inline-flex min-h-11 min-w-0 max-w-full flex-wrap items-center text-sm text-primary underline-offset-4 [overflow-wrap:anywhere] hover:underline';
 
 export type ConfiguredCopyOrigin = CopiesOrigin;
 
