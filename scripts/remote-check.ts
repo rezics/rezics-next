@@ -5824,7 +5824,7 @@ export function remoteLaunch(script: string): { command: string; stdin: Blob } {
   };
 }
 
-function cleanupScript(id: string, directory: string): string {
+export function cleanupScript(id: string, directory: string): string {
   return `run_id=${quote(id)}
 run_slice=${runSlice(id)}
 run_directory=${quote(directory)}
