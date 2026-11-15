@@ -1319,7 +1319,8 @@ CREATE FUNCTION semantic.capture_identity_epoch_source_image(p_home integer, p_j
     LANGUAGE plpgsql
     AS $$
 BEGIN
- RETURN semantic.capture_identity_epoch_source_image(p_home,p_job,p_epoch,p_unit,p_scope,p_frame,NULL::uuid,NULL::text);
+ RETURN semantic.capture_identity_epoch_source_image(
+  p_home,p_job,p_epoch,p_unit,p_scope,p_frame,NULL::uuid,NULL::text);
 END; $$;
 
 
@@ -6416,8 +6417,8 @@ CREATE TABLE semantic.identity_epoch_mapping_effect (
     source_image_digest bytea,
     source_original uuid,
     source_action text,
-    CONSTRAINT identity_epoch_mapping_source_image_shape CHECK ((((source_image_version IS NULL) AND (source_image_digest IS NULL)) OR ((source_image_version IS NOT NULL) AND (source_image_version = 1) AND (source_image_digest IS NOT NULL) AND (octet_length(source_image_digest) = 32)))),
-    CONSTRAINT identity_epoch_mapping_source_effect_stamp CHECK ((((source_original IS NULL) AND (source_action IS NULL)) OR ((NOT (source_action IS DISTINCT FROM 'source'::text)) AND (source_original IS NOT NULL) AND (partition_no = (((get_byte(uuid_send(source_original), 10) * 256) + get_byte(uuid_send(source_original), 11)) / 16)))))
+    CONSTRAINT identity_epoch_mapping_source_effect_stamp CHECK ((((source_original IS NULL) AND (source_action IS NULL)) OR ((NOT (source_action IS DISTINCT FROM 'source'::text)) AND (source_original IS NOT NULL) AND (partition_no = (((get_byte(uuid_send(source_original), 10) * 256) + get_byte(uuid_send(source_original), 11)) / 16))))),
+    CONSTRAINT identity_epoch_mapping_source_image_shape CHECK ((((source_image_version IS NULL) AND (source_image_digest IS NULL)) OR ((source_image_version IS NOT NULL) AND (source_image_version = 1) AND (source_image_digest IS NOT NULL) AND (octet_length(source_image_digest) = 32))))
 );
 
 
