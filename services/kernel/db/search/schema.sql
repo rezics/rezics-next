@@ -302,7 +302,7 @@ END $$;
 -- Name: release_relevance_advance(uuid, uuid, uuid, text, text, text, text, integer, text, timestamp with time zone, timestamp with time zone, text[]); Type: FUNCTION; Schema: search; Owner: -
 --
 
-CREATE FUNCTION search.release_relevance_advance(p_execution_id uuid, p_parent_id uuid, p_proposed_id uuid, p_branch_hash text, p_work_digest text, p_principal text, p_request_hash text, p_generation integer, p_source_cut_hash text, p_expires_at timestamp with time zone, p_now timestamp with time zone, p_work_ids text[]) RETURNS TABLE(execution_id uuid, id uuid, work_digest text, membership_ready boolean)
+CREATE FUNCTION search.release_relevance_advance(p_execution_id uuid, p_parent_id uuid, p_proposed_id uuid, p_branch_hash text, p_work_digest text, p_principal text, p_request_hash text, p_generation integer, p_source_cut_hash text, p_expires_at timestamp with time zone, p_now timestamp with time zone, p_work_ids text[]) RETURNS TABLE(execution_id uuid, id uuid, work_digest text)
     LANGUAGE plpgsql
     AS $$
 DECLARE
@@ -343,19 +343,8 @@ BEGIN
     AND p.parent_id = p_parent_id
     AND p.branch_hash = p_branch_hash;
   IF FOUND THEN
-    RETURN QUERY SELECT p_execution_id, v_existing_id, v_existing_digest, true;
+    RETURN QUERY SELECT p_execution_id, v_existing_id, v_existing_digest;
     RETURN;
-  END IF;
-  IF v_parent_root IS NULL THEN
-    IF NOT search.release_relevance_membership_build_batch(
-      p_execution_id, p_parent_id, 32, 256, p_now
-    ) THEN
-      RETURN QUERY SELECT p_execution_id, p_parent_id, p_work_digest, false;
-      RETURN;
-    END IF;
-    SELECT p.membership_root INTO v_parent_root
-    FROM search.release_relevance_position p
-    WHERE p.execution_id = p_execution_id AND p.id = p_parent_id;
   END IF;
   IF v_parent_root IS NULL THEN
     RAISE EXCEPTION 'Release relevance membership parent has no root';
@@ -364,11 +353,7 @@ BEGIN
   INSERT INTO search.release_relevance_position
     (execution_id, id, parent_id, branch_hash, work_digest, membership_root)
   VALUES (p_execution_id, p_proposed_id, p_parent_id, p_branch_hash, p_work_digest, v_root);
-  INSERT INTO search.release_relevance_work (execution_id, position_id, work_id)
-  SELECT p_execution_id, p_proposed_id, emitted.work_id
-  FROM unnest(p_work_ids) AS emitted(work_id)
-  ON CONFLICT DO NOTHING;
-  RETURN QUERY SELECT p_execution_id, p_proposed_id, p_work_digest, true;
+  RETURN QUERY SELECT p_execution_id, p_proposed_id, p_work_digest;
 END
 $$;
 
@@ -470,113 +455,6 @@ BEGIN
     v_root := search.release_relevance_membership_add(p_execution_id, v_root, v_work_id);
   END LOOP;
   RETURN v_root;
-END
-$$;
-
-
---
--- Name: release_relevance_membership_build_batch(uuid, uuid, integer, integer, timestamp with time zone); Type: FUNCTION; Schema: search; Owner: -
---
-
-CREATE FUNCTION search.release_relevance_membership_build_batch(p_execution_id uuid, p_target_position_id uuid, p_position_limit integer, p_work_limit integer, p_now timestamp with time zone) RETURNS boolean
-    LANGUAGE plpgsql
-    AS $$
-DECLARE
-  v_execution_id uuid;
-  v_position_root uuid;
-  v_root uuid;
-  v_next_position uuid;
-  v_next_work text;
-  v_parent uuid;
-  v_work_id text;
-  v_more boolean;
-  v_positions integer := 0;
-  v_works integer := 0;
-  v_room integer;
-BEGIN
-  SELECT e.id INTO v_execution_id
-  FROM search.release_relevance_execution e
-  WHERE e.id = p_execution_id AND e.expires_at > p_now
-  FOR UPDATE;
-  IF NOT FOUND THEN
-    RETURN false;
-  END IF;
-  SELECT p.membership_root INTO v_position_root
-  FROM search.release_relevance_position p
-  WHERE p.execution_id = p_execution_id AND p.id = p_target_position_id
-  FOR UPDATE;
-  IF NOT FOUND THEN
-    RETURN false;
-  END IF;
-  IF v_position_root IS NOT NULL THEN
-    RETURN true;
-  END IF;
-
-  INSERT INTO search.release_relevance_membership_build
-    (execution_id, target_position_id, next_position_id, next_work_id, membership_root)
-  VALUES (p_execution_id, p_target_position_id, p_target_position_id, NULL, NULL)
-  ON CONFLICT (execution_id, target_position_id) DO NOTHING;
-  SELECT b.next_position_id, b.next_work_id, b.membership_root
-  INTO v_next_position, v_next_work, v_root
-  FROM search.release_relevance_membership_build b
-  WHERE b.execution_id = p_execution_id AND b.target_position_id = p_target_position_id
-  FOR UPDATE;
-
-  WHILE v_next_position IS NOT NULL AND v_positions < p_position_limit LOOP
-    SELECT p.parent_id INTO v_parent
-    FROM search.release_relevance_position p
-    WHERE p.execution_id = p_execution_id AND p.id = v_next_position;
-    IF NOT FOUND THEN
-      RETURN false;
-    END IF;
-    v_room := p_work_limit - v_works;
-    IF v_room > 0 THEN
-      FOR v_work_id IN
-        SELECT w.work_id
-        FROM search.release_relevance_work w
-        WHERE w.execution_id = p_execution_id
-          AND w.position_id = v_next_position
-          AND (v_next_work IS NULL OR w.work_id > v_next_work)
-        ORDER BY w.work_id
-        LIMIT v_room
-      LOOP
-        v_root := search.release_relevance_membership_add(p_execution_id, v_root, v_work_id);
-        v_next_work := v_work_id;
-        v_works := v_works + 1;
-      END LOOP;
-    END IF;
-    SELECT EXISTS (
-      SELECT 1
-      FROM search.release_relevance_work w
-      WHERE w.execution_id = p_execution_id
-        AND w.position_id = v_next_position
-        AND (v_next_work IS NULL OR w.work_id > v_next_work)
-    ) INTO v_more;
-    IF v_more THEN
-      UPDATE search.release_relevance_membership_build b
-      SET next_position_id = v_next_position, next_work_id = v_next_work, membership_root = v_root
-      WHERE b.execution_id = p_execution_id AND b.target_position_id = p_target_position_id;
-      RETURN false;
-    END IF;
-    v_next_position := v_parent;
-    v_next_work := NULL;
-    v_positions := v_positions + 1;
-  END LOOP;
-
-  IF v_next_position IS NULL THEN
-    v_root := search.release_relevance_membership_add_many(p_execution_id, v_root, ARRAY[]::text[]);
-    UPDATE search.release_relevance_position p
-    SET membership_root = v_root
-    WHERE p.execution_id = p_execution_id AND p.id = p_target_position_id AND p.membership_root IS NULL;
-    DELETE FROM search.release_relevance_membership_build b
-    WHERE b.execution_id = p_execution_id AND b.target_position_id = p_target_position_id;
-    RETURN true;
-  END IF;
-
-  UPDATE search.release_relevance_membership_build b
-  SET next_position_id = v_next_position, next_work_id = v_next_work, membership_root = v_root
-  WHERE b.execution_id = p_execution_id AND b.target_position_id = p_target_position_id;
-  RETURN false;
 END
 $$;
 
@@ -1717,19 +1595,6 @@ CREATE TABLE search.release_relevance_execution (
 
 
 --
--- Name: release_relevance_membership_build; Type: TABLE; Schema: search; Owner: -
---
-
-CREATE TABLE search.release_relevance_membership_build (
-    execution_id uuid NOT NULL,
-    target_position_id uuid NOT NULL,
-    next_position_id uuid,
-    next_work_id text COLLATE pg_catalog."C",
-    membership_root uuid
-);
-
-
---
 -- Name: release_relevance_membership_node; Type: TABLE; Schema: search; Owner: -
 --
 
@@ -1756,21 +1621,9 @@ CREATE TABLE search.release_relevance_position (
     parent_id uuid,
     branch_hash text NOT NULL,
     work_digest text NOT NULL,
-    membership_root uuid,
+    membership_root uuid NOT NULL,
     CONSTRAINT release_relevance_position_branch_hash_check CHECK ((branch_hash ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT release_relevance_position_work_digest_check CHECK ((work_digest ~ '^[0-9a-f]{64}$'::text))
-);
-
-
---
--- Name: release_relevance_work; Type: TABLE; Schema: search; Owner: -
---
-
-CREATE TABLE search.release_relevance_work (
-    execution_id uuid NOT NULL,
-    position_id uuid NOT NULL,
-    work_id text NOT NULL COLLATE pg_catalog."C",
-    CONSTRAINT release_relevance_work_work_id_check CHECK ((work_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'::text))
 );
 
 
@@ -2404,14 +2257,6 @@ ALTER TABLE ONLY search.release_relevance_execution
 
 
 --
--- Name: release_relevance_membership_build release_relevance_membership_build_pkey; Type: CONSTRAINT; Schema: search; Owner: -
---
-
-ALTER TABLE ONLY search.release_relevance_membership_build
-    ADD CONSTRAINT release_relevance_membership_build_pkey PRIMARY KEY (execution_id, target_position_id);
-
-
---
 -- Name: release_relevance_membership_node release_relevance_membership_node_pkey; Type: CONSTRAINT; Schema: search; Owner: -
 --
 
@@ -2425,14 +2270,6 @@ ALTER TABLE ONLY search.release_relevance_membership_node
 
 ALTER TABLE ONLY search.release_relevance_position
     ADD CONSTRAINT release_relevance_position_pkey PRIMARY KEY (execution_id, id);
-
-
---
--- Name: release_relevance_work release_relevance_work_pkey; Type: CONSTRAINT; Schema: search; Owner: -
---
-
-ALTER TABLE ONLY search.release_relevance_work
-    ADD CONSTRAINT release_relevance_work_pkey PRIMARY KEY (execution_id, position_id, work_id);
 
 
 --
@@ -2782,17 +2619,10 @@ CREATE INDEX release_relevance_execution_expiry ON search.release_relevance_exec
 
 
 --
--- Name: release_relevance_membership_build_root; Type: INDEX; Schema: search; Owner: -
---
-
-CREATE INDEX release_relevance_membership_build_root ON search.release_relevance_membership_build USING btree (execution_id, membership_root) WHERE (membership_root IS NOT NULL);
-
-
---
 -- Name: release_relevance_membership_position_root; Type: INDEX; Schema: search; Owner: -
 --
 
-CREATE INDEX release_relevance_membership_position_root ON search.release_relevance_position USING btree (execution_id, membership_root) WHERE (membership_root IS NOT NULL);
+CREATE INDEX release_relevance_membership_position_root ON search.release_relevance_position USING btree (execution_id, membership_root);
 
 
 --
@@ -3151,22 +2981,6 @@ ALTER TABLE ONLY search.recent_search
 
 
 --
--- Name: release_relevance_membership_build release_relevance_membership__execution_id_membership_root_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
---
-
-ALTER TABLE ONLY search.release_relevance_membership_build
-    ADD CONSTRAINT release_relevance_membership__execution_id_membership_root_fkey FOREIGN KEY (execution_id, membership_root) REFERENCES search.release_relevance_membership_node(execution_id, id);
-
-
---
--- Name: release_relevance_membership_build release_relevance_membership__execution_id_target_position_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
---
-
-ALTER TABLE ONLY search.release_relevance_membership_build
-    ADD CONSTRAINT release_relevance_membership__execution_id_target_position_fkey FOREIGN KEY (execution_id, target_position_id) REFERENCES search.release_relevance_position(execution_id, id) ON DELETE CASCADE;
-
-
---
 -- Name: release_relevance_membership_node release_relevance_membership_node_execution_id_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
 --
 
@@ -3188,14 +3002,6 @@ ALTER TABLE ONLY search.release_relevance_position
 
 ALTER TABLE ONLY search.release_relevance_position
     ADD CONSTRAINT release_relevance_position_membership_root_fkey FOREIGN KEY (execution_id, membership_root) REFERENCES search.release_relevance_membership_node(execution_id, id);
-
-
---
--- Name: release_relevance_work release_relevance_work_execution_id_position_id_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
---
-
-ALTER TABLE ONLY search.release_relevance_work
-    ADD CONSTRAINT release_relevance_work_execution_id_position_id_fkey FOREIGN KEY (execution_id, position_id) REFERENCES search.release_relevance_position(execution_id, id) ON DELETE CASCADE;
 
 
 --

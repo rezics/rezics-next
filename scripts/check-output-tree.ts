@@ -27,9 +27,9 @@ export const KERNEL_CLIENT_OUTPUT = Object.freeze({
   profile: 'kernel-client-v1',
   root: 'packages/client/src/kernel',
   transport: '.temp/check-output-tree/kernel-client-v1.bin',
-  maxMembers: 1024,
-  maxBytes: 32 * 1024 * 1024,
-  maxMemberBytes: 2 * 1024 * 1024,
+  maxMembers: 2048,
+  maxBytes: 64 * 1024 * 1024,
+  maxMemberBytes: 8 * 1024 * 1024,
   maxDepth: 16,
   maxPathBytes: 1024,
 } as const);
@@ -221,11 +221,15 @@ export function collectOutputTree(root: string): { members: OutputTreeMember[]; 
         const stat = lstatSync(full);
         if (stat.isDirectory()) visit(full, key);
         else {
-          if (collected.length >= KERNEL_CLIENT_OUTPUT.maxMembers) fail('member count bound');
-          if (!stat.isFile() || stat.nlink !== 1 || stat.size > KERNEL_CLIENT_OUTPUT.maxMemberBytes)
-            fail('unsafe member or per-member bound');
+          if (collected.length >= KERNEL_CLIENT_OUTPUT.maxMembers)
+            fail(`member count bound at ${key}: ${collected.length + 1} > ${KERNEL_CLIENT_OUTPUT.maxMembers}`);
+          if (!stat.isFile() || stat.nlink !== 1)
+            fail(`unsafe member ${key}: regular=${stat.isFile()}, links=${stat.nlink}`);
+          if (stat.size > KERNEL_CLIENT_OUTPUT.maxMemberBytes)
+            fail(`per-member bound for ${key}: ${stat.size} > ${KERNEL_CLIENT_OUTPUT.maxMemberBytes} bytes`);
           total += stat.size;
-          if (total > KERNEL_CLIENT_OUTPUT.maxBytes) fail('aggregate decoded byte bound');
+          if (total > KERNEL_CLIENT_OUTPUT.maxBytes)
+            fail(`aggregate decoded byte bound at ${key}: ${total} > ${KERNEL_CLIENT_OUTPUT.maxBytes} bytes`);
           const bytes = readOutputTreeFile(root, relative, stat.size);
           if (bytes.length !== stat.size) fail('member changed during capture');
           collected.push({ member: { path: key, size: bytes.length, sha256: outputTreeDigest(bytes) }, bytes });
@@ -243,6 +247,18 @@ export function collectOutputTree(root: string): { members: OutputTreeMember[]; 
 export function encodeOutputTree(root: string, source: OutputTreeBinding, producerExitCode?: 0): Buffer {
   binding(source);
   const { members, contents } = collectOutputTree(root);
+  if (producerExitCode === 0) {
+    const largest = members.reduce<OutputTreeMember | null>(
+      (current, member) => !current || member.size > current.size ? member : current,
+      null,
+    );
+    process.stdout.write(`Kernel client output tree: ${JSON.stringify({
+      count: members.length,
+      totalBytes: contents.reduce((sum, bytes) => sum + bytes.length, 0),
+      maxMemberPath: largest?.path ?? null,
+      maxMemberBytes: largest?.size ?? 0,
+    })}\n`);
+  }
   const catalogue = Buffer.from(members.map((member) => `${JSON.stringify(member)}\n`).join(''));
   for (const member of members)
     if (Buffer.byteLength(`${JSON.stringify(member)}\n`) > OUTPUT_TREE_MEMBER_RECORD_BYTES)

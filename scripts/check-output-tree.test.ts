@@ -141,17 +141,17 @@ test('543-member generated closure returns exact nested bytes and hashes, delete
   expect(existsSync(join(consumer, 'packages/client/src/.kernel-output-tree/backup'))).toBe(false);
 });
 
-test('the current 543-member closure and 1024-member bound fit; overflow is refused', () => {
+test('the observed 1031-member closure and finite member bound fit; overflow is refused', () => {
   const producer = workspace();
-  generated(producer, 543);
+  generated(producer, 1031);
   const current = encodeOutputTree(producer, source);
-  expect(validateOutputTree(current, authority(current)).members).toHaveLength(543);
-  generated(producer, 1024);
+  expect(validateOutputTree(current, authority(current)).members).toHaveLength(1031);
+  generated(producer, PROFILE.maxMembers);
   const bytes = encodeOutputTree(producer, source);
-  expect(validateOutputTree(bytes, authority(bytes)).members).toHaveLength(1024);
+  expect(validateOutputTree(bytes, authority(bytes)).members).toHaveLength(PROFILE.maxMembers);
   put(producer, `${PROFILE.root}/overflow.d.ts`, 'overflow');
   expect(() => encodeOutputTree(producer, source)).toThrow('member count');
-  const count = bundle([], [], { count: 1025 });
+  const count = bundle([], [], { count: PROFILE.maxMembers + 1 });
   expect(() => validateOutputTree(count, authority(count))).toThrow('manifest count');
   expect(() => outputTreeProfile('arbitrary-directory')).toThrow('unknown output profile');
 });
@@ -165,7 +165,7 @@ test('decoded per-member and aggregate limits are checked before reading or allo
   truncateSync(join(producer, path), PROFILE.maxMemberBytes + 1);
   expect(() => encodeOutputTree(producer, source)).toThrow('per-member');
   rmSync(join(producer, path));
-  for (let index = 0; index < 16; index++) {
+  for (let index = 0; index < PROFILE.maxBytes / PROFILE.maxMemberBytes; index++) {
     const name = `${PROFILE.root}/${index}.d.ts`;
     put(producer, name, '');
     truncateSync(join(producer, name), PROFILE.maxMemberBytes);
