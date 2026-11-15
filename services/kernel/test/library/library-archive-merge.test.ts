@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
+import { nativeReceiptKeyCandidates } from '../../src/command/receipt-key.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { createLifecycleCommands } from '../../src/access/lifecycle.ts';
 import { createEntryPersonalCommands } from '../../src/library/entry-personal.ts';
@@ -614,8 +615,12 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
   const observationReceipt = await f.pool.query<{ count: string }>(
     `SELECT count(*)::text AS count FROM core.receipt
      WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
-       AND command_kind='library.entry.source-observation.admit' AND idempotency_key=$3`,
-    [partitionOf(routeOf(main.actor.accountId)!), main.actor.accountId, observationKey],
+       AND command_kind='library.entry.source-observation.admit' AND idempotency_key=ANY($3::text[])`,
+    [
+      partitionOf(routeOf(main.actor.accountId)!),
+      main.actor.accountId,
+      nativeReceiptKeyCandidates(f.pool, 'library.entry.source-observation.admit', main.actor.accountId, observationKey),
+    ],
   );
   expect(observationReceipt.rows[0]?.count).toBe('1');
   const currentAnnotation = await personal.readPersonalEntry(main.actor, subjects[0]);
