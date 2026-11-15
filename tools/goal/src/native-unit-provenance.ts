@@ -7,6 +7,7 @@ import {
   type CheckRunInvocationRecord,
 } from '../../../scripts/check-run-settlement.ts';
 import { parseRemotePhysicalRunReceipt } from '../../../scripts/remote-check.ts';
+import { configureDatabaseBusyTimeout, databaseStage } from './db.ts';
 
 /** Capture observations describe these receipts, never all code executed by an outer command. */
 export function recordNativeUnitSourceObservation(
@@ -54,6 +55,7 @@ export function recordNativeUnitSourceObservation(
     )
       return 'unmatched';
     db = new Database(context.registry, { readwrite: true, create: false });
+    configureDatabaseBusyTimeout(db);
     const run = db
       .query('SELECT unit, requested_source_commit, context FROM native_unit_runs WHERE id=?')
       .get(runId) as {
@@ -80,7 +82,7 @@ export function recordNativeUnitSourceObservation(
       return 'unmatched';
     if (JSON.stringify([...requested.requires].sort()) !== JSON.stringify([...context.requires].sort()))
       return 'unmatched';
-    db.transaction(() => {
+    databaseStage(db, 'native capture observation commit', () => db!.transaction(() => {
       db!
         .query(`INSERT OR IGNORE INTO native_unit_run_sources(
         run_id, invocation_id, source_commit, source_sha256, host, physical_run, receipt_sha256, native_exit_code
@@ -96,7 +98,7 @@ export function recordNativeUnitSourceObservation(
           receipt.exitCode,
         );
       db!.query('UPDATE native_unit_runs SET source_commit=? WHERE id=?').run(final.binding.sourceRevision, runId);
-    }).immediate();
+    }).immediate());
     return 'recorded';
   } catch (error) {
     // A telemetry failure leaves source unknown; it cannot reject or convert a command result.

@@ -76,6 +76,7 @@ export function databaseStage<T>(db: Database, stage: string, work: () => T): T 
 function databaseFailure(path: string, stage: string, error: unknown): never {
     if (!(error instanceof Error) || error.name !== 'SQLiteError') throw error;
     const contextual = new Error(`SQLite ${path} [${stage}]: ${error.message}`, { cause: error });
+    Object.assign(contextual, error);
     contextual.name = error.name;
     throw contextual;
 }
