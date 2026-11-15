@@ -13,7 +13,7 @@ import { ProblemError } from '../../src/http/problem-error.ts';
 import { parseCopyArchive, COPY_ARCHIVE_LIMITS } from '../../src/library/copy-archive-format.ts';
 import { exportSections } from '../../src/library/library-export-format.ts';
 import { createCopyArchive } from '../../src/library/copy-archive.ts';
-import { createWorkClient } from '../../src/work/client.ts';
+import { createNativeLibraryWorkClient } from './support/native-library-fixture-binding.ts';
 import { purgeOwnedGraphPage } from '../../src/library/erasure-owned-graph.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
@@ -47,7 +47,7 @@ let artifact: ArchiveTestArtifact;
 let subjectId: string;
 let sourceSessions: { id: string; unit: string }[] = [];
 let currentDigest: string;
-let workClient: Awaited<ReturnType<typeof createWorkClient>> | undefined;
+let workClient: Awaited<ReturnType<typeof createNativeLibraryWorkClient>> | undefined;
 let now = Date.now();
 const retainedUploads = new Set<string>();
 let terminalOwner = false;
@@ -725,8 +725,10 @@ test('recovery selects one equal-measure occurrence, reviews current meanings an
   expect(unitResult.progressSession).toMatchObject({
     id: unitApply.sessionId,
     state: 'completed',
-    completedUnitCount: 1,
+    completedUnitCount: 0,
   });
+  expect(unitResult.completedEpisodes.episodes.filter((episode: { completed: boolean | null }) => episode.completed))
+    .toHaveLength(1);
   const reopenedUnits = await json(
     await f.send(
       owner.bearer,
@@ -755,7 +757,7 @@ test('recovery selects one equal-measure occurrence, reviews current meanings an
       entryKey(),
     ),
   );
-  workClient ??= await createWorkClient(f.pool.options.connectionString!, f.pool);
+  workClient ??= await createNativeLibraryWorkClient(f.pool);
   const service = createCopyArchive({
       pool: f.pool,
       access: f.access,
@@ -766,11 +768,12 @@ test('recovery selects one equal-measure occurrence, reviews current meanings an
     }),
     partialKey = entryKey(),
     abort = new AbortController();
+  const acknowledgementLost = new Error('Native command acknowledgement lost');
   await expect(
     service.applyProgress(owner.actor, uploaded.uploadId, partialReview.reviewId, partialKey, abort.signal, () =>
-      abort.abort(),
+      abort.abort(acknowledgementLost),
     ),
-  ).rejects.toThrow();
+  ).rejects.toBe(acknowledgementLost);
   await service.cancel(owner.actor, uploaded.uploadId);
   const partial = await service.applyProgress(owner.actor, uploaded.uploadId, partialReview.reviewId, partialKey);
   expect(partial).toMatchObject({ state: 'partial', acceptedSteps: 1, totalSteps: 3 });
@@ -778,15 +781,16 @@ test('recovery selects one equal-measure occurrence, reviews current meanings an
   const partialResult = await json(await send('GET', `${suffix}/progressReviews/${partialReview.reviewId}`));
   expect(partialResult.progressSession).toMatchObject({ id: partial.sessionId, state: 'active' });
   const disclosureAbort = new AbortController();
+  const disclosureInterrupted = new Error('Native result disclosure interrupted');
   const throwIfNotAborted = disclosureAbort.signal.throwIfAborted.bind(disclosureAbort.signal);
   let disclosureGates = 0;
   disclosureAbort.signal.throwIfAborted = () => {
-    if (++disclosureGates === 4) disclosureAbort.abort();
+    if (++disclosureGates === 4) disclosureAbort.abort(disclosureInterrupted);
     throwIfNotAborted();
   };
   await expect(
     service.progressResult(owner.actor, uploaded.uploadId, unitReview.reviewId, disclosureAbort.signal),
-  ).rejects.toThrow();
+  ).rejects.toBe(disclosureInterrupted);
   expect(await json(await send('DELETE', suffix))).toMatchObject({ complete: true });
 }, 120000);
 
@@ -794,7 +798,7 @@ test('checkpoint replay preserves the original create and revision-sensitive mea
   const service = createCopyArchive({
     pool: f.pool,
     access: f.access,
-    workClient: (workClient ??= await createWorkClient(f.pool.options.connectionString!, f.pool)),
+    workClient: (workClient ??= await createNativeLibraryWorkClient(f.pool)),
     tokens: f.tokens,
     routeKey: testRouteKey(),
     clock: () => new Date(now),
@@ -825,6 +829,7 @@ test('checkpoint replay preserves the original create and revision-sensitive mea
   const createKey = entryKey(),
     beforeCreate = await sessionCount(),
     createAbort = new AbortController();
+  const createAcknowledgementLost = new Error('Native create acknowledgement lost');
   await expect(
     service.applyProgress(
       owner.actor,
@@ -832,9 +837,9 @@ test('checkpoint replay preserves the original create and revision-sensitive mea
       createReview.reviewId,
       createKey,
       createAbort.signal,
-      () => createAbort.abort(),
+      () => createAbort.abort(createAcknowledgementLost),
     ),
-  ).rejects.toThrow();
+  ).rejects.toBe(createAcknowledgementLost);
   const createPending = await json(
     await send('GET', `/${createUpload.uploadId}/progressReviews/${createReview.reviewId}`),
   );
@@ -870,6 +875,7 @@ test('checkpoint replay preserves the original create and revision-sensitive mea
   const measureKey = entryKey(),
     beforeMeasure = await sessionCount(),
     measureAbort = new AbortController();
+  const measureAcknowledgementLost = new Error('Native measure acknowledgement lost');
   let commands = 0;
   await expect(
     service.applyProgress(
@@ -879,10 +885,10 @@ test('checkpoint replay preserves the original create and revision-sensitive mea
       measureKey,
       measureAbort.signal,
       () => {
-        if (++commands === 2) measureAbort.abort();
+        if (++commands === 2) measureAbort.abort(measureAcknowledgementLost);
       },
     ),
-  ).rejects.toThrow();
+  ).rejects.toBe(measureAcknowledgementLost);
   const measurePending = await json(
     await send('GET', `/${measureUpload.uploadId}/progressReviews/${measureReview.reviewId}`),
   );
@@ -975,17 +981,18 @@ test('terminal account fencing denies inspection and bounded owner erasure remov
   const service = createCopyArchive({
     pool: f.pool,
     access: f.access,
-    workClient: (workClient ??= await createWorkClient(f.pool.options.connectionString!, f.pool)),
+    workClient: (workClient ??= await createNativeLibraryWorkClient(f.pool)),
     tokens: f.tokens,
     routeKey: testRouteKey(),
     clock: () => new Date(now),
   });
   const abort = new AbortController();
+  const acknowledgementLost = new Error('Native command acknowledgement lost');
   await expect(
     service.applyProgress(owner.actor, uploaded.uploadId, review.reviewId, entryKey(), abort.signal, () =>
-      abort.abort(),
+      abort.abort(acknowledgementLost),
     ),
-  ).rejects.toThrow();
+  ).rejects.toBe(acknowledgementLost);
   const retained = await f.pool.query<{ active_command: unknown }>(
     'SELECT active_command FROM library.copy_archive_progress_apply WHERE route=$1 AND account_id=$2 AND upload_id=$3',
     [routeOf(owner.actor.accountId), owner.actor.accountId, uploaded.uploadId],
