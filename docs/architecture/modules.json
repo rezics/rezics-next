@@ -1663,6 +1663,8 @@
       ],
       "publicEntries": [
         "apps/web/src/threads/post-reading-body.tsx",
+        "apps/web/src/threads/document-media.ts",
+        "apps/web/src/threads/document-media-limit.ts",
         "apps/web/src/community/index.ts",
         "apps/web/src/community/realm-catalogue-entry.ts",
         "apps/web/src/community/realm-reading-return.ts",

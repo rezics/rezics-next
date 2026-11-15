@@ -154,10 +154,7 @@ export function EditorTouchBar({
     (command) =>
       (command.id !== 'image' || upload) && (command.id !== 'table' || (onTable && canInsertSizedTable(editor))),
   );
-  const formatOrder = ['bold', 'italic', 'link', 'strike', 'code', 'clearFormatting'];
-  const formatCommands = state.marks
-    .map(({ command }) => command)
-    .sort((left, right) => formatOrder.indexOf(left.id) - formatOrder.indexOf(right.id));
+  const formatCommands = state.marks.map(({ command }) => command);
   const availableTabStops = [
     ...(blockCommands.length ? ['blocks'] : []),
     ...formatCommands.map((command) => command.id),
