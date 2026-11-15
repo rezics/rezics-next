@@ -30,6 +30,6 @@ WHERE d.revision::text=requested.source_revision
   AND m.closure_state IN ('legacy','active')
   AND m.closure_source_reservation IS NULL AND m.closure_ticket_reservation IS NULL
   AND m.closure_successor_ticket IS NULL AND m.closure_successor_original IS NULL
-  AND m.closure_cancelled_successor IS NULL AND m.closure_claim IS NULL AND m.closure_mutation_xid IS NULL
+  AND m.closure_cancelled_successor IS FALSE AND m.closure_claim IS NULL AND m.closure_mutation_xid IS NULL
   AND e.source_image_version=1 AND e.source_image_digest IS NOT NULL
   AND e.source_image_digest=semantic.identity_epoch_source_image_v1(p.partition_no,s.subject_id,e.transaction_id);
