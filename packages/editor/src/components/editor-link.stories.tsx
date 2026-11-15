@@ -85,7 +85,7 @@ export const InsertLink: Story = {
     await waitFor(() => expect(canvas.queryByRole('toolbar')).toBeNull());
     await userEvent.keyboard('{Control>}k{/Control}');
     await userEvent.type(await canvas.findByRole('textbox', { name: 'URL' }), 'mailto:hello@example.com');
-    await userEvent.click(canvas.getByRole('button', { name: 'Apply' }));
+    await userEvent.keyboard('{Enter}');
     await waitFor(() => {
       expect(checkDocument(insert.latest.current)).toBe(true);
       expect(JSON.stringify(insert.latest.current)).toContain('mailto:hello@example.com');
@@ -1037,7 +1037,7 @@ export const InlineLifetimeJourney: Story = {
     await traceClick(canvas.getByRole('button', { name: 'Use touch toolbar' }));
     await traceClick(canvas.getByRole('button', { name: 'Replace with touch target' }));
     touchToolbar = within(await canvas.findByRole('toolbar', { name: 'Formatting toolbar' }));
-    await traceClick(touchToolbar.getByRole('button', { name: 'Blocks' }));
+    await traceClick(touchToolbar.getByRole('button', { name: /^Blocks\b/ }));
     const dialog = await page.findByRole('dialog', { name: 'Blocks' });
     const finalFocus = reactCallback(dialog, 'finalFocus');
     const frames: FrameRequestCallback[] = [];

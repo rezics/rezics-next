@@ -148,7 +148,7 @@ export const BlockSheet: Story = {
   async play({ canvasElement }) {
     const { canvas, textbox } = await selectText(canvasElement);
     const toolbar = within(await canvas.findByRole('toolbar', { name: 'Formatting toolbar' }));
-    await userEvent.click(toolbar.getByRole('button', { name: 'Blocks' }));
+    await userEvent.click(toolbar.getByRole('button', { name: /^Blocks\b/ }));
     const page = within(canvasElement.ownerDocument.body);
     const dialog = within(await page.findByRole('dialog', { name: 'Blocks' }));
     await userEvent.click(dialog.getByRole('option', { name: 'Heading 2' }));
@@ -288,12 +288,12 @@ export const UndoRedo: Story = {
     expect(textbox.textContent).toBe('History');
     await waitFor(() => expect(history.latest.current).toEqual(original));
     // BlockMenu deliberately remounts its trigger when document/selection targets retire. Query the live control.
-    const blocksButton = () => toolbar.getByRole('button', { name: 'Blocks' });
+    const blocksButton = () => toolbar.getByRole('button', { name: /^Blocks\b/ });
     const tabEntries = () =>
       [...toolbarElement.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')].filter(
         (button) => button.tabIndex === 0,
       );
-    const runToolbar = async (name: string) => {
+    const runToolbar = async (name: string | RegExp) => {
       await userEvent.keyboard('{Alt>}{F10}{/Alt}{Home}');
       const target = toolbar.getByRole('button', { name });
       const enabled = [...toolbarElement.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
@@ -331,7 +331,7 @@ export const UndoRedo: Story = {
       expect(checked(history.latest.current)?.content?.[0]?.marks?.some((mark) => mark.type === 'bold')).toBe(true),
     );
     expect(plainText(history.latest.current)).toBe('History');
-    await runToolbar('Blocks');
+    await runToolbar(/^Blocks\b/);
     const page = within(canvasElement.ownerDocument.body);
     const dialog = within(await page.findByRole('dialog', { name: 'Blocks' }));
     const query = dialog.getByRole('combobox', { name: 'Find a block' });
@@ -363,7 +363,7 @@ export const ToolbarKeyboard: Story = {
     const { canvas, textbox } = await selectText(canvasElement);
     const toolbar = within(await canvas.findByRole('toolbar', { name: 'Formatting toolbar' }));
     await userEvent.keyboard('{Alt>}{F10}{/Alt}');
-    const blocksButton = toolbar.getByRole('button', { name: 'Blocks' });
+    const blocksButton = toolbar.getByRole('button', { name: /^Blocks\b/ });
     const enabled = toolbar.getAllByRole('button').filter((button) => !(button as HTMLButtonElement).disabled);
     expect(blocksButton).toHaveFocus();
     expect(toolbar.getAllByRole('button').filter((button) => button.tabIndex === 0)).toEqual([blocksButton]);
@@ -385,7 +385,7 @@ export const ProfileCommands: Story = {
   async play({ canvasElement }) {
     const { canvas } = await selectText(canvasElement);
     const toolbar = within(await canvas.findByRole('toolbar', { name: 'Formatting toolbar' }));
-    await userEvent.click(toolbar.getByRole('button', { name: 'Blocks' }));
+    await userEvent.click(toolbar.getByRole('button', { name: /^Blocks\b/ }));
     const page = within(canvasElement.ownerDocument.body);
     const dialog = within(await page.findByRole('dialog', { name: 'Blocks' }));
     expect(dialog.queryByRole('option', { name: 'Image' })).toBeNull();

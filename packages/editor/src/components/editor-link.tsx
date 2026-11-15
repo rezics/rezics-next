@@ -125,7 +125,12 @@ export function captureLink(editor: Editor, isCurrent: () => boolean = () => tru
   if (!(selected instanceof TextSelection) || (original instanceof AllSelection && selected.empty)) return null;
   const target = eligibleLinkRange(editor, selected, editor.state.storedMarks);
   return target
-    ? { ...target, selectionBookmark: original.getBookmark(), storedMarks: editor.state.storedMarks }
+    ? {
+        from: target.from,
+        to: target.to,
+        selectionBookmark: original.getBookmark(),
+        storedMarks: editor.state.storedMarks,
+      }
     : null;
 }
 

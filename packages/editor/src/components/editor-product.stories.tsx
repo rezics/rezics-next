@@ -1,14 +1,15 @@
 import { fromMarkdown, checkDocument, type DocumentSnapshot } from '@rezics/document';
 import type { Editor } from '@tiptap/core';
+import { closeHistory } from '@tiptap/pm/history';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useState } from 'react';
-import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
+import { useRef, useState } from 'react';
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { Button } from '@rezics/ui/shadcn/button';
 import type { EditorPreferences } from '../preferences.ts';
 import { RichTextEditor } from './rich-text-editor.tsx';
 import type { EditorPreset } from './editor-workbench.tsx';
 import { waitForFocus } from '../../../ui/src/test/focus.ts';
-import { moveToEditorEnd } from '../test/browser-input.ts';
+import { editorBrowserInput, moveToEditorEnd } from '../test/browser-input.ts';
 
 const chapter = fromMarkdown('# A voyage\n\nThe sea is quiet. The sea carries our story.', 'blocks');
 
@@ -16,12 +17,15 @@ function EditorProductHost({
   preset = 'writing',
   readOnly = false,
   initialPreferences = {},
+  onShortcutSave,
 }: {
   preset?: EditorPreset;
   readOnly?: boolean;
   initialPreferences?: EditorPreferences;
+  onShortcutSave?: (snapshot: DocumentSnapshot) => void;
 }) {
   const [document, setDocument] = useState<DocumentSnapshot>(chapter);
+  const currentSnapshot = useRef(document);
   const [preferences, setPreferences] = useState<EditorPreferences>(initialPreferences);
   const [saves, setSaves] = useState(0);
   const [pending, setPending] = useState(false);
@@ -36,6 +40,7 @@ function EditorProductHost({
       <RichTextEditor
         value={document}
         onChange={(next) => {
+          currentSnapshot.current = next;
           setDocument(next);
           setPending(false);
         }}
@@ -47,7 +52,10 @@ function EditorProductHost({
         onPreferencesChange={setPreferences}
         preferencesScope="session"
         onSave={() => {
-          if (!readOnly) setSaves((count) => count + 1);
+          if (!readOnly) {
+            onShortcutSave?.(currentSnapshot.current);
+            setSaves((count) => count + 1);
+          }
         }}
         actions={
           <Button type="submit" disabled={pending || readOnly}>
@@ -63,12 +71,57 @@ function EditorProductHost({
 const meta = {
   title: 'Editor/Writing/Editor Product',
   component: EditorProductHost,
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
   parameters: { layout: 'padded' },
 } satisfies Meta<typeof EditorProductHost>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
 const editorFor = (textbox: HTMLElement) => (textbox as HTMLElement & { editor: Editor }).editor;
+const shortcutSave = fn<(snapshot: DocumentSnapshot) => void>();
+
+export const SaveShortcut: Story = {
+  args: { onShortcutSave: shortcutSave },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const textbox = await canvas.findByRole('textbox', { name: 'Chapter draft' });
+    const editor = editorFor(textbox);
+    const keyboard = await moveToEditorEnd(editor, textbox);
+    const shortcut = (target: HTMLElement, isComposing = false) =>
+      target.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true, isComposing }),
+      );
+
+    // Dispatch within the edit's task so the debounce cannot publish first.
+    editor.view.dispatch(editor.state.tr.insertText(' Latest edit.'));
+    expect(shortcut(textbox, true)).toBe(true);
+    expect(shortcutSave).not.toHaveBeenCalled();
+    expect(shortcut(textbox)).toBe(false);
+    expect(shortcutSave).toHaveBeenCalledTimes(1);
+    const snapshot = shortcutSave.mock.lastCall?.[0];
+    expect(checkDocument(snapshot)).toBe(true);
+    expect(snapshot?.doc.content?.at(-1)?.content?.at(-1)?.text).toBe(
+      'The sea is quiet. The sea carries our story. Latest edit.',
+    );
+
+    const note = editor.schema.nodes.footnoteReference!.create({ label: 'Missing' });
+    editor.view.dispatch(closeHistory(editor.state.tr.replaceSelectionWith(note)));
+    expect(shortcut(textbox)).toBe(false);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('This document could not be saved.');
+    await expect(canvas.getByRole('button', { name: 'Save draft' })).toBeDisabled();
+    expect(shortcutSave).toHaveBeenCalledTimes(1);
+
+    await keyboard.keyboard('{Control>}z{/Control}');
+    await keyboard.keyboard('{Control>}s{/Control}');
+    expect(shortcutSave).toHaveBeenCalledTimes(2);
+    expect(shortcutSave).toHaveBeenLastCalledWith(snapshot);
+    const save = canvas.getByRole('button', { name: 'Save draft' });
+    await waitFor(() => expect(save).toBeEnabled());
+    save.focus();
+    expect(shortcut(save)).toBe(true);
+    expect(shortcutSave).toHaveBeenCalledTimes(2);
+  },
+};
 
 export const Writing: Story = {
   args: { preset: 'writing' },
@@ -141,7 +194,7 @@ export const Knowledge: Story = {
     await canvas.findByRole('textbox', { name: 'Chapter draft' });
     await userEvent.click(canvas.getByText('More tools', { exact: true }));
     await expect(canvas.getByRole('group', { name: 'Annotations' })).toBeVisible();
-    await expect(canvas.getByRole('button', { name: 'Block actions' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: /^Block actions\b/ })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Commands' }));
     const dialog = await screen.findByRole('dialog', { name: 'Commands' });
     const query = within(dialog).getByRole('combobox', { name: 'Search available commands' });
@@ -185,6 +238,36 @@ export const Compact: Story = {
     await expect(canvas.getByRole('region', { name: 'Find and replace' })).toBeVisible();
   },
 };
+
+const phone: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false }, theme: 'dark' },
+  async play({ canvasElement }) {
+    const { events, native } = await editorBrowserInput();
+    const canvas = within(canvasElement);
+    const textbox = await canvas.findByRole('textbox', { name: 'Chapter draft' });
+    const commands = canvas.getByRole('button', { name: 'Commands' });
+    if (native) expect(window.innerWidth).toBe(390);
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    await events.click(commands);
+    const dialog = await screen.findByRole('dialog', { name: 'Commands' });
+    const search = within(dialog).getByRole('combobox', { name: 'Search available commands' });
+    await events.click(search);
+    await waitForFocus(search);
+    await events.type(search, 'bold');
+    await expect(within(dialog).getByRole('option', { name: /Bold/ })).toBeVisible();
+    await waitFor(() => {
+      const bounds = dialog.getBoundingClientRect();
+      expect(bounds.left).toBeGreaterThanOrEqual(0);
+      expect(bounds.right).toBeLessThanOrEqual(window.innerWidth);
+    });
+    await events.keyboard('{Escape}');
+    await waitForFocus(textbox);
+  },
+};
+
+export const WritingPhone: Story = { ...phone, args: { preset: 'writing' } };
+export const KnowledgePhone: Story = { ...phone, args: { preset: 'knowledge' } };
+export const CompactPhone: Story = { ...phone, args: { preset: 'compact' } };
 
 export const ReadOnly: Story = {
   args: { readOnly: true },

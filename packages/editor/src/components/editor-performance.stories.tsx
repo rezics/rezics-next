@@ -511,7 +511,10 @@ async function journey(canvasElement: HTMLElement) {
     editor.commands.setTextSelection(positions[0]!);
     await events.click(canvas.getByRole('button', { name: 'Find and replace' }));
     const find = within(canvas.getByRole('region', { name: 'Find and replace' }));
+    const searchOptions = find.getByRole('button', { name: 'Match case / Whole words' });
+    await events.click(searchOptions);
     await events.click(find.getByRole('checkbox', { name: 'Match case' }));
+    await events.click(searchOptions);
     report(run, 'search-start', { query: 'a', logicalMatchesExpected: total });
     started = performance.now();
     await events.type(find.getByRole('textbox', { name: 'Find text' }), 'a');
@@ -525,7 +528,7 @@ async function journey(canvasElement: HTMLElement) {
     await events.click(find.getByRole('button', { name: 'Next match' }));
     await events.click(find.getByRole('button', { name: 'Previous match' }));
     if (run.kind === 'chapter') {
-      await events.click(find.getByRole('button', { name: 'Match case / Whole words' }));
+      await events.click(searchOptions);
       await events.click(find.getByRole('checkbox', { name: 'Whole words' }));
       await frames();
       await events.click(find.getByRole('checkbox', { name: 'Whole words' }));
