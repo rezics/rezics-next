@@ -28,6 +28,11 @@ OpenAPI and schema outputs from the same migrated database. It omits only the fu
 run the default `typecheck` separately for that evidence. Generation is labeled `kernel generation` and is not a full
 project typing pass. `--generate-only` requires client emission so production API compiler failures still stop output.
 
+The official SDK transport remains restricted to `packages/client/src/kernel`, with finite limits of 2,048 members,
+8 MiB per member and 64 MiB total decoded bytes. Producer and receiver share those limits; ordinary return paths
+keep their separate limits. Capture reports the actual count, total bytes and largest member. Paths, private regular
+inodes, symlink refusal, source binding and digests remain required independently of these size budgets.
+
 Declaration entry points name recursive query results through their owning compiler's return type, so publication
 does not expand an inferred cyclic structure. Publisher failure leaves dependent workspace typing pending; missing
 generated declarations are repaired through this publisher rather than handwritten consumer contracts.
