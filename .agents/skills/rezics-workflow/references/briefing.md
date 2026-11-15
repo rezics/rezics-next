@@ -4,14 +4,13 @@ Read [delivery rules](../../../../docs/development/delivery.md), the relevant
 [Goal definition](../../../../docs/goals/README.md) and the [brief schema](../../../../tools/goal/README.md#briefs-and-routing).
 Use that schema directly; this skill does not define another one. Every unit immediately merges its own coherent
 source manually under [direct source integration](../../../../docs/development/delivery.md#direct-source-integration).
-No tests, typechecks, generators or other verification precede source admission; the manager schedules unified
-verification/repair afterward. Units do not wait on the shared publisher. Acceptance-writing steps below belong to
-that later work, not a source gate.
+Apply [phase ownership](../../../../docs/development/delivery.md#implementation-and-acceptance) before allocation.
+Acceptance-writing steps below belong to separately assigned verification, not source admission.
 
 The manager and workers who author Goals:
 
-- [ ] State the outcome in user terms, what done means and the owner links; add exclusions, dependencies, consumers,
-      affected paths, risk areas and estimated size. Product workers on dev design the change and write its tests.
+- [ ] State the outcome, owner links, paths, risk areas, dependencies and estimate. Name the implementation
+      deliverable, acceptance owner, selected checks and deferred evidence; keep the product Goal's Done when intact.
 - [ ] Name required per-persona API outcomes under the
       [capability evidence rules](../../../../docs/development/verification.md#capability-evidence); schedule their
       execution after integration, rather than requiring a red test before implementation.
@@ -53,9 +52,9 @@ git branch --show-current
 git status --short
 ```
 
-Read the contract's outcomes and likely files, verify its premises against your base, implement the complete outcome,
-manually merge coherent source immediately, then follow the manager's unified post-integration
-[verification](verification.md). Preserve frozen files; update an existing test whose behaviour the contract changes
+Read the contract's outcomes and likely files, verify its premises against your base, implement and integrate source,
+then hand off under phase ownership. Follow [verification](verification.md) only when assigned. Preserve frozen files;
+update an existing test whose behaviour the contract changes
 when that acceptance work is scheduled. Decide ambiguities from the owner documents. Record decisions that change the adopted
 contract in your summary and its owning document; hand off an owning-document change outside your declared paths
 while continuing independent work. Routine implementation and test choices that preserve the contract belong in the

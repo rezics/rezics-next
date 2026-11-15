@@ -1,10 +1,9 @@
 {
-  "version": "6",
+  "version": "7",
   "classes": {
     "implementation": {
       "first": { "cli": "codex", "model": "gpt-6-luna", "effort": "high", "poolClass": "codex" },
       "fallbacks": [
-        { "cli": "codex", "model": "gpt-6-luna", "effort": "max", "poolClass": "codex" },
         { "cli": "cursor", "model": "gpt-5.6-luna", "effort": "high", "poolClass": "cursor" },
         { "cli": "grok", "model": "grok-4.7", "effort": "high", "poolClass": "grok" }
       ]
@@ -12,15 +11,13 @@
     "interface": {
       "first": { "cli": "codex", "model": "gpt-6-luna", "effort": "high", "poolClass": "codex" },
       "fallbacks": [
-        { "cli": "codex", "model": "gpt-6-luna", "effort": "max", "poolClass": "codex" },
         { "cli": "cursor", "model": "gpt-5.6-luna", "effort": "high", "poolClass": "cursor" },
         { "cli": "grok", "model": "grok-4.7", "effort": "high", "poolClass": "grok" }
       ]
     },
     "bulk-text": {
-      "first": { "cli": "codex", "model": "gpt-6-luna", "effort": "max", "poolClass": "codex" },
+      "first": { "cli": "codex", "model": "gpt-6-luna", "effort": "high", "poolClass": "codex" },
       "fallbacks": [
-        { "cli": "codex", "model": "gpt-6-luna", "effort": "max", "poolClass": "codex" },
         { "cli": "cursor", "model": "gpt-5.6-luna", "effort": "high", "poolClass": "cursor" },
         { "cli": "grok", "model": "grok-4.7", "effort": "high", "poolClass": "grok" }
       ]
@@ -28,7 +25,7 @@
     "claim": {
       "first": { "cli": "codex", "model": "gpt-6.1-sol", "effort": "high", "poolClass": "codex" },
       "fallbacks": [
-        { "cli": "codex", "model": "gpt-6-luna", "effort": "max", "poolClass": "codex" },
+        { "cli": "codex", "model": "gpt-6-luna", "effort": "high", "poolClass": "codex" },
         { "cli": "codex", "model": "gpt-6.1-sol", "effort": "high", "poolClass": "codex" },
         { "cli": "cursor", "model": "gpt-5.6-sol", "effort": "high", "poolClass": "cursor" },
         { "cli": "grok", "model": "grok-4.7", "effort": "high", "poolClass": "grok" }
@@ -42,9 +39,8 @@
       ]
     },
     "critical-path": {
-      "first": { "cli": "codex", "model": "gpt-6-luna", "effort": "max", "poolClass": "codex" },
+      "first": { "cli": "codex", "model": "gpt-6-luna", "effort": "high", "poolClass": "codex" },
       "fallbacks": [
-        { "cli": "codex", "model": "gpt-6-luna", "effort": "max", "poolClass": "codex" },
         { "cli": "cursor", "model": "gpt-5.6-luna", "effort": "high", "poolClass": "cursor" },
         { "cli": "grok", "model": "grok-4.7", "effort": "high", "poolClass": "grok" }
       ]
@@ -65,7 +61,7 @@
       "profiles": [
         { "cli": "grok", "model": "grok-4.7", "effort": "high", "poolClass": "grok" },
         { "cli": "grok", "model": "grok-4.7", "effort": "high", "poolClass": "grok" },
-        { "cli": "codex", "model": "gpt-6-luna", "effort": "max", "poolClass": "codex" }
+        { "cli": "codex", "model": "gpt-6-luna", "effort": "high", "poolClass": "codex" }
       ]
     },
     {
@@ -75,7 +71,7 @@
       "profiles": [
         { "cli": "grok", "model": "grok-4.7", "effort": "high", "poolClass": "grok" },
         { "cli": "grok", "model": "grok-4.7", "effort": "high", "poolClass": "grok" },
-        { "cli": "codex", "model": "gpt-6-luna", "effort": "max", "poolClass": "codex" }
+        { "cli": "codex", "model": "gpt-6-luna", "effort": "high", "poolClass": "codex" }
       ]
     },
     {
@@ -85,7 +81,7 @@
       "profiles": [
         { "cli": "grok", "model": "grok-4.7", "effort": "high", "poolClass": "grok" },
         { "cli": "grok", "model": "grok-4.7", "effort": "high", "poolClass": "grok" },
-        { "cli": "codex", "model": "gpt-6-luna", "effort": "max", "poolClass": "codex" }
+        { "cli": "codex", "model": "gpt-6-luna", "effort": "high", "poolClass": "codex" }
       ]
     },
     {
@@ -93,7 +89,7 @@
       "class": "claim",
       "open": true,
       "profiles": [
-        { "cli": "codex", "model": "gpt-6-luna", "effort": "max", "poolClass": "codex" },
+        { "cli": "codex", "model": "gpt-6-luna", "effort": "high", "poolClass": "codex" },
         { "cli": "grok", "model": "grok-4.7", "effort": "high", "poolClass": "grok" },
         { "cli": "codex", "model": "gpt-6.1-sol", "effort": "high", "poolClass": "codex" }
       ]

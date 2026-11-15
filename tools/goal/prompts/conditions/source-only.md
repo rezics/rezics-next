@@ -2,7 +2,7 @@
 defers: [browser, native, root]
 ---
 
-Source-only delivery is authorized for this attempt. Follow [direct source integration](docs/development/delivery.md#direct-source-integration) when integration is the bottleneck. Complete and commit coherent source; defer tests, typing, builds, browser captures and worker-check commands, including test authoring for coverage. Preserve existing tests and product contracts. Do not rerun retry-manifest commands for another verdict. Report source completion with checks unverified; it claims no compiler, test, native or Goal pass.
+Source-only delivery is authorized for this attempt. Follow direct source integration (`docs/development/delivery.md#direct-source-integration`) and its phase handoff. Complete and commit coherent source; defer tests, typing, builds, browser captures and worker-check commands, including test authoring for coverage. Preserve existing tests and product contracts. Do not rerun retry-manifest commands for another verdict. Report source completion with checks unverified; it claims no compiler, test, native or Goal pass.
 
 {{task.sourceOnlyContinuation}}
 

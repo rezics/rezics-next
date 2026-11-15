@@ -20,12 +20,13 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
 
 ## Verify once, then stop
 
-- After your last edit, run the check the brief names and the tests in the files you changed, once each. Rerun only
-  after a relevant edit.
+- Follow [phase ownership](delivery.md#implementation-and-acceptance). Source delivery carries no premerge checks.
+  In scheduled verification, run selected checks once after the last relevant edit; follow
+  [check selection](verification.md#check-selection-and-failures) for reuse and reruns.
 - Wait for a long command in one call with a yield of at least 300 seconds. Never poll faster, and never use sleep
   loops, `ps` or `pgrep` to wait.
 - A failure that also occurs on your base commit is not yours. Say so in one line and finish.
-- When the acceptance condition holds, stop. Do not add audits, proofs or checks the brief does not ask for.
+- When the assigned phase is delivered, stop. Do not add audits, proofs or checks the brief does not ask for.
 - Tests and stories prove the outcome; they are not the outcome. Write the fewest tests that pin the user-visible
   behaviour and its edge cases, as a rule fewer test lines than product lines, and only the stories for the states the
   brief names.
@@ -132,8 +133,8 @@ its authority and owns delivery. The maintainer's explicit decisions retain prec
   managers, duplicate another unit's assignment or reconstruct former manager inboxes.
 - Judge the result as a person using the product. Preserve the earlier REZICS behavior required by the owner contract;
   review real native/API and mounted-page outcomes before accepting a journey. Passing fixtures alone are insufficient.
-- Keep native Goal continuity while useful required work remains. Preserve coherent source across failed checks and
-  report deferred acceptance separately. At a timebox boundary, report what remains without claiming completion.
+- Keep native Goal continuity for its assigned outcome under [phase ownership](delivery.md#implementation-and-acceptance).
+  Preserve source across failures; at a timebox boundary report remaining work without claiming completion.
 - The manager schedules only useful wakes through the existing inbox. Units do not add polling loops or recurring
   status turns. Read the assigned Goal once and replace a short local continuation instead of appending history.
 - Route a repeated environment failure to the manager with its exact first error, affected operation and needed owner

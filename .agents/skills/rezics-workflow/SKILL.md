@@ -14,19 +14,19 @@ rules](../../../docs/development/README.md), owner documents and [AGENTS](../../
    owner documents for the decision at hand. Follow [agent conduct](../../../docs/development/agent-conduct.md).
 2. **Design and adopt.** Use [feature design](references/feature-design.md) to derive capabilities from the shared
    architecture, survey mainstream products, write acceptance in user terms and adopt the result in its owner doc.
-3. **Brief and implement.** Use [briefing](references/briefing.md) to preflight dependencies, freeze missing outcome
-   scenarios and prepare one coherent Goal. The resident is the only manager; execution units consume native Codex
-   Goals using subagents and Grok CLI. Each unit shares one worktree; different units use separate worktrees.
-4. **Prove.** Use [verification](references/verification.md) for per-persona API acceptance first, then page stories
-   from recorded responses, interaction/accessibility evidence, visual inspection and the required scoped checks.
+3. **Brief and implement.** Use [briefing](references/briefing.md) and
+   [phase ownership](../../../docs/development/delivery.md#implementation-and-acceptance) to separate source delivery
+   from acceptance. Units consume native Codex Goals; each unit and its helpers share one worktree.
+4. **Prove.** When assigned acceptance, use [verification](references/verification.md) for the selected API, page,
+   interaction, accessibility and visual evidence. Source assignments do not automatically enter this stage.
 5. **Review and deliver.** Use [review](references/review.md) to assess the diff and evidence, repair defect classes,
-   commit and hand off. The controller owns integration and promotion; verify the promoted revision for Goal closure.
+   commit and hand off. Units merge source under the delivery rules; promotion and product Goal closure stay separate.
 6. **Measure and improve.** The manager uses [efficiency](references/efficiency.md) at checkpoints to compare accepted
-   outcomes, diagnose lost attempts, apply the linked incident method and verify class repairs in the next hourly report.
+   outcomes and test corrective decisions at the existing progress checkpoint.
 
 For example, when adding Collection filters, design their behaviour across every Collection surface, link the
-adopted filter contract and frozen native scenarios in the brief, make API acceptance pass, then add recorded-response
-page stories for the applicable filter and viewer states. Do not infer backend support from a working mockup.
+adopted filter contract, and assign native acceptance and recorded-response page stories separately from source.
+Do not infer backend support from a working mockup.
 
 For dependency or shared-tool work, also read [maintenance](../../../docs/development/maintenance.md). For dispatch,
 native-unit registration, resident wakeups and promotion, read the applicable [Goal tooling](../../../tools/goal/README.md) section;
