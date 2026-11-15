@@ -2,9 +2,9 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { removeWatch } from '../../src/content/watch-management.ts';
 import type { CommandTransaction } from '../../src/command/command.ts';
 import { deletePersona } from '../support/account-deletion.ts';
-import { createWorkClient } from '../../src/work/client.ts';
-import { composeWork } from '../../src/work/registry.ts';
-import { relayEffects } from '../../src/events/effects.ts';
+import { receiptKeysFor } from '../../src/command/receipt-key.ts';
+import { startIdentityWorkProcess } from '../support/identity-work-process.ts';
+import { testReceiptKeysEnv } from '../support/receipt-keys.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import {
   HistoryRegistry,
@@ -15,28 +15,18 @@ import {
 import { minimizeHistoryOutbox } from '../../src/history/adapters/outbox.ts';
 import { minimizeHistoryReceipt, RECEIPT_OWNER_DISPOSITIONS } from '../../src/history/adapters/receipt.ts';
 import { registerWatchHistoryConsumers } from '../../src/history/adapters/watch-consumers.ts';
-import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { custodyFixture, type CustodyFixture } from './command-custody-fixture.ts';
 
 let f: CustodyFixture;
-let work: Awaited<ReturnType<typeof composeWork>>;
-let client: Awaited<ReturnType<typeof createWorkClient>>;
+let work: Awaited<ReturnType<typeof startIdentityWorkProcess>> | undefined;
 beforeAll(async () => {
   f = await custodyFixture();
-  client = await createWorkClient(f.db.url);
-  const module = KERNEL_WORK_MODULES.find(({ name }) => name === 'shared_history');
-  expect(module).toBeDefined();
-  work = await composeWork([module!], { pool: f.db.pool, client, databaseUrl: f.db.url });
 }, 180_000);
 afterAll(async () => {
   try {
-    await work?.shutdown();
+    await work?.stop();
   } finally {
-    try {
-      await client?.close();
-    } finally {
-      await f?.close();
-    }
+    await f?.close();
   }
 });
 
@@ -144,10 +134,33 @@ test('watch copies minimize only after the real account barrier and effects sett
     'outbox-effects-not-dispatched',
   );
   expect(await transaction((tx) => minimizeHistoryReceipt(tx, job, receipt.locator, registry, barrier))).toBeNull();
-  let delivered: Awaited<ReturnType<typeof relayEffects>>;
-  do delivered = await relayEffects(f.db.pool, work.effects, partition);
-  while (delivered.status === 'read' && delivered.envelopes > 0);
-  expect(delivered.status).toBe('read');
+  work = await startIdentityWorkProcess({
+    databaseUrl: f.db.url,
+    routeKey: Buffer.alloc(32, 91).toString('base64url'),
+    searchPrefix: `history_watch_${Bun.randomUUIDv7().replaceAll('-', '')}`,
+    executorId: `history-watch-${Bun.randomUUIDv7()}`,
+    workModules: ['shared_history'],
+    effectsRelay: true,
+    receiptKeys: testReceiptKeysEnv(receiptKeysFor(f.db.pool)).KERNEL_RECEIPT_KEYS,
+  });
+  const dispatchDeadline = Date.now() + 30_000;
+  let delivered = false;
+  while (Date.now() < dispatchDeadline) {
+    const dispatched = await f.db.admin.query(
+      `SELECT 1 FROM core.consumer_checkpoint
+       WHERE partition_no=$1 AND consumer='effects' AND position >= $2
+         AND EXISTS(SELECT 1 FROM core.preference_history_job WHERE account_id=$3)`,
+      [partition, command.result.position.toString(), owner.accountId],
+    );
+    if (dispatched.rows.length === 1) {
+      delivered = true;
+      break;
+    }
+    await Bun.sleep(25);
+  }
+  expect(delivered).toBe(true);
+  await work.stop();
+  work = undefined;
   expect(
     (await f.db.admin.query('SELECT 1 FROM core.preference_history_job WHERE account_id=$1', [owner.accountId])).rows,
   ).toHaveLength(1);
