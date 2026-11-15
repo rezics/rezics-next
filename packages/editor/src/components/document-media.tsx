@@ -75,14 +75,15 @@ export function DocumentImageView({
     <div
       data-slot="document-image-occurrence"
       data-occurrence-id={image.id}
-      style={{ maxWidth: '100%', ...(image.width ? { width: image.width } : {}) }}
+      className="min-w-0 max-w-full"
+      style={image.width ? { width: image.width } : undefined}
       title={image.title ?? undefined}
     >
       {image.conceal && !revealed ? (
         <Button
           type="button"
           variant="outline"
-          className="min-h-11 max-w-full whitespace-normal"
+          className="min-h-11 max-w-full whitespace-normal [overflow-wrap:anywhere]"
           onClick={() => {
             if (isCurrent()) setRevealed(true);
           }}
@@ -95,7 +96,7 @@ export function DocumentImageView({
           <div
             role="img"
             aria-label={image.alt || unavailable}
-            className="rounded-xl bg-muted p-4 text-sm text-muted-foreground [overflow-wrap:anywhere]"
+            className="min-w-0 max-w-full rounded-xl bg-muted p-4 text-sm text-muted-foreground [overflow-wrap:anywhere]"
           >
             {unavailable}
             {image.alt ? ` — ${image.alt}` : ''}
@@ -119,15 +120,21 @@ export function DocumentMediaView({
     <figure
       data-slot="document-media-occurrence"
       data-occurrence-id={media.id}
-      className="min-w-0 max-w-full space-y-2"
+      className="flex min-w-0 max-w-full flex-col gap-2 [overflow-wrap:anywhere]"
     >
       {renderMedia?.(media) ?? (
-        <div role="group" aria-label={unavailable} className="rounded-xl bg-muted p-4 text-sm text-muted-foreground">
+        <div
+          role="group"
+          aria-label={unavailable}
+          className="min-w-0 max-w-full rounded-xl bg-muted p-4 text-sm text-muted-foreground [overflow-wrap:anywhere]"
+        >
           {unavailable}
         </div>
       )}
       {media.caption ? (
-        <figcaption className="whitespace-pre-wrap [overflow-wrap:anywhere]">{media.caption}</figcaption>
+        <figcaption className="min-w-0 max-w-full whitespace-pre-wrap [overflow-wrap:anywhere]">
+          {media.caption}
+        </figcaption>
       ) : null}
     </figure>
   );
