@@ -38,7 +38,7 @@ import {
   type Release,
   type TypeDefinition,
 } from '@rezics/definitions';
-import { runCommand, type CommandTransaction, type CommandEvent } from '../command/command.ts';
+import { runCommand, noEffect, type CommandTransaction, type CommandEvent } from '../command/command.ts';
 import { commandOptions, type WriteOptions } from './definitions.ts';
 import { DefinitionNotFoundError, DefinitionInputError } from './contract/definition-values.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
@@ -457,18 +457,23 @@ export async function runCatalogueBuildStep(pool: Pool, pin: KindCataloguePin, c
       const job = await cataloguePublisherQuery<{ recorded_transaction_id: string }>(tx, 'buildIdentity', [
         parsed.rootDigest,
       ]);
+      let advanced = false;
       const value = await catalogueCheckpoint(
         tx,
         { root: parsed.rootDigest, phase: 'step', jobId: job.rows[0]!.recorded_transaction_id, position },
         async () => {
-          if (BigInt(position) > BigInt(build.steps))
-            catalogueFail('conflict', 'Catalogue position is ahead of committed progress');
-          return BigInt(position) < BigInt(build.steps)
-            ? (await readCatalogueBuild(tx, parsed))!
-            : advanceCatalogueBuild(tx, parsed);
+          if (BigInt(position) !== BigInt(build.steps))
+            catalogueFail('conflict', 'Catalogue position has no retained original result');
+          advanced = true;
+          return advanceCatalogueBuild(tx, parsed);
         },
       );
-      return { value, events: [] };
+      return advanced
+        ? {
+            value,
+            events: [event(CATALOGUE_PROGRESS, { rootDigest: parsed.rootDigest, state: value.state, steps: value.steps })],
+          }
+        : noEffect(value);
     })
   ).value;
 }
