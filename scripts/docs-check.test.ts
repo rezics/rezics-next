@@ -103,6 +103,7 @@ describe('documentation budgets and registry', () => {
 
   test('registers missing reports and refuses invalid research states', async () => {
     write('docs/research/new-topic.md', '# New topic\n');
+    execFileSync('git', ['add', 'docs/research/new-topic.md'], { cwd: root });
     write('docs/research/known.md', '# Known\n');
     write(
       'docs/research/registry.json',
@@ -127,6 +128,7 @@ describe('documentation budgets and registry', () => {
     commit('fixture seed\n\nBudget-Raise: seed the oversized fixture');
     write('docs/large.md', '12345');
     const before = await runDocsCheck(root);
+    expect(before.exitCode, output(before)).toBe(0);
     expect(output(before)).toContain(
       'budget-shrank | docs/large.md | size 5 bytes is below baseline 8 bytes | remedy:',
     );
@@ -145,6 +147,71 @@ describe('documentation budgets and registry', () => {
 });
 
 describe('documentation links and owner rules', () => {
+  test('keeps unavailable historical references informational and current owner links actionable', async () => {
+    write('docs/research/old.md', '[old evidence](../../.temp/old.json)\n');
+    write(
+      'docs/research/registry.json',
+      JSON.stringify({
+        reports: [{ path: 'docs/research/old.md', topic: 'old', researcher: 'tester', state: 'open' }],
+      }),
+    );
+    const historical = await runDocsCheck(root);
+    expect(historical.exitCode, output(historical)).toBe(0);
+    expect(output(historical)).toContain('historical-link-target | docs/research/old.md');
+    write('docs/development/current.md', '[owner](./missing.md)\n');
+    const current = await runDocsCheck(root);
+    expect(current.exitCode).toBe(1);
+    expect(output(current)).toContain('link-target | docs/development/current.md');
+  });
+
+  test('leaves untracked report registration pending until its source is staged', async () => {
+    write('docs/research/draft.md', '# Draft\n');
+    const draft = await runDocsCheck(root);
+    expect(draft.exitCode, output(draft)).toBe(0);
+    expect(output(draft)).toContain('research-pending | docs/research/draft.md');
+    execFileSync('git', ['add', 'docs/research/draft.md'], { cwd: root });
+    expect(output(await runDocsCheck(root))).toContain('research-unregistered | docs/research/draft.md');
+  });
+
+  test('distinguishes terminology and runnable examples from live task and private-state references', async () => {
+    write(
+      'docs/development/owner.md',
+      [
+        'A task-specific goal-author follows the task-custody protocol.',
+        'Write output to `.temp/screenshots`.',
+        '```sh',
+        'tool --out .temp/screenshots # TASK-ABCD',
+        '```',
+        'Use `00000000-0000-0000-0000-000000000000` as an example nonce.',
+      ].join('\n'),
+    );
+    const examples = await runDocsCheck(root);
+    expect(examples.exitCode, output(examples)).toBe(0);
+    write(
+      'docs/development/owner.md',
+      'Read `.temp/goal/private.json`.\n[authority](../../.temp/current.md)\nTask TASK-ABCD\n',
+    );
+    const live = output(await runDocsCheck(root));
+    expect(live).toContain('owner-temp-path | docs/development/owner.md');
+    expect(live).toContain('owner-task-id | docs/development/owner.md');
+  });
+
+  test('ignores generated marker examples but retains malformed and stale standalone blocks', async () => {
+    write(
+      'docs/development/examples.md',
+      [
+        'Use `<!-- generated: path -->` and `<!-- /generated -->` markers.',
+        '```md',
+        '<!-- generated: absent.txt -->',
+        'example',
+        '<!-- /generated -->',
+        '```',
+      ].join('\n'),
+    );
+    expect((await runDocsCheck(root)).exitCode).toBe(0);
+    write('docs/development/examples.md', '<!-- generated: absent.txt -->\nunclosed\n');
+    expect(output(await runDocsCheck(root))).toContain('generated block markers are incomplete');
+  });
   test('checks relative targets and anchors and includes inbound links to deleted files', async () => {
     write('docs/development/source.md', '[gone](../gone.md#missing) and [anchor](./target.md#absent)\n');
     write('docs/development/target.md', '# Present\n');

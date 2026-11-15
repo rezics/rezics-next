@@ -4,9 +4,8 @@ Read [verification rules](../../../../docs/development/verification.md), especia
 selection. Use the native command in the Goal's capability manifest or task contract; a parallel specification
 without its native driver is not acceptance.
 
-During [direct source integration](../../../../docs/development/delivery.md#direct-source-integration), defer the
-checks and coverage work below for every task type. These procedures describe scheduled acceptance, not an
-integration gate; preserve product boundary validation and record exactly what remains unobserved.
+Apply [phase ownership](../../../../docs/development/delivery.md#implementation-and-acceptance). For assigned
+acceptance, select only the applicable procedures below; preserve boundary validation and name unobserved outcomes.
 
 - [ ] Prove backend outcomes through real APIs for each persona on released fixture data. Cover independent denials,
       hidden resources, lifecycle/replay and dependency failure; use no frontend or permissive owner stubs as proof.
@@ -22,14 +21,13 @@ integration gate; preserve product boundary validation and record exactly what r
       and include first-deployment evidence when required by acceptance.
 - [ ] Select the narrowest acceptance under [check selection](../../../../docs/development/verification.md#check-selection-and-failures).
       Confirm fresh-worktree preparation is owned by the runner, and classify transport failures separately.
-- [ ] Run acceptance once after the last relevant edit and the root typecheck. Preserve exit status and logs.
-      Let queued checks acquire their slot. Follow the rules' bounded diagnostics for actual failures.
+- [ ] Run selected acceptance once after the last relevant edit. Apply check selection for evidence reuse,
+      prerequisite failures and owner repairs; preserve exit status and logs. Root typing is not a default step.
 
 Commands from the repository root; replace placeholders with the contract's actual names, and select only the
 commands applicable to the change:
 
 ```sh
-bun run typecheck
 bun run --cwd services/kernel check test/<module>/<outcome>.test.ts
 bun run --cwd apps/web check tests/<surface>.test.ts
 bun run --cwd apps/web record -- <recording-name>
@@ -45,6 +43,8 @@ The app's `test:stories` script runs the Storybook browser suite; use it only wh
 Conditional checks, not a default checklist to execute:
 
 ```sh
+# Workspace-wide type evidence, only when required by the changed contract.
+bun run typecheck
 # A shared kernel runtime contract change requires the full kernel check.
 bun run --cwd services/kernel check
 # Executable control-plane changes require its own workspace gate.

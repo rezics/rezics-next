@@ -19,11 +19,8 @@ private account readings or configuration into tracked documents.
       parent aggregate; never invent managed starts. Separate measured durations from estimates and mark unknowns.
 - [ ] Inspect the hourly ledger and preceding twelve-hour window at the required cadence. Find the largest avoidable
       cost: unready contracts, replacement input, rereads, polling, checks, conflicts or idle capacity.
-- [ ] When a task needs a third attempt, classify its losses and repair their cause. Product work on dev keeps
-      retrying meanwhile; other work waits for the repair. Preserve independent ready work while doing so.
-- [ ] Apply the [incident method](../../../../docs/development/efficiency.md#incident-method) to every evidenced cause;
-      record before/after evidence on comparable accepted work and inspect post-landing defects.
-      A retry cap or a cheaper token price alone does not demonstrate savings.
+- [ ] Apply the [incident method](../../../../docs/development/efficiency.md#incident-method) to the largest evidenced
+      loss. Separate observations from hypotheses and preserve independent work while its owner repairs the cause.
 - [ ] Adjust worker and check admission separately using measured memory, queueing and accepted throughput.
 - [ ] Keep routing in its configured owner and preserve service-tier, pacing and pause rules. Capacity/provider errors
       follow the controller retry policy, not an improvised tier switch or exhaustion claim.
@@ -33,24 +30,12 @@ their existing owner document/tool, then update briefs to link them; do not accu
 
 ## Incident analysis
 
-Use the [owning incident rule](../../../../docs/development/efficiency.md#incident-method) for the evidence, class
-repair, resident notification and next-hour verification requirements. Build a cause-to-fix record from the named
-artifacts; attach their paths and measured times to the operating report, keeping private state outside Git.
+Use the [owner rule](../../../../docs/development/efficiency.md#incident-method), not a new audit loop.
 
-### Example: Storybook delay
+1. Select the evidence that explains the largest loss; record its scope and missing attribution.
+2. Identify the decision or repeated action that sustained it, and distinguish the causal hypothesis from observation.
+3. Name what stops or changes, its owner, and the owner document or tool receiving the correction.
+4. Compare the next applicable outcome at the existing checkpoint; leave the improvement unverified until then.
 
-The delay illustrates five cause groups. The check group includes both check sizing and delayed observation; keep
-those classes distinct when choosing repairs. This qualitative example does not supply measured durations or proof
-that a repair has taken effect.
-
-| Evidenced cause                                                               | Class                                     | Repair to apply beyond this task                                                                                                                  | Evidence to inspect in the next hourly report                                               |
-| ----------------------------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Work waited because declared files overlapped.                                | Shared-file holds                         | Apply the [dependency rule](../../../../docs/development/delivery.md#brief-preflight); remove overlap-based holds from dispatch.                  | Independent overlapping tasks start without a shared-file hold.                             |
-| A brief assumed all stories lived in one Storybook and needed reshaping.      | Wrong brief premise                       | Apply repository preflight to story locations and package ownership before dispatch.                                                              | New briefs match the recorded base without the same reshape.                                |
-| Checks were oversized and long attempts went unnoticed.                       | Oversized checks; unnoticed long attempts | Use [narrow acceptance](../../../../docs/development/verification.md#check-selection-and-failures) and the hourly ledger to expose long attempts. | Commands match the changed surface; queue time and attempt duration are visible.            |
-| Integration configuration had not been validated through the deployment tool. | Unvalidated integration configuration     | Require [real integration validation](../../../../docs/development/verification.md#external-integrations) in acceptance.                          | The actual configuration has tool validation evidence, plus deployment evidence where safe. |
-| A control-plane fix had not reached the branch where it runs.                 | Branch or propagation gap                 | Split and land control-plane work under [landing discipline](../../../../docs/development/delivery.md#checkout-and-landing-discipline).           | The running control plane contains the checked main revision.                               |
-
-In an incident report, link the evidence for every row, the class repair and its owning rule. Record notification to
-the resident and affected units, and compare the next hourly report with the incident window under the owning rule; an intended repair
-is still pending until that comparison supports its effect.
+Keep a concise incident record separate from prompts. Retain raw logs privately. A usage ledger supports the
+explanation but does not replace it; do not reproduce it as another narrative report.

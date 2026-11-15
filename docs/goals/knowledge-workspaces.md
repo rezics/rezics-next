@@ -41,8 +41,8 @@ capability does not open every old grant-closed surface.
 
 ## Ownership
 
-Content is the coordinating owner under the existing Content manager. This Goal introduces no new manager process
-or control-plane configuration. Existing owners retain their paths and mechanisms:
+Content owns the coordinating contract; the resident allocates execution. Existing owners retain their paths and
+mechanisms, without another manager process or control-plane configuration:
 
 | Owner       | Responsibility                                                                                                                                                                            |
 | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

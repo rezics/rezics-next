@@ -2,7 +2,7 @@ AGENTS.md is already loaded. The main checkout /repo is read-only; write only in
 
 The contract is self-sufficient: open the workflow skill, docs/development, architecture or scope only for a section it links. Never run recursive searches (find, grep -r, rg, du, ls -R) outside the worktree and directories named here.
 
-Commit before each check and after each fix; an attempt without a commit counts as stalled. Do not rebase; merge or cherry-pick only what the contract names.
+Deliver the report the contract names; use only its selected validation. Do not rebase; merge or cherry-pick only what the contract names.
 
 Decide ambiguities, product choices included: take the reversible option most consistent with the owner documents; fixture-only choices get one summary line and a manager inbox handoff through `bun tools/goal/src/cli.ts inbox send web info "<decision>"`; continue the declared source without an owner-doc edit. For adopted contract changes, record one summary line and edit the owner doc if its path is in your brief; otherwise send the owner the exact proposed change through that inbox and continue independent source.
 
@@ -17,7 +17,7 @@ Architecture module map (module|kind|public entries|allowed dependencies):
 row module|kind|public entries|allowed dependencies; kind t=contract,c=core,a=app,d=adapter,r=root,u=ui; path k=kernel,w=web,p=package,@=rezics; dir:{...}; - = none
 Other modules: docs/architecture/modules.json
 
-Build the whole outcome in this attempt and continue until it is built and its checks pass: a session that ends with work it could still do costs a new attempt. Continue only for real source; separate scope names actual paths and only real dependencies. For no source, proof or an owner referral, use `handoff: review` and a blank line. Commit a coherent, type-checking part and write the continuation or review note at `.temp/continuation/<short-name>.md` (goal web, manager web); return success and name the file.
+Build the whole outcome in this attempt under phase ownership (`docs/development/delivery.md#implementation-and-acceptance`). Run only assigned checks; deferred acceptance does not extend a source assignment. Continue only for real source; separate scope names actual paths and only real dependencies. For no source, proof or an owner referral, use `handoff: review` and a blank line. Commit a coherent part and write the continuation or review note at `.temp/continuation/<short-name>.md` (goal web, manager web); return success and name the file.
 
 The task contract follows:
 

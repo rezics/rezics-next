@@ -26,44 +26,43 @@ the current critical path. Archived scope and historical task counts do not meas
 
 ## Direct source integration
 
-Each execution unit owns its source and manually merges each coherent committed increment directly into its target
-branch immediately. Preserve current target history, source identity and both sides' required behavior; repair
-conflicts in the owning module. Do not wait for a landing queue, another unit or the shared publisher before merging.
-This applies to product, urgent, control-plane, stabilize, specification and verification-source work.
+Each execution unit manually merges coherent committed increments into its target immediately, preserving target
+history, source identity and both sides' required behavior. Repair conflicts in the owner module. Product, urgent,
+control-plane, stabilize, specification and verification-source work all follow this rule; no landing queue, peer
+unit or publisher is a source prerequisite.
 Unresolved Git merges stop dependent ref publication; Main and Dev preserve all integrated history, a structural loss-prevention rule rather than an acceptance gate.
 
-Source admission has no premerge verification: do not run tests, typechecks, transpilation, generators, architecture,
-schema or Kernel-import checks before merging. Preserve existing tests and record acceptance as deferred. The
-manager schedules unified verification and repairs after integration; a missing check or generated artifact does
-not turn into a per-unit source gate. This policy takes precedence over source-stage checks and coverage demands
-elsewhere in the workflow. Final release acceptance and publication remain separate from source integration.
+Source admission has no premerge verification: defer tests, typechecks, transpilation, generators, architecture,
+schema and Kernel-import checks. Preserve existing tests and report deferred acceptance. This rule replaces
+source-stage check and coverage demands elsewhere. Implement product contracts, authorization, money invariants
+and production input validation; their tests are scheduled separately. Prioritize repairs that restore Storybook
+or unblock source work. The single publisher builds and publishes the integrated revision afterward.
 
-Prioritize follow-up repairs that restore the Storybook build or unblock continued tasks. Keep product contracts,
-authorization and money invariants intact, including production validation at untrusted input boundaries. Their
-implementation is required behavior, not a requirement to run a test suite before integrating source.
+## Implementation and acceptance
 
-The existing single publisher owns building and publishing the exact integrated revision after source integration.
-Units continue source delivery while that shared work runs; they do not wait on the publisher before merging. Report integrated source, a built or published artifact, and actual functional
-observations separately; none implies the others. Later acceptance and Goal closure retain their evidence owners.
+Before allocation, name the implementation deliverable, acceptance owner, selected checks and deferred evidence
+separately. Implementation and acceptance run asynchronously; sharing a worktree does not combine their duties.
+An implementation-only assignment ends when its scoped source is integrated and remaining acceptance has an owner
+and a next action. Report that as source delivery, not product acceptance. A product Goal stays open until its
+adopted outcomes and required release evidence hold; do not narrow an active product Goal merely to close it.
+
+Verification receives a pinned integrated candidate and returns reached assertions, unavailable evidence and
+actionable defects to their owners. It does not turn the implementation unit into the default owner of setup,
+generation, host or check-runner repairs. The manager allocates those repairs and further acceptance explicitly.
+The same unit may receive a later assignment; it need not remain occupied waiting for that assignment.
 
 ## Source batches
 
-During a maintainer-authorized code-only window, assign complete source outcomes and use the available
-worker capacity for implementation. Do not spend that window writing or running tests, typing or browser matrices
-unless the maintainer specifically requires them. Preserve existing tests for the asynchronous verifier, record
-unverified behavior honestly, and repair reported failures in the owning module. This does not relax money movement
-or authorization rules, nor turn source delivery into release acceptance.
+During a maintainer-authorized code-only window, assign complete source outcomes. Defer test authoring and execution,
+typing and browser matrices unless explicitly required. Preserve existing tests and record unverified behavior.
 
-Design for correctness before coding. State the invariant, who owns it, which state transitions preserve it, how partial
-failure or retries behave, and what the cost does as data grows. Use the existing shared contract and keep the change
-coherent. Tests provide evidence of behavior; they do not supply the missing design. In a code-only window,
-write and review against those invariants and leave deferred verification visible.
+Design before coding: state the invariant, owner, transitions, partial failure and retry behavior, and growth cost.
+Use the shared contract; tests provide evidence rather than supplying missing design.
 
 Keep enough independent, ready source work for available workers. A brief names one coherent outcome,
 the installed interfaces, the write boundary, and what the worker can complete if one seam is blocked.
 Use the [sizing target](efficiency.md#output-and-flow) to avoid both fragments and oversized assignments.
-The worker checkpoints its code as it goes. Follow [direct source integration](#direct-source-integration) when
-integration is the bottleneck; record deferred acceptance without adding a final lint or typing prerequisite.
+The worker checkpoints and follows [direct source integration](#direct-source-integration).
 
 Around ten minutes after launch, use the existing task and worktree evidence to look for a coherent source
 diff, a new commit or a concrete design decision that unlocks writing. Count new product code separately
@@ -72,7 +71,7 @@ identify the first blocker, not a line quota or an automatic stop. Repair the br
 independent work, or park the blocked part with its exact next action. Use existing observations and events;
 do not wake a manager or worker just to report the same state.
 
-A worker can ask for one narrowly scoped Luna Max helper through the native Goal owner when an independent
+A worker can ask for one narrowly scoped helper through the native Goal owner when an independent
 question or slice will remove a demonstrated bottleneck. Give the helper only the necessary files and a
 concrete deliverable. Use a read-only consultation for advice, or a native task with distinct write paths
 for source work. Select the actual helper profile explicitly when required; the existing consultation
@@ -148,9 +147,8 @@ use separate worktrees. Assign file ownership before concurrent writes and desig
 staging and coherent commits. Keep identifiers in commit metadata, never code or documents. Preserve other writers'
 unfinished changes; do not reset, stash, clean or rebase shared work. Keep the live checkout stable and address Git
 operations explicitly to the assigned worktree.
-The controller normally owns rebasing, integration and promotion. When integration is the bottleneck, use
-[direct source integration](#direct-source-integration). Resolve conflicts without dropping the other side's required
-changes; ref updates preserve the current head and publication keeps its existing owner.
+[Direct source integration](#direct-source-integration) owns source merging. The controller retains promotion;
+publication keeps its existing owner. Ref updates preserve the current head and peers' required changes.
 
 The resident supermanager is the only manager. Workers may author Goals; the manager adopts the scope, acceptance
 and allocation before a native execution unit consumes one. Units choose implementation order and may use native

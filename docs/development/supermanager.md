@@ -22,9 +22,9 @@ Register the unit's actual native session, Goal, shared worktree and termspaces 
 runtime identities in local state, and preserve that same Goal and pane across ordinary continuation. Source
 coordination inside a unit does not grant live controller, pool or publisher authority.
 
-Units decide implementation order and routine in-scope choices, repair shared causes in the owner module, and continue
-independent work while checks run. The manager owns cross-unit allocation and resolves product conflicts. An unavailable
-manager is not a reason to stop work permitted by the Goal; only the genuinely dependent operation waits.
+Units decide implementation order and routine choices. Allocate implementation, acceptance and infrastructure repairs
+under [phase ownership](delivery.md#implementation-and-acceptance); a shared failure does not silently expand a unit's
+assignment. The manager resolves cross-unit conflicts; only a genuinely dependent operation waits.
 
 ## Writing briefs
 
@@ -53,15 +53,17 @@ domain-manager quotas or fixed coder floors to create filler. At a requested hal
 inbox/reminder path to inspect the largest delivery loss and make a scheduling decision. Count the context reload cost;
 do not add a second timer or polling loop. Keep a timeboxed experiment's planned wakes finite.
 
-After a completed hour below the [throughput target](efficiency.md#output-and-flow), inspect source output and visible
-product outcomes, act on the largest measured loss, and continue the project's progress report. Re-evaluate the finish
-forecast from accepted remaining journeys. Report a missed timebox honestly and preserve completed work.
+At existing checkpoints, compare delivered outcomes and the finish forecast with the timebox. Act on the largest
+measured loss under [incident analysis](efficiency.md#incident-method). If checks repeatedly fail to reach relevant
+assertions or exceed the delivery forecast, choose and record a narrower check, deferred evidence, an owner repair
+or a revised scope/forecast. Do not default to more runs or leave implementation occupied by verification.
+Required product acceptance remains open; a scope change follows the Goal owner and maintainer's authority.
 
 ## Environment incidents
 
-When the same failure line ends three or more tasks within 20 minutes, treat it as one shared incident. Include the
-line, count, examples and source location in the manager's alert and the project notice. Fix the cause or assign its
-owner within 15 minutes, then retry the affected operations. A retry alone is not a class repair.
+Route repeated environment failures under [check selection](verification.md#check-selection-and-failures).
+Group affected operations into one owner repair and keep independent work moving. Use the existing incident notice
+and inbox; an additional timer or report is not a repair.
 
 ## Questions for the maintainer
 

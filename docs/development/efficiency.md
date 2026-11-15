@@ -165,8 +165,8 @@ outcome, tracked per Goal, task class and model profile. It improves in three wa
 - **Clear prompts.** The manager names current evidence, one outcome, its write scope, and the permitted checks
   separately from later acceptance. In a shared checkout, claim files or a directory before editing and tell
   peers about overlaps. Replace a repeated bad premise; keep completed source and remove stale briefs.
-- **The simplest model that does the work.** A well-specified implementation journey runs on GPT-6 Luna at max
-  effort. Stronger models are kept for the work that needs them: review-prone or citation-heavy work, hard
+- **The simplest model that does the work.** A well-specified implementation journey uses the routed profile.
+  Stronger models are kept for the work that needs them: review-prone or citation-heavy work, hard
   debugging, and design. Change a routing default only after comparing profiles on representative accepted work.
 - **No rework.** Attempts that end without landing are the largest token cost. Remove their causes, as set out under
   "Output and flow".
@@ -178,10 +178,11 @@ Follow [direct source integration](delivery.md#direct-source-integration) whenev
 for every task type. During an authorized code-first window, keep source checkpoints and deferred acceptance. Count
 saved source, integrated code and accepted journeys separately. Compare delivery cost before changing models or width.
 
-The brief writer picks the model by the task's difficulty. A simple, well-specified brief pins `model: gpt-6-luna` and
-`effort: max` in its front matter. Examples: exact edits the brief names, fixture, data or translation work, and wiring
+The brief writer picks the model by the task's difficulty. Simple, well-specified work can use `model: gpt-6-luna`;
+effort follows the routed profile. Examples: exact edits the brief names, fixture, data or translation work, and wiring
 that follows an existing pattern. Judgment work keeps the routed default: debugging an unknown cause, design,
-cross-module contracts, security and money.
+cross-module contracts, security and money. Maximum effort is a temporary task-specific choice, never a standing
+requirement. A sprint-specific effort pin expires with that assignment.
 
 Decision: the cross-module evidence and admission work for one reviewed Person across VN and anime retains the routed
 model default.
@@ -195,11 +196,10 @@ Maintain an hourly diagnostic ledger of allowance, wait requests, replacement in
 failures alongside the flow report. Use it to locate avoidable costs in briefs, exploration, rereads, polling,
 retries, conflicts, checks and idle capacity; apply the daily bottleneck change above.
 
-Product work integrating into dev retries without a limit or an approval: retry it, with an amended brief when that
-helps, and keep it moving. For a task needing a third attempt, classify each lost attempt as infrastructure, contract,
-rebase or model failure, fix the class and record the evidence alongside those retries, not before them; a retry is
-not a repair. Control-plane, stabilize and verification work keep the controller's retry limits and wait for that
-investigation before a further retry.
+Preserve source and continue useful product repairs on dev without repeated approval. After equivalent failures,
+change the approach under [check selection](verification.md#check-selection-and-failures); another identical run is
+not progress. Classify lost attempts as infrastructure, contract, integration or model failure and repair their owner.
+Control-plane, stabilize and verification work retain controller retry limits.
 
 “Selected model is at capacity” and an ambiguous “usage limit” with fresh allowance remaining are provider faults.
 Use the controller's bounded retry policy; never switch service tier or mark an allowance exhausted on that evidence
@@ -237,15 +237,16 @@ and is measured separately from Codex execution. Private configuration owns acco
 
 ## Incident method
 
-When work slows or an attempt is lost, enumerate every evidenced cause from task states, attempt records, run logs
-and `failure.json`. Name the class of each cause: for example, shared-file holds, wrong brief premises, oversized
-checks, unnoticed long attempts, unvalidated integration configuration, or branch and propagation gaps. Distinguish
-observations from hypotheses; do not invent missing timing or claim a fix without evidence.
+When delivery slows or misses its forecast, start with the largest evidenced loss. State the observation and source,
+the decision or repeated action that sustained it, the causal explanation and its confidence, what to stop or change,
+the repair owner, and the next comparable outcome. Token totals and exhausted resources describe costs, not causes.
+Do not infer loaded prompt size from repository size or attribute delay to a model setting without supporting evidence.
 
-Repair each class where it appears: give the problem to an agent at that point (resolver, same-session fix,
-regeneration), so the pipeline continues. Add a check that refuses or ends work only when no agent can repair the
-problem in place. Register that check in the guard ledger with the defect it prevents, and price it from its first
-firing. Send the manager and affected units the adopted rule and its owner link. Verify its effect in the next hourly
-report using comparable evidence; if the effect is not yet observable, record that limit and the next observation.
-Use the [worked incident procedure](../../.agents/skills/rezics-workflow/references/efficiency.md#incident-analysis)
-when preparing the cause-to-fix record.
+Repair the class at its owner and remove the superseded action or rule. Do not add another gate, watcher, audit or
+recurring report by default. Keep incident evidence in operating records or a short report, outside default prompts;
+put only reusable rules in owner documents and link them from templates and briefs.
+
+Use the existing progress checkpoint to compare delivery time, accepted outcomes, repeated failures and manager cost.
+State unknown attribution and untested hypotheses. A document edit or passing tooling test is not evidence of faster
+delivery; when no comparable outcome has run, report the improvement as unverified. Follow the
+[incident procedure](../../.agents/skills/rezics-workflow/references/efficiency.md#incident-analysis).
