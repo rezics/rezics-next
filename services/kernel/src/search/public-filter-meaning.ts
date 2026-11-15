@@ -7,6 +7,7 @@ export function hasExactPublicFilterMeaning(meaning: PublicFilterProjectionMeani
     Object.keys(meaning).length === 2 &&
     Object.hasOwn(meaning, 'digest') &&
     Object.hasOwn(meaning, 'release') &&
+    Object.keys(meaning.release.types).length > 0 &&
     meaning.digest === releaseDigest(meaning.release)
   );
 }

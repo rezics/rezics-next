@@ -1738,9 +1738,9 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
             if (error instanceof FilterError) throw new ProblemError(error.problem, { errors: error.errors });
             throw error;
           }
-          // Empty is never undefined-as-all. Native empty-scope exhaustion must establish
-          // the authorization and Source frame before this path can publish an empty page.
-          if (universe.kind === 'empty') throw indexNotReady();
+          // A release without concrete types cannot define a projectable Source meaning.
+          if (universe.kind === 'empty')
+            throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
           const admitted = await admitQuery(normalized.text, universe.predicate, current, false, undefined, true);
           if (!admitted) throw indexNotReady();
           const catalogue = catalogueFilter(admitted);

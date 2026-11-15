@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { releaseDigest } from '@rezics/definitions';
+import { hasExactPublicFilterMeaning } from '../../src/search/public-filter-meaning.ts';
 import { FilterError, FILTER_LIMITS, walkFilter, type FilterRelease } from '@rezics/filter';
 import { catalogueFacetPredicate } from '../../src/search/catalogue-facet-predicate.ts';
 
@@ -29,7 +31,7 @@ test('an explicit predicate retains its exact user meaning even with an empty ca
   expect(result.kind === 'predicate' && result.predicate === predicate).toBe(true);
 });
 
-test('an empty pinned catalogue is an explicit empty universe rather than an unfiltered query', () => {
+test('a catalogue without concrete types is explicit configuration state rather than an unfiltered query', () => {
   expect(catalogueFacetPredicate(release([]), undefined)).toEqual({ kind: 'empty' });
 });
 
@@ -37,4 +39,11 @@ test('a catalogue outside the existing AST or value-byte bounds is refused rathe
   const types = Array.from({ length: FILTER_LIMITS.in * FILTER_LIMITS.leaves + 1 }, (_, index) => `ex:T${index}`);
   expect(() => catalogueFacetPredicate(release(types), undefined)).toThrow(FilterError);
   expect(() => catalogueFacetPredicate(release([`ex:${'a'.repeat(129)}`]), undefined)).toThrow(FilterError);
+});
+
+test('release-only Source meanings retain the concrete-type projectability requirement', () => {
+  const empty = release([]);
+  expect(hasExactPublicFilterMeaning({ release: empty, digest: releaseDigest(empty) })).toBe(false);
+  const concrete = release(['schema:Book']);
+  expect(hasExactPublicFilterMeaning({ release: concrete, digest: releaseDigest(concrete) })).toBe(true);
 });
