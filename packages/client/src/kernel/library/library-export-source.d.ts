@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
-import { type LibraryExportSectionV1, type LibraryExportVersion } from './library-export-format.ts';
-export { exportSections, exportSectionsV2, exportSectionsV3, exportSectionsV4 } from './library-export-format.ts';
+import { readHostedReadingExportPage } from './hosted-reading.ts';
+import { type LibraryExportSection } from './library-export-format.ts';
+export { exportSections } from './library-export-format.ts';
 type JournalDate = {
     year: number;
 } | {
@@ -32,7 +33,7 @@ type TimestampFact = {
     zone: 'utc' | 'offset' | 'unknown';
 };
 type ExistingExportRecord = Record<string, unknown> & {
-    section: LibraryExportSectionV1;
+    section: Exclude<LibraryExportSection, 'annotations' | 'provenance' | 'journals' | 'vndbUploads' | 'vndbEvidence' | 'anilistUploads' | 'anilistEvidence' | 'hostedReading'>;
 };
 export type AnnotationExportRecord = {
     section: 'annotations';
@@ -61,7 +62,7 @@ export type ProvenanceExportRecord = {
         recordedAt: string;
     };
 };
-export type JournalExportRecordV2 = {
+export type JournalExportRecord = {
     section: 'journals';
     accountId: string;
     sessionId: string;
@@ -79,17 +80,12 @@ export type JournalExportRecordV2 = {
         startDate: JournalDate | null;
         finishDate: JournalDate | null;
         reflection: string | null;
-    };
-};
-export type JournalExportRecordV3 = Omit<JournalExportRecordV2, 'journal'> & {
-    journal: JournalExportRecordV2['journal'] & {
         assessment: {
             meaningRevision: 1;
             units: number | null;
         };
     };
 };
-export type JournalExportRecord = JournalExportRecordV2 | JournalExportRecordV3;
 export type ProviderExportRecord = {
     section: 'vndbUploads';
     upload_id: string;
@@ -107,20 +103,30 @@ export type ProviderExportRecord = {
     ordinal: number;
     evidence: unknown;
 };
-export type ExportRecord = ExistingExportRecord | AnnotationExportRecord | ProvenanceExportRecord | JournalExportRecord | ProviderExportRecord;
+/** The installed owner hook supplies the exact saved checkpoint; no current body is resolved. */
+export type HostedReadingExportRecord = Omit<Awaited<ReturnType<typeof readHostedReadingExportPage>>[number], 'key'> & {
+    section: 'hostedReading';
+    target_post_id: string;
+    bodyLanguage?: string | null;
+    subject_id_reference: {
+        id: string;
+        href: string;
+    };
+};
+export type ExportRecord = ExistingExportRecord | AnnotationExportRecord | ProvenanceExportRecord | JournalExportRecord | ProviderExportRecord | HostedReadingExportRecord;
 export type ExportSeek = {
     section: number;
     parent: string;
     after: string;
     rows: number;
     bytes: number;
-    sectionTotals?: [number, number][];
+    sectionTotals: [number, number][];
 };
-export declare const initialExportSeek: (version?: LibraryExportVersion) => ExportSeek;
+export declare const initialExportSeek: () => ExportSeek;
 export type ExportSourcePage = {
     records: ExportRecord[];
     seek: ExportSeek;
     done: boolean;
     oversized: boolean;
 };
-export declare function readExportSourcePage(client: Pick<PoolClient, 'query'>, route: number, accountId: string, input: ExportSeek, capturedAt: string, version?: LibraryExportVersion): Promise<ExportSourcePage>;
+export declare function readExportSourcePage(client: Pick<PoolClient, 'query'>, route: number, accountId: string, input: ExportSeek, capturedAt: string): Promise<ExportSourcePage>;

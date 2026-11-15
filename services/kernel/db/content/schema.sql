@@ -456,6 +456,140 @@ $$;
 
 
 --
+-- Name: guard_hosted_language_namespace(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_hosted_language_namespace() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='INSERT' THEN
+    IF NEW.state<>'open' OR NEW.publication_id IS NOT NULL THEN
+      RAISE EXCEPTION 'Hosted language namespaces start private' USING ERRCODE='23514';
+    END IF;
+    PERFORM 1 FROM content.hosted_catalogue c JOIN content.post p
+      ON p.route=c.route AND p.post_id=c.catalogue_id AND p.thread_id=c.thread_id
+      WHERE c.route=NEW.route AND c.catalogue_id=NEW.catalogue_id
+        AND p.availability='available' AND NOT p.author_erased FOR UPDATE OF p;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Hosted language preparation requires current native authority' USING ERRCODE='23514';
+    END IF;
+    IF NEW.stage_id IS NOT NULL AND NOT EXISTS (
+      SELECT 1 FROM content.hosted_publication_staging s
+      WHERE s.route=NEW.route AND s.catalogue_id=NEW.catalogue_id AND s.stage_id=NEW.stage_id
+        AND s.status NOT IN ('cancelled','expired','failed','sealed') AND s.sealed_at IS NULL
+    ) THEN
+      RAISE EXCEPTION 'Hosted language preparation source is terminal' USING ERRCODE='23514';
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF TG_OP='DELETE' THEN
+    IF OLD.state='published' THEN
+      RAISE EXCEPTION 'Published hosted language snapshots are immutable' USING ERRCODE='23514';
+    END IF;
+    IF OLD.stage_id IS NULL OR NOT content.hosted_language_cleanup_allowed(OLD.route,OLD.catalogue_id,OLD.stage_id)
+       OR EXISTS (SELECT 1 FROM content.hosted_chapter_language_snapshot s
+                  WHERE s.route=OLD.route AND s.catalogue_id=OLD.catalogue_id
+                    AND s.namespace_id=OLD.namespace_id LIMIT 1) THEN
+      RAISE EXCEPTION 'Private hosted namespaces require bounded native cleanup' USING ERRCODE='23514';
+    END IF;
+    RETURN OLD;
+  END IF;
+  IF ROW(NEW.route,NEW.catalogue_id,NEW.namespace_id) IS DISTINCT FROM
+     ROW(OLD.route,OLD.catalogue_id,OLD.namespace_id) OR OLD.state='published' THEN
+    RAISE EXCEPTION 'Hosted language namespace identity is immutable' USING ERRCODE='23514';
+  END IF;
+  IF OLD.state='open' AND NEW.state='sealed'
+     AND NEW.stage_id IS NOT DISTINCT FROM OLD.stage_id AND NEW.publication_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+  IF OLD.state='sealed' AND NEW.state='published' AND NEW.stage_id IS NULL
+     AND EXISTS (SELECT 1 FROM content.hosted_structure_revision r
+                 WHERE r.route=OLD.route AND r.catalogue_id=OLD.catalogue_id
+                   AND r.revision_id=NEW.publication_id AND r.kind='publication') THEN
+    PERFORM 1 FROM content.hosted_catalogue c JOIN content.post p
+      ON p.route=c.route AND p.post_id=c.catalogue_id AND p.thread_id=c.thread_id
+      WHERE c.route=OLD.route AND c.catalogue_id=OLD.catalogue_id
+        AND p.availability='available' AND NOT p.author_erased FOR UPDATE OF p;
+    IF FOUND THEN RETURN NEW; END IF;
+  END IF;
+  RAISE EXCEPTION 'Hosted language namespace transition is not admitted' USING ERRCODE='23514';
+END;
+$$;
+
+
+--
+-- Name: guard_hosted_language_title(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_hosted_language_title() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE namespace_state text; namespace_stage uuid;
+BEGIN
+  IF TG_OP='DELETE' THEN
+    -- Only a private namespace's parent cascade may remove snapshot payloads.
+    IF TG_TABLE_NAME='hosted_chapter_language_snapshot' THEN
+      SELECT n.state,n.stage_id INTO namespace_state,namespace_stage
+      FROM content.hosted_chapter_language_namespace n
+      WHERE n.route=OLD.route AND n.catalogue_id=OLD.catalogue_id AND n.namespace_id=OLD.namespace_id;
+      IF namespace_state IN ('open','sealed') AND namespace_stage IS NOT NULL
+         AND content.hosted_language_cleanup_allowed(OLD.route,OLD.catalogue_id,namespace_stage) THEN
+        RETURN OLD;
+      END IF;
+    END IF;
+    RAISE EXCEPTION 'Hosted language identities are immutable' USING ERRCODE='23514';
+  END IF;
+  IF TG_OP='INSERT' THEN
+    PERFORM 1 FROM content.hosted_catalogue c JOIN content.post p
+      ON p.route=c.route AND p.post_id=c.catalogue_id AND p.thread_id=c.thread_id
+      WHERE c.route=NEW.route AND c.catalogue_id=NEW.catalogue_id
+        AND p.availability='available' AND NOT p.author_erased FOR UPDATE OF p;
+    IF NOT FOUND OR NEW.title_redacted THEN
+      RAISE EXCEPTION 'Hosted language insertion requires current native authority' USING ERRCODE='23514';
+    END IF;
+    IF TG_TABLE_NAME='hosted_chapter_language_snapshot' THEN
+      SELECT state,stage_id INTO namespace_state,namespace_stage FROM content.hosted_chapter_language_namespace
+        WHERE route=NEW.route AND catalogue_id=NEW.catalogue_id AND namespace_id=NEW.namespace_id FOR UPDATE;
+      IF namespace_state IS DISTINCT FROM 'open' THEN
+        RAISE EXCEPTION 'Hosted language snapshot is sealed' USING ERRCODE='23514';
+      END IF;
+      IF namespace_stage IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM content.hosted_publication_staging s
+        WHERE s.route=NEW.route AND s.catalogue_id=NEW.catalogue_id AND s.stage_id=namespace_stage
+          AND s.status NOT IN ('cancelled','expired','failed','sealed') AND s.sealed_at IS NULL
+      ) THEN
+        RAISE EXCEPTION 'Hosted language snapshot source is terminal' USING ERRCODE='23514';
+      END IF;
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF OLD.title_redacted OR OLD.title IS NULL OR NOT NEW.title_redacted OR NEW.title IS NOT NULL
+     OR (to_jsonb(NEW)-'title'-'title_redacted') IS DISTINCT FROM
+        (to_jsonb(OLD)-'title'-'title_redacted') THEN
+    RAISE EXCEPTION 'Hosted language payload permits only one-way title redaction' USING ERRCODE='23514';
+  END IF;
+  PERFORM 1 FROM content.hosted_catalogue c JOIN content.post p
+    ON p.route=c.route AND p.post_id=c.catalogue_id AND p.thread_id=c.thread_id
+    WHERE c.route=OLD.route AND c.catalogue_id=OLD.catalogue_id
+      AND ((p.availability='erased' AND p.purge_started_at IS NOT NULL)
+        OR (p.availability='available' AND p.visibility='published' AND p.author_erased)) FOR UPDATE OF p;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Hosted language redaction requires terminal native authority' USING ERRCODE='23514';
+  END IF;
+  IF TG_TABLE_NAME='hosted_chapter_language_snapshot' THEN
+    SELECT state INTO namespace_state FROM content.hosted_chapter_language_namespace
+      WHERE route=OLD.route AND catalogue_id=OLD.catalogue_id AND namespace_id=OLD.namespace_id FOR UPDATE;
+    IF namespace_state IS DISTINCT FROM 'open' AND namespace_state IS DISTINCT FROM 'sealed' THEN
+      RAISE EXCEPTION 'Published hosted language titles are immutable' USING ERRCODE='23514';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: guard_hosted_private_title(); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -692,7 +826,14 @@ CREATE FUNCTION content.guard_hosted_version_rows() RETURNS trigger
     AS $$
 DECLARE
   authority text;
+  before_payload jsonb;
+  after_payload jsonb;
+  payload_column text;
 BEGIN
+  IF TG_TABLE_NAME='hosted_version_builder_point' AND TG_OP='DELETE' THEN
+    RETURN OLD;
+  END IF;
+  -- Candidate retirement retains its independent exact cleanup claim and deletion authority.
   IF TG_OP='DELETE' THEN
     authority := current_setting('content.hosted_version_candidate_cleanup',true);
     IF EXISTS (
@@ -708,7 +849,68 @@ BEGIN
       RETURN OLD;
     END IF;
   END IF;
-  RAISE EXCEPTION 'Hosted version rows are append only' USING ERRCODE = '23514';
+
+  IF TG_OP='INSERT' THEN
+    IF NEW.title_redacted THEN
+      RAISE EXCEPTION 'Hosted ordered title tombstones require an existing title' USING ERRCODE='23514';
+    END IF;
+    -- Serialize all new payload rows against the native terminal marker.
+    PERFORM 1 FROM content.hosted_catalogue catalogue
+    JOIN content.post post
+      ON post.route=catalogue.route AND post.post_id=catalogue.catalogue_id AND post.thread_id=catalogue.thread_id
+    WHERE catalogue.route=NEW.route AND catalogue.catalogue_id=NEW.catalogue_id
+      AND NOT ((post.availability='erased' AND post.purge_started_at IS NOT NULL)
+        OR (post.availability='available' AND post.visibility='published' AND post.author_erased))
+    FOR SHARE OF post;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Hosted ordered payload cannot be inserted after terminal authority' USING ERRCODE='23514';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP='UPDATE' AND TG_TABLE_NAME IN ('hosted_occurrence_state_version','hosted_order_node_version','hosted_version_builder_point') THEN
+    IF TG_TABLE_NAME='hosted_version_builder_point' THEN
+      IF OLD.title_redacted OR OLD.title IS NULL OR NOT NEW.title_redacted OR NEW.title IS NOT NULL
+        OR (to_jsonb(NEW)-'title'-'title_redacted') IS DISTINCT FROM (to_jsonb(OLD)-'title'-'title_redacted') THEN
+        RAISE EXCEPTION 'Hosted ordered payload permits only one-way title redaction' USING ERRCODE='23514';
+      END IF;
+    ELSE
+      payload_column := CASE WHEN TG_TABLE_NAME='hosted_occurrence_state_version' THEN 'occurrence_state' ELSE 'node_state' END;
+      before_payload := to_jsonb(OLD)->payload_column;
+      after_payload := to_jsonb(NEW)->payload_column;
+      IF OLD.title_redacted OR NOT NEW.title_redacted
+        OR after_payload IS NOT DISTINCT FROM before_payload
+        OR after_payload IS DISTINCT FROM content.redact_hosted_ordered_title(before_payload,TG_TABLE_NAME='hosted_order_node_version')
+        OR (to_jsonb(NEW)-payload_column-'title_redacted') IS DISTINCT FROM
+           (to_jsonb(OLD)-payload_column-'title_redacted') THEN
+        RAISE EXCEPTION 'Hosted ordered payload permits only one-way title redaction' USING ERRCODE='23514';
+      END IF;
+    END IF;
+    PERFORM 1 FROM content.hosted_catalogue catalogue
+    JOIN content.post post
+      ON post.route=catalogue.route AND post.post_id=catalogue.catalogue_id AND post.thread_id=catalogue.thread_id
+    WHERE catalogue.route=OLD.route AND catalogue.catalogue_id=OLD.catalogue_id
+      AND ((post.availability='erased' AND post.purge_started_at IS NOT NULL)
+        OR (post.availability='available' AND post.visibility='published' AND post.author_erased))
+    FOR UPDATE OF post;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Hosted ordered title disposition requires terminal native authority' USING ERRCODE='23514';
+    END IF;
+    IF TG_TABLE_NAME='hosted_version_builder_point' THEN RETURN NEW; END IF;
+    PERFORM 1 FROM content.hosted_tree_generation generation
+    WHERE generation.route=OLD.route AND generation.catalogue_id=OLD.catalogue_id AND generation.generation_id=OLD.generation_id
+    FOR UPDATE;
+    IF NOT FOUND OR EXISTS (
+      SELECT 1 FROM content.hosted_version_revision revision
+      WHERE revision.route=OLD.route AND revision.catalogue_id=OLD.catalogue_id
+        AND revision.generation_id=OLD.generation_id AND revision.revision_kind='publication'
+      LIMIT 1
+    ) THEN
+      RAISE EXCEPTION 'Published hosted ordered labels are immutable' USING ERRCODE='23514';
+    END IF;
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION 'Hosted version rows are append only' USING ERRCODE='23514';
 END;
 $$;
 
@@ -762,14 +964,91 @@ $$;
 
 
 --
+-- Name: guard_knowledge_account_fence(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_knowledge_account_fence() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='INSERT' THEN
+    IF NEW.account_erased THEN RAISE EXCEPTION 'Knowledge erasure requires existing native ownership' USING ERRCODE='23514'; END IF;
+    IF TG_TABLE_NAME='knowledge_document' THEN
+      PERFORM 1 FROM content.knowledge_notebook n
+      WHERE n.route=NEW.route AND n.notebook_id=NEW.notebook_id AND NOT n.account_erased FOR SHARE;
+      IF NOT FOUND THEN RAISE EXCEPTION 'Knowledge notebook is terminal' USING ERRCODE='23514'; END IF;
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF OLD.account_erased AND NOT NEW.account_erased THEN
+    RAISE EXCEPTION 'Knowledge account disposition is irreversible' USING ERRCODE='23514';
+  END IF;
+  IF TG_TABLE_NAME='knowledge_notebook' AND OLD.account_erased AND NEW IS DISTINCT FROM OLD THEN
+    RAISE EXCEPTION 'Knowledge notebook disposition is terminal' USING ERRCODE='23514';
+  END IF;
+  IF TG_TABLE_NAME='knowledge_document' AND OLD.account_erased THEN
+    IF (OLD.notebook_id IS NULL AND NEW.notebook_id IS NOT NULL)
+      OR NEW.lifecycle_generation<OLD.lifecycle_generation
+      OR OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL AND NEW.purge_started_at IS NULL
+      OR (NEW.notebook_id IS NOT NULL AND NEW.notebook_id IS DISTINCT FROM OLD.notebook_id)
+      OR NEW.head_revision_id IS DISTINCT FROM OLD.head_revision_id AND NEW.head_revision_id IS NOT NULL
+      OR NEW.current_publication_id IS DISTINCT FROM OLD.current_publication_id AND NEW.current_publication_id IS NOT NULL
+      OR OLD.purge_started_at IS NOT NULL AND NEW.purge_started_at IS NULL
+      OR OLD.purge_completed AND NOT NEW.purge_completed
+      OR NEW.retained_public_generation IS DISTINCT FROM OLD.retained_public_generation AND NEW.retained_public_generation IS NOT NULL THEN
+      RAISE EXCEPTION 'Knowledge account disposition cannot restore private or public state' USING ERRCODE='23514';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: guard_knowledge_snapshot(); Type: FUNCTION; Schema: content; Owner: -
 --
 
 CREATE FUNCTION content.guard_knowledge_snapshot() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
+DECLARE source content.knowledge_document%ROWTYPE;
 BEGIN
-  RAISE EXCEPTION 'Knowledge revisions and publications are immutable' USING ERRCODE = '23514';
+  IF TG_TABLE_NAME='knowledge_structure_revision' THEN
+    IF TG_OP='DELETE' AND EXISTS (
+      SELECT 1 FROM content.knowledge_notebook n WHERE n.route=OLD.route AND n.notebook_id=OLD.notebook_id AND n.account_erased
+    ) THEN RETURN OLD; END IF;
+    IF TG_OP='INSERT' AND EXISTS (
+      SELECT 1 FROM content.knowledge_notebook n WHERE n.route=NEW.route AND n.notebook_id=NEW.notebook_id AND NOT n.account_erased
+    ) THEN RETURN NEW; END IF;
+  ELSE
+    IF TG_OP='INSERT' THEN
+      PERFORM 1 FROM content.knowledge_document d JOIN content.knowledge_notebook n
+        ON n.route=d.route AND n.notebook_id=d.notebook_id
+      WHERE d.route=NEW.route AND d.document_id=NEW.document_id AND NOT d.account_erased AND NOT n.account_erased
+      FOR SHARE OF n,d;
+      IF FOUND THEN RETURN NEW; END IF;
+    ELSE
+      SELECT * INTO source FROM content.knowledge_document d
+      WHERE d.route=OLD.route AND d.document_id=OLD.document_id FOR UPDATE;
+      IF source.account_erased AND NOT source.legal_hold THEN
+        IF TG_TABLE_NAME='knowledge_revision' AND TG_OP='UPDATE' THEN
+          IF NEW.author_account_id IS NULL
+            AND (NEW.copy_provenance IS NULL OR NEW.copy_provenance=OLD.copy_provenance AND NEW.copy_provenance->>'representation'='public')
+            AND (to_jsonb(NEW)-'author_account_id'-'copy_provenance') IS NOT DISTINCT FROM
+                (to_jsonb(OLD)-'author_account_id'-'copy_provenance') THEN RETURN NEW; END IF;
+        END IF;
+        IF TG_OP='DELETE' AND NOT EXISTS (
+          SELECT 1 FROM content.knowledge_publication_selection s
+          WHERE s.route=source.route AND s.document_id=source.document_id
+            AND s.lifecycle_generation=source.retained_public_generation
+            AND s.lifecycle_generation=source.lifecycle_generation
+            AND s.revision_id=OLD.revision_id
+            AND (TG_TABLE_NAME='knowledge_revision' OR s.publication_id=(to_jsonb(OLD)->>'publication_id')::uuid)
+        ) THEN RETURN OLD; END IF;
+      END IF;
+    END IF;
+  END IF;
+  RAISE EXCEPTION 'Knowledge revisions and publications are immutable' USING ERRCODE='23514';
 END;
 $$;
 
@@ -782,7 +1061,21 @@ CREATE FUNCTION content.guard_knowledge_structure() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
-  RAISE EXCEPTION 'Knowledge structure revisions are immutable' USING ERRCODE = '23514';
+  IF TG_OP='INSERT' THEN
+    PERFORM 1 FROM content.knowledge_notebook n
+    WHERE n.route=NEW.route AND n.notebook_id=NEW.notebook_id AND NOT n.account_erased FOR SHARE;
+    IF FOUND THEN RETURN NEW; END IF;
+  ELSIF EXISTS (
+    SELECT 1 FROM content.knowledge_notebook n WHERE n.route=OLD.route AND n.notebook_id=OLD.notebook_id AND n.account_erased
+  ) THEN
+    IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+    IF TG_TABLE_NAME='knowledge_structure_page' THEN
+      IF NEW.left_page_id IS NULL AND NEW.right_page_id IS NULL
+        AND (to_jsonb(NEW)-'left_page_id'-'right_page_id') IS NOT DISTINCT FROM
+            (to_jsonb(OLD)-'left_page_id'-'right_page_id') THEN RETURN NEW; END IF;
+    END IF;
+  END IF;
+  RAISE EXCEPTION 'Knowledge structure revisions are immutable' USING ERRCODE='23514';
 END;
 $$;
 
@@ -1206,6 +1499,33 @@ $$;
 
 
 --
+-- Name: hosted_language_cleanup_allowed(integer, uuid, uuid); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.hosted_language_cleanup_allowed(p_route integer, p_catalogue uuid, p_stage uuid) RETURNS boolean
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM content.hosted_publication_staging_cleanup c
+    JOIN content.hosted_publication_staging s USING (route,catalogue_id,stage_id)
+    WHERE c.route=p_route AND c.catalogue_id=p_catalogue AND c.stage_id=p_stage
+      AND c.cleanup_active AND c.completed_at IS NULL
+      AND s.status=c.terminal_status AND s.owner_epoch=c.owner_epoch AND s.sealed_at IS NULL
+      AND current_setting('content.hosted_publication_staging_cleanup',true)=
+          format('%s:%s:%s:%s',c.route,c.catalogue_id,c.stage_id,c.owner_epoch)
+  ) OR EXISTS (
+    SELECT 1 FROM content.hosted_version_candidate_cleanup c
+    JOIN content.hosted_publication_staging s USING (route,catalogue_id,stage_id)
+    WHERE c.route=p_route AND c.catalogue_id=p_catalogue AND c.stage_id=p_stage
+      AND c.phase='generation' AND c.cleanup_active AND c.completed_at IS NULL
+      AND s.status=c.terminal_status AND s.owner_epoch=c.owner_epoch AND s.sealed_at IS NOT NULL
+      AND current_setting('content.hosted_version_candidate_cleanup',true)=
+          format('%s:%s:%s:%s',c.route,c.catalogue_id,c.stage_id,c.generation_id)
+  );
+$$;
+
+
+--
 -- Name: hosted_occurrence_subtree_height(jsonb); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -1250,25 +1570,34 @@ $$;
 CREATE FUNCTION content.knowledge_document_eligible(selected_route integer, selected_document uuid, include_trashed_target boolean DEFAULT false) RETURNS boolean
     LANGUAGE sql STABLE
     AS $$
-  WITH RECURSIVE path AS (
-    SELECT p.notebook_id, p.placement_id, p.parent_id, 0 AS depth,
-           (d.deleted_at IS NULL OR include_trashed_target)
-             AND d.purge_started_at IS NULL AND NOT d.purge_completed AS eligible
+  WITH RECURSIVE retained AS (
+    SELECT 1 FROM content.knowledge_document d
+    JOIN content.knowledge_publication p
+      ON p.route=d.route AND p.document_id=d.document_id AND p.publication_id=d.current_publication_id
+     AND p.lifecycle_generation=d.lifecycle_generation
+    JOIN content.knowledge_publication_selection s
+      ON s.route=p.route AND s.document_id=p.document_id AND s.lifecycle_generation=p.lifecycle_generation
+     AND s.revision_id=p.revision_id AND s.publication_id=p.publication_id
+    WHERE d.route=selected_route AND d.document_id=selected_document AND d.account_erased
+      AND d.retained_public_generation=d.lifecycle_generation AND d.deleted_at IS NULL
+      AND d.purge_started_at IS NULL AND NOT d.purge_completed
+  ), path AS (
+    SELECT p.notebook_id,p.placement_id,p.parent_id,0 AS depth,
+      (d.deleted_at IS NULL OR include_trashed_target) AND d.purge_started_at IS NULL AND NOT d.purge_completed AS eligible
     FROM content.knowledge_document d
-    JOIN content.knowledge_placement p
-      ON p.route=d.route AND p.notebook_id=d.notebook_id AND p.document_id=d.document_id
-    WHERE d.route=selected_route AND d.document_id=selected_document
+    JOIN content.knowledge_notebook n ON n.route=d.route AND n.notebook_id=d.notebook_id AND NOT n.account_erased
+    JOIN content.knowledge_placement p ON p.route=d.route AND p.notebook_id=d.notebook_id AND p.document_id=d.document_id
+    WHERE d.route=selected_route AND d.document_id=selected_document AND NOT d.account_erased
     UNION ALL
-    SELECT p.notebook_id, p.placement_id, p.parent_id, child.depth+1,
-           d.deleted_at IS NULL AND d.purge_started_at IS NULL AND NOT d.purge_completed
+    SELECT p.notebook_id,p.placement_id,p.parent_id,child.depth+1,
+      d.deleted_at IS NULL AND d.purge_started_at IS NULL AND NOT d.purge_completed
     FROM path child
     JOIN content.knowledge_placement p
       ON p.route=selected_route AND p.notebook_id=child.notebook_id AND p.placement_id=child.parent_id
-    JOIN content.knowledge_document d
-      ON d.route=p.route AND d.notebook_id=p.notebook_id AND d.document_id=p.document_id
+    JOIN content.knowledge_document d ON d.route=p.route AND d.notebook_id=p.notebook_id AND d.document_id=p.document_id
     WHERE child.depth<31
   )
-  SELECT COALESCE(bool_and(eligible) AND bool_or(parent_id IS NULL), false) FROM path;
+  SELECT EXISTS(SELECT 1 FROM retained) OR COALESCE(bool_and(eligible) AND bool_or(parent_id IS NULL),false) FROM path;
 $$;
 
 
@@ -1373,6 +1702,34 @@ $$;
 
 
 --
+-- Name: redact_hosted_ordered_title(jsonb, boolean); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.redact_hosted_ordered_title(payload jsonb, nested boolean) RETURNS jsonb
+    LANGUAGE plpgsql IMMUTABLE STRICT
+    AS $$
+DECLARE fields jsonb;
+BEGIN
+  IF payload->>'kind' IS DISTINCT FROM 'object' OR jsonb_typeof(payload->'value') IS DISTINCT FROM 'array' THEN
+    RETURN payload;
+  END IF;
+  SELECT jsonb_agg(
+    CASE
+      WHEN nested AND pair->>0='value' THEN
+        jsonb_build_array('value',content.redact_hosted_ordered_title(pair->1,false))
+      WHEN NOT nested AND pair->>0='title' AND pair->1->>'kind'='primitive'
+           AND jsonb_typeof(pair->1->'value')='string' THEN
+        jsonb_build_array('title',jsonb_build_object('kind','primitive','value',NULL))
+      ELSE pair
+    END ORDER BY ordinal
+  ) INTO fields
+  FROM jsonb_array_elements(payload->'value') WITH ORDINALITY entry(pair,ordinal);
+  RETURN jsonb_set(payload,'{value}',COALESCE(fields,'[]'::jsonb));
+END;
+$$;
+
+
+--
 -- Name: register_hosted_publication_retention_pending(); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -1472,7 +1829,7 @@ CREATE TABLE content.account_erasure_progress (
     statements_kept_until timestamp with time zone,
     CONSTRAINT account_erasure_progress_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT account_erasure_progress_erased_at_check CHECK (isfinite(erased_at)),
-    CONSTRAINT account_erasure_progress_phase_check CHECK ((phase = ANY (ARRAY['slow-mode'::text, 'authored'::text, 'uploads'::text, 'reactions'::text, 'moderation'::text, 'notices'::text, 'proof'::text, 'complete'::text]))),
+    CONSTRAINT account_erasure_progress_phase_check CHECK ((phase = ANY (ARRAY['slow-mode'::text, 'authored'::text, 'knowledge'::text, 'uploads'::text, 'reactions'::text, 'moderation'::text, 'notices'::text, 'proof'::text, 'complete'::text]))),
     CONSTRAINT account_erasure_progress_statements_kept_until_check CHECK (((statements_kept_until IS NULL) OR isfinite(statements_kept_until))),
     CONSTRAINT account_erasure_progress_step_check CHECK ((step >= 0))
 );
@@ -2130,6 +2487,89 @@ CREATE TABLE content.hosted_catalogue (
 
 
 --
+-- Name: hosted_chapter_language_binding; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_chapter_language_binding (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    occurrence_id uuid NOT NULL,
+    language text NOT NULL COLLATE pg_catalog."C",
+    version bigint NOT NULL,
+    title text,
+    target jsonb,
+    title_redacted boolean DEFAULT false NOT NULL,
+    CONSTRAINT hosted_chapter_language_binding_check CHECK ((((target IS NULL) AND (title IS NULL) AND (NOT title_redacted)) OR ((target IS NOT NULL) AND (((title IS NOT NULL) AND (NOT title_redacted)) OR ((title IS NULL) AND title_redacted))))),
+    CONSTRAINT hosted_chapter_language_binding_title_check CHECK (((length(title) >= 1) AND (length(title) <= 256))),
+    CONSTRAINT hosted_chapter_language_binding_version_check CHECK ((version > 0))
+);
+
+
+--
+-- Name: hosted_chapter_language_key; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_chapter_language_key (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    occurrence_id uuid NOT NULL,
+    language text NOT NULL COLLATE pg_catalog."C",
+    first_version bigint NOT NULL,
+    CONSTRAINT hosted_chapter_language_key_first_version_check CHECK ((first_version > 0)),
+    CONSTRAINT hosted_chapter_language_key_language_check CHECK (((length(language) >= 1) AND (length(language) <= 63)))
+);
+
+
+--
+-- Name: hosted_chapter_language_namespace; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_chapter_language_namespace (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    namespace_id uuid NOT NULL,
+    stage_id uuid,
+    state text DEFAULT 'open'::text NOT NULL,
+    publication_id uuid,
+    CONSTRAINT hosted_chapter_language_namespace_check CHECK (((stage_id IS NULL) OR (stage_id = namespace_id))),
+    CONSTRAINT hosted_chapter_language_namespace_check1 CHECK ((((state = 'published'::text) AND (publication_id IS NOT NULL) AND (stage_id IS NULL)) OR ((state <> 'published'::text) AND (publication_id IS NULL)))),
+    CONSTRAINT hosted_chapter_language_namespace_state_check CHECK ((state = ANY (ARRAY['open'::text, 'sealed'::text, 'published'::text])))
+);
+
+
+--
+-- Name: hosted_chapter_language_snapshot; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_chapter_language_snapshot (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    namespace_id uuid NOT NULL,
+    occurrence_id uuid NOT NULL,
+    language text NOT NULL COLLATE pg_catalog."C",
+    first_version bigint NOT NULL,
+    title text,
+    title_redacted boolean DEFAULT false NOT NULL,
+    target jsonb NOT NULL,
+    CONSTRAINT hosted_chapter_language_snapshot_check CHECK (((title_redacted AND (title IS NULL)) OR ((NOT title_redacted) AND (title IS NOT NULL) AND ((length(title) >= 1) AND (length(title) <= 256))))),
+    CONSTRAINT hosted_chapter_language_snapshot_first_version_check CHECK ((first_version >= 0)),
+    CONSTRAINT hosted_chapter_language_snapshot_language_check CHECK (((length(language) >= 1) AND (length(language) <= 63)))
+);
+
+
+--
+-- Name: hosted_chapter_language_version; Type: SEQUENCE; Schema: content; Owner: -
+--
+
+CREATE SEQUENCE content.hosted_chapter_language_version
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
 -- Name: hosted_migration_input; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -2214,6 +2654,8 @@ CREATE TABLE content.hosted_occurrence_state_version (
     occurrence_state jsonb,
     is_deleted boolean NOT NULL,
     subtree_height smallint,
+    title_redacted boolean DEFAULT false NOT NULL,
+    CONSTRAINT hosted_occurrence_private_title_tombstone CHECK (((NOT title_redacted) OR (NOT (occurrence_state IS DISTINCT FROM content.redact_hosted_ordered_title(occurrence_state, false))))),
     CONSTRAINT hosted_occurrence_state_depth_bounds CHECK (((subtree_height IS NULL) OR ((subtree_height >= 0) AND (subtree_height <= 16)))),
     CONSTRAINT hosted_occurrence_state_version_check CHECK (((is_deleted AND (occurrence_state IS NULL) AND (parent_occurrence_id IS NULL) AND (subtree_size = 0)) OR ((NOT is_deleted) AND (occurrence_state IS NOT NULL) AND (subtree_size > 0)))),
     CONSTRAINT hosted_occurrence_state_version_check1 CHECK ((route = ((get_byte(uuid_send(occurrence_id), 10) * 256) + get_byte(uuid_send(occurrence_id), 11)))),
@@ -2240,6 +2682,8 @@ CREATE TABLE content.hosted_order_node_version (
     subtree_height smallint,
     maximum_subtree_height smallint,
     maximum_subtree_occurrence_id uuid,
+    title_redacted boolean DEFAULT false NOT NULL,
+    CONSTRAINT hosted_node_private_title_tombstone CHECK (((NOT title_redacted) OR (NOT (node_state IS DISTINCT FROM content.redact_hosted_ordered_title(node_state, true))))),
     CONSTRAINT hosted_order_node_depth_bounds CHECK (((subtree_height IS NULL) OR ((subtree_height >= 0) AND (subtree_height <= 16)))),
     CONSTRAINT hosted_order_node_max_depth_bounds CHECK (((maximum_subtree_height IS NULL) OR ((maximum_subtree_height >= 0) AND (maximum_subtree_height <= 16)))),
     CONSTRAINT hosted_order_node_max_depth_pair CHECK ((((maximum_subtree_height IS NULL) AND (maximum_subtree_occurrence_id IS NULL)) OR ((maximum_subtree_height IS NOT NULL) AND (maximum_subtree_occurrence_id IS NOT NULL)))),
@@ -2395,6 +2839,38 @@ CREATE TABLE content.hosted_publication_activation_vector (
 
 
 --
+-- Name: hosted_publication_language_progress; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_publication_language_progress (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    stage_id uuid NOT NULL,
+    after_source_order bigint DEFAULT '-1'::integer CONSTRAINT hosted_publication_language_progres_after_source_order_not_null NOT NULL,
+    after_language_version bigint,
+    after_language text COLLATE pg_catalog."C",
+    complete boolean DEFAULT false NOT NULL,
+    CONSTRAINT hosted_publication_language_progress_check CHECK (((after_language_version IS NULL) = (after_language IS NULL)))
+);
+
+
+--
+-- Name: hosted_publication_language_target; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_publication_language_target (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    stage_id uuid NOT NULL,
+    thread_id uuid NOT NULL,
+    post_id uuid NOT NULL,
+    target_revision_id uuid NOT NULL,
+    body_sha256 bytea NOT NULL,
+    occurrence_id uuid NOT NULL
+);
+
+
+--
 -- Name: hosted_publication_retention_adoption_cursor; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -2511,6 +2987,7 @@ CREATE TABLE content.hosted_publication_staging (
     source_kind text NOT NULL,
     source_ordered_generation_id uuid,
     source_ordered_sequence bigint,
+    language_occurrence_count bigint DEFAULT 0 NOT NULL,
     CONSTRAINT hosted_publication_staging_candidate_count_check CHECK ((candidate_count >= 0)),
     CONSTRAINT hosted_publication_staging_check CHECK ((route = ((get_byte(uuid_send(catalogue_id), 10) * 256) + get_byte(uuid_send(catalogue_id), 11)))),
     CONSTRAINT hosted_publication_staging_check1 CHECK ((route = ((get_byte(uuid_send(stage_id), 10) * 256) + get_byte(uuid_send(stage_id), 11)))),
@@ -2530,6 +3007,7 @@ CREATE TABLE content.hosted_publication_staging (
     CONSTRAINT hosted_publication_staging_input_count_check CHECK ((input_count >= 0)),
     CONSTRAINT hosted_publication_staging_input_frontier_check CHECK ((input_frontier >= '-1'::integer)),
     CONSTRAINT hosted_publication_staging_input_version_check CHECK ((input_version >= 0)),
+    CONSTRAINT hosted_publication_staging_language_occurrence_count_check CHECK ((language_occurrence_count >= 0)),
     CONSTRAINT hosted_publication_staging_mode_check CHECK ((mode = ANY (ARRAY['whole'::text, 'selection'::text]))),
     CONSTRAINT hosted_publication_staging_ordered_generation_route_check CHECK (((source_ordered_generation_id IS NULL) OR (route = ((get_byte(uuid_send(source_ordered_generation_id), 10) * 256) + get_byte(uuid_send(source_ordered_generation_id), 11))))),
     CONSTRAINT hosted_publication_staging_ordered_source_shape_check CHECK ((((source_kind = 'ordered'::text) AND (NOT source_has_descriptor) AND (source_ordered_generation_id IS NOT NULL) AND (source_ordered_sequence IS NOT NULL) AND (source_ordered_sequence >= 0)) OR ((source_kind = 'prefix'::text) AND source_has_descriptor AND (source_ordered_generation_id IS NULL) AND (source_ordered_sequence IS NULL)) OR ((source_kind = 'snapshot'::text) AND (NOT source_has_descriptor) AND (source_ordered_generation_id IS NULL) AND (source_ordered_sequence IS NULL)))),
@@ -2585,6 +3063,7 @@ CREATE TABLE content.hosted_publication_staging_candidate (
     post_id uuid,
     target_revision_id uuid,
     body_sha256 bytea,
+    body_languages jsonb,
     CONSTRAINT hosted_publication_staging_candidate_check CHECK ((route = ((get_byte(uuid_send(occurrence_id), 10) * 256) + get_byte(uuid_send(occurrence_id), 11)))),
     CONSTRAINT hosted_publication_staging_candidate_check1 CHECK (((parent_id IS NULL) OR (route = ((get_byte(uuid_send(parent_id), 10) * 256) + get_byte(uuid_send(parent_id), 11))))),
     CONSTRAINT hosted_publication_staging_candidate_check2 CHECK ((((kind = 'part'::text) AND (thread_id IS NULL) AND (post_id IS NULL) AND (target_revision_id IS NULL) AND (body_sha256 IS NULL)) OR ((kind = 'chapter'::text) AND (thread_id IS NOT NULL) AND (post_id IS NOT NULL) AND (target_revision_id IS NOT NULL) AND (body_sha256 IS NOT NULL) AND (octet_length(body_sha256) = 32)))),
@@ -2720,7 +3199,7 @@ CREATE TABLE content.hosted_publication_staging_step (
     CONSTRAINT hosted_publication_staging_step_check CHECK ((route = ((get_byte(uuid_send(step_id), 10) * 256) + get_byte(uuid_send(step_id), 11)))),
     CONSTRAINT hosted_publication_staging_step_checkpoint_check CHECK (((result_checkpoint IS NULL) OR COALESCE(((jsonb_typeof(result_checkpoint) = 'object'::text) AND (octet_length((result_checkpoint)::text) <= 8192) AND (jsonb_typeof((result_checkpoint -> 'locator'::text)) = 'object'::text) AND (((result_checkpoint -> 'locator'::text) ->> 'catalogueId'::text) = (catalogue_id)::text) AND (((result_checkpoint -> 'locator'::text) ->> 'stageId'::text) = (stage_id)::text) AND ((result_checkpoint ->> 'mode'::text) = ANY (ARRAY['whole'::text, 'selection'::text])) AND ((result_checkpoint ->> 'state'::text) = ANY (ARRAY['collecting'::text, 'building'::text, 'closing'::text, 'ready'::text, 'sealed'::text, 'cancelled'::text, 'expired'::text, 'failed'::text])) AND (((result_state = 'failed'::text) AND ((result_checkpoint ->> 'state'::text) = 'failed'::text)) OR ((result_state = 'ready'::text) AND ((result_checkpoint ->> 'state'::text) = 'ready'::text)) OR ((result_state = 'more'::text) AND ((result_checkpoint ->> 'state'::text) <> ALL (ARRAY['failed'::text, 'ready'::text]))))), false))),
     CONSTRAINT hosted_publication_staging_step_created_at_check CHECK (isfinite(created_at)),
-    CONSTRAINT hosted_publication_staging_step_phase_check CHECK ((phase = ANY (ARRAY['whole'::text, 'selection'::text, 'closure'::text, 'candidate_begin'::text, 'candidate_page'::text, 'exhausted'::text, 'terminal'::text]))),
+    CONSTRAINT hosted_publication_staging_step_phase_check CHECK ((phase = ANY (ARRAY['whole'::text, 'selection'::text, 'closure'::text, 'candidate_begin'::text, 'candidate_page'::text, 'exhausted'::text, 'terminal'::text, 'language_targets'::text]))),
     CONSTRAINT hosted_publication_staging_step_preparation_check CHECK (((result_preparation IS NULL) OR ((jsonb_typeof(result_preparation) = 'object'::text) AND (octet_length((result_preparation)::text) <= 8192) AND ((result_preparation ->> 'catalogueId'::text) = (catalogue_id)::text) AND ((result_preparation ->> 'stageId'::text) = (stage_id)::text)))),
     CONSTRAINT hosted_publication_staging_step_processed_check CHECK (((processed >= 0) AND (processed <= 20))),
     CONSTRAINT hosted_publication_staging_step_result_state_check CHECK ((result_state = ANY (ARRAY['more'::text, 'ready'::text, 'failed'::text])))
@@ -2925,6 +3404,8 @@ CREATE TABLE content.hosted_version_builder_point (
     target_post_id uuid,
     target_revision_id uuid,
     target_sha256 bytea,
+    title_redacted boolean DEFAULT false NOT NULL,
+    CONSTRAINT hosted_builder_private_title_tombstone CHECK (((NOT title_redacted) OR (title IS NULL))),
     CONSTRAINT hosted_version_builder_point_address_segment_check CHECK ((address_segment = ANY (ARRAY['base'::text, 'prefix'::text]))),
     CONSTRAINT hosted_version_builder_point_check CHECK (((route = ((get_byte(uuid_send(occurrence_id), 10) * 256) + get_byte(uuid_send(occurrence_id), 11))) AND ((parent_id IS NULL) OR (route = ((get_byte(uuid_send(parent_id), 10) * 256) + get_byte(uuid_send(parent_id), 11)))))),
     CONSTRAINT hosted_version_builder_point_check1 CHECK ((((address_segment = 'base'::text) AND (source_revision_id IS NOT NULL) AND (source_stream_id IS NULL) AND (source_offset IS NULL) AND (source_address_ordinal IS NOT NULL) AND (source_address_ordinal = source_ordinal)) OR ((address_segment = 'prefix'::text) AND (source_revision_id IS NULL) AND (source_stream_id IS NOT NULL) AND (source_offset IS NOT NULL) AND (source_offset >= 0) AND (source_address_ordinal IS NULL)))),
@@ -3402,21 +3883,25 @@ ALTER TABLE ONLY content.imported_field ALTER COLUMN body SET COMPRESSION lz4;
 CREATE TABLE content.knowledge_document (
     route integer NOT NULL,
     document_id uuid NOT NULL,
-    notebook_id uuid NOT NULL,
-    head_revision_id uuid NOT NULL,
+    notebook_id uuid,
+    head_revision_id uuid,
     current_publication_id uuid,
-    created_transaction_id uuid NOT NULL,
-    created_at timestamp with time zone NOT NULL,
+    created_transaction_id uuid,
+    created_at timestamp with time zone,
     lifecycle_generation bigint DEFAULT 0 NOT NULL,
     deleted_at timestamp with time zone,
     purge_started_at timestamp with time zone,
     purge_completed boolean DEFAULT false NOT NULL,
     legal_hold boolean DEFAULT false NOT NULL,
+    account_erased boolean DEFAULT false NOT NULL,
+    retained_public_generation bigint,
+    CONSTRAINT knowledge_document_active_identity CHECK ((account_erased OR ((notebook_id IS NOT NULL) AND (head_revision_id IS NOT NULL) AND (created_transaction_id IS NOT NULL) AND (created_at IS NOT NULL)))),
     CONSTRAINT knowledge_document_check CHECK ((route = ((get_byte(uuid_send(document_id), 10) * 256) + get_byte(uuid_send(document_id), 11)))),
     CONSTRAINT knowledge_document_created_at_check CHECK (isfinite(created_at)),
     CONSTRAINT knowledge_document_deleted_at_check CHECK (((deleted_at IS NULL) OR isfinite(deleted_at))),
     CONSTRAINT knowledge_document_lifecycle_generation_check CHECK ((lifecycle_generation >= 0)),
     CONSTRAINT knowledge_document_purge_started_at_check CHECK (((purge_started_at IS NULL) OR isfinite(purge_started_at))),
+    CONSTRAINT knowledge_document_retained_public_generation_check CHECK (((retained_public_generation IS NULL) OR (retained_public_generation >= 0))),
     CONSTRAINT knowledge_document_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
@@ -3489,6 +3974,7 @@ CREATE TABLE content.knowledge_notebook (
     created_transaction_id uuid NOT NULL,
     created_at timestamp with time zone NOT NULL,
     structure_revision_number bigint DEFAULT 1 NOT NULL,
+    account_erased boolean DEFAULT false NOT NULL,
     CONSTRAINT knowledge_notebook_check CHECK ((route = ((get_byte(uuid_send(notebook_id), 10) * 256) + get_byte(uuid_send(notebook_id), 11)))),
     CONSTRAINT knowledge_notebook_check1 CHECK ((route = ((get_byte(uuid_send(owner_account_id), 10) * 256) + get_byte(uuid_send(owner_account_id), 11)))),
     CONSTRAINT knowledge_notebook_created_at_check CHECK (isfinite(created_at)),
@@ -3578,6 +4064,7 @@ CREATE TABLE content.knowledge_revision (
     reference_manifest jsonb DEFAULT '[]'::jsonb NOT NULL,
     copy_provenance jsonb,
     block_ids text[] GENERATED ALWAYS AS (content.knowledge_block_ids(canonical_bytes)) STORED,
+    media_ids uuid[] DEFAULT '{}'::uuid[] NOT NULL,
     CONSTRAINT knowledge_revision_body_sha256_check CHECK ((octet_length(body_sha256) = 32)),
     CONSTRAINT knowledge_revision_canonical_bytes_check CHECK ((octet_length(canonical_bytes) <= 2097152)),
     CONSTRAINT knowledge_revision_check CHECK ((route = ((get_byte(uuid_send(document_id), 10) * 256) + get_byte(uuid_send(document_id), 11)))),
@@ -3585,6 +4072,7 @@ CREATE TABLE content.knowledge_revision (
     CONSTRAINT knowledge_revision_created_at_check CHECK (isfinite(created_at)),
     CONSTRAINT knowledge_revision_language_check CHECK (((language IS NULL) OR ((char_length(language) >= 1) AND (char_length(language) <= 64)))),
     CONSTRAINT knowledge_revision_licence_check CHECK (((char_length(licence) >= 1) AND (char_length(licence) <= 128))),
+    CONSTRAINT knowledge_revision_media_ids_check CHECK (((cardinality(media_ids) <= 32) AND (array_position(media_ids, NULL::uuid) IS NULL))),
     CONSTRAINT knowledge_revision_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT knowledge_revision_subject_ids_check CHECK ((cardinality(subject_ids) <= 64)),
     CONSTRAINT knowledge_revision_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 512)))
@@ -3729,11 +4217,11 @@ CREATE TABLE content.media (
     CONSTRAINT media_declared_measurements_check CHECK (((purpose = 'cover'::text) OR ((byte_count IS NOT NULL) AND (media_type IS NOT NULL)))),
     CONSTRAINT media_declared_sha256_check CHECK ((declared_sha256 ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT media_focal_point_check CHECK ((((focal_x IS NULL) AND (focal_y IS NULL)) OR ((focal_x IS NOT NULL) AND (focal_y IS NOT NULL) AND (focal_x >= (0)::double precision) AND (focal_x <= (1)::double precision) AND (focal_y >= (0)::double precision) AND (focal_y <= (1)::double precision)))),
+    CONSTRAINT media_knowledge_browser_provenance_check CHECK (((purpose <> 'knowledge-image'::text) OR ((source_url IS NULL) AND (credit IS NULL) AND (provenance IS NULL) AND (claimed_item_id IS NULL) AND (claimed_realm_id IS NULL)))),
+    CONSTRAINT media_knowledge_publication_generation_check CHECK (((knowledge_publication_generation IS NULL) OR ((purpose = 'knowledge-image'::text) AND (claimed_at IS NOT NULL) AND (knowledge_publication_generation >= 0)))),
     CONSTRAINT media_measurements_check CHECK (((((state = 'reserved'::text) AND (actual_byte_count IS NULL) AND (sha256 IS NULL) AND (decision IS NULL) AND (claimed_at IS NULL)) OR ((state = ANY (ARRAY['uploaded'::text, 'available'::text, 'rejected'::text])) AND (byte_count IS NOT NULL) AND (media_type IS NOT NULL) AND (actual_byte_count IS NOT NULL) AND (actual_byte_count = byte_count) AND (sha256 IS NOT NULL) AND (((state = 'uploaded'::text) AND (decision IS NULL) AND (claimed_at IS NULL)) OR ((state = 'available'::text) AND (decision IS NULL)) OR ((state = 'rejected'::text) AND (decision IS NOT NULL) AND (claimed_at IS NULL)))) OR ((purpose = 'cover'::text) AND (state = 'rejected'::text) AND (byte_count IS NULL) AND (media_type IS NULL) AND (actual_byte_count IS NULL) AND (sha256 IS NULL) AND (declared_sha256 IS NULL) AND (decision IS NOT NULL) AND (claimed_at IS NULL))) IS TRUE)),
     CONSTRAINT media_media_type_check CHECK ((media_type = ANY (ARRAY['image/avif'::text, 'image/gif'::text, 'image/jpeg'::text, 'image/png'::text, 'image/webp'::text]))),
     CONSTRAINT media_purpose_check CHECK ((purpose = ANY (ARRAY['post-image'::text, 'cover'::text, 'avatar'::text, 'realm-icon'::text, 'realm-banner'::text, 'knowledge-image'::text]))),
-    CONSTRAINT media_knowledge_browser_provenance_check CHECK (((purpose <> 'knowledge-image'::text) OR ((source_url IS NULL) AND (credit IS NULL) AND (provenance IS NULL) AND (claimed_item_id IS NULL) AND (claimed_realm_id IS NULL)))),
-    CONSTRAINT media_knowledge_publication_generation_check CHECK (((knowledge_publication_generation IS NULL) OR ((purpose = 'knowledge-image'::text) AND (claimed_at IS NOT NULL) AND (knowledge_publication_generation >= 0)))),
     CONSTRAINT media_realm_asset_check CHECK (((purpose <> ALL (ARRAY['realm-icon'::text, 'realm-banner'::text])) OR ((source_url IS NULL) AND (credit IS NULL) AND (provenance IS NULL) AND (claimed_item_id IS NULL)))),
     CONSTRAINT media_realm_claim_check CHECK (((claimed_realm_id IS NULL) OR ((purpose = ANY (ARRAY['realm-icon'::text, 'realm-banner'::text])) AND (claimed_realm_id = container_id) AND (claimed_at IS NOT NULL)))),
     CONSTRAINT media_reservation_request_id_check CHECK (((char_length(reservation_request_id) >= 1) AND (char_length(reservation_request_id) <= 255))),
@@ -5294,6 +5782,38 @@ ALTER TABLE ONLY content.hosted_catalogue
 
 
 --
+-- Name: hosted_chapter_language_binding hosted_chapter_language_binding_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_chapter_language_binding
+    ADD CONSTRAINT hosted_chapter_language_binding_pkey PRIMARY KEY (route, catalogue_id, occurrence_id, language, version);
+
+
+--
+-- Name: hosted_chapter_language_key hosted_chapter_language_key_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_chapter_language_key
+    ADD CONSTRAINT hosted_chapter_language_key_pkey PRIMARY KEY (route, catalogue_id, occurrence_id, language);
+
+
+--
+-- Name: hosted_chapter_language_namespace hosted_chapter_language_namespace_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_chapter_language_namespace
+    ADD CONSTRAINT hosted_chapter_language_namespace_pkey PRIMARY KEY (route, catalogue_id, namespace_id);
+
+
+--
+-- Name: hosted_chapter_language_snapshot hosted_chapter_language_snapshot_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_chapter_language_snapshot
+    ADD CONSTRAINT hosted_chapter_language_snapshot_pkey PRIMARY KEY (route, catalogue_id, namespace_id, occurrence_id, language);
+
+
+--
 -- Name: hosted_migration_input hosted_migration_input_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -5395,6 +5915,22 @@ ALTER TABLE ONLY content.hosted_publication_activation
 
 ALTER TABLE ONLY content.hosted_publication_activation_vector
     ADD CONSTRAINT hosted_publication_activation_vector_pkey PRIMARY KEY (route, catalogue_id, stage_id, pass_id, home_no);
+
+
+--
+-- Name: hosted_publication_language_progress hosted_publication_language_progress_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_language_progress
+    ADD CONSTRAINT hosted_publication_language_progress_pkey PRIMARY KEY (route, catalogue_id, stage_id);
+
+
+--
+-- Name: hosted_publication_language_target hosted_publication_language_target_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_language_target
+    ADD CONSTRAINT hosted_publication_language_target_pkey PRIMARY KEY (route, catalogue_id, stage_id, thread_id, post_id, target_revision_id, body_sha256, occurrence_id);
 
 
 --
@@ -6775,6 +7311,27 @@ CREATE INDEX hosted_append_occurrence_idx ON content.hosted_append USING btree (
 
 
 --
+-- Name: hosted_chapter_language_page; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_chapter_language_page ON content.hosted_chapter_language_key USING btree (route, catalogue_id, occurrence_id, first_version, language);
+
+
+--
+-- Name: hosted_chapter_language_snapshot_page; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_chapter_language_snapshot_page ON content.hosted_chapter_language_snapshot USING btree (route, catalogue_id, namespace_id, occurrence_id, first_version, language);
+
+
+--
+-- Name: hosted_chapter_language_target; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_chapter_language_target ON content.hosted_chapter_language_binding USING btree (((target ->> 'postId'::text)), ((target ->> 'revisionId'::text)), route, catalogue_id, occurrence_id, language, version) WHERE (target IS NOT NULL);
+
+
+--
 -- Name: hosted_migration_input_owner_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -6880,6 +7437,13 @@ CREATE INDEX hosted_sibling_root_asof ON content.hosted_sibling_root_version USI
 
 
 --
+-- Name: hosted_staging_language_occurrence; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_staging_language_occurrence ON content.hosted_publication_staging_candidate USING btree (route, catalogue_id, stage_id, source_order) WHERE (body_languages IS NOT NULL);
+
+
+--
 -- Name: hosted_structure_revision_history_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -6922,6 +7486,20 @@ CREATE INDEX hosted_version_release_candidate_state_idx ON content.hosted_versio
 
 
 --
+-- Name: hosted_version_revision_generation_kind; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_version_revision_generation_kind ON content.hosted_version_revision USING btree (route, catalogue_id, generation_id, revision_kind);
+
+
+--
+-- Name: knowledge_document_hold; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX knowledge_document_hold ON content.knowledge_document USING btree (route, notebook_id, document_id) WHERE legal_hold;
+
+
+--
 -- Name: knowledge_lifecycle_frontier_pending; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -6933,6 +7511,13 @@ CREATE INDEX knowledge_lifecycle_frontier_pending ON content.knowledge_lifecycle
 --
 
 CREATE INDEX knowledge_lifecycle_restore_pending ON content.knowledge_lifecycle_restore USING btree (route, started_at, root_document_id) WHERE (state = 'running'::text);
+
+
+--
+-- Name: knowledge_notebook_erasure_owner; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX knowledge_notebook_erasure_owner ON content.knowledge_notebook USING btree (route, owner_account_id, notebook_id);
 
 
 --
@@ -7420,6 +8005,34 @@ CREATE TRIGGER hosted_append_immutable BEFORE INSERT OR DELETE OR UPDATE ON cont
 
 
 --
+-- Name: hosted_version_builder_point hosted_builder_private_title; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_builder_private_title BEFORE INSERT OR DELETE OR UPDATE ON content.hosted_version_builder_point FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_version_rows();
+
+
+--
+-- Name: hosted_chapter_language_binding hosted_chapter_language_binding_guard; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_chapter_language_binding_guard BEFORE INSERT OR DELETE OR UPDATE ON content.hosted_chapter_language_binding FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_language_title();
+
+
+--
+-- Name: hosted_chapter_language_namespace hosted_chapter_language_namespace_guard; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_chapter_language_namespace_guard BEFORE INSERT OR DELETE OR UPDATE ON content.hosted_chapter_language_namespace FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_language_namespace();
+
+
+--
+-- Name: hosted_chapter_language_snapshot hosted_chapter_language_snapshot_guard; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_chapter_language_snapshot_guard BEFORE INSERT OR DELETE OR UPDATE ON content.hosted_chapter_language_snapshot FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_language_title();
+
+
+--
 -- Name: hosted_catalogue hosted_locator_pending; Type: TRIGGER; Schema: content; Owner: -
 --
 
@@ -7441,10 +8054,24 @@ CREATE TRIGGER hosted_occurrence_immutable BEFORE DELETE OR UPDATE ON content.ho
 
 
 --
+-- Name: hosted_occurrence_state_version hosted_occurrence_state_terminal_insert; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_occurrence_state_terminal_insert BEFORE INSERT ON content.hosted_occurrence_state_version FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_version_rows();
+
+
+--
 -- Name: hosted_occurrence_state_version hosted_occurrence_state_version_immutable; Type: TRIGGER; Schema: content; Owner: -
 --
 
 CREATE TRIGGER hosted_occurrence_state_version_immutable BEFORE DELETE OR UPDATE ON content.hosted_occurrence_state_version FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_version_rows();
+
+
+--
+-- Name: hosted_order_node_version hosted_order_node_terminal_insert; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_order_node_terminal_insert BEFORE INSERT ON content.hosted_order_node_version FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_version_rows();
 
 
 --
@@ -7609,10 +8236,31 @@ CREATE TRIGGER imported_field_immutable BEFORE DELETE OR UPDATE ON content.impor
 
 
 --
+-- Name: knowledge_document knowledge_document_account_fence; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER knowledge_document_account_fence BEFORE INSERT OR UPDATE ON content.knowledge_document FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_account_fence();
+
+
+--
+-- Name: knowledge_notebook knowledge_notebook_account_fence; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER knowledge_notebook_account_fence BEFORE INSERT OR UPDATE ON content.knowledge_notebook FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_account_fence();
+
+
+--
 -- Name: knowledge_publication knowledge_publication_immutable; Type: TRIGGER; Schema: content; Owner: -
 --
 
 CREATE TRIGGER knowledge_publication_immutable BEFORE DELETE OR UPDATE ON content.knowledge_publication FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_snapshot();
+
+
+--
+-- Name: knowledge_publication knowledge_publication_terminal_insert; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER knowledge_publication_terminal_insert BEFORE INSERT ON content.knowledge_publication FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_snapshot();
 
 
 --
@@ -7623,10 +8271,24 @@ CREATE TRIGGER knowledge_revision_immutable BEFORE DELETE OR UPDATE ON content.k
 
 
 --
+-- Name: knowledge_revision knowledge_revision_terminal_insert; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER knowledge_revision_terminal_insert BEFORE INSERT ON content.knowledge_revision FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_snapshot();
+
+
+--
 -- Name: knowledge_structure_change knowledge_structure_change_immutable; Type: TRIGGER; Schema: content; Owner: -
 --
 
 CREATE TRIGGER knowledge_structure_change_immutable BEFORE DELETE OR UPDATE ON content.knowledge_structure_change FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_structure();
+
+
+--
+-- Name: knowledge_structure_change knowledge_structure_change_terminal_insert; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER knowledge_structure_change_terminal_insert BEFORE INSERT ON content.knowledge_structure_change FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_structure();
 
 
 --
@@ -7637,6 +8299,13 @@ CREATE TRIGGER knowledge_structure_page_immutable BEFORE DELETE OR UPDATE ON con
 
 
 --
+-- Name: knowledge_structure_page knowledge_structure_page_terminal_insert; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER knowledge_structure_page_terminal_insert BEFORE INSERT ON content.knowledge_structure_page FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_structure();
+
+
+--
 -- Name: knowledge_structure_revision knowledge_structure_revision_immutable; Type: TRIGGER; Schema: content; Owner: -
 --
 
@@ -7644,10 +8313,24 @@ CREATE TRIGGER knowledge_structure_revision_immutable BEFORE DELETE OR UPDATE ON
 
 
 --
+-- Name: knowledge_structure_revision knowledge_structure_revision_terminal_insert; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER knowledge_structure_revision_terminal_insert BEFORE INSERT ON content.knowledge_structure_revision FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_snapshot();
+
+
+--
 -- Name: knowledge_structure_parent_root knowledge_structure_root_immutable; Type: TRIGGER; Schema: content; Owner: -
 --
 
 CREATE TRIGGER knowledge_structure_root_immutable BEFORE DELETE OR UPDATE ON content.knowledge_structure_parent_root FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_structure();
+
+
+--
+-- Name: knowledge_structure_parent_root knowledge_structure_root_terminal_insert; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER knowledge_structure_root_terminal_insert BEFORE INSERT ON content.knowledge_structure_parent_root FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_structure();
 
 
 --
@@ -7989,6 +8672,62 @@ ALTER TABLE ONLY content.hosted_catalogue
 
 
 --
+-- Name: hosted_chapter_language_binding hosted_chapter_language_bindi_route_catalogue_id_occurrenc_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_chapter_language_binding
+    ADD CONSTRAINT hosted_chapter_language_bindi_route_catalogue_id_occurrenc_fkey FOREIGN KEY (route, catalogue_id, occurrence_id, language) REFERENCES content.hosted_chapter_language_key(route, catalogue_id, occurrence_id, language) ON DELETE CASCADE;
+
+
+--
+-- Name: hosted_chapter_language_key hosted_chapter_language_key_route_catalogue_id_occurrence__fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_chapter_language_key
+    ADD CONSTRAINT hosted_chapter_language_key_route_catalogue_id_occurrence__fkey FOREIGN KEY (route, catalogue_id, occurrence_id) REFERENCES content.hosted_occurrence(route, catalogue_id, occurrence_id) ON DELETE CASCADE;
+
+
+--
+-- Name: hosted_chapter_language_namespace hosted_chapter_language_names_route_catalogue_id_publicati_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_chapter_language_namespace
+    ADD CONSTRAINT hosted_chapter_language_names_route_catalogue_id_publicati_fkey FOREIGN KEY (route, catalogue_id, publication_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_chapter_language_namespace hosted_chapter_language_namesp_route_catalogue_id_stage_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_chapter_language_namespace
+    ADD CONSTRAINT hosted_chapter_language_namesp_route_catalogue_id_stage_id_fkey FOREIGN KEY (route, catalogue_id, stage_id) REFERENCES content.hosted_publication_staging(route, catalogue_id, stage_id) ON DELETE CASCADE;
+
+
+--
+-- Name: hosted_chapter_language_namespace hosted_chapter_language_namespace_route_catalogue_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_chapter_language_namespace
+    ADD CONSTRAINT hosted_chapter_language_namespace_route_catalogue_id_fkey FOREIGN KEY (route, catalogue_id) REFERENCES content.hosted_catalogue(route, catalogue_id);
+
+
+--
+-- Name: hosted_chapter_language_snapshot hosted_chapter_language_snaps_route_catalogue_id_namespace_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_chapter_language_snapshot
+    ADD CONSTRAINT hosted_chapter_language_snaps_route_catalogue_id_namespace_fkey FOREIGN KEY (route, catalogue_id, namespace_id) REFERENCES content.hosted_chapter_language_namespace(route, catalogue_id, namespace_id) ON DELETE CASCADE;
+
+
+--
+-- Name: hosted_chapter_language_snapshot hosted_chapter_language_snaps_route_catalogue_id_occurrenc_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_chapter_language_snapshot
+    ADD CONSTRAINT hosted_chapter_language_snaps_route_catalogue_id_occurrenc_fkey FOREIGN KEY (route, catalogue_id, occurrence_id) REFERENCES content.hosted_occurrence(route, catalogue_id, occurrence_id);
+
+
+--
 -- Name: hosted_migration_input hosted_migration_input_catalogue_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -8170,6 +8909,30 @@ ALTER TABLE ONLY content.hosted_publication_activation_dependency
 
 ALTER TABLE ONLY content.hosted_publication_activation_vector
     ADD CONSTRAINT hosted_publication_activation_vector_home_no_fkey FOREIGN KEY (home_no) REFERENCES core.publication_authority_epoch(home_no);
+
+
+--
+-- Name: hosted_publication_language_target hosted_publication_language__route_catalogue_id_stage_id__fkey1; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_language_target
+    ADD CONSTRAINT hosted_publication_language__route_catalogue_id_stage_id__fkey1 FOREIGN KEY (route, catalogue_id, stage_id, thread_id, post_id, target_revision_id, body_sha256) REFERENCES content.hosted_publication_staging_target(route, catalogue_id, stage_id, thread_id, post_id, target_revision_id, body_sha256);
+
+
+--
+-- Name: hosted_publication_language_progress hosted_publication_language_pr_route_catalogue_id_stage_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_language_progress
+    ADD CONSTRAINT hosted_publication_language_pr_route_catalogue_id_stage_id_fkey FOREIGN KEY (route, catalogue_id, stage_id) REFERENCES content.hosted_publication_staging(route, catalogue_id, stage_id) ON DELETE CASCADE;
+
+
+--
+-- Name: hosted_publication_language_target hosted_publication_language_t_route_catalogue_id_stage_id__fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_language_target
+    ADD CONSTRAINT hosted_publication_language_t_route_catalogue_id_stage_id__fkey FOREIGN KEY (route, catalogue_id, stage_id, occurrence_id) REFERENCES content.hosted_publication_staging_candidate(route, catalogue_id, stage_id, occurrence_id) ON DELETE CASCADE;
 
 
 --

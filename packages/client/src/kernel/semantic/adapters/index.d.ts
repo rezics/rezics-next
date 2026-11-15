@@ -17,7 +17,10 @@ import type { CopyWorkReaderPort, CopyWorkSearchEvidencePort } from '../copy-wor
 export declare function createNativeSemanticCopyWorkReaderPort(searchEvidence: CopyWorkSearchEvidencePort): CopyWorkReaderPort;
 export { nativeReleasedDefinitions, type NativeReleasedDefinitions } from './released-definitions.ts';
 export { nativeCopyListContext, type NativeCopyListContext } from './copy-list-context.ts';
+export { createSemanticTitleInputsAdapter } from './title-inputs.ts';
+export type { SemanticTitleInputEntry, SemanticTitleInputs, SemanticTitleInputsObservation } from './title-inputs.ts';
 export { createLibrarySubjectIdentityAdapter, observeLibrarySubjectSummaries, readLibraryIdentityMappings, } from './library-presentation.ts';
 export type { LibrarySubjectIdentityAdapter, LibrarySubjectReferenceResult } from './library-presentation.ts';
 export { createNativeLibraryObservationAdapter } from './library-observation.ts';
 export type { LibrarySubjectIdentityContext } from './library-presentation.ts';
+export { createSemanticTitleProvenanceAdapter, type SemanticTitleFieldBinding, type SemanticTitleProvenance, type SemanticTitleProvenanceEntry, type SemanticTitleProvenanceObservation, type SemanticTitleProvenanceOrigin, type SemanticTitleProvenanceSupport, } from './title-inputs-provenance.ts';

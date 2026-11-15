@@ -7,6 +7,7 @@ import type { HistoryArtifact, HistoryBarrier, HistoryProducerFamily, HistoryRea
 import type { HistoryCallback, HistoryHandle, HistoryPool, HistoryTransaction, HistoryWorkClient, HistoryWorkContext } from './transaction.ts';
 import type { HistoryOwnerCoverageResult, HistoryReceivingContext, HistoryReceivingDependencies, HistoryReceivingReceipt } from './receiving-types.ts';
 import type { RecordHistoryPurgeResult, SharedHistoryResult } from './record-types.ts';
+export type { LibraryBulkReceiptDispositionPort } from './library-bulk-receipts.ts';
 /**
  * The inward surface of the native History composition. Foreign Kernel modules reach History only through
  * the application facades, which read the composition installed by the process root. Opaque handles stand for

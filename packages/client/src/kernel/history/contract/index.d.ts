@@ -10,6 +10,8 @@ export { agentIdentityAccounts, agentIdentitySourceKey, agentIdentityWorkLocator
 export type { AgentIdentitySourceKey } from './identity-vocabulary.ts';
 export { MAX_LOCATOR_BYTES, MAX_SCOPE_ACCOUNTS, decodeLocator, encodeLocator, validateLocator, validateScope, } from './locator.ts';
 export type { AccountReference, HistoryLocator, HistoryScope } from './locator.ts';
+export { LIBRARY_BULK_TARGET_COMMAND_KIND, LIBRARY_BULK_TARGET_COMMAND_KIND_ID } from './library-bulk-receipts.ts';
+export type { LibraryBulkReceiptBinding, LibraryBulkReceiptDisposition, LibraryBulkReceiptDispositionPort, LibraryBulkReceiptLocator, } from './library-bulk-receipts.ts';
 export type { CommittedOperationalWork, OperationalEpisode, OperationalMembersBinding, OperationalWorkDomain, OperationalWorkPhase, OperationalWorkRegistration, OperationalWorkStamp, OperationalWorkTransfer, SelectedEpisode, SelectedLocator, SelectedOutcome, } from './operational-types.ts';
 export type { HistoryComposition, HistoryExecutionPort, HistoryWorkModule } from './ports.ts';
 export type { HistoryOwnerCoverage, HistoryOwnerCoverageResult, HistoryReceivingContext, HistoryReceivingDependencies, HistoryReceivingReceipt, ZoneHistoryConsumerObservation, } from './receiving-types.ts';

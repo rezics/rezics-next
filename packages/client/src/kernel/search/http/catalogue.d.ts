@@ -401,7 +401,7 @@ export declare function createCatalogueResponseAdapter({ pool, routeKey }: {
             type: string;
             labels: Record<string, string>;
         }[];
-    }>(page: T, authorize: (resource: Resource) => Promise<AccessCheck>, languages?: readonly string[], active?: Awaited<ReturnType<typeof activeRelease>> | undefined) => Promise<Omit<T, 'subjects'> & {
+    }>(page: T, authorize: (resource: Resource) => Promise<AccessCheck>, languages?: readonly string[], active?: Awaited<ReturnType<typeof activeRelease>> | undefined, deadline?: number) => Promise<Omit<T, 'subjects'> & {
         subjects: (T['subjects'][number] & {
             summary: SubjectSummary | null;
         })[];
@@ -419,7 +419,7 @@ export declare function createCatalogueResponseAdapter({ pool, routeKey }: {
             base: SearchHttpBase;
         })[];
     };
-    renderSelected: (subjects: readonly string[], authorize: (resource: Resource) => Promise<AccessCheck>, languages?: readonly string[], active?: Awaited<ReturnType<typeof activeRelease>> | undefined) => Promise<Omit<Omit<{
+    renderSelected: (subjects: readonly string[], authorize: (resource: Resource) => Promise<AccessCheck>, languages?: readonly string[], active?: Awaited<ReturnType<typeof activeRelease>> | undefined, deadline?: number) => Promise<Omit<Omit<{
         subjects: {
             id: string;
             type: string;

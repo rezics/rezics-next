@@ -1,3 +1,4 @@
+import { type CommittedSessionRevocationWorkflow } from './session-revocation-work.ts';
 import type { MembershipWorkInput, MembershipWorkResult, MembershipWorkflowPorts } from '@rezics/auth-contract';
 import type { WorkClient } from '../work/client.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
@@ -35,6 +36,7 @@ type Options = {
     authorize?: MembershipAuthorization;
     access?: Access;
     realm?: RealmMembershipCommands;
+    sessionRevocation?: CommittedSessionRevocationWorkflow;
 };
 /** Native Access-only ports. Direct component construction defers approval
  * configuration until use; WorkModule registration validates it eagerly. */

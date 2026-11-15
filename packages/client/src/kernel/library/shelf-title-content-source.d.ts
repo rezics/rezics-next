@@ -14,6 +14,7 @@ export interface ContentShelfTitleInputs {
         languages: readonly string[];
         viewer: AccountActor;
         subjects: readonly string[];
+        deadline: number;
     }): Promise<{
         status: 'unavailable';
     } | {

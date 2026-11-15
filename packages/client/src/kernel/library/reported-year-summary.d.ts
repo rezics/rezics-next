@@ -35,12 +35,15 @@ export type ReportedYearSummary = ReportedYearCounts & Readonly<{
         revision: string;
     }>;
 }>;
+type ReportedYearSummaryReads = Readonly<{
+    summary(actor: Actor, year: number, deadline: number, signal?: AbortSignal): Promise<ReportedYearSummary>;
+    summary<T>(actor: Actor, year: number, deadline: number, signal: AbortSignal | undefined, deliver: (value: ReportedYearSummary, encoded: string) => T): Promise<T>;
+}>;
 /** Shared coverage and source revision for summary-to-diary navigation; no preparation. */
 export declare function reportedYearRevision(client: Pick<PoolClient, 'query'>, route: number, accountId: string): Promise<string>;
 /** Pure bounded read. The optional delivery callback encodes HTTP while final
  * authority and cancellation checks still apply; it cannot await more work. */
 export declare function createReportedYearSummaryReads(deps: {
     pool: Pool;
-}): {
-    summary<T = ReportedYearSummary>(actor: Actor, year: number, deadline: number, signal?: AbortSignal, deliver?: (value: ReportedYearSummary, encoded: string) => T): Promise<T>;
-};
+}): ReportedYearSummaryReads;
+export {};

@@ -1,3 +1,4 @@
+import { type EditorPreferences, type EditorPreferencePatch } from '@rezics/editor/preferences';
 import type { Pool } from 'pg';
 import type { TSchema } from 'typebox';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
@@ -5383,7 +5384,7 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                 post: {
                     body: {
                         pin: {
-                            format: "https://rezics.com/definitions/catalogue/2";
+                            format: "https://rezics.com/definitions/catalogue/1";
                             rootDigest: string;
                             kindSpec: "https://rezics.com/definitions/kind/1";
                             reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5397,7 +5398,7 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                     response: {
                         200: {
                             pin: {
-                                format: "https://rezics.com/definitions/catalogue/2";
+                                format: "https://rezics.com/definitions/catalogue/1";
                                 rootDigest: string;
                                 kindSpec: "https://rezics.com/definitions/kind/1";
                                 reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5514,7 +5515,7 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                             response: {
                                 200: {
                                     pin: {
-                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        format: "https://rezics.com/definitions/catalogue/1";
                                         rootDigest: string;
                                         kindSpec: "https://rezics.com/definitions/kind/1";
                                         reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5635,7 +5636,7 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                             response: {
                                 200: {
                                     pin: {
-                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        format: "https://rezics.com/definitions/catalogue/1";
                                         rootDigest: string;
                                         kindSpec: "https://rezics.com/definitions/kind/1";
                                         reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5739,7 +5740,7 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                     response: {
                         200: {
                             pin: {
-                                format: "https://rezics.com/definitions/catalogue/2";
+                                format: "https://rezics.com/definitions/catalogue/1";
                                 rootDigest: string;
                                 kindSpec: "https://rezics.com/definitions/kind/1";
                                 reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5823,7 +5824,7 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                             response: {
                                 200: {
                                     pin: {
-                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        format: "https://rezics.com/definitions/catalogue/1";
                                         rootDigest: string;
                                         kindSpec: "https://rezics.com/definitions/kind/1";
                                         reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -8185,6 +8186,7 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     gridSize?: "large" | "medium" | "small";
                                     tableColumns?: ("added" | "cover" | "creator" | "finished" | "last_activity" | "progress" | "rating" | "started" | "status" | "title" | "type")[];
                                 };
+                                editor: EditorPreferences | EditorPreferencePatch;
                                 notifications: Notifications;
                                 version: number;
                                 page: {
@@ -8359,6 +8361,7 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 gridSize?: "large" | "medium" | "small" | null;
                                 tableColumns?: ("added" | "cover" | "creator" | "finished" | "last_activity" | "progress" | "rating" | "started" | "status" | "title" | "type")[] | null;
                             } | null;
+                            editor?: EditorPreferences | EditorPreferencePatch | null;
                             notifications?: Partial<Record<"board_activity" | "mention" | "reply" | "thread_watch", boolean | null>> | null;
                         };
                         params: {
@@ -8387,6 +8390,7 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     gridSize?: "large" | "medium" | "small";
                                     tableColumns?: ("added" | "cover" | "creator" | "finished" | "last_activity" | "progress" | "rating" | "started" | "status" | "title" | "type")[];
                                 };
+                                editor: EditorPreferences | EditorPreferencePatch;
                                 notifications: Notifications;
                                 version: number;
                                 page: {

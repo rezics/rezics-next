@@ -22,8 +22,8 @@ export type ShelfTitleLabels = {
  * Implementations must not acquire one Subject per Entry or manufacture currentness from cached labels.
  */
 export interface ShelfTitleSource {
-    basis(owner: ShelfOwner, languages: readonly string[], viewer: AccountActor): Promise<ShelfTitleBasis>;
-    labels(owner: ShelfOwner, languages: readonly string[], basis: string, subjectIds: readonly string[], viewer: AccountActor): Promise<{
+    basis(owner: ShelfOwner, languages: readonly string[], viewer: AccountActor, deadline: number): Promise<ShelfTitleBasis>;
+    labels(owner: ShelfOwner, languages: readonly string[], basis: string, subjectIds: readonly string[], viewer: AccountActor, deadline: number): Promise<{
         status: 'current';
         entries: readonly ShelfTitleLabels[];
     } | {
@@ -32,4 +32,4 @@ export interface ShelfTitleSource {
 }
 export declare function titleLanguages(value: unknown): string[];
 export declare function shelfTitlePolicy(languages: readonly string[]): string;
-export declare function currentShelfTitleBasis(source: ShelfTitleSource | undefined, owner: ShelfOwner, languages: readonly string[], viewer: AccountActor): Promise<string>;
+export declare function currentShelfTitleBasis(source: ShelfTitleSource | undefined, owner: ShelfOwner, languages: readonly string[], viewer: AccountActor, deadline: number): Promise<string>;

@@ -58,6 +58,31 @@ test('Kernel check forwards focused test options and program operands after the 
   }
 });
 
+test('Kernel tests-only plans explicit native files and preserves focused options', () => {
+  const fixture = schemaFixture();
+  try {
+    mkdirSync(join(fixture.kernel, 'test'), { recursive: true });
+    writeFileSync(join(fixture.kernel, 'test/native.test.ts'), '');
+    expect(planCheck(['--tests-only', 'test/native.test.ts', '--', '-t', 'qualification'], fixture.kernel, { env: {} }).plan)
+      .toEqual({ files: ['test/native.test.ts'], tests: ['test/native.test.ts'], testsOnly: true, testArguments: ['-t', 'qualification'] });
+    expect(() => planCheck(['--tests-only'], fixture.kernel, { env: {} })).toThrow('requires explicit test files');
+  } finally { fixture.dispose(); }
+});
+
+test('Kernel tests-only reaches native setup and tests without compiler lint or format', async () => {
+  const phases: string[] = [];
+  await runKernelCheckStages({
+    plan: { files: ['test/media.test.ts', 'test/rating.test.ts'], tests: ['test/media.test.ts', 'test/rating.test.ts'], testsOnly: true },
+    environment: {}, reyloConfig: 'unused', ownedFiles: [],
+    programs: { tsc: 'unused', lintProgram: 'unused', formatProgram: 'unused' },
+    captureCommand: async () => { throw new Error('quality command must not run'); },
+    aroundCompiler: async () => { throw new Error('compiler must not run'); },
+    afterQuality: async () => { phases.push('native setup'); },
+    runTests: async (files) => { phases.push(...files); return []; },
+  });
+  expect(phases).toEqual(['native setup', 'test/media.test.ts', 'test/rating.test.ts']);
+});
+
 test('A genuine schema mismatch retains expected and actual normalized dumps and an actionable bounded structural diff identifying the owning schema path and exact source, while still failing before any journey test; missing expected files remain failures', async () => {
   const fixture = schemaFixture();
   try {

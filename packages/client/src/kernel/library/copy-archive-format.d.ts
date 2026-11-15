@@ -1,4 +1,4 @@
-import { LIBRARY_EXPORT_FORMAT } from './library-export-format.ts';
+import { type LibraryArchiveManifest } from './library-export-format.ts';
 import type { LibraryProfilePin } from './profile.ts';
 /** Admission limits, independent of any eventual native copy command. */
 export declare const COPY_ARCHIVE_LIMITS: {
@@ -34,49 +34,12 @@ export type ArchivedHolding = {
     created_at: string;
     updated_at: string;
 };
-type CopyArchiveManifestBase = {
-    format: typeof LIBRARY_EXPORT_FORMAT;
-    exportId: string;
-    capturedAt: string;
-    expiresAt: string;
-    privacy: 'private';
-    completeness: 'supported-native-facts';
-    sections: string[];
-    omissions: Record<string, string>;
-    fullExport: false;
-    rows: number;
-    recordBytes: number;
-};
-/** Original manifests and all section totals remain evidence, including unsupported provider rows. */
-export type CopyArchiveManifest = CopyArchiveManifestBase & ({
-    version: 1;
-} | {
-    version: 2;
-    coverage: 'private-library-owner-facts-v2';
-    sectionTotals: Record<string, {
-        rows: number;
-        recordBytes: number;
-    }>;
-} | {
-    version: 4;
-    coverage: 'private-library-owner-facts-v4';
-    sectionTotals: Record<string, {
-        rows: number;
-        recordBytes: number;
-    }>;
-} | {
-    version: 3;
-    coverage: 'private-library-owner-facts-v3';
-    sectionTotals: Record<string, {
-        rows: number;
-        recordBytes: number;
-    }>;
-});
+/** The archive producer and all recovery consumers share one canonical manifest. */
+export type CopyArchiveManifest = LibraryArchiveManifest;
 export type ArchiveSectionCoverage = {
     section: string;
     records: number;
-    /** Absent on uploads retained before per-section byte accounting was installed. */
-    recordBytes?: number;
+    recordBytes: number;
     support: 'evidence-only' | 'unsupported';
 };
 export type ArchivedProgressMeasure = {
@@ -120,9 +83,7 @@ export type ArchivedProgressUnit = {
 };
 export type ParsedCopyArchive = {
     manifest: CopyArchiveManifest;
-    coverage: (ArchiveSectionCoverage & {
-        recordBytes: number;
-    })[];
+    coverage: ArchiveSectionCoverage[];
     holdings: {
         ordinal: number;
         evidence: ArchivedHolding;
@@ -136,4 +97,3 @@ export type ParsedCopyArchive = {
 };
 /** Parse the installed Web artifact, never a synthetic row-list or an unfinished page. */
 export declare function parseCopyArchive(bytes: Uint8Array): ParsedCopyArchive;
-export {};

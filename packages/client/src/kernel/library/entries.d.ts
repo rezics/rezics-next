@@ -150,7 +150,9 @@ export declare function createEntryCommands(config: Dependencies): {
             revision: number;
             priorRevision: number | null;
             beforeState: string | null;
+            beforeProfilePin: import("@rezics/definitions").LibraryProfilePin | null;
             afterState: string;
+            afterProfilePin: import("@rezics/definitions").LibraryProfilePin;
             commandId: string;
             commandKind: EntryStateCommandKind;
             changedAt: string;
@@ -163,7 +165,9 @@ export declare function createEntryCommands(config: Dependencies): {
             revision: number;
             priorRevision: number | null;
             beforeState: string | null;
+            beforeProfilePin: import("@rezics/definitions").LibraryProfilePin | null;
             afterState: string;
+            afterProfilePin: import("@rezics/definitions").LibraryProfilePin;
             commandId: string;
             commandKind: EntryStateCommandKind;
             changedAt: string;
@@ -186,7 +190,10 @@ export declare function createEntryCommands(config: Dependencies): {
         entry: Entry;
     }>>;
     readEntry: (actor: Actor, subjectId: string) => Promise<Entry>;
-    listEntries: (actor: Actor, options?: ListEntryOptions) => Promise<{
+    listEntries: (...args: Parameters<(actor: Actor, options?: ListEntryOptions) => Promise<{
+        entries: Entry[];
+        next: string | null;
+    }>>) => Promise<{
         entries: Entry[];
         next: string | null;
     }>;

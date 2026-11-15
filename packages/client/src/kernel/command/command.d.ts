@@ -202,6 +202,11 @@ export declare class IdempotencyConflictError extends Error {
 export declare class CommandResultErasedError extends Error {
     constructor();
 }
+/** A sent COMMIT may be durable even when its native response is lost. */
+export declare class CommandCommitUncertainError extends Error {
+    readonly partition: number;
+    constructor(partition: number, cause: unknown);
+}
 export declare class TooManyEventsError extends Error {
     readonly partition: number;
     readonly count: number;

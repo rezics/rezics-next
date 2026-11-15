@@ -10,6 +10,7 @@ import type { SearchPlan } from './query.ts';
 import { searchSubjectHits } from './query.ts';
 import { type SubjectSource } from './source.ts';
 import type { SubjectCanonicalNames } from '../semantic/subject-source-key-pages.ts';
+import { type ReleaseSearchCurrentText } from './release-search-text.ts';
 type SourceWithNames = SubjectSource & {
     canonicalNames?: SubjectCanonicalNames;
 };
@@ -29,6 +30,7 @@ export declare function readReleaseSearchGroups(input: {
     prefix: string;
     client: Parameters<typeof searchSubjectHits>[0];
     relationProperties: readonly string[];
+    currentText?: ReleaseSearchCurrentText;
     observeBasis: () => Promise<ReleaseGroupingBasis>;
     deadline: number;
     observeRelationRelease: () => Promise<CurrentRelationRelease | null>;
@@ -51,6 +53,7 @@ export declare function readReleaseSearchChildren(input: {
     prefix: string;
     client: Parameters<typeof searchSubjectHits>[0];
     relationProperties: readonly string[];
+    currentText?: ReleaseSearchCurrentText;
     observeBasis: () => Promise<ReleaseGroupingBasis>;
     deadline: number;
     observeRelationRelease: () => Promise<CurrentRelationRelease | null>;

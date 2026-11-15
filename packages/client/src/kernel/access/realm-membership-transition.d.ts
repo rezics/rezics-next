@@ -36,18 +36,26 @@ export declare function createRealmMembershipTransitions(config: {
     consume(input: RealmMembershipTransition & {
         key: string;
         proofTransactionId?: string;
-    }): Promise<import("../command/command.ts").CommandOutcome<{
-        accountId: string;
-        principal: import("./membership-inverse.ts").MembershipPrincipal;
-        reservationId: string;
-        transition: {
-            generationId: string;
-            operationId: string;
-        } & {
-            generationId: string;
-            operationId: string;
+    }): Promise<{
+        value: {
+            accountId: string;
+            principal: import("./membership-inverse.ts").MembershipPrincipal;
+            reservationId: string;
+            transition: {
+                generationId: string;
+                operationId: string;
+            } & {
+                generationId: string;
+                operationId: string;
+            };
+            proofTransactionId: string;
+            outcome: "cancelled" | "published";
+            publicationTransactionId: string | null;
         };
-        proofTransactionId: string;
-        outcome: "cancelled" | "published";
-    }>>;
+        partition: number;
+        epoch: number;
+        position: bigint;
+        transactionId: string;
+        replayed: boolean;
+    }>;
 };

@@ -66,6 +66,10 @@ export declare function readContext(pool: Pool, id: string, authorize: (client: 
         position: bigint;
     };
 } | null>;
+/** Creation-snapshotted defaults on the caller's connection, with the ordinary Context availability rules.
+ * Authorization and absent-Context policy remain with the caller. Reuse this snapshot across a mutation's views.
+ */
+export declare function readContextDefaults(client: ContextQueryClient, id: string): Promise<ContextRecord['defaults']>;
 export declare function contextSnapshot(pool: Pool, id: string, accessPort?: ContextAccessPort): Promise<ContextRecord | null>;
 export declare function contextLabels(id: string, input: unknown): Record<string, string>;
 export declare function publicContextEligibility(resource: ContextResource, accessPort?: ContextAccessPort): ResourceEligibility;

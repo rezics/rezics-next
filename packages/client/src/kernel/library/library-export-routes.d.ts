@@ -5368,7 +5368,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                 post: {
                     body: {
                         pin: {
-                            format: "https://rezics.com/definitions/catalogue/2";
+                            format: "https://rezics.com/definitions/catalogue/1";
                             rootDigest: string;
                             kindSpec: "https://rezics.com/definitions/kind/1";
                             reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5382,7 +5382,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                     response: {
                         200: {
                             pin: {
-                                format: "https://rezics.com/definitions/catalogue/2";
+                                format: "https://rezics.com/definitions/catalogue/1";
                                 rootDigest: string;
                                 kindSpec: "https://rezics.com/definitions/kind/1";
                                 reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5499,7 +5499,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                             response: {
                                 200: {
                                     pin: {
-                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        format: "https://rezics.com/definitions/catalogue/1";
                                         rootDigest: string;
                                         kindSpec: "https://rezics.com/definitions/kind/1";
                                         reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5620,7 +5620,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                             response: {
                                 200: {
                                     pin: {
-                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        format: "https://rezics.com/definitions/catalogue/1";
                                         rootDigest: string;
                                         kindSpec: "https://rezics.com/definitions/kind/1";
                                         reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5724,7 +5724,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                     response: {
                         200: {
                             pin: {
-                                format: "https://rezics.com/definitions/catalogue/2";
+                                format: "https://rezics.com/definitions/catalogue/1";
                                 rootDigest: string;
                                 kindSpec: "https://rezics.com/definitions/kind/1";
                                 reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -5808,7 +5808,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                             response: {
                                 200: {
                                     pin: {
-                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        format: "https://rezics.com/definitions/catalogue/1";
                                         rootDigest: string;
                                         kindSpec: "https://rezics.com/definitions/kind/1";
                                         reduction: "https://rezics.com/definitions/kind-reduction/1";
@@ -7029,54 +7029,13 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                     200: {
                         format: "https://rezics.com/formats/library-export";
                         version: 1;
+                        coverage: "private-library-owner-facts-v1";
                         exportId: string;
                         capturedAt: string;
                         expiresAt: string;
                         privacy: "private";
                         completeness: "supported-native-facts";
-                        sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence"];
-                        omissions: Record<string, string>;
-                        fullExport: false;
-                        state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
-                        first: string | null;
-                    } | {
-                        format: "https://rezics.com/formats/library-export";
-                        version: 2;
-                        coverage: "private-library-owner-facts-v2";
-                        exportId: string;
-                        capturedAt: string;
-                        expiresAt: string;
-                        privacy: "private";
-                        completeness: "supported-native-facts";
-                        sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals"];
-                        omissions: Record<string, string>;
-                        fullExport: false;
-                        state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
-                        first: string | null;
-                    } | {
-                        format: "https://rezics.com/formats/library-export";
-                        version: 3;
-                        coverage: "private-library-owner-facts-v3";
-                        exportId: string;
-                        capturedAt: string;
-                        expiresAt: string;
-                        privacy: "private";
-                        completeness: "supported-native-facts";
-                        sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals"];
-                        omissions: Record<string, string>;
-                        fullExport: false;
-                        state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
-                        first: string | null;
-                    } | {
-                        format: "https://rezics.com/formats/library-export";
-                        version: 4;
-                        coverage: "private-library-owner-facts-v4";
-                        exportId: string;
-                        capturedAt: string;
-                        expiresAt: string;
-                        privacy: "private";
-                        completeness: "supported-native-facts";
-                        sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals", "vndbUploads", "vndbEvidence", "anilistUploads", "anilistEvidence"];
+                        sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals", "vndbUploads", "vndbEvidence", "anilistUploads", "anilistEvidence", "hostedReading"];
                         omissions: Record<string, string>;
                         fullExport: false;
                         state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
@@ -7179,54 +7138,13 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                         200: {
                             format: "https://rezics.com/formats/library-export";
                             version: 1;
+                            coverage: "private-library-owner-facts-v1";
                             exportId: string;
                             capturedAt: string;
                             expiresAt: string;
                             privacy: "private";
                             completeness: "supported-native-facts";
-                            sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence"];
-                            omissions: Record<string, string>;
-                            fullExport: false;
-                            state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
-                            first: string | null;
-                        } | {
-                            format: "https://rezics.com/formats/library-export";
-                            version: 2;
-                            coverage: "private-library-owner-facts-v2";
-                            exportId: string;
-                            capturedAt: string;
-                            expiresAt: string;
-                            privacy: "private";
-                            completeness: "supported-native-facts";
-                            sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals"];
-                            omissions: Record<string, string>;
-                            fullExport: false;
-                            state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
-                            first: string | null;
-                        } | {
-                            format: "https://rezics.com/formats/library-export";
-                            version: 3;
-                            coverage: "private-library-owner-facts-v3";
-                            exportId: string;
-                            capturedAt: string;
-                            expiresAt: string;
-                            privacy: "private";
-                            completeness: "supported-native-facts";
-                            sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals"];
-                            omissions: Record<string, string>;
-                            fullExport: false;
-                            state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
-                            first: string | null;
-                        } | {
-                            format: "https://rezics.com/formats/library-export";
-                            version: 4;
-                            coverage: "private-library-owner-facts-v4";
-                            exportId: string;
-                            capturedAt: string;
-                            expiresAt: string;
-                            privacy: "private";
-                            completeness: "supported-native-facts";
-                            sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals", "vndbUploads", "vndbEvidence", "anilistUploads", "anilistEvidence"];
+                            sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals", "vndbUploads", "vndbEvidence", "anilistUploads", "anilistEvidence", "hostedReading"];
                             omissions: Record<string, string>;
                             fullExport: false;
                             state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
@@ -7430,43 +7348,6 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                                             day: number;
                                         } | null;
                                         reflection: string | null;
-                                    };
-                                } | {
-                                    section: "journals";
-                                    accountId: string;
-                                    sessionId: string;
-                                    subjectId: string;
-                                    versionSubjectId: string | null;
-                                    state: string;
-                                    progressRevision: number;
-                                    libraryProfilePin: unknown;
-                                    startedAt: string;
-                                    completedAt: string | null;
-                                    lastChangedAt: string | null;
-                                    journal: {
-                                        sessionId: string;
-                                        revision: number;
-                                        startDate: {
-                                            year: number;
-                                        } | {
-                                            year: number;
-                                            month: number;
-                                        } | {
-                                            year: number;
-                                            month: number;
-                                            day: number;
-                                        } | null;
-                                        finishDate: {
-                                            year: number;
-                                        } | {
-                                            year: number;
-                                            month: number;
-                                        } | {
-                                            year: number;
-                                            month: number;
-                                            day: number;
-                                        } | null;
-                                        reflection: string | null;
                                         assessment: {
                                             meaningRevision: 1;
                                             units: number | null;
@@ -7493,79 +7374,36 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                                     upload_id: string;
                                     ordinal: number;
                                     evidence: unknown;
+                                } | {
+                                    section: "hostedReading";
+                                    subject_id: string;
+                                    subject_id_reference: {
+                                        id: string;
+                                        href: string;
+                                    };
+                                    catalogue_id: string;
+                                    publication_revision_id: string;
+                                    occurrence_id: string;
+                                    target_post_id: string;
+                                    target_revision_id: string;
+                                    target_sha256: string;
+                                    bodyLanguage?: string | null;
+                                    document_block_id: string | null;
+                                    document_offset: number | null;
+                                    revision: string;
+                                    changed_at: string;
                                 })[];
                                 next: string | null;
                                 manifest: {
                                     format: "https://rezics.com/formats/library-export";
                                     version: 1;
+                                    coverage: "private-library-owner-facts-v1";
                                     exportId: string;
                                     capturedAt: string;
                                     expiresAt: string;
                                     privacy: "private";
                                     completeness: "supported-native-facts";
-                                    sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence"];
-                                    omissions: Record<string, string>;
-                                    fullExport: false;
-                                    rows: number;
-                                    recordBytes: number;
-                                } | {
-                                    format: "https://rezics.com/formats/library-export";
-                                    version: 2;
-                                    coverage: "private-library-owner-facts-v2";
-                                    exportId: string;
-                                    capturedAt: string;
-                                    expiresAt: string;
-                                    privacy: "private";
-                                    completeness: "supported-native-facts";
-                                    sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals"];
-                                    omissions: Record<string, string>;
-                                    fullExport: false;
-                                    rows: number;
-                                    recordBytes: number;
-                                    sectionTotals: {
-                                        [x: string]: {
-                                            rows: number;
-                                            recordBytes: number;
-                                        };
-                                        [x: number]: {
-                                            rows: number;
-                                            recordBytes: number;
-                                        };
-                                    };
-                                } | {
-                                    format: "https://rezics.com/formats/library-export";
-                                    version: 3;
-                                    coverage: "private-library-owner-facts-v3";
-                                    exportId: string;
-                                    capturedAt: string;
-                                    expiresAt: string;
-                                    privacy: "private";
-                                    completeness: "supported-native-facts";
-                                    sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals"];
-                                    omissions: Record<string, string>;
-                                    fullExport: false;
-                                    rows: number;
-                                    recordBytes: number;
-                                    sectionTotals: {
-                                        [x: string]: {
-                                            rows: number;
-                                            recordBytes: number;
-                                        };
-                                        [x: number]: {
-                                            rows: number;
-                                            recordBytes: number;
-                                        };
-                                    };
-                                } | {
-                                    format: "https://rezics.com/formats/library-export";
-                                    version: 4;
-                                    coverage: "private-library-owner-facts-v4";
-                                    exportId: string;
-                                    capturedAt: string;
-                                    expiresAt: string;
-                                    privacy: "private";
-                                    completeness: "supported-native-facts";
-                                    sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals", "vndbUploads", "vndbEvidence", "anilistUploads", "anilistEvidence"];
+                                    sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals", "vndbUploads", "vndbEvidence", "anilistUploads", "anilistEvidence", "hostedReading"];
                                     omissions: Record<string, string>;
                                     fullExport: false;
                                     rows: number;
@@ -7790,62 +7628,21 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                 code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
-        200: import("typebox").TUnion<[import("typebox").TObject<{
+        200: import("typebox").TObject<{
             format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
             version: import("typebox").TLiteral<1>;
+            coverage: import("typebox").TLiteral<"private-library-owner-facts-v1">;
             exportId: import("typebox").TString;
             capturedAt: import("typebox").TString;
             expiresAt: import("typebox").TString;
             privacy: import("typebox").TLiteral<"private">;
             completeness: import("typebox").TLiteral<"supported-native-facts">;
-            sections: import("typebox").TTuple<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">]>;
+            sections: import("typebox").TTuple<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">, import("typebox").TLiteral<"vndbUploads">, import("typebox").TLiteral<"vndbEvidence">, import("typebox").TLiteral<"anilistUploads">, import("typebox").TLiteral<"anilistEvidence">, import("typebox").TLiteral<"hostedReading">]>;
             omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
             fullExport: import("typebox").TLiteral<false>;
             state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
             first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-        }>, import("typebox").TObject<{
-            format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
-            version: import("typebox").TLiteral<2>;
-            coverage: import("typebox").TLiteral<"private-library-owner-facts-v2">;
-            exportId: import("typebox").TString;
-            capturedAt: import("typebox").TString;
-            expiresAt: import("typebox").TString;
-            privacy: import("typebox").TLiteral<"private">;
-            completeness: import("typebox").TLiteral<"supported-native-facts">;
-            sections: import("typebox").TTuple<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>;
-            omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
-            fullExport: import("typebox").TLiteral<false>;
-            state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
-            first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-        }>, import("typebox").TObject<{
-            format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
-            version: import("typebox").TLiteral<3>;
-            coverage: import("typebox").TLiteral<"private-library-owner-facts-v3">;
-            exportId: import("typebox").TString;
-            capturedAt: import("typebox").TString;
-            expiresAt: import("typebox").TString;
-            privacy: import("typebox").TLiteral<"private">;
-            completeness: import("typebox").TLiteral<"supported-native-facts">;
-            sections: import("typebox").TTuple<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>;
-            omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
-            fullExport: import("typebox").TLiteral<false>;
-            state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
-            first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-        }>, import("typebox").TObject<{
-            format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
-            version: import("typebox").TLiteral<4>;
-            coverage: import("typebox").TLiteral<"private-library-owner-facts-v4">;
-            exportId: import("typebox").TString;
-            capturedAt: import("typebox").TString;
-            expiresAt: import("typebox").TString;
-            privacy: import("typebox").TLiteral<"private">;
-            completeness: import("typebox").TLiteral<"supported-native-facts">;
-            sections: import("typebox").TTuple<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">, import("typebox").TLiteral<"vndbUploads">, import("typebox").TLiteral<"vndbEvidence">, import("typebox").TLiteral<"anilistUploads">, import("typebox").TLiteral<"anilistEvidence">]>;
-            omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
-            fullExport: import("typebox").TLiteral<false>;
-            state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
-            first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-        }>]>;
+        }>;
     };
     detail: {
         operationId: string;
@@ -7948,54 +7745,13 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
         200: {
             format: "https://rezics.com/formats/library-export";
             version: 1;
+            coverage: "private-library-owner-facts-v1";
             exportId: string;
             capturedAt: string;
             expiresAt: string;
             privacy: "private";
             completeness: "supported-native-facts";
-            sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence"];
-            omissions: Record<string, string>;
-            fullExport: false;
-            state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
-            first: string | null;
-        } | {
-            format: "https://rezics.com/formats/library-export";
-            version: 2;
-            coverage: "private-library-owner-facts-v2";
-            exportId: string;
-            capturedAt: string;
-            expiresAt: string;
-            privacy: "private";
-            completeness: "supported-native-facts";
-            sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals"];
-            omissions: Record<string, string>;
-            fullExport: false;
-            state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
-            first: string | null;
-        } | {
-            format: "https://rezics.com/formats/library-export";
-            version: 3;
-            coverage: "private-library-owner-facts-v3";
-            exportId: string;
-            capturedAt: string;
-            expiresAt: string;
-            privacy: "private";
-            completeness: "supported-native-facts";
-            sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals"];
-            omissions: Record<string, string>;
-            fullExport: false;
-            state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
-            first: string | null;
-        } | {
-            format: "https://rezics.com/formats/library-export";
-            version: 4;
-            coverage: "private-library-owner-facts-v4";
-            exportId: string;
-            capturedAt: string;
-            expiresAt: string;
-            privacy: "private";
-            completeness: "supported-native-facts";
-            sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals", "vndbUploads", "vndbEvidence", "anilistUploads", "anilistEvidence"];
+            sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals", "vndbUploads", "vndbEvidence", "anilistUploads", "anilistEvidence", "hostedReading"];
             omissions: Record<string, string>;
             fullExport: false;
             state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
@@ -8083,54 +7839,13 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
         200: {
             format: "https://rezics.com/formats/library-export";
             version: 1;
+            coverage: "private-library-owner-facts-v1";
             exportId: string;
             capturedAt: string;
             expiresAt: string;
             privacy: "private";
             completeness: "supported-native-facts";
-            sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence"];
-            omissions: Record<string, string>;
-            fullExport: false;
-            state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
-            first: string | null;
-        } | {
-            format: "https://rezics.com/formats/library-export";
-            version: 2;
-            coverage: "private-library-owner-facts-v2";
-            exportId: string;
-            capturedAt: string;
-            expiresAt: string;
-            privacy: "private";
-            completeness: "supported-native-facts";
-            sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals"];
-            omissions: Record<string, string>;
-            fullExport: false;
-            state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
-            first: string | null;
-        } | {
-            format: "https://rezics.com/formats/library-export";
-            version: 3;
-            coverage: "private-library-owner-facts-v3";
-            exportId: string;
-            capturedAt: string;
-            expiresAt: string;
-            privacy: "private";
-            completeness: "supported-native-facts";
-            sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals"];
-            omissions: Record<string, string>;
-            fullExport: false;
-            state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
-            first: string | null;
-        } | {
-            format: "https://rezics.com/formats/library-export";
-            version: 4;
-            coverage: "private-library-owner-facts-v4";
-            exportId: string;
-            capturedAt: string;
-            expiresAt: string;
-            privacy: "private";
-            completeness: "supported-native-facts";
-            sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals", "vndbUploads", "vndbEvidence", "anilistUploads", "anilistEvidence"];
+            sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals", "vndbUploads", "vndbEvidence", "anilistUploads", "anilistEvidence", "hostedReading"];
             omissions: Record<string, string>;
             fullExport: false;
             state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
@@ -8240,62 +7955,21 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                     code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
-            200: import("typebox").TUnion<[import("typebox").TObject<{
+            200: import("typebox").TObject<{
                 format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
                 version: import("typebox").TLiteral<1>;
+                coverage: import("typebox").TLiteral<"private-library-owner-facts-v1">;
                 exportId: import("typebox").TString;
                 capturedAt: import("typebox").TString;
                 expiresAt: import("typebox").TString;
                 privacy: import("typebox").TLiteral<"private">;
                 completeness: import("typebox").TLiteral<"supported-native-facts">;
-                sections: import("typebox").TTuple<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">]>;
+                sections: import("typebox").TTuple<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">, import("typebox").TLiteral<"vndbUploads">, import("typebox").TLiteral<"vndbEvidence">, import("typebox").TLiteral<"anilistUploads">, import("typebox").TLiteral<"anilistEvidence">, import("typebox").TLiteral<"hostedReading">]>;
                 omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
                 fullExport: import("typebox").TLiteral<false>;
                 state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
                 first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-            }>, import("typebox").TObject<{
-                format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
-                version: import("typebox").TLiteral<2>;
-                coverage: import("typebox").TLiteral<"private-library-owner-facts-v2">;
-                exportId: import("typebox").TString;
-                capturedAt: import("typebox").TString;
-                expiresAt: import("typebox").TString;
-                privacy: import("typebox").TLiteral<"private">;
-                completeness: import("typebox").TLiteral<"supported-native-facts">;
-                sections: import("typebox").TTuple<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>;
-                omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
-                fullExport: import("typebox").TLiteral<false>;
-                state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
-                first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-            }>, import("typebox").TObject<{
-                format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
-                version: import("typebox").TLiteral<3>;
-                coverage: import("typebox").TLiteral<"private-library-owner-facts-v3">;
-                exportId: import("typebox").TString;
-                capturedAt: import("typebox").TString;
-                expiresAt: import("typebox").TString;
-                privacy: import("typebox").TLiteral<"private">;
-                completeness: import("typebox").TLiteral<"supported-native-facts">;
-                sections: import("typebox").TTuple<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>;
-                omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
-                fullExport: import("typebox").TLiteral<false>;
-                state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
-                first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-            }>, import("typebox").TObject<{
-                format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
-                version: import("typebox").TLiteral<4>;
-                coverage: import("typebox").TLiteral<"private-library-owner-facts-v4">;
-                exportId: import("typebox").TString;
-                capturedAt: import("typebox").TString;
-                expiresAt: import("typebox").TString;
-                privacy: import("typebox").TLiteral<"private">;
-                completeness: import("typebox").TLiteral<"supported-native-facts">;
-                sections: import("typebox").TTuple<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">, import("typebox").TLiteral<"vndbUploads">, import("typebox").TLiteral<"vndbEvidence">, import("typebox").TLiteral<"anilistUploads">, import("typebox").TLiteral<"anilistEvidence">]>;
-                omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
-                fullExport: import("typebox").TLiteral<false>;
-                state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
-                first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-            }>]>;
+            }>;
         };
         detail: {
             operationId: string;
@@ -8355,54 +8029,13 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
 }) => Promise<{
     format: "https://rezics.com/formats/library-export";
     version: 1;
+    coverage: "private-library-owner-facts-v1";
     exportId: string;
     capturedAt: string;
     expiresAt: string;
     privacy: "private";
     completeness: "supported-native-facts";
-    sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence"];
-    omissions: Record<string, string>;
-    fullExport: false;
-    state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
-    first: string | null;
-} | {
-    format: "https://rezics.com/formats/library-export";
-    version: 2;
-    coverage: "private-library-owner-facts-v2";
-    exportId: string;
-    capturedAt: string;
-    expiresAt: string;
-    privacy: "private";
-    completeness: "supported-native-facts";
-    sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals"];
-    omissions: Record<string, string>;
-    fullExport: false;
-    state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
-    first: string | null;
-} | {
-    format: "https://rezics.com/formats/library-export";
-    version: 3;
-    coverage: "private-library-owner-facts-v3";
-    exportId: string;
-    capturedAt: string;
-    expiresAt: string;
-    privacy: "private";
-    completeness: "supported-native-facts";
-    sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals"];
-    omissions: Record<string, string>;
-    fullExport: false;
-    state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
-    first: string | null;
-} | {
-    format: "https://rezics.com/formats/library-export";
-    version: 4;
-    coverage: "private-library-owner-facts-v4";
-    exportId: string;
-    capturedAt: string;
-    expiresAt: string;
-    privacy: "private";
-    completeness: "supported-native-facts";
-    sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals", "vndbUploads", "vndbEvidence", "anilistUploads", "anilistEvidence"];
+    sections: ["entries", "labels", "assignments", "sessions", "holdings", "collections", "collectionPins", "bangumiUploads", "bangumiEvidence", "malImports", "units", "history", "occurrences", "malEvidence", "annotations", "provenance", "journals", "vndbUploads", "vndbEvidence", "anilistUploads", "anilistEvidence", "hostedReading"];
     omissions: Record<string, string>;
     fullExport: false;
     state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
@@ -8510,62 +8143,21 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                 code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
-        200: import("typebox").TUnion<[import("typebox").TObject<{
+        200: import("typebox").TObject<{
             format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
             version: import("typebox").TLiteral<1>;
+            coverage: import("typebox").TLiteral<"private-library-owner-facts-v1">;
             exportId: import("typebox").TString;
             capturedAt: import("typebox").TString;
             expiresAt: import("typebox").TString;
             privacy: import("typebox").TLiteral<"private">;
             completeness: import("typebox").TLiteral<"supported-native-facts">;
-            sections: import("typebox").TTuple<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">]>;
+            sections: import("typebox").TTuple<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">, import("typebox").TLiteral<"vndbUploads">, import("typebox").TLiteral<"vndbEvidence">, import("typebox").TLiteral<"anilistUploads">, import("typebox").TLiteral<"anilistEvidence">, import("typebox").TLiteral<"hostedReading">]>;
             omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
             fullExport: import("typebox").TLiteral<false>;
             state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
             first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-        }>, import("typebox").TObject<{
-            format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
-            version: import("typebox").TLiteral<2>;
-            coverage: import("typebox").TLiteral<"private-library-owner-facts-v2">;
-            exportId: import("typebox").TString;
-            capturedAt: import("typebox").TString;
-            expiresAt: import("typebox").TString;
-            privacy: import("typebox").TLiteral<"private">;
-            completeness: import("typebox").TLiteral<"supported-native-facts">;
-            sections: import("typebox").TTuple<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>;
-            omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
-            fullExport: import("typebox").TLiteral<false>;
-            state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
-            first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-        }>, import("typebox").TObject<{
-            format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
-            version: import("typebox").TLiteral<3>;
-            coverage: import("typebox").TLiteral<"private-library-owner-facts-v3">;
-            exportId: import("typebox").TString;
-            capturedAt: import("typebox").TString;
-            expiresAt: import("typebox").TString;
-            privacy: import("typebox").TLiteral<"private">;
-            completeness: import("typebox").TLiteral<"supported-native-facts">;
-            sections: import("typebox").TTuple<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>;
-            omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
-            fullExport: import("typebox").TLiteral<false>;
-            state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
-            first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-        }>, import("typebox").TObject<{
-            format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
-            version: import("typebox").TLiteral<4>;
-            coverage: import("typebox").TLiteral<"private-library-owner-facts-v4">;
-            exportId: import("typebox").TString;
-            capturedAt: import("typebox").TString;
-            expiresAt: import("typebox").TString;
-            privacy: import("typebox").TLiteral<"private">;
-            completeness: import("typebox").TLiteral<"supported-native-facts">;
-            sections: import("typebox").TTuple<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">, import("typebox").TLiteral<"vndbUploads">, import("typebox").TLiteral<"vndbEvidence">, import("typebox").TLiteral<"anilistUploads">, import("typebox").TLiteral<"anilistEvidence">]>;
-            omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
-            fullExport: import("typebox").TLiteral<false>;
-            state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
-            first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-        }>]>;
+        }>;
     };
     detail: {
         operationId: string;

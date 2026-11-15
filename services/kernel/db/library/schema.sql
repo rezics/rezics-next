@@ -4817,6 +4817,7 @@ CREATE TABLE library.hosted_reading (
     catalogue_id uuid NOT NULL,
     publication_revision_id uuid NOT NULL,
     occurrence_id uuid NOT NULL,
+    target_post_id uuid NOT NULL,
     target_revision_id uuid NOT NULL,
     target_sha256 bytea NOT NULL,
     document_block_id text,
@@ -4824,8 +4825,10 @@ CREATE TABLE library.hosted_reading (
     revision bigint NOT NULL,
     changed_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
     activity_sequence bigint NOT NULL,
+    body_language text,
     CONSTRAINT hosted_reading_account_route_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT hosted_reading_block_check CHECK (((document_block_id IS NULL) OR ((char_length(document_block_id) >= 1) AND (char_length(document_block_id) <= 128)))),
+    CONSTRAINT hosted_reading_body_language_check CHECK (((body_language IS NULL) OR (((char_length(body_language) >= 1) AND (char_length(body_language) <= 63)) AND (body_language ~ '^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$'::text)))),
     CONSTRAINT hosted_reading_offset_check CHECK (((document_offset IS NULL) OR ((document_offset >= 0) AND (document_offset <= 2097152)))),
     CONSTRAINT hosted_reading_position_check CHECK (((document_block_id IS NULL) = (document_offset IS NULL))),
     CONSTRAINT hosted_reading_revision_check CHECK ((revision > 0)),
@@ -4865,6 +4868,20 @@ CREATE TABLE library.hosted_reading_fence (
     CONSTRAINT hosted_reading_fence_account_route_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT hosted_reading_fence_revision_check CHECK ((revision >= 0)),
     CONSTRAINT hosted_reading_fence_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: hosted_reading_unsupported; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.hosted_reading_unsupported (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    evidence jsonb NOT NULL,
+    reason text NOT NULL,
+    CONSTRAINT hosted_reading_unsupported_reason_check CHECK ((reason = 'exact_target_unavailable'::text))
 );
 
 
@@ -5204,7 +5221,7 @@ CREATE TABLE library.library_archive_merge_item (
     CONSTRAINT library_archive_merge_item_result_check CHECK (((result IS NULL) OR (octet_length((result)::text) <= 8192))),
     CONSTRAINT library_archive_merge_item_review_check CHECK (((review IS NULL) OR (octet_length((review)::text) <= 16384))),
     CONSTRAINT library_archive_merge_item_review_revision_check CHECK ((review_revision >= 0)),
-    CONSTRAINT library_archive_merge_item_section_check CHECK ((section = ANY (ARRAY['entries'::text, 'labels'::text, 'assignments'::text, 'sessions'::text, 'holdings'::text, 'collections'::text, 'collectionPins'::text, 'bangumiUploads'::text, 'bangumiEvidence'::text, 'malImports'::text, 'units'::text, 'history'::text, 'occurrences'::text, 'malEvidence'::text, 'annotations'::text, 'journals'::text, 'provenance'::text]))),
+    CONSTRAINT library_archive_merge_item_section_check CHECK ((section = ANY (ARRAY['entries'::text, 'labels'::text, 'assignments'::text, 'sessions'::text, 'holdings'::text, 'collections'::text, 'collectionPins'::text, 'bangumiUploads'::text, 'bangumiEvidence'::text, 'malImports'::text, 'units'::text, 'history'::text, 'occurrences'::text, 'malEvidence'::text, 'annotations'::text, 'journals'::text, 'provenance'::text, 'vndbUploads'::text, 'vndbEvidence'::text, 'anilistUploads'::text, 'anilistEvidence'::text, 'hostedReading'::text]))),
     CONSTRAINT library_archive_merge_item_status_check CHECK ((status = ANY (ARRAY['unresolved'::text, 'unsupported'::text, 'create'::text, 'already_equal'::text, 'current_conflict'::text, 'mapped'::text, 'preserved'::text, 'applying'::text, 'acknowledged'::text])))
 );
 
@@ -5246,10 +5263,8 @@ CREATE TABLE library.library_export (
     created_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     state text NOT NULL,
-    format_version smallint DEFAULT 4 NOT NULL,
     CONSTRAINT library_export_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT library_export_check1 CHECK ((expires_at = (created_at + '00:15:00'::interval))),
-    CONSTRAINT library_export_format_version_check CHECK ((format_version = ANY (ARRAY[1, 2, 3, 4]))),
     CONSTRAINT library_export_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT library_export_state_check CHECK ((state = ANY (ARRAY['collecting'::text, 'ready'::text, 'stale'::text, 'cancelled'::text, 'expired'::text, 'limit'::text])))
 );
@@ -7880,6 +7895,14 @@ ALTER TABLE ONLY library.hosted_reading
 
 
 --
+-- Name: hosted_reading_unsupported hosted_reading_unsupported_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.hosted_reading_unsupported
+    ADD CONSTRAINT hosted_reading_unsupported_pkey PRIMARY KEY (route, account_id, subject_id);
+
+
+--
 -- Name: identity_epoch_participant_handoff identity_epoch_participant_handoff_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -9582,7 +9605,7 @@ CREATE INDEX follow_count_terminal_source_pending ON library.follow_count_termin
 -- Name: hosted_reading_activity_idx; Type: INDEX; Schema: library; Owner: -
 --
 
-CREATE INDEX hosted_reading_activity_idx ON library.hosted_reading USING btree (route, account_id, activity_sequence DESC, subject_id) INCLUDE (changed_at, revision, catalogue_id, publication_revision_id, occurrence_id, target_revision_id, target_sha256, document_block_id, document_offset);
+CREATE INDEX hosted_reading_activity_idx ON library.hosted_reading USING btree (route, account_id, activity_sequence DESC, subject_id) INCLUDE (changed_at, revision, catalogue_id, publication_revision_id, occurrence_id, body_language, target_post_id, target_revision_id, target_sha256, document_block_id, document_offset);
 
 
 --
@@ -11021,6 +11044,13 @@ CREATE TRIGGER native_source_writer AFTER INSERT OR DELETE OR UPDATE ON library.
 
 
 --
+-- Name: hosted_reading native_source_writer; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_source_writer AFTER INSERT OR DELETE OR UPDATE ON library.hosted_reading FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
 -- Name: label_assignment native_source_writer; Type: TRIGGER; Schema: library; Owner: -
 --
 
@@ -11699,6 +11729,14 @@ ALTER TABLE ONLY library.entry_source_observation
 
 ALTER TABLE ONLY library.follow_count_terminal_source
     ADD CONSTRAINT follow_count_terminal_source_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: hosted_reading_unsupported hosted_reading_unsupported_route_account_id_subject_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.hosted_reading_unsupported
+    ADD CONSTRAINT hosted_reading_unsupported_route_account_id_subject_id_fkey FOREIGN KEY (route, account_id, subject_id) REFERENCES library.hosted_reading_fence(route, account_id, subject_id) ON DELETE CASCADE;
 
 
 --

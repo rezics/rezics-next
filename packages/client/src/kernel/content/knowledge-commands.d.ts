@@ -5,14 +5,13 @@ export declare function createKnowledgeNotebook(deps: KnowledgeDependencies, act
     notebookId: string;
     structureRevisionId: string;
 }>>;
-export declare function createKnowledgeDocument(deps: KnowledgeDependencies, actor: Actor, notebookId: string, input: KnowledgeCreateDocumentInput, context: KnowledgeCommandContext): Promise<import("../command/command.ts").CommandOutcome<{
+export declare function createKnowledgeDocument(deps: KnowledgeDependencies, actor: Actor, notebookId: string, input: KnowledgeCreateDocumentInput, context: KnowledgeCommandContext): Promise<import("../command/command.ts").CommandOutcome<Readonly<{
     notebookId: string;
     documentId: string;
     placementId: string;
     revisionId: string;
     structureRevisionId: string;
-}>>;
-/** Shared destination path: account authority, structure CAS, ancestry, private insert, event and receipt. */
+}>>>;
 export declare function writeKnowledgeDocument(deps: KnowledgeDependencies, actor: Actor, notebookId: string, placement: Readonly<{
     expectedStructureRevisionId: string;
     parentPlacementId: string | null;
@@ -23,13 +22,13 @@ export declare function writeKnowledgeDocument(deps: KnowledgeDependencies, acto
         input: KnowledgeDocumentInput;
         provenance: KnowledgeProvenance | null;
     }>>;
-}>): Promise<import("../command/command.ts").CommandOutcome<{
+}>): Promise<import("../command/command.ts").CommandOutcome<Readonly<{
     notebookId: string;
     documentId: string;
     placementId: string;
     revisionId: string;
     structureRevisionId: string;
-}>>;
+}>>>;
 export declare function moveKnowledgePlacement(deps: KnowledgeDependencies, actor: Actor, notebookId: string, placementId: string, input: KnowledgeMovePlacementInput, context: KnowledgeCommandContext): Promise<import("../command/command.ts").CommandOutcome<{
     notebookId: string;
     placementId: string;

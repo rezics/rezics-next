@@ -2,7 +2,9 @@ import type { RatingCapabilityOptions } from './contract/capabilities.ts';
 import type { Pool } from 'pg';
 import { type Access, type Actor, type SubjectCanonicalPopulation, type SubjectCanonicalNameKey } from './dependencies.ts';
 import { type KeyRing } from '../tokens/seal.ts';
+import { type RealmRankScoredCanonicalRequest, type RealmRankScoredCanonicalPage } from './realm-rank-canonical-order.ts';
 import { type RatingQuestionView } from './question-directory.ts';
+export type { RealmRankScoredCanonicalKey, RealmRankScoredCanonicalRequest, RealmRankScoredCanonicalPage, } from './realm-rank-canonical-order.ts';
 export type RealmRankRequest = Readonly<{
     realmId: string;
     questionId: string;
@@ -33,6 +35,14 @@ export interface RealmRankSource {
         deadline: number;
     }): Promise<RealmRankPage>;
 }
+export type RealmRankScoredHome = Readonly<{
+    partition: number;
+    generation: string;
+    epoch: number;
+    position: string;
+    canonicalGeneration: string | null;
+    canonicalRevision: string | null;
+}>;
 export type RealmRankOrderObservation = Readonly<{
     populationId: string;
     questionPublication: string;
@@ -53,6 +63,7 @@ export type RealmRankOrderObservation = Readonly<{
     realmAuthority: string;
     realmRevision: string;
     publicationGeneration: string;
+    scoredHomes: readonly RealmRankScoredHome[];
     canonicalPopulation: SubjectCanonicalPopulation;
 }>;
 export type RealmRankOrderCandidate = RealmRankCandidate & Readonly<{
@@ -125,6 +136,12 @@ export interface RealmRankOrderSource {
         generation: string;
         candidates: readonly RealmRankOrderCandidate[];
     }>>;
+    /** Raw internal candidates in score DESC, canonical name ASC (missing last), Subject ID ASC.
+     * Continue with a returned candidate.key; Search still owns complete predicate admission and disclosure.
+     */
+    readScoredCanonicalPartition(actor: Actor, input: RealmRankScoredCanonicalRequest, observation: RealmRankOrderObservation, context: {
+        deadline: number;
+    }): Promise<RealmRankScoredCanonicalPage>;
     proveFigures(actor: Actor, input: Readonly<{
         realmId: string;
         questionId: string;
@@ -151,9 +168,7 @@ export declare class RealmRankQuestionUnavailableError extends Error {
 }
 /** Production native Search port. No caller-supplied eligibility or disclosure flags are accepted. */
 export declare function createRealmRankSource(deps: Dependencies): RealmRankSource;
-/** Native observations, canonical population/name candidates and scored/figure primitives.
- * Search still needs canonical scored ties and admitted predicate composition before complete ordering.
- * The compatibility page remains scored-only.
+/** Native observations, canonical score/name/ID and name/ID candidates, and exact figure primitives.
+ * Search owns admitted predicate composition and disclosure. The compatibility page remains scored-only.
  */
 export declare function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSource;
-export {};
