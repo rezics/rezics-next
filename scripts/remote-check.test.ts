@@ -1001,6 +1001,7 @@ if (script.includes('/proc/loadavg')) {
 } else if (script.includes('REMOTE_CHECK_RECONCILE_STATUS')) {
   log({ kind: 'reconciliation-status' });
   if (config.retainedPreparationAbort) {
+    const host = address.slice(address.indexOf('@') + 1).replace(/\\.test$/, '');
     const run = readFileSync(dir + '/' + hostKey + '.run-id', 'utf8');
     console.log(JSON.stringify({ native: null, preparedInputs: null, lifetimeFailure: null,
       preparationAbortUnavailable: null, preparationAbort: {
