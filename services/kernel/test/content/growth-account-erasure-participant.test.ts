@@ -7,9 +7,9 @@ test('registered Content participant phases, closure, pending Collection, retent
   const fixture = await participantFixture();
   try {
     const result = await fixture.measure();
-    // Empty: nine operations; contributions: thirteen, including Collection,
-    // the unchanged ten-minute delay and the registered retention expiry.
-    expect(result.reports).toBe(3 * (9 + 13));
+    // Empty: twelve operations; contributions: sixteen, including the registered
+    // slow-mode, Knowledge and notices phases, Collection and retention expiry.
+    expect(result.reports).toBe(3 * (12 + 16));
     expect(result.revision).toMatch(/^[a-f0-9]{40}$/);
     expect(result.completed.length).toBeGreaterThanOrEqual(3 * 3 * 2 * 2);
     for (const item of fixture.selected) {
