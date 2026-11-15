@@ -10,5 +10,8 @@ CREATE TABLE library.progress_episode (
   PRIMARY KEY (route, session_id, episode_subject_id),
   FOREIGN KEY (route, session_id) REFERENCES library.progress_session (route, session_id)
 );
+CREATE TRIGGER native_source_writer AFTER INSERT OR UPDATE OR DELETE ON library.progress_episode
+  FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
 -- migrate:down
 -- Forward only: personal completion facts survive definition rollback.
