@@ -5322,7 +5322,7 @@ host=$REMOTE_CHECK_HOST
     reclaim_run_inactive_file
     if [ "$code" -eq 0 ]; then
       export PATH="$(dirname "$bun"):$PWD/node_modules/.bin:$PATH"
-      python3 -c ${quote(`import json,time; from pathlib import Path; Path(${JSON.stringify(`${directory}/.temp/check-host/preparation-progress.json`)}).write_text(json.dumps({'phase':'generation','at':time.monotonic()}))`)}
+      python3 ${quote(`${wrapperDirectory}/prepare.py`)} phase ${quote(directory)} generation
       ${preparationScript}
     fi
     ${preparedInputsEvidence}
