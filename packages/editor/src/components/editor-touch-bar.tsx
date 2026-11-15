@@ -304,8 +304,7 @@ export function EditorTouchBar({
           <Button
             type="button"
             variant="ghost"
-            aria-label={title}
-            aria-description={insert ? undefined : blockLabel}
+            aria-label={insert || title === blockLabel ? title : `${title}: ${blockLabel}`}
             data-editor-block-trigger
             tabIndex={activeTabStop === kind ? 0 : -1}
             className="min-w-0 shrink-0"

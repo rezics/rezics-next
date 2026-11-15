@@ -273,9 +273,8 @@ export function BlockActions({
   ];
   const title = labels.blockActions ?? behaviorControlLabels.blockActions;
   const target = state.target;
-  const description = target && target.count > 1
-    ? `${target.count} · ${target.first} … ${target.last ?? ''}`
-    : target?.first;
+  const targetLabel =
+    target && target.count > 1 ? `${target.count} · ${target.first} … ${target.last ?? ''}` : target?.first;
   return (
     <div data-slot="editor-block-actions">
       <Menu
@@ -287,13 +286,11 @@ export function BlockActions({
             type="button"
             variant="ghost"
             className="h-auto min-h-7 max-w-full whitespace-normal text-start"
-            aria-label={title}
-            aria-description={description}
             onMouseDown={(event) => event.preventDefault()}
           >
             <Ellipsis aria-hidden="true" />
             <span className="min-w-0">{title}</span>
-            {description ? <bdi className="max-w-36 truncate text-muted-foreground">{description}</bdi> : null}
+            {targetLabel ? <bdi className="max-w-36 truncate text-muted-foreground">{targetLabel}</bdi> : null}
           </Button>
         }
       />

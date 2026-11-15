@@ -110,7 +110,8 @@ export const DomainAnnotations: Story = {
     let dialog = within(await screen.findByRole('dialog', { name: 'Ruby annotation' }));
     await userEvent.type(dialog.getByRole('textbox', { name: 'Reading' }), 'かんじ');
     await userEvent.type(dialog.getByRole('textbox', { name: 'Language tag' }), 'ja');
-    await userEvent.selectOptions(dialog.getByRole('combobox', { name: 'Reading position' }), 'under');
+    await userEvent.click(dialog.getByRole('combobox', { name: 'Reading position' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Below' }));
     await userEvent.keyboard('{Enter}');
     expect(annotations.submissions.current).toBe(0);
     await userEvent.click(dialog.getByRole('button', { name: 'Apply' }));
@@ -132,7 +133,8 @@ export const DomainAnnotations: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Language and direction' }));
     dialog = within(await screen.findByRole('dialog', { name: 'Language and direction' }));
     await userEvent.type(dialog.getByRole('textbox', { name: 'Language tag' }), 'zh-Hant-TW');
-    await userEvent.selectOptions(dialog.getByRole('combobox', { name: 'Text direction' }), 'auto');
+    await userEvent.click(dialog.getByRole('combobox', { name: 'Text direction' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Automatic' }));
     await userEvent.click(dialog.getByRole('button', { name: 'Apply' }));
     await waitFor(() =>
       expect(annotations.latest.current.doc.content?.[0]?.content?.[0]?.marks).toContainEqual({
@@ -192,7 +194,7 @@ export const ReadOnlyAnnotations: Story = {
     const canvas = within(canvasElement);
     expect(canvas.getByRole('textbox', { name: 'Annotated document' })).toHaveAttribute('contenteditable', 'false');
     expect(canvas.queryByRole('button', { name: 'Ruby annotation' })).toBeNull();
-    expect(canvas.queryByRole('button', { name: 'Block actions' })).toBeNull();
+    expect(canvas.queryByRole('button', { name: /^Block actions\b/ })).toBeNull();
     const preview = within(canvas.getByRole('region', { name: 'Reading preview' }));
     await userEvent.click(preview.getByRole('button', { name: 'Reveal spoiler' }));
     const disclosure = preview.getByText('Footnote Source');

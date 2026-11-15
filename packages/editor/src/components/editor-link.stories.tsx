@@ -1037,7 +1037,7 @@ export const InlineLifetimeJourney: Story = {
     await traceClick(canvas.getByRole('button', { name: 'Use touch toolbar' }));
     await traceClick(canvas.getByRole('button', { name: 'Replace with touch target' }));
     touchToolbar = within(await canvas.findByRole('toolbar', { name: 'Formatting toolbar' }));
-    await traceClick(touchToolbar.getByRole('button', { name: 'Blocks' }));
+    await traceClick(touchToolbar.getByRole('button', { name: /^Blocks\b/ }));
     const dialog = await page.findByRole('dialog', { name: 'Blocks' });
     const finalFocus = reactCallback(dialog, 'finalFocus');
     const frames: FrameRequestCallback[] = [];

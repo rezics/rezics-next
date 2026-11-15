@@ -193,7 +193,7 @@ export const Knowledge: Story = {
     await canvas.findByRole('textbox', { name: 'Chapter draft' });
     await userEvent.click(canvas.getByText('More tools', { exact: true }));
     await expect(canvas.getByRole('group', { name: 'Annotations' })).toBeVisible();
-    await expect(canvas.getByRole('button', { name: 'Block actions' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: /^Block actions\b/ })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Commands' }));
     const dialog = await screen.findByRole('dialog', { name: 'Commands' });
     const query = within(dialog).getByRole('combobox', { name: 'Search available commands' });
