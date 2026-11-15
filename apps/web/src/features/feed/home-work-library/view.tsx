@@ -1,3 +1,4 @@
+import { websiteSignInHref } from '../../../session/return-target';
 import { createContext, useContext, useMemo, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { LibraryBigIcon } from 'lucide-react';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
@@ -149,7 +150,7 @@ export function HomeWorkLibraryAction({
   const signedIn = signedInProp ?? context.signedIn;
   const row = signedIn ? homeWorkLibraryRow(projection, rowKey, subjectId) : undefined;
   const options = { locale: locale as Locale };
-  const signIn = `/${encodeURIComponent(locale)}/auth/sign-in?return_to=${encodeURIComponent(href)}`;
+  const signIn = websiteSignInHref(href);
   const entry =
     row?.entry.state === 'present'
       ? `${m.library_subject_entry({}, options)}: ${m.library_other({}, options)}`

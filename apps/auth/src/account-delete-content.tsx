@@ -648,7 +648,7 @@ export function DeleteAccountContent({
           {historyPanel()}
           {recoveryPanel()}
           <p>{m.auth_account_operation_sign_in_required()}</p>
-          <a href="/login">{m.auth_security_sign_in()}</a>
+          <a href="/login?return_to=%2Faccount%2Fdelete">{m.auth_security_sign_in()}</a>
           <p>
             <a ref={safeExit} href="/security">
               {m.auth_account_operation_return()}
@@ -670,7 +670,7 @@ export function DeleteAccountContent({
               {m.auth_account_delete_retry()}
             </Button>
           ) : null}
-          <a href="/login">{m.auth_security_sign_in()}</a>
+          <a href="/login?return_to=%2Faccount%2Fdelete">{m.auth_security_sign_in()}</a>
           <p>
             <a ref={safeExit} href="/security">
               {m.auth_account_operation_return()}
@@ -686,7 +686,7 @@ export function DeleteAccountContent({
         {historyPanel()}
         {recoveryPanel()}
         <p role="status">{m.auth_inventory_loading()}</p>
-        <a href="/login">{m.auth_security_sign_in()}</a>
+        <a href="/login?return_to=%2Faccount%2Fdelete">{m.auth_security_sign_in()}</a>
         <p>
           <a ref={safeExit} href="/security">
             {m.auth_account_operation_return()}

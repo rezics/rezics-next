@@ -1,3 +1,4 @@
+import { websiteSignInHref } from '../../../session/return-target';
 import { Button } from '@rezics/ui/shadcn/button';
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import { useQueryClient } from '@tanstack/react-query';
@@ -394,7 +395,7 @@ export function ContributionActionsHost({
   const showReadStatus = hydrated && signedIn;
   const signInHref =
     hydrated && reader.state === 'signed-out'
-      ? `/${encodeURIComponent(locale)}/auth/sign-in?return_to=${encodeURIComponent(window.location.pathname + window.location.search + window.location.hash)}`
+      ? websiteSignInHref(window.location.pathname + window.location.search + window.location.hash)
       : undefined;
   return (
     <ContributionActionsCapabilities value={actions}>

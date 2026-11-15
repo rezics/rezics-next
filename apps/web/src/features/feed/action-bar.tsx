@@ -1,3 +1,4 @@
+import { websiteSignInHref } from '../../session/return-target';
 import {
   useContext,
   useEffect,
@@ -107,7 +108,7 @@ function subjectReactionFallback(
   const viewer = source.viewer;
   const viewerKnown = current() && viewer?.state === 'available';
   const selected = viewerKnown ? viewer.kind : undefined;
-  const signIn = `/${locale}/auth/sign-in?return_to=${encodeURIComponent(href ?? `/${locale}/`)}`;
+  const signIn = websiteSignInHref(href ?? `/${locale}`);
   const signInAllowed = !signedIn && source?.action === 'sign_in' && current();
   const format = (kind: string) => {
     const raw = knownValues?.[kind];
@@ -184,7 +185,7 @@ function subjectReactionFallback(
 /** Native feedback commands are not installed. Keep their absence explicit in the shared menu. */
 export function feedFeedbackEntries(locale: string, signedIn: boolean, href: string): MenuEntry[] {
   const options = { locale: locale as Locale };
-  const signIn = `/${locale}/auth/sign-in?return_to=${encodeURIComponent(href)}`;
+  const signIn = websiteSignInHref(href);
   return [m.feed_action_mute({}, options), m.feed_action_hide({}, options)].map((label) =>
     signedIn
       ? { type: 'item', label: `${label} · ${m.feed_action_unavailable({}, options)}`, disabled: true, onSelect() {} }
@@ -431,7 +432,7 @@ function ActionVisit({
     return () => cancelAnimationFrame(frame);
   }, [feedback, manualUrl]);
   const current = () => mounted.current && isCurrent();
-  const signIn = `/${locale}/auth/sign-in?return_to=${encodeURIComponent(href ?? `/${locale}/`)}`;
+  const signIn = websiteSignInHref(href ?? `/${locale}`);
   const available = origin?.isCurrent() ?? true;
   const activeOverflow = signedIn ? overflow : undefined;
   const shareLabel = <span className="sr-only sm:not-sr-only">{m.thread_reading_share({}, options)}</span>;

@@ -1,3 +1,4 @@
+import { websiteSignInHref } from '../session/return-target';
 import { Reactions, type ReactionKind } from '@rezics/ui/reactions';
 import { QueryClientContext } from '@tanstack/react-query';
 import {
@@ -520,7 +521,7 @@ function ReactionCaller({
         value={resolved ? resolved.snapshot.value : value}
         {...(signedIn || signInAllowed === false
           ? {}
-          : { signInHref: `${locale ? `/${locale}` : ''}/auth/sign-in?return_to=${encodeURIComponent(returnTo)}` })}
+          : { signInHref: websiteSignInHref(returnTo) })}
       />
       {recovery && !commandRecovery ? (
         <>

@@ -1,5 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { redirect } from '@tanstack/react-router';
+import { isLocale } from '../paraglide/runtime.js';
+import { websiteSignInHref } from './return-target';
 import { normalizeSessionObservation } from './browser-state';
 import { sessionQuery } from './query';
 import { SessionUnavailableError } from './unavailable';
@@ -16,7 +18,9 @@ export type SessionAccess = {
 
 const signedInPaths = [
   /^\/collections\/[^/]+\/publish(?:\/|$)/,
-  /^\/operations(?:\/|$)/,
+  /^\/(?:drafts|operations|studio)(?:\/|$)/,
+  /^\/boards\/[^/]+\/moderation(?:\/|$)/,
+  /^\/moderation\/(?:cases|reports)(?:\/|$)/,
   /^\/my\/contexts(?:\/|$)/,
   /^\/editions\/?$/,
   /^\/editions\/new(?:\/|$)/,
@@ -32,19 +36,20 @@ const signedInPaths = [
   /^\/(?:accounts(?:\/|$)|review\/account-verifications(?:\/|$))/,
   /^\/organizations(?:\/|$)/,
   /^\/collections\/[^/]+\/rule\/?$/,
-  /^\/(?:library(?:\/|$)|settings(?:\/|$)|collections\/new(?:\/|$)|boards\/[^/]+\/new(?:\/|$)|orders(?:\/|$)|curate\/presentation(?:\/|$)|realms(?:\/|$)|moderation\/(?:workbench(?:\/|$)|(?:decisions|reports)\/[^/]+(?:\/|$)))/,
+  /^\/(?:library(?:\/|$)|settings(?:\/|$)|collections\/new(?:\/|$)|boards\/[^/]+\/new(?:\/|$)|orders(?:\/|$)|curate\/presentation(?:\/|$)|realms(?:\/?$|\/new(?:\/|$)|\/[^/]+\/(?:questions|claims|claim-requests)(?:\/|$))|moderation\/(?:workbench(?:\/|$)|(?:decisions|reports)\/[^/]+(?:\/|$)))/,
 ];
 
 /** Whether a localized route pathname belongs to a page protected by `requireSignedIn`. */
 export function isSignedInPath(pathname: string): boolean {
-  const path = pathname.replace(/^\/(?:en|zh-Hant|zh-Hans|ja|ko|de|fr|es)(?=\/|$)/, '') || '/';
+  const [, prefix, ...rest] = pathname.split('/');
+  const path = isLocale(prefix) ? `/${rest.join('/')}` : pathname;
   return signedInPaths.some((pattern) => pattern.test(path));
 }
 
 /** Read the current page session without turning an indeterminate result into anonymous access. */
 export async function requirePrivatePageAccess({ context, location }: GuardContext): Promise<SessionAccess> {
   const url = new URL(location.publicHref, 'https://site.invalid');
-  const signInHref = `/auth/sign-in?return_to=${encodeURIComponent(url.pathname + url.search)}`;
+  const signInHref = websiteSignInHref(url.pathname + url.search + url.hash);
   try {
     await context.queryClient.ensureQueryData(sessionQuery);
   } catch {
