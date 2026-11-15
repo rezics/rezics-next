@@ -1043,7 +1043,7 @@ if (script.includes('/proc/loadavg')) {
       'remote-check: recovered command output after disconnect run=' + runId + '\\n' +
       config.recoveredOutput + '\\nremote-check: end recovered command output run=' + runId + '\\n',
     );
-    if (config.cleanupError) process.stderr.write(config.cleanupError + '\n');
+    if (config.cleanupError) process.stderr.write(config.cleanupError + '\\n');
   }
 } else if (script.includes('REMOTE_CHECK_RUN_LIFETIME_STATUS')) {
   log({ kind: 'lifetime-status', slotHeld: slotHeld() });
