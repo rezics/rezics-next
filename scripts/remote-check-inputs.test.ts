@@ -247,11 +247,17 @@ test('direct Kernel client emission is source-pinned before producer launch', as
       [],
       pinned.expectedSourceSha256,
     );
-    const receipt = generated.indexOf('prepared input evidence unavailable');
-    const commandStart = generated.search(/^[ \t]*touch [^\n]*\/command-started'[ \t]*$/m);
+    const assignmentStart = generated.indexOf('systemd_script=');
+    const assignmentEnd = generated.indexOf('\n# systemd 259 ', assignmentStart);
+    expect(assignmentStart).toBeGreaterThanOrEqual(0);
+    expect(assignmentEnd).toBeGreaterThan(assignmentStart);
+    const decoded = spawnSync('sh', ['-c', generated.slice(assignmentStart, assignmentEnd) + '\nprintf "%s" "$systemd_script"'], { encoding: 'utf8' });
+    expect(decoded.status, decoded.stderr).toBe(0);
+    const receipt = decoded.stdout.indexOf('prepared input evidence unavailable');
+    const commandStart = decoded.stdout.split('\n').find((line) => line.trimStart().startsWith('touch ') && line.includes('/command-started'));
     expect(receipt).toBeGreaterThanOrEqual(0);
-    expect(commandStart).toBeGreaterThanOrEqual(0);
-    expect(receipt).toBeLessThan(commandStart);
+    expect(commandStart).toBeDefined();
+    expect(receipt).toBeLessThan(decoded.stdout.indexOf(commandStart!));
   } finally {
     cleanup(fixture);
   }
