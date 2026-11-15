@@ -30,14 +30,16 @@ function CopyLoanVisit({
 }) {
   const [read, setRead] = useState<OpenCopyLoanRead | null>(null);
   const [failed, setFailed] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [generation, setGeneration] = useState(0);
+  const [searching, setSearching] = useState(true);
+  const [request, setRequest] = useState<{ cursor: string | null; sequence: number }>({ cursor: null, sequence: 0 });
+  const sequence = useRef(0);
   const [readVersion, setReadVersion] = useState(0);
   const [expanded, setExpanded] = useState(false);
   const [retired, setRetired] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const retry = useRef<HTMLButtonElement>(null);
+  const more = useRef<HTMLButtonElement>(null);
   const focusAfterExpansion = useRef<'heading' | 'trigger' | null>(null);
   const refreshFocus = useRef<{ trigger: HTMLButtonElement; moved: boolean } | null>(null);
   const id = useId();
@@ -60,24 +62,26 @@ function CopyLoanVisit({
       let result: OpenCopyLoanRead;
       try {
         const { readOpenCopyLoan } = await import('./loans-actions');
-        result = await readOpenCopyLoan({ data: { copyId: copy.id } });
+        result = await readOpenCopyLoan({
+          data: { copyId: copy.id, ...(request.cursor !== null ? { cursor: request.cursor } : {}) },
+        });
       } catch {
-        if (active && source.isCurrent('copy.list')) {
+        if (active && sequence.current === request.sequence && source.isCurrent('copy.list')) {
           setFailed(true);
-          setRefreshing(false);
+          setSearching(false);
         }
         return;
       }
-      if (!active || !source.isCurrent('copy.list')) return;
+      if (!active || sequence.current !== request.sequence || !source.isCurrent('copy.list')) return;
       setRead(result);
       setFailed(false);
-      setRefreshing(false);
-      if (generation > 0) setReadVersion((value) => value + 1);
+      setSearching(false);
+      if (request.sequence > 0) setReadVersion((value) => value + 1);
     })();
     return () => {
       active = false;
     };
-  }, [copy.id, generation, source]);
+  }, [copy.id, request, source]);
   useEffect(() => {
     const trackFocus = (event: FocusEvent) => {
       const pending = refreshFocus.current;
@@ -87,21 +91,37 @@ function CopyLoanVisit({
     document.addEventListener('focusin', trackFocus);
     return () => document.removeEventListener('focusin', trackFocus);
   }, []);
+  const pageCursor = read ? (read.page.requestedCursor ?? null) : null;
+  const readCursor = read ? (read.requestedCursor === undefined ? pageCursor : read.requestedCursor) : null;
   const unavailable =
-    read && (!read.page.signedIn || read.copyId !== copy.id || read.page.inventoryState || !read.page.boundary);
+    !!read &&
+    (!read.page.signedIn ||
+      read.copyId !== copy.id ||
+      (!searching && (readCursor !== request.cursor || pageCursor !== request.cursor)) ||
+      !!read.page.inventoryState ||
+      !read.page.boundary ||
+      read.outcome === null);
   useLayoutEffect(() => {
     const pending = refreshFocus.current;
-    if (!pending || refreshing) return;
+    if (!pending || searching) return;
     refreshFocus.current = null;
     if (pending.moved || !source.isCurrent('copy.list')) return;
-    (failed || unavailable ? retry.current : trigger.current)?.focus();
-  }, [failed, read, refreshing, source, unavailable]);
-  const refresh = (button: HTMLButtonElement) => {
+    (failed || unavailable ? retry.current : (trigger.current ?? more.current))?.focus();
+  }, [failed, read, searching, source, unavailable]);
+  const startSearch = (cursor: string | null, button?: HTMLButtonElement) => {
     if (!source.isCurrent('copy.list')) return;
-    refreshFocus.current = { trigger: button, moved: false };
+    refreshFocus.current = button ? { trigger: button, moved: false } : null;
+    const nextSequence = sequence.current + 1;
+    sequence.current = nextSequence;
     setFailed(false);
-    setRefreshing(true);
-    setGeneration((value) => value + 1);
+    setSearching(true);
+    setRequest({ cursor, sequence: nextSequence });
+  };
+  const refresh = (button: HTMLButtonElement) => {
+    startSearch(null, button);
+  };
+  const retryPage = (button: HTMLButtonElement) => {
+    startSearch(request.cursor, button);
   };
   const inspect = () => {
     if (!source.isCurrent() || expanded) return;
@@ -114,6 +134,11 @@ function CopyLoanVisit({
     setExpanded(false);
   };
   if (!current) return null;
+  const outcome = read?.outcome;
+  const found = outcome?.kind === 'found' ? outcome.item : outcome === undefined && read?.item ? read.item : null;
+  const exhausted = outcome?.kind === 'exhausted' || (outcome === undefined && !!read && !read.item);
+  const continuation = outcome?.kind === 'continuation' ? outcome.cursor : null;
+  const controlsDisabled = disabled || searching || failed;
   return (
     <section className="min-w-0 space-y-4 rounded-lg border border-border p-4" aria-labelledby={`${id}-title`}>
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -140,62 +165,88 @@ function CopyLoanVisit({
             type="button"
             variant="outline"
             className={controlWrap}
-            disabled={disabled}
-            onClick={(event) => refresh(event.currentTarget)}
+            disabled={disabled || searching}
+            onClick={(event) => retryPage(event.currentTarget)}
           >
             {m.library_loans_refresh()}
           </Button>
+          {request.cursor !== null ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={controlWrap}
+              disabled={disabled || searching}
+              onClick={(event) => refresh(event.currentTarget)}
+            >
+              {m.library_collections_first_page()}
+            </Button>
+          ) : null}
         </div>
       ) : null}
-      {refreshing || (!read && !failed) ? <p role="status">{m.library_sort_preparing()}</p> : null}
+      {searching ? <p role="status">{m.candidate_loading()}</p> : null}
       {read && !unavailable ? (
         <>
-          {read.item ? (
-            <LoanFacts loan={read.item.loan} today={read.page.boundary?.today ?? null} />
-          ) : (
+          {found ? (
+            <LoanFacts loan={found.loan} today={read.page.boundary?.today ?? null} />
+          ) : exhausted ? (
             <p className="text-sm text-muted-foreground">{m.library_loans_create_copy()}</p>
+          ) : (
+            <Button
+              ref={more}
+              type="button"
+              variant="outline"
+              className={controlWrap}
+              disabled={controlsDisabled || continuation === null}
+              onClick={(event) => continuation !== null && startSearch(continuation, event.currentTarget)}
+            >
+              {m.library_loans_more()}
+            </Button>
           )}
-          <Button
-            ref={trigger}
-            type="button"
-            variant="outline"
-            className={controlWrap}
-            aria-expanded={expanded}
-            aria-controls={`${id}-controls`}
-            disabled={disabled}
-            onClick={inspect}
-          >
-            {m.library_loans_inspect()}
-          </Button>
-          <section
-            id={`${id}-controls`}
-            hidden={!expanded}
-            aria-labelledby={`${id}-selected`}
-            className="space-y-4 border-t border-border pt-4"
-          >
-            <header className="flex flex-wrap items-center justify-between gap-3">
-              <h4
-                id={`${id}-selected`}
-                ref={heading}
-                tabIndex={-1}
-                className="font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          {found || exhausted ? (
+            <>
+              <Button
+                ref={trigger}
+                type="button"
+                variant="outline"
+                className={controlWrap}
+                aria-expanded={expanded}
+                aria-controls={`${id}-controls`}
+                disabled={controlsDisabled}
+                onClick={inspect}
               >
                 {m.library_loans_inspect()}
-              </h4>
-              <Button type="button" variant="outline" size="sm" className={compactWrap} onClick={close}>
-                {m.library_loans_close()}
               </Button>
-            </header>
-            <LoanControls
-              loan={read.item?.loan}
-              copy={read.item ? undefined : { id: copy.id, revision: copy.revision }}
-              today={read.page.boundary?.today ?? null}
-              originating={source}
-              disabled={disabled}
-              onRefresh={refresh}
-              readVersion={readVersion}
-            />
-          </section>
+              <section
+                id={`${id}-controls`}
+                hidden={!expanded}
+                aria-labelledby={`${id}-selected`}
+                className="space-y-4 border-t border-border pt-4"
+              >
+                <header className="flex flex-wrap items-center justify-between gap-3">
+                  <h4
+                    id={`${id}-selected`}
+                    ref={heading}
+                    tabIndex={-1}
+                    className="font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {m.library_loans_inspect()}
+                  </h4>
+                  <Button type="button" variant="outline" size="sm" className={compactWrap} onClick={close}>
+                    {m.library_loans_close()}
+                  </Button>
+                </header>
+                <LoanControls
+                  loan={found?.loan}
+                  copy={exhausted ? { id: copy.id, revision: copy.revision } : undefined}
+                  today={read.page.boundary?.today ?? null}
+                  originating={source}
+                  disabled={controlsDisabled}
+                  onRefresh={refresh}
+                  readVersion={readVersion}
+                />
+              </section>
+            </>
+          ) : null}
         </>
       ) : null}
     </section>

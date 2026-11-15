@@ -81,11 +81,18 @@ export const completeLoan = createServerFn({ method: 'POST' })
     return returnLoan(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
   });
 
+export type OpenCopyLoanOutcome =
+  | { kind: 'found'; item: LoansPageData['items'][number] }
+  | { kind: 'continuation'; cursor: string }
+  | { kind: 'exhausted' };
+
 export type OpenCopyLoanRead = {
   sessionSubject: string | null;
   copyId: string | null;
+  requestedCursor?: string | null;
   page: LoansPageData;
   item: LoansPageData['items'][number] | null;
+  outcome?: OpenCopyLoanOutcome | null;
 };
 
 export const readOpenCopyLoan = createServerFn({ method: 'GET' })
@@ -95,19 +102,66 @@ export const readOpenCopyLoan = createServerFn({ method: 'GET' })
     const copyId =
       data && typeof data === 'object' && 'copyId' in data && typeof data.copyId === 'string' ? data.copyId : null;
     const request = getRequest();
-    const page = await loadLoansPage(kernelClient(), request, env as Partial<SessionEnv>, {
+    const address = loansAddress(
+      {
+        filter: 'open',
+        ...(data && typeof data === 'object' && 'cursor' in data ? { cursor: data.cursor } : {}),
+      },
+      requestLocale(request) ?? 'en',
+    );
+    const requestedCursor = address.issue ? null : address.cursor;
+    if (address.issue) {
+      const refused = await prepareSession(request, env as Partial<SessionEnv>);
+      const subject = sessionSubject(request);
+      const credential = viewerCredential(request);
+      return {
+        sessionSubject: refused || !subject || !credential ? null : subject,
+        copyId,
+        requestedCursor,
+        page: {
+          signedIn: !refused && !!subject && !!credential,
+          filter: 'open',
+          requestedCursor,
+          inventoryState: 'unavailable',
+          boundary: null,
+          items: [],
+          next: null,
+        },
+        item: null,
+        outcome: null,
+      };
+    }
+    const page = await loadLoansPage(kernelClient(address.locale), request, env as Partial<SessionEnv>, {
       filter: 'open',
+      ...(address.cursor !== null ? { cursor: address.cursor } : {}),
       limit: 100,
     });
     const subject = sessionSubject(request);
     const credential = viewerCredential(request);
     if (!page.signedIn || !subject || !credential)
-      return { sessionSubject: null, copyId, page: { ...page, signedIn: false, items: [], next: null }, item: null };
+      return {
+        sessionSubject: null,
+        copyId,
+        requestedCursor,
+        page: { ...page, signedIn: false, items: [], next: null },
+        item: null,
+        outcome: null,
+      };
     const item = copyId ? (page.items.find((row) => row.loan.copyId === copyId) ?? null) : null;
+    const outcome =
+      !page.inventoryState && page.boundary && copyId
+        ? item
+          ? { kind: 'found' as const, item }
+          : page.next !== null
+            ? { kind: 'continuation' as const, cursor: page.next }
+            : { kind: 'exhausted' as const }
+        : null;
     return {
       sessionSubject: subject,
       copyId,
+      requestedCursor,
       page: { ...page, csrfToken: requestCsrfToken(request) },
       item,
+      outcome,
     };
   });
