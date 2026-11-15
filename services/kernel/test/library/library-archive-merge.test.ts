@@ -131,7 +131,8 @@ beforeAll(async () => {
 
   async function createSubject(label: string) {
     const response = await send(source, 'POST', '/v1/subjects', { type: 'ex:Child', labels: { en: label } });
-    const result = await json(response, 201);
+    expect(response.status, await response.clone().text()).toBe(201);
+    const result = await response.json();
     return (result.subject as { id: string }).id;
   }
   subjects = [await createSubject('archive first subject'), await createSubject('archive second subject')];

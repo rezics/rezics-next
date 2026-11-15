@@ -207,6 +207,7 @@ beforeAll(async () => {
   f = await createProfileEntryFixture({ clock: () => new Date(now) });
   owner = await f.identity(scopes);
   other = await f.identity(scopes);
+  await f.grantLibraryGate(owner.actor.accountId);
   await f.activate(await f.publish(await archiveRelease(['owned', 'lent'], true)));
   for (const group of ['personal_library', 'reading_progress', 'collections'])
     expect((await f.send('steward', 'POST', `/v1/platform/exposure/${group}:open`)).status).toBe(200);
