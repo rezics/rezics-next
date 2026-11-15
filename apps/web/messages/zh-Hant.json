@@ -4109,6 +4109,9 @@
   "library_archive_progress_title": "還原封存的進度",
   "library_archive_progress_uncertain": "The response was lost. Reconcile the original command before starting another effect.",
   "library_archive_progress_unit_help": "The archived count is {count}. It never supplies missing IDs. Inspect ten identities per page and select at most twenty exact current members.",
+  "library_archive_progress_local_count": "封存中的本機完成單元數",
+  "library_archive_progress_episode_count": "封存中的集數完成數",
+  "library_archive_progress_count_unknown": "此封存中未記錄",
   "library_archive_progress_units": "Exact archived unit identities",
   "library_archive_progress_unsupported": "Unsupported remainder",
   "library_archive_recovery_presentation_adopted": "已採用審閱確認的呈現類型。",
@@ -13277,5 +13280,6 @@
   "editor_formatting_under": "下方",
   "editor_formatting_text_emphasis": "著重號",
   "editor_formatting_code_language_help": "設定此程式碼區塊的程式語言，與正文的自然語言分別儲存。",
-  "editor_formatting_text_style_help": "調整文件中的文字與背景色彩。個人字型與字級仍屬於編輯器偏好。"
+  "editor_formatting_text_style_help": "調整文件中的文字與背景色彩。個人字型與字級仍屬於編輯器偏好。",
+  "knowledge_media_save_first": "請先儲存文件，再加入圖片。空白的私人文件也可以。"
 }

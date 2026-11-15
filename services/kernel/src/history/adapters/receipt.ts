@@ -6,6 +6,7 @@ import { sealHistoryAccount } from './gates.ts';
 import minimize from './receipt.sql';
 import { agentIdentityCopyRetentionGap } from './agent-identity-source.ts';
 import { commandHistoryKind } from '../application/records.ts';
+import { LIBRARY_BULK_TARGET_HISTORY_OWNER } from './library-bulk-receipt-owner.ts';
 import {
   type HistoryBarrier,
   type HistoryReceivingContext,
@@ -86,7 +87,10 @@ export async function minimizeHistoryReceipt(
     // An account-erasure readiness callback is never reused as ordinary-record permission.
     if (!Object.hasOwn(RECEIPT_OWNER_DISPOSITIONS, kind)) return 'receipt-record-consumer-proof-unavailable';
   } else if (registry) {
-    const owner = registry.owner('command-receipt/v1', kind);
+    const owner = registry.owner(
+      'command-receipt/v1',
+      kind === LIBRARY_BULK_TARGET_COMMAND_KIND ? LIBRARY_BULK_TARGET_HISTORY_OWNER : kind,
+    );
     if (!owner || !barrier) return 'receipt-consumer-proof-unavailable';
     const readiness = await owner.readiness(
       tx,

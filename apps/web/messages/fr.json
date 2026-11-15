@@ -4109,6 +4109,9 @@
   "library_archive_progress_title": "Récupérer la progression archivée",
   "library_archive_progress_uncertain": "The response was lost. Reconcile the original command before starting another effect.",
   "library_archive_progress_unit_help": "The archived count is {count}. It never supplies missing IDs. Inspect ten identities per page and select at most twenty exact current members.",
+  "library_archive_progress_local_count": "Unités locales terminées dans l’archive",
+  "library_archive_progress_episode_count": "Épisodes terminés dans l’archive",
+  "library_archive_progress_count_unknown": "Non enregistré dans cette archive",
   "library_archive_progress_units": "Exact archived unit identities",
   "library_archive_progress_unsupported": "Unsupported remainder",
   "library_archive_recovery_presentation_adopted": "Le Type de présentation vérifié a été adopté.",
@@ -13277,5 +13280,6 @@
   "editor_formatting_under": "En dessous",
   "editor_formatting_text_emphasis": "Marques d’emphase",
   "editor_formatting_code_language_help": "Définir le langage de programmation de ce bloc, indépendamment de la langue naturelle du texte.",
-  "editor_formatting_text_style_help": "Modifier les couleurs du texte et du fond dans le document. La police et la taille personnelles restent des préférences de l’éditeur."
+  "editor_formatting_text_style_help": "Modifier les couleurs du texte et du fond dans le document. La police et la taille personnelles restent des préférences de l’éditeur.",
+  "knowledge_media_save_first": "Enregistrez le document avant d’ajouter des images. Un document privé vide suffit."
 }

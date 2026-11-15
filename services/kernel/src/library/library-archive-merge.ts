@@ -55,7 +55,11 @@ import { createPersonalLabelCommands } from './label-commands.ts';
 import { createLabelAssignmentCommands, type AssignmentReviewGuard } from './label-assignment-commands.ts';
 import { normalizePersonalLabelName } from './label-store.ts';
 import { hasEntryState, type LibraryProfilePin } from './profile.ts';
-import { readLibraryProfileAnchor, readLibraryProfileSourceObservation } from './profile-source.ts';
+import {
+  readLibraryProfileAnchor,
+  readLibraryProfileSourceObservation,
+  type LibraryProfileAnchor,
+} from './profile-source.ts';
 import { parseProgressSessionJournalPatch } from './progress-journal.ts';
 import { createSessionCommands, ProgressConflictError, ProgressInvalidError } from './sessions.ts';
 
@@ -260,6 +264,10 @@ function personalOutcome(section: string, status: string, result: Record<string,
   if (status === 'unsupported') return 'unsupported';
   if (status === 'unresolved' || status === 'current_conflict') return 'stale';
   return 'failed';
+}
+
+function archivedComponent(component: LibraryProfileAnchor['component']) {
+  return { partition: component.partition, epoch: component.epoch, position: component.position.toString() };
 }
 
 function sameJson(left: unknown, right: unknown) {
@@ -851,6 +859,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
           provider: parsed.value.provider,
           recordId: parsed.value.recordId,
           action: decision.action,
+          ...(decision.action === 'correct' ? { revision: decision.revision } : {}),
           fields: choices,
           visibility: 'private',
         };
@@ -916,7 +925,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
               identityEpoch: anchor.identityEpoch.toString(),
               acceptingType: anchor.acceptingType,
               requestedSubjectId: anchor.requestedSubjectId,
-              component: anchor.component,
+              component: archivedComponent(anchor.component),
               pin: source.pin,
             },
             current: currentBinding,
@@ -1145,7 +1154,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
               identityEpoch: anchor.identityEpoch.toString(),
               acceptingType: anchor.acceptingType,
               requestedSubjectId: anchor.requestedSubjectId,
-              component: anchor.component,
+              component: archivedComponent(anchor.component),
               pin: source.pin,
             },
             current: { ...currentBinding, ...currentAnnotation, visibility: 'private' },
@@ -1275,7 +1284,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
               identityEpoch: anchor.identityEpoch.toString(),
               acceptingType: anchor.acceptingType,
               requestedSubjectId: anchor.requestedSubjectId,
-              component: anchor.component,
+              component: archivedComponent(anchor.component),
               pin: source.pin,
             },
             current: currentBinding,
@@ -1891,6 +1900,26 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
           sessionStartedAt: effect.operands.sessionStartedAt,
           state: effect.operands.state,
         },
+        prepare: async () => {
+          await identityTime(async (at) => {
+            const observation = await readLibraryProfileSourceObservation(
+              { pool: deps.pool, access: deps.access, actor: owner, at, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
+              subjectId,
+            );
+            const source = observation?.source;
+            if (
+              !observation ||
+              source?.kind !== 'supported' ||
+              source.subjectId !== subjectId ||
+              observation.anchor.identityEpoch.toString() !== profile.identityEpoch ||
+              observation.anchor.acceptingType !== profile.acceptingType ||
+              observation.anchor.requestedSubjectId !== profile.requestedSubjectId ||
+              !sameJson(archivedComponent(observation.anchor.component), profile.component) ||
+              !sameJson(source.pin, profile.pin)
+            )
+              throw new ProgressConflictError();
+          });
+        },
         assert: async (tx: CommandTransaction) => {
           const archive = object(effect.operands.archive);
           if (!archive || typeof archive.uploadId !== 'string') throw new ProgressConflictError();
@@ -1921,24 +1950,6 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
               session.rows[0]?.startedAt !== effect.operands.sessionStartedAt)
           )
             throw new ProgressConflictError();
-          await identityTime(async (at) => {
-            const observation = await readLibraryProfileSourceObservation(
-              { pool: deps.pool, access: deps.access, actor: owner, at, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
-              subjectId,
-            );
-            const source = observation?.source;
-            if (
-              !observation ||
-              source?.kind !== 'supported' ||
-              source.subjectId !== subjectId ||
-              observation.anchor.identityEpoch.toString() !== profile.identityEpoch ||
-              observation.anchor.acceptingType !== profile.acceptingType ||
-              observation.anchor.requestedSubjectId !== profile.requestedSubjectId ||
-              !sameJson(observation.anchor.component, profile.component) ||
-              !sameJson(source.pin, profile.pin)
-            )
-              throw new ProgressConflictError();
-          });
         },
       };
       const result = await sessionCommands().patchSessionJournal(

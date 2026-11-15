@@ -6,10 +6,12 @@ import {
   type HistoryRegistry,
 } from '../contract/index.ts';
 
-const WATCH_RECEIPTS = [
-  ['content.board.watch', COMMAND_HISTORY_KINDS['content.board.watch']],
-  ['content.watch.remove', COMMAND_HISTORY_KINDS['content.watch.remove']],
-] as const;
+function watchReceipts() {
+  return [
+    ['content.board.watch', COMMAND_HISTORY_KINDS['content.board.watch']],
+    ['content.watch.remove', COMMAND_HISTORY_KINDS['content.watch.remove']],
+  ] as const;
+}
 
 const WATCH_EVENTS = ['com.rezics.content.board.watch.changed.v1', 'com.rezics.content.watch.removed.v1'] as const;
 
@@ -29,7 +31,7 @@ function exactOwnerAssociation(artifact: HistoryArtifact, barrier: HistoryBarrie
 }
 
 export function registerWatchHistoryConsumers({ history }: { history: HistoryRegistry }): void {
-  for (const [name, commandKindId] of WATCH_RECEIPTS) {
+  for (const [name, commandKindId] of watchReceipts()) {
     history.registerOwner({
       name,
       artifactType: 'command-receipt/v1',

@@ -374,7 +374,7 @@ function supportedRecord(row: ObjectValue, section: MergeSection) {
         'lastChangedAt',
         'journal',
       ]) ||
-      !exactKeys(journal, ['sessionId', 'revision', 'startDate', 'finishDate', 'reflection', 'assessment']) ||
+      !exactKeys(journal, ['sessionId', 'revision', 'assessment'], ['startDate', 'finishDate', 'reflection']) ||
       !uuid(row.accountId) ||
       !uuid(row.sessionId) ||
       !uuid(row.subjectId) ||
@@ -542,6 +542,11 @@ function recordKey(row: ObjectValue, section: LibraryExportSection) {
     } else if (!uuid(value)) fail('invalid_record');
     return value;
   });
+  if (section === 'units') {
+    if (row.unit_kind !== undefined && row.unit_kind !== 'local' && row.unit_kind !== 'episode') fail('invalid_record');
+    if (row.unit_kind === 'episode' && !uuid(row.unit_id)) fail('invalid_record');
+    values.push(row.unit_kind ?? null);
+  }
   if (section === 'provenance') {
     const observation = object(row.observation, 'invalid_record');
     if (typeof observation.provider !== 'string' || typeof observation.recordId !== 'string') fail('invalid_record');

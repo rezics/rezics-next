@@ -162,7 +162,7 @@ export const REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES = ['bun-runtime-transpile
 /** Run-local scratch paths are excluded separately from the root control namespace. */
 const REMOTE_CHECK_RUN_SCRATCH_PATHS = ['.temp/check-host', '.temp/node-compile-cache'] as const;
 
-/** One v1 receipt contract is embedded in both dependency preparation and prepared-source verification. */
+/** One v1 producer receipt contract is embedded in both install and prepared-source verification. */
 export const installReceiptContractPython = String.raw`import math,re
 INSTALL_RECEIPT_REQUIRED_FIELDS=('schema','host','run','cache','nativeCache','key','packages','nativeChecks')
 INSTALL_RECEIPT_OPTIONAL_FIELDS=('installerSeconds','phaseSeconds')
@@ -461,6 +461,13 @@ export type RemotePreparationAbortEvidence = {
   run: string;
   status: 'infrastructure-failure';
   phase: 'abort';
+  diagnostics?: {
+    signal: 1 | 2 | 15;
+    stalledPhase: string;
+    phaseElapsedMs: number | null;
+    ownedProcesses: Array<{ pid: number; state: string; wait: string }>;
+    logTail: string;
+  };
   preparationReceiptSha256: string;
   resourcesReceiptSha256: string;
   resources: {
@@ -795,6 +802,7 @@ export function parseRemotePreparationAbortEvidence(
       'preparationReceiptSha256',
       'resourcesReceiptSha256',
       'resources',
+      ...(value && typeof value === 'object' && 'diagnostics' in value ? ['diagnostics'] : []),
     ])
   )
     return null;
@@ -824,6 +832,35 @@ export function parseRemotePreparationAbortEvidence(
     ])
   )
     return null;
+  if (item.diagnostics !== undefined) {
+    const detail = item.diagnostics;
+    if (
+      !exactKeys(detail, ['signal', 'stalledPhase', 'phaseElapsedMs', 'ownedProcesses', 'logTail']) ||
+      ![1, 2, 15].includes(Number(detail.signal)) ||
+      typeof detail.signal !== 'number' ||
+      typeof detail.stalledPhase !== 'string' ||
+      !/^[a-z-]{1,64}$/.test(detail.stalledPhase) ||
+      !(
+        detail.phaseElapsedMs === null ||
+        (Number.isSafeInteger(detail.phaseElapsedMs) && Number(detail.phaseElapsedMs) >= 0)
+      ) ||
+      typeof detail.logTail !== 'string' ||
+      Buffer.byteLength(detail.logTail) > 8192 ||
+      !Array.isArray(detail.ownedProcesses) ||
+      detail.ownedProcesses.length > 16 ||
+      !detail.ownedProcesses.every(
+        (entry) =>
+          exactKeys(entry, ['pid', 'state', 'wait']) &&
+          Number.isSafeInteger(entry.pid) &&
+          Number(entry.pid) > 0 &&
+          typeof entry.state === 'string' &&
+          /^[A-Za-z]$/.test(entry.state) &&
+          typeof entry.wait === 'string' &&
+          entry.wait.length <= 128,
+      )
+    )
+      return null;
+  }
   const resources = item.resources;
   const supervisor = resources.supervisor;
   const finite = (number: unknown): number is number => typeof number === 'number' && Number.isFinite(number);
@@ -1166,7 +1203,6 @@ export function parseRunLifetimeFailure(output: string): RunLifetimeFailure | nu
   return null;
 }
 const DEFAULT_LIVENESS_INTERVAL_MS = 60_000;
-const DEFAULT_PHASE_EVENT_POLL_MS = 500;
 export const DEFAULT_TRANSFER_TIMEOUT_MS = 120_000;
 // Base refresh and installs for dozens of concurrent checks exceeded three minutes on 2026-11-02.
 export const DEFAULT_PREPARATION_TIMEOUT_MS = 900_000;
@@ -2345,6 +2381,7 @@ stop_owned_check_unit "$run_slice" || exit $?
 export const dependencyPreparationProgram = String.raw`# Linux check-host dependency preparation. The supervising process is a subreaper in the run's systemd scope.
 SUPERVISOR_SCHEMA = ${REMOTE_CHECK_SUPERVISOR_MARKER_SCHEMA_JSON}
 ${checkHostPressureProgram}
+${installReceiptContractPython}
 import contextlib
 import ctypes
 import errno
@@ -2374,6 +2411,23 @@ RUN_SCRATCH_PATHS=set(${REMOTE_CHECK_RUN_SCRATCH_PATHS_JSON})
 PREPARATION_IO_ROOT = None
 PREPARATION_IO_NEXT = 0
 PREPARATION_IO_PHASE = None
+PREPARATION_PHASE_AT = None
+PREPARATION_PHASE_SECONDS = {}
+PREPARATION_PRESSURE_SECONDS = {}
+
+
+def record_preparation_pressure_wait(evidence, elapsed):
+    # A partition of observed wait intervals, never overlapping PSI percentages or duplicate phase totals.
+    # Simultaneous triggering memory and I/O pressure has its own combined category. Below triggering
+    # thresholds, the existing paused state is a recovery hold (including its healthy hysteresis).
+    if evidence is None:
+        reason = 'state-lock'
+    else:
+        io = evidence['ioFull'] >= 10
+        memory = evidence['memoryFull'] >= 1
+        reason = 'io-memory' if io and memory else 'io' if io else 'memory' if memory else 'recovery-hold'
+    phase = 'host-pressure-wait-' + reason
+    PREPARATION_PRESSURE_SECONDS[phase] = PREPARATION_PRESSURE_SECONDS.get(phase, 0) + elapsed
 
 
 def preparation_io_gate():
@@ -2387,16 +2441,19 @@ def preparation_io_gate():
     phase = PREPARATION_IO_PHASE
     waited = False
     slots = Path(os.environ['REMOTE_CHECK_PREPARATION_CACHE']).parent / 'slots'
-    paused, _, _ = update_host_pressure(slots)
+    paused, _, evidence = update_host_pressure(slots)
     while paused:
         if not waited:
-            preparation_progress(PREPARATION_IO_ROOT, 'cache-io-pressure-wait')
+            preparation_progress(PREPARATION_IO_ROOT, 'host-pressure-wait')
             waited = True
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            raise RuntimeError('absolute preparation deadline exceeded during cache I/O wait')
+            raise RuntimeError('absolute preparation deadline exceeded during host pressure wait')
+        interval_started = time.monotonic()
         time.sleep(min(0.5, remaining))
-        paused, _, _ = update_host_pressure(slots)
+        previous_evidence = evidence
+        paused, _, evidence = update_host_pressure(slots)
+        record_preparation_pressure_wait(previous_evidence, time.monotonic() - interval_started)
     PREPARATION_IO_NEXT = time.monotonic() + 0.25
     if waited and phase is not None:
         preparation_progress(PREPARATION_IO_ROOT, phase)
@@ -2439,7 +2496,7 @@ def digest(path):
     return value.hexdigest()
 
 
-def inventory(root, allocated=None):
+def inventory(root, allocated=None, digest_cache=None):
     result = {}
     # These belong to the transport/supervisor, or are disposable runtime caches, never lifecycle outputs.
     excluded = {'.git'} | CONTROL_ROOT_FILES | CONTROL_ROOT_DIRECTORIES | RUN_SCRATCH_PATHS
@@ -2465,7 +2522,12 @@ def inventory(root, allocated=None):
             elif path.is_dir():
                 result[relative] = ['directory', mode]
             elif path.is_file():
-                result[relative] = ['file', mode, digest(path)]
+                identity = (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns, mode)
+                prior = digest_cache.get(relative) if digest_cache is not None else None
+                value = prior[-1] if prior is not None and prior[:-1] == identity else digest(path)
+                if digest_cache is not None:
+                    digest_cache[relative] = (*identity, value)
+                result[relative] = ['file', mode, value]
             else:
                 raise RuntimeError('unsupported preparation output: ' + relative)
     return result
@@ -3883,6 +3945,7 @@ def install():
         manifest = verified(entry, key)
         hit = manifest is not None
         native_hit = None
+        installer_seconds = None
         if not hit:
             native_key = key
             native_cache = cache / 'native'
@@ -3906,19 +3969,26 @@ def install():
                         raise RuntimeError('restored native package identity mismatch')
                 # No ignore-scripts: workspace/source lifecycle outputs are always rebuilt on a source-key miss.
                 preparation_progress(root, 'frozen-install')
+                installer_started = time.monotonic()
                 completed = subprocess.run([os.environ['REMOTE_CHECK_REAL_BUN'], *sys.argv[2:]])
+                installer_seconds = time.monotonic() - installer_started
                 if completed.returncode:
                     return completed.returncode if completed.returncode > 0 else 128 - completed.returncode
-                preparation_progress(root, 'native-artifact-publication')
-                native_outputs = native_entries(root, inventory(root))
+                preparation_progress(root, 'postinstall-inventory')
+                postinstall_digests = {}
+                after = inventory(root, digest_cache=postinstall_digests)
+                native_outputs = native_entries(root, after)
                 native_checks = verify_native_packages(root, native_outputs)
+                preparation_progress(root, 'native-artifact-publication')
                 if not native_hit:
                     publish_artifacts(root, native_entry, {'schema': 2, 'key': native_key,
                         'entries': native_outputs, 'removed': [], 'nativeChecks': native_checks})
             if owned_processes():
                 raise RuntimeError('installer left owned descendants')
             preparation_progress(root, 'source-artifact-publication')
-            after = inventory(root)
+            # Native publication only writes excluded control staging. Reuse the immutable postinstall hashes;
+            # re-stat the tree so additions, links, modes or changed inode/ctime/mtime/size invalidate that reuse.
+            after = inventory(root, digest_cache=postinstall_digests)
             native_checks = verify_native_packages(root, after)
             outputs = {name: value for name, value in after.items() if before.get(name) != value}
             # Include parent directories so the payload has a complete independently verifiable inventory.
@@ -3946,12 +4016,16 @@ def install():
                     pass
         receipt = make_install_receipt(os.environ['REMOTE_CHECK_HOST'], os.environ['REZICS_CHECK_RUN'],
                    'hit' if hit else 'miss', None if hit else ('hit' if native_hit else 'miss'),
-                   key, packages, manifest['nativeChecks'])
+                   key, packages, manifest['nativeChecks'],
+                   None if installer_seconds is None else round(installer_seconds, 3), preparation_phase_seconds())
         (root / 'preparation-install.json').write_text(json.dumps(receipt, sort_keys=True))
         if time.monotonic() >= deadline:
             raise RuntimeError('absolute preparation deadline exceeded')
         (root / '.bun-install-complete').touch()
         print('remote-check: dependency artifacts ' + receipt['cache'] + ' ' + key, file=sys.stderr, flush=True)
+        print('remote-check: dependency preparation timing ' + json.dumps(
+            {'installerSeconds': receipt['installerSeconds'], 'phaseSeconds': receipt['phaseSeconds']}, sort_keys=True),
+            file=sys.stderr, flush=True)
         return 0
 
 
@@ -4018,13 +4092,28 @@ def active_packages(root):
 
 
 def preparation_progress(root, phase):
-    global PREPARATION_IO_PHASE
+    global PREPARATION_IO_PHASE, PREPARATION_PHASE_AT
+    now = time.monotonic()
+    if PREPARATION_IO_PHASE is not None and PREPARATION_PHASE_AT is not None:
+        PREPARATION_PHASE_SECONDS[PREPARATION_IO_PHASE] = PREPARATION_PHASE_SECONDS.get(PREPARATION_IO_PHASE, 0) + now - PREPARATION_PHASE_AT
+    PREPARATION_PHASE_AT = now
     PREPARATION_IO_PHASE = phase
     path = root / '.temp/check-host/preparation-progress.json'
     path.parent.mkdir(parents=True, exist_ok=True)
     pending = path.with_name(path.name + '.pending')
-    pending.write_text(json.dumps({'phase': phase, 'at': time.monotonic()}))
+    pending.write_text(json.dumps({'phase': phase, 'at': now}))
     pending.replace(path)
+
+
+def preparation_phase_seconds():
+    result = dict(PREPARATION_PHASE_SECONDS)
+    if PREPARATION_IO_PHASE is not None and PREPARATION_PHASE_AT is not None:
+        result[PREPARATION_IO_PHASE] = result.get(PREPARATION_IO_PHASE, 0) + time.monotonic() - PREPARATION_PHASE_AT
+    # Replace the aggregate phase with its mutually exclusive sampled-reason partition, so consumers may
+    # sum phaseSeconds without counting the same wait twice. Progress markers retain the aggregate name.
+    result.pop('host-pressure-wait', None)
+    result.update(PREPARATION_PRESSURE_SECONDS)
+    return {phase: round(elapsed, 3) for phase, elapsed in result.items()}
 
 
 def preparation_diagnostics(root):
@@ -4159,7 +4248,7 @@ def supervise():
             block = os.read(event.fileobj.fileno(), 65536)
             if block:
                 last_test = remember_test_file(root, block, last_test)
-                if not preparation_done:
+                if not (root / 'command-started').exists():
                     tail.extend(block)
                     del tail[:-8192]
                     # The independent host deadline can reap this supervisor, including while SSH output blocks.
@@ -4425,6 +4514,7 @@ class Resources:
                 self.identity = (stat.st_dev, stat.st_ino)
                 self.receipt['cgroup'] = {'path': group if not RESOURCE_CGROUP_OVERRIDE else str(path),
                     'device': stat.st_dev, 'inode': stat.st_ino, 'invocation': invocation}
+                durable(self.root / 'physical-resources.json', json.dumps(self.receipt, sort_keys=True))
                 return
             except (OSError, ValueError, StopIteration, subprocess.TimeoutExpired):
                 return
@@ -4658,6 +4748,9 @@ def lifetime():
         receipt = {'schema': 1, 'status': 'infrastructure-failure', 'phase': reason, 'host': host, 'run': run,
                    'limitMs': 15000 if reason == 'host-pressure' else limit_ms, 'elapsedMs': elapsed, 'command': command[:256]}
         if reason == 'host-pressure': receipt['pressure'] = pressure_evidence
+        if reason == 'abort':
+            receipt['diagnostics'] = {'signal': interrupted[0], 'logTail': preparation_log_tail(root),
+                                      **(diagnostics or preparation_diagnostics(root))}
         result_code = 124 if reason in ['run-lifetime', 'host-pressure'] else 128 + interrupted[0] if interrupted else 70
         if reason == 'install/preparation':
             receipt.update({'reason': 'absolute preparation deadline exceeded', 'activePackages': packages,
@@ -5247,6 +5340,7 @@ host=$REMOTE_CHECK_HOST
     reclaim_run_inactive_file
     if [ "$code" -eq 0 ]; then
       export PATH="$(dirname "$bun"):$PWD/node_modules/.bin:$PATH"
+      python3 ${quote(`${wrapperDirectory}/prepare.py`)} phase ${quote(directory)} generation
       ${preparationScript}
     fi
     ${preparedInputsEvidence}
@@ -5443,10 +5537,6 @@ run_directory=${quote(directory)}
 ${cleanupCommands()}`;
 }
 
-function heartbeatScript(directory: string): string {
-  return `touch ${quote(`${directory}/.alive`)}`;
-}
-
 function stopRunScript(id: string): string {
   const slice = quote(runSlice(id));
   return `systemctl stop ${slice} >/dev/null 2>&1 || true
@@ -5549,6 +5639,101 @@ function localRsyncSupportsZstd(): boolean {
 const recoveredOutputHeader = 'remote-check: recovered command output after disconnect run=';
 const recoveredOutputFooter = 'remote-check: end recovered command output run=';
 
+/** A retained abort may outlive both its run directory and a stuck SSH output channel. */
+export function retainedPreparationAbortScript(directory: string, host: string, run: string): string {
+  const reader = String.raw`import json,sys
+from pathlib import Path
+root=Path(${JSON.stringify(directory)}).parent.parent
+host=${JSON.stringify(host)}
+run=${JSON.stringify(run)}
+def read(name,limit):
+    p=root/'receipts'/run/name
+    if p.is_symlink() or not p.is_file() or p.stat().st_size>limit: raise ValueError('receipt unavailable')
+    return json.loads(p.read_bytes())
+try:
+    abort=read('preparation-status.json',65536)
+    resources=read('physical-resources.json',500000)
+    if (abort.get('schema')!=1 or abort.get('host')!=host or abort.get('run')!=run or
+            abort.get('status')!='infrastructure-failure' or abort.get('phase')!='abort' or
+            resources.get('schema')!=1 or resources.get('host')!=host or resources.get('run')!=run or
+            resources.get('boot')!=Path('/proc/sys/kernel/random/boot_id').read_text().strip() or
+            resources.get('commandStartedMonoMs') is not None): raise ValueError('not this pre-command abort')
+    samples=resources['samples']
+    if (not 1<=len(samples)<=1444 or samples[-1].get('phase')!='terminal' or
+            any(sample.get('phase')=='command' for sample in samples) or
+            not isinstance(resources.get('terminalMonoMs'),(int,float))): raise ValueError('not terminal')
+    owner=resources['supervisor']
+    if type(owner['pid']) is not int or owner['pid']<=0: raise ValueError('invalid supervisor')
+    process=Path('/proc')/str(owner['pid'])
+    if process.exists():
+        fields=(process/'stat').read_text().rsplit(')',1)[1].split()
+        if fields[19]==owner['start']: raise ValueError('supervisor still present')
+    cgroup=resources['cgroup']
+    expected='/rezics.slice/rezics-check.slice/rezics-check-'+run.replace('-','_')+'.slice'
+    if cgroup['path']!=expected: raise ValueError('foreign cgroup')
+    group=Path('/sys/fs/cgroup'+expected)
+    if group.exists():
+        events=dict(line.split() for line in (group/'cgroup.events').read_text().splitlines())
+        if events.get('populated')!='0': raise ValueError('owned processes remain')
+    print('PREPARATION_ABORTED')
+except (OSError,ValueError,TypeError,KeyError,AttributeError,IndexError):
+    sys.exit(1)
+`;
+  return `# REMOTE_CHECK_RETAINED_ABORT\npython3 -c ${quote(reader)}`;
+}
+
+/** Classify pre-command ownership without confusing live generation with a command that never started. */
+export function preparationStatusScript(directory: string, host: string, run: string): string {
+  const reader = String.raw`import json,os,sys
+from pathlib import Path
+root=Path(${JSON.stringify(directory)})
+try:
+    marker=json.loads((root/'.remote-check-supervisor').read_text())
+    if marker.get('schema')!=1 or marker.get('host')!=${JSON.stringify(host)} or marker.get('run')!=${JSON.stringify(run)}:
+        raise ValueError('foreign supervisor')
+    if type(marker.get('pid')) is not int or marker['pid']<=0 or type(marker.get('started')) is not str:
+        raise ValueError('invalid supervisor')
+    group=Path('/sys/fs/cgroup/rezics.slice/rezics-check.slice/rezics-check-'+${JSON.stringify(run)}.replace('-','_')+'.slice')
+    process=Path('/proc')/str(marker['pid'])
+    live=False
+    if process.exists():
+        fields=(process/'stat').read_text().rsplit(')',1)[1].split()
+        live=(fields[19]==marker['started'] and fields[0] not in ['Z','X'] and
+              int(fields[2])==marker.get('group') and process.stat().st_uid==marker.get('uid'))
+    if live:
+        resource=json.loads((root/'physical-resources.json').read_text())
+        cgroup=resource['cgroup']; info=group.stat()
+        if (resource.get('schema')!=1 or resource.get('host')!=${JSON.stringify(host)} or resource.get('run')!=${JSON.stringify(run)} or
+                resource.get('boot')!=Path('/proc/sys/kernel/random/boot_id').read_text().strip() or
+                resource['supervisor']!={'pid':marker['pid'],'start':marker['started'],'group':marker['group']} or
+                cgroup['path']!=str(group).removeprefix('/sys/fs/cgroup') or
+                (info.st_dev,info.st_ino)!=(cgroup['device'],cgroup['inode'])): raise ValueError('unverified resource identity')
+        events=dict(line.split() for line in (group/'cgroup.events').read_text().splitlines())
+        if events.get('populated')!='1': raise ValueError('unverified cgroup state')
+        print('PREPARING')
+    elif not (root/'.preparation-started').exists():
+        # Missing command markers alone are insufficient: retain exact boot/owner evidence and reject results.
+        resource=json.loads((root/'physical-resources.json').read_text())
+        if (resource.get('schema')!=1 or resource.get('host')!=${JSON.stringify(host)} or resource.get('run')!=${JSON.stringify(run)} or
+                resource.get('boot')!=Path('/proc/sys/kernel/random/boot_id').read_text().strip() or
+                resource['supervisor']!={'pid':marker['pid'],'start':marker['started'],'group':marker['group']} or
+                resource.get('commandStartedMonoMs') is not None or
+                any((root/name).exists() for name in ['command-started','.command-result','exit-status']) or
+                any((root.parent.parent/'receipts'/${JSON.stringify(run)}/name).exists()
+                    for name in ['physical-run-status.json','prepared-inputs.json'])):
+            raise ValueError('no-start is unproved')
+        if group.exists():
+            events=dict(line.split() for line in (group/'cgroup.events').read_text().splitlines())
+            if events.get('populated')!='0': raise ValueError('owned processes remain')
+        print('NOT_STARTED')
+    else:
+        print('UNKNOWN')
+except (OSError,ValueError,TypeError,KeyError,IndexError,AttributeError):
+    print('UNKNOWN')
+`;
+  return `python3 -c ${quote(reader)}`;
+}
+
 /** Reads status only from the exact host/run supervisor and optionally returns its bounded command output tail. */
 export function statusScript(directory: string, host: string, run: string, recoverOutput = true): string {
   const marker = quote(`${directory}/.remote-check-supervisor`);
@@ -5579,13 +5764,16 @@ if [ -e ${quote(`${directory}/exit-status`)} ]; then
 ${recoveredOutput}
 elif [ -e ${quote(`${directory}/.owned-cleanup-incomplete.json`)} ] || [ -e ${quote(`${directory}/.owned-resources-incomplete.json`)} ] || [ -e ${quote(`${directory}/run-lifetime-status.json`)} ] || [ -e ${quote(`${directory}/.command-result`)} ]; then printf 'CLEANING\\n'
 elif [ -e ${quote(`${directory}/command-started`)} ]; then printf 'STARTED\\n'
-else printf 'NOT_STARTED\\n'; fi`;
+else ${preparationStatusScript(directory, host, run)}; fi`;
 }
 
 type RemoteCommandStatus =
+  | { kind: 'preparing' }
+  | { kind: 'unknown' }
   | { kind: 'not-started' }
   | { kind: 'started' }
   | { kind: 'cleaning' }
+  | { kind: 'preparation-aborted' }
   | { kind: 'completed'; code: number };
 
 export function parseRemoteCommandStatus(
@@ -5596,10 +5784,19 @@ export function parseRemoteCommandStatus(
   const parsed = /^(?:0|[1-9]\d{0,2})$/.test(recorded) ? Number(recorded) : Number.NaN;
   const invalid =
     status.code !== 0 ||
-    (!Number.isInteger(parsed) && recorded !== 'NOT_STARTED' && recorded !== 'STARTED' && recorded !== 'CLEANING') ||
+    (!Number.isInteger(parsed) &&
+      recorded !== 'NOT_STARTED' &&
+      recorded !== 'STARTED' &&
+      recorded !== 'CLEANING' &&
+      recorded !== 'PREPARATION_ABORTED' &&
+      recorded !== 'PREPARING' &&
+      recorded !== 'UNKNOWN') ||
     parsed > 255;
   if (invalid)
     throw new RemoteTransportError(host.name, 'remote command', status.code || REMOTE_TRANSPORT_FAILURE, false);
+  if (recorded === 'PREPARING') return { kind: 'preparing' };
+  if (recorded === 'UNKNOWN') return { kind: 'unknown' };
+  if (recorded === 'PREPARATION_ABORTED') return { kind: 'preparation-aborted' };
   if (recorded === 'NOT_STARTED') return { kind: 'not-started' };
   if (recorded === 'STARTED') return { kind: 'started' };
   if (recorded === 'CLEANING') return { kind: 'cleaning' };
@@ -5627,7 +5824,7 @@ async function waitForRemoteCommandStatus(
       response = await boundedSsh(
         host,
         connectionId,
-        statusScript(directory, host.name, run),
+        `${retainedPreparationAbortScript(directory, host.name, run)} || { ${statusScript(directory, host.name, run)}; }`,
         'remote command status',
         timeoutMs,
       );
@@ -5660,7 +5857,7 @@ async function waitForRemoteCommandStatus(
     assertExecutionAllowed(options, signal);
     const remainingMs = deadlineAt - Date.now();
     const status = await probe(Math.max(1, Math.min(5_000, remainingMs)));
-    if (status && status.kind !== 'started' && status.kind !== 'cleaning') return status;
+    if (status && ['completed', 'not-started', 'preparation-aborted'].includes(status.kind)) return status;
     const delay = status ? pollMs : Math.min(30_000, retryBaseMs * 2 ** Math.min(consecutiveDrops - 1, 5));
     await sleep(Math.max(1, Math.min(delay, deadlineAt - Date.now())), signal);
   }
@@ -7155,6 +7352,7 @@ async function boundedSsh(
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
+    env: process.env,
   });
   const streams = Promise.all([
     new Response(child.stdout).text(),
@@ -8088,7 +8286,7 @@ async function cleanupPreparedRun(prepared: PreparedRun): Promise<RemoteCleanupR
           prepared.host.address,
           cleanupScript(prepared.id, prepared.directory),
         ],
-        { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' },
+        { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', env: process.env },
       );
       const [cleaned, output] = await boundedTextChild(
         cleanup,
@@ -8351,7 +8549,7 @@ def read_json(name,limit=8192):
     try: return json.loads(raw)
     except (UnicodeDecodeError,ValueError): return None
 def preparation_abort():
-    preparation_raw=read_bytes('preparation-status.json',8192)
+    preparation_raw=read_bytes('preparation-status.json',65536)
     if preparation_raw is None: return None,'matching preparation abort receipt is unavailable'
     resources_raw=read_bytes('physical-resources.json',500000)
     if resources_raw is None: return None,'terminal physical resource receipt is unavailable'
@@ -8374,6 +8572,7 @@ def preparation_abort():
         terminal_sample=samples[-1]
         return ({'schema':1,'host':${JSON.stringify(hostName)},'run':${JSON.stringify(runId)},
                  'status':'infrastructure-failure','phase':'abort',
+                 **({'diagnostics':preparation['diagnostics']} if 'diagnostics' in preparation else {}),
                  'preparationReceiptSha256':hashlib.sha256(preparation_raw).hexdigest(),
                  'resourcesReceiptSha256':hashlib.sha256(resources_raw).hexdigest(),
                  'resources':{'schema':1,'host':${JSON.stringify(hostName)},'run':${JSON.stringify(runId)},
@@ -8395,7 +8594,7 @@ print(json.dumps({'native':read_json('physical-run-status.json'),'preparedInputs
     'reconciliation status',
     10_000,
   );
-  if (observed.code !== 0 || Buffer.byteLength(observed.output) > 24 * 1024)
+  if (observed.code !== 0 || Buffer.byteLength(observed.output) > 96 * 1024)
     throw new RemoteTransportError(
       host.name,
       'reconciliation status',
@@ -8693,6 +8892,8 @@ async function runLeased(
   let transportChildReaped = true;
   let native: RemotePhysicalRunReceipt | null = null;
   let preparedInputs: RemotePreparedInputsEvidence | null = null;
+  let preparationAbort: RemoteCheckSettlement['preparationAbort'];
+  let retainedAbortObserved = false;
   let returnManifest: RemoteReturnManifest = {
     schema: 1,
     status: options.returns?.length ? 'unknown' : 'empty',
@@ -8808,9 +9009,12 @@ async function runLeased(
     const deadlineAt = Date.now() + maxMs + 1_000;
     const heartbeatMs = options.livenessIntervalMs ?? DEFAULT_LIVENESS_INTERVAL_MS;
     const heartbeatChildren = new Set<ReturnType<typeof Bun.spawn>>();
-    let phasePoll: ReturnType<typeof setInterval> | undefined;
+    let resolveRetainedAbort!: (value: 'preparation-aborted') => void;
+    const retainedAbortResult = new Promise<'preparation-aborted'>((resolve) => {
+      resolveRetainedAbort = resolve;
+    });
     const observeCommandStart = async () => {
-      if (!options.phaseEvent || phaseStartMarkerObserved || heartbeatChildren.size !== 0 || signal.aborted) return;
+      if (heartbeatChildren.size !== 0 || signal.aborted) return;
       let child: ReturnType<typeof Bun.spawn> | undefined;
       let probeTimer: ReturnType<typeof setTimeout> | undefined;
       try {
@@ -8819,7 +9023,7 @@ async function runLeased(
             sshExecutable(),
             ...sshOptions(host, connectionId),
             host.address,
-            statusScript(directory, host.name, id, false),
+            `${retainedPreparationAbortScript(directory, host.name, id)} || { ${statusScript(directory, host.name, id, false)}; }`,
           ],
           {
             stdin: 'ignore',
@@ -8849,9 +9053,12 @@ async function runLeased(
           return;
         }
         const status = parseRemoteCommandStatus(host, { code: statusCode, output: stdout, stdout });
-        if (status.kind !== 'started') return;
+        if (status.kind === 'preparation-aborted') {
+          resolveRetainedAbort('preparation-aborted');
+          return;
+        }
+        if (status.kind !== 'started' || phaseStartMarkerObserved || !options.phaseEvent) return;
         phaseStartMarkerObserved = true;
-        if (phasePoll) clearInterval(phasePoll);
         liveExecutionStartReported = publishPhaseEvent({
           schema: 1,
           kind: 'execution-started',
@@ -8866,24 +9073,9 @@ async function runLeased(
         if (child) heartbeatChildren.delete(child);
       }
     };
-    const heartbeat = setInterval(() => {
-      // A slow SSH channel must not accumulate another child every interval.
-      if (heartbeatChildren.size !== 0) return;
-      try {
-        const child = Bun.spawn(
-          [sshExecutable(), ...sshOptions(host, connectionId), host.address, heartbeatScript(directory)],
-          { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' },
-        );
-        heartbeatChildren.add(child);
-        void child.exited.then(() => heartbeatChildren.delete(child));
-      } catch (error) {
-        primaryFailure ??= error;
-      }
-    }, heartbeatMs);
-    phasePoll = options.phaseEvent
-      ? setInterval(() => void observeCommandStart(), Math.min(heartbeatMs, DEFAULT_PHASE_EVENT_POLL_MS))
-      : undefined;
-    if (phasePoll) void observeCommandStart();
+    // The existing heartbeat slot also observes retained terminal evidence; no second monitor is needed.
+    const heartbeat = setInterval(() => void observeCommandStart(), heartbeatMs);
+    void observeCommandStart();
     const commandResult = finished(run, signal);
     let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
     const deadlineResult = new Promise<null>((resolve) => {
@@ -8891,8 +9083,13 @@ async function runLeased(
       deadlineTimer = setTimeout(() => resolve(null), Math.max(1, deadlineAt - Date.now()));
     });
     try {
-      const completed = await Promise.race([commandResult.then((value) => value), deadlineResult]);
-      if (completed === null) {
+      const completed = await Promise.race([commandResult.then((value) => value), retainedAbortResult, deadlineResult]);
+      if (completed === 'preparation-aborted') {
+        retainedAbortObserved = true;
+        executionNotStartedConfirmed = true;
+        commandTerminal = true;
+        code = 70;
+      } else if (completed === null) {
         console.error(`remote-check: deadline reached after ${maxMs} ms`);
         const stopped = await boundedSsh(host, connectionId, stopRunScript(id), 'remote command stop', 15_000);
         if (stopped.code !== 0 || !stopped.output.includes('STOPPED'))
@@ -8910,7 +9107,6 @@ async function runLeased(
       }
     } finally {
       clearInterval(heartbeat);
-      if (phasePoll) clearInterval(phasePoll);
       if (deadlineTimer) clearTimeout(deadlineTimer);
       await settleRunTransport();
       // No heartbeat channel may touch the run after its result is collected or its directory is removed.
@@ -8920,11 +9116,16 @@ async function runLeased(
     if (code === 255) {
       const status = await waitForRemoteCommandStatus(host, id, connectionId, directory, deadlineAt, options, signal);
       assertExecutionAllowed(options, signal);
-      if (status.kind === 'unreachable') {
+      if (status.kind === 'unreachable' || status.kind === 'unknown') {
         preserveRemoteRun = true;
         throw new RemoteTransportError(host.name, 'remote command', REMOTE_TRANSPORT_FAILURE, false);
       }
-      if (status.kind === 'not-started') {
+      if (status.kind === 'preparation-aborted') {
+        retainedAbortObserved = true;
+        executionNotStartedConfirmed = true;
+        commandTerminal = true;
+        code = 70;
+      } else if (status.kind === 'not-started') {
         commandTerminal = true;
         executionNotStartedConfirmed = true;
         settlementStarted = performance.now();
@@ -8940,7 +9141,7 @@ async function runLeased(
           'the host retained its root result but has not published terminal cleanup; the physical run remains owned',
         );
       }
-      if (status.kind === 'started') {
+      if (status.kind === 'started' || status.kind === 'preparing') {
         console.error(`remote-check: deadline reached after ${maxMs} ms`);
         const stopped = await boundedSsh(host, connectionId, stopRunScript(id), 'remote command stop', 15_000);
         if (stopped.code !== 0 || !stopped.output.includes('STOPPED'))
@@ -8953,7 +9154,7 @@ async function runLeased(
         await settleRunTransport();
         commandTerminal = true;
         code = REMOTE_DEADLINE_EXIT;
-      } else {
+      } else if (status.kind === 'completed') {
         code = status.code;
         commandTerminal = true;
       }
@@ -8967,57 +9168,81 @@ async function runLeased(
       );
       primaryFailure ??= error;
     }
-    let lifetimeFailure: RunLifetimeFailure | null = null;
-    if (code === REMOTE_DEADLINE_EXIT) {
-      try {
-        lifetimeFailure = await recoverRunLifetimeFailure(prepared, options.workspace);
-      } catch (error) {
-        console.error(
-          `remote-check: could not retrieve run lifetime receipt; retained on ${host.name} for ${id}: ${error instanceof Error ? error.message : error}`,
-        );
-      }
-    }
-    const resources = await recoverResources(prepared, options.workspace, code);
-    const physical: RemotePhysicalRunReceipt = {
-      schema: 1,
-      host: host.name,
-      run: id,
-      exitCode: code,
-      lifetimeFailure,
-      resources,
-    };
-    native = physical;
-    preparedInputs = options.expectedSourceSha256 === undefined ? null : await recoverPreparedInputs(prepared);
-    if (options.expectedSourceSha256 !== undefined && !preparedInputs) {
-      primaryFailure ??= new Error('remote-check: prepared source/generated input evidence is unavailable');
-    }
-    try {
-      await options.completed?.(physical);
-    } catch (error) {
-      primaryFailure ??= error;
-    }
-    try {
-      returnManifest = await copyReturns(
-        host,
-        directory,
-        connectionId,
-        options,
+    if (retainedAbortObserved) {
+      const recovered = await reconcileRemoteRunOwned(
+        {
+          hosts: [host],
+          physical: { host: host.name, run: id },
+          workspace: options.workspace,
+          allowedHosts: [host.name],
+        },
         signal,
-        preparedInputs && preparedInputs.sourceSha256 === options.expectedSourceSha256
-          ? { host: native.host, run: native.run, exitCode: native.exitCode, sourceSha256: preparedInputs.sourceSha256 }
-          : undefined,
       );
-    } catch (error) {
-      assertExecutionAllowed(options, signal);
-      const reason = error instanceof Error ? error.message.slice(0, 512) : 'unknown returns failure';
-      returnManifest = { schema: 1, status: 'failed', entries: [], missing: [], failures: [reason] };
-      if (native.exitCode !== 0) {
-        const cause = native.lifetimeFailure
-          ? 'recorded remote lifecycle infrastructure interruption'
-          : `native command exit ${native.exitCode}`;
-        console.error(`remote-check: returns failed after ${cause}: ${reason}`);
-      } else {
+      preparationAbort = recovered.preparationAbort;
+      if (!remotePreparationAbortSettlementReady(recovered, { host: host.name, run: id }))
+        throw new Error('remote-check: retained preparation abort cleanup is unverified');
+      console.error(
+        `remote-check: retained infrastructure preparation abort on ${host.name} run=${id}; tests never started`,
+      );
+      primaryFailure ??= new Error('remote-check: infrastructure preparation aborted before command start');
+    } else {
+      let lifetimeFailure: RunLifetimeFailure | null = null;
+      if (code === REMOTE_DEADLINE_EXIT) {
+        try {
+          lifetimeFailure = await recoverRunLifetimeFailure(prepared, options.workspace);
+        } catch (error) {
+          console.error(
+            `remote-check: could not retrieve run lifetime receipt; retained on ${host.name} for ${id}: ${error instanceof Error ? error.message : error}`,
+          );
+        }
+      }
+      const resources = await recoverResources(prepared, options.workspace, code);
+      const physical: RemotePhysicalRunReceipt = {
+        schema: 1,
+        host: host.name,
+        run: id,
+        exitCode: code,
+        lifetimeFailure,
+        resources,
+      };
+      native = physical;
+      preparedInputs = options.expectedSourceSha256 === undefined ? null : await recoverPreparedInputs(prepared);
+      if (options.expectedSourceSha256 !== undefined && !preparedInputs) {
+        primaryFailure ??= new Error('remote-check: prepared source/generated input evidence is unavailable');
+      }
+      try {
+        await options.completed?.(physical);
+      } catch (error) {
         primaryFailure ??= error;
+      }
+      try {
+        returnManifest = await copyReturns(
+          host,
+          directory,
+          connectionId,
+          options,
+          signal,
+          preparedInputs && preparedInputs.sourceSha256 === options.expectedSourceSha256
+            ? {
+                host: native.host,
+                run: native.run,
+                exitCode: native.exitCode,
+                sourceSha256: preparedInputs.sourceSha256,
+              }
+            : undefined,
+        );
+      } catch (error) {
+        assertExecutionAllowed(options, signal);
+        const reason = error instanceof Error ? error.message.slice(0, 512) : 'unknown returns failure';
+        returnManifest = { schema: 1, status: 'failed', entries: [], missing: [], failures: [reason] };
+        if (native.exitCode !== 0) {
+          const cause = native.lifetimeFailure
+            ? 'recorded remote lifecycle infrastructure interruption'
+            : `native command exit ${native.exitCode}`;
+          console.error(`remote-check: returns failed after ${cause}: ${reason}`);
+        } else {
+          primaryFailure ??= error;
+        }
       }
     }
   } catch (error) {
@@ -9071,6 +9296,7 @@ async function runLeased(
     host: host.name,
     run: id,
     native,
+    ...(preparationAbort ? { preparationAbort } : {}),
     preparedInputs,
     returns: returnManifest,
     cleanup,

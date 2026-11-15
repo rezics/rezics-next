@@ -1391,7 +1391,7 @@ export function checkFlowAlarms(
 }
 export function dispatchDailyStepAudit(
   db: Database,
-  tasks: Task[],
+  tasks: readonly Task[] | (() => readonly Task[]),
   dispatch: () => Task,
   now = new Date(),
   reportFailure: (summary: string) => void = (summary) => console.error(summary),
@@ -1425,7 +1425,8 @@ export function dispatchDailyStepAudit(
   };
   report();
   if (db.query('SELECT 1 FROM flow_audit_runs WHERE day=?').get(day)) return null;
-  const open = tasks.find(
+  // A completed/claimed day must not hydrate or clone task bodies on every host reminder tick.
+  const open = (typeof tasks === 'function' ? tasks() : tasks).find(
     (task) =>
       task.brief.goal === 'daily-step-audit' && !['integrated', 'merged', 'stopped', 'cancelled'].includes(task.state),
   );

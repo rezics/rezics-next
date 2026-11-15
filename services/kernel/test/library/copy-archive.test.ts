@@ -9,6 +9,7 @@ import {
   unitData,
 } from '../../../../packages/definitions/test/support/library-profiles.ts';
 import { createLifecycleCommands } from '../../src/access/lifecycle.ts';
+import { ProblemError } from '../../src/http/problem-error.ts';
 import { parseCopyArchive, COPY_ARCHIVE_LIMITS } from '../../src/library/copy-archive-format.ts';
 import { exportSections } from '../../src/library/library-export-format.ts';
 import { createCopyArchive } from '../../src/library/copy-archive.ts';
@@ -66,6 +67,16 @@ const scopes = [
 ];
 const path = '/v1/libraryCopyArchives';
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
+function refusesArchive(input: Uint8Array, code: 'invalid_request' | 'content_too_large') {
+  let failure: unknown;
+  try {
+    parseCopyArchive(input);
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toBeInstanceOf(ProblemError);
+  expect(failure).toMatchObject({ code });
+}
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -207,6 +218,7 @@ beforeAll(async () => {
   f = await createProfileEntryFixture({ clock: () => new Date(now) });
   owner = await f.identity(scopes);
   other = await f.identity(scopes);
+  await f.grantLibraryGate(owner.actor.accountId);
   await f.activate(await f.publish(await archiveRelease(['owned', 'lent'], true)));
   for (const group of ['personal_library', 'reading_progress', 'collections'])
     expect((await f.send('steward', 'POST', `/v1/platform/exposure/${group}:open`)).status).toBe(200);
@@ -294,6 +306,7 @@ beforeAll(async () => {
     const relation = body.subject.statements['schema:isPartOf'][0];
     if (!isRecord(relation) || typeof relation.id !== 'string')
       throw new Error('Episode response is missing its membership statement');
+    await f.awaitCurrentIdentity(body.subject.id);
     return { id: body.subject.id, relationId: relation.id };
   };
   const member = await createEpisode('Archive member'),
@@ -387,6 +400,9 @@ test('actual installed export retains independent holdings, all pins and exact d
   );
   expect(primary.evidence.additional_measures?.every((measure) => measure.amount === '4.125000')).toBe(true);
   const units = parsed.progress.filter((row) => row.evidence.section === 'units');
+  expect(units.every((row) => row.evidence.section === 'units' && row.evidence.unit_kind === 'episode')).toBe(true);
+  expect(parsed.progress.find((row) => row.sourceSessionId === archivedUnits.sessionId && row.evidence.section === 'sessions'))
+    .toMatchObject({ evidence: { completed_unit_count: 0, episode_completed_count: 2 } });
   expect(units.map((row) => row.evidence.section === 'units' && row.evidence.unit_id).sort()).toEqual(
     [archivedUnits.detachedId, archivedUnits.memberId].sort(),
   );
@@ -409,12 +425,12 @@ test('installed final manifest, counts, envelopes and admission bounds are manda
       a.manifest.rows = a.records.length;
       a.manifest.recordBytes = a.records.reduce((n, r) => n + bytes(r).length, 0);
     }
-    expect(() => parseCopyArchive(bytes(a))).toThrow('invalid_request');
+    refusesArchive(bytes(a), 'invalid_request');
   };
   reject((a) => {
     a.manifest.version = 4;
   });
-  expect(() => parseCopyArchive(bytes({ manifest: null, records: artifact.records }))).toThrow('invalid_request');
+  refusesArchive(bytes({ manifest: null, records: artifact.records }), 'invalid_request');
   reject((a) => {
     a.manifest.rows++;
   });
@@ -444,11 +460,9 @@ test('installed final manifest, counts, envelopes and admission bounds are manda
   reject((a) => {
     a.records.push(a.records[0]!);
   }, true);
-  expect(() => parseCopyArchive(new Uint8Array(COPY_ARCHIVE_LIMITS.bytes + 1))).toThrow('content_too_large');
-  expect(() => parseCopyArchive(new TextEncoder().encode('{"manifest":1,"manifest":2,"records":[]}'))).toThrow(
-    'invalid_request',
-  );
-  expect(() => parseCopyArchive(new TextEncoder().encode('['.repeat(17) + ']'.repeat(17)))).toThrow('invalid_request');
+  refusesArchive(new Uint8Array(COPY_ARCHIVE_LIMITS.bytes + 1), 'content_too_large');
+  refusesArchive(new TextEncoder().encode('{"manifest":1,"manifest":2,"records":[]}'), 'invalid_request');
+  refusesArchive(new TextEncoder().encode('['.repeat(17) + ']'.repeat(17)), 'invalid_request');
 });
 
 function artifactWithUnsupportedEvidence() {
@@ -521,7 +535,7 @@ test('canonical export preserves exact accounting and unsupported facts stay unr
       for (const mutate of mutations) {
         const malformed = structuredClone(a);
         mutate(malformed.manifest);
-        expect(() => parseCopyArchive(bytes(malformed))).toThrow('invalid_request');
+        refusesArchive(bytes(malformed), 'invalid_request');
       }
       const journal = a.records.find((row) => row.section === 'journals');
       if (!journal || !isRecord(journal.journal)) throw new Error('Missing exported journal record');
@@ -530,7 +544,7 @@ test('canonical export preserves exact accounting and unsupported facts stay unr
       const delta = bytes(journal).length - before;
       a.manifest.recordBytes += delta;
       archiveSectionTotal(a.manifest, 'journals').recordBytes += delta;
-      expect(() => parseCopyArchive(bytes(a))).toThrow('invalid_request');
+      refusesArchive(bytes(a), 'invalid_request');
     }
   }
 });

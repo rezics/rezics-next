@@ -68,6 +68,7 @@ export type ArchivedProgressSession = {
     locator: string | null;
     position: string | null;
     completed_unit_count: number;
+    episode_completed_count?: number;
     state: string;
     revision: number;
     library_profile_pin: unknown;
@@ -77,6 +78,7 @@ export type ArchivedProgressSession = {
 };
 export type ArchivedProgressUnit = {
     section: 'units';
+    unit_kind?: 'local' | 'episode';
     session_id: string;
     unit_id: string;
     added_at: string;

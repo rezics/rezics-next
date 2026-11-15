@@ -227,6 +227,13 @@ export function KnowledgeDocumentPage({
             document={document.body}
             references={document.references}
             locale={locale}
+            mediaSelection={{
+              representation: 'public',
+              documentId: document.documentId,
+              revisionId: document.revisionId,
+              sourceSha256: document.sourceSha256,
+              publicationId: document.publicationId,
+            }}
           />
           <KnowledgeDetails label={m.knowledge_workspace_details()}>
             {document ? (

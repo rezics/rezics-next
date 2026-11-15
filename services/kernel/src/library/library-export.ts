@@ -15,7 +15,7 @@ import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
 import { libraryCommandAuthorization, createLibraryCommandRunner } from './command-support.ts';
-import { initialExportSeek, readExportSourcePage, type ExportSeek } from './library-export-source.ts';
+import { initialExportSeek, readExportSourcePage, validUnitExportFrontier, type ExportSeek } from './library-export-source.ts';
 import {
   libraryExportManifest as manifest,
   LIBRARY_EXPORT_LIMITS,
@@ -119,6 +119,8 @@ function seekOf(
     rows > LIBRARY_EXPORT_LIMITS.records ||
     bytes > LIBRARY_EXPORT_LIMITS.recordBytes
   )
+    throw new ProblemError('invalid_cursor');
+  if (sections[section] === 'units' && !validUnitExportFrontier(parent, after))
     throw new ProblemError('invalid_cursor');
   if (
     !Array.isArray(sectionTotals) ||

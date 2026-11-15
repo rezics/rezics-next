@@ -44,10 +44,11 @@ export function MappingPanel({ journey, snap }: { journey: Journey; snap: View }
           unitIds: choice.mode === 'completed_units' ? ids : [],
         }
       : null;
+  const episodeUnits = (snap.units?.units ?? []).filter(({ evidence }) => evidence.unit_kind === 'episode');
   const visit = preparingVisit(null);
   visit.kind = 'ready';
   visit.membership = 'admitted';
-  visit.rows = (snap.units?.units ?? []).map(({ evidence }) => {
+  visit.rows = episodeUnits.map(({ evidence }) => {
     const admission = snap.unitSupport.find((unit) => unit.unitId === evidence.unit_id)?.admission;
     return {
       episodeSubjectId: evidence.unit_id,
@@ -220,16 +221,21 @@ export function MappingPanel({ journey, snap }: { journey: Journey; snap: View }
         : null}
       <section className="space-y-3">
         <h3 className="font-semibold">{m.library_archive_progress_units()}</h3>
-        <p>{m.library_archive_progress_unit_help({ count: source.completed_unit_count })}</p>
+        <p>{m.library_archive_progress_local_count()}: {source.completed_unit_count}</p>
+        <p>
+          {m.library_archive_progress_episode_count()}: {source.episode_completed_count === undefined
+            ? m.library_archive_progress_count_unknown()
+            : source.episode_completed_count}
+        </p>
         <EvidenceDetails value={snap.units} />
         {choice?.mode === 'completed_units' && body ? (
           <>
             <button
               className={action}
-              disabled={locked}
+              disabled={locked || !episodeUnits.length}
               onClick={() =>
                 void journey.review(
-                  { ...body, unitIds: snap.units!.units.map(({ evidence }) => evidence.unit_id) },
+                  { ...body, unitIds: episodeUnits.map(({ evidence }) => evidence.unit_id) },
                   true,
                 )
               }

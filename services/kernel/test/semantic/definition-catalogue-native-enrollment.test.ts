@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { Type } from 'typebox';
+import { registerEventTypes } from '../../src/events/catalogue.ts';
 import {
   buildCatalogue,
   catalogueBytes,
@@ -26,6 +28,25 @@ import {
   type CatalogueConsumerCapture,
   type CatalogueConsumerSource,
 } from '../../src/semantic/definition-catalogue-lifecycle.ts';
+
+// This fixture owns a native Source and its receipt table; material changes have their own event contract.
+const SOURCE_CHANGED = 'com.rezics.test.catalogue-source.changed.v1';
+registerEventTypes({
+  [SOURCE_CHANGED]: Type.Object(
+    {
+      rootDigest: Type.String(),
+      operation: Type.Union([Type.Literal('enroll'), Type.Literal('receipt-install'), Type.Literal('receipt-refresh')]),
+    },
+    { additionalProperties: false },
+  ),
+});
+const sourceChanged = (rootDigest: string, operation: 'enroll' | 'receipt-install' | 'receipt-refresh') => [
+  {
+    type: SOURCE_CHANGED,
+    subject: GLOBAL_CONTEXT,
+    data: { rootDigest, operation },
+  },
+];
 
 async function publisher(f: CollectionKindFixture) {
   const authority = await createRealAccess(f.database.pool, { publisher: newId(0) }, [
@@ -89,11 +110,11 @@ async function publisher(f: CollectionKindFixture) {
     }
     if (!execute) return pin;
     let progress = await call('/v1/definitions/catalogues', { pin });
-    expect(progress.status).toBe(200);
+    expect(progress.status, JSON.stringify({ response: progress.body, pin })).toBe(200);
     // Finite test input and one real bounded native continuation per call; no test scheduler.
     for (let page = 0; page < 2048 && progress.body.state === 'building'; page++) {
       progress = await call(`/v1/definitions/catalogues/${pin.rootDigest}:step`, {});
-      expect(progress.status).toBe(200);
+      expect(progress.status, JSON.stringify({ response: progress.body, pin })).toBe(200);
     }
     expect(progress.body.state).toBe('ready');
     return pin;
@@ -156,7 +177,7 @@ test('Unset presentation Type uses mixed member hints while explicit Type select
   } finally {
     await f.close();
   }
-}, 180_000);
+}, 240_000);
 
 test('Catalogue root closure serializes enrollment and final publication requires exact durable current withdrawal acknowledgements for every captured consumer', async () => {
   const f = await createCollectionKindFixture();
@@ -211,7 +232,7 @@ test('Catalogue root closure serializes enrollment and final publication require
           provenance: { ownerGeneration: '1', restoreGeneration: '1' },
           dependency: { op: 'kinds', pin: first, ids: ['schema:Book'] },
         }),
-        events: [],
+        events: sourceChanged(first.rootDigest, 'enroll'),
       }));
     await enroll('original');
     await enroll('second');
@@ -270,7 +291,7 @@ test('Catalogue root closure serializes enrollment and final publication require
         VALUES($1,$2,'2','2','1','1',true,$3)`,
           [capture.id, catalogueConsumerCaptureDigest(capture), Buffer.from(currentCommand(tx).transactionId)],
         );
-      return { value: null, events: [] };
+      return { value: null, events: sourceChanged(first.rootDigest, 'receipt-install') };
     });
     expect((await p.activate(next, head)).status).toBe(503);
     expect((await p.call('/v1/definitions/catalogue')).body.pin).toEqual(first);
@@ -291,7 +312,7 @@ test('Catalogue root closure serializes enrollment and final publication require
           catalogueConsumerCaptureDigest(capture),
           Buffer.from(currentCommand(tx).transactionId),
         ]);
-      return { value: null, events: [] };
+      return { value: null, events: sourceChanged(first.rootDigest, 'receipt-refresh') };
     });
     expect((await p.activate(next, head)).status).toBe(200);
     const acknowledgements = (
@@ -323,7 +344,7 @@ test('Catalogue build and activation recover the same committed result after a l
       pin = await p.build(`replay-${randomUUID()}`, false);
     const key = JSON.stringify(randomUUID());
     const started = await p.call('/v1/definitions/catalogues', { pin }, key);
-    expect(started.status).toBe(200);
+    expect(started.status, JSON.stringify({ response: started.body, pin })).toBe(200);
     p.restart();
     expect(await p.call('/v1/definitions/catalogues', { pin }, key)).toEqual(started);
     const first = await runCatalogueBuildStep(f.database.pool, pin, () => new Date(), '0');

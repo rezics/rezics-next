@@ -69,6 +69,7 @@ beforeAll(async () => {
     'progress_session:update',
     'collection:read',
   ]);
+  await f.grantLibraryGate(owner.actor.accountId);
   const profile = libraryProfile('fixture.archive-web', 'chapter');
   profile.progress.allowed[0]!.units.push(unitData('page'), unitData('old.page'));
   profile.progress.allowed.push({ mode: 'completed_units', units: [unitData('episode', 'completed_units')] });
@@ -81,7 +82,7 @@ beforeAll(async () => {
     isPartOf: {
       slot_uri: 'schema:isPartOf',
       range: 'Child',
-      annotations: { datatype: 'wikibase-item', relation_group: 'membership' },
+      annotations: { datatype: 'wikibase-item', relation_group: 'membership', inverse: 'none' },
     },
   };
   sources.schemas['fixture.yaml'] = JSON.stringify(schema);
@@ -134,7 +135,9 @@ beforeAll(async () => {
         'schema:isPartOf': [{ property: { id: 'schema:isPartOf' }, value: { type: 'value', content: subjectId } }],
       },
     });
-    return item.subject as { id: string; statements: Record<string, { id: string }[]> };
+    const subject = item.subject as { id: string; statements: Record<string, { id: string }[]> };
+    await f.awaitCurrentIdentity(subject.id);
+    return subject;
   };
   const member = await episode('Member'),
     detached = await episode('Detached');
@@ -174,6 +177,7 @@ beforeAll(async () => {
   }
   expect(manifest).toMatchObject({ version: 1 });
   artifact = JSON.stringify({ manifest, records });
+  expect(await response('DELETE', `/v1/libraryExports/${capture.exportId}`)).toMatchObject({ state: 'cancelled' });
   work = await createWorkClient(f.pool.options.connectionString!, f.pool);
   const service = createCopyArchive({
     pool: f.pool,
@@ -242,17 +246,21 @@ async function independent() {
   const capture = await response('POST', '/v1/libraryExports');
   let cursor = capture.first;
   const facts: unknown[] = [];
-  while (cursor) {
-    const page = await response(
-      'GET',
-      `/v1/libraryExports/${capture.exportId}/pages?cursor=${encodeURIComponent(cursor)}`,
-    );
-    facts.push(
-      ...page.records.filter((row: { section: string }) =>
-        ['entries', 'holdings', 'journals', 'annotations', 'provenance'].includes(row.section),
-      ),
-    );
-    cursor = page.next;
+  try {
+    while (cursor) {
+      const page = await response(
+        'GET',
+        `/v1/libraryExports/${capture.exportId}/pages?cursor=${encodeURIComponent(cursor)}`,
+      );
+      facts.push(
+        ...page.records.filter((row: { section: string }) =>
+          ['entries', 'holdings', 'journals', 'annotations', 'provenance'].includes(row.section),
+        ),
+      );
+      cursor = page.next;
+    }
+  } finally {
+    expect(await response('DELETE', `/v1/libraryExports/${capture.exportId}`)).toMatchObject({ state: 'cancelled' });
   }
   return facts;
 }

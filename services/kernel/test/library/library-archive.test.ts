@@ -179,6 +179,10 @@ test('canonical archive retains exact annotation presence, partial journal dates
   const file = archiveFacts([annotation, provenance, journal]);
   const decoded = decode(file);
   expect(decoded.records).toEqual(file.records);
+  const absentJournal = { ...(journal.journal as Record<string, unknown>) };
+  for (const field of ['startDate', 'finishDate', 'reflection']) delete absentJournal[field];
+  const absent = archiveFacts([{ ...journal, journal: absentJournal }]);
+  expect(decode(absent).records).toEqual(absent.records);
   expect(decoded.coverage.find((row) => row.section === 'annotations')).toMatchObject({
     capture: 'present',
     treatment: 'requires-explicit-mapping',
@@ -237,10 +241,20 @@ test('duplicate native rows and names cannot select repeated effects or guess la
   refuses(archive([named(), named(randomUUID())]), 'duplicate_label');
   refuses(archive([named(), assignment(), assignment()]), 'duplicate_record');
   refuses(archive([assignment()]), 'incomplete_capture');
-  const futureSection = { ...named(), section: 'future-section' } as unknown as ArchiveRecord;
-  refuses(archive([entry(first), futureSection]), 'invalid_record');
+  const futureSection = archive([entry(first), named()]);
+  futureSection.records[1] = { ...named(), section: 'future-section' } as unknown as ArchiveRecord;
+  refuses(futureSection, 'invalid_record');
   refuses(archive([named(), entry(first)]), 'invalid_record');
   expect(decode(archive([named(label, 'Weekend'), named(randomUUID(), 'weekend')])).records).toHaveLength(2);
+});
+
+test('equal unit ID text stays independent across native fact families', () => {
+  const sessionId = randomUUID(), unitId = randomUUID();
+  const local = { section: 'units', session_id: sessionId, unit_id: unitId, unit_kind: 'local', added_at: at } as ArchiveRecord;
+  const episode = { ...local, unit_kind: 'episode' } as ArchiveRecord;
+  expect(decode(archiveFacts([local, episode])).records).toEqual([local, episode]);
+  refuses(archiveFacts([local, { ...local }]), 'duplicate_record');
+  refuses(archiveFacts([{ ...episode, unit_id: 'opaque-unit' }]), 'invalid_record');
 });
 
 test('native references and required shapes are validated without admitting stored authority', () => {

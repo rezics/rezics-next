@@ -964,14 +964,91 @@ $$;
 
 
 --
+-- Name: guard_knowledge_account_fence(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_knowledge_account_fence() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='INSERT' THEN
+    IF NEW.account_erased THEN RAISE EXCEPTION 'Knowledge erasure requires existing native ownership' USING ERRCODE='23514'; END IF;
+    IF TG_TABLE_NAME='knowledge_document' THEN
+      PERFORM 1 FROM content.knowledge_notebook n
+      WHERE n.route=NEW.route AND n.notebook_id=NEW.notebook_id AND NOT n.account_erased FOR SHARE;
+      IF NOT FOUND THEN RAISE EXCEPTION 'Knowledge notebook is terminal' USING ERRCODE='23514'; END IF;
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF OLD.account_erased AND NOT NEW.account_erased THEN
+    RAISE EXCEPTION 'Knowledge account disposition is irreversible' USING ERRCODE='23514';
+  END IF;
+  IF TG_TABLE_NAME='knowledge_notebook' AND OLD.account_erased AND NEW IS DISTINCT FROM OLD THEN
+    RAISE EXCEPTION 'Knowledge notebook disposition is terminal' USING ERRCODE='23514';
+  END IF;
+  IF TG_TABLE_NAME='knowledge_document' AND OLD.account_erased THEN
+    IF (OLD.notebook_id IS NULL AND NEW.notebook_id IS NOT NULL)
+      OR NEW.lifecycle_generation<OLD.lifecycle_generation
+      OR OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL AND NEW.purge_started_at IS NULL
+      OR (NEW.notebook_id IS NOT NULL AND NEW.notebook_id IS DISTINCT FROM OLD.notebook_id)
+      OR NEW.head_revision_id IS DISTINCT FROM OLD.head_revision_id AND NEW.head_revision_id IS NOT NULL
+      OR NEW.current_publication_id IS DISTINCT FROM OLD.current_publication_id AND NEW.current_publication_id IS NOT NULL
+      OR OLD.purge_started_at IS NOT NULL AND NEW.purge_started_at IS NULL
+      OR OLD.purge_completed AND NOT NEW.purge_completed
+      OR NEW.retained_public_generation IS DISTINCT FROM OLD.retained_public_generation AND NEW.retained_public_generation IS NOT NULL THEN
+      RAISE EXCEPTION 'Knowledge account disposition cannot restore private or public state' USING ERRCODE='23514';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: guard_knowledge_snapshot(); Type: FUNCTION; Schema: content; Owner: -
 --
 
 CREATE FUNCTION content.guard_knowledge_snapshot() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
+DECLARE source content.knowledge_document%ROWTYPE;
 BEGIN
-  RAISE EXCEPTION 'Knowledge revisions and publications are immutable' USING ERRCODE = '23514';
+  IF TG_TABLE_NAME='knowledge_structure_revision' THEN
+    IF TG_OP='DELETE' AND EXISTS (
+      SELECT 1 FROM content.knowledge_notebook n WHERE n.route=OLD.route AND n.notebook_id=OLD.notebook_id AND n.account_erased
+    ) THEN RETURN OLD; END IF;
+    IF TG_OP='INSERT' AND EXISTS (
+      SELECT 1 FROM content.knowledge_notebook n WHERE n.route=NEW.route AND n.notebook_id=NEW.notebook_id AND NOT n.account_erased
+    ) THEN RETURN NEW; END IF;
+  ELSE
+    IF TG_OP='INSERT' THEN
+      PERFORM 1 FROM content.knowledge_document d JOIN content.knowledge_notebook n
+        ON n.route=d.route AND n.notebook_id=d.notebook_id
+      WHERE d.route=NEW.route AND d.document_id=NEW.document_id AND NOT d.account_erased AND NOT n.account_erased
+      FOR SHARE OF n,d;
+      IF FOUND THEN RETURN NEW; END IF;
+    ELSE
+      SELECT * INTO source FROM content.knowledge_document d
+      WHERE d.route=OLD.route AND d.document_id=OLD.document_id FOR UPDATE;
+      IF source.account_erased AND NOT source.legal_hold THEN
+        IF TG_TABLE_NAME='knowledge_revision' AND TG_OP='UPDATE' THEN
+          IF NEW.author_account_id IS NULL
+            AND (NEW.copy_provenance IS NULL OR NEW.copy_provenance=OLD.copy_provenance AND NEW.copy_provenance->>'representation'='public')
+            AND (to_jsonb(NEW)-'author_account_id'-'copy_provenance') IS NOT DISTINCT FROM
+                (to_jsonb(OLD)-'author_account_id'-'copy_provenance') THEN RETURN NEW; END IF;
+        END IF;
+        IF TG_OP='DELETE' AND NOT EXISTS (
+          SELECT 1 FROM content.knowledge_publication_selection s
+          WHERE s.route=source.route AND s.document_id=source.document_id
+            AND s.lifecycle_generation=source.retained_public_generation
+            AND s.lifecycle_generation=source.lifecycle_generation
+            AND s.revision_id=OLD.revision_id
+            AND (TG_TABLE_NAME='knowledge_revision' OR s.publication_id=(to_jsonb(OLD)->>'publication_id')::uuid)
+        ) THEN RETURN OLD; END IF;
+      END IF;
+    END IF;
+  END IF;
+  RAISE EXCEPTION 'Knowledge revisions and publications are immutable' USING ERRCODE='23514';
 END;
 $$;
 
@@ -984,7 +1061,21 @@ CREATE FUNCTION content.guard_knowledge_structure() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
-  RAISE EXCEPTION 'Knowledge structure revisions are immutable' USING ERRCODE = '23514';
+  IF TG_OP='INSERT' THEN
+    PERFORM 1 FROM content.knowledge_notebook n
+    WHERE n.route=NEW.route AND n.notebook_id=NEW.notebook_id AND NOT n.account_erased FOR SHARE;
+    IF FOUND THEN RETURN NEW; END IF;
+  ELSIF EXISTS (
+    SELECT 1 FROM content.knowledge_notebook n WHERE n.route=OLD.route AND n.notebook_id=OLD.notebook_id AND n.account_erased
+  ) THEN
+    IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+    IF TG_TABLE_NAME='knowledge_structure_page' THEN
+      IF NEW.left_page_id IS NULL AND NEW.right_page_id IS NULL
+        AND (to_jsonb(NEW)-'left_page_id'-'right_page_id') IS NOT DISTINCT FROM
+            (to_jsonb(OLD)-'left_page_id'-'right_page_id') THEN RETURN NEW; END IF;
+    END IF;
+  END IF;
+  RAISE EXCEPTION 'Knowledge structure revisions are immutable' USING ERRCODE='23514';
 END;
 $$;
 
@@ -1479,25 +1570,34 @@ $$;
 CREATE FUNCTION content.knowledge_document_eligible(selected_route integer, selected_document uuid, include_trashed_target boolean DEFAULT false) RETURNS boolean
     LANGUAGE sql STABLE
     AS $$
-  WITH RECURSIVE path AS (
-    SELECT p.notebook_id, p.placement_id, p.parent_id, 0 AS depth,
-           (d.deleted_at IS NULL OR include_trashed_target)
-             AND d.purge_started_at IS NULL AND NOT d.purge_completed AS eligible
+  WITH RECURSIVE retained AS (
+    SELECT 1 FROM content.knowledge_document d
+    JOIN content.knowledge_publication p
+      ON p.route=d.route AND p.document_id=d.document_id AND p.publication_id=d.current_publication_id
+     AND p.lifecycle_generation=d.lifecycle_generation
+    JOIN content.knowledge_publication_selection s
+      ON s.route=p.route AND s.document_id=p.document_id AND s.lifecycle_generation=p.lifecycle_generation
+     AND s.revision_id=p.revision_id AND s.publication_id=p.publication_id
+    WHERE d.route=selected_route AND d.document_id=selected_document AND d.account_erased
+      AND d.retained_public_generation=d.lifecycle_generation AND d.deleted_at IS NULL
+      AND d.purge_started_at IS NULL AND NOT d.purge_completed
+  ), path AS (
+    SELECT p.notebook_id,p.placement_id,p.parent_id,0 AS depth,
+      (d.deleted_at IS NULL OR include_trashed_target) AND d.purge_started_at IS NULL AND NOT d.purge_completed AS eligible
     FROM content.knowledge_document d
-    JOIN content.knowledge_placement p
-      ON p.route=d.route AND p.notebook_id=d.notebook_id AND p.document_id=d.document_id
-    WHERE d.route=selected_route AND d.document_id=selected_document
+    JOIN content.knowledge_notebook n ON n.route=d.route AND n.notebook_id=d.notebook_id AND NOT n.account_erased
+    JOIN content.knowledge_placement p ON p.route=d.route AND p.notebook_id=d.notebook_id AND p.document_id=d.document_id
+    WHERE d.route=selected_route AND d.document_id=selected_document AND NOT d.account_erased
     UNION ALL
-    SELECT p.notebook_id, p.placement_id, p.parent_id, child.depth+1,
-           d.deleted_at IS NULL AND d.purge_started_at IS NULL AND NOT d.purge_completed
+    SELECT p.notebook_id,p.placement_id,p.parent_id,child.depth+1,
+      d.deleted_at IS NULL AND d.purge_started_at IS NULL AND NOT d.purge_completed
     FROM path child
     JOIN content.knowledge_placement p
       ON p.route=selected_route AND p.notebook_id=child.notebook_id AND p.placement_id=child.parent_id
-    JOIN content.knowledge_document d
-      ON d.route=p.route AND d.notebook_id=p.notebook_id AND d.document_id=p.document_id
+    JOIN content.knowledge_document d ON d.route=p.route AND d.notebook_id=p.notebook_id AND d.document_id=p.document_id
     WHERE child.depth<31
   )
-  SELECT COALESCE(bool_and(eligible) AND bool_or(parent_id IS NULL), false) FROM path;
+  SELECT EXISTS(SELECT 1 FROM retained) OR COALESCE(bool_and(eligible) AND bool_or(parent_id IS NULL),false) FROM path;
 $$;
 
 
@@ -1729,7 +1829,7 @@ CREATE TABLE content.account_erasure_progress (
     statements_kept_until timestamp with time zone,
     CONSTRAINT account_erasure_progress_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT account_erasure_progress_erased_at_check CHECK (isfinite(erased_at)),
-    CONSTRAINT account_erasure_progress_phase_check CHECK ((phase = ANY (ARRAY['slow-mode'::text, 'authored'::text, 'uploads'::text, 'reactions'::text, 'moderation'::text, 'notices'::text, 'proof'::text, 'complete'::text]))),
+    CONSTRAINT account_erasure_progress_phase_check CHECK ((phase = ANY (ARRAY['slow-mode'::text, 'authored'::text, 'knowledge'::text, 'uploads'::text, 'reactions'::text, 'moderation'::text, 'notices'::text, 'proof'::text, 'complete'::text]))),
     CONSTRAINT account_erasure_progress_statements_kept_until_check CHECK (((statements_kept_until IS NULL) OR isfinite(statements_kept_until))),
     CONSTRAINT account_erasure_progress_step_check CHECK ((step >= 0))
 );
@@ -3783,21 +3883,25 @@ ALTER TABLE ONLY content.imported_field ALTER COLUMN body SET COMPRESSION lz4;
 CREATE TABLE content.knowledge_document (
     route integer NOT NULL,
     document_id uuid NOT NULL,
-    notebook_id uuid NOT NULL,
-    head_revision_id uuid NOT NULL,
+    notebook_id uuid,
+    head_revision_id uuid,
     current_publication_id uuid,
-    created_transaction_id uuid NOT NULL,
-    created_at timestamp with time zone NOT NULL,
+    created_transaction_id uuid,
+    created_at timestamp with time zone,
     lifecycle_generation bigint DEFAULT 0 NOT NULL,
     deleted_at timestamp with time zone,
     purge_started_at timestamp with time zone,
     purge_completed boolean DEFAULT false NOT NULL,
     legal_hold boolean DEFAULT false NOT NULL,
+    account_erased boolean DEFAULT false NOT NULL,
+    retained_public_generation bigint,
+    CONSTRAINT knowledge_document_active_identity CHECK ((account_erased OR ((notebook_id IS NOT NULL) AND (head_revision_id IS NOT NULL) AND (created_transaction_id IS NOT NULL) AND (created_at IS NOT NULL)))),
     CONSTRAINT knowledge_document_check CHECK ((route = ((get_byte(uuid_send(document_id), 10) * 256) + get_byte(uuid_send(document_id), 11)))),
     CONSTRAINT knowledge_document_created_at_check CHECK (isfinite(created_at)),
     CONSTRAINT knowledge_document_deleted_at_check CHECK (((deleted_at IS NULL) OR isfinite(deleted_at))),
     CONSTRAINT knowledge_document_lifecycle_generation_check CHECK ((lifecycle_generation >= 0)),
     CONSTRAINT knowledge_document_purge_started_at_check CHECK (((purge_started_at IS NULL) OR isfinite(purge_started_at))),
+    CONSTRAINT knowledge_document_retained_public_generation_check CHECK (((retained_public_generation IS NULL) OR (retained_public_generation >= 0))),
     CONSTRAINT knowledge_document_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
@@ -3870,6 +3974,7 @@ CREATE TABLE content.knowledge_notebook (
     created_transaction_id uuid NOT NULL,
     created_at timestamp with time zone NOT NULL,
     structure_revision_number bigint DEFAULT 1 NOT NULL,
+    account_erased boolean DEFAULT false NOT NULL,
     CONSTRAINT knowledge_notebook_check CHECK ((route = ((get_byte(uuid_send(notebook_id), 10) * 256) + get_byte(uuid_send(notebook_id), 11)))),
     CONSTRAINT knowledge_notebook_check1 CHECK ((route = ((get_byte(uuid_send(owner_account_id), 10) * 256) + get_byte(uuid_send(owner_account_id), 11)))),
     CONSTRAINT knowledge_notebook_created_at_check CHECK (isfinite(created_at)),
@@ -7388,6 +7493,13 @@ CREATE INDEX hosted_version_revision_generation_kind ON content.hosted_version_r
 
 
 --
+-- Name: knowledge_document_hold; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX knowledge_document_hold ON content.knowledge_document USING btree (route, notebook_id, document_id) WHERE legal_hold;
+
+
+--
 -- Name: knowledge_lifecycle_frontier_pending; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -7399,6 +7511,13 @@ CREATE INDEX knowledge_lifecycle_frontier_pending ON content.knowledge_lifecycle
 --
 
 CREATE INDEX knowledge_lifecycle_restore_pending ON content.knowledge_lifecycle_restore USING btree (route, started_at, root_document_id) WHERE (state = 'running'::text);
+
+
+--
+-- Name: knowledge_notebook_erasure_owner; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX knowledge_notebook_erasure_owner ON content.knowledge_notebook USING btree (route, owner_account_id, notebook_id);
 
 
 --
@@ -8117,10 +8236,31 @@ CREATE TRIGGER imported_field_immutable BEFORE DELETE OR UPDATE ON content.impor
 
 
 --
+-- Name: knowledge_document knowledge_document_account_fence; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER knowledge_document_account_fence BEFORE INSERT OR UPDATE ON content.knowledge_document FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_account_fence();
+
+
+--
+-- Name: knowledge_notebook knowledge_notebook_account_fence; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER knowledge_notebook_account_fence BEFORE INSERT OR UPDATE ON content.knowledge_notebook FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_account_fence();
+
+
+--
 -- Name: knowledge_publication knowledge_publication_immutable; Type: TRIGGER; Schema: content; Owner: -
 --
 
 CREATE TRIGGER knowledge_publication_immutable BEFORE DELETE OR UPDATE ON content.knowledge_publication FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_snapshot();
+
+
+--
+-- Name: knowledge_publication knowledge_publication_terminal_insert; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER knowledge_publication_terminal_insert BEFORE INSERT ON content.knowledge_publication FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_snapshot();
 
 
 --
@@ -8131,10 +8271,24 @@ CREATE TRIGGER knowledge_revision_immutable BEFORE DELETE OR UPDATE ON content.k
 
 
 --
+-- Name: knowledge_revision knowledge_revision_terminal_insert; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER knowledge_revision_terminal_insert BEFORE INSERT ON content.knowledge_revision FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_snapshot();
+
+
+--
 -- Name: knowledge_structure_change knowledge_structure_change_immutable; Type: TRIGGER; Schema: content; Owner: -
 --
 
 CREATE TRIGGER knowledge_structure_change_immutable BEFORE DELETE OR UPDATE ON content.knowledge_structure_change FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_structure();
+
+
+--
+-- Name: knowledge_structure_change knowledge_structure_change_terminal_insert; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER knowledge_structure_change_terminal_insert BEFORE INSERT ON content.knowledge_structure_change FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_structure();
 
 
 --
@@ -8145,6 +8299,13 @@ CREATE TRIGGER knowledge_structure_page_immutable BEFORE DELETE OR UPDATE ON con
 
 
 --
+-- Name: knowledge_structure_page knowledge_structure_page_terminal_insert; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER knowledge_structure_page_terminal_insert BEFORE INSERT ON content.knowledge_structure_page FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_structure();
+
+
+--
 -- Name: knowledge_structure_revision knowledge_structure_revision_immutable; Type: TRIGGER; Schema: content; Owner: -
 --
 
@@ -8152,10 +8313,24 @@ CREATE TRIGGER knowledge_structure_revision_immutable BEFORE DELETE OR UPDATE ON
 
 
 --
+-- Name: knowledge_structure_revision knowledge_structure_revision_terminal_insert; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER knowledge_structure_revision_terminal_insert BEFORE INSERT ON content.knowledge_structure_revision FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_snapshot();
+
+
+--
 -- Name: knowledge_structure_parent_root knowledge_structure_root_immutable; Type: TRIGGER; Schema: content; Owner: -
 --
 
 CREATE TRIGGER knowledge_structure_root_immutable BEFORE DELETE OR UPDATE ON content.knowledge_structure_parent_root FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_structure();
+
+
+--
+-- Name: knowledge_structure_parent_root knowledge_structure_root_terminal_insert; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER knowledge_structure_root_terminal_insert BEFORE INSERT ON content.knowledge_structure_parent_root FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_structure();
 
 
 --

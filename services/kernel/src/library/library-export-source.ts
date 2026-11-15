@@ -117,6 +117,16 @@ const ZERO = '00000000-0000-0000-0000-000000000000';
 function FETCH_ROWS() {
   return memoizedValue(FETCH_ROWS, () => LIBRARY_EXPORT_LIMITS.pageRows + 1);
 }
+/** A unit frontier names a fact family; it never rewrites the stored unit ID. */
+export function validUnitExportFrontier(parent: string, after: string): boolean {
+  if (!parent || !after) return true;
+  if (after.startsWith('0/')) {
+    const id = after.slice(2);
+    return id.length > 0 && id.length <= 128 && !id.includes('\0') && id.isWellFormed();
+  }
+  return /^1\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(after);
+}
+
 export const initialExportSeek = (): ExportSeek => ({
   section: 0,
   parent: '',
@@ -150,7 +160,7 @@ function queries(): Partial<Record<LibraryExportSection, string>> {
         AND l.label_id=a.label_id AND l.deleted_at IS NULL)
     ORDER BY a.subject_id,a.label_id LIMIT ${FETCH_ROWS()}`,
     sessions: `SELECT session_id::text AS key, session_id,subject_id,version_subject_id,mode,unit,total::text,
-    amount::text,additional_measures,locator,position::text,completed_unit_count,state,revision,library_profile_pin,
+    amount::text,additional_measures,locator,position::text,completed_unit_count,episode_completed_count,state,revision,library_profile_pin,
     started_at::text,completed_at::text,last_changed_at::text
     FROM library.progress_session WHERE state <> 'retired' AND route=$1 AND account_id=$2 AND session_id > $3::uuid
     ORDER BY session_id LIMIT ${FETCH_ROWS()}`,
@@ -266,6 +276,8 @@ export async function readExportSourcePage(
   const sections = exportSections;
   const section = sections[seek.section] as LibraryExportSection | undefined;
   if (!section) throw new TypeError('Invalid library export section cursor');
+  if (section === 'units' && !validUnitExportFrontier(seek.parent, seek.after))
+    throw new TypeError('Invalid library export unit frontier');
   const fetchRows = FETCH_ROWS();
 
   let rows: { value: SourceRow | null }[];
@@ -344,9 +356,25 @@ export async function readExportSourcePage(
           ? `SELECT ordinal::text AS key,upload_id,ordinal,evidence FROM library.list_import_mal_row
            WHERE route=$1 AND upload_id=$2 AND account_id=$4 AND ordinal>$3::integer ORDER BY ordinal LIMIT ${fetchRows}`
           : section === 'units'
-            ? `SELECT unit_id AS key,session_id,unit_id,added_at::text FROM library.progress_unit
-           WHERE route=$1 AND session_id=$2 AND EXISTS (SELECT 1 FROM library.progress_session p WHERE p.route=$1 AND p.account_id=$4
-             AND p.session_id=$2 AND p.state <> 'retired') AND unit_id COLLATE "C">$3 COLLATE "C" ORDER BY unit_id COLLATE "C" LIMIT ${fetchRows}`
+            ? `SELECT * FROM (
+               (SELECT '0/'||unit_id AS key,session_id,unit_id,'local'::text AS unit_kind,added_at::text
+                FROM library.progress_unit
+                WHERE route=$1 AND session_id=$2 AND left($3,2)<>'1/'
+                  AND unit_id COLLATE "C">(CASE WHEN left($3,2)='0/' THEN substring($3 FROM 3) ELSE '' END) COLLATE "C"
+                  AND EXISTS (SELECT 1 FROM library.progress_session p WHERE p.route=$1 AND p.account_id=$4
+                    AND p.session_id=$2 AND p.state <> 'retired')
+                ORDER BY unit_id COLLATE "C" LIMIT ${fetchRows})
+               UNION ALL
+               (SELECT '1/'||episode_subject_id::text AS key,session_id,episode_subject_id::text AS unit_id,
+                       'episode'::text AS unit_kind,added_at::text
+                FROM library.progress_episode
+                WHERE route=$1 AND session_id=$2
+                  AND (left($3,2)<>'1/' OR episode_subject_id>
+                    CASE WHEN left($3,2)='1/' THEN substring($3 FROM 3)::uuid ELSE NULL END)
+                  AND EXISTS (SELECT 1 FROM library.progress_session p WHERE p.route=$1 AND p.account_id=$4
+                    AND p.session_id=$2 AND p.state <> 'retired')
+                ORDER BY episode_subject_id LIMIT ${fetchRows})
+             ) AS units ORDER BY key COLLATE "C" LIMIT ${fetchRows}`
             : section === 'history'
               ? `SELECT change_no::text AS key,session_id,change_no,intent,recorded_at::text FROM library.progress_change
              WHERE route=$1 AND session_id=$2 AND EXISTS (SELECT 1 FROM library.progress_session p WHERE p.route=$1 AND p.account_id=$4

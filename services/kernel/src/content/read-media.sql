@@ -4,7 +4,7 @@ WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :id::uuid AS id, :kind::text AS kind
 )
 SELECT m.media_id, m.route, m.container_id, m.uploader_id, m.reservation_request_id,
-       m.purpose, m.media_type, m.byte_count, m.declared_sha256, m.sha256, m.state,
+       m.purpose, m.media_type, m.byte_count::text, m.declared_sha256, m.sha256, m.state,
        m.claimed_at::text, m.created_at::text, m.transaction_id, m.key,
        m.erased, m.collection_pending, m.decision, m.taken_down,
        m.security_revision::text AS media_security_revision, m.source_url, m.credit, m.provenance,

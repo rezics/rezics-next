@@ -66,6 +66,8 @@ import {
   reconcileRemoteRun,
   runScript,
   statusScript,
+  preparationStatusScript,
+  retainedPreparationAbortScript,
   repositoryBun,
   remoteLaunch,
   MAX_REMOTE_LAUNCH_BYTES,
@@ -999,16 +1001,36 @@ if (script.includes('/proc/loadavg')) {
   console.log('STOPPED');
 } else if (script.includes('REMOTE_CHECK_RECONCILE_STATUS')) {
   log({ kind: 'reconciliation-status' });
+  if (config.retainedPreparationAbort) {
+    const host = address.slice(address.indexOf('@') + 1).replace(/\\.test$/, '');
+    const run = readFileSync(dir + '/' + hostKey + '.run-id', 'utf8');
+    console.log(JSON.stringify({ native: null, preparedInputs: null, lifetimeFailure: null,
+      preparationAbortUnavailable: null, preparationAbort: {
+        schema: 1, host, run, status: 'infrastructure-failure', phase: 'abort',
+        preparationReceiptSha256: 'a'.repeat(64), resourcesReceiptSha256: 'b'.repeat(64),
+        resources: { schema: 1, host, run, boot: 'fixture-boot',
+          supervisor: { pid: 42, start: '900', group: 42 }, startedMonoMs: 100,
+          commandStartedMonoMs: null, terminalMonoMs: 300, terminalSampleMonoMs: 299,
+          sampleCount: 4, commandSampleCount: 0 } } }));
+    process.exit(0);
+  }
   if (config.reconciliationStatus === undefined) process.exit(4);
   console.log(JSON.stringify(config.reconciliationStatus));
 } else if (script.includes('REMOTE_CHECK_STATUS')) {
+  if (config.retainedPreparationAbort && existsSync(dir + '/' + hostKey + '.run-id')) {
+    log({ kind: 'retained-abort' });
+    console.log('PREPARATION_ABORTED');
+    process.exit(0);
+  }
   // Recorded exit is hostKey.status; this counter must not share that file.
   const attempt = count('status-probe') + 1;
   log({ kind: 'status', attempt });
   if (config.statusWarning) console.error(config.statusWarning);
   if (config.statusAlwaysFails || config.statusFailureProbes?.includes(attempt)) process.exit(255);
   const statusFile = dir + '/' + hostKey + '.status';
-  if (existsSync(statusFile)) console.log(readFileSync(statusFile, 'utf8'));
+  if (config.statusPreparingProbes?.includes(attempt)) console.log('PREPARING');
+  else if (config.statusUnknownProbes?.includes(attempt)) console.log('UNKNOWN');
+  else if (existsSync(statusFile)) console.log(readFileSync(statusFile, 'utf8'));
   else {
     const runCount = Number(existsSync(dir + '/' + hostKey + '.run') ? readFileSync(dir + '/' + hostKey + '.run', 'utf8') : '0');
     if (runCount > 0 && runCount <= (config.preCommandFailures ?? 0)) console.log('NOT_STARTED');
@@ -1022,10 +1044,10 @@ if (script.includes('/proc/loadavg')) {
   if (existsSync(statusFile) && config.recoveredOutput) {
     const runId = readFileSync(dir + '/' + hostKey + '.run-id', 'utf8');
     process.stderr.write(
-      'remote-check: recovered command output after disconnect run=' + runId + '\n' +
-      config.recoveredOutput + '\nremote-check: end recovered command output run=' + runId + '\n',
+      'remote-check: recovered command output after disconnect run=' + runId + '\\n' +
+      config.recoveredOutput + '\\nremote-check: end recovered command output run=' + runId + '\\n',
     );
-    if (config.cleanupError) process.stderr.write(config.cleanupError + '\n');
+    if (config.cleanupError) process.stderr.write(config.cleanupError + '\\n');
   }
 } else if (script.includes('REMOTE_CHECK_RUN_LIFETIME_STATUS')) {
   log({ kind: 'lifetime-status', slotHeld: slotHeld() });
@@ -1308,6 +1330,7 @@ ${javascript}
 type Event = { kind: string; address?: string; [key: string]: unknown };
 type HostConfig = {
   reconciliationStatus?: Record<string, unknown>;
+  retainedPreparationAbort?: boolean;
   stallHeartbeats?: boolean;
   gitFetchExit?: number;
   available?: number;
@@ -1358,6 +1381,8 @@ type HostConfig = {
   transportFailures?: number;
   statusAlwaysFails?: boolean;
   statusFailureProbes?: number[];
+  statusPreparingProbes?: number[];
+  statusUnknownProbes?: number[];
   statusCleaningProbes?: number[];
   statusCompleteAfter?: number;
   statusWarning?: string;
@@ -8310,6 +8335,7 @@ sys.exit(child.wait())
       bound?: number;
       lifetime?: number;
       priority?: string;
+      prepare?: { cwd: string; command: string[] }[];
       version?: string;
       lock?: string;
       delay?: string;
@@ -8347,6 +8373,9 @@ sys.exit(child.wait())
       settings.bound ?? 5_000,
       undefined,
       settings.lifetime,
+      undefined,
+      undefined,
+      settings.prepare,
     )
       // Preserve paths to this fixture's checkout when the outer suite itself runs on a check host.
       .replaceAll(repository, '__FIXTURE_OUTER_CHECKOUT__')
@@ -10530,3 +10559,161 @@ for (const zstd of [true, false])
     expect(events().filter((event) => event.kind === 'run')).toHaveLength(1);
     expect(events().filter((event) => event.kind === 'returns')).toHaveLength(1);
   });
+
+
+test('retained preparation abort requires exact terminal dead ownership and never completes active or foreign evidence', () => {
+  const root = mkdtempSync(join(tmpdir(), 'retained-preparation-abort-'));
+  const run = 'retained-abort-fixture';
+  const directory = join(root, 'runs', run);
+  const receipts = join(root, 'receipts', run);
+  mkdirSync(receipts, { recursive: true });
+  const boot = readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
+  const owner = { pid: 2147483647, start: '1', group: 2147483647 };
+  const resources = { schema: 1, host: 'a', run, boot, supervisor: owner,
+    commandStartedMonoMs: null, terminalMonoMs: 300, samples: [{ phase: 'terminal' }],
+    cgroup: { path: '/rezics.slice/rezics-check.slice/rezics-check-'+run.replaceAll('-', '_')+'.slice' } };
+  const probe = () => spawnSync('sh', ['-c', retainedPreparationAbortScript(directory, 'a', run)], { encoding: 'utf8' });
+  const writeResources = (value: unknown) => writeFileSync(join(receipts, 'physical-resources.json'), JSON.stringify(value));
+  try {
+    expect(probe().status).not.toBe(0);
+    writeFileSync(join(receipts, 'preparation-status.json'), JSON.stringify({ schema: 1, host: 'a', run,
+      status: 'infrastructure-failure', phase: 'abort' }));
+    writeResources(resources);
+    expect(probe().stdout.trim()).toBe('PREPARATION_ABORTED');
+    writeResources({ ...resources, run: 'foreign' });
+    expect(probe().status).not.toBe(0);
+    writeResources({ ...resources, commandStartedMonoMs: 200 });
+    expect(probe().status).not.toBe(0);
+    const ownFields = readFileSync('/proc/self/stat', 'utf8').split(')').at(-1)!.trim().split(/\s+/);
+    writeResources({ ...resources, supervisor: { pid: process.pid, start: ownFields[19], group: process.pid } });
+    expect(probe().status).not.toBe(0);
+    writeResources({ ...resources, cgroup: { path: '/foreign' } });
+    expect(probe().status).not.toBe(0);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('retained terminal preparation abort settles a hanging transport without a test exit or remote stop', async () => {
+  const fixture = scenario({ a: { available: 8e9, hang: true, silentHang: true, retainedPreparationAbort: true } });
+  const directory = workspace();
+  const child = Bun.spawn([process.execPath, '--eval', `
+    import { remoteCheck, readHosts } from ${JSON.stringify(remoteCheck)};
+    try {
+      await remoteCheck({ hosts: readHosts(process.env.KERNEL_CHECK_REMOTE),
+        workspace: ${JSON.stringify(directory)}, command: ['true'], maxMs: 5000, livenessIntervalMs: 10,
+        settled: async value => console.log('SETTLED '+JSON.stringify(value)),
+      }, new AbortController().signal);
+    } catch (error) { console.error(String(error)); process.exitCode=1; }
+  `], { env: fixture.env, stdout: 'pipe', stderr: 'pipe' });
+  const [code, stdout, stderr] = await Promise.all([child.exited,
+    new Response(child.stdout).text(), new Response(child.stderr).text()]);
+  expect(code, stderr).toBe(1);
+  expect(stderr).toContain('infrastructure preparation aborted before command start');
+  expect(stderr).not.toContain('deadline reached');
+  const settlement = JSON.parse(stdout.split('SETTLED ')[1]!.trim());
+  expect(settlement).toMatchObject({ native: null, preparationAbort: { phase: 'abort' },
+    cleanup: { status: 'verified' }, transportChildReaped: true });
+  expect(fixture.events().some(event => event.kind === 'stop')).toBe(false);
+  expect(fixture.events().filter(event => event.kind === 'run')).toHaveLength(1);
+  expect(slotMarkers(fixture.env, 'a')).toEqual([]);
+});
+
+
+test('pre-command status proves live preparation and never treats missing or ambiguous evidence as no-start', () => {
+  const root = mkdtempSync(join(tmpdir(), 'preparing-status-'));
+  const directory = join(root, 'runs', 'owned-preparation');
+  const cgroups = join(root, 'cgroups');
+  const group = join(cgroups, 'rezics.slice/rezics-check.slice/rezics-check-owned_preparation.slice');
+  mkdirSync(directory, { recursive: true }); mkdirSync(group, { recursive: true });
+  const fields = readFileSync('/proc/self/stat', 'utf8').split(')').at(-1)!.trim().split(/\s+/);
+  const owner = { pid: process.pid, start: fields[19], group: Number(fields[2]) };
+  const marker = { schema: 1, host: 'a', run: 'owned-preparation', pid: owner.pid, started: owner.start,
+    group: owner.group, uid: process.getuid?.() ?? 0 };
+  const info = statSync(group);
+  const resource = { schema: 1, host: 'a', run: marker.run,
+    boot: readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim(), supervisor: owner,
+    commandStartedMonoMs: null,
+    cgroup: { path: '/rezics.slice/rezics-check.slice/rezics-check-owned_preparation.slice',
+      device: info.dev, inode: info.ino, invocation: 'fixture' } };
+  const probe = () => spawnSync('sh', ['-c', preparationStatusScript(directory, 'a', marker.run)
+    .replaceAll('/sys/fs/cgroup', cgroups)], { encoding: 'utf8' }).stdout.trim();
+  const write = (name: string, value: unknown) => writeFileSync(join(directory, name), JSON.stringify(value));
+  try {
+    expect(probe()).toBe('UNKNOWN');
+    write('.remote-check-supervisor', marker); write('physical-resources.json', resource);
+    writeFileSync(join(group, 'cgroup.events'), 'populated 1\n');
+    expect(probe()).toBe('PREPARING');
+    write('physical-resources.json', { ...resource, boot: 'foreign-boot' });
+    expect(probe()).toBe('UNKNOWN');
+    write('physical-resources.json', resource);
+    write('.remote-check-supervisor', { ...marker, pid: 2147483647 });
+    expect(probe()).toBe('UNKNOWN');
+    const dead = { pid: 2147483647, start: '1', group: 2147483647 };
+    write('.remote-check-supervisor', { ...marker, pid: dead.pid, started: dead.start, group: dead.group });
+    write('physical-resources.json', { ...resource, supervisor: dead });
+    expect(probe()).toBe('UNKNOWN');
+    writeFileSync(join(group, 'cgroup.events'), 'populated 0\n');
+    expect(probe()).toBe('NOT_STARTED');
+    write('.preparation-started', {});
+    expect(probe()).toBe('UNKNOWN');
+    rmSync(join(directory, '.preparation-started'));
+    write('.command-result', 7);
+    expect(probe()).toBe('UNKNOWN');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('transient SSH255 preserves live or unknown preparation until the same run reaches its native result', async () => {
+  const fixture = scenario({ a: { available: 8e9, transportFailures: 1, statusPreparingProbes: [1, 2],
+    statusUnknownProbes: [3], statusCompleteAfter: 4, exit: 7 } });
+  const result = await remote(fixture.env, workspace(), ['true']);
+  expect(result.code, result.stderr).toBe(7);
+  const events = fixture.events();
+  expect(events.filter(event => event.kind === 'run')).toHaveLength(1);
+  expect(events.filter(event => event.kind === 'status')).toHaveLength(4);
+  expect(events.filter(event => event.kind === 'stop')).toHaveLength(0);
+  expect(result.stderr).not.toContain('retrying transport failure');
+  expect(slotMarkers(fixture.env, 'a')).toEqual([]);
+});
+
+test('generation before native start retains its bounded output and original supervisor signal diagnostics', () => {
+  const fixture = preparationFixture();
+  const run = fixture.create({ bound: 10_000, timeout: 15_000, prepare: [{ cwd: '.', command: ['python3', '-c',
+    `import json,os,pathlib,signal,time
+root=pathlib.Path.cwd()
+print('GENERATION_CAUSE_MARKER',flush=True)
+end=time.monotonic()+3
+while time.monotonic()<end:
+    p=root/'.temp/check-host/preparation-output'
+    if p.exists() and 'GENERATION_CAUSE_MARKER' in p.read_text(errors='replace'): break
+    time.sleep(.01)
+owner=json.loads((root/'.remote-check-supervisor').read_text())
+os.kill(owner['pid'],signal.SIGHUP)
+time.sleep(10)`] }] });
+  const result = run.execute();
+  expect(result.status, result.stderr).toBe(129);
+  const receipt = run.receipt();
+  expect(receipt).toMatchObject({ schema: 1, phase: 'abort',
+    diagnostics: { signal: 1, stalledPhase: 'generation' } });
+  expect(receipt.diagnostics.logTail).toContain('GENERATION_CAUSE_MARKER');
+  expect(Buffer.byteLength(receipt.diagnostics.logTail)).toBeLessThanOrEqual(8192);
+  expect(receipt.diagnostics.ownedProcesses.length).toBeLessThanOrEqual(16);
+  expect(existsSync(join(run.run, 'command-started'))).toBe(false);
+  expect(existsSync(join(run.run, 'command-invoked'))).toBe(false);
+  const retained = join(fixture.directory, 'receipts', run.run.split('/').at(-1)!, 'preparation-status.json');
+  expect(JSON.parse(readFileSync(retained, 'utf8')).diagnostics).toEqual(receipt.diagnostics);
+  const resource = JSON.parse(readFileSync(join(run.run, 'physical-resources.json'), 'utf8'));
+  const evidence = { schema: 1, host: 'a', run: run.run.split('/').at(-1)!, status: 'infrastructure-failure',
+    phase: 'abort', diagnostics: receipt.diagnostics,
+    preparationReceiptSha256: 'a'.repeat(64), resourcesReceiptSha256: 'b'.repeat(64),
+    resources: { schema: 1, host: 'a', run: run.run.split('/').at(-1)!, boot: resource.boot,
+      supervisor: resource.supervisor, startedMonoMs: resource.startedMonoMs, commandStartedMonoMs: null,
+      terminalMonoMs: resource.terminalMonoMs, terminalSampleMonoMs: resource.samples.at(-1).monoMs,
+      sampleCount: resource.samples.length, commandSampleCount: 0 } };
+  const identity = { host: 'a', run: evidence.run };
+  expect(parseRemotePreparationAbortEvidence(evidence, identity)).toEqual(evidence);
+  expect(parseRemotePreparationAbortEvidence({ ...evidence,
+    diagnostics: { ...receipt.diagnostics, signal: 9 } }, identity)).toBeNull();
+  expect(parseRemotePreparationAbortEvidence({ ...evidence,
+    diagnostics: { ...receipt.diagnostics, logTail: 'x'.repeat(8193) } }, identity)).toBeNull();
+  expect(parseRemotePreparationAbortEvidence({ ...evidence,
+    diagnostics: { ...receipt.diagnostics, phaseElapsedMs: -1 } }, identity)).toBeNull();
+});

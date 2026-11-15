@@ -714,8 +714,12 @@ test('once a day the manager host dispatches the daily step audit unless one is 
   const db = openDb(':memory:');
   ensureFlow(db);
   const dispatch = () => task('audit', 'daily-step-audit');
-  expect(dispatchDailyStepAudit(db, [], dispatch, new Date(date(0)))?.id).toBe('audit');
-  expect(dispatchDailyStepAudit(db, [], dispatch, new Date(date(1)))).toBeNull();
+  let taskReads = 0;
+  const readTasks = () => { taskReads++; return []; };
+  expect(dispatchDailyStepAudit(db, readTasks, dispatch, new Date(date(0)))?.id).toBe('audit');
+  expect(taskReads).toBe(1);
+  expect(dispatchDailyStepAudit(db, readTasks, dispatch, new Date(date(1)))).toBeNull();
+  expect(taskReads).toBe(1);
   const tomorrow = new Date(Date.parse(date(0)) + 86400_000);
   expect(
     dispatchDailyStepAudit(db, [{ ...task('open', 'daily-step-audit'), state: 'running' }], dispatch, tomorrow),

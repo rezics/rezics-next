@@ -98,7 +98,7 @@ test.each([
     cache: 'hit',
     telemetry: {
       installer_seconds: null,
-      phase_seconds: { 'artifact-restore': 6.197, 'cache-io-pressure-wait': 304.428 },
+      phase_seconds: { 'artifact-restore': 6.197, 'host-pressure-wait-io': 304.428 },
     },
   },
   {
@@ -249,4 +249,65 @@ test('optional telemetry never changes prepared-source evidence and cannot repla
   expect(invalid.result.status).not.toBe(0);
   expect(invalid.result.stderr).toContain('invalid shape');
   expect(existsSync(invalid.path)).toBe(false);
+});
+
+test('host pressure gate partitions observed wait reasons and its unchanged v1 receipt reaches the real consumer', () => {
+  const root = fixture();
+  const program = String.raw`import ast,json,sys
+from pathlib import Path
+from types import SimpleNamespace
+source=json.loads(sys.stdin.read())
+module=ast.parse(source)
+names={'record_preparation_pressure_wait','preparation_io_gate','preparation_progress','preparation_phase_seconds'}
+functions=[node for node in module.body if isinstance(node,ast.FunctionDef) and node.name in names]
+assert len(functions)==len(names)
+clock=[0.0]
+def sleep(elapsed): clock[0]+=elapsed
+observations=iter([
+    (True,False,{'ioFull':11,'memoryFull':0}),
+    (True,False,{'ioFull':0,'memoryFull':2}),
+    (True,False,{'ioFull':11,'memoryFull':2}),
+    (True,False,{'ioFull':0.1,'memoryFull':0}),
+    (True,False,None),
+    (False,False,{'ioFull':0.1,'memoryFull':0}),
+])
+ns={'Path':Path,'json':json,'time':SimpleNamespace(monotonic=lambda:clock[0],sleep=sleep),
+    'os':SimpleNamespace(environ={'REMOTE_CHECK_PREPARATION_DEADLINE':'30',
+        'REMOTE_CHECK_PREPARATION_CACHE':str(Path(sys.argv[1])/'cache')}),
+    'update_host_pressure':lambda _:next(observations),
+    'PREPARATION_IO_ROOT':Path(sys.argv[1]),'PREPARATION_IO_NEXT':0,
+    'PREPARATION_IO_PHASE':None,'PREPARATION_PHASE_AT':None,
+    'PREPARATION_PHASE_SECONDS':{},'PREPARATION_PRESSURE_SECONDS':{}}
+exec(compile(ast.Module(body=functions,type_ignores=[]),'actual-preparation-functions','exec'),ns)
+ns['preparation_progress'](Path(sys.argv[1]),'artifact-restore')
+ns['preparation_io_gate']()
+phases=ns['preparation_phase_seconds']()
+assert ns['PREPARATION_IO_PHASE']=='artifact-restore'
+assert ns['PREPARATION_IO_NEXT']==2.75
+print(json.dumps(phases))
+`;
+  const measured = spawnSync('python3', ['-c', program, root], {
+    input: JSON.stringify(dependencyPreparationProgram),
+    encoding: 'utf8',
+    timeout: 5000,
+  });
+  expect(measured.status, measured.stderr).toBe(0);
+  const phases = JSON.parse(measured.stdout);
+  expect(phases).toEqual({
+    'artifact-restore': 0,
+    'host-pressure-wait-io': 0.5,
+    'host-pressure-wait-memory': 0.5,
+    'host-pressure-wait-io-memory': 0.5,
+    'host-pressure-wait-recovery-hold': 0.5,
+    'host-pressure-wait-state-lock': 0.5,
+  });
+  expect(Object.values(phases).reduce((sum: number, value) => sum + Number(value), 0)).toBe(2.5);
+  expect(phases).not.toHaveProperty('host-pressure-wait');
+  expect(phases).not.toHaveProperty('cache-io-pressure-wait');
+  const written = fixture({ installer_seconds: null, phase_seconds: phases });
+  const receipt = JSON.parse(readFileSync(join(written, 'preparation-install.json'), 'utf8'));
+  expect(Object.keys(receipt)).toHaveLength(10);
+  const consumed = verify(written);
+  expect(consumed.result.status, consumed.result.stderr).toBe(0);
+  expect(JSON.parse(readFileSync(consumed.path, 'utf8'))).toMatchObject({ sourceSha256: source, fileCount: 1 });
 });

@@ -487,12 +487,13 @@ export const CATALOGUE_PUBLISHER_OPERATIONS = Object.freeze({
     0,
     [71, 20],
   ),
+  // A canonical pin is 255 compact bytes, but PostgreSQL jsonb::text adds spaces (262 bytes).
   buildStatus: literalOperation(
-    'SELECT CASE WHEN octet_length(pin::text)<=256 THEN pin END AS pin,state,phase,steps,nodes,releases,declarations,indexed_rows,examined_bytes,CASE WHEN octet_length(missing_digest)<=71 THEN missing_digest END AS missing_digest,CASE WHEN octet_length(error)<=8192 THEN error END AS error FROM semantic.definition_catalogue_build WHERE route=0 AND root_digest=$1',
+    'SELECT CASE WHEN octet_length(pin::text)<=512 THEN pin END AS pin,state,phase,steps,nodes,releases,declarations,indexed_rows,examined_bytes,CASE WHEN octet_length(missing_digest)<=71 THEN missing_digest END AS missing_digest,CASE WHEN octet_length(error)<=8192 THEN error END AS error FROM semantic.definition_catalogue_build WHERE route=0 AND root_digest=$1',
     1,
     1,
     0,
-    8704,
+    8960,
     [71],
   ),
   identityUpsert: literalOperation(
@@ -600,11 +601,11 @@ export const CATALOGUE_PUBLISHER_OPERATIONS = Object.freeze({
     [71],
   ),
   buildLock: literalOperation(
-    'SELECT CASE WHEN octet_length(pin::text)<=256 THEN pin END AS pin,state,phase,steps,nodes,releases,declarations,indexed_rows,examined_bytes,CASE WHEN octet_length(missing_digest)<=71 THEN missing_digest END AS missing_digest,CASE WHEN octet_length(error)<=8192 THEN error END AS error,next_node FROM semantic.definition_catalogue_build WHERE route=0 AND root_digest=$1 FOR UPDATE',
+    'SELECT CASE WHEN octet_length(pin::text)<=512 THEN pin END AS pin,state,phase,steps,nodes,releases,declarations,indexed_rows,examined_bytes,CASE WHEN octet_length(missing_digest)<=71 THEN missing_digest END AS missing_digest,CASE WHEN octet_length(error)<=8192 THEN error END AS error,next_node FROM semantic.definition_catalogue_build WHERE route=0 AND root_digest=$1 FOR UPDATE',
     1,
     1,
     0,
-    8736,
+    8992,
     [71],
   ),
   stepSavepoint: literalOperation('SAVEPOINT catalogue_step', 0, 0, 0, 0, []),

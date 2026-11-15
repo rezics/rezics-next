@@ -238,8 +238,8 @@ current metadata visibility, provider identity or entitlement. No subject metada
 | entries        | `subject_id`, `requested_subject_id`, `incarnation_id`, stored exclusive `state`, `revision`, `library_profile_pin`; `created_at`, `updated_at`, `activity_at`, `finished_at` remain independent timestamps                                |
 | labels         | `label_id`, `normalized_name`, `revision`, `created_at`, `updated_at`; only live owner labels                                                                                                                                              |
 | assignments    | Composite `(subject_id,label_id)`, nullable historical `assignment_id`, revision and dates; only live assignments with a live label parent                                                                                                 |
-| sessions       | `session_id`, subject/version anchors, mode/unit, total, amount, additional measures, locator, position, completed-unit count, state/revision/pin, started/completed/last-changed dates; active, completed and abandoned retained sessions |
-| units          | `session_id`, exact opaque `unit_id` and `added_at`; a sparse completed set, never a derived interval                                                                                                                                      |
+| sessions       | `session_id`, subject/version anchors, mode/unit, total, amount, additional measures, locator, position, independent local `completed_unit_count` and canonical `episode_completed_count`, state/revision/pin, started/completed/last-changed dates; active, completed and abandoned retained sessions |
+| units          | `session_id`, exact `unit_id`, `unit_kind` (`local` or `episode`) and original `added_at`; the independent manual and canonical Episode fact sets, never a derived interval                                                                                                                                      |
 | history        | `session_id`, `change_no`, original `intent`, `recorded_at`; independent recorded progress intents                                                                                                                                         |
 | holdings       | `copy_id`, subject, kind/status, all three stored profile pins, location/source, acquired/disposed dates, note, revision and creation/update timestamps; only retained live copies                                                         |
 | collections    | Own active metadata: identity, title/description/privacy/revision, membership kind, builtin identity/pins, presentation kind, stored rule/filter/sort/release/revision and dates                                                           |
@@ -263,6 +263,11 @@ regardless of any Collection visibility field.
 
 ## Coverage and bounded continuation
 
+A local unit and an Episode fact with equal ID text remain two independent records. `unit_kind` identifies the
+native fact family; it never grants current Subject authority. An omitted origin or Episode counter is unknown,
+not inferred from UUID syntax or a manual count. The source fence covers direct Episode fact insertion, rekey,
+update and deletion as well as the native Session revision changes.
+
 Installed native owner tables supply these sections, including retained Bangumi and unexpired MAL row evidence.
 Raw MAL XML/envelope metadata and review/apply internals are excluded; credential/capability-shaped field keys are
 removed. The artifact includes unexpired VNDB and retained AniList uploads and parsed rows; other import stores are unavailable; no shared provider custody is scanned and no identifier is invented.
@@ -272,7 +277,7 @@ Trash, published/working output, credentials, Access capabilities, secrets, othe
 financial evidence are excluded. The archive consumer supports its documented reviewed recovery subset, including occurrence assessment.
 
 One control row per owner survives for at most the current capture; no private fact payload is retained server-side.
-Native fact fences cover entries, labels, assignments, sessions, measures/history, copies, Collection metadata,
+Native fact fences cover entries, labels, assignments, sessions, both local and canonical Episode fact sets, measures/history, copies, Collection metadata,
 occurrences, Collection pins, rich-entry annotations and accepted source observations. Journal writes, reopen,
 retirement and entry incarnation changes use those existing source-fence owners. Each page holds the account
 terminal barrier and source fence while reading.
@@ -281,7 +286,7 @@ A new capture has a new idempotency key; original command receipts never regener
 One live capture at a time returns `409 conflict` for another new request. Cancel, expiry or a stale/limit outcome
 allows a new identity. An older replaced identity returns `404`, including its original create replay.
 
-Keysets use owner/parent indexes with no offsets. Each page examines at most seventeen fact rows and one parent key,
+Keysets use owner/parent indexes with no offsets. A unit page reads at most seventeen local rows and seventeen canonical Episode rows through their own indexes, then returns at most sixteen records. Its internal cursor carries the fact-family frontier; exported IDs are never prefixed or rewritten. Other pages examine at most seventeen fact rows and one parent key,
 guards SQL-projected rows at 65,536 bytes, returns at most sixteen records, and emits at most 120,000 encoded record
 bytes. The exporter also caps each final encoded record at 65,536 bytes. A stream stops at
 100,000 records or 32 MiB; `limit` returns no records or manifest and requires a narrower future format or support.

@@ -196,3 +196,12 @@ retained behaviors are explicit owner controls, private visibility, order and un
 The existing Web recovery visit consumes presentation review, confirmation and result fields through the
 [generated Kernel client](../services/kernel/README.md#client-declaration-output-placement). Browser acceptance
 must use those declarations and the mounted route.
+
+## Original source checkpoint address
+
+A native Collection command targets the newly created destination Collection. Its checkpoint addresses the
+original archived occurrence, using the owner/upload, original review and source occurrence key retained before
+dispatch. Source and destination Collection IDs never substitute for each other. The existing cleanup index
+bounds this original-source lookup. Missing or ambiguous retained source custody keeps the original effect
+unresolved; it cannot authorize a replacement command. Success and failure checkpoints use the same source key,
+while the native command operands and idempotency key remain unchanged.

@@ -1,5 +1,7 @@
 import { afterAll, setDefaultTimeout } from 'bun:test';
 import type { Page } from 'playwright';
+import { knowledgeMediaSource, parseKnowledgeMediaSource } from '@rezics/definitions/knowledge-media';
+import { lanternFerryCoverPng } from './hosted-book-journey-fixture';
 import { expect } from 'playwright/test';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
 import {
@@ -46,6 +48,33 @@ async function expectPrivateTextsAbsent(page: Page, extra: string[] = []): Promi
 function asDocument(value: KnowledgeJourneyDocument | { status: number; body: string }): KnowledgeJourneyDocument {
   if ('status' in value) throw new Error(`expected a private document, received HTTP ${value.status}: ${value.body}`);
   return value;
+}
+
+const imageAlt = 'Original Knowledge scene study';
+
+async function uploadKnowledgeImageInEditor(page: Page, documentId: string): Promise<string> {
+  const reserved = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === '/media' && response.request().method() === 'POST',
+  );
+  await page.getByRole('button', { name: 'Image', exact: true }).click();
+  await page
+    .getByLabel('Choose image file', { exact: true })
+    .setInputFiles({ name: 'knowledge-scene-study.png', mimeType: 'image/png', buffer: lanternFerryCoverPng() });
+  await page.getByLabel('Alt text', { exact: true }).fill(imageAlt);
+  await page.getByRole('button', { name: 'Insert image', exact: true }).click();
+  const response = await reserved;
+  expect(response.status()).toBe(201);
+  expect(response.request().postDataJSON()).toMatchObject({ purpose: 'knowledge-image', containerId: documentId });
+  const body = (await response.json()) as { media?: { id?: string } };
+  if (!isKnowledgeJourneyId(body.media?.id)) throw new Error('Knowledge image reservation omitted its native media ID');
+  const image = page.locator('.ProseMirror').getByRole('img', { name: imageAlt, exact: true });
+  await expect(image).toBeVisible();
+  await expect
+    .poll(() =>
+      image.evaluate((element) => element instanceof HTMLImageElement && element.complete && element.naturalWidth > 0),
+    )
+    .toBe(true);
+  return body.media!.id!;
 }
 
 nativeTest(
@@ -137,6 +166,8 @@ nativeTest(
     await expect(page.locator('.ProseMirror')).toContainText(text.firstBody);
     await fixture.fillTitle(page, copy.documentTitle, text.selectedTitle);
     await fixture.fillBody(page, text.selectedBody);
+    const mediaId = await uploadKnowledgeImageInEditor(page, firstHead.documentId);
+    fixture.evidence.mediaId = mediaId;
     await fixture.waitEnabled(page, copy.save);
     await knowledgeJourneyClick(page, copy.save);
     await fixture.waitStatus(page, copy.readbackConfirmed);
@@ -149,7 +180,9 @@ nativeTest(
     );
     selectedHead.placementId = firstHead.placementId;
     expect(selectedHead.title).toBe(text.selectedTitle);
-    expect(selectedHead.body).toBe(text.selectedBody);
+    expect(selectedHead.body.trim()).toBe([text.selectedBody, imageAlt].join('\n'));
+    const selectedBody = selectedHead.body;
+    expect(selectedHead.mediaSources).toEqual([knowledgeMediaSource(mediaId)]);
     expect(selectedHead.revisionId).not.toBe(firstHead.revisionId);
     expect(selectedHead.publicationId).toBeNull();
     fixture.evidence.child = selectedHead;
@@ -168,8 +201,18 @@ nativeTest(
     fixture.evidence.stage = 'publication';
     await knowledgeJourneyClick(page, copy.reviewPublication);
     await expect(page.getByText(text.selectedTitle)).toBeVisible();
-    await expect(page.getByText(text.selectedBody)).toBeVisible();
-    await expect(page.getByText(selectedHead.revisionId)).toBeVisible();
+    const publicationReview = page.getByRole('region', { name: copy.reviewPublication, exact: true });
+    await expect(publicationReview.getByText(text.selectedBody, { exact: true })).toBeVisible();
+    const previewImage = publicationReview.getByRole('img', { name: imageAlt, exact: true });
+    await expect(previewImage).toBeVisible();
+    await expect
+      .poll(() =>
+        previewImage.evaluate(
+          (element) => element instanceof HTMLImageElement && element.complete && element.naturalWidth > 0,
+        ),
+      )
+      .toBe(true);
+    await expect(publicationReview.getByText(selectedHead.revisionId, { exact: true })).toBeVisible();
     await expectAbsent(page, text.parentBody, text.firstBody, text.laterBody);
     await knowledgeJourneyClick(page, copy.publishExact);
     await fixture.waitStatus(page, copy.publicationAcknowledged);
@@ -185,7 +228,7 @@ nativeTest(
     const publicationId = publishedPrivate.publicationId;
     if (!isKnowledgeJourneyId(publicationId))
       throw new Error(`publication private read omitted publication identity: ${JSON.stringify(publishedPrivate)}`);
-    expect(publishedPrivate.body).toBe(text.selectedBody);
+    expect(publishedPrivate.body).toBe(selectedBody);
     fixture.evidence.selectedPublicationId = publicationId;
     await expect(page.getByText(publicationId)).toBeVisible();
     const nativePublication = await fixture.requirePublicDocument(
@@ -199,8 +242,21 @@ nativeTest(
       publicationId,
       subjectId,
       title: text.selectedTitle,
-      body: text.selectedBody,
+      body: selectedBody,
       authorId: null,
+    });
+
+    expect(nativePublication.sourceSha256).toBe(selectedHead.sha256);
+    const publicImageSource = parseKnowledgeMediaSource(nativePublication.mediaSources[0]);
+    expect(publicImageSource).toEqual({
+      mediaId,
+      selection: {
+        representation: 'public',
+        documentId: firstHead.documentId,
+        revisionId: selectedHead.revisionId,
+        sourceSha256: selectedHead.sha256,
+        publicationId,
+      },
     });
 
     fixture.evidence.stage = 'public-read';
@@ -211,6 +267,22 @@ nativeTest(
     await expect(publicPage.getByText(copy.liveKind)).toBeVisible();
     await expect(publicPage.getByRole('heading', { name: text.selectedTitle })).toBeVisible();
     await expect(publicPage.getByRole('main')).toContainText(text.selectedBody);
+    const publicImage = publicPage.getByRole('img', { name: imageAlt, exact: true });
+    await expect(publicImage).toBeVisible();
+    await expect
+      .poll(() =>
+        publicImage.evaluate(
+          (element) => element instanceof HTMLImageElement && element.complete && element.naturalWidth > 0,
+        ),
+      )
+      .toBe(true);
+    const publicImageUrl = new URL((await publicImage.getAttribute('src'))!, publicPage.url()).href;
+    const mediaContext = new URL(publicImageUrl).searchParams;
+    expect(mediaContext.get('knowledgeDocumentId')).toBe(firstHead.documentId);
+    expect(mediaContext.get('knowledgeRevisionId')).toBe(selectedHead.revisionId);
+    expect(mediaContext.get('knowledgeSourceSha256')).toBe(selectedHead.sha256);
+    expect(mediaContext.get('knowledgePublicationId')).toBe(publicationId);
+    expect((await anonymous.request.get(publicImageUrl)).status()).toBe(200);
     await expectPrivateTextsAbsent(publicPage, [text.firstTitle, text.parentTitle, text.laterTitle]);
     await fixture.open(publicPage, fixture.exactHref(firstHead.documentId, selectedHead.revisionId));
     await expect(publicPage.getByText(copy.exactKind)).toBeVisible();
@@ -220,7 +292,7 @@ nativeTest(
     const anonymousLive = await fixture.requirePublicDocument('public-read', firstHead.documentId);
     expect(anonymousLive.revisionId).toBe(selectedHead.revisionId);
     expect(anonymousLive.publicationId).toBe(publicationId);
-    expect(anonymousLive.body).toBe(text.selectedBody);
+    expect(anonymousLive.body).toBe(selectedBody);
     expect(anonymousLive.authorId).toBeNull();
     const firstPublic = await fixture.readPublicDocument(
       'public-read',
@@ -365,7 +437,9 @@ nativeTest(
     expect(copied.revisionId).not.toBe(selectedHead.revisionId);
     expect(copied.publicationId).toBeNull();
     expect(copied.title).toBe(text.selectedTitle);
-    expect(copied.body).toBe(text.selectedBody);
+    expect(copied.body).toBe(selectedBody);
+    expect(copied.mediaSources).toEqual(nativePublication.mediaSources);
+    expect(copied.sha256).toBe(nativePublication.sha256);
     expect(copied.body).not.toBe(text.laterBody);
     fixture.evidence.copy = copied;
     await openCopy.click();
@@ -378,7 +452,7 @@ nativeTest(
       await fixture.readPrivateDocument('reuse', 'alice', alice, reuseNotebookId, copiedDocumentId, 200),
     );
     expect(reopened.revisionId).toBe(copied.revisionId);
-    expect(reopened.body).toBe(text.selectedBody);
+    expect(reopened.body).toBe(selectedBody);
     await fixture.requireUnauthorizedPrivate(
       'reuse',
       'bob copied private document',
@@ -404,6 +478,35 @@ nativeTest(
     expect(fixture.evidence.child?.documentId).toBe(firstHead.documentId);
     expect(fixture.evidence.copy?.documentId).toBe(copiedDocumentId);
     expect(bob).not.toBe(alice);
+
+    fixture.evidence.stage = 'withdrawal';
+    await fixture.open(page, fixture.privateHref(sourceNotebookId, firstHead.documentId));
+    await knowledgeJourneyClick(page, 'Review withdrawal');
+    await knowledgeJourneyClick(page, 'Withdraw this publication');
+    await fixture.waitStatus(
+      page,
+      'The native withdrawal command was acknowledged. This document has no selected publication.',
+    );
+    await fixture.open(publicPage, fixture.exactHref(firstHead.documentId, selectedHead.revisionId));
+    await expect(publicPage.getByRole('main')).not.toContainText(text.selectedBody);
+    await expect(publicPage.locator('img')).toHaveCount(0);
+    const withdrawnBytes = await anonymous.request.get(publicImageUrl);
+    expect(withdrawnBytes.status()).toBe(404);
+    const presented = await fixture.stack.kernel('/v1/media/presentations', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ids: [mediaId], knowledge: publicImageSource!.selection }),
+    });
+    expect(presented.status).toBe(200);
+    expect(((await presented.json()) as { images: unknown[] }).images).toEqual([]);
+    await fixture.open(page, fixture.privateHref(reuseNotebookId, copiedDocumentId));
+    await expect(page.locator('.ProseMirror')).toContainText(text.selectedBody);
+    await expect(page.locator('.ProseMirror img')).toHaveCount(0);
+    expect(
+      (await fixture.requirePrivateDocument('withdrawal', 'alice', alice, reuseNotebookId, copiedDocumentId))
+        .mediaSources,
+    ).toEqual(copied.mediaSources);
+    fixture.evidence.withdrawnMediaUnavailable = true;
   },
   lifecycle,
 );

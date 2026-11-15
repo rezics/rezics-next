@@ -1,6 +1,7 @@
 import { expect, setDefaultTimeout, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import type { HostedCommandDependencies } from '../../src/content/hosted-chapters-commands.ts';
+import type { HostedPlacement } from '../../src/content/hosted-chapters-model.ts';
 import {
   captureHostedPublicBaselineInput,
   readHostedPublicBaselineInputPage,
@@ -30,7 +31,7 @@ function dependencies(fixture: Awaited<ReturnType<typeof hostedChaptersFixture>>
 
 async function publish(
   fixture: Awaited<ReturnType<typeof hostedChaptersFixture>>,
-  placements: readonly Record<string, unknown>[],
+  placements: readonly HostedPlacement[],
 ) {
   const created = await fixture.retained.structure(placements);
   const released = await fixture.retained.publication(

@@ -190,7 +190,7 @@ test('native identity birth, control-home changes and redirects retire title cur
 });
 
 test('native lifecycle and owner-tuple writes retire the complete title basis', async () => {
-  const owner = await driver.fixtures.person(`title-input-lifecycle-${randomUUID()}`);
+  const owner = await driver.fixtures.person('title-input-lifecycle');
   await driver.fixtures.grantAccount(owner, ['statement:delete'], driver.globalContext);
   const created = await driver.fixtures.send(
     owner,
@@ -327,7 +327,7 @@ test('an unrequested Semantic visibility write retires the basis while empty-she
 
 test('integrated title preparation receives more than one chunk without retiring its source basis', async () => {
   await driver.fixtures.openFeatures(['personal_library']);
-  const shelfOwner = await driver.fixtures.person(`title-input-chunks-${randomUUID()}`, {
+  const shelfOwner = await driver.fixtures.person('title-input-chunks', {
     scopes: ['library_entry:list', 'library_entry:update'],
   });
   const subjectIds: string[] = [];

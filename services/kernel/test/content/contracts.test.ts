@@ -37,6 +37,7 @@ import type * as model from '../../src/content/model.ts';
 import type { ImportedSource, Rights } from '../../src/content/imported-contract.ts';
 import type { Kernel } from '../../src/http/kernel.ts';
 import { MediaReservationInputSchema, RealmMediaReservationInputSchema } from '../../src/content/schemas.ts';
+import { ProblemError, problemResponse, problemSchema, withAppliedCommandEffect } from '../../src/http/problem.ts';
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 function same<T extends true>(..._proof: T[]): void {}
@@ -155,6 +156,7 @@ function publishedSignatures(): void {
         boardId: string,
         after: board.BoardCandidateKey | null,
         limit: number,
+        deadline?: number,
       ) => Promise<board.BoardCandidatePage>
     >
   >();
@@ -844,6 +846,35 @@ function publishedModels(): void {
   same<Equal<reports.ReportRequestContext, model.RequestContext & Readonly<{ botToken?: string }>>>();
 }
 void [publishedSignatures, publishedModels];
+
+test('committed response failures preserve disclosure and dependency problems while reporting the applied command', async () => {
+  for (const original of [
+    new ProblemError('not_found'),
+    new ProblemError('dependency_unavailable', { headers: { 'retry-after': '1' } }),
+  ]) {
+    const error = await withAppliedCommandEffect(async () => {
+      throw original;
+    }).catch((error: unknown) => error);
+    const context = { method: 'POST', action: 'thread:create', id: 'response-readback' };
+    const response = problemResponse(error, context);
+    const body = await response.json();
+    const beforeCommit = problemResponse(original, context);
+    expect(response.status).toBe(beforeCommit.status);
+    expect(body).toMatchObject({ code: original.code, effect_status: 'applied' });
+    expect(Value.Check(problemSchema(original.code), body)).toBe(true);
+    expect(response.headers.get('retry-after')).toBe(original.headers?.['retry-after'] ?? null);
+    // The same domain refusal outside the committed response boundary retains
+    // its precommit meaning; wrapping never mutates a shared Error instance.
+    expect(await beforeCommit.json()).toMatchObject({ code: original.code, effect_status: 'not_applied' });
+  }
+  const readFailure = await withAppliedCommandEffect(async () => {
+    throw new Error('Response storage failed');
+  }).catch((error: unknown) => error);
+  expect(await problemResponse(readFailure, { method: 'POST', id: 'response-storage' }).json()).toMatchObject({
+    code: 'internal_error',
+    effect_status: 'applied',
+  });
+});
 
 test('Realm media reservation keeps its own strict purpose and route-owned parent input', () => {
   const fields = { mediaType: 'image/png', byteCount: 10 };

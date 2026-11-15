@@ -1046,7 +1046,7 @@ determines `nextCursor`. The traversal key is storage position, never historical
 `nativeOrder` remains exact; observations without that fact retain `legacy: true` and `nativeOrder: null`.
 During one-time conversion, known native positions keep their relative order above unknown positions, whose
 digest order supplies deterministic traversal without asserting original chronology. `payloadVersion` is explicit, and `provenance` labels the content digest as unversioned provider
-provenance. The exported response schema is the actual route DTO for the generated Imports API43 and Web clients.
+provenance. The exported response schema is the actual route DTO for the generated Imports and Web clients.
 
 Decision: inspection always includes the current head; an optional digest resolves that exact retained observation,
 while signed history uses one indexed storage traversal and preserves unknown native order.
@@ -1063,6 +1063,8 @@ failures; callers retain the supplied cursor for an identical retry or explicitl
 the native token envelope and binds caller, client, delegator, scopes, route, Subject, provider, Subject home and
 Subject epoch, query shape and expiry. Provider tuple homes can differ from the Subject home and from one another.
 History keeps its initial storage seek ceiling across every continuation. A removed cursor boundary returns conflict so the caller can retry the original frontier.
+Temporary Subject identity unavailability returns retryable 503, while absent or concealed required Subjects
+remain 404 and denied write authority remains 403. None of these failures returns a hydrated inspection DTO.
 
 Decision: history cursors retain one initial seek ceiling; continuations reject missing retained boundary rows.
 

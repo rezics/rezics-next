@@ -4109,6 +4109,9 @@
   "library_archive_progress_title": "Archivierten Fortschritt wiederherstellen",
   "library_archive_progress_uncertain": "The response was lost. Reconcile the original command before starting another effect.",
   "library_archive_progress_unit_help": "The archived count is {count}. It never supplies missing IDs. Inspect ten identities per page and select at most twenty exact current members.",
+  "library_archive_progress_local_count": "Archivierte lokal abgeschlossene Einheiten",
+  "library_archive_progress_episode_count": "Archivierte Episodenabschlüsse",
+  "library_archive_progress_count_unknown": "In diesem Archiv nicht erfasst",
   "library_archive_progress_units": "Exact archived unit identities",
   "library_archive_progress_unsupported": "Unsupported remainder",
   "library_archive_recovery_presentation_adopted": "Der geprüfte Darstellungstyp wurde übernommen.",
@@ -13277,5 +13280,6 @@
   "editor_formatting_under": "Darunter",
   "editor_formatting_text_emphasis": "Betonungszeichen",
   "editor_formatting_code_language_help": "Die Programmiersprache dieses Codeblocks einstellen. Sie ist unabhängig von der natürlichen Sprache des Texts.",
-  "editor_formatting_text_style_help": "Text- und Hintergrundfarben im Dokument ändern. Persönliche Schriftart und Textgröße bleiben Editor-Einstellungen."
+  "editor_formatting_text_style_help": "Text- und Hintergrundfarben im Dokument ändern. Persönliche Schriftart und Textgröße bleiben Editor-Einstellungen.",
+  "knowledge_media_save_first": "Speichere das Dokument, bevor du Bilder hinzufügst. Ein leeres privates Dokument genügt."
 }

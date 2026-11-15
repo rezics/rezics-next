@@ -597,6 +597,108 @@ test('deleting an account with no content acknowledges content none', async () =
   await waitParticipant(person, 'delivery', 'none');
 });
 
+test('global content erasure waits for held Knowledge before uploads and commits fresh durable steps until acknowledgement', async () => {
+  const person = await createPerson();
+  const notebook = await call<{ notebookId: string; structureRevisionId: string }>(
+    person, 'POST', '/v1/knowledge/notebooks', { subjectId: boardSubjectId, title: 'Held private notebook' },
+  );
+  const document = await call<{ documentId: string }>(
+    person, 'POST', `/v1/knowledge/notebooks/${notebook.notebookId}/documents`, {
+      title: 'Held private document', body: fromPlainText('Private Knowledge must precede upload erasure'),
+      licence: 'MIT', subjectIds: [], parentPlacementId: null,
+      expectedStructureRevisionId: notebook.structureRevisionId,
+    },
+  );
+  // Legal hold is retention setup; all erasure, continuation and acknowledgement
+  // transitions below use the existing native account/worker protocol.
+  await system.database.pool.query(
+    'UPDATE content.knowledge_document SET legal_hold=true WHERE route=$1 AND document_id=$2',
+    [routeOf(document.documentId), document.documentId],
+  );
+  await grantMediaCreate(person);
+  const avatar = await upload(person, person.accountId, 'avatar');
+  await waitMediaReady(avatar);
+  await drainRelays();
+  await erase(person);
+
+  type Progress = { step: string; phase: string; cursor: unknown; phase_pending: boolean; content_found: boolean };
+  const progress = async () => (await system.database.pool.query<Progress>(
+    `SELECT step::text,phase,cursor,phase_pending,content_found
+     FROM content.account_erasure_progress WHERE route=$1 AND account_id=$2`,
+    [routeOf(person.accountId), person.accountId],
+  )).rows[0];
+  await waitUntil(async () => {
+    const row = await progress();
+    return row?.phase === 'knowledge' && row.phase_pending && row.cursor !== null;
+  }, 'held Knowledge to withhold the upload phase');
+  const first = (await progress())!;
+  expect(first.content_found).toBe(true);
+  expect((await readErasureStatus(system.database.pool, person.accountId))?.participants.content?.outcome).toBe('pending');
+  expect((await readErasureStatus(system.database.pool, person.accountId))?.participants.delivery?.outcome).toBe('pending');
+  expect(fake.objects.has(`m/${avatar}/original`)).toBe(true);
+  expect((await system.database.pool.query(
+    'SELECT erased FROM content.media WHERE route=$1 AND media_id=$2', [routeOf(avatar), avatar],
+  )).rows[0].erased).toBe(false);
+
+  // Resume the current native step while the hold persists. The source cursor
+  // stays fixed, but a new step and receipt must replace the withheld attempt.
+  await resumeParticipant(person);
+  await waitUntil(async () => BigInt((await progress())!.step) > BigInt(first.step), 'fresh held Knowledge step');
+  const second = (await progress())!;
+  expect(second).toMatchObject({
+    phase: 'knowledge', cursor: first.cursor, phase_pending: true, content_found: true,
+  });
+  const stepKeys = [first.step, second.step].map((step) => `${person.accountId}:${BigInt(step) - 1n}`);
+  const receipts = await system.database.pool.query<{ command_kind: string; idempotency_key: string }>(
+    `SELECT command_kind,idempotency_key FROM core.receipt
+     WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
+       AND command_kind IN ('content.account-erasure.knowledge','content.account-erasure.progress')
+       AND idempotency_key=ANY($3::text[]) ORDER BY command_kind,idempotency_key`,
+    [partitionOf(routeOf(person.accountId)!), person.accountId, stepKeys],
+  );
+  expect(receipts.rows).toHaveLength(4);
+  for (const key of stepKeys) {
+    expect(receipts.rows).toContainEqual({ command_kind: 'content.account-erasure.knowledge', idempotency_key: key });
+    expect(receipts.rows).toContainEqual({ command_kind: 'content.account-erasure.progress', idempotency_key: key });
+  }
+  expect((await system.database.pool.query(
+    `SELECT 1 FROM access.erasure_acknowledgement
+     WHERE route=$1 AND account_id=$2 AND participant IN ('content','delivery')`,
+    [routeOf(person.accountId), person.accountId],
+  )).rows).toEqual([]);
+  expect(fake.objects.has(`m/${avatar}/original`)).toBe(true);
+
+  await system.database.pool.query(
+    'UPDATE content.knowledge_document SET legal_hold=false WHERE route=$1 AND document_id=$2',
+    [routeOf(document.documentId), document.documentId],
+  );
+  await resumeParticipant(person);
+  await waitParticipant(person, 'content', 'erased');
+  await waitParticipant(person, 'delivery', 'erased');
+  expect((await system.database.pool.query(
+    'SELECT 1 FROM content.knowledge_notebook WHERE route=$1 AND notebook_id=$2',
+    [routeOf(person.accountId), notebook.notebookId],
+  )).rows).toEqual([]);
+  expect([...fake.objects.keys()].some((key) => key.startsWith(`m/${avatar}/`))).toBe(false);
+
+  const acknowledgement = async () => (await system.database.pool.query(
+    `SELECT to_jsonb(a) AS value,a.xmin::text AS version FROM access.erasure_acknowledgement a
+     WHERE route=$1 AND account_id=$2 AND participant='content'`,
+    [routeOf(person.accountId), person.accountId],
+  )).rows;
+  const committed = await acknowledgement();
+  expect(committed).toHaveLength(1);
+  expect(committed[0].value.outcome).toBe('erased');
+  const client = await createWorkClient(system.database.pool.options.connectionString!);
+  try {
+    await createAccountErasureEffect({ client }).run(await eventFor(person.accountId));
+  } finally {
+    await client.close();
+  }
+  await drainRelays();
+  expect(await acknowledgement()).toEqual(committed);
+});
+
 test('a replayed tombstone event neither repeats work nor acknowledges twice, and pending Collection media delays the acknowledgement', async () => {
   const person = await createPerson();
   await grantMediaCreate(person);

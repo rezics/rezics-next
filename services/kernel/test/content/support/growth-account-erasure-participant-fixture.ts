@@ -672,25 +672,28 @@ async function worker() {
   type Stage = { name: string; phase?: string; step?: number; delayed?: boolean; probes: number };
   const common: Stage[] = [
     { name: 'fence-close', phase: 'close', step: 0, probes: 12 },
-    { name: 'authored', phase: 'authored', step: 1, probes: 12 + 50 * 6 + 100 },
-    { name: 'uploads-media', phase: 'uploads', step: 2, probes: 12 + 50 * 8 },
+    { name: 'slow-mode', phase: 'slow-mode', step: 1, probes: 12 + 100 * 8 },
+    { name: 'authored', phase: 'authored', step: 2, probes: 12 + 50 * 6 + 100 },
+    { name: 'knowledge', phase: 'knowledge', step: 3, probes: 24 + 100 * 8 },
+    { name: 'uploads-media', phase: 'uploads', step: 4, probes: 12 + 50 * 8 },
   ];
   const tail = (offset: number): Stage[] => [
-    { name: 'reactions-reports', phase: 'reactions', step: 4 + offset, probes: 12 + 50 * 8 },
-    { name: 'moderation', phase: 'moderation', step: 5 + offset, probes: 12 + 50 * 8 },
-    { name: 'proof-media', phase: 'proof', step: 6 + offset, probes: 12 + 6 + 50 * 8 },
-    { name: 'proof-fields-acknowledge', phase: 'proof', step: 7 + offset, probes: 24 + 50 * 8 },
+    { name: 'reactions-reports', phase: 'reactions', step: 6 + offset, probes: 12 + 50 * 8 },
+    { name: 'moderation', phase: 'moderation', step: 7 + offset, probes: 12 + 50 * 8 },
+    { name: 'notices', phase: 'notices', step: 8 + offset, probes: 12 + 100 * 8 },
+    { name: 'proof-media', phase: 'proof', step: 9 + offset, probes: 12 + 6 + 50 * 8 },
+    { name: 'proof-fields-acknowledge', phase: 'proof', step: 10 + offset, probes: 24 + 50 * 8 },
     { name: 'tombstone-replay', probes: 12 },
   ];
   const stages = (mode: Mode): Stage[] =>
     mode === 'empty'
-      ? [...common, { name: 'uploads-fields-delivery', phase: 'uploads', step: 3, probes: 24 + 50 * 8 }, ...tail(0)]
+      ? [...common, { name: 'uploads-fields-delivery', phase: 'uploads', step: 5, probes: 24 + 50 * 8 }, ...tail(0)]
       : [
           ...common,
-          { name: 'pending-collection-delay', phase: 'uploads', step: 3, delayed: true, probes: 12 + 50 * 8 },
+          { name: 'pending-collection-delay', phase: 'uploads', step: 5, delayed: true, probes: 12 + 50 * 8 },
           { name: 'registered-collection-settlement', probes: 16 * 2 + 100 * 8 },
-          { name: 'settled-uploads-media', phase: 'uploads', step: 4, probes: 12 + 50 * 8 },
-          { name: 'settled-uploads-fields-delivery', phase: 'uploads', step: 5, probes: 24 + 50 * 8 },
+          { name: 'settled-uploads-media', phase: 'uploads', step: 6, probes: 12 + 50 * 8 },
+          { name: 'settled-uploads-fields-delivery', phase: 'uploads', step: 7, probes: 24 + 50 * 8 },
           ...tail(2),
           { name: 'retention-expiry', probes: 12 + 50 * 8 },
         ];
@@ -714,7 +717,9 @@ async function worker() {
       selectedId = result.id;
       nativeSteps = result.steps.length;
       output = result.output;
-      assert.equal((await progress(item))?.step, String(stage.step! + 1));
+      const current = await progress(item);
+      assert.equal(current?.step, String(stage.step! + 1));
+      assert.equal(current?.phase, result.output.phase);
       if (stage.phase === 'close') {
         assert(
           (
@@ -724,6 +729,18 @@ async function worker() {
             ])
           ).rows[0]?.closed_at,
         );
+      }
+      if (stage.name === 'knowledge') {
+        assert.equal(result.output.phase, 'uploads');
+        assert.equal(current?.cursor, null);
+        assert.deepEqual(await acknowledgement(item), []);
+        const status = await readErasureStatus(db.pool, item.person.accountId);
+        assert.equal(status?.participants.content?.outcome, 'pending');
+        assert.equal(status?.participants.delivery?.outcome, 'pending');
+      }
+      if (stage.name === 'authored') {
+        assert.equal(result.output.phase, 'knowledge');
+        assert.equal(current?.cursor, null);
       }
       if (stage.name === 'pending-collection-delay') {
         const status = await readErasureStatus(db.pool, item.person.accountId);
@@ -960,6 +977,12 @@ async function worker() {
               (item) => item.axis === axis && item.mode === mode && item.scale === scale && item.slot === slot,
             );
             assert(prepared, `Exhausted six native lifecycle states: ${axis}/${mode}/${scale}/${stage.name}`);
+            if (stageIndex > 0) {
+              // Wait outside the measured operation for the native thirty-second
+              // barrier before preparing or measuring its registered phase.
+              const wait = Date.parse(prepared.erasedAt!) + 30_001 - Date.now();
+              if (wait > 0) await Bun.sleep(wait);
+            }
             while ((reached.get(prepared.person.accountId) ?? 0) < stageIndex)
               await execute(prepared, sequence[reached.get(prepared.person.accountId) ?? 0]!);
             assert.equal(reached.get(prepared.person.accountId) ?? 0, stageIndex);

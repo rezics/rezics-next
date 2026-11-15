@@ -31,6 +31,8 @@ import { declareAgentIdentitySource } from '../../src/history/adapters/agent-ide
 import { beginSemanticRecordSourceSet } from '../../src/semantic/record-source-set.ts';
 import { writeIdentityScopeConsumerNativeCommit } from '../../src/semantic/identity-epoch-native-commit.ts';
 import { createPool } from '../../src/database/pool.ts';
+import { newId } from '../../src/route/route.ts';
+import { readLiveCopyLineage } from '../../src/access/live-copy-lineage.ts';
 import { enterCommandGate } from '../../src/command/gate.ts';
 import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
 import { observeSql, type SqlObserver } from '../content/support/sql-observer.ts';
@@ -128,9 +130,12 @@ function fixture(statements = 8, id = account) {
   };
 }
 beforeAll(async () => {
-  await admin.query("INSERT INTO core.partition(partition_no,node) VALUES($1,'local') ON CONFLICT DO NOTHING", [
-    partition,
-  ]);
+  const client = await admin.connect();
+  try {
+    expect((await readLiveCopyLineage(client, partition)).partition).toBe(partition);
+  } finally {
+    client.release();
+  }
   // Learn the actual mapped native statements, never a replacement fence or executor.
   const observer = observe();
   await runCommand(pool, { partition }, async () => response(0));
@@ -144,9 +149,11 @@ afterEach(async () => {
   await admin.query("UPDATE core.partition SET write_state='active',moved_to=NULL WHERE partition_no=$1", [partition]);
 });
 afterAll(async () => {
-  await pool.end();
-  await foreign.end();
-  await admin.end();
+  try {
+    for (const observer of observers.splice(0)) await observer.close();
+  } finally {
+    await Promise.all([pool.end(), foreign.end(), admin.end()]);
+  }
 });
 
 async function position() {
@@ -411,28 +418,29 @@ for (const association of ['callback', 'source', 'source set', 'agent identity s
   test(`native ${association} refuses before executor callbacks, History serialization or finalization IO`, async () => {
     const f = fixture();
     const observer = observe();
-    await expect(
-      f.run(async (tx) => {
-        if (association === 'callback')
-          registerCommandCallback(tx, () => {
-            throw new Error('callback executed');
-          });
-        if (association === 'source') declareCommandRecordSources(tx, [{ kind: 'context', contextId: randomUUID() }]);
-        if (association === 'source set') await beginSemanticRecordSourceSet(tx);
-        if (association === 'agent identity source')
-          await declareAgentIdentitySource(
-            tx,
-            {
-              route: 0,
-              accountId: account,
-              direction: 'account-agent.verify',
-              receiptId: randomUUID(),
-            },
-            'sha256:' + '0'.repeat(64),
-          );
-        return response(1);
-      }),
-    ).rejects.toBeInstanceOf(Error);
+    const outcome = f.run(async (tx) => {
+      if (association === 'callback')
+        registerCommandCallback(tx, () => {
+          throw new Error('callback executed');
+        });
+      if (association === 'source')
+        declareCommandRecordSources(tx, [{ kind: 'context', contextId: newId(partition << 4) }]);
+      if (association === 'source set') await beginSemanticRecordSourceSet(tx);
+      if (association === 'agent identity source')
+        await declareAgentIdentitySource(
+          tx,
+          {
+            route: 0,
+            accountId: account,
+            direction: 'account-agent.verify',
+            receiptId: randomUUID(),
+          },
+          'sha256:' + '0'.repeat(64),
+        );
+      return response(1);
+    });
+    if (association === 'source') await expect(outcome).rejects.toThrow('Unsupported dispatch lifetime');
+    else await expect(outcome).rejects.toBeInstanceOf(Error);
     expect(texts(observer)).not.toContain(eventFence);
     expect(texts(observer)).not.toContain('COMMIT');
     expect(texts(observer).some((sql) => /record_history|history_locator/.test(sql))).toBe(false);
@@ -449,7 +457,7 @@ test('copied native tx has no context, receipt, callback, source or source-set a
       () => currentCommandResources(copy),
       () => currentCommandReceipt(copy),
       () => registerCommandCallback(copy, () => {}),
-      () => declareCommandRecordSources(copy, [{ kind: 'context', contextId: randomUUID() }]),
+      () => declareCommandRecordSources(copy, [{ kind: 'context', contextId: newId(partition << 4) }]),
       () => declareCommandRecordSourceSet(copy, Object.freeze({}) as never),
     ])
       expect(operation).toThrow();

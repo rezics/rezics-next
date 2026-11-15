@@ -147,6 +147,7 @@ export type CopyArchiveProgressReview = {
     amount: string | null;
     additionalMeasures: ArchivedProgressMeasure[];
     completedUnitCount: number;
+    episodeCompletedCount?: number;
     state: string;
     sourceRevision: number;
     versionSubjectId: string | null;
@@ -697,15 +698,16 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
         if (!session || routeOf(request.sessionId) !== route) throw missing();
         const units = request.unitIds.length
           ? (
-              await tx.query<{ source_unit_id: string }>(
-                `SELECT source_unit_id FROM library.copy_archive_row
+              await tx.query<{ source_unit_id: string; unit_kind: 'local' | 'episode' | null }>(
+                `SELECT source_unit_id,evidence->>'unit_kind' AS unit_kind FROM library.copy_archive_row
                 WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND section='units'
                   AND source_session_id=$4 AND source_unit_id=ANY($5::text[])`,
                 [route, account, id, request.sessionId, request.unitIds],
               )
-            ).rows.map((row) => row.source_unit_id)
+            ).rows
           : [];
-        if (units.length !== request.unitIds.length) throw new ProblemError('invalid_request');
+        if (new Set(units.map((row) => row.source_unit_id)).size !== request.unitIds.length)
+          throw new ProblemError('invalid_request');
         return { replay: null, route, session, units, expiresAt: h.expires_at };
       },
       'progress_session:read',
@@ -715,7 +717,11 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
     const observation = await profileObservation(actor, request.subjectId);
     if (!observation || observation.source.subjectId !== request.subjectId) throw missing();
     let unitReview: { unitId: string; admission: 'member' | 'detached' | 'unavailable' }[] = [];
-    const canonicalUnitIds = request.unitIds.filter((unitId) => routeOf(unitId) !== null);
+    const canonicalUnitIds = request.unitIds.filter(
+      (unitId) =>
+        routeOf(unitId) !== null &&
+        evidence.units.some((row) => row.source_unit_id === unitId && row.unit_kind === 'episode'),
+    );
     if (
       request.mode === 'completed_units' &&
       request.unit === 'episode' &&
@@ -753,6 +759,9 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
       unsupported: string[] = [],
       measureReviews: CopyArchiveProgressReview['measures'] = [];
     let plan: ProgressRecoveryPlan | null = null;
+    if (archived.episode_completed_count === undefined) unsupported.push('source-episode-count-unavailable');
+    else if (archived.mode !== 'completed_units' && archived.episode_completed_count > 0)
+      unsupported.push('canonical-episode-facts-not-recovered');
     if (archived.mode !== request.mode) unsupported.push('mode-mapping-not-supported');
     if (observation.source.kind !== 'supported') unsupported.push('current-profile-unavailable');
     const stateAdmitted =
@@ -986,8 +995,11 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
         const admittedIds = unitReview.filter((unit) => unit.admission === 'member').map((unit) => unit.unitId);
         const unsupportedUnits = unitReview.filter((unit) => unit.admission !== 'member');
         if (unsupportedUnits.length) unsupported.push(`units-not-admitted:${unsupportedUnits.length}`);
-        if (archived.completed_unit_count > admittedIds.length) unsupported.push('source-count-not-fully-identified');
-        if (parsedCreate.ok && (archived.completed_unit_count === 0 || admittedIds.length > 0))
+        const episodeCount = archived.episode_completed_count;
+        if (episodeCount !== undefined && episodeCount > admittedIds.length)
+          unsupported.push('source-count-not-fully-identified');
+        if (archived.completed_unit_count > 0) unsupported.push('local-unit-facts-not-recovered');
+        if (parsedCreate.ok && (episodeCount === 0 || admittedIds.length > 0))
           plan = {
             subjectId: request.subjectId,
             versionSubjectId: null,
@@ -1026,6 +1038,9 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
           amount: archived.amount,
           additionalMeasures: archived.additional_measures ?? [],
           completedUnitCount: archived.completed_unit_count,
+          ...(archived.episode_completed_count === undefined
+            ? {}
+            : { episodeCompletedCount: archived.episode_completed_count }),
           state: archived.state,
           sourceRevision: archived.revision,
           versionSubjectId: archived.version_subject_id,

@@ -1,3 +1,5 @@
+import type { KnowledgeMediaSelection } from '@rezics/definitions/knowledge-media';
+import { useKnowledgeImageRenderer } from './media-view';
 import { useLayoutEffect, useId, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -229,10 +231,11 @@ export function KnowledgeReferenceList({
           ) : result?.state === 'ready' ? (
             <div className="min-w-0 space-y-3">
               <h4 className="font-semibold [overflow-wrap:anywhere]">{result.title}</h4>
-              <DocumentBody
+              <KnowledgeReferenceBody
                 document={result.body}
                 locale={locale}
-                visitKey={`${result.documentId}:${result.revisionId}`}
+                inspectable={false}
+                mediaSelection={result.mediaSelection ?? null}
               />
             </div>
           ) : result ? (
@@ -250,16 +253,19 @@ export function KnowledgeReferenceList({
 export function KnowledgeReferenceBody({
   references,
   inspectable = true,
+  mediaSelection = null,
   ...props
 }: {
   document: DocumentSnapshot;
   references?: readonly KnowledgeReference[] | undefined;
   locale: string;
   inspectable?: boolean;
+  mediaSelection?: KnowledgeMediaSelection | null;
 }) {
+  const renderImage = useKnowledgeImageRenderer(props.document, mediaSelection, props.locale);
   return (
     <>
-      <DocumentBody {...props} />
+      <DocumentBody {...props} renderImage={renderImage} />
       <KnowledgeReferenceList
         body={props.document}
         references={references}

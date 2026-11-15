@@ -14,7 +14,11 @@ let fixture: ReleasedDiscoveryFixture;
 type Fact = Parameters<ReleasedDiscoveryFixture['adopt']>[1];
 type Decision = 'accept' | 'reject';
 type Mode = 'inherit' | 'replace' | 'suppress';
-const date = (day: string) => ({ time: `+2024-03-${day}T00:00:00Z`, precision: 11 });
+const date = (day: string) => ({
+  time: `+2024-03-${day}T00:00:00Z`,
+  precision: 11,
+  calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+});
 const named = (property: string, content: unknown, rank: 'normal' | 'preferred' = 'normal'): Fact => {
   const fact = discoveryStatement(property, content as StatementInput['value']['content']);
   fact.rank = rank;

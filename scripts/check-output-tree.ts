@@ -254,15 +254,17 @@ export function encodeOutputTree(root: string, source: OutputTreeBinding, produc
   const { members, contents } = collectOutputTree(root);
   if (producerExitCode === 0) {
     const largest = members.reduce<OutputTreeMember | null>(
-      (current, member) => !current || member.size > current.size ? member : current,
+      (current, member) => (!current || member.size > current.size ? member : current),
       null,
     );
-    process.stdout.write(`Kernel client output tree: ${JSON.stringify({
-      count: members.length,
-      totalBytes: contents.reduce((sum, bytes) => sum + bytes.length, 0),
-      maxMemberPath: largest?.path ?? null,
-      maxMemberBytes: largest?.size ?? 0,
-    })}\n`);
+    process.stdout.write(
+      `Kernel client output tree: ${JSON.stringify({
+        count: members.length,
+        totalBytes: contents.reduce((sum, bytes) => sum + bytes.length, 0),
+        maxMemberPath: largest?.path ?? null,
+        maxMemberBytes: largest?.size ?? 0,
+      })}\n`,
+    );
   }
   const catalogue = Buffer.from(members.map((member) => `${JSON.stringify(member)}\n`).join(''));
   for (const member of members)

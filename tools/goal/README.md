@@ -2495,6 +2495,10 @@ bun tools/goal/src/cli.ts unit context <unit>
 bun tools/goal/src/cli.ts unit run <unit> [-- <focused-check-argv>]
 ```
 
+Cold unit worktrees need their own root `bun install --frozen-lockfile` with the installed pinned Bun, followed by
+their own `node_modules/.bin` first in PATH, before scheduled post-integration native checks. Kernel's Bun preload
+resolves before host placement; this dependency setup is not a source-integration gate or permission to bypass admission.
+
 The Goal file's front matter names explicit `acceptance.command` arguments and `acceptance.requires` as the applicable
 subset of `native`, `browser` and `root`. `unit context` returns `{cwd,environment,command}`; `unit run` executes the
 registered acceptance by default, or a focused check chosen within the adopted Goal, in that context. Named checks
@@ -2505,6 +2509,13 @@ the existing check context. Only a matched committed check-run settlement and ph
 capture observation with revision, source hash, invocation and physical run. Direct local or remote-overlay commands
 remain allowed with observed source unknown. An observation describes its captured checks, not every command in a
 composed wrapper. Newer local source remains unverified, and generated outputs retain source-matching restoration.
+
+The direct Kernel/Auth `stack-run` remote path forwards native-unit context but does not itself create the committed
+check-run invocation/final binding. Its physical exit/resource receipt alone carries no source revision or prepared
+input fingerprint, so these runs may retain unknown source even after a terminal command. Logs naming a revision,
+a requested checkpoint or a current HEAD cannot fill that gap. Preserve those observations without backfilling or
+rerunning merely to populate telemetry. This reporting limitation adds no source-admission or acceptance gate;
+future coverage must use the existing immutable capture/settlement contract, not a second attestation system.
 
 #### Resident event delivery
 

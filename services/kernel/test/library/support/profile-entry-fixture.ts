@@ -959,6 +959,7 @@ export async function createProfileEntryFixture(
       recaptureMappedHomes,
       awaitCurrentIdentity,
       admitSubjectMerge,
+      drainIdentityMerge,
       publish,
       activate,
       readHead,

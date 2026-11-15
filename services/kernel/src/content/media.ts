@@ -759,6 +759,9 @@ function reservationMetadata(mediaId: MediaId, row: Row): MediaMetadata | null {
     return null;
   const variants: unknown = JSON.parse(row.variants_json);
   if (!Array.isArray(variants) || !variants.every(isVariant)) return null;
+  const byteCount = row.byte_count === null ? null : Number(row.byte_count);
+  if (byteCount !== null && (!Number.isSafeInteger(byteCount) || byteCount < 1 || byteCount > 20 * 1024 * 1024))
+    return null;
   const metadata: MediaMetadataBase = {
     id: mediaId,
     route: route(mediaId),
@@ -785,9 +788,9 @@ function reservationMetadata(mediaId: MediaId, row: Row): MediaMetadata | null {
       row.purpose === 'realm-icon' ||
       row.purpose === 'realm-banner') &&
     row.media_type !== null &&
-    row.byte_count !== null
+    byteCount !== null
   )
-    return { ...metadata, purpose: row.purpose, mediaType: row.media_type, byteCount: Number(row.byte_count) };
+    return { ...metadata, purpose: row.purpose, mediaType: row.media_type, byteCount };
   if (row.purpose !== 'cover') return null;
   const source = {
     containerId: row.container_id,
@@ -800,7 +803,7 @@ function reservationMetadata(mediaId: MediaId, row: Row): MediaMetadata | null {
     ...metadata,
     purpose: 'cover',
     mediaType: row.media_type,
-    byteCount: row.byte_count === null ? null : Number(row.byte_count),
+    byteCount,
     rights: {
       license: source.credit.license,
       obligations: source.credit.obligations,

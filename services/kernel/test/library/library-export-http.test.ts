@@ -5,9 +5,13 @@ import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { createKernelClient } from '../../../../packages/client/src/index.ts';
 import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { purgeOwnedGraphPage as purge } from '../../src/library/erasure-owned-graph.ts';
-import { newId } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import type { Access } from '../../src/request/access.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
+import { stepIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
 import { parseBangumiUpload } from '../../src/library/list-import-bangumi-model.ts';
@@ -19,6 +23,9 @@ import { exportSections } from '../../src/library/library-export-format.ts';
 import { decodeLibraryArchive, type ArchiveRecord } from '../../src/library/library-archive.ts';
 import { createLibraryArchiveCollectionRecovery } from '../../src/library/library-archive-collection-recovery.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { bindNativeLibraryFixture } from './support/native-library-fixture-binding.ts';
+let restoreLibraryBinding: (() => void) | undefined;
+let nativeAccess: Access;
 let workClient: WorkClient;
 let db: GrowthDatabase, app: ReturnType<typeof createKernel>;
 let fixture: Awaited<ReturnType<typeof createRealAccess<{ owner: string; other: string }>>>;
@@ -31,6 +38,7 @@ const collection = newId(route),
   copy = newId(route),
   version = newId(route);
 const scopes = [
+  'library_archive:read',
   'library_entry:list',
   'library_entry:read',
   'library_entry:update',
@@ -62,7 +70,7 @@ function request(
   method: string,
   path: string,
   persona: 'owner' | 'other' | 'anonymous' = 'owner',
-  requestKey = key,
+  requestKey = randomUUID(),
   signal?: AbortSignal,
 ) {
   return app.handle(
@@ -116,33 +124,38 @@ beforeAll(async () => {
     clock: () => new Date(now),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(29)]]) },
     access: fixture.access,
-    writeRate: fixture.writeRate,
+    onAccessReady(access) {
+      nativeAccess = access;
+      restoreLibraryBinding = bindNativeLibraryFixture({ pool: db.pool, access, routeKey, clock: () => new Date(now) });
+    },
+    writeRate: createWriteRateLimiter({
+      secret: 'library-export-fixture-rate-secret',
+      overrides: JSON.stringify({ 'new-account': { write: { maximum: 100000, seconds: 86400 } } }),
+    }),
     ratePeer: () => '127.0.0.1',
   });
   await sql`INSERT INTO access.exposure_opening("group",valid,transaction_id) SELECT g,tstzrange('2020-01-01',NULL,'[)'),${owner} FROM unnest(${['personal_library', 'reading_progress', 'collections']}::text[]) g`;
   for (let i = 0; i < 18; i++) {
-    const subject = newId(route);
-    if (i === 4) {
-      const key = randomUUID();
-      const response = await app.handle(
-        new Request('http://kernel.test/v1/subjects', {
-          method: 'POST',
-          headers: {
-            authorization: `Bearer ${fixture.bearer('owner')}`,
-            'content-type': 'application/json',
-            'idempotency-key': JSON.stringify(key),
-          },
-          body: JSON.stringify({ type: 'schema:Book', labels: { en: 'Recovered occurrence subject' } }),
-        }),
-      );
-      if (response.status !== 201)
-        throw new Error(`Native Subject creation failed: ${response.status} ${await response.text()}`);
-      subjectIds.push(((await response.json()) as { subject: { id: string } }).subject.id);
-    } else {
-      await sql`INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id) VALUES(${route},${subject},'schema:Book',${owner})`;
-      subjectIds.push(subject);
-    }
+    const response = await command('POST', '/v1/subjects', {
+      type: 'schema:Book',
+      labels: { en: i === 4 ? 'Recovered occurrence subject' : `Archived subject ${i + 1}` },
+    });
+    if (response.status !== 201)
+      throw new Error(`Native Subject creation failed: ${response.status} ${await response.text()}`);
+    const subject = ((await response.json()) as { subject: { id: string } }).subject.id;
+    subjectIds.push(subject);
     await sql`INSERT INTO library.entry(route,account_id,subject_id,state,library_profile_pin,revision,created_at,updated_at,transaction_id) VALUES(${route},${owner},${subject},${i === 0 ? 'old-unknown-state' : 'planned'},${legacyPin},1,now(),now(),${owner})`;
+  }
+  await installIdentityEpochBootstrap(db.pool);
+  for (const partition of new Set(subjectIds.map((id) => partitionOf(routeOf(id)!)))) {
+    let caughtUp = false;
+    for (let page = 0; page < 1000; page++) {
+      if ((await stepIdentityEpochBootstrap(db.pool, partition)).state === 'caught-up') {
+        caughtUp = true;
+        break;
+      }
+    }
+    if (!caughtUp) throw new Error('Library export Subject identities did not finish their finite bootstrap');
   }
   await sql`INSERT INTO library.personal_label(route,account_id,label_id,normalized_name,revision,created_at,updated_at,transaction_id) VALUES(${route},${owner},${label},'weekend',1,now(),now(),${owner})`;
   await sql`INSERT INTO library.label_assignment(route,account_id,subject_id,label_id,revision,created_at,updated_at,transaction_id) VALUES(${route},${owner},${subjectIds[1]},${label},1,now(),now(),${owner})`;
@@ -187,9 +200,52 @@ beforeAll(async () => {
     await sql`INSERT INTO library.list_import_anilist(route,account_id,import_id,ordinal,payload) VALUES(${route},${owner},${copy},${ordinal},${{ source, review: { id: 'never-export-review-id' }, outcome: { receipt: 'never-export-receipt' } }})`;
 });
 afterAll(async () => {
+  restoreLibraryBinding?.();
   await workClient?.close();
   await db?.close();
 });
+test('local and Episode unit facts retain equal IDs and independent counters under the capture fence', async () => {
+  const unitIds = subjectIds.filter((_, index) => index !== 5);
+  const unitId = unitIds[0]!;
+  let captured: { exportId: string; first: string } | undefined;
+  try {
+    await sql`INSERT INTO library.progress_unit(route,session_id,unit_id,added_at) SELECT ${route},${sparse},u,'2020-02-03 04:05:06.123456+00' FROM unnest(${unitIds}::text[]) u`;
+    await sql`INSERT INTO library.progress_episode(route,session_id,episode_subject_id,added_at) SELECT ${route},${sparse},u,'2021-03-04 05:06:07.654321+00' FROM unnest(${unitIds}::uuid[]) u`;
+    await sql`UPDATE library.progress_session SET completed_unit_count=19,episode_completed_count=17 WHERE route=${route} AND session_id=${sparse}`;
+    captured = await capture();
+    const records: ArchiveRecord[] = [];
+    let next: string | null = captured.first;
+    let manifest: unknown;
+    while (next) {
+      const page = await get(`/v1/libraryExports/${captured.exportId}/pages?cursor=${encodeURIComponent(next)}`);
+      records.push(...page.records);
+      next = page.next;
+      if (page.manifest) manifest = page.manifest;
+    }
+    const artifact = Buffer.from(JSON.stringify({ manifest, records }));
+    const decoded = decodeLibraryArchive(artifact);
+    expect(decoded.records).toEqual(records);
+    const units = decoded.records.filter((row) => row.section === 'units' && row.session_id === sparse);
+    expect(units).toHaveLength(36);
+    expect(new Set(units.map((row) => JSON.stringify([row.unit_kind, row.unit_id]))).size).toBe(36);
+    const matching = units.filter((row) => row.unit_id === unitId);
+    expect(matching).toHaveLength(2);
+    expect(matching.map((row) => row.unit_kind)).toEqual(['local', 'episode']);
+    expect(matching.map((row) => row.unit_id)).toEqual([unitId, unitId]);
+    expect(decoded.records.find((row) => row.session_id === sparse && row.section === 'sessions'))
+      .toMatchObject({ completed_unit_count: 19, episode_completed_count: 17 });
+    await sql`UPDATE library.progress_episode SET added_at=added_at+interval '1 second' WHERE route=${route} AND session_id=${sparse} AND episode_subject_id=${unitId}`;
+    expect(await get(`/v1/libraryExports/${captured.exportId}`)).toMatchObject({ state: 'stale', first: null });
+    expect(await get(`/v1/libraryExports/${captured.exportId}/pages?cursor=${encodeURIComponent(captured.first)}`))
+      .toMatchObject({ state: 'stale', records: [], manifest: null });
+  } finally {
+    if (captured) expect((await request('DELETE', `/v1/libraryExports/${captured.exportId}`)).status).toBe(200);
+    await sql`DELETE FROM library.progress_unit WHERE route=${route} AND session_id=${sparse} AND unit_id=ANY(${unitIds}::text[])`;
+    await sql`DELETE FROM library.progress_episode WHERE route=${route} AND session_id=${sparse} AND episode_subject_id=ANY(${unitIds}::uuid[])`;
+    await sql`UPDATE library.progress_session SET completed_unit_count=2,episode_completed_count=0 WHERE route=${route} AND session_id=${sparse}`;
+  }
+});
+
 test('native owner export streams independent persisted facts, preserves dates, and retries original identity', async () => {
   expect((await request('POST', '/v1/libraryExports', 'anonymous')).status).toBe(401);
   const original = await capture(key);
@@ -315,7 +371,7 @@ test('native owner export streams independent persisted facts, preserves dates, 
   });
   expect(decoded.fullRestoration).toBe(false);
 
-  await fixture.grant({ route, id: subjectIds[4]! }, 'owner', 'subject:read');
+  await fixture.grant({ route: routeOf(subjectIds[4]!)!, id: subjectIds[4]! }, 'owner', 'subject:read');
   const archiveBase64 = Buffer.from(JSON.stringify({ manifest: archiveManifest, records: archiveRecords })).toString(
     'base64',
   );
@@ -398,9 +454,7 @@ test('native owner export streams independent persisted facts, preserves dates, 
     404,
   );
 
-  const recoveryAccess = fixture.access({
-    actions: new Map([...scopes.map((action) => [action, { anonymous: false }] as const), ...LIFECYCLE_ACTIONS]),
-  });
+  const recoveryAccess = nativeAccess;
   const ownerActor = await recoveryAccess.authenticate(fixture.bearer('owner'), {
     pool: db.pool,
     deadline: Date.now() + 10_000,
@@ -490,7 +544,7 @@ test('native owner export streams independent persisted facts, preserves dates, 
   ]);
   expect(directCollections.collections.find((item) => item.id === collection)?.eligible).toBe(true);
 
-  await fixture.grant({ route, id: subjectIds[4]! }, 'other', 'subject:read');
+  await fixture.grant({ route: routeOf(subjectIds[4]!)!, id: subjectIds[4]! }, 'other', 'subject:read');
   const otherActor = await recoveryAccess.authenticate(fixture.bearer('other'), {
     pool: db.pool,
     deadline: Date.now() + 10_000,

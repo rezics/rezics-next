@@ -22,6 +22,11 @@ import { eraseFeedInboxPage } from './feed-activity.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { eraseAccountNoticesPage, type NoticeErasureCursor } from './notices.ts';
 import { eraseBoardSlowModeAccountPage } from './board-slow.ts';
+import { markAccountErasureFound } from './account-erasure-progress.ts';
+import {
+  advanceKnowledgeAccountErasure,
+  isKnowledgeAccountErasureCursor,
+} from './knowledge-account-erasure.ts';
 
 const workflow = 'content.account-erasure.step';
 const retentionWorkflow = 'content.account-erasure.retention';
@@ -29,6 +34,7 @@ type Phase =
   | 'close'
   | 'slow-mode'
   | 'authored'
+  | 'knowledge'
   | 'uploads'
   | 'reactions'
   | 'moderation'
@@ -265,9 +271,55 @@ async function step(
     found = page.found;
     if (page.next) nextCursor = page.next;
     else {
-      nextPhase = 'uploads';
+      nextPhase = 'knowledge';
       nextCursor = null;
     }
+  } else if (currentPhase === 'knowledge') {
+    if (progress.cursor !== null && !isKnowledgeAccountErasureCursor(progress.cursor))
+      throw new TypeError('Invalid Knowledge account-erasure cursor');
+    const page = await runCommand(
+      pool,
+      {
+        partition: partitionOf(home),
+        deadline: deadlineFor(120_000),
+        receipt: {
+          actorAccountId: accountId,
+          kind: 'content.account-erasure.knowledge',
+          key: `${accountId}:${expectedStep}`,
+          digest: createHash('sha256')
+            .update(JSON.stringify([progress.erased_at.toISOString(), progress.cursor]))
+            .digest(),
+        },
+      },
+      async (tx) => {
+        // Progress stores the status API's millisecond timestamp; Access keeps its native precision.
+        const proof = await tx.query(
+          `SELECT 1 FROM content.account_erasure_progress p
+           JOIN access.erasure e ON e.route=p.route AND e.account_id=p.account_id
+             AND date_trunc('milliseconds',e.at)=p.erased_at
+           WHERE p.route=$1 AND p.account_id=$2 AND p.step=$3 AND p.phase='knowledge'
+             AND p.cursor IS NOT DISTINCT FROM $4::jsonb
+             AND NOT EXISTS (SELECT 1 FROM access.erasure_acknowledgement a
+               WHERE a.route=p.route AND a.account_id=p.account_id AND a.participant='content')
+           FOR SHARE OF e FOR UPDATE OF p`,
+          [
+            home,
+            accountId,
+            expectedStep,
+            progress.cursor === null ? null : JSON.stringify(progress.cursor),
+          ],
+        );
+        if (!proof.rowCount) throw new Error('Knowledge account erasure requires its current committed participant step');
+        const result = await advanceKnowledgeAccountErasure(tx, accountId, progress.cursor, 100);
+        if (result.found > 0) await markAccountErasureFound(tx, accountId, 'content');
+        return noEffect(result);
+      },
+    ).then((result) => result.value);
+    found = page.found;
+    nextCursor = page.next;
+    pendingNow = page.pending === true;
+    if (pendingNow) delayMs = 60_000;
+    else if (page.next === null) nextPhase = 'uploads';
   } else if (currentPhase === 'uploads') {
     const page = await eraseAccountUploadsPage(
       { pool, storage },

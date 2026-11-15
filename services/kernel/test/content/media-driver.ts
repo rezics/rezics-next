@@ -1,6 +1,8 @@
 import { afterAll, mock } from 'bun:test';
 import { Pool } from 'pg';
 import sharp, { type SharpInput, type SharpOptions } from 'sharp';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import type {
   ContentMediaDriver,
   Media,
@@ -81,6 +83,8 @@ type MediaScenario = {
   erasureJob: ReturnType<typeof createErasureJob>;
 };
 let scenario: MediaScenario | undefined;
+type MediaUploadScenario = Omit<MediaScenario, 'anchors'>;
+let uploadScenario: MediaUploadScenario | undefined;
 
 type SharedContentSystem = {
   databaseUrl: string;
@@ -167,6 +171,7 @@ async function closeSharedContentSystem(): Promise<void> {
     }
     shared.onAuthentication = undefined;
     if (scenario?.system === shared.system) scenario = undefined;
+    if (uploadScenario?.system === shared.system) uploadScenario = undefined;
     if (sharedSystemPromise === pending) sharedSystemPromise = undefined;
     if (errors.length) throw new AggregateError(errors, 'Shared content fixture cleanup failed');
   })();
@@ -180,6 +185,12 @@ process.once('beforeExit', () => void closeSharedContentSystem());
 export function currentMediaScenario() {
   if (!scenario) throw new Error('The native media scenario has not been opened');
   return scenario;
+}
+
+/** Native account/Auth and byte-processing fixture, independent of Post containers. */
+export function currentMediaUploadScenario() {
+  if (!uploadScenario) throw new Error('The native media upload scenario has not been opened');
+  return uploadScenario;
 }
 
 function outcomeRoute(method: string, path: string) {
@@ -238,7 +249,31 @@ function parameter(record: SqlExecution, names: readonly string[], name: string)
   return record.parameters[index];
 }
 
-export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
+export function createContentMediaDriver(): Promise<ContentMediaDriver> {
+  return createMediaDriver(true);
+}
+
+export type KnowledgeMediaDriver = Pick<ContentMediaDriver,
+  | 'authorId' | 'close' | 'reserve' | 'complete' | 'authenticationEvidence'
+  | 'process' | 'inspect' | 'derivatives' | 'decode' | 'processingEvidence'
+  | 'source' | 'placeOriginal'
+>;
+
+/** Share the existing lifecycle engine while provisioning only native identities.
+ * The test creates its real Knowledge document before reserving any media.
+ */
+export async function createKnowledgeMediaDriver(): Promise<KnowledgeMediaDriver> {
+  const driver = await createMediaDriver(false);
+  return {
+    authorId: driver.authorId, close: driver.close, reserve: driver.reserve,
+    complete: driver.complete, authenticationEvidence: driver.authenticationEvidence,
+    process: driver.process, inspect: driver.inspect, derivatives: driver.derivatives,
+    decode: driver.decode, processingEvidence: driver.processingEvidence,
+    source: driver.source, placeOriginal: driver.placeOriginal,
+  };
+}
+
+async function createMediaDriver(withPostContainers: boolean): Promise<ContentMediaDriver> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL must name a migrated application template');
   const shared = await acquireSharedContentSystem(databaseUrl);
@@ -265,11 +300,13 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
   const captureAuthentication = (bearer: string, actor: AccountActor) => verified.set(bearer, actor);
   shared.onAuthentication = captureAuthentication;
   let mediaScenario: MediaScenario | undefined;
+  let mediaUploadScenario: MediaUploadScenario | undefined;
   let closing: Promise<void> | undefined;
   const close = () =>
     (closing ??= (async () => {
       const errors: unknown[] = [];
       if (scenario === mediaScenario) scenario = undefined;
+      if (uploadScenario === mediaUploadScenario) uploadScenario = undefined;
       observeSharp = undefined;
       if (shared.onAuthentication === captureAuthentication) shared.onAuthentication = undefined;
       for (const release of [
@@ -292,7 +329,12 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
     // fixture boundary before creating resources so later tests can move the
     // command clock to an earlier fixed instant without predating their grants.
     await system.clock.setCommandTime(new Date().toISOString());
-    const { containers, posts } = await provisionMediaContainers(system, { namespace });
+    const anchors = withPostContainers ? await provisionMediaContainers(system, { namespace }) : undefined;
+    if (!withPostContainers) await bootstrapRelease(pool, bundledRelease);
+    function contentAnchors() {
+      if (!anchors) throw new Error('This media upload fixture has no Post containers');
+      return anchors;
+    }
     const baseline = await pool.query<{ transaction_id: string }>('SELECT transaction_id::text FROM core.receipt');
     const setupTransactions = baseline.rows.map((row) => row.transaction_id);
     const issueFresh = (original: ContentCredential) =>
@@ -390,8 +432,8 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
         decision: row.decision,
       }));
     }
-    function routed(id: string, fallback = containers.thread.route): string {
-      return routeOf(id) === null ? newId(fallback) : id;
+    function routed(id: string, fallback?: number): string {
+      return routeOf(id) === null ? newId(fallback ?? contentAnchors().containers.thread.route) : id;
     }
     async function deny(resourceId: string, action: string) {
       await pool.query(
@@ -405,7 +447,7 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
       let captured = references.get(input.requestId);
       if (!captured) {
         const containerId = routed(input.containerId);
-        const post = posts.get(containerId);
+        const post = contentAnchors().posts.get(containerId);
         captured = {
           path:
             input.kind === 'post'
@@ -458,7 +500,7 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
 
     const driver: ContentMediaDriver = {
       authorId: system.actors.author.actor.accountId,
-      containers,
+      get containers() { return contentAnchors().containers; },
       close,
       async reserve(as, input) {
         const mark = observer.records.length;
@@ -713,14 +755,14 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
       },
       async revokeReferenceAuthority(containerId, kind) {
         await deny(
-          kind === 'post' ? containerId : posts.get(containerId)!.id,
+          kind === 'post' ? containerId : contentAnchors().posts.get(containerId)!.id,
           kind === 'post' ? 'post:create' : 'post:revise',
         );
       },
       async setParentVisibility(value) {
         await pool.query(
           'UPDATE content.thread SET visibility=$3,security_revision=security_revision+1 WHERE route=$1 AND thread_id=$2',
-          [containers.thread.route, containers.thread.id, value === 'private' ? 'protected' : 'taken_down'],
+          [contentAnchors().containers.thread.route, contentAnchors().containers.thread.id, value === 'private' ? 'protected' : 'taken_down'],
         );
       },
       async erase(objectId) {
@@ -733,7 +775,7 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
         observer.armFault({
           match: { statement: commandFence.sql },
           boundary: 'before',
-          error: new CommandUnavailableError('overloaded', containers.thread.partition),
+          error: new CommandUnavailableError('overloaded', contentAnchors().containers.thread.partition),
         });
       },
       async failNextStorageDelete(key) {
@@ -765,8 +807,12 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
         return { claim: claimResult, collection: collectionResult };
       },
     };
-    mediaScenario = { system, anchors: { containers, posts }, erasureJob: erasure };
-    scenario = mediaScenario;
+    mediaUploadScenario = { system, erasureJob: erasure };
+    uploadScenario = mediaUploadScenario;
+    if (anchors) {
+      mediaScenario = { system, anchors, erasureJob: erasure };
+      scenario = mediaScenario;
+    }
     return driver;
   } catch (error) {
     await close();

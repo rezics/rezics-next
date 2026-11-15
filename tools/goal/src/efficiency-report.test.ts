@@ -1,4 +1,4 @@
-import { expect, setSystemTime, test } from 'bun:test';
+import { expect, setSystemTime, test, spyOn } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawn, execFileSync } from 'node:child_process';
@@ -126,14 +126,24 @@ test('scheduled native reports omit the legacy lifetime census while manual repo
       .query('INSERT INTO native_execution_units VALUES (?, ?, ?, ?, ?)')
       .run(unit.id, unit.threadId, '%1', unit.worktree, JSON.stringify(unit));
     stages.length = 0;
-    const scheduled = await renderHourlyEfficiencyReport(h.db, { ...options, view: 'native-scheduled' });
+    const queries = spyOn(h.db, 'query');
+    let scheduled = '';
+    try {
+      scheduled = await renderHourlyEfficiencyReport(h.db, { ...options, view: 'native-scheduled' });
+      expect(queries.mock.calls.some(([sql]) => /\bFROM\s+worker_promotions\b/i.test(sql))).toBe(false);
+    } finally {
+      queries.mockRestore();
+    }
     expect(stages).not.toContain('lifecycle');
     expect(stages).toContain('native');
+    expect(stages).not.toContain('promotion');
+    expect(scheduled).toContain('Legacy managed promotion: unmeasured');
     expect(scheduled).toContain('Legacy managed lifecycle census: unmeasured');
     expect(scheduled).toContain('unknown (lifetime census omitted)');
     stages.length = 0;
     const manual = await renderHourlyEfficiencyReport(h.db, options);
     expect(stages).toContain('lifecycle');
+    expect(stages).toContain('promotion');
     expect(manual).not.toContain('lifetime census omitted');
   } finally {
     h.close();
@@ -210,14 +220,14 @@ test('hourly report uses timestamped outcomes and leaves missing lifecycle evide
       .run(JSON.stringify({ id: 'promotion', phase: 'stabilize-blocked' }));
 
     const report = await renderHourlyEfficiencyReport(h.db, { bucket, now });
-    expect(report).toContain('Landings in UTC hour: dev 1; stabilize 0; main 0; unknown 0 (each task counted once).');
+    expect(report).toContain('Legacy managed landings in UTC hour: dev 1; stabilize 0; main 0; unknown 0 (each task counted once).');
     expect(report).toContain(
       'Landing operations in UTC hour: 2 terminal; 1 timed; 1 unknown duration; p50 1800000 ms; p90 1800000 ms.',
     );
     expect(report).toContain('Backlog returns in bucket: 0.');
-    expect(report).toContain('Landing identities: landed#2 at 2026-10-31T01:10:00.000Z (dev).');
+    expect(report).toContain('Legacy managed landing identities: landed#2 at 2026-10-31T01:10:00.000Z (dev).');
     expect(report).toContain('Last useful landing: landed#2 at 2026-10-31T01:10:00.000Z.');
-    expect(report).toContain('Worker starts / finishes in bucket: 2 starts (including resumes) / 1 finished attempts.');
+    expect(report).toContain('Legacy managed worker starts / finishes in bucket: 2 starts (including resumes) / 1 finished attempts.');
     expect(report).toContain('Guard firings in bucket: new-failure 1; environment 1.');
     expect(report).toContain('Current landing queue age: 1 queued attempts; oldest 2700000 ms.');
     expect(report).toContain('queued#1');
@@ -234,7 +244,7 @@ test('hourly report uses timestamped outcomes and leaves missing lifecycle evide
   const db = openDb(join(empty.path, 'empty.sqlite'));
   try {
     const report = await renderHourlyEfficiencyReport(db, { bucket: '2026-10-31T01:00:00.000Z' });
-    expect(report).toContain('Landings: unknown (timestamped integration history unavailable).');
+    expect(report).toContain('Legacy managed landings: unknown (timestamped integration history unavailable).');
     expect(report).toContain('Backlog returns in bucket: unknown (flow history unavailable).');
     expect(report).toContain('Last useful landing: unknown');
     expect(report).toContain('Current waits: unknown (current task state unavailable).');
@@ -348,14 +358,14 @@ test('hourly aggregation preserves interleaved waits and normalized landings as 
     const { readControlPolicy } = await import('./policy.ts');
     const policy = readControlPolicy({ hourlyReport: { goalRows: 2, landingRows: 2 } });
     const report = await renderHourlyEfficiencyReport(h.db, { bucket, policy });
-    expect(report).toContain('Landings in UTC hour: dev 2; stabilize 0; main 0; unknown 1 (each task counted once).');
-    expect(report).toContain('Landings by Goal: content 1, search 1; 1 more Goals omitted.');
+    expect(report).toContain('Legacy managed landings in UTC hour: dev 2; stabilize 0; main 0; unknown 1 (each task counted once).');
+    expect(report).toContain('Legacy managed landings by Goal: content 1, search 1; 1 more Goals omitted.');
     expect(report).toContain(
-      'Landing identities: ambiguous#1 at 2026-10-31T01:05:00.000Z (unknown); alpha#1 at 2026-10-31T01:10:00.000Z (dev); 1 more omitted.',
+      'Legacy managed landing identities: ambiguous#1 at 2026-10-31T01:05:00.000Z (unknown); alpha#1 at 2026-10-31T01:10:00.000Z (dev); 1 more omitted.',
     );
-    expect(report).toContain('Urgent landings (excluded from throughput): urgent#1.');
-    expect(report).toContain('Worker starts / finishes in bucket: 2 starts (including resumes) / 2 finished attempts.');
-    expect(report).toContain('Urgent worker starts / finishes in bucket (excluded from throughput): 2 / 1.');
+    expect(report).toContain('Legacy managed urgent landings (excluded from throughput): urgent#1.');
+    expect(report).toContain('Legacy managed worker starts / finishes in bucket: 2 starts (including resumes) / 2 finished attempts.');
+    expect(report).toContain('Legacy managed urgent worker starts / finishes in bucket (excluded from throughput): 2 / 1.');
     expect(report).toContain('Check-slot wait in bucket: 3 completed request/acquire pairs; p90 4m.');
   } finally {
     h.close();
@@ -907,12 +917,12 @@ test('source-neutral propagation stays out of attribution while real and late la
       productLineMeasurement: nextMeasurement,
     });
     expect(backfill.snapshot.report).toContain(
-      'Landing identities: late-integration#1 at 2026-10-31T01:10:00.000Z (dev).',
+      'Legacy managed landing identities: late-integration#1 at 2026-10-31T01:10:00.000Z (dev).',
     );
     expect(backfill.snapshot.report).toContain(
       'Aggregate late integration backfill in this bucket: 3 additions newly visible since',
     );
-    expect(backfill.snapshot.report).toContain('Late integrations remain visible in their integration bucket');
+    expect(backfill.snapshot.report).toContain('Late integration backfill is older committed source newly visible on dev');
     expect(backfill.snapshot.observation.backfillProductLines).toBe(3);
     expect(backfill.snapshot.rolling).toEqual({ productLines: 0, attribution: 'measured' });
 

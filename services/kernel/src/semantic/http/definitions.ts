@@ -504,7 +504,10 @@ export function definitionRoutes(
       },
       async ({ actor, admission, job }) => {
         try {
-          return await admission.run('normal', job, () => catalogue().head(catalogueReadContext(actor, job.deadline)));
+          const head = await admission.run('normal', job, () =>
+            catalogue().head(catalogueReadContext(actor, job.deadline)),
+          );
+          return Response.json(head);
         } catch (error) {
           return definitionProblem(error);
         }
