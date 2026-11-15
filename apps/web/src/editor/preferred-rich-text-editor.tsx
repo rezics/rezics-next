@@ -8,7 +8,7 @@ import { localizedMediaLabels } from './media-labels';
 import { useMemo } from 'react';
 
 /** Every Web authoring host uses one account/device/session preference binding. */
-export function PreferredRichTextEditor({ toolbar: _toolbar, ...props }: RichTextEditorProps) {
+export function PreferredRichTextEditor(props: RichTextEditorProps) {
   const preferences = useEditorPreferences();
   const media = useEditorImagePresentation(props.value);
   const mediaVisitKey = useMemo(

@@ -8,7 +8,7 @@ import {
   type DocumentSnapshot,
 } from '@rezics/document';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import type { EditorPreferences } from '../preferences.ts';
 import { RichTextEditor } from './rich-text-editor.tsx';
@@ -104,38 +104,61 @@ function PresetReviewHost({
   const [preferences, setPreferences] = useState<EditorPreferences>({});
   const [saves, setSaves] = useState(0);
   const [pending, setPending] = useState(false);
+  const [invalid, setInvalid] = useState(false);
+  const [saved, setSaved] = useState(document);
+  const current = useRef({ document, pending, invalid });
+  const save = () => {
+    const draft = current.current;
+    if (readOnly || draft.pending || draft.invalid || !checkDocument(draft.document)) return;
+    setSaved(draft.document);
+    setSaves((count) => count + 1);
+  };
   const label = reviewLabel(preset, readOnly);
   return (
     <form
       className="mx-auto flex w-full max-w-5xl flex-col gap-3"
       onSubmit={(event) => {
         event.preventDefault();
-        if (!pending && !readOnly && checkDocument(document)) setSaves((count) => count + 1);
+        save();
       }}
     >
       <RichTextEditor
         value={document}
         onChange={(next) => {
+          current.current = { document: next, pending: false, invalid: false };
           setDocument(next);
           setPending(false);
+          setInvalid(false);
         }}
-        onSnapshotPending={() => setPending(true)}
+        onSnapshotPending={() => {
+          current.current.pending = true;
+          setPending(true);
+        }}
+        onSnapshotError={() => {
+          current.current.invalid = true;
+          setInvalid(true);
+        }}
         label={label}
         preset={preset}
         readOnly={readOnly}
         preferences={preferences}
         onPreferencesChange={setPreferences}
         preferencesScope="session"
-        onSave={() => {
-          if (!readOnly) setSaves((count) => count + 1);
-        }}
+        onSave={save}
         actions={
-          <Button type="submit" disabled={pending || readOnly}>
+          <Button type="submit" disabled={pending || invalid || readOnly}>
             Save draft
           </Button>
         }
       />
-      <output aria-label="Saved drafts">{saves}</output>
+      {!readOnly ? (
+        <>
+          <p role="status" className="text-sm text-muted-foreground">
+            {invalid ? 'Draft needs repair' : pending ? 'Preparing draft' : document !== saved ? 'Unsaved changes' : 'Draft saved'}
+          </p>
+          <output className="sr-only" aria-label="Saved drafts">{saves}</output>
+        </>
+      ) : null}
     </form>
   );
 }

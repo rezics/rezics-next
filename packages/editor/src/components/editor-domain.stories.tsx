@@ -104,6 +104,7 @@ export const DomainAnnotations: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const textbox = canvas.getByRole('textbox', { name: 'Annotated document' });
+    await userEvent.click(canvas.getByText('More tools', { exact: true }));
     await selectEditorText(textbox, '漢字');
     await userEvent.click(canvas.getByRole('button', { name: 'Ruby annotation' }));
     let dialog = within(await screen.findByRole('dialog', { name: 'Ruby annotation' }));
@@ -171,6 +172,7 @@ export const StaleAnnotationTarget: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const textbox = canvas.getByRole('textbox', { name: 'Annotated document' });
+    await userEvent.click(canvas.getByText('More tools', { exact: true }));
     await selectEditorText(textbox, '漢字');
     await userEvent.click(canvas.getByRole('button', { name: 'Ruby annotation' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Ruby annotation' }));

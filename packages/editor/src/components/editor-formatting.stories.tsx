@@ -63,6 +63,7 @@ export const AuthoredFormatting: Story = {
     selection.removeAllRanges();
     selection.addRange(range);
     document.dispatchEvent(new Event('selectionchange'));
+    await userEvent.click(canvas.getByText('More tools', { exact: true }));
     await userEvent.click(canvas.getByRole('button', { name: 'Text colors' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Text colors' }));
     await userEvent.type(dialog.getByRole('textbox', { name: 'Text color' }), '#991b1b');
@@ -90,6 +91,7 @@ export const CodeLanguage: Story = {
     const canvas = within(canvasElement);
     const textbox = canvas.getByRole('textbox', { name: 'Authored formatting document' });
     await userEvent.click(within(textbox).getByText('const value = 1;'));
+    await userEvent.click(canvas.getByText('More tools', { exact: true }));
     await waitFor(() => expect(canvas.getByRole('button', { name: 'Code language' })).toBeEnabled());
     await userEvent.click(canvas.getByRole('button', { name: 'Code language' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Code language' }));

@@ -335,13 +335,17 @@ export function NativeDraftComposer({
         </section>
       ) : null}
       <p className="studio-help" role="status">
-        {form.snapshot === 'invalid'
-          ? m.studio_workspace_snapshot_error({}, options)
-          : form.snapshot === 'pending'
-            ? m.studio_workspace_snapshot_pending({}, options)
-            : atRisk
-              ? m.studio_workspace_unsaved({}, options)
-              : m.studio_workspace_private_draft({}, options)}
+        {state.operation && ownsCommand
+          ? m.studio_workspace_creating({}, options)
+          : ownsCommand && state.issue?.kind === 'uncertain'
+            ? m.studio_workspace_failure_uncertain({}, options)
+            : form.snapshot === 'invalid'
+              ? m.studio_workspace_snapshot_error({}, options)
+              : form.snapshot === 'pending'
+                ? m.studio_workspace_snapshot_pending({}, options)
+                : atRisk
+                  ? m.studio_workspace_unsaved({}, options)
+                  : m.studio_workspace_private_draft({}, options)}
       </p>
       <details className="studio-technical">
         <summary>{m.studio_native_metadata({}, options)}</summary>

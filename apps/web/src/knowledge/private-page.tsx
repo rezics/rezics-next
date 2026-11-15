@@ -1594,8 +1594,18 @@ function PrivateKnowledgeEditor({
       title={head.title}
       locale={locale}
       status={
-        <p className="text-sm text-muted-foreground">
-          {dirty ? m.knowledge_workspace_unsaved({}, options) : m.knowledge_private_current_head({}, options)}
+        <p role="status" className="text-sm text-muted-foreground">
+          {revisionBusy
+            ? m.knowledge_private_saving({}, options)
+            : canReplay
+              ? m.knowledge_private_uncertain({}, options)
+              : requiresHeadReview
+                ? m.knowledge_private_review_before_save({}, options)
+                : editorPending
+                  ? m.studio_workspace_snapshot_pending({}, options)
+                  : dirty
+                    ? m.knowledge_workspace_unsaved({}, options)
+                    : m.knowledge_private_current_head({}, options)}
         </p>
       }
       navigation={

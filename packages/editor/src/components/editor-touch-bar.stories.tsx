@@ -399,7 +399,7 @@ export const HiddenForFinePointer: Story = {
   async play({ canvasElement }) {
     expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
     const { canvas } = await selectText(canvasElement);
-    expect(canvas.queryByRole('toolbar', { name: 'Formatting toolbar' })).toBeNull();
+    expect(canvas.getByRole('toolbar', { name: 'Formatting toolbar' })).toBeVisible();
     const toolbar = within(await canvas.findByRole('toolbar', { name: 'Format text' }));
     const bold = toolbar.getByRole('button', { name: 'Bold' });
     await userEvent.click(bold);

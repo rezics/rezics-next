@@ -525,11 +525,13 @@ async function journey(canvasElement: HTMLElement) {
     await events.click(find.getByRole('button', { name: 'Next match' }));
     await events.click(find.getByRole('button', { name: 'Previous match' }));
     if (run.kind === 'chapter') {
+      await events.click(find.getByRole('button', { name: 'Match case / Whole words' }));
       await events.click(find.getByRole('checkbox', { name: 'Whole words' }));
       await frames();
       await events.click(find.getByRole('checkbox', { name: 'Whole words' }));
       await waitFor(() => expect(find.getByRole('status')).toHaveTextContent(`of ${total} matches`));
     }
+    await events.click(find.getByRole('button', { name: 'Replace with' }));
     await events.type(find.getByRole('textbox', { name: 'Replace with' }), 'b');
     const bookmark = TextSelection.create(beforeBulk, middle).getBookmark();
     pending = trackPosition(editor, middle);

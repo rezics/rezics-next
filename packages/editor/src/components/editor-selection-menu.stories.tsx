@@ -68,8 +68,6 @@ export const MarkCommands: Story = {
     for (const [name, mark] of [
       ['Bold', 'bold'],
       ['Italic', 'italic'],
-      ['Strikethrough', 'strike'],
-      ['Inline code', 'code'],
     ]) {
       const button = toolbar.getByRole('button', { name });
       await userEvent.click(button);
@@ -78,7 +76,20 @@ export const MarkCommands: Story = {
         expect(checked(marks.latest.current)?.content?.[0]?.marks?.some((value) => value.type === mark)).toBe(true);
       });
     }
-    await userEvent.click(toolbar.getByRole('button', { name: 'Clear formatting' }));
+    for (const [name, mark] of [
+      ['Strikethrough', 'strike'],
+      ['Inline code', 'code'],
+    ]) {
+      await userEvent.click(toolbar.getByRole('button', { name: 'More formatting' }));
+      const item = await screen.findByRole('menuitemcheckbox', { name });
+      await expect(item).toHaveAttribute('aria-checked', 'false');
+      await userEvent.click(item);
+      await waitFor(() =>
+        expect(checked(marks.latest.current)?.content?.[0]?.marks?.some((value) => value.type === mark)).toBe(true),
+      );
+    }
+    await userEvent.click(toolbar.getByRole('button', { name: 'More formatting' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Clear formatting' }));
     await waitFor(() => expect(checked(marks.latest.current)?.content?.[0]?.marks ?? []).toEqual([]));
     expect(checked(marks.latest.current)?.content?.[0]?.text).toBe('Selected words');
   },
@@ -141,7 +152,7 @@ export const KeyboardReach: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const textbox = canvas.getByRole('textbox', { name: 'Post' });
-    expect(canvas.queryByRole('toolbar')).toBeNull();
+    expect(canvas.queryByRole('toolbar', { name: 'Selection tools' })).toBeNull();
     await select(canvasElement);
     const toolbar = within(await canvas.findByRole('toolbar', { name: 'Selection tools' }));
     await userEvent.keyboard('{Alt>}{F10}{/Alt}');
@@ -169,7 +180,7 @@ export const KeyboardReach: Story = {
     expect(window.getSelection()?.toString()).toBe('Selected words');
     window.getSelection()?.collapseToEnd();
     document.dispatchEvent(new Event('selectionchange'));
-    await waitFor(() => expect(canvas.queryByRole('toolbar')).toBeNull());
+    await waitFor(() => expect(canvas.queryByRole('toolbar', { name: 'Selection tools' })).toBeNull());
     expect(checkDocument(keyboard.latest.current)).toBe(true);
   },
 };

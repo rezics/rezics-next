@@ -4,6 +4,7 @@
 import type { Editor } from '@tiptap/core';
 import type { Transaction } from '@tiptap/pm/state';
 import { useEditorState } from '@tiptap/react';
+import { BubbleMenu } from '@tiptap/react/menus';
 import { isInTable } from '@tiptap/pm/tables';
 import { Button } from '@rezics/ui/shadcn/button';
 import { TooltipProvider } from '@rezics/ui/shadcn/tooltip';
@@ -22,7 +23,7 @@ import {
   ChevronDown,
   Trash2,
 } from 'lucide-react';
-import { Fragment, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { Fragment, useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import type { RichTextEditorLabels } from '../../editor-labels.ts';
 import {
@@ -34,7 +35,7 @@ import {
 import { ActionButton } from './action-button.tsx';
 import { tableLabelsForLanguage } from './table-labels.ts';
 import { editorCommandsForPresentation } from '../../editor-command-preferences.ts';
-import { returnFocus } from '../../editor-menu-helpers.ts';
+import { bubbleOptions, returnFocus } from '../../editor-menu-helpers.ts';
 
 const icons = {
   addColumnBefore: ArrowLeft,
@@ -67,11 +68,13 @@ export function TableControls({
   editor,
   labels,
   labelOverrides,
+  container,
   isCurrent,
 }: {
   editor: Editor;
   labels: RichTextEditorLabels;
   labelOverrides?: Partial<RichTextEditorLabels> | undefined;
+  container?: RefObject<HTMLDivElement | null>;
   isCurrent: () => boolean;
 }) {
   const state = useEditorState({
@@ -122,7 +125,10 @@ export function TableControls({
   }, [labels, state.active]);
   const localized = tableLabelsForLanguage(language);
   const [tabStop, setTabStop] = useState<TableCommandName>('addColumnBefore');
-  const groups = [state.presented.map(({ id }) => id)];
+  const ordered = state.presented.map(({ id }) => id);
+  const groups = tableCommandGroups
+    .map((group) => ordered.filter((name) => group.some((member) => member === name)))
+    .filter((group) => group.length > 0);
   const enabled = groups.flat().filter((name) => state.can[name]);
   const activeTabStop = enabled.includes(tabStop) ? tabStop : enabled[0];
   const label = (name: TableCommandName) => labelOverrides?.[name] ?? localized[name];
@@ -178,62 +184,76 @@ export function TableControls({
 
   if (!isCurrent() || !state.active || state.presented.length === 0) return null;
 
+  const toolbar = (
+    <div
+      ref={root}
+      role="toolbar"
+      aria-label={labels.table}
+      aria-orientation="horizontal"
+      data-slot="editor-table-controls"
+      className="flex min-w-0 max-w-[min(42rem,calc(100vw-1rem))] items-center gap-1 rounded-lg border bg-popover p-1 text-popover-foreground shadow-md"
+      onKeyDown={moveFocus}
+    >
+      <div className="min-w-0 max-w-full flex-1 md:hidden">
+        <Menu
+          key={`${state.tableId}:${renderedRevision}`}
+          title={labels.table}
+          entries={entries}
+          trigger={
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-auto min-h-7 w-full min-w-0 justify-start whitespace-normal"
+              aria-label={labels.table}
+              onMouseDown={(event) => event.preventDefault()}
+            >
+              <Table aria-hidden="true" />
+              <span className="min-w-0 flex-1 text-start break-words">{labels.table}</span>
+              <ChevronDown aria-hidden="true" />
+            </Button>
+          }
+        />
+      </div>
+      <div className="hidden min-w-0 max-w-full flex-1 items-center gap-1 overflow-x-auto overscroll-x-contain md:flex">
+        {groups.map((group, index) => (
+          <Fragment key={group[0]}>
+            {index ? <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-border" /> : null}
+            {group.map((name) => {
+              const Icon = icons[name];
+              return (
+                <ActionButton
+                  key={name}
+                  label={label(name)}
+                  icon={<Icon aria-hidden="true" />}
+                  disabled={!state.can[name]}
+                  action={() => run(name)}
+                  tabIndex={activeTabStop === name ? 0 : -1}
+                  onFocus={() => {
+                    if (isCurrent()) setTabStop(name);
+                  }}
+                  className={name.startsWith('delete') ? 'text-destructive' : undefined}
+                />
+              );
+            })}
+          </Fragment>
+        ))}
+      </div>
+    </div>
+  );
   return (
     <TooltipProvider delay={600}>
-      <div
-        ref={root}
-        role="toolbar"
-        aria-label={labels.table}
-        aria-orientation="horizontal"
-        data-slot="editor-table-controls"
-        className="mb-2 flex w-full min-w-0 max-w-full items-center gap-1 rounded-lg border bg-popover p-1 text-popover-foreground"
-        onKeyDown={moveFocus}
-      >
-        <div className="min-w-0 max-w-full flex-1 md:hidden">
-          <Menu
-            key={`${state.tableId}:${renderedRevision}`}
-            title={labels.table}
-            entries={entries}
-            trigger={
-              <Button
-                type="button"
-                variant="ghost"
-                className="h-auto min-h-7 w-full min-w-0 justify-start whitespace-normal"
-                aria-label={labels.table}
-                onMouseDown={(event) => event.preventDefault()}
-              >
-                <Table aria-hidden="true" />
-                <span className="min-w-0 flex-1 text-start break-words">{labels.table}</span>
-                <ChevronDown aria-hidden="true" />
-              </Button>
-            }
-          />
-        </div>
-        <div className="hidden min-w-0 max-w-full flex-1 items-center gap-1 overflow-x-auto overscroll-x-contain md:flex">
-          {groups.map((group, index) => (
-            <Fragment key={group[0]}>
-              {index ? <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-border" /> : null}
-              {group.map((name) => {
-                const Icon = icons[name];
-                return (
-                  <ActionButton
-                    key={name}
-                    label={label(name)}
-                    icon={<Icon aria-hidden="true" />}
-                    disabled={!state.can[name]}
-                    action={() => run(name)}
-                    tabIndex={activeTabStop === name ? 0 : -1}
-                    onFocus={() => {
-                      if (isCurrent()) setTabStop(name);
-                    }}
-                    className={name.startsWith('delete') ? 'text-destructive' : undefined}
-                  />
-                );
-              })}
-            </Fragment>
-          ))}
-        </div>
-      </div>
+      {container ? (
+        <BubbleMenu
+          editor={editor}
+          pluginKey="rezicsTableControls"
+          appendTo={() => container.current!}
+          updateDelay={0}
+          options={{ ...bubbleOptions, placement: 'bottom' }}
+          shouldShow={({ editor: current, state: live }) => isCurrent() && current.isEditable && isInTable(live)}
+        >
+          {toolbar}
+        </BubbleMenu>
+      ) : toolbar}
     </TooltipProvider>
   );
 }

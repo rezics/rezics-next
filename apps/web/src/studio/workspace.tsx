@@ -735,27 +735,31 @@ export function StudioWorkbench({
                 <h2 ref={editorHeading} tabIndex={-1}>
                   {documentTitle}
                 </h2>
-                <div className="studio-document-feedback">
-                  <p className="studio-help" role="status">
-                    {selected.invalid
-                      ? m.studio_workspace_snapshot_error({}, options)
-                      : selected.uploading
-                        ? m.studio_workspace_upload_pending({}, options)
-                        : selected.snapshotPending
-                          ? m.studio_workspace_snapshot_pending({}, options)
-                          : selected.dirty
-                            ? m.studio_workspace_unsaved({}, options)
-                            : m.studio_workspace_saved_at({ savedAt: selected.source.revision.savedAt }, options)}
-                  </p>
-                  {!selected.source.permissions.edit ? (
+                {!selected.source.permissions.edit ? (
+                  <div className="studio-document-feedback">
                     <p role="status">{m.studio_workspace_readonly({}, options)}</p>
-                  ) : null}
-                </div>
+                  </div>
+                ) : null}
               </header>
               <div className="studio-document-toolbar">
-                <span className="studio-toolbar-current" aria-hidden="true">
-                  {documentTitle}
-                </span>
+                <div className="min-w-0 flex-1">
+                  <span className="studio-toolbar-current" aria-hidden="true">{documentTitle}</span>
+                  <p className="studio-help" role="status">
+                    {state.operation === 'save'
+                      ? m.studio_workspace_saving({}, options)
+                      : unresolved && state.issue
+                        ? workspaceFailureMessage(state.issue.kind, locale)
+                        : selected.invalid
+                          ? m.studio_workspace_snapshot_error({}, options)
+                          : selected.uploading
+                            ? m.studio_workspace_upload_pending({}, options)
+                            : selected.snapshotPending
+                              ? m.studio_workspace_snapshot_pending({}, options)
+                              : selected.dirty
+                                ? m.studio_workspace_unsaved({}, options)
+                                : m.studio_workspace_saved_at({ savedAt: selected.source.revision.savedAt }, options)}
+                  </p>
+                </div>
                 <div className="studio-toolbar-actions">
                   <div className="studio-action-row" role="group" aria-label={m.studio_workspace_views({}, options)}>
                     {!historyOpen ? (
