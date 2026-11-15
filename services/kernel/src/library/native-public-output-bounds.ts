@@ -27,7 +27,8 @@ import transition from './native-public-output-transition.sql';
 import consume from './native-public-output-consume.sql';
 import fence from './native-public-output-fence.sql';
 import retained from './native-public-output-retained.sql';
-import frozenLock from './native-public-output-frozen-lock.sql';
+import frozenOrigin from './native-public-output-frozen-origin.sql';
+import frozenOwnerLock from './native-public-output-frozen-owner-lock.sql';
 import frozenSuccessor from './native-public-output-frozen-successor.sql';
 
 export const NATIVE_PUBLIC_OUTPUT_PAGE_LIMIT = 100;
@@ -416,11 +417,22 @@ function retainedStatement() {
     ),
   );
 }
-function frozenLockStatement() {
-  return memoizedValue(frozenLockStatement, () =>
-    statement('frozen-lock', frozenLock, captureBinds, { present: 1 }, {
-      nativeRows: 24,
-      nativePoints: 5,
+function frozenOriginStatement() {
+  return memoizedValue(frozenOriginStatement, () =>
+    statement('frozen-origin', frozenOrigin, [65535, id, id], {
+      ...publicationRow, incarnation: text.repeat(128), epoch: epochBind, currentPosition: decimal,
+    }, {
+      nativeRows: 96,
+      nativePoints: 11,
+      relationBytes: 1024,
+    }),
+  );
+}
+function frozenOwnerLockStatement() {
+  return memoizedValue(frozenOwnerLockStatement, () =>
+    statement('frozen-owner-lock', frozenOwnerLock, [65535, id], { present: 1 }, {
+      nativeRows: 16,
+      nativePoints: 2,
       relationBytes: 64,
     }),
   );
@@ -441,7 +453,7 @@ function bindStatement() {
       bind,
       bindInsertBinds,
       { native_xid: decimal },
-      { nativeRows: 160, nativePoints: 32, statements: 3, relationBytes: 32768 },
+      { nativeRows: 280, nativePoints: 53, statements: 4, relationBytes: 32768 },
     ),
   );
 }
@@ -708,7 +720,8 @@ function staticStatements() {
       xminStatement(),
       provenanceStatement(),
       retainedStatement(),
-      frozenLockStatement(),
+      frozenOriginStatement(),
+      frozenOwnerLockStatement(),
       frozenSuccessorStatement(),
       bindStatement(),
       receivingStatement(),
@@ -885,12 +898,12 @@ export function NATIVE_PUBLIC_OUTPUT_JOURNEYS() {
       ),
       revalidate: sumBounds(ownerStatement().bound, bindingLockStatement().bound, committedProof(), currentTuple(true)),
       frozenRead: sumBounds(
-        ownerStatement().bound,
+        frozenOwnerLockStatement().bound,
         bindingLockStatement().bound,
         committedProof(),
-        retainedStatement().bound,
-        frozenLockStatement().bound,
+        repeatBound(frozenOriginStatement().bound, 2),
       ),
+      frozenOrigin: sumBounds(frozenOwnerLockStatement().bound, frozenOriginStatement().bound),
       frozenSuccessor: sumBounds(bindingStatement().bound, committedProof(), frozenSuccessorStatement().bound),
       transfer: sumBounds(
         bindingStatement().bound,
@@ -899,6 +912,8 @@ export function NATIVE_PUBLIC_OUTPUT_JOURNEYS() {
         committedProof(),
         transitionReadStatement().bound,
         retainedStatement().bound,
+        frozenOwnerLockStatement().bound,
+        repeatBound(frozenOriginStatement().bound, 2),
         transitionStatement().bound,
         holdSuccessorStatement().bound,
         consumeStatement().bound,

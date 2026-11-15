@@ -347,6 +347,15 @@ export function publicOutputRetireWork(): WorkDimensions {
   );
 }
 
+export function publicOutputFrozenCaptureWork(): WorkDimensions {
+  const native = NATIVE_PUBLIC_OUTPUT_JOURNEYS();
+  return nativePublicOutputWorkDimensions(sumBounds(
+    { ...publicOutputAdvanceWork(), engineRequests: 0 },
+    repeatBound(native.frozenRead, 3),
+    repeatBound(native.frozenOrigin, 2),
+  ));
+}
+
 export function publicOutputFreezeWork(): WorkDimensions {
   const native = NATIVE_PUBLIC_OUTPUT_JOURNEYS();
   return nativePublicOutputWorkDimensions(sumBounds(

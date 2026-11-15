@@ -69,6 +69,7 @@ export type NativePublicOutputBinding = Readonly<{
 export type PublicOutputBindingSelection = Readonly<{
   captureId: string;
   definitionDigest: string;
+  frozen?: true;
   publication: NativePublicOutputRef & Readonly<{ activation: NativeOutputActivation }>;
 }>;
 export type PublicOutputDispositionSelection = Readonly<{
@@ -78,7 +79,7 @@ export type PublicOutputDispositionSelection = Readonly<{
   disposition: NativePublicOutputReceipt;
 }>;
 export type PublicOutputReadOptions = PublicOutputWork &
-  Readonly<{ after: CollectionSourceRawKey | null; limit: number }>;
+  Readonly<{ after: CollectionSourceRawKey | null; limit: number; frozen?: true }>;
 export type PublicOutputPage =
   | PublicOutputRefusal
   | Readonly<{

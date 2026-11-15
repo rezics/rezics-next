@@ -833,7 +833,11 @@ publication and still-held seal. The Source sweep transfers the hold through Sem
 disposition, with the same generation and seal. Terminal cleanup can detach the curator and original account
 publication row only when this is the sole remaining hold. Subsequent member reads revalidate the committed
 successor, account-free retained generation and current identity scope. Other held or uncertain copies keep
-de-identification pending.
+de-identification pending. The same sweep can capture a retained built-in output whose original capture was
+missing or unfinished at T. It reads only the immutable frozen set under its actual activation, and resumes
+the original capture if one exists. A terminal freeze now retains the verified activation coordinates before
+History can minimize the original write basis. Older frozen rows without those coordinates require the matching
+original basis or an already committed native binding that retained the same activation.
 `collection-publication-http.test.ts` retains the unmet real API/default-worker acceptance and focused closed
 grammar/privacy assertions. It uses the existing native fixture and actual output rows/receipt, with no replacement
 worker or domain backend. Schema availability and local typing do not establish that native acceptance.

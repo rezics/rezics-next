@@ -418,7 +418,11 @@ export function createPublicIdentityOutputCapture(
       return refuse('binding', 'unavailable', `semantic.public-source.${resolved.reason}`);
     if (!equal(resolved.definition, definition)) return refuse('binding', 'changed');
   }
-  async function captureAcceptance(request: T.PublicIdentityOutputAcceptance, options: T.PublicIdentityOutputWork) {
+  async function captureAcceptance(
+    request: T.PublicIdentityOutputAcceptance,
+    options: T.PublicIdentityOutputWork,
+    frozen = false,
+  ) {
     // Snapshot all input before any asynchronous release. Never accept an identity/effect from a caller.
     const r = structuredClone(request);
     id(r.captureId);
@@ -452,7 +456,7 @@ export function createPublicIdentityOutputCapture(
             )
           )
             return refuse('binding', 'changed');
-          await eligible(tx, a, work, options.deadline, nativeOutput);
+          await eligible(tx, a, work, options.deadline, nativeOutput, frozen ? 'frozen-transfer' : 'live');
           await component(tx);
           return { status: 'accepted' as const, capture: locator(a) };
         }
@@ -461,7 +465,12 @@ export function createPublicIdentityOutputCapture(
         const result = await work.compose(async (allowance) =>
           nativeOutput.bindAndHoldNativePublicCollectionOutput(
             tx,
-            { captureId: r.captureId, definitionDigest: hash(r.definition), publication: r.publication },
+            {
+              captureId: r.captureId,
+              definitionDigest: hash(r.definition),
+              publication: r.publication,
+              ...(frozen ? { frozen: true as const } : {}),
+            },
             context(tx, pool, options.deadline, allowance),
           ),
         );
@@ -529,12 +538,16 @@ export function createPublicIdentityOutputCapture(
    * producer's persisted progress and compares the immutable activation before using any hold. */
   async function advancePublication(
     publication: T.PublicIdentityOutputAcceptance['publication'],
-    releaseDigest: string,
+    releaseDigest: string | null,
     options: T.PublicIdentityOutputWork,
+    frozen = false,
   ) {
     const captureId = publication.generation;
     id(captureId);
-    if (routeOf(publication.collectionId) !== publication.route || !/^sha256:[0-9a-f]{64}$/.test(releaseDigest))
+    if (
+      routeOf(publication.collectionId) !== publication.route ||
+      (releaseDigest === null ? !frozen : !/^sha256:[0-9a-f]{64}$/.test(releaseDigest))
+    )
       throw new TypeError('Invalid Collection publication capture locator');
     const home = partitionOf(publication.route);
     return execute(options, async (work) => {
@@ -547,7 +560,7 @@ export function createPublicIdentityOutputCapture(
           native.collectionId !== publication.collectionId ||
           native.outputGeneration !== publication.generation ||
           !equal(native.activation, publication.activation) ||
-          accepted.definition.meaning.digest !== releaseDigest
+          (!frozen && accepted.definition.meaning.digest !== releaseDigest)
         )
           return refuse('binding', 'changed');
         const progress = await one<Pick<Progress, 'version' | 'exhausted'>>(tx, resumeSQL, [home, captureId]);
@@ -555,6 +568,7 @@ export function createPublicIdentityOutputCapture(
         return { capture: locator(accepted), progress };
       });
       if (!before) {
+        if (!releaseDigest) return refuse('binding');
         const release = await read(options.deadline, async (tx) => {
           const size = await one<{ bytes: number }>(tx, releaseSizeSQL, [releaseDigest]);
           if (!size || size.bytes > 2097152) return refuse('binding');
@@ -574,18 +588,18 @@ export function createPublicIdentityOutputCapture(
         );
         if (definition.status !== 'resolved') return refuse('binding');
         const accepted = await work.compose((allowance) =>
-          captureAcceptance({ captureId, definition: definition.definition, publication }, { ...options, allowance }),
+          captureAcceptance({ captureId, definition: definition.definition, publication }, { ...options, allowance }, frozen),
         );
         if (accepted.status !== 'accepted') return refuse(accepted.reason, accepted.status, accepted.dependency);
         return { status: 'more' as const };
       }
       if (before.progress.exhausted) {
-        const sealed = await work.compose((allowance) => seal(before.capture, { ...options, allowance }));
+        const sealed = await work.compose((allowance) => seal(before.capture, { ...options, allowance }, frozen));
         if (sealed.status !== 'sealed') return refuse(sealed.reason, sealed.status, sealed.dependency);
         return { status: 'sealed' as const };
       }
       const page = await work.compose((allowance) =>
-        capturePage(before.capture, before.progress.version, 8, { ...options, allowance }),
+        capturePage(before.capture, before.progress.version, 8, { ...options, allowance }, frozen),
       );
       if (page.status !== 'progress' && page.status !== 'exhausted')
         return refuse(page.reason, page.status, page.dependency);
@@ -721,13 +735,14 @@ export function createPublicIdentityOutputCapture(
     continuation: string,
     inputLimit: number,
     options: T.PublicIdentityOutputWork,
+    frozen = false,
   ) {
     if (!Number.isInteger(inputLimit) || inputLimit < 1 || inputLimit > 100 || !/^(0|[1-9][0-9]*)$/.test(continuation))
       throw new TypeError('Invalid bounded output continuation');
     return execute(options, async (work) => {
       const a = await read(options.deadline, (tx) => load(tx, l));
       let p = await command(l.partition, options.deadline, l.captureId, async (tx) => {
-        await eligible(tx, a, work, options.deadline, nativeOutput);
+        await eligible(tx, a, work, options.deadline, nativeOutput, frozen ? 'frozen-transfer' : 'live');
         const p = await one<Progress>(tx, progressSQL, [l.partition, l.captureId]);
         if (!p || p.version !== continuation) return refuse('continuation', 'changed');
         await component(tx);
@@ -741,6 +756,7 @@ export function createPublicIdentityOutputCapture(
             deadline: options.deadline,
             after: p!.after_key,
             limit: Math.min(inputLimit, 8),
+            ...(frozen ? { frozen: true as const } : {}),
           }),
         );
         if (page.status !== 'ready' || !samePublication(page.tuple, a.binding.tuple))
@@ -773,7 +789,7 @@ export function createPublicIdentityOutputCapture(
           65536,
         );
         await command(l.partition, options.deadline, l.captureId, async (tx) => {
-          await eligible(tx, a, work, options.deadline, nativeOutput);
+          await eligible(tx, a, work, options.deadline, nativeOutput, frozen ? 'frozen-transfer' : 'live');
           const now = await one<Progress>(tx, progressSQL, [l.partition, l.captureId]);
           if (!now || now.version !== continuation || now.pending) return refuse('continuation', 'changed');
           if (
@@ -801,7 +817,7 @@ export function createPublicIdentityOutputCapture(
       )
         return refuse('closure', 'changed');
       return command(l.partition, options.deadline, l.captureId, async (tx) => {
-        await eligible(tx, a, work, options.deadline, nativeOutput);
+        await eligible(tx, a, work, options.deadline, nativeOutput, frozen ? 'frozen-transfer' : 'live');
         const now = await one<Progress>(tx, progressSQL, [l.partition, l.captureId]);
         if (!now || now.version !== continuation || !equal(now.pending, plan)) return refuse('continuation', 'changed');
         const version = (BigInt(now.version) + 1n).toString(),
@@ -838,11 +854,11 @@ export function createPublicIdentityOutputCapture(
       });
     });
   }
-  async function seal(l: T.PublicIdentityOutputCapture, options: T.PublicIdentityOutputWork) {
+  async function seal(l: T.PublicIdentityOutputCapture, options: T.PublicIdentityOutputWork, frozen = false) {
     return execute(options, (work) =>
       command(l.partition, options.deadline, l.captureId, async (tx) => {
         const a = await load(tx, l);
-        await eligible(tx, a, work, options.deadline, nativeOutput);
+        await eligible(tx, a, work, options.deadline, nativeOutput, frozen ? 'frozen-transfer' : 'live');
         const previous = await one<Seal>(tx, sealSQL, [l.partition, l.captureId]);
         if (previous) {
           await component(tx);
@@ -1259,10 +1275,25 @@ export function createPublicIdentityOutputCapture(
     );
   }
   return {
-    accept: captureAcceptance,
-    advancePublication,
-    capturePage,
-    seal,
+    accept: (request: T.PublicIdentityOutputAcceptance, options: T.PublicIdentityOutputWork) =>
+      captureAcceptance(request, options),
+    advancePublication: (
+      publication: T.PublicIdentityOutputAcceptance['publication'],
+      releaseDigest: string,
+      options: T.PublicIdentityOutputWork,
+    ) => advancePublication(publication, releaseDigest, options),
+    advanceFrozenPublication: (
+      publication: T.PublicIdentityOutputAcceptance['publication'],
+      releaseDigest: string | null,
+      options: T.PublicIdentityOutputWork,
+    ) => advancePublication(publication, releaseDigest, options, true),
+    capturePage: (
+      capture: T.PublicIdentityOutputCapture,
+      continuation: string,
+      limit: number,
+      options: T.PublicIdentityOutputWork,
+    ) => capturePage(capture, continuation, limit, options),
+    seal: (capture: T.PublicIdentityOutputCapture, options: T.PublicIdentityOutputWork) => seal(capture, options),
     ready,
     revalidate: ready,
     membership: (l: T.PublicIdentityOutputCapture, originals: readonly string[], options: T.PublicIdentityOutputWork) =>
