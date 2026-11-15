@@ -412,8 +412,7 @@ async function boundedResponse(response: Response, limit: number, signal: AbortS
   }
 }
 
-/** Public, read-only JSON transport sharing the importer's response and retry bounds. */
-export function createBoundedPublicGet(options: {
+type PublicGetOptions = {
   origin: string;
   pathPrefix: string;
   fetch?: typeof fetch;
@@ -425,10 +424,21 @@ export function createBoundedPublicGet(options: {
   maxWaitMs?: number;
   maxTotalWaitMs?: number;
   deadlineMs?: number;
-}): (url: string, signal?: AbortSignal) => Promise<Response> {
+};
+
+type PublicGetPolicy = {
+  protocols: readonly string[];
+  redirect: RequestRedirect;
+  cache?: RequestCache;
+};
+
+function createBoundedGet(
+  options: PublicGetOptions,
+  policy: PublicGetPolicy,
+): (url: string, signal?: AbortSignal) => Promise<Response> {
   const origin = new URL(options.origin);
   if (
-    origin.protocol !== 'https:' ||
+    !policy.protocols.includes(origin.protocol) ||
     origin.username ||
     origin.password ||
     origin.pathname !== '/' ||
@@ -437,7 +447,11 @@ export function createBoundedPublicGet(options: {
     !options.pathPrefix.startsWith('/') ||
     options.pathPrefix.includes('..')
   )
-    throw new TypeError('Expected a bounded HTTPS read origin and path');
+    throw new TypeError(
+      policy.protocols.length === 1
+        ? 'Expected a bounded HTTPS read origin and path'
+        : 'Expected a bounded API read origin and path',
+    );
   const maxAttempts = boundedSetting(options.maxAttempts, MAX_IMPORT_ATTEMPTS, MAX_IMPORT_ATTEMPTS, 1);
   const maxResponseBytes = boundedSetting(
     options.maxResponseBytes,
@@ -480,16 +494,22 @@ export function createBoundedPublicGet(options: {
         signal.throwIfAborted();
         let response: Response;
         try {
-          response = await abortable(signal, () =>
-            upstream(url.href, {
+          response = await abortable(signal, async () => {
+            const received = await upstream(url.href, {
               method: 'GET',
               headers: { accept: 'application/json' },
               credentials: 'omit',
               referrerPolicy: 'no-referrer',
-              redirect: 'error',
+              redirect: policy.redirect,
+              ...(policy.cache === undefined ? {} : { cache: policy.cache }),
               signal,
-            }),
-          );
+            });
+            if (signal.aborted) {
+              void cancel(received.body);
+              signal.throwIfAborted();
+            }
+            return received;
+          });
         } catch (error) {
           signal.throwIfAborted();
           const delay = backoff(attempt);
@@ -539,6 +559,19 @@ export function createBoundedPublicGet(options: {
       clearDeadline?.();
     }
   };
+}
+
+/** Public provider GETs keep their HTTPS-only origin, response and retry bounds. */
+export function createBoundedPublicGet(options: PublicGetOptions) {
+  return createBoundedGet(options, { protocols: ['https:'], redirect: 'error' });
+}
+
+/** The independent Kernel reader observes an individual response, including native 308 and 503. */
+export function createBoundedPublicSubjectGet(options: Pick<PublicGetOptions, 'origin' | 'fetch'>) {
+  return createBoundedGet(
+    { ...options, pathPrefix: '/v1/subjects/', maxAttempts: 1 },
+    { protocols: ['http:', 'https:'], redirect: 'manual', cache: 'no-store' },
+  );
 }
 
 /** Transport for createKernelClient; session state and write validation remain with the client/server. */
