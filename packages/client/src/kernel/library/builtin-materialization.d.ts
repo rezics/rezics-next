@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import { type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import type { Access, AccountActor } from '../request/access.ts';
 import { type BuiltinCollectionKey } from './builtin-identity.ts';
+import type { CollectionChanges } from './collection-model.ts';
 import type { SavedCollectionRule } from './collection-rules.ts';
 type Client = Pick<PoolClient, 'query'>;
 type Key = Exclude<BuiltinCollectionKey, {
@@ -16,7 +17,7 @@ export type BuiltinMaterialization = Readonly<{
     key: Key;
     rule: SavedCollectionRule;
     authorization: CommandAuthorization;
-    materialize(tx: CommandTransaction): Promise<void>;
+    materialize(tx: CommandTransaction, metadata?: Partial<Omit<CollectionChanges, 'visibility'>>): Promise<void>;
 }>;
 /** One native header, retaining accepted meaning rather than choosing a new current release. Data only. */
 export declare function readBuiltinPublicationRule(client: Client, route: number, collectionId: string): Promise<BuiltinPublicationRule | null>;

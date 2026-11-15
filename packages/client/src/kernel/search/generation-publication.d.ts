@@ -29,6 +29,8 @@ export type SearchGenerationPublication = Readonly<{
         status: 'preparing';
         job: GenerationPublicationJob;
         cost: SearchPublicFilterCost;
+        next?: 'step' | 'activate';
+        advanced?: boolean;
     } | PublicFilterConsumerUnavailable>;
     close(): Promise<void>;
 }>;

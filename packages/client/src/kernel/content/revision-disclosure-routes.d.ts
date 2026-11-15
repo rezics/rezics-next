@@ -24561,6 +24561,7 @@ export declare function revisionDisclosureRoutes(app: ReturnType<typeof knowledg
                             query: {
                                 limit?: string | number;
                                 cursor?: string;
+                                subjectId?: string;
                             };
                             headers: unknown;
                             response: {

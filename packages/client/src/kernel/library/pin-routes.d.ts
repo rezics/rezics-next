@@ -7106,13 +7106,13 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 builtinLabels?: Record<string, string>;
                                 title: string | null;
                                 description: string | null;
-                                visibility: "private";
+                                visibility: "private" | "public" | "unlisted";
                                 allowedVisibilityActions?: ("private" | "public" | "unlisted")[];
                                 revision: number;
                                 presentationKind: string | null;
                                 presentationKindSource: "mixed" | "owner";
                                 cover: null;
-                                coverSource: "none";
+                                coverSource: "none" | "pending";
                             } | {
                                 id: string;
                                 curatorAccountId: string | null;
@@ -7161,6 +7161,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 subjectIds?: string[];
                                 revision: number;
                                 membershipKind: "dynamic";
+                                builtinKind?: "everything" | "liked" | "state";
                             } | null;
                         }[];
                         revision: number;

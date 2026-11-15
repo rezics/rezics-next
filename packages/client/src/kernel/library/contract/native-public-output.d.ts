@@ -69,6 +69,7 @@ export type NativePublicOutputBinding = Readonly<{
 export type PublicOutputBindingSelection = Readonly<{
     captureId: string;
     definitionDigest: string;
+    frozen?: true;
     publication: NativePublicOutputRef & Readonly<{
         activation: NativeOutputActivation;
     }>;
@@ -82,6 +83,7 @@ export type PublicOutputDispositionSelection = Readonly<{
 export type PublicOutputReadOptions = PublicOutputWork & Readonly<{
     after: CollectionSourceRawKey | null;
     limit: number;
+    frozen?: true;
 }>;
 export type PublicOutputPage = PublicOutputRefusal | Readonly<{
     status: 'ready';
@@ -130,6 +132,12 @@ export type NativePublicOutputApplication<Tx, PoolLike, Time> = Readonly<{
         work: WorkReceipt;
     }>>;
     revalidateNativePublicCollectionOutputHold(tx: Tx, binding: NativePublicOutputBinding, context: PublicOutputCommandContext<PoolLike, Time>): Promise<PublicOutputRefusal | Readonly<{
+        status: 'locked';
+        binding: NativePublicOutputBinding;
+        work: WorkReceipt;
+    }>>;
+    /** Read-only terminal freeze under the original hold or its independently committed successor. */
+    lockNativeFrozenCollectionOutput?(tx: Tx, binding: NativePublicOutputBinding, context: PublicOutputCommandContext<PoolLike, Time>, hold?: 'predecessor' | 'successor'): Promise<PublicOutputRefusal | Readonly<{
         status: 'locked';
         binding: NativePublicOutputBinding;
         work: WorkReceipt;

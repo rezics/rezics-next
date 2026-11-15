@@ -1,4 +1,4 @@
-/** Private bounded follow preparation shared by Search and Space entry. The writer remains follows.ts. */
+/** Private bounded follow preparation for disclosed discovery and feed targets. The writer remains follows.ts. */
 import type { Pool } from 'pg';
 import type { Access, Actor } from '../request/access.ts';
 import type { KernelClock } from '../clock.ts';

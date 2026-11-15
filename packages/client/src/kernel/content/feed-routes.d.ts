@@ -7053,6 +7053,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
         readonly 200: import("typebox").TUnsafe<Readonly<{
             feedItems: readonly import("./feed-contract.ts").FeedItem[];
             viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
+            viewerFollows?: import("./contract/feed.ts").FeedViewerFollows;
             next: string | null;
             asOf: string;
             reactionsAsOf?: import("./contract/feed.ts").FeedReactionFreshness | null;
@@ -7190,6 +7191,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
         readonly 200: Readonly<{
             feedItems: readonly import("./feed-contract.ts").FeedItem[];
             viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
+            viewerFollows?: import("./contract/feed.ts").FeedViewerFollows;
             next: string | null;
             asOf: string;
             reactionsAsOf?: import("./contract/feed.ts").FeedReactionFreshness | null;
@@ -7281,6 +7283,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
         readonly 200: Readonly<{
             feedItems: readonly import("./feed-contract.ts").FeedItem[];
             viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
+            viewerFollows?: import("./contract/feed.ts").FeedViewerFollows;
             next: string | null;
             asOf: string;
             reactionsAsOf?: import("./contract/feed.ts").FeedReactionFreshness | null;
@@ -7381,6 +7384,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             readonly 200: import("typebox").TUnsafe<Readonly<{
                 feedItems: readonly import("./feed-contract.ts").FeedItem[];
                 viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
+                viewerFollows?: import("./contract/feed.ts").FeedViewerFollows;
                 next: string | null;
                 asOf: string;
                 reactionsAsOf?: import("./contract/feed.ts").FeedReactionFreshness | null;
@@ -7557,6 +7561,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
 }) => Promise<Readonly<{
     feedItems: readonly import("./feed-contract.ts").FeedItem[];
     viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
+    viewerFollows?: import("./contract/feed.ts").FeedViewerFollows;
     next: string | null;
     asOf: string;
     reactionsAsOf?: import("./contract/feed.ts").FeedReactionFreshness | null;
@@ -7578,6 +7583,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
         readonly 200: import("typebox").TUnsafe<Readonly<{
             feedItems: readonly import("./feed-contract.ts").FeedItem[];
             viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
+            viewerFollows?: import("./contract/feed.ts").FeedViewerFollows;
             next: string | null;
             asOf: string;
             reactionsAsOf?: import("./contract/feed.ts").FeedReactionFreshness | null;
@@ -7714,6 +7720,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             readonly 200: Readonly<{
                 feedItems: readonly import("./feed-contract.ts").FeedItem[];
                 viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
+                viewerFollows?: import("./contract/feed.ts").FeedViewerFollows;
                 next: string | null;
                 asOf: string;
                 reactionsAsOf?: import("./contract/feed.ts").FeedReactionFreshness | null;
@@ -7805,6 +7812,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             readonly 200: Readonly<{
                 feedItems: readonly import("./feed-contract.ts").FeedItem[];
                 viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
+                viewerFollows?: import("./contract/feed.ts").FeedViewerFollows;
                 next: string | null;
                 asOf: string;
                 reactionsAsOf?: import("./contract/feed.ts").FeedReactionFreshness | null;
@@ -7908,6 +7916,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 readonly 200: Readonly<{
                     feedItems: readonly import("./feed-contract.ts").FeedItem[];
                     viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
+                    viewerFollows?: import("./contract/feed.ts").FeedViewerFollows;
                     next: string | null;
                     asOf: string;
                     reactionsAsOf?: import("./contract/feed.ts").FeedReactionFreshness | null;

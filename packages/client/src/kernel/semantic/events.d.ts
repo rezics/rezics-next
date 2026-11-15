@@ -6,6 +6,9 @@ export declare const CATALOGUE_PROGRESS: 'com.rezics.definitions.catalogue.progr
 export declare const CATALOGUE_ACTIVATED: 'com.rezics.definitions.catalogue.activated.v1';
 export declare const SUBJECT_MERGED: 'com.rezics.subject.merged.v1';
 export declare const SUBJECT_REVISED: 'com.rezics.subject.revised.v1';
+export declare const CANONICAL_GENERATION_COMMITTED: 'com.rezics.semantic.canonical-generation.committed.v1';
+export declare const CANONICAL_GENERATION_CONTINUATION: 'com.rezics.semantic.canonical-generation.continuation.v1';
+export declare const CANONICAL_GENERATION_DELIVERED: 'com.rezics.semantic.canonical-generation.delivered.v1';
 export declare const LINKS_MOVING: 'com.rezics.semantic.links.moving.v1';
 export declare const LINKS_CHANGED: 'com.rezics.semantic.links.changed.v1';
 export declare const LINK_KEYS_CHANGED: 'com.rezics.semantic.links.keys-changed.v1';
@@ -28,6 +31,18 @@ export declare const SUBJECT_PAGE_REPAIR_REQUESTED: 'com.rezics.semantic.subject
 export declare const SUBJECT_PAGE_WORK_COMMITTED: 'com.rezics.semantic.subject_page.work_committed.v1';
 /** Closed semantic event catalogue. Envelope identity and ordering belong to the kernel. */
 export declare const SEMANTIC_EVENTS: {
+    readonly "com.rezics.semantic.canonical-generation.committed.v1": Type.TObject<{
+        partition: Type.TInteger;
+        generation: Type.TString;
+    }>;
+    readonly "com.rezics.semantic.canonical-generation.delivered.v1": Type.TObject<{
+        partition: Type.TInteger;
+        generation: Type.TString;
+    }>;
+    readonly "com.rezics.semantic.canonical-generation.continuation.v1": Type.TObject<{
+        after: Type.TInteger;
+        limit: Type.TInteger;
+    }>;
     readonly "com.rezics.semantic.identity-scope.retirement.v1": Type.TObject<{
         sourceKey: Type.TString;
         scope: Type.TString;

@@ -7528,6 +7528,13 @@ CREATE INDEX knowledge_notebook_owner_page ON content.knowledge_notebook USING b
 
 
 --
+-- Name: knowledge_notebook_owner_subject_page; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX knowledge_notebook_owner_subject_page ON content.knowledge_notebook USING btree (route, owner_account_id, subject_id, created_at DESC, notebook_id) WHERE (NOT account_erased);
+
+
+--
 -- Name: knowledge_placement_child_height; Type: INDEX; Schema: content; Owner: -
 --
 

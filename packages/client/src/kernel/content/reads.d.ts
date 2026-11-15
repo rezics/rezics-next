@@ -190,7 +190,7 @@ type SelectionRound = Readonly<{
     anchors: readonly AnchoredPosition[];
 }>;
 export declare function selectBoardThreadCandidates(dependencies: ContentReadDependencies, boardId: BoardId, threadIds: readonly string[], context: ReadContext, decisions: ReadDecisions, query?: string): Promise<SelectionRound>;
-export declare function discloseBoardPageThreads(dependencies: ContentReadDependencies, boardId: BoardId, baseline: BoardView, threadIds: readonly string[], expectedRevisions: ReadonlyMap<string, string>, context: ReadContext, decisions: ReadDecisions, query?: string, subjectScope?: {
+export declare function discloseBoardPageThreads(dependencies: ContentReadDependencies, boardId: BoardId, inputBaseline: BoardView, inputThreadIds: readonly string[], inputExpectedRevisions: ReadonlyMap<string, string>, inputContext: ReadContext, decisions: ReadDecisions, query?: string, inputSubjectScope?: {
     subjectId: string;
     placeId: string;
 }): Promise<Readonly<{
@@ -356,11 +356,11 @@ export declare function readNoticeBoardContexts(dependencies: ContentReadDepende
  * This uses the ordinary batch disclosure round and retains its private source
  * rows, not equality of public JSON. No connection survives either round.
  */
-export declare function observeBoardRecords(dependencies: ContentReadDependencies, boardIds: readonly string[], context: ReadContext): Promise<Readonly<{
+export declare function observeBoardRecords(dependencies: ContentReadDependencies, inputBoardIds: readonly string[], inputContext: ReadContext): Promise<Readonly<{
     records: readonly Anchored<import('./model.ts').BoardRecord | null>[];
     current: () => Promise<boolean>;
 }>>;
-export declare function readBoards(dependencies: ContentReadDependencies, boardIds: readonly string[], context: ReadContext): Promise<readonly Anchored<import('./model.ts').BoardView | null>[]>;
+export declare function readBoards(dependencies: ContentReadDependencies, inputBoardIds: readonly string[], inputContext: ReadContext): Promise<readonly Anchored<import('./model.ts').BoardView | null>[]>;
 /** Edition publication enrolls just the selected source post. Ancestors keep their
  * ordinary read formula; this port cannot authorize an ordinary post route. */
 export declare function prepareEditionSource(dependencies: Pick<ContentReadDependencies, 'pool' | 'access' | 'clock'>, source: ContentEditionSource, context: ReadContext, time: AuthoritativeTime, accessContext: AccessContext, ordinarySource: boolean): Promise<Readonly<{

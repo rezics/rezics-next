@@ -2,6 +2,11 @@ import { type FieldErrorCode } from '../http/problem-error.ts';
 import type { AdmittedSearchRequest, SearchRequest } from './service-contract.ts';
 export declare function invalid(pointer: string, code: FieldErrorCode): never;
 export declare function unsupported(pointer: string, code?: FieldErrorCode): never;
+/** The public slice accepts one positive predicate over exact released bibliographic Types. */
+export declare function hasPublicBookSearchShape(request: {
+    filter?: unknown;
+    sort?: unknown;
+}): boolean;
 export declare function containsRealmPredicate(value: unknown): boolean;
 /** Parse and admit the caller's Search JSON once, before it reaches execution or cursor planning. */
 export declare function admitSearchRequest(request: SearchRequest): AdmittedSearchRequest;

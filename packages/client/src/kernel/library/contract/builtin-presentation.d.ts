@@ -4,6 +4,8 @@ export type BuiltinMemberOptions<Query> = {
     cursor?: string | null;
     deadline?: number;
     query?: Query;
+    view?: 'BASIC' | 'FULL';
+    languages?: readonly string[];
 };
 /** Native Source, owner truth and cursor execution remain the existing single maintained implementation. */
 export interface BuiltinMemberCapability<View, Query, Member> {

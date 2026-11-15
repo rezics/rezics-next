@@ -8,7 +8,7 @@ export declare function createBuiltinRuntime(config: Omit<OwnerQueryDependencies
     access?: Access;
     tokens?: KeyRing;
 }): {
-    read: (actor: import("./adapters/authorization.ts").Actor, id: string, scope?: "collection:delete" | "collection:read" | "collection:update", deadline?: number) => Promise<import("./builtin-runtime.ts").BuiltinCollectionView | null>;
+    read: (actor: import("./adapters/authorization.ts").Actor, id: string, scope?: "collection:delete" | "collection:read" | "collection:update", deadline?: number, forMembers?: boolean) => Promise<import("./builtin-runtime.ts").BuiltinCollectionView | null>;
     discover: (actor: import("./adapters/authorization.ts").Actor, after?: string | null, limit?: number) => Promise<import("./builtin-runtime.ts").BuiltinCollectionView[]>;
     resolve: (actor: import("./adapters/authorization.ts").Actor, key: Exclude<import("./builtin-identity.ts").BuiltinCollectionKey, {
         kind: 'liked';
