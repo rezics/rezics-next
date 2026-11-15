@@ -11,6 +11,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { assertGrowthAccessPaths, capture, checkGrowth, costOf, seed } from '../support/growth.ts';
 import {
   assertPageCapture,
+  capturedConsumer,
   consumerFixture,
   fixture,
   nativeProducer,
@@ -326,13 +327,8 @@ test('original capture survives native derived execution windows and exact relea
     };
     const book: string = (await f.post('/v1/subjects', { type: 'schema:Book', labels: { en: term }, statements: {} }))
       .subject.id;
-    const captured = await consumer.operations.capture({ plan: root, snapshot: 'pit' }, readContext());
-    if (captured.status === 'preparing') {
-      const repair = await consumer.operations.repairStep(captured.repair, readContext());
-      // Source settle cannot certify Search engine-visible repair. Do not inject completion.
-      expect(repair).toMatchObject({ status: 'unavailable', reason: 'source_pending' });
-      return;
-    }
+    // Finish the actual retained capture job; progress is not query or settlement authority.
+    const captured = await capturedConsumer(f, consumer, root, 'pit');
     expect(captured.status).toBe('captured');
     if (captured.status !== 'captured') throw new Error(captured.reason);
     const original = await binding.join({ queried: captured.queried }, readContext());

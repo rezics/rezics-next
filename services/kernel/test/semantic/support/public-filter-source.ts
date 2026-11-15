@@ -102,6 +102,7 @@ export const actions = [
   'source_fence:takedown',
   'definitions:publish',
   'definitions:activate',
+  'gate:definition_publication',
   'collection:create',
   'collection:update',
 ];
