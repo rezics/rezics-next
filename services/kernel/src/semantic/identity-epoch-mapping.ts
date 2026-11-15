@@ -32,6 +32,10 @@ import sourceEffect from './identity-epoch-mapping-source.sql';
 import inboundEffect from './identity-epoch-mapping-inbound.sql';
 import outboundEffect from './identity-epoch-mapping-outbound.sql';
 import removeInboundEffect from './identity-epoch-mapping-remove-inbound.sql';
+import {
+  beginIdentityMappingPointWithdrawal,
+  completeIdentityMappingPointWithdrawal,
+} from './identity-mapping-point-withdrawal.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { identityErasureRoles, bindSemanticProducerRoles, type SemanticCopyRole } from './erasure-producer.ts';
 
@@ -96,7 +100,8 @@ type Plan = {
   outputs: Output[];
 };
 type Work = { -readonly [K in keyof NativeStepWork]: NativeStepWork[K] };
-const mappingSourceTargets = new WeakMap<CommandTransaction, Set<string>>();
+type MappingSourceFrame = { targets: Set<string>; unit: number; planDigest: string };
+const mappingSourceFrames = new WeakMap<CommandTransaction, MappingSourceFrame>();
 const unavailable = (detail = 'Native mapping source, admission or receipt custody is unavailable') =>
   new IdentityEpochStoreError('identity_epoch_unavailable', detail);
 const stale = () =>
@@ -565,12 +570,12 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
         [proposed.home, job.jobId, head.unit + 1, job.epoch.toString(), saved.scope_digest, digest, transactionId],
       );
       const sources = new Set<string>();
-      mappingSourceTargets.set(tx, sources);
+      mappingSourceFrames.set(tx, { targets: sources, unit: head.unit + 1, planDigest: digest });
       let result: Plan;
       try {
         result = await apply(tx, job, saved, head, proposed, measured, transactionId);
       } finally {
-        mappingSourceTargets.delete(tx);
+        mappingSourceFrames.delete(tx);
       }
       await query(
         tx,
@@ -793,12 +798,41 @@ async function effectGate(
   measured: Work,
   transactionId: string,
 ) {
-  const sources = mappingSourceTargets.get(tx);
-  if (!sources || (sources.size > 0 && !sources.has(destination)))
+  const frame = mappingSourceFrames.get(tx);
+  if (!frame || (frame.targets.size > 0 && !frame.targets.has(destination)))
     throw unavailable('A local mapping plan requires exactly one native Source destination');
   await gate(tx, job, destination, original, previous, saved.scope_digest, measured, transactionId);
   await identityEpochStore().admitHomeEffect(tx, { kind: 'structural', original, destination, job });
-  sources.add(destination);
+  frame.targets.add(destination);
+}
+async function withdrawMappingSourcePoint(
+  tx: CommandTransaction,
+  job: IdentityJobRef,
+  saved: Saved,
+  original: string,
+  measured: Work,
+) {
+  const frame = mappingSourceFrames.get(tx);
+  if (!frame) throw unavailable('A local mapping plan requires exactly one native Source destination');
+  const status = await beginIdentityMappingPointWithdrawal(
+    tx,
+    {
+      job,
+      unit: frame.unit,
+      scopeDigest: saved.scope_digest,
+      planDigest: frame.planDigest,
+      original,
+      inputs: saved.inputs.map((input) => ({
+        terminal: input.terminal,
+        generation: input.generation,
+        basisVersion: input.basis_version,
+        controlPartition: input.control_partition,
+        ownerEpoch: input.owner_epoch,
+      })),
+    },
+    measured,
+  );
+  return status === 'withdrawn';
 }
 async function apply(
   tx: CommandTransaction,
@@ -996,6 +1030,7 @@ async function apply(
       measured,
       transactionId,
     );
+    const withdrawn = await withdrawMappingSourcePoint(tx, job, saved, change.original, measured);
     const result = await query(tx, measured, sourceEffect.sql, [
       sourceRoute,
       change.original,
@@ -1004,6 +1039,7 @@ async function apply(
       saved.intent.release,
       transactionId,
     ]);
+    if (withdrawn) await completeIdentityMappingPointWithdrawal(tx, change.original, measured);
     if (saved.intent.kind === 'unmerge') consumeRaw(measured, 2);
     if (result.rows[0]?.apply_identity_epoch_mapping_source === false)
       return { ...plan, frontier: next(head, 'source') };
@@ -1519,6 +1555,7 @@ async function apply(
     );
     const owner = await readPartition(tx, plan.home);
     if (!owner || owner.writeState !== 'active') throw unavailable();
+    const withdrawn = await withdrawMappingSourcePoint(tx, job, saved, change.original, measured);
     await query(
       tx,
       measured,
@@ -1542,6 +1579,7 @@ async function apply(
       ],
     );
     if (updated.rowCount !== 1) throw stale();
+    if (withdrawn) await completeIdentityMappingPointWithdrawal(tx, change.original, measured);
     return plan;
   }
   throw stale();
