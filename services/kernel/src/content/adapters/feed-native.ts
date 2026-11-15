@@ -243,7 +243,7 @@ export function createNativeFeedPorts(
     } else {
       if (followingSpace) return null;
       const collection = await producers.readCollection(actor, object.id, deadline);
-      if (collection.visibility !== 'public') return null;
+      if (collection.visibility !== 'public' || collection.title === null) return null;
       item = {
         id: activity.id,
         source: 'following',

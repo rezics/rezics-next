@@ -601,7 +601,7 @@ export function createPublicIdentityOutputCapture(
       const page = await work.compose((allowance) =>
         capturePage(before.capture, before.progress.version, 8, { ...options, allowance }, frozen),
       );
-      if (page.status !== 'progress' && page.status !== 'exhausted')
+      if (page.status === 'changed' || page.status === 'unavailable')
         return refuse(page.reason, page.status, page.dependency);
       return { status: 'more' as const };
     });

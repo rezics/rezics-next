@@ -31,7 +31,7 @@ export function prepareRelationGraph(
     (scope.orientation !== 'forward' && scope.orientation !== 'inverse')
   ) return unknownGraph('invalid-input', 'Expected one Context, release, property and orientation.');
   if (
-    scope.definition.datatype !== 'item' || scope.definition.relation?.acyclic !== true ||
+    scope.definition.datatype !== 'wikibase-item' || scope.definition.relation?.acyclic !== true ||
     scope.definition.relation.symmetric === true
   ) return unknownGraph('unsupported-property', 'Expected a declared acyclic directed item property.');
   if (coverage.selection !== 'effective' || coverage.observation !== 'coherent')
