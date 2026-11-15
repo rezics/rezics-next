@@ -38,9 +38,22 @@ WITH args AS MATERIALIZED (
   AND m.closure_export_transaction=i.export_transaction
   AND m.closure_registration_transaction=i.registration_transaction_id
   AND m.closure_install_transaction=i.install_transaction_id
-  AND m.closure_state IN ('active','withdrawn')
-  AND m.source_revision=d.revision AND d.revision=d.captured_revision
-  AND coalesce(r.target,m.original)=m.closure_immediate
+  AND ((m.closure_state='active' AND m.source_revision=d.revision AND d.revision=d.captured_revision
+    AND coalesce(r.target,m.original)=m.closure_immediate)
+   OR (m.closure_state='withdrawn' AND EXISTS (
+    SELECT 1 FROM semantic.identity_epoch_mapping_effect prior
+    JOIN semantic.identity_epoch_mapping_payload payload
+     ON payload.partition_no=prior.partition_no AND payload.job_id=prior.job_id AND payload.unit=prior.unit
+    JOIN semantic.identity_epoch_native_commit prior_commit
+     ON prior_commit.partition_no=prior.partition_no AND prior_commit.transaction_id=prior.transaction_id
+     AND prior_commit.purpose='mapping' AND prior_commit.xmin=prior.xmin
+     AND prior_commit.epoch=p.epoch AND prior_commit.position<=p.position
+    WHERE prior.partition_no=p.partition_no AND prior.job_id=i.job AND prior.job_epoch=i.job_epoch
+     AND prior.scope_digest=i.scope_digest
+     AND prior.source_image_version=1 AND octet_length(prior.source_image_digest)=32
+     AND payload.result->>'action'='source'
+     AND (payload.result->'change'->>'original')::uuid=m.original
+   )))
   AND m.closure_successor_ticket IS NULL AND m.closure_successor_original IS NULL
   AND m.closure_ticket_reservation IS NULL AND m.closure_source_reservation IS NULL
   AND m.closure_cancelled_successor IS NOT TRUE AND m.closure_claim IS NULL AND m.closure_mutation_xid IS NULL
