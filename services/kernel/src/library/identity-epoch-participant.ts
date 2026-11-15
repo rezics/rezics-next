@@ -1260,14 +1260,13 @@ export const stepLibraryIdentityEpoch: IdentityEpochStep = (pool, job) =>
     }
     if (saved.state !== 'pending') throw stale('Published identity job is missing its ALL-Library receipt');
     const retained = await withReadTransaction(pool, (tx) => readLibraryCompletion(tx, job), deadline);
-    if (retained) return identityEpochStore().reconcileStepReceipt(pool, { job, step, version: 1, native: retained });
     const home = identityJobPartition(job);
     const funded = activeIdentitySourceConsumerMaintenance(pool);
-    if (funded) {
+    if (!retained && funded) {
       const source = resolveLiveLibrarySource({ libraryWork: identitySourceConsumerLibraryWork }, pool, funded);
       const advanced = await stepLibraryIdentityEpochWithSource(pool, job, source);
       if (advanced.state !== 'closed') throw unavailable(`${sixDriverPending} (${advanced.state})`);
-    } else {
+    } else if (!retained) {
       const pending = await runCommand(pool, { partition: home, deadline }, async (tx) => {
         const result = await tx.query<QueuedEffect>(
           `SELECT original,effect_key,role,receiving_partition,receiving_epoch,
@@ -1311,13 +1310,14 @@ export const stepLibraryIdentityEpoch: IdentityEpochStep = (pool, job) =>
         ).rows[0];
         if (!admitted) throw stale('Library completion lost the admitted identity scope');
 
-        const replay = await readLibraryCompletion(tx, job);
-        if (replay) return noEffect(replay);
-
         const coverage = (
           await tx.query<{ building: boolean; affected: boolean; directory_empty: boolean }>(scanSql.sql, key)
         ).rows[0];
         if (!coverage?.directory_empty || coverage.building || coverage.affected) throw unavailable(sixDriverPending);
+
+        // Earlier unacknowledged local steps can replay only against the same locked admission cut.
+        const replay = await readLibraryCompletion(tx, job);
+        if (replay) return noEffect(replay);
 
         bindSemanticProducerRoles(tx, roles);
         recordIdentityEpochNativeCommit(tx, step);
