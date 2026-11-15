@@ -39,7 +39,7 @@ export function RealmHomeHeader({
         banner?.credit),
   );
   const title = distinctSpace ? (
-    <h2 id={headingId} className="text-3xl leading-tight font-semibold sm:text-4xl">
+    <h2 id={headingId} className="min-w-0 max-w-full text-3xl leading-tight font-semibold sm:text-4xl">
       <Link
         to="/realms/$id"
         params={{ id: realm.id }}
@@ -49,7 +49,7 @@ export function RealmHomeHeader({
       </Link>
     </h2>
   ) : (
-    <h1 id={headingId} className="text-3xl leading-tight font-semibold sm:text-4xl">
+    <h1 id={headingId} className="min-w-0 max-w-full text-3xl leading-tight font-semibold sm:text-4xl">
       {name}
     </h1>
   );
@@ -62,7 +62,7 @@ export function RealmHomeHeader({
     >
       {distinctSpace ? (
         <aside className="min-w-0 space-y-1 rounded-xl border border-border bg-muted/30 px-4 py-3 sm:px-5">
-          <h1 className="text-base leading-snug font-semibold">{space.title}</h1>
+          <h1 className="min-w-0 max-w-full text-base leading-snug font-semibold">{space.title}</h1>
           <p className="text-xs text-muted-foreground">
             {m.community_space_context({ realm: m.space_realm_heading() })}
           </p>
@@ -94,7 +94,7 @@ export function RealmHomeHeader({
           {participation ? (
             <aside
               data-slot="realm-home-participation"
-              className="min-w-0 max-w-full rounded-xl border border-border bg-background/70 p-3 sm:p-4 [&>*]:min-w-0 [&>*]:max-w-full [&_a]:h-auto [&_a]:min-h-11 [&_a]:max-w-full [&_a]:whitespace-normal [&_button]:h-auto [&_button]:min-h-11 [&_button]:max-w-full [&_button]:whitespace-normal"
+              className="min-w-0 max-w-full rounded-xl border border-border bg-background/70 p-3 sm:p-4 [&>*]:min-w-0 [&>*]:max-w-full [&_a]:h-auto [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:whitespace-normal [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:whitespace-normal"
             >
               {participation}
             </aside>
@@ -103,7 +103,7 @@ export function RealmHomeHeader({
       </div>
       <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(15rem,0.75fr)]">
         <section
-          className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4 sm:p-5"
+          className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4 sm:p-5 [&_a]:h-auto [&_a]:min-h-11 [&_a]:max-w-full [&_a]:whitespace-normal"
           aria-labelledby={rulesHeadingId}
         >
           <RulesHeading id={rulesHeadingId} className="text-base font-semibold">
@@ -112,7 +112,7 @@ export function RealmHomeHeader({
           <CommunityRules rules={community?.rules} />
         </section>
         {community && hasPresentationDetails ? (
-          <aside className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4 sm:p-5">
+          <aside className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4 sm:p-5 [&_a]:max-w-full [&_a]:whitespace-normal">
             <dl className="flex min-w-0 flex-col gap-2 text-xs text-muted-foreground [&>div]:min-w-0 [&>div]:max-w-full">
               {(['avatar', 'banner'] as const).map((slot) =>
                 community[slot].state !== 'available' ? (

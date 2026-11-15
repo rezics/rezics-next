@@ -200,11 +200,11 @@ export function CommunityRules({ rules }: { rules?: CommunityPresentation['rules
           <DocumentBody document={rules.value.body} locale={getLocale()} className="text-sm" />
           <a
             href={`/${getLocale()}/posts/${rules.value.postId}/revisions/${rules.value.revisionId}`}
-            className="inline-flex min-h-11 items-center text-sm text-primary hover:underline"
+            className="inline-flex h-auto min-h-11 min-w-11 max-w-full items-center text-start text-sm whitespace-normal text-primary hover:underline"
           >
             {m.board_community_rules_revision()}
           </a>
-          <p className="text-xs text-muted-foreground">{rules.value.licence}</p>
+          <p className="min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">{rules.value.licence}</p>
         </>
       ) : (
         <p className="text-sm text-muted-foreground">
@@ -223,9 +223,13 @@ export function ImageCredit({ image, loaded = true }: { image: RealmPresentation
   const credit = image.credit;
   if (!loaded || !credit) return null;
   return (
-    <p className="text-xs text-muted-foreground">
+    <p className="min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">
       © {credit.rightsHolder} ·{' '}
-      <a href={credit.via.url} rel="noopener noreferrer nofollow" className="underline">
+      <a
+        href={credit.via.url}
+        rel="noopener noreferrer nofollow"
+        className="max-w-full whitespace-normal underline"
+      >
         {credit.via.name}
       </a>{' '}
       · {credit.license}
