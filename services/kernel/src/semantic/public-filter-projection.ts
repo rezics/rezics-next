@@ -328,7 +328,8 @@ function validMeaning(meaning: PublicFilterProjectionMeaning): boolean {
   return (
     hasPublicFilterMeaningShape(meaning) &&
     typeof meaning.digest === 'string' &&
-    releaseDigest(meaning.release) === meaning.digest
+    releaseDigest(meaning.release) === meaning.digest &&
+    Object.keys(meaning.release.types).length > 0
   );
 }
 

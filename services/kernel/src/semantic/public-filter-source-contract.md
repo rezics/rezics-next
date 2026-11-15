@@ -57,7 +57,10 @@ The selected native public Source binding declarations now live in
 `PublicFilterSourceBinding` and `createPublicFilterSourceBinding(pool, routing, access)`.
 `resolve({source, meaning, capture}, context)` must resolve the actual Source instance and full immutable
 compiler input to a native definition. Meaning has exactly the own fields `{digest, release}` and pins the full
-accepted Definitions release. Candidate type membership comes from `capture.filterDocument`; each projection uses
+accepted Definitions release, with at least one compiled concrete Subject type. A release with an empty `types`
+map is unprojectable and rejects before Source configuration or publication; a valid release digest alone does
+not establish projectability. Full retained release bodies meet the same rule; an owner reference still resolves
+the actual stored release. Candidate type membership comes from `capture.filterDocument`; each projection uses
 the actual Subject type to select that release's facet declarations. Extra descriptor fields reject. Native
 read-definition, projection-build and replay identity retain the release digest plus their existing Source,
 Subject, capture and frame keys. Prior populated derivatives require the controlled owner drain before the

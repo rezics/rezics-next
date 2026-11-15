@@ -774,7 +774,7 @@ export async function readNativePublicFilterSourceDefinition(
   const bytes = Number(row.definition_bytes);
   if (!Number.isSafeInteger(bytes) || bytes < 0 || bytes > maxBytes) throw new BindingError('binding_mismatch');
   const release = await readRelease(db, row.release_digest);
-  if (!release) throw new BindingError('definition_missing');
+  if (!release || Object.keys(release.types).length === 0) throw new BindingError('definition_missing');
   let capture: PublicSourceCaptureInput;
   let keys: readonly PublicFilterDependencyKey[];
   const meaning = {
@@ -2081,7 +2081,8 @@ export function createNativePublicFilterSourceBinding(
         if (!hasPublicFilterMeaningShape(request.meaning)) return fail('binding_mismatch');
         meaning = structuredClone(request.meaning);
         capture = structuredClone(request.capture);
-        if (!hasPublicFilterMeaningShape(meaning)) return fail('binding_mismatch');
+        if (!hasPublicFilterMeaningShape(meaning) || Object.keys(meaning.release.types).length === 0)
+          return fail('binding_mismatch');
       } catch {
         return fail('binding_mismatch');
       }
@@ -2091,7 +2092,7 @@ export function createNativePublicFilterSourceBinding(
         if (Buffer.byteLength(encoded) > 1048576) throw new BindingError('binding_mismatch');
         // Caller digest equality is checked again against the actual immutable release owner.
         const release = await readRelease(db, meaning.digest);
-        if (!release || !isDeepStrictEqual(release, meaning.release))
+        if (!release || !isDeepStrictEqual(release, meaning.release) || Object.keys(release.types).length === 0)
           throw new BindingError('definition_missing');
         const source = (await nativeSourceQuery(db, registerSource, { route_digest: routeDigest }))[0];
         if (!source) throw new BindingError('owner_unavailable');

@@ -117,6 +117,7 @@ function validBindings(
   ].sort();
   if (
     !hasPublicFilterMeaningShape(definition.meaning) ||
+    (!('authority' in definition.meaning.release) && Object.keys(definition.meaning.release.types).length === 0) ||
     retained.digest !== createHash('sha256').update(search.encodeState(definition)).digest('hex') ||
     definition.readDefinition !== row.read_definition ||
     !isDeepStrictEqual(definition.source, {

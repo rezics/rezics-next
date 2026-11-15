@@ -104,7 +104,8 @@ function validate(request: IdentitySourceSupportRequest): void {
     typeof definition.readDefinition !== 'string' ||
     !definition.readDefinition ||
     !hasPublicFilterMeaningShape(definition.meaning) ||
-    releaseDigest(definition.meaning.release) !== definition.meaning.digest
+    releaseDigest(definition.meaning.release) !== definition.meaning.digest ||
+    Object.keys(definition.meaning.release.types).length === 0
   )
     throw new TypeError('Invalid native Source definition');
 }
