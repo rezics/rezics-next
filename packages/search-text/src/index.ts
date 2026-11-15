@@ -219,26 +219,54 @@ export function diagnoseText(input: string): TextDiagnostic | undefined {
   }
 }
 
-/** Admit only the closed bounded wire diagnostic, copying no arbitrary response fields. */
+/**
+ * Parser spans are empty, one code point, or a BMP backslash plus one code point.
+ * A supplementary code point is two UTF-16 units and four UTF-8 bytes; every other
+ * code point is one unit and one to three bytes. The escape consumes its backslash
+ * before the unconsumed second code point is reported.
+ */
+function textPositionsAgree(
+  start: number,
+  end: number,
+  codePointStart: number,
+  codePointEnd: number,
+  byteOffset: number,
+): boolean {
+  const units = end - start;
+  const points = codePointEnd - codePointStart;
+  const span =
+    (points === 0 && units === 0) ||
+    (points === 1 && (units === 1 || units === 2)) ||
+    (points === 2 && (units === 2 || units === 3));
+  if (!span || (points === 2 && byteOffset > TEXT_LIMITS.bytes - 1)) return false;
+  const supplementary = start - codePointStart;
+  const bmp = codePointStart - supplementary;
+  if (supplementary < 0 || bmp < 0) return false;
+  const minBytes = bmp + supplementary * 4;
+  const maxBytes = bmp * 3 + supplementary * 4;
+  return byteOffset >= minBytes && byteOffset <= maxBytes;
+}
+
+/** Admit only a closed wire diagnostic whose positions can occur together. */
 export function readTextDiagnostic(value: unknown): TextDiagnostic | undefined {
   if (!value || typeof value !== 'object') return;
   const d = value as Record<string, unknown>;
   if (!TEXT_DIAGNOSTIC_REASONS.includes(d.reason as TextDiagnosticReason) || d.unit !== 'utf16') return;
   const { start, end, codePointStart, codePointEnd, byteOffset } = d;
+  const limit = TEXT_LIMITS.bytes;
   const bounded = (n: unknown, maximum: number): n is number =>
     typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 && n <= maximum;
+  // The cursor stops at the byte limit. The reported end may include one more code point:
+  // two UTF-16 units, or a backslash plus a supplementary character.
   if (
-    !bounded(start, 512) ||
-    !bounded(end, 514) ||
-    end < start ||
-    end - start > 3 ||
-    !bounded(codePointStart, 512) ||
-    !bounded(codePointEnd, 513) ||
-    codePointEnd < codePointStart ||
-    codePointEnd - codePointStart > 2 ||
-    !bounded(byteOffset, 512)
+    !bounded(start, limit) ||
+    !bounded(end, limit + 2) ||
+    !bounded(codePointStart, limit) ||
+    !bounded(codePointEnd, limit + 1) ||
+    !bounded(byteOffset, limit)
   )
     return;
+  if (!textPositionsAgree(start, end, codePointStart, codePointEnd, byteOffset)) return;
   return {
     reason: d.reason as TextDiagnosticReason,
     unit: 'utf16',
