@@ -45,6 +45,7 @@ export type CopyArchiveProgressReview = {
         amount: string | null;
         additionalMeasures: ArchivedProgressMeasure[];
         completedUnitCount: number;
+        episodeCompletedCount?: number;
         state: string;
         sourceRevision: number;
         versionSubjectId: string | null;

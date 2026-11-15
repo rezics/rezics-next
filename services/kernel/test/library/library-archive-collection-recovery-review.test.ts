@@ -214,6 +214,7 @@ for (const partial of [false, true])
     try {
       const applied = await service.apply(actor, f.id, f.review.confirmation!);
       expect(applied.state).toBe(partial ? 'partial' : 'complete');
+      expect(applied.collectionId).not.toBe(input.collectionId);
       const accepted = await persisted(f.id);
       expect(accepted.effects).toHaveLength(partial ? 1 : 2);
       expect(accepted.records.filter((row) => row.native_member_id)).toHaveLength(partial ? 1 : 2);
