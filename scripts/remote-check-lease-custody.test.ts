@@ -139,12 +139,14 @@ test('actual slotScript EOF preserves the same generation and terminal physical 
   } finally { await f.close(); }
 });
 
-test('explicit TERM and the original deadline stop owned work while reservations remain held until termination', async () => {
-  for (const deadline of [false, true]) {
+test('explicit TERM INT HUP and the original deadline stop owned work while reservations remain held until termination', async () => {
+  for (const requested of ['SIGTERM', 'SIGINT', 'SIGHUP', 'deadline'] as const) {
+    const deadline = requested === 'deadline';
     const f = await fixture(false, deadline ? 60 : 10_000);
     try {
-      if (deadline) await f.holder.stdin.end(); else f.holder.kill('SIGTERM');
-      expect(await f.holder.exited, await f.stderr).toBe(143);
+      if (deadline) await f.holder.stdin.end(); else f.holder.kill(requested);
+      const expected = requested === 'SIGINT' ? 130 : requested === 'SIGHUP' ? 129 : 143;
+      expect(await f.holder.exited, await f.stderr).toBe(expected);
       await f.owner.exited;
       expect(JSON.parse(readFileSync(join(f.directory, 'signals.json'), 'utf8'))).toContain(15);
       expect(oldReader(f.hostRoot)).toBe('0 0 0');
