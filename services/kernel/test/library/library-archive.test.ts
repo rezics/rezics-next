@@ -179,6 +179,10 @@ test('canonical archive retains exact annotation presence, partial journal dates
   const file = archiveFacts([annotation, provenance, journal]);
   const decoded = decode(file);
   expect(decoded.records).toEqual(file.records);
+  const absentJournal = { ...(journal.journal as Record<string, unknown>) };
+  for (const field of ['startDate', 'finishDate', 'reflection']) delete absentJournal[field];
+  const absent = archiveFacts([{ ...journal, journal: absentJournal }]);
+  expect(decode(absent).records).toEqual(absent.records);
   expect(decoded.coverage.find((row) => row.section === 'annotations')).toMatchObject({
     capture: 'present',
     treatment: 'requires-explicit-mapping',

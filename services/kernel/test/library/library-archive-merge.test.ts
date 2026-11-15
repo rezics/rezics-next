@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
+import { nativeReceiptKeyCandidates } from '../../src/command/receipt-key.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { createLifecycleCommands } from '../../src/access/lifecycle.ts';
 import { createEntryPersonalCommands } from '../../src/library/entry-personal.ts';
@@ -8,7 +9,7 @@ import { createLabelAssignmentCommands } from '../../src/library/label-assignmen
 import { createSessionCommands } from '../../src/library/sessions.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { purgeOwnedGraphPage } from '../../src/library/erasure-owned-graph.ts';
-import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identityEpochStore } from '../../src/semantic/identity-adapters/index.ts';
@@ -614,8 +615,12 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
   const observationReceipt = await f.pool.query<{ count: string }>(
     `SELECT count(*)::text AS count FROM core.receipt
      WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
-       AND command_kind='library.entry.source-observation.admit' AND idempotency_key=$3`,
-    [partitionOf(routeOf(main.actor.accountId)!), main.actor.accountId, observationKey],
+       AND command_kind='library.entry.source-observation.admit' AND idempotency_key=ANY($3::text[])`,
+    [
+      partitionOf(routeOf(main.actor.accountId)!),
+      main.actor.accountId,
+      nativeReceiptKeyCandidates(f.pool, 'library.entry.source-observation.admit', main.actor.accountId, observationKey),
+    ],
   );
   expect(observationReceipt.rows[0]?.count).toBe('1');
   const currentAnnotation = await personal.readPersonalEntry(main.actor, subjects[0]);
@@ -1152,14 +1157,14 @@ test('missing personal targets stay inert and concurrent annotation or journal r
           ordinal: missingAnnotation.ordinal,
           kind: 'annotation',
           subjectId: subjects[0],
-          incarnationId: key(),
+          incarnationId: newId(routeOf(missingFactOwner.actor.accountId)!),
           fields: { note: 'set' },
         },
         {
           ordinal: missingJournal.ordinal,
           kind: 'journal',
           subjectId: subjects[0],
-          sessionId: key(),
+          sessionId: newId(routeOf(missingFactOwner.actor.accountId)!),
           fields: { startDate: 'set' },
         },
         {
@@ -1261,11 +1266,12 @@ test('missing personal targets stay inert and concurrent annotation or journal r
 });
 
 test('annotation application rejects a recreated Entry and expiry cleanup removes retained personal evidence', async () => {
-  const original = await f.commands.readEntry(staleIncarnation.actor, subjects[0]);
-  const { id } = await makeUpload(staleIncarnation);
-  const annotation = (await previewAll(staleIncarnation, id)).records.find((row: any) => row.section === 'annotations');
+  const owner = await f.identity(mergeScopes);
+  const original = (await f.commands.putEntry(owner.actor, subjects[0], { state: 'planned' }, entryKey())).value.entry;
+  const { id } = await makeUpload(owner);
+  const annotation = (await previewAll(owner, id)).records.find((row: any) => row.section === 'annotations');
   await json(
-    await send(staleIncarnation, 'PATCH', `${mergePath}/${id}/review`, {
+    await send(owner, 'PATCH', `${mergePath}/${id}/review`, {
       items: [
         {
           ordinal: annotation.ordinal,
@@ -1278,17 +1284,17 @@ test('annotation application rejects a recreated Entry and expiry cleanup remove
     }),
   );
   await f.commands.deleteEntry(
-    staleIncarnation.actor,
+    owner.actor,
     subjects[0],
     original.revision,
     entryKey(),
     original.incarnationId!,
   );
-  const recreated = (await f.commands.putEntry(staleIncarnation.actor, subjects[0], { state: 'completed' }, entryKey()))
+  const recreated = (await f.commands.putEntry(owner.actor, subjects[0], { state: 'completed' }, entryKey()))
     .value.entry;
   expect(recreated.incarnationId).not.toBe(original.incarnationId);
   expect(
-    (await json(await send(staleIncarnation, 'POST', `${mergePath}/${id}/apply`, selected([annotation.ordinal]))))
+    (await json(await send(owner, 'POST', `${mergePath}/${id}/apply`, selected([annotation.ordinal]))))
       .applied,
   ).toMatchObject([{ status: 'stale' }]);
 
@@ -1405,17 +1411,7 @@ test('cancellation stops pending effects and terminal erasure removes retained a
   ).toMatchObject({ privacy: { status: 'known', meaning: 'source_visible' } });
 
   const { id: deletedId } = await makeUpload(deletedOwner);
-  const grants = createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' });
-  await grants.create(
-    { pool: f.pool, actor: f.steward.actor, deadline: deadlineFor(30_000) },
-    {
-      resource: { route: routeOf(deletedOwner.actor.accountId)!, id: deletedOwner.actor.accountId },
-      subject: { kind: 'account', id: deletedOwner.actor.accountId },
-      actions: ['account:delete'],
-      valid: '(,)',
-      key: key(),
-    },
-  );
+  await f.grantAccountActions(deletedOwner.actor.accountId, ['account:delete']);
   await createLifecycleCommands({ pool: f.pool, access: f.access }).tombstone(
     { actor: deletedOwner.actor, deadline: deadlineFor(30_000) },
     { accountId: deletedOwner.actor.accountId, key: key() },

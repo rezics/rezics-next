@@ -239,7 +239,7 @@ test('local and Episode unit facts retain equal IDs and independent counters und
     expect(await get(`/v1/libraryExports/${captured.exportId}/pages?cursor=${encodeURIComponent(captured.first)}`))
       .toMatchObject({ state: 'stale', records: [], manifest: null });
   } finally {
-    if (captured) expect((await request('DELETE', `/v1/libraryExports/${captured.exportId}`)).status).toBe(204);
+    if (captured) expect((await request('DELETE', `/v1/libraryExports/${captured.exportId}`)).status).toBe(200);
     await sql`DELETE FROM library.progress_unit WHERE route=${route} AND session_id=${sparse} AND unit_id=ANY(${unitIds}::text[])`;
     await sql`DELETE FROM library.progress_episode WHERE route=${route} AND session_id=${sparse} AND episode_subject_id=ANY(${unitIds}::uuid[])`;
     await sql`UPDATE library.progress_session SET completed_unit_count=2,episode_completed_count=0 WHERE route=${route} AND session_id=${sparse}`;
