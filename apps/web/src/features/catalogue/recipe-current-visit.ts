@@ -44,7 +44,11 @@ const fields = new Set([
 ]);
 const localePattern = '(?:en|zh-Hant|zh-Hans|ja|ko|fr|de|es)';
 const subjectPath = new RegExp(`^/(${localePattern})/subjects/(${uuidSegment})/[^/?#]+$`, 'i');
+const exactLocalePrefix = new RegExp(`^/(${localePattern})(?=/|$)`);
 const currentReturnKey = 'recipeReturn';
+/** Opaque overview. `return` is a shell path-redirect key and would send this editor to locale home. */
+const overviewKey = 'recipeOverview';
+const legacyReturnKey = 'return';
 
 function encodeAddress(value: string): string {
   const bytes = new TextEncoder().encode(value);
@@ -116,12 +120,42 @@ export function recipePublicSubjectHref(
   return recipePublicReturnAddress(`${url.pathname}${url.search}`, locale, subject.id);
 }
 
+/** Swap only a supported leading locale segment. The remainder of that address stays intact. */
+function retargetLeadingLocale(value: string, locale: string): string | undefined {
+  const match = exactLocalePrefix.exec(value);
+  if (!match) return;
+  return match[1] === locale ? value : `/${locale}${value.slice(match[0].length)}`;
+}
+
+/**
+ * Validate the original overview before moving its locale prefix.
+ * Keep an optional prior visit when it is valid in the active locale.
+ */
+function adaptRecipeOverview(value: string, locale: string, recipe: string): string | undefined {
+  const sourceLocale = exactLocalePrefix.exec(value)?.[1];
+  if (!sourceLocale) return;
+  const original = recipePublicReturnAddress(value, sourceLocale, recipe);
+  if (!original || sourceLocale === locale) return original;
+  const retargeted = retargetLeadingLocale(original, locale);
+  if (!retargeted) return;
+  const url = new URL(retargeted, 'https://rezics.invalid');
+  const previous = url.searchParams.get('via');
+  if (previous) {
+    const nested = subjectVisitReturn(retargetLeadingLocale(previous, locale) ?? previous, locale);
+    if (nested) url.searchParams.set('via', nested);
+    else url.searchParams.delete('via');
+  }
+  return recipePublicReturnAddress(`${url.pathname}${url.search}`, locale, recipe);
+}
+
 /** HTTP address boundary: reject ambiguous selectors rather than silently opening Global. */
 export function parseRecipeVisit(search: string, locale?: string, recipe?: string): RecipeVisitInput {
   if (new TextEncoder().encode(search).byteLength > recipeVisitByteLimit) return { valid: false };
   const params = new URLSearchParams(search);
-  const keys = ['context', 'realm', 'property', 'statement', 'holder', 'return'];
+  const keys = ['context', 'realm', 'property', 'statement', 'holder', legacyReturnKey, overviewKey];
   for (const key of params.keys()) if (!keys.includes(key) || params.getAll(key).length !== 1) return { valid: false };
+  // One overview field. A legacy path-return key and the recipe field together are ambiguous.
+  if (params.has(legacyReturnKey) && params.has(overviewKey)) return { valid: false };
   const context = params.get('context') ?? candidateContext;
   if (!uuid.test(context)) return { valid: false };
   const realm = params.get('realm');
@@ -135,10 +169,9 @@ export function parseRecipeVisit(search: string, locale?: string, recipe?: strin
     (!property || !fields.has(property) || !statement || !uuid.test(statement) || !holder || !uuid.test(holder))
   )
     return { valid: false };
-  const encodedReturn = params.get('return');
+  const encodedReturn = params.get(overviewKey) ?? params.get(legacyReturnKey);
   const returnAddress = encodedReturn && encodedReturn !== 'unsupported' ? decodeAddress(encodedReturn) : undefined;
-  const returnHref =
-    returnAddress && locale && recipe ? recipePublicReturnAddress(returnAddress, locale, recipe) : undefined;
+  const returnHref = returnAddress && locale && recipe ? adaptRecipeOverview(returnAddress, locale, recipe) : undefined;
   const returnUnsupported = encodedReturn === 'unsupported';
   if (encodedReturn !== null && !returnHref && !returnUnsupported) return { valid: false };
   return {
@@ -157,9 +190,15 @@ export function recipeVisitSearch(visit: RecipeVisit): string {
   const params = new URLSearchParams({ context: visit.context });
   if (visit.realm) params.set('realm', visit.realm);
   if (visit.occurrence) for (const [key, value] of Object.entries(visit.occurrence)) params.set(key, value);
-  if (visit.returnHref) params.set('return', encodeAddress(visit.returnHref));
-  else if (visit.returnUnsupported) params.set('return', 'unsupported');
+  if (visit.returnHref) params.set(overviewKey, encodeAddress(visit.returnHref));
+  else if (visit.returnUnsupported) params.set(overviewKey, 'unsupported');
   return `?${params}`;
+}
+
+/** Canonical query for a valid legacy `return` visit. Other searches stay untouched. */
+export function canonicalRecipeVisitSearch(search: string, visit: RecipeVisit): string | undefined {
+  if (!new URLSearchParams(search).has(legacyReturnKey)) return;
+  return recipeVisitSearch(visit);
 }
 
 export function recipeCorrectionHref(

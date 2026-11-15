@@ -4,7 +4,11 @@ import { setResponseHeader } from '@tanstack/react-start/server';
 import { RecipeEditorSession } from '../../features/catalogue/recipe-editor-session';
 import { getLocale } from '../../paraglide/runtime';
 import { m } from '../../paraglide/messages.js';
-import { parseRecipeVisit, recipeVisitByteLimit } from '../../features/catalogue/recipe-current-visit';
+import {
+  canonicalRecipeVisitSearch,
+  parseRecipeVisit,
+  recipeVisitByteLimit,
+} from '../../features/catalogue/recipe-current-visit';
 import { candidateContext } from '../../features/pages/visit-host-port';
 import { contextHref } from '../../features/pages/context-navigation';
 import { canonicalRedirect, keepSearch } from '../../subject/subject-href';
@@ -34,8 +38,11 @@ const canonicalRecipe = createServerFn({ method: 'GET', strict: false })
       realm: intent.visit.realm,
     });
     if (canonical.kind === 'missing') throw notFound();
-    if (canonical.value.id !== data.id || canonical.value.slug !== data.slug)
-      throw redirect(canonicalRedirect(`${canonical.value.href}/recipe`, data.search));
+    // Legacy `return` is a shell redirect key. Rewrite only a visit already validated for this subject.
+    const rewritten =
+      canonical.value.id === data.id ? canonicalRecipeVisitSearch(data.search, intent.visit) : undefined;
+    if (canonical.value.id !== data.id || canonical.value.slug !== data.slug || rewritten)
+      throw redirect(canonicalRedirect(`${canonical.value.href}/recipe`, rewritten ?? data.search));
     return {
       id: canonical.value.id,
       intent,
