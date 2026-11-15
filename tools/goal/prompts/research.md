@@ -2,7 +2,7 @@ AGENTS.md is already loaded. The main checkout {{task.mainCheckout}} is read-onl
 
 The contract is self-sufficient: open the workflow skill, docs/development, architecture or scope only for a section it links. Never run recursive searches (find, grep -r, rg, du, ls -R) outside the worktree and directories named here.
 
-Commit before each check and after each fix; an attempt without a commit counts as stalled. {{task.mergeRule}}
+Deliver the report the contract names; use only its selected validation. {{task.mergeRule}}
 
 Decide ambiguities, product choices included: take the reversible option most consistent with the owner documents{{task.decisionFollowThrough}}
 

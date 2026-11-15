@@ -23,8 +23,8 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
 - Follow [phase ownership](delivery.md#implementation-and-acceptance). Source delivery carries no premerge checks.
   In scheduled verification, run selected checks once after the last relevant edit; follow
   [check selection](verification.md#check-selection-and-failures) for reuse and reruns.
-- Wait for a long command in one call with a yield of at least 300 seconds. Never poll faster, and never use sleep
-  loops, `ps` or `pgrep` to wait.
+- For a foreground command, use its open session and a long yield, without polling loops. For an asynchronous
+  wrapper check, return its check ID and let the controller wake the session; do not wait or poll it yourself.
 - A failure that also occurs on your base commit is not yours. Say so in one line and finish.
 - When the assigned phase is delivered, stop. Do not add audits, proofs or checks the brief does not ask for.
 - Tests and stories prove the outcome; they are not the outcome. Write the fewest tests that pin the user-visible
@@ -159,4 +159,3 @@ its authority and owns delivery. The maintainer's explicit decisions retain prec
 | Final summary / blocker detail | 120 / 80 words                |
 | Decision or handoff message    | 60 words                     |
 | Local continuation             | 8,000 characters              |
-| Wait interval                  | at least 300 seconds          |

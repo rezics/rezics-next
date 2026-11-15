@@ -83,7 +83,7 @@ const MINIMAL_RESULT = `Then commit and return success (blocker null, \`"checks"
 const PROTOCOL_FOOTER: Partial<Record<ConditionId, string>> = {
   'minimal-verification': `${MINIMAL_RESULT} ${MINIMAL_SESSION_COMMANDS} ${MINIMAL_WRAPPER_RESULT}`.trimEnd(),
   'local-placement': `${WAIT} ${REGRESSION}`,
-  wrapper: `${WAIT} ${REGRESSION}`,
+  wrapper: REGRESSION,
   'no-wrapper': `${WAIT} ${REGRESSION}`,
 };
 
@@ -388,7 +388,7 @@ function promptView(input: WorkerPromptInput, deferOrdinaryTests = false, source
         ? 'Do not rebase; merge or cherry-pick only what the contract names.'
         : 'Do not rebase or merge.',
     premiseCheck: product && !research ? 'Check premises against your base first.' : '',
-    acceptanceTests: research
+    acceptanceTests: research || sourceOnly
       ? ''
       : `Write missing acceptance tests the contract names${product ? ' or implies' : ''}. Update and list tests if a contract change alters asserted behaviour; keep unchanged assertions. Use the fewest tests that pin user-visible behaviour and edge cases (fewer test lines than product lines); add stories only for named states.`,
     decisionFollowThrough: product
@@ -485,6 +485,7 @@ export function renderWorkerPrompt(input: WorkerPromptInput): RenderedPrompt {
   const { task, mainCheckout } = input;
   const selected = selectConditions(input);
   const sourceOnly = selected.includes('source-only');
+  const readOnlyProof = selected.includes('proof-run') || selected.includes('registered-proof');
   const view = promptView(input, sourceOnly || selected.includes('minimal-verification'), sourceOnly);
   const research = task.brief.kind === 'research';
   const verification = task.brief.kind === 'verification';
@@ -544,8 +545,8 @@ export function renderWorkerPrompt(input: WorkerPromptInput): RenderedPrompt {
         ]
       : [];
   const extras = [
-    view.unfinished,
-    view.testCommands,
+    readOnlyProof ? '' : view.unfinished,
+    readOnlyProof ? '' : view.testCommands,
     selected.includes('local-placement') ? [view.localRun, view.wrapperResult].filter(Boolean).join(' ') : '',
     input.evidence ? `Continue from this retry manifest:\n${view.evidenceManifest}` : '',
     input.landingDiagnostic
@@ -716,7 +717,6 @@ function renderNativeRoleOpening(role: 'unit' | 'goal-author', input: NativeRole
   );
   const prompt = [
     roleText,
-    input.goal ? `Owner contract: [Goal scope and acceptance](docs/goals/${input.goal}.md).` : '',
     `## Assigned brief\n${input.brief}`,
   ]
     .filter(Boolean)

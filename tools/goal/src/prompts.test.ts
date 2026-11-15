@@ -214,6 +214,27 @@ test('implementation, research and verification worker roles receive the path-se
   }
 });
 
+test('source-only and read-only proof renders omit incompatible source and check instructions', () => {
+  const directory = temporaryDirectory();
+  try {
+    writeFileSync(join(directory.path, 'verification-mode'), 'source-only\n');
+    const source = renderWorkerPrompt({
+      task: worker(contract()),
+      mainCheckout: MAIN,
+      stateDirectory: directory.path,
+    });
+    expect(Object.keys(source.manifest.conditions)).toContain('source-only');
+    expect(source.prompt).not.toContain('Write missing acceptance tests');
+    expect(source.prompt).toContain('including test authoring for coverage');
+    const proof = goldenCases().find(({ name }) => name === 'verification-proof.txt')!.rendered;
+    expect(proof.prompt).toContain('Do not edit, typecheck, commit or land');
+    expect(proof.prompt).not.toContain('commit a coherent part');
+    expect(proof.prompt).not.toContain('the landing\'s test commands');
+  } finally {
+    directory.close();
+  }
+});
+
 test('a worker render over its budgets launches with layer sizes, budgets and over-budget names', () => {
   const policy = {
     ...defaultPolicy,
@@ -311,7 +332,11 @@ test('unit and Goal-author openings carry only the assigned brief and owner link
     mkdirSync(join(directory.path, '.temp/goal/fixture'), { recursive: true });
     writeFileSync(join(directory.path, 'docs/goals/fixture.md'), 'UNREQUESTED_OWNER_BODY');
     writeFileSync(join(directory.path, '.temp/goal/fixture/CONTINUATION.md'), 'STALE_MANAGER_CONTINUATION');
-    const input = { goal: 'fixture', brief: 'Deliver the assigned source outcome.', cwd: directory.path };
+    const input = {
+      goal: 'fixture',
+      brief: 'Deliver the assigned source outcome. [Goal scope and acceptance](docs/goals/fixture.md)',
+      cwd: directory.path,
+    };
     for (const render of [renderUnitOpening, renderGoalAuthorOpening]) {
       const result = render(input);
       expect(result.prompt).toContain(input.brief);
@@ -326,6 +351,10 @@ test('unit and Goal-author openings carry only the assigned brief and owner link
     expect(unit).toContain('in /shared/unit');
     expect(unit).toContain('native subagents and Grok CLI work in this same worktree');
     expect(unit).toContain('resident allocates it');
+    const objective = 'Complete the existing Hosted Book and Knowledge journeys';
+    const unlinked = renderUnitOpening({ goal: objective, brief: 'Use the assigned contract.', cwd: directory.path });
+    expect(unlinked.prompt).not.toContain(`docs/goals/${objective}.md`);
+    expect(unlinked.prompt).not.toContain('Owner contract:');
     expect(renderGoalAuthorOpening({ brief: 'Author a concrete Goal.', cwd: '/missing' }).prompt).toContain(
       'resident adopts scope and acceptance',
     );
@@ -457,6 +486,8 @@ test('minimal dev infrastructure failures remain unverified source success while
     });
     expect(wrappedDev.prompt).toContain('A wrapper-classified shared infrastructure-only failure uses the dev product');
     expect(wrappedDev.prompt).not.toContain('is final: a `tool` blocker');
+    expect(wrappedDev.prompt).toContain('end the turn at once');
+    expect(wrappedDev.prompt).not.toContain('Wait for a long command');
 
     const mainRelease = renderWorkerPrompt({
       task: worker(contract({ goal: 'control-plane', target: 'main' }), { worktree: repositoryRoot }),

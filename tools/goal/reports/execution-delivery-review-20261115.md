@@ -48,3 +48,19 @@ the incident evidence: time to integrated source and accepted behavior, repeated
 and whether each deferred check has an owner. Verify that implementation ends at its assigned handoff rather than
 absorbing unrelated verification repairs. Preserve unknown attribution; no matched outcome has yet demonstrated an
 efficiency gain. Use the existing checkpoint, without another watcher or recurring audit.
+
+## Instruction-chain cleanup
+
+The follow-up traced `renderUnitOpening`, `renderWorkerPrompt`, their role and condition templates, the Goal index
+and the selected local settings. It found obsolete domain-manager references, a proof render containing both a
+commit instruction and a read-only prohibition, an asynchronous wrapper render with a foreground wait instruction,
+and source-only guidance still asking for acceptance-test authoring. Native unit opening also derived a document
+filename from the natural-language Goal objective supplied by `native-unit-command.ts`; owner links now come from
+the assigned brief instead. Renderer cases cover these phase boundaries.
+
+Local notes contained a standing max-effort instruction, expired experiment checkpoints, duplicate recurring reviews
+and future commands to restore providers or premerge checks. They were reduced to operating facts, with the original
+configuration retained privately. Routing, allowances, pause controls and registered Goal/brief identities were
+preserved. Closed routing experiments are inactive records, so they were not deleted. Paused adopted Goals still
+need explicit phase allocation when execution is authorized again; this cleanup does not rewrite their scope or
+claim to have refreshed an existing native session's context.

@@ -26,9 +26,9 @@ of a reference.
 Active templates in `tools/goal/prompts/` supply worker, unit and research role text;
 [supermanager](supermanager.md) owns the resident role. Remove retired manager templates from active loading. Condition byte budgets count filled condition template
 bodies; check-condition footers are appended once and counted in the session total. Minimal verification omits the
-open-session wait footer, asks for a typecheck-only wrapper check after the outcome is written (plus money-path tests
-when those paths changed), and routes that check-host command through the wrapper; other check conditions keep the wait
-footer. Runtime command argv and wrapper-result lines are extras, not condition-template bytes.
+open-session wait footer and routes its selected checks through the wrapper. Foreground local/no-wrapper conditions
+keep their wait footer; asynchronous wrapper checks return their ID instead. Runtime command argv and wrapper-result
+lines are extras, not condition-template bytes.
 
 ### Rules
 

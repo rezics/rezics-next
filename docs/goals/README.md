@@ -9,15 +9,15 @@ The active definitions are:
 - [Semantic catalogue and Zones](semantic.md)
 - [Search and composition](search.md)
 - [Content and communities](content.md)
-- [Subject-connected knowledge workspaces](knowledge-workspaces.md) — coordinated by the existing Content manager
+- [Subject-connected knowledge workspaces](knowledge-workspaces.md) — Content owns the coordinating contract
 - [Commerce](commerce.md)
-- [Library and Collections](library.md) — same commerce manager; separate owner documentation
+- [Library and Collections](library.md) — separate owner documentation
 - [Imports](imports.md)
 - [Web and Auth interfaces](web.md)
 - [Performance](performance.md)
 
-Commerce and Library retain the original combined manager scope, tasks and native/main completion requirements.
-The separate documents do not create a new control-plane Goal.
+The resident allocates these outcomes under [phase ownership](../development/delivery.md#implementation-and-acceptance).
+Domain names identify contracts, not managers. Separate documents do not create another manager or control-plane Goal.
 
 The completed kernel foundation is described by its [module contract](../../services/kernel/README.md), not a second
 active Goal. Catalogue work is included in semantic. Interoperability has no separate active definition until its
