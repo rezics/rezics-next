@@ -189,7 +189,7 @@ test('old 1024-member bundles and the 2048-member boundary fit; 2049 members are
 
 test('decoded per-member and aggregate limits are checked before reading or allocating content', () => {
   const producer = workspace();
-  expect(PROFILE.maxMemberBytes).toBe(4 * 1024 * 1024);
+  expect(PROFILE.maxMemberBytes).toBe(8 * 1024 * 1024);
   expect(PROFILE.maxBytes).toBe(64 * 1024 * 1024);
   const path = `${PROFILE.root}/large.d.ts`;
   put(producer, path, '');
@@ -199,7 +199,7 @@ test('decoded per-member and aggregate limits are checked before reading or allo
   truncateSync(join(producer, path), PROFILE.maxMemberBytes + 1);
   expect(() => encodeOutputTree(producer, source)).toThrow('per-member byte bound: bytes=4194305, max=4194304');
   rmSync(join(producer, path));
-  for (let index = 0; index < 16; index++) {
+  for (let index = 0; index < PROFILE.maxBytes / PROFILE.maxMemberBytes; index++) {
     const name = `${PROFILE.root}/${index}.d.ts`;
     put(producer, name, '');
     truncateSync(join(producer, name), PROFILE.maxMemberBytes);

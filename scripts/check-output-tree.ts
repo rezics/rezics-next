@@ -29,7 +29,7 @@ export const KERNEL_CLIENT_OUTPUT = Object.freeze({
   transport: '.temp/check-output-tree/kernel-client-v1.bin',
   maxMembers: 2048,
   maxBytes: 64 * 1024 * 1024,
-  maxMemberBytes: 4 * 1024 * 1024,
+  maxMemberBytes: 8 * 1024 * 1024,
   maxDepth: 16,
   maxPathBytes: 1024,
 } as const);
@@ -252,6 +252,18 @@ export function collectOutputTree(root: string): { members: OutputTreeMember[]; 
 export function encodeOutputTree(root: string, source: OutputTreeBinding, producerExitCode?: 0): Buffer {
   binding(source);
   const { members, contents } = collectOutputTree(root);
+  if (producerExitCode === 0) {
+    const largest = members.reduce<OutputTreeMember | null>(
+      (current, member) => !current || member.size > current.size ? member : current,
+      null,
+    );
+    process.stdout.write(`Kernel client output tree: ${JSON.stringify({
+      count: members.length,
+      totalBytes: contents.reduce((sum, bytes) => sum + bytes.length, 0),
+      maxMemberPath: largest?.path ?? null,
+      maxMemberBytes: largest?.size ?? 0,
+    })}\n`);
+  }
   const catalogue = Buffer.from(members.map((member) => `${JSON.stringify(member)}\n`).join(''));
   for (const member of members)
     if (Buffer.byteLength(`${JSON.stringify(member)}\n`) > OUTPUT_TREE_MEMBER_RECORD_BYTES)
