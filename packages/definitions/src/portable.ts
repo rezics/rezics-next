@@ -29,6 +29,9 @@ export type {
   LibraryProfileSource,
 } from './library-profile.ts';
 
+/** Exact released bibliographic grains used by the Book Catalogue and its public Search. */
+export const BOOK_CATALOGUE_TYPES = ['schema:Book', 'schema:BookSeries', 'bf:Instance'] as const;
+
 export const RELEASE_FORMAT = 'https://rezics.com/definitions/release/1';
 // Headroom over the bundled catalogue plus 100 launch-grain verticals (3 types and 12 properties each).
 export const RELEASE_LIMITS = {

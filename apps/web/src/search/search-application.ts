@@ -2,7 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import { facetProperties } from '@rezics/filter';
 import { pickText } from '@rezics/composition';
 import type { Release } from '../subject/definitions';
-import { discoveryRequest, realmSearchRequest } from './search-request';
+import { bookCatalogueSearchRequest, discoveryRequest, realmSearchRequest } from './search-request';
 import { applicableRefinementProperties, refinementProperties, type RefinementApplicability } from './refinement/model';
 import { readFacetPage, facetProblem, refinementKey, type FacetState } from './refinement/request';
 import { scopedRefinementRequests } from './refinement/scoped-refinement';
@@ -181,11 +181,14 @@ async function readSearch(
     : [];
   const refinementTypes = knownType ?? (data.facetValues.type?.length ? data.facetValues.type : selectedSemanticKinds);
   const roster = release ? refinementProperties(release, refinementTypes) : [];
+  const bookRequest = bookCatalogueSearchRequest(queryState, languages);
   let refinementRequests: ReturnType<typeof scopedRefinementRequests> | undefined;
-  try {
-    refinementRequests = scopedRefinementRequests(queryState, adapters.requestLanguages(data.locale), []);
-  } catch {
-    refinementRequests = undefined;
+  if (bookRequest === null) {
+    try {
+      refinementRequests = scopedRefinementRequests(queryState, adapters.requestLanguages(data.locale), []);
+    } catch {
+      refinementRequests = undefined;
+    }
   }
   const body = refinementRequests?.search;
   const hasSearch =
@@ -206,6 +209,7 @@ async function readSearch(
     ? (async () => {
         // No installed Content complete-order adapter exists yet. Never ask Global Search and relabel it.
         if (realmRatingUnavailable) return { recovery: { status: 'unavailable' } as SearchRecoveryState };
+        if (bookRequest) return readSearchOutcome(bookRequest, sendSearch, signal, 'subjects');
         if (!body) return { recovery: { status: 'invalid' } as SearchRecoveryState };
         if (realmCatalogue) {
           const request = {

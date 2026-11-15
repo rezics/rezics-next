@@ -2041,6 +2041,12 @@ only on explicit conflict reload, never upload anonymous history, omit persisted
 
 ## Default public runtime composition
 
+The mounted Subject Search operation admits an anonymous or ordinary account query over an exact positive
+Book, Book Series or Edition Type selection with the basic text and sort grammar. The shared bibliographic
+Types are declared in Definitions. All other requests on the same operation require the Search platform gate;
+advanced requests also require the existing advanced gate. The canonical Web Book search sends the native
+Subject request and renders its current Subjects and continuation.
+
 Decision: request and continuation handles forward the same native page opener; irrelevant excluded-key
 reductions retain useful permitted pages during Search-only lag, while returned-subject and filter/order
 blocks still prepare. The existing native query-privacy cell owns anonymous/editor/suspended observations
