@@ -196,7 +196,7 @@ function seconds(started: number): number {
   return Math.round(((performance.now() - started) / 1000) * 1000) / 1000;
 }
 
-export type CheckPlan = { files: string[] | null; tests: string[]; testArguments?: string[] };
+export type CheckPlan = { files: string[] | null; tests: string[]; testArguments?: string[]; testsOnly?: true };
 
 function resolveTypeScriptImport(fromFile: string, specifier: string, moduleDirectory: string): string | null {
   if (!specifier.startsWith('.')) return null;
@@ -370,6 +370,17 @@ export function planCheck(
   moduleDirectory: string,
   options: { env?: NodeJS.ProcessEnv; changed?: (revision: string) => string[] } = {},
 ): { plan: CheckPlan; announcement: string | null } {
+  if (args[0] === '--tests-only') {
+    const separator = args.indexOf('--');
+    const names = args.slice(1, separator < 0 ? undefined : separator);
+    if (!names.length || names.some((name) => !name.endsWith('.test.ts')))
+      throw new Error('Kernel tests-only mode requires explicit test files');
+    const plan = checkPlan(names, moduleDirectory);
+    return {
+      plan: { ...plan, testsOnly: true, ...(separator < 0 ? {} : { testArguments: args.slice(separator + 1) }) },
+      announcement: 'Kernel tests-only: native setup and selected tests; compiler, lint and format remain unverified.',
+    };
+  }
   const separator = args.indexOf('--');
   if (separator >= 0) {
     const selected = planCheck(args.slice(0, separator), moduleDirectory, options);
@@ -688,6 +699,7 @@ export async function runKernelCheckStages(input: KernelCheckStages): Promise<vo
   const aroundCompiler = input.aroundCompiler ?? (async <T>(work: () => Promise<T>) => work());
   const productFailures = input.productFailures ?? [];
   const quality: QualityOutcome = { diagnostics: [], qualityFailures: [...productFailures], compilerOutput: '' };
+  if (!input.plan.testsOnly) {
   try {
     const typecheck = await aroundCompiler(() =>
       Promise.resolve(
@@ -716,6 +728,7 @@ export async function runKernelCheckStages(input: KernelCheckStages): Promise<vo
     fail(withQualityFailures(asFailureMessage(error), quality));
   }
   input.onQualitySeconds?.(seconds(qualityStarted));
+  }
   try {
     await input.afterQuality?.(quality);
   } catch (error) {
@@ -1222,7 +1235,9 @@ export async function placeKernelCheck(
         ...(forwardedEnv.length ? ['env', ...forwardedEnv] : []),
         'bun',
         'scripts/check.ts',
+        ...(plan.testsOnly ? ['--tests-only'] : []),
         ...(plan.files ?? []),
+        ...(plan.testArguments ? ['--', ...plan.testArguments] : []),
       ],
       ...(phaseEvent === undefined ? {} : { phaseEvent }),
       ...(estimateMs === undefined ? {} : { estimateMs }),
