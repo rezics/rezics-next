@@ -5694,6 +5694,16 @@ try:
         if events.get('populated')!='1': raise ValueError('unverified cgroup state')
         print('PREPARING')
     elif not (root/'.preparation-started').exists():
+        # Missing command markers alone are insufficient: retain exact boot/owner evidence and reject results.
+        resource=json.loads((root/'physical-resources.json').read_text())
+        if (resource.get('schema')!=1 or resource.get('host')!=${JSON.stringify(host)} or resource.get('run')!=${JSON.stringify(run)} or
+                resource.get('boot')!=Path('/proc/sys/kernel/random/boot_id').read_text().strip() or
+                resource['supervisor']!={'pid':marker['pid'],'start':marker['started'],'group':marker['group']} or
+                resource.get('commandStartedMonoMs') is not None or
+                any((root/name).exists() for name in ['command-started','.command-result','exit-status']) or
+                any((root.parent.parent/'receipts'/${JSON.stringify(run)}/name).exists()
+                    for name in ['physical-run-status.json','prepared-inputs.json'])):
+            raise ValueError('no-start is unproved')
         if group.exists():
             events=dict(line.split() for line in (group/'cgroup.events').read_text().splitlines())
             if events.get('populated')!='0': raise ValueError('owned processes remain')
@@ -8560,7 +8570,7 @@ print(json.dumps({'native':read_json('physical-run-status.json'),'preparedInputs
     'reconciliation status',
     10_000,
   );
-  if (observed.code !== 0 || Buffer.byteLength(observed.output) > 24 * 1024)
+  if (observed.code !== 0 || Buffer.byteLength(observed.output) > 96 * 1024)
     throw new RemoteTransportError(
       host.name,
       'reconciliation status',
