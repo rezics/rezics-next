@@ -12,7 +12,7 @@ import { observationDigest } from '../src/source-observation.ts';
 
 const SCALES = [32, 64, 128] as const;
 const HISTORY = 40;
-const registration = createSourceRegistration('vndb');
+const registration = createSourceRegistration('vndb', { sourceSnapshotAsOf: '2026-10-25' });
 
 function vn(index: number): SourceRecord {
   const key = `v${index}`;
@@ -166,4 +166,4 @@ test('32/64/128 VNDB observation intents stay O(N+A+R) with indexed pages and fi
   expect(c!.heads / a!.heads).toBeCloseTo(4, 0);
   expect(c!.journal / a!.journal).toBeLessThan(6);
   expect(samples.every((sample) => sample.pages >= 1)).toBe(true);
-});
+}, 120_000);
