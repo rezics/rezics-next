@@ -141,42 +141,92 @@ test('543-member generated closure returns exact nested bytes and hashes, delete
   expect(existsSync(join(consumer, 'packages/client/src/.kernel-output-tree/backup'))).toBe(false);
 });
 
-test('the current 543-member closure and 1024-member bound fit; overflow is refused', () => {
+test('the observed 1028 declarations and three runtime modules restore, including a declaration beyond the former member bound', () => {
   const producer = workspace();
-  generated(producer, 543);
-  const current = encodeOutputTree(producer, source);
-  expect(validateOutputTree(current, authority(current)).members).toHaveLength(543);
-  generated(producer, 1024);
+  const consumer = workspace();
+  const expected = generated(producer, 1028);
+  const declaration = Buffer.from(`export type Current = "${'x'.repeat(2 * 1024 * 1024)}";\n`);
+  expected.set('content/http.d.ts', declaration);
+  // Replace one small declaration so the observed declaration count remains 1028.
+  const replaced = expected.keys().next().value!;
+  rmSync(join(producer, PROFILE.root, replaced));
+  expected.delete(replaced);
+  put(producer, `${PROFILE.root}/content/http.d.ts`, declaration);
+  for (let index = 0; index < 3; index++) {
+    const path = `rating/runtime-${index}.ts`;
+    const content = Buffer.from(`export const runtime${index} = ${index};\n`);
+    expected.set(path, content);
+    put(producer, `${PROFILE.root}/${path}`, content);
+  }
+  put(consumer, `${PROFILE.root}/obsolete.d.ts`, 'old');
+  put(consumer, 'packages/client/src/unrelated.ts', 'untouched');
   const bytes = encodeOutputTree(producer, source);
-  expect(validateOutputTree(bytes, authority(bytes)).members).toHaveLength(1024);
+  const tree = validateOutputTree(bytes, authority(bytes));
+  expect(tree.header.count).toBe(1031);
+  expect(tree.members.find((entry) => entry.path === 'content/http.d.ts')!.size).toBeGreaterThan(2 * 1024 * 1024);
+  const members = restoreOutputTree(consumer, bytes, authority(bytes));
+  expect(members).toHaveLength(1031);
+  for (const item of members)
+    expect(readFileSync(join(consumer, PROFILE.root, item.path))).toEqual(expected.get(item.path)!);
+  expect(existsSync(join(consumer, PROFILE.root, 'obsolete.d.ts'))).toBe(false);
+  expect(readFileSync(join(consumer, 'packages/client/src/unrelated.ts'), 'utf8')).toBe('untouched');
+});
+
+test('old 1024-member bundles and the 2048-member boundary fit; 2049 members are refused', () => {
+  const producer = workspace();
+  expect(PROFILE.maxMembers).toBe(2048);
+  for (const count of [1024, PROFILE.maxMembers]) {
+    generated(producer, count);
+    const bytes = encodeOutputTree(producer, source);
+    expect(validateOutputTree(bytes, authority(bytes)).members).toHaveLength(count);
+  }
   put(producer, `${PROFILE.root}/overflow.d.ts`, 'overflow');
-  expect(() => encodeOutputTree(producer, source)).toThrow('member count');
-  const count = bundle([], [], { count: 1025 });
-  expect(() => validateOutputTree(count, authority(count))).toThrow('manifest count');
+  expect(() => encodeOutputTree(producer, source)).toThrow('member count bound: count=2049, max=2048');
+  const count = bundle([], [], { count: PROFILE.maxMembers + 1 });
+  expect(() => validateOutputTree(count, authority(count))).toThrow('manifest count bound: count=2049, max=2048');
   expect(() => outputTreeProfile('arbitrary-directory')).toThrow('unknown output profile');
 });
 
 test('decoded per-member and aggregate limits are checked before reading or allocating content', () => {
   const producer = workspace();
+  expect(PROFILE.maxMemberBytes).toBe(4 * 1024 * 1024);
+  expect(PROFILE.maxBytes).toBe(64 * 1024 * 1024);
   const path = `${PROFILE.root}/large.d.ts`;
   put(producer, path, '');
   truncateSync(join(producer, path), PROFILE.maxMemberBytes);
-  expect(encodeOutputTree(producer, source).length).toBeGreaterThan(PROFILE.maxMemberBytes);
+  const maximumMember = encodeOutputTree(producer, source);
+  expect(validateOutputTree(maximumMember, authority(maximumMember)).members[0]!.size).toBe(PROFILE.maxMemberBytes);
   truncateSync(join(producer, path), PROFILE.maxMemberBytes + 1);
-  expect(() => encodeOutputTree(producer, source)).toThrow('per-member');
+  expect(() => encodeOutputTree(producer, source)).toThrow('per-member byte bound: bytes=4194305, max=4194304');
   rmSync(join(producer, path));
   for (let index = 0; index < 16; index++) {
     const name = `${PROFILE.root}/${index}.d.ts`;
     put(producer, name, '');
     truncateSync(join(producer, name), PROFILE.maxMemberBytes);
   }
-  expect(encodeOutputTree(producer, source).length).toBeLessThanOrEqual(OUTPUT_TREE_TRANSPORT_BYTES);
+  const maximumTotal = encodeOutputTree(producer, source);
+  expect(maximumTotal.length).toBeLessThanOrEqual(OUTPUT_TREE_TRANSPORT_BYTES);
+  expect(validateOutputTree(maximumTotal, authority(maximumTotal)).header.totalBytes).toBe(PROFILE.maxBytes);
   put(producer, `${PROFILE.root}/overflow.d.ts`, 'x');
-  expect(() => encodeOutputTree(producer, source)).toThrow('aggregate');
+  expect(() => encodeOutputTree(producer, source)).toThrow(
+    'aggregate decoded byte bound: bytes=67108865, max=67108864',
+  );
   const oversized = bundle([{ ...member('x'), size: PROFILE.maxMemberBytes + 1 }], []);
-  expect(() => validateOutputTree(oversized, authority(oversized))).toThrow('member size');
+  expect(() => validateOutputTree(oversized, authority(oversized))).toThrow(
+    'member size bound: bytes=4194305, max=4194304',
+  );
   const aggregate = bundle([], [], { totalBytes: PROFILE.maxBytes + 1 });
   expect(() => validateOutputTree(aggregate, authority(aggregate))).toThrow('decoded byte');
+  const oversizedCatalogue = bundle(
+    Array.from({ length: 17 }, (_, index) => ({
+      ...member(`${String(index).padStart(2, '0')}.d.ts`),
+      size: index === 16 ? 1 : PROFILE.maxMemberBytes,
+    })),
+    [],
+  );
+  expect(() => validateOutputTree(oversizedCatalogue, authority(oversizedCatalogue))).toThrow(
+    'aggregate decoded byte bound: bytes=67108865, max=67108864',
+  );
 });
 
 test('component, UTF-8 path, encoded header, record and whole transport bounds are finite', () => {
