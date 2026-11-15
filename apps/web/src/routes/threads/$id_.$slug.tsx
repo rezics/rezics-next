@@ -1,3 +1,4 @@
+import { CommunityRouteNotFound, readCommunityRoute } from '../../community/protected-route';
 import { RemovedPost } from '../../threads/post-removed';
 import { ReplyContext, type ReplyParents } from '../../threads/reply-context';
 import { draftFetch, InlinePostEditor, SignInPrompt } from '../../threads/composer';
@@ -86,69 +87,86 @@ export const Route = createFileRoute('/threads/$id_/$slug')({
   staticData: { publicCache: true },
   validateSearch: threadSearch,
   loaderDeps: ({ search }) => threadSearch(search),
-  loader: async ({ params, deps, context }) => {
-    const mode = context.credentialMode;
-    const known = rememberedThreadSlug(params.id);
-    const expectedSlug = known !== undefined && slugMatches(params.slug, known) ? undefined : params.slug;
-    const query = threadPageQuery(params.id, deps.cursor, mode, expectedSlug, deps.post);
-    const identity: ThreadPageRouteIdentity = {
-      id: params.id,
-      ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }),
-      ...(deps.post === undefined ? {} : { post: deps.post }),
-      slug: params.slug,
-      locale: getLocale(),
-      credentialMode: mode,
-    };
-    const caller = ThreadPageCaller.capture(context.queryClient, identity, expectedSlug, query.queryKey);
-    const page = await runThreadPageQuery(context.queryClient, caller, query, (guarded) =>
-      context.queryClient.ensureQueryData(guarded),
-    );
-    caller.assertReadCurrent();
-    if ('redirect' in page) {
-      rememberThreadSlug(page.redirect.id, page.redirect.title);
-      caller.assertReadCurrent();
-      const href = threadLocation(
-        getLocale(),
-        page.redirect,
-        deps.cursor,
-        deps.post,
-        {
-          ...(deps.historyReturn ? { token: deps.historyReturn } : {}),
-          ...(deps.historyRevision ? { revisionId: deps.historyRevision } : {}),
-        },
-        deps.boardReturn,
+  loader: ({ params, deps, context }) =>
+    readCommunityRoute(context.queryClient, context.credentialMode, async (mode, reader) => {
+      const known = rememberedThreadSlug(params.id);
+      const expectedSlug = known !== undefined && slugMatches(params.slug, known) ? undefined : params.slug;
+      const query = threadPageQuery(params.id, deps.cursor, mode, expectedSlug, deps.post, reader);
+      const identity: ThreadPageRouteIdentity = {
+        id: params.id,
+        ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }),
+        ...(deps.post === undefined ? {} : { post: deps.post }),
+        slug: params.slug,
+        locale: getLocale(),
+        credentialMode: mode,
+      };
+      const caller = ThreadPageCaller.capture(context.queryClient, identity, expectedSlug, query.queryKey);
+      const page = await runThreadPageQuery(context.queryClient, caller, query, (guarded) =>
+        context.queryClient.ensureQueryData(guarded),
       );
       caller.assertReadCurrent();
-      caller.retireFromRouteChange();
-      throw redirect({ href, statusCode: 301 });
-    }
-    const title = threadTitle(page.thread);
-    caller.assertReadCurrent();
-    rememberThreadSlug(page.thread.id, title);
-    caller.assertReadCurrent();
-    if (!sameThreadSlug(params.slug, title)) {
-      const href = threadLocation(
-        getLocale(),
-        { id: page.thread.id, title },
-        deps.cursor,
-        deps.post,
-        {
-          ...(deps.historyReturn ? { token: deps.historyReturn } : {}),
-          ...(deps.historyRevision ? { revisionId: deps.historyRevision } : {}),
-        },
-        deps.boardReturn,
-      );
+      if ('redirect' in page) {
+        if (mode === 'anonymous') rememberThreadSlug(page.redirect.id, page.redirect.title);
+        caller.assertReadCurrent();
+        const href = threadLocation(
+          getLocale(),
+          page.redirect,
+          deps.cursor,
+          deps.post,
+          {
+            ...(deps.historyReturn ? { token: deps.historyReturn } : {}),
+            ...(deps.historyRevision ? { revisionId: deps.historyRevision } : {}),
+          },
+          deps.boardReturn,
+        );
+        caller.assertReadCurrent();
+        caller.retireFromRouteChange();
+        throw redirect(
+          mode === 'anonymous'
+            ? { href, statusCode: 301 }
+            : { href, statusCode: 302, headers: { 'Cache-Control': 'private, no-store' } },
+        );
+      }
+      const title = threadTitle(page.thread);
       caller.assertReadCurrent();
-      caller.retireFromRouteChange();
-      throw redirect({ href, statusCode: 301 });
-    }
-    return {
-      ...page,
-      callerAdmission: caller.admission,
-      indexable: deps.cursor === undefined && deps.post === undefined,
-    };
-  },
-  head: ({ loaderData }) => (loaderData ? threadPageHead(loaderData) : { meta: [{ title: m.threads_untitled() }] }),
+      if (mode === 'anonymous') rememberThreadSlug(page.thread.id, title);
+      caller.assertReadCurrent();
+      if (!sameThreadSlug(params.slug, title)) {
+        const href = threadLocation(
+          getLocale(),
+          { id: page.thread.id, title },
+          deps.cursor,
+          deps.post,
+          {
+            ...(deps.historyReturn ? { token: deps.historyReturn } : {}),
+            ...(deps.historyRevision ? { revisionId: deps.historyRevision } : {}),
+          },
+          deps.boardReturn,
+        );
+        caller.assertReadCurrent();
+        caller.retireFromRouteChange();
+        throw redirect(
+          mode === 'anonymous'
+            ? { href, statusCode: 301 }
+            : { href, statusCode: 302, headers: { 'Cache-Control': 'private, no-store' } },
+        );
+      }
+      return {
+        ...page,
+        callerAdmission: caller.admission,
+        indexable:
+          mode === 'anonymous' &&
+          deps.cursor === undefined &&
+          deps.post === undefined &&
+          page.thread.availability === 'available' &&
+          page.thread.firstPost.availability === 'available',
+      };
+    }),
+  head: ({ loaderData }) =>
+    loaderData?.callerAdmission.identity.credentialMode === 'anonymous'
+      ? threadPageHead(loaderData)
+      : { meta: [{ name: 'robots', content: 'noindex, follow' }] },
+  notFoundComponent: CommunityRouteNotFound,
   component: ThreadPage,
   errorComponent: (props) => {
     const { id } = Route.useParams();
@@ -189,7 +207,12 @@ export function ThreadReadingHeader({
       className="min-h-8 min-w-0 scroll-mt-24 space-y-5 px-1 [overflow-wrap:anywhere]"
     >
       <div data-slot="conversation-navigation" className="min-w-0 space-y-1">
-        <BoardContext realm={page.realm} board={page.board} boardReturn={currentOrigin ? origin : undefined} prominent />
+        <BoardContext
+          realm={page.realm}
+          board={page.board}
+          boardReturn={currentOrigin ? origin : undefined}
+          prominent
+        />
         {subjectReturn ? (
           <a
             data-slot="thread-subject-return"
@@ -567,7 +590,7 @@ function ThreadPage() {
       if (!publicationCurrent()) throw new Error('Thread reader changed');
       setRefreshed({ source: loadedPage, scope: readScope, page: updated, admission: nextCaller.admission });
       if (!publicationCurrent()) throw new Error('Thread reader changed');
-      rememberThreadSlug(updated.thread.id, updated.thread.title);
+      if (mode === 'anonymous') rememberThreadSlug(updated.thread.id, updated.thread.title);
       if (!publicationCurrent()) throw new Error('Thread reader changed');
       const destinationLocation = deLocalizeUrl(new URL(destination, window.location.origin));
       const currentLocation = deLocalizeUrl(new URL(location.pathname + location.search, window.location.origin));

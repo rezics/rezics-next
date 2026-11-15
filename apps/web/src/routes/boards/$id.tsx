@@ -1,3 +1,4 @@
+import { CommunityRouteNotFound, readCommunityRoute } from '../../community/protected-route';
 import { realmReadingReturn } from '../../community/realm-reading-return';
 import { useSession } from '../../session/query';
 import { createFileRoute, useLocation, useRouter } from '@tanstack/react-router';
@@ -31,39 +32,52 @@ export const Route = createFileRoute('/boards/$id')({
     const parsed = boardSearch(search);
     return { cursor: parsed.cursor, sort: parsed.sort };
   },
-  loader: async ({ params, deps, abortController, context }) => {
-    const caller = createBoardPageCaller(
-      context.queryClient,
-      {
-        id: params.id,
-        ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }),
-        ...(deps.sort === undefined ? {} : { sort: deps.sort }),
-        locale: getLocale(),
-        credentialMode: context.credentialMode,
-      },
-      abortController.signal,
-    );
-    try {
-      const read = await context.queryClient.ensureQueryData(
-        caller.queryOptions(boardPageQuery(params.id, deps.cursor, deps.sort, context.credentialMode)),
+  loader: ({ params, deps, abortController, context }) =>
+    readCommunityRoute(context.queryClient, context.credentialMode, async (credentialMode) => {
+      const caller = createBoardPageCaller(
+        context.queryClient,
+        {
+          id: params.id,
+          ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }),
+          ...(deps.sort === undefined ? {} : { sort: deps.sort }),
+          locale: getLocale(),
+          credentialMode,
+        },
+        abortController.signal,
       );
-      caller.assertLoadCurrent();
-      const result = await caller.resultFor(read, deps.cursor === undefined && read.page.threads.threads.length > 0);
-      caller.assertLoadCurrent();
-      for (const thread of [...(read.page.threads.pinnedThreads ?? []), ...read.page.threads.threads]) {
+      try {
+        const read = await context.queryClient.ensureQueryData(
+          caller.queryOptions(boardPageQuery(params.id, deps.cursor, deps.sort, credentialMode)),
+        );
         caller.assertLoadCurrent();
-        rememberThreadSlug(thread.id, threadTitle(thread));
+        const result = await caller.resultFor(
+          read,
+          credentialMode === 'anonymous' &&
+            deps.cursor === undefined &&
+            deps.sort === undefined &&
+            read.page.threads.threads.length > 0,
+        );
+        caller.assertLoadCurrent();
+        if (credentialMode === 'anonymous') {
+          for (const thread of [...(read.page.threads.pinnedThreads ?? []), ...read.page.threads.threads]) {
+            caller.assertLoadCurrent();
+            rememberThreadSlug(thread.id, threadTitle(thread));
+          }
+        }
+        caller.assertLoadCurrent();
+        return result;
+      } catch (error) {
+        caller.captureError(error);
+        throw error;
       }
-      caller.assertLoadCurrent();
-      return result;
-    } catch (error) {
-      caller.captureError(error);
-      throw error;
-    }
-  },
-  head: ({ loaderData }) => (loaderData ? boardPageHead(loaderData) : { meta: [{ title: m.threads_untitled() }] }),
+    }),
+  head: ({ loaderData }) =>
+    loaderData?.caller.credentialMode === 'anonymous'
+      ? boardPageHead(loaderData)
+      : { meta: [{ name: 'robots', content: 'noindex, follow' }] },
   pendingComponent: () => <BoardCommunityStatus state="loading" />,
   errorComponent: BoardPageError,
+  notFoundComponent: CommunityRouteNotFound,
   component: BoardPage,
 });
 
@@ -75,6 +89,7 @@ function BoardPage() {
   const id = Route.useParams().id;
   const search = Route.useSearch();
   const sort = boardSortFromSearch(search.sort);
+  const credentialMode = page.caller.credentialMode;
   const returnTo = boardRequestHref(getLocale(), id, boardSearch(search));
   return (
     <BoardPageCallerHost
@@ -84,7 +99,7 @@ function BoardPage() {
         ...(search.cursor === undefined ? {} : { cursor: search.cursor }),
         ...(sort === undefined ? {} : { sort }),
         locale: getLocale(),
-        credentialMode: router.options.context.credentialMode,
+        credentialMode,
       }}
     >
       {(currentPage, reactionOrigin, slowModeSource) => (
@@ -119,8 +134,8 @@ function BoardPage() {
               session.state === 'signed-in' ? (
                 <SlowModeSetting
                   boardId={id}
-                  scopeKey={JSON.stringify([location.publicHref, getLocale(), router.options.context.credentialMode])}
-                  credentialMode={router.options.context.credentialMode}
+                  scopeKey={JSON.stringify([location.publicHref, getLocale(), credentialMode])}
+                  credentialMode={credentialMode}
                   source={slowModeSource}
                   onApplied={() => void router.invalidate()}
                 />
