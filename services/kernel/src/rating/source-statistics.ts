@@ -19,6 +19,7 @@ import {
   type Access,
   type Actor,
   resolveSubject,
+  SubjectIdentityUnavailableError,
 } from './dependencies.ts';
 
 import type { CommandAuthorization, CommandOutcome } from '../command/command.ts';
@@ -541,6 +542,7 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
 }
 
 function sourceStatisticProblem(error: unknown): never {
+  if (error instanceof SubjectIdentityUnavailableError) throw new ProblemError('partition_unavailable');
   if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
   if (error instanceof SourceStatisticNotFoundError) throw new ProblemError('not_found');
   if (error instanceof SourceStatisticInvalidError)

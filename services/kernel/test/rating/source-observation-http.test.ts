@@ -331,7 +331,10 @@ test('source changes and failed fills retry the same raw cursor, without publish
   await json(await changingLookahead, 409);
   const stable = await page(id, cursor);
   expect(stable.history!.items).toEqual([]);
-  expect(stable.history!.nextCursor).toBe(retried.history!.nextCursor);
+  const binding = historyBinding(id, fixture.actors.importer);
+  const retriedBoundary = decodeCursor(fixture.tokens, binding, retried.history!.nextCursor!);
+  expect(retriedBoundary.ok).toBe(true);
+  expect(decodeCursor(fixture.tokens, binding, stable.history!.nextCursor!)).toEqual(retriedBoundary);
   const end = await page(id, stable.history!.nextCursor!);
   expect(end.head).toEqual(stable.head);
   expect(end.history).toEqual({ items: [], nextCursor: null });
@@ -341,7 +344,10 @@ test('source changes and failed fills retry the same raw cursor, without publish
     error: new Error('inspection dependency failed'),
   });
   expect((await inspect(id, `?cursor=${encodeURIComponent(cursor)}`)).status).toBeGreaterThanOrEqual(500);
-  expect(await page(id, cursor)).toEqual(stable);
+  const recovered = await page(id, cursor);
+  expect(recovered.head).toEqual(stable.head);
+  expect(recovered.history!.items).toEqual(stable.history!.items);
+  expect(decodeCursor(fixture.tokens, binding, recovered.history!.nextCursor!)).toEqual(retriedBoundary);
 });
 
 test('caller revocation and Subject identity changes during hydration withhold the original page', async () => {
@@ -372,8 +378,17 @@ test('caller revocation and Subject identity changes during hydration withhold t
   } finally {
     heldIdentityPayload.release();
   }
-  await json(await pendingIdentity, 404);
-  await json(await inspect(identity.id, `?cursor=${encodeURIComponent(identityCursor)}`), 404);
+  // The merge command admits asynchronous identity work. Its unfinished source
+  // is unavailable; it must not disclose the page hydrated before that change.
+  for (const response of [
+    await pendingIdentity,
+    await inspect(identity.id, `?cursor=${encodeURIComponent(identityCursor)}`),
+  ]) {
+    const problem = await json(response, 503);
+    expect(problem).toMatchObject({ code: 'partition_unavailable', retryable: true });
+    expect(JSON.stringify(problem)).not.toContain(identity.digests[1]!);
+    expect(JSON.stringify(problem)).not.toContain('catalogue-232');
+  }
 });
 
 test('inspection supports deliberate CAS correction, clear, replay and revoked/account-switched recovery', async () => {
