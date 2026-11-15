@@ -1,6 +1,7 @@
 import { cleanupShelfTitleKeys } from './shelf-title-maintenance-store.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { KernelClock } from '../clock.ts';
+import { noEffect } from '../command/command.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { withConnection } from '../database/pool.ts';
@@ -98,6 +99,13 @@ export function createShelfTitlePreparation(deps: {
     const languages = titleLanguages(rawLanguages);
     const policy = shelfTitlePolicy(languages);
     const owner = { route: requireRoute(actor.accountId), accountId: actor.accountId };
+    const events = [
+      {
+        type: 'com.rezics.library.shelf-maintenance.advanced.v1',
+        subject: owner.accountId,
+        data: { accountId: owner.accountId },
+      },
+    ];
     const result = await runner.ownAccountPrepared(
       actor,
       {
@@ -162,10 +170,12 @@ export function createShelfTitlePreparation(deps: {
       async (tx, _command, input) => {
         if (!input) throw new (ShelfReadUnavailableError())('complete current Content title/disclosure source');
         if ('error' in input) throw input.error;
-        await tx.query(
+        const ownerInsert = await tx.query(
           `INSERT INTO library.shelf_title_owner(route,account_id) VALUES($1,$2::uuid) ON CONFLICT DO NOTHING`,
           [owner.route, owner.accountId],
         );
+        const withoutHeadChange = (value: ShelfTitlePreparation) =>
+          ownerInsert.rowCount ? { value, events } : noEffect(value);
         const { rows: owners } = await tx.query<{ population: string }>(
           `SELECT population::text FROM library.shelf_title_owner WHERE route=$1 AND account_id=$2::uuid FOR UPDATE`,
           [owner.route, owner.accountId],
@@ -182,9 +192,9 @@ export function createShelfTitlePreparation(deps: {
                phase='cleanup',after_subject_id=NULL`,
             [owner.route, owner.accountId, newId(owner.route), population, policy, input.basis],
           );
-          return { value: pending, events: [] };
+          return { value: pending, events };
         }
-        if (head.phase === 'ready') return { value: { installation: 'installed' as const, prepared: 0 }, events: [] };
+        if (head.phase === 'ready') return withoutHeadChange({ installation: 'installed', prepared: 0 });
         if (head.phase === 'cleanup') {
           const removed = await cleanupShelfTitleKeys(tx, owner);
           if (removed < 100)
@@ -192,10 +202,10 @@ export function createShelfTitlePreparation(deps: {
               owner.route,
               owner.accountId,
             ]);
-          return { value: pending, events: [] };
+          return { value: pending, events };
         }
         // A concurrent page, population edit or replacement build cannot advance this captured frontier.
-        if (JSON.stringify(head) !== JSON.stringify(input.head)) return { value: pending, events: [] };
+        if (JSON.stringify(head) !== JSON.stringify(input.head)) return withoutHeadChange(pending);
         if (input.rows.some((row) => row.incarnation_id === null || row.type_id === null))
           throw new (ShelfReadUnavailableError())('complete native Entry incarnation and type maintenance');
         // Exactly the bounded captured Entry versions must remain at this frontier; no per-Subject reads.
@@ -209,7 +219,7 @@ export function createShelfTitlePreparation(deps: {
             ) ||
           current.length > 100 !== input.more
         )
-          return { value: pending, events: [] };
+          return withoutHeadChange(pending);
         if (input.rows.length)
           await tx.query(
             `INSERT INTO library.shelf_title_key(route,account_id,subject_id,generation,incarnation_id,
@@ -240,7 +250,7 @@ export function createShelfTitlePreparation(deps: {
             installation: input.more ? ('pending' as const) : ('installed' as const),
             prepared: input.rows.length,
           },
-          events: [],
+          events,
         };
       },
     );
