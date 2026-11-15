@@ -82,10 +82,10 @@ export const InsertLink: Story = {
     // An empty selection accepts an address as linked text.
     window.getSelection()?.collapseToEnd();
     document.dispatchEvent(new Event('selectionchange'));
-    await waitFor(() => expect(canvas.queryByRole('toolbar')).toBeNull());
+    await waitFor(() => expect(canvas.queryByRole('toolbar', { name: 'Format text' })).toBeNull());
     await userEvent.keyboard('{Control>}k{/Control}');
     await userEvent.type(await canvas.findByRole('textbox', { name: 'URL' }), 'mailto:hello@example.com');
-    await userEvent.click(canvas.getByRole('button', { name: 'Apply' }));
+    await userEvent.keyboard('{Enter}');
     await waitFor(() => {
       expect(checkDocument(insert.latest.current)).toBe(true);
       expect(JSON.stringify(insert.latest.current)).toContain('mailto:hello@example.com');
@@ -97,7 +97,8 @@ export const UnsafeLinkRefused: Story = {
   render: () => <unsafe.Demo />,
   async play({ canvasElement }) {
     const canvas = await select(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'Link' }));
+    const formatting = within(canvas.getByRole('toolbar', { name: 'Format text' }));
+    await userEvent.click(formatting.getByRole('button', { name: 'Link' }));
     const address = await canvas.findByRole('textbox', { name: 'URL' });
     for (const url of ['javascript:alert(1)', 'data:text/html,unsafe', '/relative', 'ftp://example.com']) {
       await userEvent.clear(address);
@@ -848,16 +849,21 @@ export const InlineLifetimeJourney: Story = {
     await userEvent.keyboard('{Control>}k{/Control}');
     address = await canvas.findByRole('textbox', { name: 'URL' });
     await userEvent.type(address, 'https://retired-draft.example');
-    const retainedSubmit = reactCallback(address.closest('form')!, 'onSubmit');
+    const retainedApply = reactCallback(address.closest('[data-slot="editor-link-field"]')!, 'onKeyDown');
     await traceClick(canvas.getByRole('button', { name: 'Replace with selection target' }));
-    let stoppedRetiredSubmit = false;
-    retainedSubmit({
-      preventDefault: () => undefined,
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true });
+    let stoppedRetiredApply = false;
+    retainedApply({
+      nativeEvent: enter,
+      key: enter.key,
+      target: address,
+      preventDefault: () => enter.preventDefault(),
       stopPropagation: () => {
-        stoppedRetiredSubmit = true;
+        stoppedRetiredApply = true;
       },
     } as never);
-    expect(stoppedRetiredSubmit).toBe(true);
+    expect(enter.defaultPrevented).toBe(true);
+    expect(stoppedRetiredApply).toBe(true);
     expect(canvas.queryByRole('textbox', { name: 'URL' })).toBeNull();
     expect(JSON.stringify(evidence.latest)).not.toContain('https://retired-draft.example');
 
@@ -1037,7 +1043,7 @@ export const InlineLifetimeJourney: Story = {
     await traceClick(canvas.getByRole('button', { name: 'Use touch toolbar' }));
     await traceClick(canvas.getByRole('button', { name: 'Replace with touch target' }));
     touchToolbar = within(await canvas.findByRole('toolbar', { name: 'Formatting toolbar' }));
-    await traceClick(touchToolbar.getByRole('button', { name: 'Blocks' }));
+    await traceClick(touchToolbar.getByRole('button', { name: /^Blocks\b/ }));
     const dialog = await page.findByRole('dialog', { name: 'Blocks' });
     const finalFocus = reactCallback(dialog, 'finalFocus');
     const frames: FrameRequestCallback[] = [];

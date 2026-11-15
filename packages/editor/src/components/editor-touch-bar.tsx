@@ -138,7 +138,8 @@ export function EditorTouchBar({
   isCurrent: () => boolean;
 }) {
   const state = useCommandState(editor);
-  const [tabStop, setTabStop] = useState(preset === 'compact' ? 'bold' : 'blocks');
+  const defaultTabStop = preset === 'compact' ? 'bold' : 'blocks';
+  const [tabStop, setTabStop] = useState(defaultTabStop);
   const bar = useRef<HTMLDivElement>(null);
   const inset = useKeyboardInset(docked);
   const selectedBlock = state.blocks.find(({ active }) => active)?.command;
@@ -173,7 +174,8 @@ export function EditorTouchBar({
     ...(showInsert ? ['insert'] : []),
     ...(docked ? ['hideKeyboard'] : []),
   ];
-  const activeTabStop = availableTabStops.includes(tabStop) ? tabStop : availableTabStops[0];
+  const defaultEntry = availableTabStops.includes(defaultTabStop) ? defaultTabStop : availableTabStops[0];
+  const activeTabStop = availableTabStops.includes(tabStop) ? tabStop : defaultEntry;
   const selectionRevision = useRef(0);
   const [renderedSelectionRevision, setRenderedSelectionRevision] = useState(0);
   const menuIsCurrent = () => isCurrent() && selectionRevision.current === renderedSelectionRevision;
@@ -304,8 +306,7 @@ export function EditorTouchBar({
           <Button
             type="button"
             variant="ghost"
-            aria-label={title}
-            aria-description={insert ? undefined : blockLabel}
+            aria-label={insert || title === blockLabel ? title : `${title}: ${blockLabel}`}
             data-editor-block-trigger
             tabIndex={activeTabStop === kind ? 0 : -1}
             className="min-w-0 shrink-0"

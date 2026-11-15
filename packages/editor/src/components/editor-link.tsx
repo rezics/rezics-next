@@ -125,7 +125,12 @@ export function captureLink(editor: Editor, isCurrent: () => boolean = () => tru
   if (!(selected instanceof TextSelection) || (original instanceof AllSelection && selected.empty)) return null;
   const target = eligibleLinkRange(editor, selected, editor.state.storedMarks);
   return target
-    ? { ...target, selectionBookmark: original.getBookmark(), storedMarks: editor.state.storedMarks }
+    ? {
+        from: target.from,
+        to: target.to,
+        selectionBookmark: original.getBookmark(),
+        storedMarks: editor.state.storedMarks,
+      }
     : null;
 }
 
@@ -170,15 +175,15 @@ export function applyLink(
   if (!target) return false;
   const link = editor.schema.marks.link;
   return runCompactEditorChain(editor, (chain) => {
-    const selected = chain.setTextSelection(target);
     if (target.from === target.to) {
+      const selected = chain.setTextSelection(target);
       if (href === null) return selected.unsetMark('link');
       const marks = capturedMarks ?? editor.state.doc.resolve(target.from).marks();
       const previous = marks.find((mark) => mark.type === link);
       const linked = link.create({ ...previous?.attrs, href }).addToSet(marks);
       return selected.insertContent({ type: 'text', text: href, marks: linked.map((mark) => mark.toJSON()) });
     }
-    return selected.command(({ tr }) => {
+    return chain.command(({ tr }) => {
       visitLinkText(editor, target, (node, from, to) => {
         if (href === null) tr.removeMark(from, to, link);
         else {
