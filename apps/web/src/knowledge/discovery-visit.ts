@@ -1,5 +1,6 @@
 import { knowledgeId } from './public-read';
 import type { KnowledgeDiscoveryPage, KnowledgeDiscoveryRead, KnowledgeDiscoveryRequest } from './discovery';
+import { isPlatformClosedError } from '../kernel/platform-closed';
 
 export const KNOWLEDGE_DISCOVERY_RETURN_MAXIMUM = 2048;
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'fr', 'de', 'es'] as const;
@@ -101,7 +102,7 @@ export class KnowledgeDiscoveryReading {
         locale: this.binding.locale,
       });
     } catch (error) {
-      if (!(error instanceof TypeError)) throw error;
+      if (isPlatformClosedError(error)) throw error;
       if (this.live(sequence)) this.publish({ state: 'unavailable', status: 503, cursor, busy: false });
       return;
     }

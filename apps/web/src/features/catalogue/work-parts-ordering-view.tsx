@@ -266,13 +266,27 @@ export function WorkPartsOrderingBoard({
       )}
       <section data-ordering-preview className="min-w-0 space-y-2" aria-label={m.work_parts_order_preview({}, o)}>
         <h3 className="text-sm font-semibold">{m.work_parts_order_preview({}, o)}</h3>
-        <ol className="min-w-0 space-y-1 text-sm">
-          {page.map((draft) => (
-            <li key={draft.key}>
-              {identityLabel(draft, locale)}: {draft.proposedPosition || m.work_parts_order_missing({}, o)}
-            </li>
-          ))}
-        </ol>
+        {changed.length ? (
+          <ol className="min-w-0 space-y-2 text-sm">
+            {changed.map((draft) => (
+              <li key={draft.key}>
+                <p className="font-medium">{identityLabel(draft, locale)}</p>
+                <dl className="grid min-w-0 gap-x-4 gap-y-1 sm:grid-cols-2">
+                  <div>
+                    <dt className="text-muted-foreground">{m.work_parts_order_current({}, o)}</dt>
+                    <dd className="break-all">{draft.currentPosition || m.work_parts_order_missing({}, o)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">{m.work_parts_order_proposed({}, o)}</dt>
+                    <dd className="break-all">{draft.proposedPosition || m.work_parts_order_missing({}, o)}</dd>
+                  </div>
+                </dl>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="text-sm text-muted-foreground">{m.work_parts_order_none({}, o)}</p>
+        )}
       </section>
       <WorkPartsOrderingReview
         items={changed}

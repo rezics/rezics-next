@@ -1,5 +1,11 @@
+import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { KnowledgeNavigationFrontier, KnowledgeNavigationReader } from './navigation-model';
-import type { KnowledgeNavigationPage, KnowledgeNavigationRequest, KnowledgePlacementRow } from './navigation-read';
+import type {
+  KnowledgeNavigationPage,
+  KnowledgeNavigationRequest,
+  KnowledgeNavigationResult,
+  KnowledgePlacementRow,
+} from './navigation-read';
 
 type OutlineRequest = Extract<KnowledgeNavigationRequest, { kind: 'outline' }>;
 export type KnowledgeOutlineRow = Readonly<{
@@ -103,7 +109,17 @@ export class KnowledgeOutlineReading {
     const token = {};
     this.pending.set(parent, token);
     this.replace(parent, { ...branch, state: 'preparing' });
-    const result = await this.read(branch.frontier.request);
+    let result: KnowledgeNavigationResult;
+    try {
+      result = await this.read(branch.frontier.request);
+    } catch (error) {
+      if (this.retired || !this.current() || this.pending.get(parent) !== token) return;
+      this.pending.delete(parent);
+      if (isPlatformClosedError(error)) throw error;
+      const latest = this.snapshot.branches.get(parent);
+      if (latest) this.replace(parent, { ...latest, state: 'unavailable' });
+      return;
+    }
     if (this.retired || !this.current() || this.pending.get(parent) !== token) return;
     this.pending.delete(parent);
     if (result.state === 'denied' || result.state === 'signed-out' || result.state === 'retired') {

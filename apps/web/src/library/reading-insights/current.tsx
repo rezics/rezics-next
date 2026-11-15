@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useOperationAdmission, useReaderCurrentOrigin, useReaderResponseOrigin } from '../../session/reader';
-import { useReaderVisit } from '../../reader/lifetime';
-import { browserObservation } from '../../session';
+import { browserObservation, useReaderVisit } from '../../session';
 import { viewerExposureQuery } from '../../kernel/viewer-exposure';
 import { getLocale } from '../../paraglide/runtime.js';
 import type { PrivateInsightsResult } from './server';
