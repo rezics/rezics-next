@@ -1,3 +1,4 @@
+import { knowledgeAuthoringImageSelection } from './media';
 import { KnowledgeDetails, KnowledgeValue, knowledgeControl, knowledgeLink } from './workspace';
 import { KnowledgePublicationReaderLink } from './publication-return';
 import {
@@ -630,6 +631,7 @@ export function KnowledgePublicationPanel({
                 document={currentReview.head.body}
                 references={currentReview.head.references}
                 locale={locale}
+                mediaSelection={knowledgeAuthoringImageSelection(currentReview.head)}
                 inspectable={false}
               />
             </div>
