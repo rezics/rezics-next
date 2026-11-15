@@ -3,7 +3,6 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import { waitForFocus } from '../../../ui/src/test/focus.ts';
-import { dismissed } from '../../../ui/src/test/waits.ts';
 import { RichTextEditor } from './rich-text-editor.tsx';
 
 function demo(profile: DocumentProfile = 'blocks', translated = false) {
@@ -111,7 +110,7 @@ export const BlockCommands: Story = {
       ).toHaveLength(1);
       await userEvent.click(menu.getByRole('option', { name }));
       // The next round must not find this menu while it leaves.
-      await dismissed('listbox');
+      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
       await waitFor(() => expect(checked(blocks.latest.current)?.type).toBe(type));
       if (type === 'heading' || type === 'paragraph' || type === 'codeBlock')
         expect(checked(blocks.latest.current)?.attrs?.id).toBe(id);
@@ -131,7 +130,7 @@ export const ProfileCommands: Story = {
     expect(canvas.queryByRole('button', { name: /table|image/i })).toBeNull();
     await userEvent.click(menu.getByRole('option', { name: 'Heading 1' }));
     // The settled story must not hold a leaving menu, whose focus guards fail the accessibility check.
-    await dismissed('listbox');
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
     await waitFor(() => expect(checked(profiles.latest.current)?.type).toBe('heading'));
     expect(profiles.latest.current.profile).toBe('text');
   },
@@ -157,7 +156,7 @@ export const KeyboardReach: Story = {
     await waitForFocus(textbox);
     await userEvent.keyboard('{Alt>}{F10}{/Alt}{End}{Enter}');
     const menu = within(await screen.findByRole('listbox', { name: 'Turn into' }));
-    const query = screen.getByRole('combobox', { name: 'Search blocks' });
+    const query = screen.getByRole('combobox', { name: 'Find a block' });
     await waitFor(() => expect(query).toHaveFocus());
     await userEvent.keyboard('{ArrowDown}');
     await waitFor(() =>

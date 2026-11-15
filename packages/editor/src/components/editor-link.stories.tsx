@@ -392,23 +392,34 @@ export const InlineLifetimeJourney: Story = {
     const requestCount = evidence.requests.length;
 
     // A real edit publishes into the controlled parent. The next render allocates a fresh source callback.
+    console.info('Editor inline lifetime: placing end caret');
     let textbox = await caretAtEnd(canvas);
+    console.info('Editor inline lifetime: typing controlled edit');
     await userEvent.type(textbox, ' local edit');
+    console.info('Editor inline lifetime: awaiting controlled edit publication');
     await waitFor(() => expect(evidence.publications).toBeGreaterThan(0));
     expect(journeyText(checkJourneyDocument(evidence.latest))).toContain('Draft text local edit');
 
     // Selection formatting and shortcut link creation operate on the mounted ProseMirror selection.
+    console.info('Editor inline lifetime: selecting text for formatting');
     textbox = await selectJourneyText(canvas);
     const selectionToolbar = within(await canvas.findByRole('toolbar', { name: 'Format text' }));
+    console.info('Editor inline lifetime: applying bold');
     await userEvent.click(selectionToolbar.getByRole('button', { name: 'Bold' }));
+    console.info('Editor inline lifetime: awaiting bold publication');
     await waitFor(() => expect(JSON.stringify(evidence.latest)).toContain('"type":"bold"'));
     textbox = await selectJourneyText(canvas);
+    console.info('Editor inline lifetime: opening shortcut URL field');
     await userEvent.keyboard('{Control>}k{/Control}');
     let address = await canvas.findByRole('textbox', { name: 'URL' });
+    console.info('Editor inline lifetime: typing shortcut URL');
     await userEvent.type(address, 'https://shortcut.example/resource');
+    console.info('Editor inline lifetime: applying shortcut URL');
     await userEvent.click(canvas.getByRole('button', { name: 'Apply' }));
+    console.info('Editor inline lifetime: awaiting shortcut URL publication');
     await waitFor(() => expect(JSON.stringify(evidence.latest)).toContain('https://shortcut.example/resource'));
 
+    console.info('Editor inline lifetime: shortcut cancellation');
     // Escape cancels a shortcut draft without changing the link or inserting a URL.
     await caretAtEnd(canvas);
     await userEvent.keyboard('{Control>}k{/Control}');
@@ -418,6 +429,7 @@ export const InlineLifetimeJourney: Story = {
     expect(canvas.queryByRole('textbox', { name: 'URL' })).toBeNull();
     expect(JSON.stringify(evidence.latest)).not.toContain('https://cancelled.example');
 
+    console.info('Editor inline lifetime: anchor editing');
     // Link editing, cancel, replacement, and removal remain attached to the current anchor.
     textbox = canvas.getByRole('textbox', { name: 'Post' });
     const anchor = textbox.querySelector('a');
@@ -447,6 +459,7 @@ export const InlineLifetimeJourney: Story = {
     await userEvent.click(await canvas.findByRole('button', { name: 'Remove link' }));
     await waitFor(() => expect(JSON.stringify(evidence.latest)).not.toContain('https://edited.example/resource'));
 
+    console.info('Editor inline lifetime: selection and touch links');
     // The selection menu can create a link, and a touch visit can create, cancel, edit, and remove one.
     await userEvent.click(canvas.getByRole('button', { name: 'Replace with selection target' }));
     textbox = await selectJourneyText(canvas);

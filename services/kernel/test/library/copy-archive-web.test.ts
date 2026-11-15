@@ -18,14 +18,14 @@ import {
 } from '../../../../apps/web/src/library/archive-progress-recovery/native';
 import type { ProgressRecoveryPort as Port } from '../../../../apps/web/src/library/archive-progress-recovery/native';
 import { createCopyArchive } from '../../src/library/copy-archive';
-import { createWorkClient } from '../../src/work/client';
+import { createNativeLibraryWorkClient } from './support/native-library-fixture-binding.ts';
 import { routeOf } from '../../src/route/route';
 import { testRouteKey } from '../support/test-kernel';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture';
 
 let f: NativeProfileFixture;
 let owner: Awaited<ReturnType<NativeProfileFixture['identity']>>;
-let work: Awaited<ReturnType<typeof createWorkClient>>;
+let work: Awaited<ReturnType<typeof createNativeLibraryWorkClient>>;
 let subjectId: string, artifact: string, memberId: string, detachedId: string, unitSource: string;
 let sessions: string[] = [];
 let port: Port;
@@ -179,7 +179,7 @@ beforeAll(async () => {
   expect(manifest).toMatchObject({ version: 1 });
   artifact = JSON.stringify({ manifest, records });
   expect(await response('DELETE', `/v1/libraryExports/${capture.exportId}`)).toMatchObject({ state: 'cancelled' });
-  work = await createWorkClient(f.pool.options.connectionString!, f.pool);
+  work = await createNativeLibraryWorkClient(f.pool);
   const service = createCopyArchive({
     pool: f.pool,
     access: f.access,
@@ -198,6 +198,7 @@ beforeAll(async () => {
         if (interrupt) {
           interrupt = false;
           const abort = new AbortController();
+          const acknowledgementLost = new Error('Native create acknowledgement lost');
           await expect(
             service.applyProgress(
               owner.actor,
@@ -205,9 +206,9 @@ beforeAll(async () => {
               applying[2]!,
               JSON.parse(request.headers.get('idempotency-key')!),
               abort.signal,
-              () => abort.abort(),
+              () => abort.abort(acknowledgementLost),
             ),
-          ).rejects.toThrow();
+          ).rejects.toBe(acknowledgementLost);
           return Response.json({ code: 'dependency_unavailable' }, { status: 503 });
         }
         if (loseResponse) {

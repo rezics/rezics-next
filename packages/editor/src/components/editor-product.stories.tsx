@@ -120,7 +120,7 @@ export const Settings: Story = {
     await userEvent.keyboard('{Enter}');
     await userEvent.tab();
     await userEvent.selectOptions(within(dialog).getByRole('combobox', { name: 'Toolbar' }), 'hidden');
-    await expect(canvas.getByRole('status', { name: 'Saved drafts' })).toHaveTextContent('0');
+    await expect(canvas.getByLabelText('Saved drafts')).toHaveTextContent('0');
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Editor settings' })).not.toBeInTheDocument());
     await waitForFocus(textbox);

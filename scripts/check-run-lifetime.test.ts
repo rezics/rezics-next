@@ -5,6 +5,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, unl
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
+  discardRegisteredCheckRunFailedSnapshot,
+  prepareCandidateSnapshot,
   maintainCheckRunSnapshots,
   reapRetainedTransportChild,
   reconcileCheckRunPreparationIntent,
@@ -20,6 +22,9 @@ import {
   claimCheckRunPreparedInvocation,
   checkRunPreparationIntentFile,
   createCheckRunFinalSettlement,
+  discardCheckRunFailedSnapshot,
+  checkRunBindingHash,
+  checkRunSnapshotReleaseKind,
   discardCheckRunPreparationIntent,
   encodeCheckRunFinalSettlement,
   getCheckRunStatus,
@@ -1501,4 +1506,333 @@ test('cleanup-only receiving preserves an existing native outcome and immutable 
   expect(after.finalCustody).toEqual(before.finalCustody);
   expect(after.snapshot).toEqual(before.snapshot);
   expect(after.physicalCleanup?.remote.status).toBe('verified');
+});
+
+async function failedSnapshotFixture(
+  exitCode = 70,
+  cleanup: Partial<CheckRunFinalSettlement['cleanup']> = {},
+  accept = true,
+) {
+  const root = fixtureRoot();
+  const state = privateDirectory(root, 'state');
+  const { candidate } = gitCandidate(root);
+  mkdirSync(join(candidate, 'contracts'));
+  const priorOutput = '{"prior":"caller source"}\n';
+  writeFileSync(join(candidate, 'contracts/openapi.json'), priorOutput);
+  git(candidate, ['add', 'contracts/openapi.json']);
+  git(candidate, ['commit', '-m', 'fixture generated source']);
+  const sourceRevision = git(candidate, ['rev-parse', 'HEAD']);
+  const returns = ['contracts/openapi.json'];
+  const frozen = await prepareCandidateSnapshot(candidate, sourceRevision, undefined, returns);
+  const snapshot = {
+    workspace: frozen.workspace,
+    scratch: frozen.scratch,
+    sourceSha256: frozen.sourceHash,
+    inputFiles: frozen.inputFiles,
+  };
+  const selected = {
+    ...binding(),
+    sourceRevision,
+    indexTree: frozen.indexTree,
+    sourceSha256: frozen.sourceHash,
+    returnsSha256: digest(JSON.stringify(returns)),
+  };
+  const registration = await registerCheckRunInvocation(selected, {
+    stateDirectory: state,
+    candidateWorkspace: candidate,
+    snapshot,
+    returns,
+  });
+  const options = { stateDirectory: state };
+  const physical = { host: 'b', run: 'failed-original-run-70' };
+  const native = { exitCode, lifetimeFailure: false, receiptSha256: '6'.repeat(64) };
+  await markCheckRunQueued(registration.invocationId, registration.nonce, options);
+  await beginCheckRunAllocation(registration.invocationId, registration.nonce, options);
+  await allocateCheckRunPhysical(registration.invocationId, registration.nonce, physical.host, physical.run, options);
+  await withCheckRunSpawnPermit(
+    registration.invocationId,
+    registration.nonce,
+    physical.host,
+    physical.run,
+    () => undefined,
+    options,
+  );
+  let final: CheckRunFinalSettlement | null = null;
+  if (accept) {
+    await markCheckRunNativeTerminal(
+      registration.invocationId,
+      registration.nonce,
+      { ...physical, ...native },
+      options,
+    );
+    final = createCheckRunFinalSettlement({
+      invocationId: registration.invocationId,
+      nonce: registration.nonce,
+      binding: selected,
+      physical,
+      native,
+      preparedInputs: {
+        status: 'unavailable',
+        sourceSha256: null,
+        manifestSha256: null,
+        fileCount: null,
+        totalBytes: null,
+      },
+      returns: {
+        status: 'missing',
+        declarationsSha256: selected.returnsSha256,
+        entries: [],
+        missing: returns,
+        failures: ['original preparation produced no returned source'],
+      },
+      cleanup: {
+        disposition: 'unknown',
+        remote: 'verified',
+        transportChild: 'reaped',
+        source: 'verified',
+        localWorktree: 'retained',
+        failures: ['failed return recovery retains the local snapshot'],
+        ...cleanup,
+      },
+      failures: { primary: [`original native exit ${exitCode}`, 'prepared inputs unavailable'], cleanup: [] },
+    });
+    await acceptCheckRunFinalSettlement(encodeCheckRunFinalSettlement(final), options);
+  }
+  const record = await getCheckRunStatus(registration.invocationId, options);
+  const decision = {
+    abandonReturns: true,
+    bindingSha256: checkRunBindingHash(record.binding),
+    physical,
+    native,
+    finalSha256: record.finalCustody?.originalFinalSha256 ?? '7'.repeat(64),
+  };
+  return { candidate, priorOutput, snapshot, registration, options, final, record, decision };
+}
+
+test('explicit failed snapshot discard retains native70, missing returns and immutable non-green final', async () => {
+  const f = await failedSnapshotFixture();
+  expect(checkRunSnapshotReleaseKind(f.record)).toBeNull();
+  const originalFinal = encodeCheckRunFinalSettlement(f.final!);
+  const originalNative = f.record.native;
+  writeFileSync(join(f.candidate, 'source.txt'), 'later caller work\n');
+  git(f.candidate, ['add', 'source.txt']);
+  git(f.candidate, ['commit', '-m', 'advance caller after the failed original']);
+  const callerHead = git(f.candidate, ['rev-parse', 'HEAD']);
+  expect(callerHead).not.toBe(f.record.binding.sourceRevision);
+  const newerOutput = '{"newer":"subsequent generator output"}\n';
+  writeFileSync(join(f.candidate, 'contracts/openapi.json'), newerOutput);
+  const result = await discardRegisteredCheckRunFailedSnapshot(
+    f.registration.invocationId,
+    f.registration.nonce,
+    true,
+    f.options,
+  );
+  expect(result.snapshotCustody).toBe('removed');
+  expect(existsSync(f.snapshot.workspace)).toBe(false);
+  expect(existsSync(f.snapshot.scratch)).toBe(false);
+  expect(readFileSync(join(f.candidate, 'contracts/openapi.json'), 'utf8')).toBe(newerOutput);
+  expect(git(f.candidate, ['rev-parse', 'HEAD'])).toBe(callerHead);
+  expect(result.binding).toEqual(f.record.binding);
+  expect(result.returns).toEqual(f.record.returns);
+  expect(result.finalCustody?.originalFinalSha256).toBe(f.record.finalCustody?.originalFinalSha256);
+  expect(encodeCheckRunFinalSettlement(result.final!)).toBe(originalFinal);
+  expect(result.native).toEqual(originalNative);
+  expect(result.native?.exitCode).toBe(70);
+  expect(result.final?.returns).toEqual(f.final!.returns);
+  expect(result.phase).toBe('unknown');
+  expect(result.finalCustody?.aggregate).not.toBe('settled');
+  expect(checkRunSnapshotReleaseKind(result)).toBeNull();
+});
+
+test('failed snapshot discard refuses absent abandonment and changed nonce, binding, physical or native identity', async () => {
+  const f = await failedSnapshotFixture();
+  let removals = 0;
+  const remove = () => {
+    removals++;
+  };
+  await expect(
+    discardCheckRunFailedSnapshot(f.registration.invocationId, randomUUID(), f.decision, remove, f.options),
+  ).rejects.toThrow('nonce');
+  for (const decision of [
+    { ...f.decision, abandonReturns: false },
+    { ...f.decision, bindingSha256: '8'.repeat(64) },
+    { ...f.decision, physical: { ...f.decision.physical, run: 'replacement-run' } },
+    { ...f.decision, native: { ...f.decision.native, exitCode: 1 } },
+    { ...f.decision, native: { ...f.decision.native, receiptSha256: '9'.repeat(64) } },
+    { ...f.decision, finalSha256: '0'.repeat(64) },
+  ])
+    await expect(
+      discardCheckRunFailedSnapshot(f.registration.invocationId, f.registration.nonce, decision, remove, f.options),
+    ).rejects.toThrow();
+  expect(removals).toBe(0);
+  expect((await getCheckRunStatus(f.registration.invocationId, f.options)).snapshotCustody).toBe('owned');
+  expect(existsSync(f.snapshot.workspace)).toBe(true);
+});
+
+test('failed snapshot discard refuses success, active work and unknown remote, transport or source cleanup', async () => {
+  const cases = [
+    await failedSnapshotFixture(0),
+    await failedSnapshotFixture(70, {}, false),
+    await failedSnapshotFixture(70, { remote: 'unknown' }),
+    await failedSnapshotFixture(70, { transportChild: 'unknown' }),
+    await failedSnapshotFixture(70, { source: 'unknown' }),
+  ];
+  for (const f of cases) {
+    let removals = 0;
+    await expect(
+      discardCheckRunFailedSnapshot(
+        f.registration.invocationId,
+        f.registration.nonce,
+        f.decision,
+        () => {
+          removals++;
+        },
+        f.options,
+      ),
+    ).rejects.toThrow();
+    expect(removals).toBe(0);
+    expect(existsSync(f.snapshot.workspace)).toBe(true);
+    expect((await getCheckRunStatus(f.registration.invocationId, f.options)).snapshotCustody).toBe('owned');
+  }
+});
+
+test('failed snapshot removal failure retains exact ownership and can retry ordinary Git cleanup', async () => {
+  const f = await failedSnapshotFixture();
+  await expect(
+    discardCheckRunFailedSnapshot(
+      f.registration.invocationId,
+      f.registration.nonce,
+      f.decision,
+      () => {
+        throw new Error('owned removal unavailable');
+      },
+      f.options,
+    ),
+  ).rejects.toThrow('owned removal unavailable');
+  const retained = await getCheckRunStatus(f.registration.invocationId, f.options);
+  expect(retained.snapshotCustody).toBe('owned');
+  expect(retained.final).toEqual(f.final);
+  expect(existsSync(f.snapshot.workspace)).toBe(true);
+  const retried = await discardRegisteredCheckRunFailedSnapshot(
+    f.registration.invocationId,
+    f.registration.nonce,
+    true,
+    f.options,
+  );
+  expect(retried.snapshotCustody).toBe('removed');
+  expect(retried.final).toEqual(f.final);
+});
+
+test('failed snapshot discard refuses modified source and a replacement directory at the registered worktree path', async () => {
+  const changed = await failedSnapshotFixture();
+  writeFileSync(join(changed.snapshot.workspace, 'source.txt'), 'new local source must survive\n');
+  await expect(
+    discardRegisteredCheckRunFailedSnapshot(
+      changed.registration.invocationId,
+      changed.registration.nonce,
+      true,
+      changed.options,
+    ),
+  ).rejects.toThrow('source identity changed');
+  expect(existsSync(changed.snapshot.workspace)).toBe(true);
+  expect((await getCheckRunStatus(changed.registration.invocationId, changed.options)).snapshotCustody).toBe('owned');
+  const replaced = await failedSnapshotFixture();
+  git(replaced.candidate, ['worktree', 'remove', '--force', replaced.snapshot.workspace]);
+  mkdirSync(replaced.snapshot.workspace);
+  writeFileSync(join(replaced.snapshot.workspace, 'replacement.txt'), 'not owned by the failed attempt\n');
+  await expect(
+    discardRegisteredCheckRunFailedSnapshot(
+      replaced.registration.invocationId,
+      replaced.registration.nonce,
+      true,
+      replaced.options,
+    ),
+  ).rejects.toThrow();
+  expect(readFileSync(join(replaced.snapshot.workspace, 'replacement.txt'), 'utf8')).toBe(
+    'not owned by the failed attempt\n',
+  );
+  expect((await getCheckRunStatus(replaced.registration.invocationId, replaced.options)).snapshotCustody).toBe('owned');
+});
+
+test('a second failed discard waits for the original invocation fence and cannot remove after custody changed', async () => {
+  const f = await failedSnapshotFixture();
+  let enter!: () => void;
+  let release!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    enter = resolve;
+  });
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let removals = 0;
+  const first = discardCheckRunFailedSnapshot(
+    f.registration.invocationId,
+    f.registration.nonce,
+    f.decision,
+    async () => {
+      removals++;
+      enter();
+      await held;
+      git(f.candidate, ['worktree', 'remove', '--force', f.snapshot.workspace]);
+      rmSync(f.snapshot.scratch, { recursive: true, force: true });
+    },
+    f.options,
+  );
+  await entered;
+  const second = discardCheckRunFailedSnapshot(
+    f.registration.invocationId,
+    f.registration.nonce,
+    f.decision,
+    () => {
+      removals++;
+    },
+    f.options,
+  );
+  const rejected = expect(second).rejects.toThrow('retained terminal custody');
+  for (let index = 0; index < 4; index++) await Promise.resolve();
+  expect(removals).toBe(1);
+  release();
+  expect((await first).snapshotCustody).toBe('removed');
+  await rejected;
+  expect(removals).toBe(1);
+});
+
+test('failed snapshot CLI requires the original nonce and explicit return abandonment and reports the failed original', async () => {
+  const f = await failedSnapshotFixture();
+  const maintenance = spawnSync(
+    process.execPath,
+    [settlementCli, 'maintain', '--limit', '1', '--state-dir', f.options.stateDirectory],
+    {
+      encoding: 'utf8',
+      timeout: 30_000,
+    },
+  );
+  expect(maintenance.error).toBeUndefined();
+  expect(maintenance.signal).toBeNull();
+  expect(maintenance.status, maintenance.stderr).toBe(0);
+  expect(JSON.parse(maintenance.stdout).accounting.removed).toBe(0);
+  expect((await getCheckRunStatus(f.registration.invocationId, f.options)).snapshotCustody).toBe('owned');
+  const argv = [settlementCli, 'discard-failed-snapshot', f.registration.invocationId, '--nonce', f.registration.nonce];
+  const rejected = spawnSync(process.execPath, [...argv, '--state-dir', f.options.stateDirectory], {
+    encoding: 'utf8',
+    timeout: 30_000,
+  });
+  expect(rejected.error).toBeUndefined();
+  expect(rejected.signal).toBeNull();
+  expect(rejected.status).toBe(2);
+  expect(rejected.stderr).toContain('--abandon-returns');
+  expect(existsSync(f.snapshot.workspace)).toBe(true);
+  const retired = spawnSync(process.execPath, [...argv, '--abandon-returns', '--state-dir', f.options.stateDirectory], {
+    encoding: 'utf8',
+    timeout: 30_000,
+  });
+  expect(retired.error).toBeUndefined();
+  expect(retired.signal).toBeNull();
+  expect(retired.status, retired.stderr).toBe(0);
+  const record = JSON.parse(retired.stdout);
+  expect(record.snapshotCustody).toBe('removed');
+  expect(record.native.exitCode).toBe(70);
+  expect(record.final).toEqual(f.final);
+  expect(record.final.returns.status).toBe('missing');
+  expect(record.phase).toBe('unknown');
 });

@@ -164,10 +164,11 @@ export const UndoRedo: Story = {
     const { events: userEvent } = await editorBrowserInput();
     const canvas = within(canvasElement);
     const textbox = canvas.getByRole('textbox', { name: 'Post' });
-    const toolbarElement = await canvas.findByRole('toolbar', { name: 'Formatting toolbar' });
-    const toolbar = within(toolbarElement);
-    const undo = toolbar.getByRole('button', { name: 'Undo' });
-    const redo = toolbar.getByRole('button', { name: 'Redo' });
+    let toolbarElement = await canvas.findByRole('toolbar', { name: 'Formatting toolbar' });
+    let toolbar = within(toolbarElement);
+    let undo = toolbar.getByRole('button', { name: 'Undo' });
+    let redo = toolbar.getByRole('button', { name: 'Redo' });
+    let hostMode = 'Edit';
     await waitFor(() => {
       expect(undo).toBeDisabled();
       expect(redo).toBeDisabled();
@@ -194,12 +195,23 @@ export const UndoRedo: Story = {
       expect(textbox.dispatchEvent(event), `${key} handled=${handled} init=${JSON.stringify(init)}`).toBe(!handled);
       await waitFor(() => {
         expect(textbox.textContent).toBe(expected);
-        expect((undo as HTMLButtonElement).disabled).toBe(undoDepth(view.state) === 0);
-        expect((redo as HTMLButtonElement).disabled).toBe(redoDepth(view.state) === 0);
+        const current = canvas.queryByRole('toolbar', { name: 'Formatting toolbar' });
+        expect(Boolean(current)).toBe(!['Preview', 'History', 'Read only', 'Unmount'].includes(hostMode));
+        if (current) {
+          toolbarElement = current;
+          toolbar = within(current);
+          undo = toolbar.getByRole('button', { name: 'Undo' });
+          redo = toolbar.getByRole('button', { name: 'Redo' });
+          expect((undo as HTMLButtonElement).disabled).toBe(undoDepth(view.state) === 0);
+          expect((redo as HTMLButtonElement).disabled).toBe(redoDepth(view.state) === 0);
+        }
       });
       if (handled) expect(textbox).toHaveFocus();
     };
-    const control = async (name: string) => userEvent.click(canvas.getByRole('button', { name }));
+    const control = async (name: string) => {
+      hostMode = name;
+      await userEvent.click(canvas.getByRole('button', { name }));
+    };
     const view = (textbox as HTMLElement & { editor: Editor }).editor.view;
     const captureNative = () => view.props.handleDOMEvents!.beforeinput!;
     const staleInput = new InputEvent('beforeinput', { inputType: 'historyUndo', cancelable: true });
@@ -314,7 +326,7 @@ export const UndoRedo: Story = {
     await userEvent.keyboard('{Alt>}{F10}{/Alt}{Home}{Enter}');
     const page = within(canvasElement.ownerDocument.body);
     const dialog = within(await page.findByRole('dialog', { name: 'Blocks' }));
-    const query = dialog.getByRole('combobox', { name: 'Search blocks' });
+    const query = dialog.getByRole('combobox', { name: 'Find a block' });
     await userEvent.type(query, 'Heading 2');
     await waitFor(() => expect(dialog.getByRole('option', { name: 'Heading 2' })).toBeVisible());
     await userEvent.keyboard('{Enter}');

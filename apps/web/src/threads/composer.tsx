@@ -1550,7 +1550,11 @@ function PostComposerContent<T, Context = undefined>({
       ) : null}
       {writing || inspection ? (
         <details className="mt-4 min-w-0 rounded-xl border border-border/60 bg-muted/20 p-3 sm:p-4 [overflow-wrap:anywhere]">
-          <summary className={`${authoringActionClassName} cursor-pointer rounded-md`}>{m.thread_write_help()}</summary>
+          <summary className={`${authoringActionClassName} cursor-pointer rounded-md`}>
+            {[writing ? m.thread_portable_heading() : null, inspection ? m.thread_inspection_open() : null]
+              .filter(Boolean)
+              .join(' · ')}
+          </summary>
           <div className="mt-3 min-w-0 space-y-3">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               {writing ? <PortableWritingToolbar transfer={writing} /> : null}
