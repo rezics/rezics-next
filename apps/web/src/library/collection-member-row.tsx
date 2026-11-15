@@ -20,9 +20,16 @@ import {
   type CollectionViewerProjection,
 } from './collection-viewer/model';
 
+const wrappingLink =
+  'inline-flex min-h-11 min-w-0 max-w-full flex-wrap items-center whitespace-normal text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+
 export function CollectionMemberNoteSaved({ memberId }: { memberId: string }) {
   return (
-    <span role="status" data-collection-note-saved={memberId} className="text-sm text-muted-foreground">
+    <span
+      role="status"
+      data-collection-note-saved={memberId}
+      className="min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]"
+    >
       {m.library_subject_saved()}
     </span>
   );
@@ -57,8 +64,14 @@ export function CollectionMemberDetails({
           : 'empty';
   return (
     <>
-      {member.subject.typeLabel ? <p className="text-sm text-muted-foreground">{member.subject.typeLabel}</p> : null}
-      <div data-slot="member-list-row-facts" data-context-state={state} className="text-sm text-muted-foreground">
+      {member.subject.typeLabel ? (
+        <p className="min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]">{member.subject.typeLabel}</p>
+      ) : null}
+      <div
+        data-slot="member-list-row-facts"
+        data-context-state={state}
+        className="min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]"
+      >
         {facts.length ? (
           <dl className="flex min-w-0 flex-wrap gap-x-4 gap-y-1 [overflow-wrap:anywhere]">
             {facts.map((fact, index) => (
@@ -66,12 +79,12 @@ export function CollectionMemberDetails({
                 <dt lang={fact.label.lang ?? undefined} className="text-xs">
                   {fact.label.text || m.search_constraint_identity_property_unavailable()}
                 </dt>
-                <dd lang={fact.lang}>
+                <dd lang={fact.lang} className="flex min-w-0 max-w-full flex-wrap items-start gap-x-2">
                   {fact.targetId && (currentHref || referenceActions) ? (
                     <a
                       href={collectionComparisonHref(fact.targetId, fact.text, locale, currentHref, member.id)}
                       data-comparison-reference={fact.targetId}
-                      className="relative z-10 inline-flex min-h-11 max-w-full items-center rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                      className={`relative z-10 rounded-sm ${wrappingLink}`}
                       onClick={(event) => onReferenceNavigate?.(event.currentTarget)}
                     >
                       {fact.text}
@@ -79,13 +92,15 @@ export function CollectionMemberDetails({
                   ) : (
                     fact.text
                   )}
-                  {fact.targetId
-                    ? referenceActions?.({
+                  {fact.targetId && referenceActions ? (
+                    <div className="min-w-0 max-w-full shrink-0">
+                      {referenceActions({
                         id: fact.targetId,
                         label: fact.text,
                         href: collectionComparisonHref(fact.targetId, fact.text, locale, currentHref, member.id),
-                      })
-                    : null}
+                      })}
+                    </div>
+                  ) : null}
                 </dd>
               </div>
             ))}
@@ -144,7 +159,7 @@ export function CollectionMemberViewerDetails({
       aria-label={m.collection_viewer_heading()}
       data-slot="collection-viewer-facts"
       data-viewer-state={hasCurrentRow ? 'current' : 'unavailable'}
-      className="space-y-1 border-t pt-2 text-sm"
+      className="min-w-0 space-y-1 border-t pt-2 text-sm [overflow-wrap:anywhere]"
     >
       <p className="font-medium">{m.collection_viewer_heading()}</p>
       {projection.state === 'unavailable' ? (
@@ -192,10 +207,7 @@ export function CollectionMemberViewerDetails({
         </p>
       ) : null}
       {actionHref && projection.state === 'current' && collectionViewerHasPersonalAction(row, question) ? (
-        <a
-          href={actionHref}
-          className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        >
+        <a href={actionHref} className={`shrink-0 ${wrappingLink}`}>
           {m.collection_viewer_action()}
         </a>
       ) : null}

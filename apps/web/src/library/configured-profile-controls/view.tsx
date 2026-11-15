@@ -1,5 +1,5 @@
 import { queryOptions, useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { personalRead } from '../../session/reading-policy';
 import { Exposure, useOperation, type GatedOperation } from '../../kernel/exposure';
@@ -31,8 +31,31 @@ const operations = [
 
 const target =
   'min-h-11 min-w-11 max-w-full cursor-pointer whitespace-normal py-2 text-center [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const quiet = `${target} inline-flex items-center justify-center rounded-lg border border-border px-4 hover:bg-muted disabled:opacity-60`;
-const linkClass = 'text-sm text-primary underline-offset-4 hover:underline';
+const quiet = `${target} inline-flex shrink-0 items-center justify-center rounded-lg border border-border px-4 hover:bg-muted disabled:opacity-60`;
+const linkClass =
+  'inline-flex min-h-11 min-w-0 max-w-full flex-wrap items-center text-sm text-primary underline-offset-4 [overflow-wrap:anywhere] hover:underline';
+
+function ConfiguredRetry({
+  message,
+  disabled,
+  onRetry,
+}: {
+  message: string;
+  disabled?: boolean;
+  onRetry: () => void;
+}) {
+  const statusId = useId();
+  return (
+    <div className="min-w-0 space-y-2">
+      <p role="status" id={statusId} className="min-w-0 text-sm [overflow-wrap:anywhere]">
+        {message}
+      </p>
+      <button type="button" className={quiet} disabled={disabled} aria-describedby={statusId} onClick={onRetry}>
+        {m.library_configured_retry()}
+      </button>
+    </div>
+  );
+}
 
 export function configuredLibraryVisitQuery(
   subjectId: string,
@@ -114,24 +137,20 @@ function VisitBody({
   if (visit.state === 'signed-out') return null;
   if (visit.state === 'refused')
     return (
-      <p role="status" className="text-sm">
+      <p role="status" className="min-w-0 text-sm [overflow-wrap:anywhere]">
         {m.library_configured_refused()}
       </p>
     );
   if (visit.state === 'unavailable')
     return (
-      <div className="space-y-2">
-        <p role="status" className="text-sm">
-          {visit.closed ? m.library_subject_closed() : m.library_configured_unavailable()}
-        </p>
-        <button type="button" className={quiet} onClick={() => current() && onRefresh()}>
-          {m.library_configured_retry()}
-        </button>
-      </div>
+      <ConfiguredRetry
+        message={visit.closed ? m.library_subject_closed() : m.library_configured_unavailable()}
+        onRetry={() => current() && onRefresh()}
+      />
     );
   if (visit.state === 'unsupported')
     return (
-      <p role="status" className="text-sm text-muted-foreground">
+      <p role="status" className="min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]">
         {m.library_configured_unsupported()}
       </p>
     );
@@ -153,8 +172,8 @@ function VisitBody({
   };
 
   return (
-    <div className="mt-4 min-w-0 space-y-6 border-t border-border pt-4">
-      <div className="space-y-2">
+    <div className="mt-4 min-w-0 space-y-6 border-t border-border pt-4 [overflow-wrap:anywhere]">
+      <div className="min-w-0 space-y-2">
         <h2 className="text-lg font-medium">{m.library_configured_heading()}</h2>
         <p className="text-sm text-muted-foreground">{identityLabel(visit.identity)}</p>
         {visit.entry.meaning === 'absent' ? (
@@ -264,14 +283,11 @@ export function ConfiguredProfileControls({
   if (!visit) {
     if (!ready || supplied) return null;
     return loaded.isError ? (
-      <button
-        type="button"
-        className={quiet}
+      <ConfiguredRetry
+        message={m.library_configured_unavailable()}
         disabled={loaded.isFetching}
-        onClick={() => isCurrent() && void loaded.refetch()}
-      >
-        {m.library_configured_retry()}
-      </button>
+        onRetry={() => isCurrent() && void loaded.refetch()}
+      />
     ) : null;
   }
   return (
