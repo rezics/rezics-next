@@ -15,9 +15,9 @@ original case and actual new persona/sign-in receipts, with no skips.
 
 ## First-public journey walk
 
-[First-public scope](../scope.md) keeps Search behind its existing grants. This ledger does not open Search,
-advanced facets/scopes or rating sorts, public Collection/review/Space discovery, or saved-query authoring.
-The granted Search journeys and Search's composition consumers below are the finishing inventory.
+[First-public scope](../scope.md) admits exact Book, Book Series and Edition discovery through native Subject
+Search. Other queries keep their existing platform grants. The granted Search journeys and Search's composition
+consumers below are the finishing inventory.
 Web owns surrounding navigation and Semantic owns static Zone routing. Their Search seams are included here.
 
 PASS requires the complete path on dev through native HTTP and its mounted page, using real seeded identities and

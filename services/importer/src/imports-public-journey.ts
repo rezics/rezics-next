@@ -22,9 +22,16 @@ import {
   readSeedRemainingRequest,
   remainingRequestFromPreparedJournal,
 } from './seed-remaining-request.ts';
+import { MAX_IMPORT_DEADLINE_MS } from './import-fetch.ts';
 import { ImportSession } from './import-session.ts';
 import { sameStatementProvenance } from './statement-provenance.ts';
-import { GLOBAL_CONTEXT, selectedSynopsisQueryFromPublic } from './public-bulk-client.ts';
+import {
+  createPublicBulkClient,
+  GLOBAL_CONTEXT,
+  PublicSubjectGetUnavailable,
+  ReviewedSubjectNotReady,
+  selectedSynopsisQueryFromPublic,
+} from './public-bulk-client.ts';
 import { BOOK_OWNER_GRANT_ACTIONS, grantOrdinaryOwnerActions } from './ordinary-owner-grants.ts';
 import {
   citedAnimeCreditTargets,
@@ -492,31 +499,34 @@ async function parseEnv(path: string): Promise<Record<string, string>> {
 }
 
 async function currentSubject(api: string, id: string) {
-  let last = 0;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const response = await fetch(`${api}/v1/subjects/${id}`);
-    last = response.status;
-    if (response.status === 503) {
-      if (attempt === 4) break;
+  const reader = createPublicBulkClient({ origin: api });
+  const signal = AbortSignal.timeout(MAX_IMPORT_DEADLINE_MS);
+  let body: unknown;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      body = await reader.readSubject(id, signal);
+      break;
+    } catch (error) {
+      if (
+        attempt === 5 ||
+        (!(error instanceof ReviewedSubjectNotReady) && !(error instanceof PublicSubjectGetUnavailable))
+      )
+        throw error;
       await Bun.sleep(200);
-      continue;
     }
-    assert.equal(response.status, 200, `anonymous Subject ${id}`);
-    const body: unknown = await response.json();
-    if (
-      !isRecord(body) ||
-      !isRecord(body.subject) ||
-      typeof body.subject.id !== 'string' ||
-      typeof body.subject.type !== 'string' ||
-      !isRecord(body.subject.statements)
-    )
-      throw new TypeError(`Current Subject ${id} has an invalid response shape`);
-    return body as {
-      subject: { id: string; type: string; release?: string; context?: string; statements: Record<string, unknown[]> };
-      summary?: unknown;
-    };
   }
-  throw new Error(`anonymous Subject ${id} returned ${last}`);
+  if (
+    !isRecord(body) ||
+    !isRecord(body.subject) ||
+    typeof body.subject.id !== 'string' ||
+    typeof body.subject.type !== 'string' ||
+    !isRecord(body.subject.statements)
+  )
+    throw new TypeError(`Current Subject ${id} has an invalid response shape`);
+  return body as {
+    subject: { id: string; type: string; release?: string; context?: string; statements: Record<string, unknown[]> };
+    summary?: unknown;
+  };
 }
 
 async function currentLinks(api: string, id: string, property: string) {
