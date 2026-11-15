@@ -71,6 +71,7 @@ async function main(args: string[]): Promise<void> {
           policy: settings.policy,
           now,
           productLineMeasurement,
+          ...(parsed.scheduled ? { view: 'native-scheduled' as const } : {}),
           ...(observeStage ? { observeStage } : {}),
         }),
       );

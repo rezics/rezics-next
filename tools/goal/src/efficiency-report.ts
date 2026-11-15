@@ -79,6 +79,8 @@ export function hourlyReportStage<T>(observe: ReportStageObserver | undefined, s
 }
 
 export type ReportOptions = {
+  /** Scheduled native delivery keeps the lifetime legacy census in the manual view. */
+  view?: 'full' | 'native-scheduled';
   observeStage?: ReportStageObserver;
   policy?: ControlPolicy | undefined;
   bucket?: string;
@@ -959,9 +961,14 @@ function buildHourlyEfficiencyReport(
   if (flowAvailable) ensureFlow(db);
   const asOf = options.now ?? Date.now();
   const openWorkAvailable = hasTable(db, 'worker_tasks');
-  const metrics = openWorkAvailable
-    ? hourlyReportStage(options.observeStage, 'lifecycle', () => lifecycleMetrics(db, asOf, options.policy))
-    : null;
+  const nativeScheduled =
+    options.view === 'native-scheduled' &&
+    hasTable(db, 'native_execution_units') &&
+    Boolean(db.query('SELECT 1 FROM native_execution_units LIMIT 1').get());
+  const metrics =
+    openWorkAvailable && !nativeScheduled
+      ? hourlyReportStage(options.observeStage, 'lifecycle', () => lifecycleMetrics(db, asOf, options.policy))
+      : null;
   const bucketSummary = hourlyReportStage(options.observeStage, 'bucket', () =>
     aggregateBucket(db, bucket, flowAvailable, openWorkAvailable, policy),
   );
@@ -984,12 +991,17 @@ function buildHourlyEfficiencyReport(
           : []),
         ...aggregateLines.slice(1),
       ]
-    : [
-        'Launches in trailing hour: unknown (current task state unavailable).',
-        'Current waits: unknown (current task state unavailable).',
-        'Orphaned landings: unknown (current task state unavailable).',
-        'Quarantines: unknown (current task state unavailable).',
-      ];
+    : nativeScheduled
+      ? [
+          'Legacy managed lifecycle census: unmeasured in the scheduled native view; the manual report retains the full legacy view.',
+          'Legacy managed current width, waits, orphaned landings and quarantines: unknown (lifetime census omitted).',
+        ]
+      : [
+          'Launches in trailing hour: unknown (current task state unavailable).',
+          'Current waits: unknown (current task state unavailable).',
+          'Orphaned landings: unknown (current task state unavailable).',
+          'Quarantines: unknown (current task state unavailable).',
+        ];
   const landed = bucketSummary.landingLines;
   const incidents = sharedIncidentLine(db);
   const waitsAvailable = openWorkAvailable;
