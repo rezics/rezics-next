@@ -107,6 +107,7 @@ export const SaveShortcut: Story = {
     const note = editor.schema.nodes.footnoteReference!.create({ label: 'Missing' });
     editor.view.dispatch(closeHistory(editor.state.tr.replaceSelectionWith(note)));
     expect(shortcut(textbox)).toBe(false);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('This document could not be saved.');
     await expect(canvas.getByRole('button', { name: 'Save draft' })).toBeDisabled();
     expect(shortcutSave).toHaveBeenCalledTimes(1);
 
@@ -250,7 +251,10 @@ const phone: Story = {
     await events.click(commands);
     const dialog = await screen.findByRole('dialog', { name: 'Commands' });
     const search = within(dialog).getByRole('combobox', { name: 'Search available commands' });
+    await events.click(search);
     await waitForFocus(search);
+    await events.type(search, 'bold');
+    await expect(within(dialog).getByRole('option', { name: /Bold/ })).toBeVisible();
     await waitFor(() => {
       const bounds = dialog.getBoundingClientRect();
       expect(bounds.left).toBeGreaterThanOrEqual(0);

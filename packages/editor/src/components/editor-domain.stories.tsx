@@ -112,6 +112,7 @@ export const DomainAnnotations: Story = {
     await userEvent.type(dialog.getByRole('textbox', { name: 'Language tag' }), 'ja');
     await userEvent.click(dialog.getByRole('combobox', { name: 'Reading position' }));
     await userEvent.click(await screen.findByRole('option', { name: 'Below' }));
+    await userEvent.click(dialog.getByRole('textbox', { name: 'Language tag' }));
     await userEvent.keyboard('{Enter}');
     expect(annotations.submissions.current).toBe(0);
     await userEvent.click(dialog.getByRole('button', { name: 'Apply' }));
@@ -143,7 +144,9 @@ export const DomainAnnotations: Story = {
       }),
     );
     await selectEditorText(textbox, 'outside');
-    await userEvent.click(canvas.getByRole('button', { name: 'Spoiler' }));
+    const formatting = within(await canvas.findByRole('toolbar', { name: 'Format text' }));
+    await userEvent.click(formatting.getByRole('button', { name: 'More formatting' }));
+    await userEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Spoiler' }));
     await waitFor(() =>
       expect(
         within(canvas.getByRole('region', { name: 'Reading preview' })).getByRole('button', { name: 'Reveal spoiler' }),
