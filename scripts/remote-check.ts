@@ -1738,6 +1738,240 @@ export function landingMarkerScript(
   return `# REMOTE_CHECK_LANDING_MARKER\n# REMOTE_CHECK_LANDING_COUNT ${slots}\n# REMOTE_CHECK_LANDING_ID ${id}\n# REMOTE_CHECK_LANDING_ARRIVAL ${arrivalOrder}\n# REMOTE_CHECK_LANDING_ESTIMATE_MS ${estimateMs ?? 'none'}\n# REMOTE_CHECK_LANDING_MEMORY_BYTES ${memoryReservationBytes}\nset -eu\nmkdir -p ${ROOT}/slots\nexec 6>"${ROOT}/slots/landing-queue.lock"\nflock -x 6\nexec 8>>${quote(marker)}\nflock -n 8 || { flock -u 6; exit ${SLOT_BUSY}; }\n: > ${quote(marker)}\ntrap 'exit 0' HUP INT TERM\nsequence_file=${ROOT}/slots/landing-wait-sequence\nsequence=0\nif [ -e "$sequence_file" ]; then read -r sequence < "$sequence_file" || sequence=0; fi\ncase "$sequence" in ''|*[!0-9]*) sequence=0 ;; esac\nsequence=$((sequence + 1))\nprintf '%s\\n' "$sequence" > "$sequence_file"\nprintf '%s %s %s %s %s\\n' ${slots} ${arrivalOrder} "$sequence" ${estimateMs ?? 'none'} ${memoryReservationBytes} >&8\nflock -u 6\nexec 6>&-\necho LANDING_MARKER\ncat >/dev/null\n`;
 }
 
+/** Observational record plus kernel verification; JSON never establishes reservation authority by itself. */
+export const leaseCustodyProgram = String.raw`import fcntl,json,os,re,select,signal,subprocess,sys,time
+from pathlib import Path
+LEASE_ROOT=Path('${ROOT}')
+LEASE_CGROUP_ROOT=Path('/sys/fs/cgroup')
+
+def lease_json(path,limit=65536):
+    if path.is_symlink() or not path.is_file() or path.stat().st_size>limit:
+        raise ValueError('lease evidence unavailable')
+    with path.open() as source: return json.loads(source.read(limit+1))
+
+def lease_fields(pid):
+    return (Path('/proc')/str(pid)/'stat').read_text().rsplit(')',1)[1].split()
+
+def lease_note(message):
+    try: os.write(2,('remote-check: '+message+'\n').encode())
+    except OSError: pass
+
+def lease_record_path(root):
+    return root.parent.parent/'receipts'/root.name/'lease-custody.json'
+
+def verified_lease(root,value=None):
+    if root.parent.parent!=LEASE_ROOT or root.parent.name!='runs': raise ValueError('foreign lease root')
+    record=value if value is not None else lease_json(lease_record_path(root))
+    if (set(record)!={'schema','host','run','boot','holder','slots'} or record['schema']!=1 or
+            record['run']!=root.name or not re.fullmatch('[a-zA-Z0-9-]{1,96}',record['run']) or
+            not re.fullmatch('[a-z][a-z0-9-]{0,62}',record['host']) or
+            record['boot']!=Path('/proc/sys/kernel/random/boot_id').read_text().strip()):
+        raise ValueError('foreign lease identity')
+    holder=record['holder']; pid=holder['pid']; fields=lease_fields(pid)
+    if (type(pid) is not int or pid<=1 or fields[19]!=holder['start'] or fields[0] in ['Z','X'] or
+            int(fields[2])!=holder['group'] or (Path('/proc')/str(pid)).stat().st_uid!=holder['uid'] or
+            holder['uid']!=os.getuid()): raise ValueError('lease holder changed')
+    slots=record['slots']
+    if not isinstance(slots,list) or not 1<=len(slots)<=256: raise ValueError('invalid lease slot count')
+    names=set();fds=set()
+    for item in slots:
+        name=item['name'];fd=item['fd']
+        if (not re.fullmatch('(?:express|[0-9]{1,5})',name) or name in names or type(fd) is not int or
+                fd<10 or fd in fds or type(item['bytes']) is not int or item['bytes']<=0):
+            raise ValueError('invalid lease slot')
+        names.add(name);fds.add(fd)
+        path=LEASE_ROOT/'slots'/(name+'.lock'); held=Path('/proc')/str(pid)/'fd'/str(fd)
+        expected=(item['device'],item['inode'])
+        if path.is_symlink() or (path.stat().st_dev,path.stat().st_ino)!=expected or (held.stat().st_dev,held.stat().st_ino)!=expected:
+            raise ValueError('lease lock path or descriptor changed')
+        info=(Path('/proc')/str(pid)/'fdinfo'/str(fd)).read_text()
+        if not any(line.startswith('lock:') and re.search(r'FLOCK\s+ADVISORY\s+WRITE\s',line) for line in info.splitlines()):
+            raise ValueError('lease descriptor does not hold its lock')
+        memory=LEASE_ROOT/'slots'/(name+'.memory')
+        if (memory.is_symlink() or (memory.stat().st_dev,memory.stat().st_ino)!=(item['memoryDevice'],item['memoryInode']) or
+                memory.stat().st_size>32 or memory.read_text().strip()!=str(item['bytes'])):
+            raise ValueError('lease byte reservation changed')
+    return record
+
+def lease_supervisor(root,host,require_live=True):
+    marker=lease_json(root/'.remote-check-supervisor',8192)
+    if (marker.get('schema')!=1 or marker.get('host')!=host or marker.get('run')!=root.name or
+            type(marker.get('pid')) is not int or marker['pid']<=1 or marker.get('group')!=marker['pid'] or
+            marker.get('uid')!=os.getuid()): raise ValueError('foreign supervisor marker')
+    resource=lease_json(root.parent.parent/'receipts'/root.name/'physical-resources.json',500000)
+    if (resource.get('host')!=host or resource.get('run')!=root.name or
+            resource.get('boot')!=Path('/proc/sys/kernel/random/boot_id').read_text().strip() or
+            resource.get('supervisor')!={'pid':marker['pid'],'start':marker['started'],'group':marker['group']}):
+        raise ValueError('foreign supervisor resource identity')
+    cgroup=resource['cgroup']; expected='/rezics.slice/rezics-check.slice/rezics-check-'+root.name.replace('-','_')+'.slice'
+    if cgroup['path']!=expected: raise ValueError('foreign run cgroup')
+    group=LEASE_CGROUP_ROOT/expected.lstrip('/')
+    live=False
+    try:
+        fields=lease_fields(marker['pid'])
+        live=(fields[19]==marker['started'] and fields[0] not in ['Z','X'] and
+              int(fields[2])==marker['group'] and (Path('/proc')/str(marker['pid'])).stat().st_uid==marker['uid'])
+    except FileNotFoundError: pass
+    if group.exists():
+        info=group.stat()
+        if (info.st_dev,info.st_ino)!=(cgroup['device'],cgroup['inode']): raise ValueError('run cgroup replaced')
+    if require_live and (not live or not group.exists()): raise ValueError('supervisor is not live')
+    deadline=None
+    if live:
+        arguments=(Path('/proc')/str(marker['pid'])/'cmdline').read_bytes()
+        if len(arguments)>65536: raise ValueError('supervisor arguments exceed bound')
+        argv=arguments.decode().split('\0')
+        if (len(argv)<9 or argv[1]!=str(root/'.temp/check-host/prepare.py') or argv[2]!='lifetime' or
+                argv[4:7]!=[host,root.name,str(root)]): raise ValueError('supervisor lifetime authority differs')
+        bound=int(argv[3])
+        if not 0<bound<=7200000: raise ValueError('invalid original lifetime')
+        deadline=resource['startedMonoMs']/1000+bound/1000
+    return {'marker':marker,'group':group,'cgroup':cgroup,'live':live,'deadline':deadline}
+
+def lease_group_empty(owner):
+    group=owner['group']
+    if not group.exists(): return True
+    info=group.stat()
+    if (info.st_dev,info.st_ino)!=(owner['cgroup']['device'],owner['cgroup']['inode']):
+        raise ValueError('run cgroup replaced')
+    events=dict(line.split() for line in (group/'cgroup.events').read_text().splitlines())
+    if events.get('populated') not in ['0','1']: raise ValueError('run group state unavailable')
+    return events['populated']=='0'
+`;
+
+export function leaseCustodyCheckScript(directory: string): string {
+  return `python3 -c ${quote(leaseCustodyProgram + String.raw`
+try: verified_lease(Path(sys.argv[1]))
+except (OSError,ValueError,KeyError,TypeError,AttributeError,IndexError): sys.exit(1)
+`)} ${directory}`;
+}
+
+/** Replaces the existing holder in place; inherited flock open descriptions never move or close. */
+export const leaseHolderProgram = leaseCustodyProgram + String.raw`
+class LeaseStop(Exception):
+    def __init__(self,number): self.number=number
+
+def lease_stop(number,frame): raise LeaseStop(number)
+
+def hold_lease():
+    root=Path(sys.argv[1]);host=sys.argv[2];names=sys.argv[3].split();express_fd=int(sys.argv[4]);cleanup=sys.argv[5]
+    captured=[];record=None;owner=None;code=0;quarantined=False
+    for number in [signal.SIGTERM,signal.SIGINT,signal.SIGHUP]: signal.signal(number,lease_stop)
+    try:
+        fields=lease_fields(os.getpid())
+        for name in names:
+            fd=express_fd if name=='express' else 10+int(name)
+            os.set_inheritable(fd,True)
+            lock=os.fstat(fd);memory=LEASE_ROOT/'slots'/(name+'.memory');info=memory.stat()
+            captured.append({'name':name,'fd':fd,'device':lock.st_dev,'inode':lock.st_ino,
+                             'bytes':int(memory.read_text().strip()),'memoryDevice':info.st_dev,'memoryInode':info.st_ino})
+        record={'schema':1,'host':host,'run':root.name,'boot':Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+                'holder':{'pid':os.getpid(),'start':fields[19],'group':int(fields[2]),'uid':os.getuid()},'slots':captured}
+        verified_lease(root,record)
+        try:
+            path=lease_record_path(root);path.parent.mkdir(parents=True,exist_ok=True)
+            data=json.dumps(record,sort_keys=True).encode()
+            if len(data)>65536: raise ValueError('lease observation exceeds bound')
+            temporary=path.with_name(path.name+'.'+str(os.getpid())+'.pending')
+            descriptor=os.open(temporary,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+            try: os.write(descriptor,data);os.fsync(descriptor)
+            finally: os.close(descriptor)
+            os.replace(temporary,path)
+        except Exception: lease_note('lease custody observation unavailable')
+        # EOF is transport/release, not an authenticated cancellation. Explicit signals retain stop semantics.
+        while os.read(0,65536): pass
+        if not (root/'exit-status').exists():
+            owner=lease_supervisor(root,host)
+            verified_lease(root,record)
+            descriptor=os.pidfd_open(owner['marker']['pid'])
+            try:
+                if lease_fields(owner['marker']['pid'])[19]!=owner['marker']['started']:
+                    raise ValueError('supervisor changed before wait')
+                poll=select.poll();poll.register(descriptor,select.POLLIN)
+                # Reuse the existing controller's one-second rescue grace after the ORIGINAL host deadline.
+                remaining=max(0,owner['deadline']+1-time.monotonic())
+                poll.poll(int(remaining*1000))
+            finally: os.close(descriptor)
+        if (root/'exit-status').exists():
+            owner=lease_supervisor(root,host,False)
+            if owner['live'] or not lease_group_empty(owner): raise ValueError('terminal ownership remains live')
+        else:
+            raise LeaseStop(signal.SIGTERM)
+    except LeaseStop as stopped:
+        code=128+stopped.number
+        try:
+            if record is not None: verified_lease(root,record)
+            if (root/'.remote-check-supervisor').exists():
+                marker=lease_json(root/'.remote-check-supervisor',8192)
+                if marker.get('host')!=host or marker.get('run')!=root.name or marker.get('uid')!=os.getuid():
+                    raise ValueError('refusing foreign supervisor cleanup')
+            result=subprocess.run(['bash','-c',cleanup],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL)
+            if result.returncode: raise RuntimeError('owned lease cleanup is unverified')
+        except Exception:
+            quarantined=True
+    except Exception:
+        # No live preparation is preserved on absent/foreign authority. Attempt only exact existing cleanup.
+        code=75
+        try:
+            if record is not None: verified_lease(root,record)
+            if (root/'.remote-check-supervisor').exists():
+                marker=lease_json(root/'.remote-check-supervisor',8192)
+                if marker.get('host')!=host or marker.get('run')!=root.name or marker.get('uid')!=os.getuid():
+                    raise ValueError('refusing foreign supervisor cleanup')
+            result=subprocess.run(['bash','-c',cleanup],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL)
+            if result.returncode: raise RuntimeError('owned lease cleanup is unverified')
+            code=0
+        except Exception: quarantined=True
+    while quarantined:
+        lease_note('owned lease cleanup unknown; original reservations remain held')
+        try:
+            verified_lease(root,record)
+            if owner is None: owner=lease_supervisor(root,host,False)
+            # Kernel absence can prove the reserved processes ended even when ancillary cleanup failed.
+            try:
+                fields=lease_fields(owner['marker']['pid'])
+                owner['live']=fields[19]==owner['marker']['started'] and fields[0] not in ['Z','X']
+            except FileNotFoundError: owner['live']=False
+            if not owner['live'] and lease_group_empty(owner): break
+            poll=select.poll();descriptors=[]
+            if owner['live']:
+                fd=os.pidfd_open(owner['marker']['pid']);descriptors.append(fd);poll.register(fd,select.POLLIN)
+            if owner['group'].exists():
+                fd=os.open(owner['group']/'cgroup.events',os.O_RDONLY);descriptors.append(fd)
+                os.read(fd,4096);poll.register(fd,select.POLLPRI|select.POLLERR)
+            if not descriptors: raise ValueError('unknown owned kernel custody')
+            try: poll.poll()
+            finally:
+                for fd in descriptors: os.close(fd)
+        except LeaseStop:
+            try:
+                verified_lease(root,record)
+                result=subprocess.run(['bash','-c',cleanup],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL)
+                if result.returncode==0: break
+            except Exception: pass
+        except Exception:
+            # Do not reinterpret an unavailable or replaced path as proof, and do not auto-retry cleanup.
+            try: signal.pause()
+            except LeaseStop:
+                try:
+                    verified_lease(root,record)
+                    result=subprocess.run(['bash','-c',cleanup],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL)
+                    if result.returncode==0: break
+                except Exception: pass
+    for item in captured:
+        try:
+            path=LEASE_ROOT/'slots'/(item['name']+'.memory');info=path.stat()
+            if (info.st_dev,info.st_ino)!=(item['memoryDevice'],item['memoryInode']):
+                lease_note('reservation path replaced; foreign memory record retained');code=75;continue
+            path.unlink()
+        except FileNotFoundError: pass
+        except OSError: code=75
+    return code
+
+sys.exit(hold_lease())
+`;
+
+
 /** Takes all requested slots together, or none. The host reservation protects only this short take. */
 export function slotScript(
   host: Host,
@@ -1940,6 +2174,7 @@ fi`;
 now=$(date +%s)
 for run in ${ROOT}/runs/*; do
   [ -d "$run" ] || continue
+  if ${leaseCustodyCheckScript('"$run"')}; then continue; fi
   if [ -e "$run/command-started" ] && [ ! -f "$run/.remote-check-supervisor" ]; then
     echo "remote-check: retaining started run \${run##*/}: supervisor custody unavailable" >&2
     continue
@@ -2078,18 +2313,18 @@ if [ -n "$run_id" ]; then
     printf '%s\\n' ${count} > "$run_directory/.remote-check-slot-count"
   fi
 fi
-cleanup_orphan() {
-  if [ -n "$run_id" ] && [ -n "$run_directory" ] && [ ! -e "$run_directory/exit-status" ]; then
-    if [ -e "$run_directory/command-started" ]; then
-      echo "remote-check: preserving started run $run_id for stale-run cleanup" >&2
-    else
-      ${cleanupCommands(true, 'lease-orphan')}
-    fi
-  fi
+if [ -z "$run_id" ]; then
   for slot in $reserved_slots; do rm -f -- "${ROOT}/slots/$slot.memory"; done
-}
-trap cleanup_orphan EXIT
-cat >/dev/null`;
+  exit 0
+fi
+cleanup_source=${quote(cleanupCommands(true, 'lease-orphan', true))}
+cleanup_script="run_id=$run_id
+run_directory=$run_directory
+run_slice=$run_slice
+$cleanup_source"
+unset cleanup_source
+# Same-process exec retains original flock open descriptions and unchanged byte records.
+exec python3 -c ${quote(leaseHolderProgram)} "$run_directory" ${quote(host.name)} "$reserved_slots" ${expressFd} "$cleanup_script"`;
   // dash treats exec 10>file as a command named "10"; Bash is provisioned on every supported check host and
   // preserves the inherited stdin, signals, exit code and multi-digit lock descriptors here.
   return `exec bash -c ${quote(body)}`;
@@ -2376,7 +2611,8 @@ function stopOwnedCheckUnitShell(): string {
 }
 
 /** Both normal cleanup and the stale-directory sweep reconcile only Docker resources labelled for this run. */
-function cleanupCommands(removeDirectory = true, reason: 'lease-orphan' | 'stale-run' | 'controller-cleanup' = 'controller-cleanup'): string {
+function cleanupCommands(removeDirectory = true, reason: 'lease-orphan' | 'stale-run' | 'controller-cleanup' = 'controller-cleanup', ownedHolder = false): string {
+  const reservationGuard = ownedHolder ? '' : `if ${leaseCustodyCheckScript('"$run_directory"')}; then echo 'cleanup: live reservation remains owned by its lease holder' >&2; exit 75; fi`;
   const settleResources = `settle_owned_docker_resources() {
   attempt=0
   while [ "$attempt" -lt 3 ]; do
@@ -2407,6 +2643,7 @@ function cleanupCommands(removeDirectory = true, reason: 'lease-orphan' | 'stale
   if (removeDirectory) {
     return `set -eu
 ${stopOwnedCheckUnitShell()}
+${reservationGuard}
 if [ -e "$run_directory/command-started" ] && [ ! -f "$run_directory/.remote-check-supervisor" ]; then echo 'cleanup: started run supervisor custody unavailable' >&2; exit 1; fi
 [ "$run_directory" = ${quote(`${ROOT}/runs/`)}"$run_id" ] || exit 1
 ${stopSupervisor('"$run_directory"', reason)} || exit 1
@@ -2422,6 +2659,7 @@ printf 'CLEANED %s\\n' "$run_id"`;
   }
   return `set -eu
 ${stopOwnedCheckUnitShell()}
+${reservationGuard}
 if [ -e "$run_directory/command-started" ] && [ ! -f "$run_directory/.remote-check-supervisor" ]; then echo 'cleanup: started run supervisor custody unavailable' >&2; exit 1; fi
 ${settleResources}
 ${stopSupervisor('"$run_directory"', reason)} || exit 1
@@ -5598,6 +5836,15 @@ export function stopRunScript(id: string): string {
   return `${stopSupervisor(quote(`${ROOT}/runs/${id}`), 'controller-stop', true)} || true
 systemctl stop ${slice} >/dev/null 2>&1 || true
 ${stopSupervisor(quote(`${ROOT}/runs/${id}`), 'controller-stop')} || exit 1
+python3 -c ${quote(leaseCustodyProgram + String.raw`
+root=Path(sys.argv[1])
+try:
+    value=verified_lease(root);owner=value['holder'];descriptor=os.pidfd_open(owner['pid'])
+    try:
+        if lease_fields(owner['pid'])[19]==owner['start']: signal.pidfd_send_signal(descriptor,signal.SIGTERM)
+    finally: os.close(descriptor)
+except (OSError,ValueError,KeyError,TypeError,AttributeError,IndexError): pass
+`)} ${quote(`${ROOT}/runs/${id}`)}
 if systemctl is-active --quiet ${slice}; then exit 1; fi
 printf 'STOPPED\\n'`;
 }
@@ -6430,14 +6677,15 @@ function sessionLease(
       } catch {
         // The connection may already be gone.
       }
-      if ((await within(10_000, exited)) === null) {
-        try {
-          holder.kill();
-        } catch {
-          // The connection may already have exited.
-        }
+      const result = await within(10_000, exited);
+      if (result === null) {
+        try { holder.kill(); } catch { /* The exact local transport may already be gone. */ }
+        await within(1_000, holder.exited);
+        throw new RemoteTransportError(host.name, 'slot lease release', REMOTE_TRANSPORT_FAILURE, false,
+          'remote lease custody remains unknown; retained reservations are not a successful release');
       }
-      await exited;
+      if (result !== 0) throw new RemoteTransportError(host.name, 'slot lease cleanup', result, false);
+
     },
   };
 }
@@ -8565,6 +8813,7 @@ async function reconcileRemoteRunOwned(
     options.controlProbeTimeoutMs ?? DEFAULT_CONTROL_PROBE_TIMEOUT_MS,
   );
   if (options.cleanupOnly) {
+    await stopPreparedRun(prepared);
     let cleanup: RemoteCleanupReceipt;
     try {
       cleanup = await cleanupPreparedRun(prepared);
@@ -9305,6 +9554,10 @@ async function runLeased(
   } catch (error) {
     primaryFailure ??= error;
   } finally {
+    if (signal.aborted || executionCancellation(options.cancellation)) {
+      try { await stopPreparedRun(prepared); }
+      catch (error) { preserveRemoteRun = true; cleanupFailures.push('cancelled run stop remains unverified'); primaryFailure ??= error; }
+    }
     if (run || runTransport) {
       try {
         await settleRunTransport();
