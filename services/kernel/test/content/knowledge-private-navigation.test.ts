@@ -189,14 +189,7 @@ test('owners reload paged notebooks and current outlines, then review publicatio
     'UPDATE access.account SET minimum_authn_epoch=minimum_authn_epoch+1 WHERE route=$1 AND account_id=$2',
     [accountRoute, accountId],
   );
-  try {
-    const revoked = await fixture.call('GET', privatePath);
-    expect(revoked.status).toBe(401);
-    expect(revoked.value.code).toBe('invalid_credentials');
-  } finally {
-    await fixture.pool.query(
-      'UPDATE access.account SET minimum_authn_epoch=minimum_authn_epoch-1 WHERE route=$1 AND account_id=$2',
-      [accountRoute, accountId],
-    );
-  }
+  const revoked = await fixture.call('GET', privatePath);
+  expect(revoked.status).toBe(401);
+  expect(revoked.value.code).toBe('invalid_credentials');
 });
