@@ -485,7 +485,7 @@ export async function readKnowledgeHistoricalOutline(
   query: KnowledgeOutlinePageInput,
   context: ReadContext,
 ) {
-  const page = {
+  const pageInput = {
     limit: query.limit ?? KNOWLEDGE_PAGE_LIMIT,
     cursor: query.cursor,
     parentPlacementId: query.parentPlacementId,
@@ -498,17 +498,17 @@ export async function readKnowledgeHistoricalOutline(
     readContext.actor.accountId !== accountId ||
     accountRoute !== sourceRoute ||
     route(revisionId) !== sourceRoute ||
-    (page.parentPlacementId !== undefined && route(page.parentPlacementId) !== sourceRoute)
+    (pageInput.parentPlacementId !== undefined && route(pageInput.parentPlacementId) !== sourceRoute)
   )
     throw new KnowledgeNotFoundError();
-  const parentId = page.parentPlacementId ?? null;
-  const limit = page.limit;
+  const parentId = pageInput.parentPlacementId ?? null;
+  const limit = pageInput.limit;
   const binding = knowledgeCursorBinding(
     'GET /v1/accounts/:accountId/knowledge/notebooks/:notebookId/outline@revision',
     accountId,
     { limit, notebookId, parentPlacementId: parentId, revisionId },
   );
-  const cursor = await readCursor(deps, binding, page.cursor);
+  const cursor = await readCursor(deps, binding, pageInput.cursor);
   if (
     cursor &&
     (cursor.after.length !== 2 ||

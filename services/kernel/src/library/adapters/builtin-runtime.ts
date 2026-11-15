@@ -194,7 +194,7 @@ export function createNativeBuiltinRuntime(
       (key.kind === 'liked' && visibility !== 'private')
     )
       throw new ProblemError('dependency_unavailable');
-    return { ...stored, visibility };
+    return { ...stored, visibility } satisfies Pick<BuiltinCollectionView, 'visibility'>;
   }
 
   async function present(
