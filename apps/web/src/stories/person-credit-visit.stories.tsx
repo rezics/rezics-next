@@ -18,7 +18,7 @@ import { ConnectedStory } from './connected-story';
 import { Button } from '@rezics/ui/shadcn/button';
 
 const meta = {
-  title: 'Subjects/Person credit visit',
+  title: 'Subjects/People/Person Credit Visit',
   id: 'pages-subjects-person-credit-visit',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

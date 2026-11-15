@@ -15,7 +15,7 @@ import {
 } from './page';
 
 const meta = {
-  title: 'Discovery/Search',
+  title: 'Discovery/Search/Search Page',
   id: 'pages-discovery-search',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

@@ -8,7 +8,7 @@ import { PatternStory, pagePaths } from './page';
 import { Button } from '@rezics/ui/shadcn/button';
 
 const meta = {
-  title: 'Library/Calendar day field',
+  title: 'Library/Copies/Calendar Day Field',
   id: 'patterns-library-calendar-day-field',
   parameters: {
     layout: 'fullscreen',

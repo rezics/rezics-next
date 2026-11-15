@@ -33,7 +33,7 @@ function MusicReleaseStory({ scenario = 'admitted' }: { scenario?: MusicReleaseE
   );
 }
 const meta = {
-  title: 'Catalogue/Music release reader',
+  title: 'Catalogue/Music/Music Release Reader',
   id: 'pages-catalogue-music-release-reader',
   component: MusicReleaseStory,
   parameters: {

@@ -160,7 +160,7 @@ function LabelStory({ state }: { state: 'evidence' | 'review' | 'pending' | 'cur
   );
 }
 const meta = {
-  title: 'Library/AniList label adoption',
+  title: 'Library/Imports/AniList Label Adoption',
   id: 'pages-library-anilist-label-adoption',
   component: LabelStory,
   parameters: { layout: 'fullscreen' },

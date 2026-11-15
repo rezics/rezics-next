@@ -93,7 +93,7 @@ function OverviewJourney({
 }
 
 const meta = {
-  title: 'Subjects/Overview section navigation',
+  title: 'Subjects/Subject Page/Overview Section Navigation',
   id: 'pages-subjects-overview-section-navigation',
   component: OverviewJourney,
   parameters: {

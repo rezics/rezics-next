@@ -6,7 +6,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Collapsible',
+  title: 'Layout/Collapsible',
   component: Collapsible,
   tags: ['autodocs'],
   decorators: [withSurface],

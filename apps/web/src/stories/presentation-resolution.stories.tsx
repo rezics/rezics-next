@@ -169,7 +169,7 @@ function ConnectedCuration({
 }
 
 const meta = {
-  title: 'Catalogue/Presentation Resolution',
+  title: 'Catalogue/Presentation/Presentation Resolution',
   id: 'patterns-curation-presentation-resolution',
   globals: { locale: 'en' },
   parameters: {

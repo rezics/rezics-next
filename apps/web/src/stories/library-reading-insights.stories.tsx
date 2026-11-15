@@ -8,7 +8,7 @@ import { m } from '../paraglide/messages.js';
 
 const full = readingInsightsExample();
 const meta = {
-  title: 'Library/Reading Insights',
+  title: 'Library/Progress/Reading Insights',
   id: 'pages-library-reading-insights',
   component: ReadingInsightsView,
   parameters: { layout: 'fullscreen' },

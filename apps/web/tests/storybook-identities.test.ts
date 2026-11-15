@@ -36,8 +36,8 @@ test('every published outcome has a viewport-independent identity, including hid
   expect(ids.web.has('pages-library-collection-comparison--recovered-comparison')).toBe(true);
   expect(ids.web.has('pages-catalogue-book-and-book-series-work-editor--current-book')).toBe(true);
   expect(ids.web.has('pages-library-collection-comparison--phone-390')).toBe(false);
-  expect(ids.ui.has('components-menu--plain-entries')).toBe(true);
-  expect(ids.ui.has('components-richtexteditor--blocks-profile')).toBe(true);
+  expect(ids.ui.has('overlays-menu--plain-entries')).toBe(true);
+  expect(ids.ui.has('editor-writing-rich-text-editor--blocks-profile')).toBe(true);
 });
 
 test('canonical fixtures leave viewport and theme selection to the toolbar', () => {

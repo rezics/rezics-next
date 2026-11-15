@@ -6,7 +6,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Empty',
+  title: 'Feedback/Empty',
   component: Empty,
   tags: ['autodocs'],
   decorators: [withSurface],

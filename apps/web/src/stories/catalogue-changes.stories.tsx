@@ -85,7 +85,7 @@ function ChangesStory({
   );
 }
 const meta = {
-  title: 'Catalogue/Changes',
+  title: 'Catalogue/Changes and Corrections/Changes',
   id: 'pages-catalogue-changes',
   component: ChangesStory,
   parameters: { layout: 'fullscreen' },

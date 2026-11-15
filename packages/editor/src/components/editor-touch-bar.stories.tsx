@@ -92,7 +92,7 @@ function plainText(snapshot: DocumentSnapshot): string {
 }
 
 const meta = {
-  title: 'Components/Editor Touch Bar',
+  title: 'Editor/Writing/Touch Bar',
   component: RichTextEditor,
   args: { value: fromPlainText('Touch formatting'), label: 'Post', onChange: () => undefined },
   parameters: { layout: 'padded' },

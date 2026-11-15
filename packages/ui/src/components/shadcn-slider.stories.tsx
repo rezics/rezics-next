@@ -6,7 +6,7 @@ import { Slider } from '@rezics/ui/shadcn/slider';
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Slider',
+  title: 'Forms/Slider',
   component: Slider,
   tags: ['autodocs'],
   decorators: [withSurface],

@@ -58,7 +58,7 @@ function ContributionStory({ scenario = 'ready' }: { scenario?: ContributionScen
 }
 
 const meta = {
-  title: 'Catalogue/Contribution lifecycle',
+  title: 'Catalogue/Contributions/Contribution Lifecycle',
   id: 'pages-catalogue-contribution-lifecycle',
   component: ContributionStory,
   decorators: [

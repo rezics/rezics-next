@@ -5,7 +5,7 @@ import { inboxTriageStory, resetInboxTriageStory } from '../kernel/fake/notifica
 import { PageStory } from './page';
 
 const meta = {
-  title: 'Account/Inbox Page',
+  title: 'Account/Inbox/Inbox Page',
   id: 'pages-account-inbox',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

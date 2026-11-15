@@ -10,7 +10,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { selectSharedOption } from './shared-select-interaction';
 
 const meta = {
-  title: 'Subjects/Candidate Review',
+  title: 'Subjects/Subject Page/Candidate Review',
   id: 'pages-subjects-candidate-review',
   component: CandidateStory,
   args: { page: true },

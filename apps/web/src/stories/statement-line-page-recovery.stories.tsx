@@ -12,7 +12,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Catalogue/Statement Line Pages',
+  title: 'Catalogue/Statements/Statement Line Pages',
   id: 'patterns-statement-line-pages',
   parameters: {
     layout: 'padded',

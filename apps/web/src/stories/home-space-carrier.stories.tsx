@@ -31,7 +31,7 @@ function SpaceCarrierReading() {
 }
 
 const meta = {
-  title: 'Discovery/Home Space carrier reading',
+  title: 'Discovery/Home/Home Space Carrier Reading',
   id: 'pages-discovery-home-space-carrier-reading',
   component: SpaceCarrierReading,
   parameters: {

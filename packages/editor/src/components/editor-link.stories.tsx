@@ -46,7 +46,7 @@ async function select(canvasElement: HTMLElement) {
   return canvas;
 }
 const meta = {
-  title: 'Components/Editor Link',
+  title: 'Editor/Writing/Link',
   component: RichTextEditor,
   args: { value: fromPlainText(''), label: 'Post', onChange: () => undefined },
   parameters: { layout: 'padded' },

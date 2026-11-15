@@ -118,7 +118,7 @@ function NavigationExample({ scenario, locale = 'en' }: { scenario: Scenario; lo
 }
 
 const meta = {
-  title: 'Pages/Knowledge/Navigation',
+  title: 'Content/Knowledge/Navigation',
   component: NavigationExample,
   args: { scenario: 'owned', locale: 'en' },
   argTypes: { scenario: { control: false }, locale: { control: 'select', options: locales } },

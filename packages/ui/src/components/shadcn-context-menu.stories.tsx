@@ -20,7 +20,7 @@ import {
 import { settled, withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Context menu',
+  title: 'Overlays/Context Menu',
   component: ContextMenu,
   tags: ['autodocs'],
   decorators: [withSurface],

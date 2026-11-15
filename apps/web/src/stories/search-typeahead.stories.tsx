@@ -44,7 +44,7 @@ const scopedPath = `/search?filter=${encodeURIComponent(scopedFilter)}`;
 
 /** Only the site's HTTP boundary is adapted for Storybook; the real shell and typed native read stay mounted. */
 const meta = {
-  title: 'Discovery/Search Typeahead',
+  title: 'Discovery/Search/Search Typeahead',
   id: 'pages-discovery-search-typeahead',
   parameters: { layout: 'fullscreen' },
   render: () => <PageStory visitor="Signed Out" path="/search" />,

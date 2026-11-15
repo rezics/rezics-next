@@ -17,7 +17,7 @@ import { m } from '../paraglide/messages.js';
 import { collectionReviewPath, resetCollectionReview } from '../kernel/fake/a-collection-review';
 
 const meta = {
-  title: 'Library/Collection',
+  title: 'Library/Collections/Collection Page',
   id: 'pages-library-collection',
   parameters: {
     layout: 'fullscreen',

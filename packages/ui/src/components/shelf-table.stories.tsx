@@ -30,7 +30,7 @@ const labels: Record<ShelfColumnId, string> = {
   lastActivity: 'Last activity',
 };
 const meta = {
-  title: 'Components/Shelf Table',
+  title: 'Data Display/Shelf Table',
   component: ShelfTable,
   parameters: {
     docs: {

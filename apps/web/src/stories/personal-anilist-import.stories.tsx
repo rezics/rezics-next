@@ -366,7 +366,7 @@ function ScoreImportStory({ navigation, cleanup }: { navigation?: NavigationStat
 }
 
 const meta = {
-  title: 'Library/AniList import',
+  title: 'Library/Imports/AniList Import',
   id: 'pages-library-anilist-import',
   component: ScoreImportStory,
   parameters: { layout: 'fullscreen' },

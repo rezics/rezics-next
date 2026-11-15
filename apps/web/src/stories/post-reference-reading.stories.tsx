@@ -92,7 +92,7 @@ function ReferencesJourney({ state = 'mixed' }: { state?: State }) {
 }
 
 const meta = {
-  title: 'Community/Post references',
+  title: 'Community/Posts/Post References',
   id: 'interfaces-community-post-references',
   component: ReferencesJourney,
   parameters: { layout: 'fullscreen' },

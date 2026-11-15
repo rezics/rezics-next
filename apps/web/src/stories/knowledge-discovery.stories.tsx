@@ -38,7 +38,7 @@ const illustrative =
   'Constructed illustrative Knowledge discovery states for phone and desktop; not native Search evidence.';
 
 const meta = {
-  title: 'Knowledge/Discovery',
+  title: 'Content/Knowledge/Discovery',
   id: 'pages-knowledge-discovery',
   component: KnowledgeDiscoveryPanel,
   parameters: {

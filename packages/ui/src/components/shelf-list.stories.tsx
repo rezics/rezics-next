@@ -17,7 +17,7 @@ const examples = [
   { id: 'unknown', title: 'A title with unknown progress', ratio: '2:3' as const, types: ['schema:Book'] },
 ];
 const meta = {
-  title: 'Components/Shelf List',
+  title: 'Data Display/Shelf List',
   component: ShelfList,
   parameters: {
     docs: {

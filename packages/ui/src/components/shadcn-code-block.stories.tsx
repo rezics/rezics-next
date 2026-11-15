@@ -13,7 +13,7 @@ import {
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/CodeBlock',
+  title: 'Data Display/Code Block',
   component: CodeBlock,
   tags: ['autodocs'],
   decorators: [withSurface],

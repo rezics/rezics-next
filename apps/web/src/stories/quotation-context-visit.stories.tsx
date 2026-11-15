@@ -102,7 +102,7 @@ function Example() {
 }
 
 const meta = {
-  title: 'Subjects/Quotation Context visit',
+  title: 'Subjects/Quotations/Quotation Context Visit',
   id: 'pages-subjects-quotation-context-visit',
   component: Example,
   parameters: { layout: 'fullscreen' },

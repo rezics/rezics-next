@@ -281,7 +281,7 @@ function VersionBrowsingStory({ scenario, profile }: { scenario: Scenario; profi
 }
 
 const meta = {
-  title: 'Interfaces/Studio/Version browsing',
+  title: 'Content/Studio/Version Browsing',
   component: VersionBrowsingStory,
   parameters: {
     layout: 'fullscreen',

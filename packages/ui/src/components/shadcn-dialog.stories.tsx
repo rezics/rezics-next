@@ -31,7 +31,7 @@ import { waitForFocus } from '../test/focus.ts';
 import { settled, withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Dialog',
+  title: 'Overlays/Dialog',
   component: Dialog,
   tags: ['autodocs'],
   decorators: [withSurface],

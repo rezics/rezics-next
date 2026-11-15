@@ -15,7 +15,7 @@ import { withSurface } from '../stories/support.tsx';
 import { MetaLine } from './meta-line.tsx';
 
 const meta = {
-  title: 'shadcn/Trace',
+  title: 'Data Display/Trace',
   component: Trace,
   tags: ['autodocs'],
   decorators: [withSurface],

@@ -11,7 +11,7 @@ import { authLocale, fill, reviewParameters, waitFor } from '../accounts-operati
 import '../../styles.css';
 
 export default {
-  title: 'Account/Sign up',
+  title: 'Account/Sign Up/Entry',
   id: 'pages-account-sign-up',
   parameters: reviewParameters,
   decorators: [authLocale],

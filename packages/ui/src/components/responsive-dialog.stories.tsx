@@ -44,7 +44,7 @@ function ChoiceField({
 }
 
 const meta = {
-  title: 'Components/Responsive dialog',
+  title: 'Overlays/Responsive Dialog',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;
 export default meta;

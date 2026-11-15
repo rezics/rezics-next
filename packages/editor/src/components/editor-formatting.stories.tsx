@@ -44,7 +44,7 @@ function Demo() {
   );
 }
 const meta = {
-  title: 'Components/EditorFormatting',
+  title: 'Editor/Writing/Formatting',
   render: () => <Demo />,
   parameters: { layout: 'padded' },
 } satisfies Meta;

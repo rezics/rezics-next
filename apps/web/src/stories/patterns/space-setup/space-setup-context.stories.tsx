@@ -43,7 +43,7 @@ export function ContextSetupReview({
   );
 }
 const meta = {
-  title: 'Community/Space Setup Context Workflow',
+  title: 'Community/Spaces/Space Setup Context Workflow',
   id: 'patterns-community-space-setup-context',
   component: ContextSetupReview,
   parameters: { layout: 'fullscreen' },

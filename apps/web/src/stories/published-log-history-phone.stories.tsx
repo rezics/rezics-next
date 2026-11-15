@@ -10,7 +10,7 @@ import { PageStory, PatternStory } from './page';
 
 // UNRUN: authored connected browser coverage. Native, browser and full acceptance proof are deferred.
 const meta = {
-  title: 'Library/Published log history navigation',
+  title: 'Library/Published Logs/Published Log History Navigation',
   id: 'pages-library-published-log-history-navigation',
   parameters: {
     layout: 'fullscreen',

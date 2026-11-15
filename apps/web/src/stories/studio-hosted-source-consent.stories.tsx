@@ -128,7 +128,7 @@ function Example({ scenario }: { scenario: Scenario }) {
   );
 }
 const meta = {
-  title: 'Studio/Hosted source consent',
+  title: 'Content/Studio/Hosted Source Consent',
   component: Example,
   parameters: { layout: 'fullscreen' },
   tags: ['illustrative'],

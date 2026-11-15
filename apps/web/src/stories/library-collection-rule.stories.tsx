@@ -10,7 +10,7 @@ import { AppShell } from '../shell/shell';
 import { PageStory, PatternStory, pageReady } from './page';
 
 const meta = {
-  title: 'Library/Collection rule',
+  title: 'Library/Collections/Collection Rule',
   id: 'pages-library-collection-rule',
   parameters: {
     layout: 'fullscreen',

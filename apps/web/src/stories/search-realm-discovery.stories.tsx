@@ -18,7 +18,7 @@ const sparseRead = fn<RealmDiscoveryReader>(async ({ data }) => ({
 }));
 const retryRead = fn<RealmDiscoveryReader>(async () => ({ kind: 'unavailable' }));
 const meta = {
-  title: 'Discovery/Search Realm Discovery',
+  title: 'Discovery/Search/Search Realm Discovery',
   id: 'pages-discovery-search-realm-discovery',
   parameters: {
     layout: 'fullscreen',

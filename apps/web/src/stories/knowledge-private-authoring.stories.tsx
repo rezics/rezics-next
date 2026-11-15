@@ -190,7 +190,7 @@ function KnowledgePrivateAuthoringExample({ scenario, locale = 'en' }: { scenari
 }
 
 const meta = {
-  title: 'Knowledge/PrivateAuthoring',
+  title: 'Content/Knowledge/Private Authoring',
   id: 'pages-knowledge-private-authoring',
   component: KnowledgePrivateAuthoringExample,
   args: { scenario: 'existing', locale: 'en' },

@@ -67,7 +67,7 @@ function Example({ scenario = 'ready', onRequests }: ExampleProps) {
   );
 }
 const meta = {
-  title: 'Catalogue/Propose correction',
+  title: 'Catalogue/Changes and Corrections/Propose Correction',
   id: 'pages-catalogue-propose-correction',
   component: Example,
   tags: ['autodocs'],

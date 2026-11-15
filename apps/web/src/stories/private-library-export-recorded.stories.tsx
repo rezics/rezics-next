@@ -6,7 +6,7 @@ import { LibraryExportPortContext } from '../library/private-export/port';
 import { exportRecording, recordedExportPort } from '../library/private-export/recording';
 
 const meta = {
-  title: 'Library/Private Export/Producer recordings',
+  title: 'Library/Private Data/Private Export Producer Recordings',
   id: 'pages-library-private-export-producer-recordings',
   parameters: {
     layout: 'fullscreen',

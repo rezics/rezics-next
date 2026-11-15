@@ -70,7 +70,7 @@ function ReadingPage({ state }: { state: State }) {
 }
 
 const meta = {
-  title: 'Subjects/Relations Reading States',
+  title: 'Subjects/Relationships/Relations Reading States',
   id: 'pages-subjects-relations-reading-states',
   component: ReadingPage,
   parameters: {

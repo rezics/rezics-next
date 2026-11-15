@@ -207,7 +207,7 @@ function Story({ mode }: { mode: Mode }) {
   return <RouterProvider router={router} />;
 }
 const meta = {
-  title: 'Library/My classification assessments',
+  title: 'Library/Labels/My Classification Assessments',
   id: 'pages-library-my-classification-assessments',
   component: Story,
   parameters: {

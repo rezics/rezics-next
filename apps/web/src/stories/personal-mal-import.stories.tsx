@@ -295,7 +295,7 @@ function MalImportStory({ navigation }: { navigation?: NavigationState } = {}) {
   );
 }
 const meta = {
-  title: 'Library/Personal MAL import',
+  title: 'Library/Imports/Personal MAL Import',
   id: 'families-library-personal-mal-import',
   component: MalImportStory,
   parameters: { layout: 'fullscreen' },

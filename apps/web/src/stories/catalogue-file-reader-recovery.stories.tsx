@@ -68,7 +68,7 @@ function CatalogueFileReaderRecoveryStory({ reject = false }: { reject?: boolean
 }
 
 const meta = {
-  title: 'Subjects/Catalogue file reader recovery',
+  title: 'Subjects/Sources/Catalogue File Reader Recovery',
   id: 'pages-subjects-catalogue-file-reader-recovery',
   component: CatalogueFileReaderRecoveryStory,
   parameters: {

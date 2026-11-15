@@ -136,7 +136,7 @@ function NotationReview({
 }
 
 const meta = {
-  title: 'Editor/Notation review',
+  title: 'Editor/Writing/Notation Review',
   id: 'editor-notation-review',
   parameters: {
     layout: 'padded',

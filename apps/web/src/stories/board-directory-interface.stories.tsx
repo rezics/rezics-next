@@ -112,7 +112,7 @@ function DirectoryInterface({
 }
 
 const meta = {
-  title: 'Community/Board Directory/Interface',
+  title: 'Community/Boards/Board Directory Controls',
   id: 'patterns-community-board-directory-interface',
   component: DirectoryInterface,
   args: { onRead: fn() },

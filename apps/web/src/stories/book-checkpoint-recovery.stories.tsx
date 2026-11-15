@@ -180,7 +180,7 @@ function BookCheckpointRecovery({ scenario = 'saved' }: { scenario?: Scenario })
 }
 
 const meta = {
-  title: 'Books/Book checkpoint recovery',
+  title: 'Library/Books/Book Checkpoint Recovery',
   id: 'interfaces-book-checkpoint-recovery',
   component: BookCheckpointRecovery,
   parameters: {

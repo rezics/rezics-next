@@ -6,7 +6,7 @@ import { m } from '../paraglide/messages.js';
 import { PatternStory, pagePaths } from './page';
 
 const meta = {
-  title: 'Library/Copies filters',
+  title: 'Library/Copies/Copies Filters',
   id: 'patterns-library-copies-filters',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

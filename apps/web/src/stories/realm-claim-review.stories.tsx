@@ -30,7 +30,7 @@ function ReviewPage({ scenario = 'pending' }: { scenario?: ReviewScenario | 'wit
   );
 }
 const meta = {
-  title: 'Community/Realm Claim Review Page',
+  title: 'Community/Realm Claims/Realm Claim Review Page',
   id: 'pages-community-realm-claim-review',
   component: ReviewPage,
   parameters: {

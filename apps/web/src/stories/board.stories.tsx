@@ -7,7 +7,7 @@ import {
 } from '../kernel/fake/board-conversation';
 
 const meta = {
-  title: 'Community/Board',
+  title: 'Community/Boards/Board Page',
   id: 'pages-community-board',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

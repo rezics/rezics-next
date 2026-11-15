@@ -11,7 +11,7 @@ import {
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Message scroller',
+  title: 'Data Display/Message Scroller',
   component: MessageScroller,
   tags: ['autodocs'],
   decorators: [withSurface],

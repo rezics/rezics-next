@@ -12,7 +12,7 @@ import { PatternStory } from '../page';
 import { erasureStoryOperation } from '../patterns/author-erasure/author-erasure-preview';
 
 const meta = {
-  title: 'Account/Erasure progress',
+  title: 'Account/Account Lifecycle/Erasure Progress',
   id: 'pages-account-erasure-progress',
   component: ErasureProgressView,
   parameters: {

@@ -19,7 +19,7 @@ let releaseFirstDecode: (() => Promise<void>) | undefined;
 let firstDecodeReady: Promise<void> = Promise.resolve();
 
 const meta = {
-  title: 'Account/Avatar crop',
+  title: 'Account/Profile/Avatar Crop',
   id: 'pages-settings-avatar-crop',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

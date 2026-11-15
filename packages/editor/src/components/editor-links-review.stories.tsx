@@ -4,7 +4,7 @@ import { richTextEditorLabels, type RichTextEditorLabels } from './editor-labels
 import { LinkEditBlock, LinkViewBlock } from './editor-upstream/reactjs-tiptap-editor/link-controls.tsx';
 
 const meta = {
-  title: 'Editor/Link controls',
+  title: 'Editor/Writing/Link Controls',
   id: 'editor-links-review',
   parameters: { layout: 'padded' },
 } satisfies Meta;

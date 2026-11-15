@@ -68,7 +68,7 @@ function Example({
   );
 }
 const meta = {
-  title: 'Catalogue/Add-on and expansion editor',
+  title: 'Catalogue/Add-ons/Add-on and Expansion Editor',
   id: 'pages-catalogue-add-on-and-expansion-editor',
   component: Example,
   parameters: {

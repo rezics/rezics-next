@@ -8,7 +8,7 @@ import { m } from '../paraglide/messages.js';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Library/Collection Row',
+  title: 'Library/Collections/Collection Row',
   id: 'patterns-collection-row',
   tags: ['autodocs'],
   excludeStories: ['recordedBrowseCollection'],

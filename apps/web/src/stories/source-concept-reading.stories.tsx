@@ -283,7 +283,7 @@ function Example({ state }: { state: State }) {
 }
 
 const meta = {
-  title: 'Catalogue/Source concept reading',
+  title: 'Catalogue/Files and Evidence/Source Concept Reading',
   component: Example,
   args: { state: 'current' },
   parameters: {

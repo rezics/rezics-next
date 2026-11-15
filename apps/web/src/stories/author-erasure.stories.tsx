@@ -5,7 +5,7 @@ import * as Erasure from './patterns/author-erasure/author-erasure.stories';
 
 const meta = {
   ...Erasure.default,
-  title: 'Community/Author erasure Page',
+  title: 'Community/Authoring/Author Erasure Page',
   id: 'pages-community-author-erasure',
   component: AuthorErasurePreview,
   args: { shell: true },

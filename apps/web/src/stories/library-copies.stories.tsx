@@ -14,7 +14,7 @@ import { m } from '../paraglide/messages.js';
 import { PageStory, PatternStory, libraryHeadingReady, pagePaths, pageReady } from './page';
 
 const meta = {
-  title: 'Library/Copies',
+  title: 'Library/Copies/Copies',
   id: 'pages-library-copies',
   parameters: {
     layout: 'fullscreen',

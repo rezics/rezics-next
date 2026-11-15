@@ -26,7 +26,7 @@ function BookListVisit({
 }
 
 const meta = {
-  title: 'Library/Book catalogue visit',
+  title: 'Library/Books/Book Catalogue Visit',
   id: 'pages-books-catalogue',
   parameters: {
     layout: 'fullscreen',

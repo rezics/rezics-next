@@ -8,7 +8,7 @@ import { PatternStory } from './page';
 import collectionRecording from '../kernel/recorded/library-collection.json';
 
 const meta = {
-  title: 'Library/Navigation',
+  title: 'Library/Personal Library/Navigation',
   id: 'patterns-library-navigation',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

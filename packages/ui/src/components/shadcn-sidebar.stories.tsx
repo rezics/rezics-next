@@ -24,7 +24,7 @@ import {
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Sidebar',
+  title: 'Navigation/Sidebar',
   component: SidebarProvider,
   tags: ['autodocs'],
   decorators: [withSurface],

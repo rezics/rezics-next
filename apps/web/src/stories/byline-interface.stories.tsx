@@ -51,7 +51,7 @@ const privacy = [
 // Actual Byline with illustrative supplied DTOs. Observations are UNRUN under MINIMAL;
 // no native identity, image transport, authorization or browser evidence is claimed.
 const meta = {
-  title: 'Community/Byline interface',
+  title: 'Community/Posts/Byline Interface',
   id: 'patterns-community-byline-interface',
   component: Byline,
   parameters: { layout: 'fullscreen' },

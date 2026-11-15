@@ -227,7 +227,7 @@ function ArticlePublicationStory({ scenario }: { scenario: Scenario }) {
 }
 
 const meta = {
-  title: 'Interfaces/Studio/Article publication',
+  title: 'Content/Studio/Article Publication',
   component: ArticlePublicationStory,
   parameters: { layout: 'fullscreen' },
   args: { scenario: 'structured' },

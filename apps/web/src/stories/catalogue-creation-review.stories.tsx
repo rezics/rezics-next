@@ -47,7 +47,7 @@ function CreationReview({ fileNotices = false }: { fileNotices?: boolean }) {
 }
 
 const meta = {
-  title: 'Catalogue/Creation review',
+  title: 'Catalogue/Changes and Corrections/Creation Review',
   id: 'pages-catalogue-creation-review',
   component: CreationReview,
   parameters: {

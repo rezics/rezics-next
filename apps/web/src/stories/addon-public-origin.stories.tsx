@@ -38,7 +38,7 @@ function Example({
 }
 
 const meta = {
-  title: 'Catalogue/Add-on public correction origin',
+  title: 'Catalogue/Add-ons/Add-on Public Correction Origin',
   id: 'pages-catalogue-add-on-public-correction-origin',
   component: Example,
   parameters: {

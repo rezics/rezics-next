@@ -6,7 +6,7 @@ import { AccountMenu, NavigationToggle } from '../shell/shell';
 import { PatternStory, pagePaths, pageReady } from './page';
 
 const meta = {
-  title: 'Account/Shell',
+  title: 'Account/Account Menu/Shell',
   id: 'patterns-account-shell',
   parameters: {
     viewport: {

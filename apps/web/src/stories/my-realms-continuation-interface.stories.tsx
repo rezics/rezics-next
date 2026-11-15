@@ -104,7 +104,7 @@ function ContinuationExample({
 }
 
 const meta = {
-  title: 'Community/My Realms Continuation Interface',
+  title: 'Community/Realms/My Realms Continuation Interface',
   id: 'pages-community-my-realms-continuation-interface',
   component: ContinuationExample,
   parameters: {

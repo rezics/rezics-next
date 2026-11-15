@@ -7,7 +7,7 @@ import { undoToast } from './undo-toast.tsx';
 import { settled, withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'Components/Content/Undo toast',
+  title: 'Feedback/Undo Toast',
   decorators: [withSurface],
 } satisfies Meta;
 export default meta;

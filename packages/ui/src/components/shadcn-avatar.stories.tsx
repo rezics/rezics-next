@@ -11,7 +11,7 @@ import {
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Avatar',
+  title: 'Media/Avatar',
   component: Avatar,
   tags: ['autodocs'],
   decorators: [withSurface],

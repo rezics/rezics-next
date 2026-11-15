@@ -118,7 +118,7 @@ function SectionsJourney({ state = 'ordinary' }: { state?: State }) {
 }
 
 const meta = {
-  title: 'Community/Post sections',
+  title: 'Community/Posts/Post Sections',
   id: 'interfaces-community-post-sections',
   component: SectionsJourney,
   parameters: { layout: 'fullscreen' },

@@ -4,7 +4,7 @@ import { Progress, ProgressLabel, ProgressValue } from '@rezics/ui/shadcn/progre
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Progress',
+  title: 'Feedback/Progress',
   component: Progress,
   tags: ['autodocs'],
   decorators: [withSurface],

@@ -36,7 +36,7 @@ function WorkspaceStory({ scenario = 'list' }: { scenario?: Scenario | 'loading'
 }
 
 const meta = {
-  title: 'Zones/Owner workspace',
+  title: 'Zones/Owner Workspace/Owner Workspace',
   id: 'pages-zones-owner-workspace',
   component: WorkspaceStory,
   tags: ['autodocs'],

@@ -10,7 +10,7 @@ function SignedInSafety(props: Extract<AccountSafetyProps, { state: 'signed-in' 
 
 const identity = { accountId: '123e4567-e89b-42d3-a456-426614174000', handle: 'alice', available: false };
 const meta = {
-  title: 'Account/Account safety recovery',
+  title: 'Account/Security/Account Safety Recovery',
   id: 'patterns-account-account-safety-recovery',
   component: SignedInSafety,
   parameters: { layout: 'padded' },

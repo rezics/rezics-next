@@ -28,7 +28,7 @@ function Example({ state = 'admitted' }: { state?: Parameters<typeof personReade
 }
 
 const meta = {
-  title: 'Subjects/Person biography',
+  title: 'Subjects/People/Person Biography',
   id: 'pages-subjects-person-biography',
   component: Example,
   parameters: { layout: 'fullscreen' },

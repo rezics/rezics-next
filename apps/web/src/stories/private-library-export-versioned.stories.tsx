@@ -16,7 +16,7 @@ import { emptyExportCost } from '../library/private-export/cost';
 import { ExportVisitView } from '../library/private-export/page';
 
 const meta = {
-  title: 'Library/Private Export/Capture states',
+  title: 'Library/Private Data/Private Export Capture States',
   id: 'pages-library-private-export-capture-states',
   parameters: {
     layout: 'fullscreen',

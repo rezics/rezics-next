@@ -25,7 +25,7 @@ const meta = {
       </Toaster>
     ),
   ],
-  title: 'Library/Personal Library Workflow',
+  title: 'Library/Personal Library/Personal Library Workflow',
   id: 'patterns-library-personal-library',
   beforeEach: () => setLibraryEntriesStoryMode('recorded'),
   parameters: { layout: 'fullscreen', admitted: ['personal_library', 'reading_progress', 'collections'] },

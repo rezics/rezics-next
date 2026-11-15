@@ -55,7 +55,7 @@ const page: BanReadState = {
 const read = async () => page;
 const write = async () => ({ ok: false as const, reason: 'unavailable' as const });
 const meta = {
-  title: 'Community/Realm bans/current identity fallback',
+  title: 'Community/Moderation/Realm Bans Current Identity Fallback',
   id: 'patterns-community-realm-bans-current-identity-fallback',
   parameters: {
     layout: 'fullscreen',

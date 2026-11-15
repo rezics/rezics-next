@@ -13,7 +13,7 @@ function grainExample(type?: 'schema:Book' | 'schema:BookSeries' | 'bf:Instance'
 }
 
 const meta = {
-  title: 'Catalogue/Literary reader/Details',
+  title: 'Catalogue/Books/Literary Reader Details',
   id: 'pages-subjects-literary-grain',
   component: LiteraryReaderEntry,
   args: grainExample(),

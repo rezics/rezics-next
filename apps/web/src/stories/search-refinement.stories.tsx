@@ -22,7 +22,7 @@ const initial: FacetState = {
   },
 };
 const meta = {
-  title: 'Discovery/Search Refinement',
+  title: 'Discovery/Search/Search Refinement',
   id: 'patterns-discovery-search-refinement',
   parameters: {
     layout: 'padded',

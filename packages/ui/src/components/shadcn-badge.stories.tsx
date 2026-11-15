@@ -5,7 +5,7 @@ import { Badge } from '@rezics/ui/shadcn/badge';
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Badge',
+  title: 'Data Display/Badge',
   component: Badge,
   tags: ['autodocs'],
   decorators: [withSurface],

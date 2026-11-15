@@ -55,7 +55,7 @@ function Reading({ lang, document }: { lang: string; document: DocumentSnapshot 
 }
 
 const meta = {
-  title: 'Components/Document Mixed Script',
+  title: 'Editor/Reading/Document Mixed Script',
   component: DocumentBody,
   args: { document: snapshot([{ type: 'paragraph' }]) },
   decorators: [withSurface],

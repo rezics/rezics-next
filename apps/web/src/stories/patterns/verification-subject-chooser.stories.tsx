@@ -78,7 +78,7 @@ function Example({ scenario = 'ready' }: { scenario?: Scenario }) {
 }
 
 const meta = {
-  title: 'Account/Verification subject chooser',
+  title: 'Account/Security/Verification Subject Chooser',
   id: 'patterns-account-verification-subject-chooser',
   component: Example,
   parameters: {

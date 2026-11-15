@@ -24,7 +24,7 @@ function GameShowcase({ state = 'rich', entry = 'work' }: { state?: GameShowcase
 }
 
 const meta = {
-  title: 'Library/Games',
+  title: 'Library/Games/Games Page',
   id: 'pages-library-games',
   component: GameShowcase,
   parameters: {

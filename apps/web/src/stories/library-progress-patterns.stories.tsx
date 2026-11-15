@@ -16,7 +16,7 @@ const viewports = {
 };
 
 const meta = {
-  title: 'Library/Progress controls',
+  title: 'Library/Progress/Progress Controls',
   id: 'patterns-library-progress-controls',
   tags: ['autodocs'],
   parameters: { layout: 'fullscreen', viewport: { options: viewports } },

@@ -8,7 +8,7 @@ import { setCollectionStoryMode, type CollectionStoryMode } from '../kernel/fake
 import { m } from '../paraglide/messages.js';
 import { PatternStory, pagePaths } from './page';
 
-const meta = { title: 'Library/Collection controls', id: 'patterns-library-collection-controls' } satisfies Meta;
+const meta = { title: 'Library/Collections/Collection Controls', id: 'patterns-library-collection-controls' } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

@@ -5,7 +5,7 @@ import { Spinner } from '@rezics/ui/shadcn/spinner';
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Spinner',
+  title: 'Feedback/Spinner',
   component: Spinner,
   tags: ['autodocs'],
   decorators: [withSurface],

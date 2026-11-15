@@ -11,7 +11,7 @@ import { getLocale } from '../../../paraglide/runtime.js';
 import { DiscoveryFixture, discoveryRealm } from './fixtures';
 
 const meta = {
-  title: 'Community/Realm Discovery',
+  title: 'Community/Realms/Realm Discovery',
   id: 'patterns-community-realm-discovery',
   component: RealmDiscoverySection,
   parameters: { layout: 'fullscreen' },

@@ -80,7 +80,7 @@ function RecordingReaderStory({ admitted = true }: { admitted?: boolean }) {
 }
 
 const meta = {
-  title: 'Catalogue/Recording reader',
+  title: 'Catalogue/Music/Recording Reader',
   id: 'pages-catalogue-recording-reader',
   component: RecordingReaderStory,
   parameters: {

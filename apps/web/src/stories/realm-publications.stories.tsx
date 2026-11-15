@@ -18,7 +18,7 @@ import { PublicationControls, usePublicationControls } from '../community/public
 import { pickText } from '@rezics/composition';
 
 const meta = {
-  title: 'Community/Realm Publications',
+  title: 'Community/Realm Publication/Realm Publications',
   id: 'patterns-community-realm-publications',
   tags: ['autodocs'],
   parameters: {

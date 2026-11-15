@@ -17,7 +17,7 @@ import { PatternStory } from './page';
 import { selectSettingsCategory } from './settings-category-navigation';
 
 const meta = {
-  title: 'Account/Settings',
+  title: 'Account/Settings/Settings',
   id: 'pages-account-settings',
   component: SettingsPageView,
   parameters: { layout: 'fullscreen' },

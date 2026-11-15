@@ -7,7 +7,7 @@ import { AccountManagementPage } from '../../../../accounts/management/pages';
 import { PageStory, PatternStory } from '../../../page';
 import { ready, reviewParameters } from '../support';
 const meta = {
-  title: 'Account/Management/Account',
+  title: 'Account/Managed Accounts/Account Management',
   id: 'pages-account-management-account',
   parameters: reviewParameters,
 } satisfies Meta;

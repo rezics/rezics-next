@@ -25,7 +25,7 @@ function RecipeReturnStory({ state }: { state: RecipeCurrentReturnState }) {
 }
 
 const meta = {
-  title: 'Catalogue/Recipe current visit',
+  title: 'Catalogue/Recipes/Recipe Current Visit',
   id: 'pages-catalogue-recipe-current-visit',
   component: RecipeReturnStory,
   parameters: { layout: 'fullscreen' },

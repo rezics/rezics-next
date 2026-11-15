@@ -80,7 +80,7 @@ function BoardChoiceExample({ outcome = 'denied' }: { outcome?: 'denied' | 'conf
   );
 }
 const meta = {
-  title: 'Community/Space Setup/Board Choices',
+  title: 'Community/Spaces/Space Setup Board Choices',
   id: 'patterns-community-space-setup-board-choices',
   component: BoardChoiceExample,
   parameters: {

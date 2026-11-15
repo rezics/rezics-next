@@ -12,7 +12,7 @@ import { ErrorStory, errorReady, StillUnavailable, Closed as ClosedOutcome, NotF
 import { Button } from '@rezics/ui/shadcn/button';
 
 const meta = {
-  title: 'Site Shell/Route recovery',
+  title: 'Site Shell/Errors and Recovery/Route Recovery',
   id: 'pages-shell-route-recovery',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

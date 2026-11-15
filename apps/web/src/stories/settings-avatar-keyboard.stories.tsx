@@ -12,7 +12,7 @@ let uploadGate: Promise<void> = Promise.resolve();
 let uploadedBytes: Blob | undefined;
 
 const meta = {
-  title: 'Account/Avatar keyboard',
+  title: 'Account/Profile/Avatar Keyboard',
   id: 'pages-settings-avatar-keyboard',
   parameters: {
     layout: 'fullscreen',

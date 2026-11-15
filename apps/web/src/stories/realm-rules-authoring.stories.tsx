@@ -83,7 +83,7 @@ const settingsArgs = {
 };
 
 const meta = {
-  title: 'Community/Realm Rules Authoring',
+  title: 'Community/Realm Membership/Realm Rules Authoring',
   id: 'patterns-community-realm-rules-authoring',
   component: RealmAppearanceSettings,
   tags: ['autodocs'],

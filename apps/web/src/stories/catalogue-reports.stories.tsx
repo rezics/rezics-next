@@ -120,7 +120,7 @@ function LoadedStory({ args }: { args: CatalogueReportsViewProps }) {
 }
 
 const meta = {
-  title: 'Moderation/Catalogue reports',
+  title: 'Moderation/Reports/Catalogue Reports',
   id: 'pages-moderation-catalogue-reports',
   component: CatalogueReportsView,
   parameters: { layout: 'fullscreen', viewport: { options: queueViewports } },

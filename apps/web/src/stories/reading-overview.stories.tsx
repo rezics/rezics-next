@@ -79,7 +79,7 @@ function CompleteReadingPage({ domain, state }: { domain: ReadingExampleDomain; 
 }
 
 const meta = {
-  title: 'Subjects/Reading first',
+  title: 'Subjects/Subject Page/Reading First',
   id: 'pages-subjects-reading-first',
   parameters: {
     layout: 'fullscreen',

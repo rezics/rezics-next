@@ -122,7 +122,7 @@ function BoardChoiceExample({
 }
 
 const meta = {
-  title: 'Community/Space Setup/Board Choice Interface',
+  title: 'Community/Spaces/Space Setup Board Choice Interface',
   id: 'patterns-community-space-setup-board-choice-interface',
   component: BoardChoiceExample,
   args: { onChange: fn(), onRead: fn() },

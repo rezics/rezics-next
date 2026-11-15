@@ -163,7 +163,7 @@ function Example({ outcome = 'available', authEntry }: { outcome?: Outcome; auth
   );
 }
 const meta = {
-  title: 'Account/Managed account actions',
+  title: 'Account/Managed Accounts/Managed Account Actions',
   id: 'patterns-account-managed-account-actions',
   component: Example,
   parameters: {

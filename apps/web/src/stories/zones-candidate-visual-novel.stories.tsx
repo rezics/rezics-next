@@ -4,7 +4,7 @@ import { PageStory, pageReady } from './page';
 import { visualNovelZoneIds } from '../zones/candidates/visual-novel';
 
 const meta = {
-  title: 'Zones/Candidates/Visual novels',
+  title: 'Zones/Candidates/Visual Novels',
   parameters: {
     layout: 'fullscreen',
     docs: {

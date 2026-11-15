@@ -11,7 +11,7 @@ import { PatternStory } from './page';
 import { longCredit, longCreditPage } from './qualified-relations-data';
 import { m } from '../paraglide/messages.js';
 const meta = {
-  title: 'Subjects/Qualified Relations',
+  title: 'Subjects/Relationships/Qualified Relations',
   id: 'pages-subjects-qualified-relations',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

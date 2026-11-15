@@ -29,7 +29,7 @@ const longReferencePage = {
 };
 
 const meta = {
-  title: 'Community/Moderation decision',
+  title: 'Community/Moderation/Moderation Decision',
   id: 'pages-community-moderation-decision',
   component: DecisionPageView,
   parameters: { layout: 'fullscreen', viewport: { options: reporterStatusViewports } },

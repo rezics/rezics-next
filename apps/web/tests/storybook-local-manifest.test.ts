@@ -55,10 +55,10 @@ test('An own-worktree Storybook dev server supplies its real local MCP and compo
   // Use the complete default catalogues. No browser, preview build, fixture server or alternate generator.
   const uiPort = await unusedPort();
   for (const { workspace, title, source, port } of [
-    { workspace: 'packages/ui', title: 'Components/Cover', source: '/components/cover.stories.tsx', port: uiPort },
+    { workspace: 'packages/ui', title: 'Media/Cover', source: '/components/cover.stories.tsx', port: uiPort },
     {
       workspace: 'apps/web',
-      title: 'Discovery/Search Refinement',
+      title: 'Discovery/Search/Search Refinement',
       source: '/stories/search-refinement.stories.tsx',
       port: await unusedPort(),
     },

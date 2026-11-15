@@ -9,7 +9,7 @@ import { AppShell } from '../shell/shell';
 import { PageStory, PatternStory } from './page';
 
 const meta = {
-  title: 'Account/Inbox watch updates',
+  title: 'Account/Inbox/Inbox Watch Updates',
   id: 'pages-account-inbox-watch-updates',
   parameters: {
     layout: 'fullscreen',

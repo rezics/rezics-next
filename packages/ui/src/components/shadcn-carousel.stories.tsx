@@ -4,7 +4,7 @@ import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Carousel',
+  title: 'Media/Carousel',
   component: Carousel,
   tags: ['autodocs'],
   decorators: [withSurface],

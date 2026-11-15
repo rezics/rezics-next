@@ -4,7 +4,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import { withSurface } from '../stories/support.tsx';
 import { ListRow, ListRowControl, ListRowLink } from './list-row.tsx';
 
-const meta = { title: 'Components/List Row', component: ListRow, decorators: [withSurface] } satisfies Meta<
+const meta = { title: 'Data Display/List Row', component: ListRow, decorators: [withSurface] } satisfies Meta<
   typeof ListRow
 >;
 export default meta;

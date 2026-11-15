@@ -29,7 +29,7 @@ function GuideStory({ scenario = 'active' }: { scenario?: GuideScenario }) {
 }
 
 const meta = {
-  title: 'Catalogue/Type and field guide',
+  title: 'Catalogue/Vocabulary/Type and Field Guide',
   id: 'pages-catalogue-type-and-field-guide',
   component: GuideStory,
   tags: ['autodocs'],

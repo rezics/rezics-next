@@ -33,7 +33,7 @@ function Example() {
     </div>
   );
 }
-const meta = { title: 'Components/Shelf/Selection', component: Example } satisfies Meta<typeof Example>;
+const meta = { title: 'Actions/Shelf Selection', component: Example } satisfies Meta<typeof Example>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Selection: Story = {

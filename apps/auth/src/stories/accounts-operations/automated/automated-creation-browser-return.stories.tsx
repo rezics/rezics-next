@@ -6,7 +6,7 @@ import { authLocale, button, fill, reviewParameters, waitFor } from '../../accou
 import { m } from '../../../paraglide/messages.js';
 
 export default {
-  title: 'Account/Automated/Creation browser return',
+  title: 'Account/Managed Accounts/Creation Browser Return',
   id: 'pages-accounts-operations-automated-creation-browser-return',
   parameters: reviewParameters,
   decorators: [authLocale],

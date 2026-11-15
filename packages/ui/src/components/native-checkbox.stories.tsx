@@ -4,7 +4,7 @@ import { NativeCheckbox } from './native-checkbox';
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'Components/NativeCheckbox',
+  title: 'Forms/Native Checkbox',
   component: NativeCheckbox,
   decorators: [withSurface],
 } satisfies Meta<typeof NativeCheckbox>;

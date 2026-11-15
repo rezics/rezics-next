@@ -76,7 +76,7 @@ function RecordingReaderRecovery({ scenario = 'failed' }: { scenario?: Scenario 
 }
 
 const meta = {
-  title: 'Catalogue/Recording reader recovery',
+  title: 'Catalogue/Music/Recording Reader Recovery',
   id: 'pages-catalogue-recording-reader-recovery',
   component: RecordingReaderRecovery,
   parameters: {

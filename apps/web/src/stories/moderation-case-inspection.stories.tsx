@@ -51,7 +51,7 @@ const currentDestination = {
 };
 
 const meta = {
-  title: 'Moderation/Moderation case inspection',
+  title: 'Moderation/Decisions/Moderation Case Inspection',
   id: 'pages-moderation-case-inspection',
   component: WorkbenchCaseDetail,
   parameters: { layout: 'fullscreen', viewport: { options: queueViewports } },

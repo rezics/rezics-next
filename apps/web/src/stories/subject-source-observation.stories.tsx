@@ -173,7 +173,7 @@ function ObservationStory({ mode }: { mode: Mode }) {
 }
 
 const meta = {
-  title: 'Subjects/Provider observation',
+  title: 'Subjects/Subject Page/Provider Observation',
   id: 'pages-subjects-provider-observation',
   component: ObservationStory,
   parameters: {

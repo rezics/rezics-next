@@ -7,7 +7,7 @@ import { PageStory, PatternStory } from './page';
 import { diarySessionId, setPrivateDiaryScenario, type PrivateDiaryScenario } from '../kernel/fake/private-diary';
 
 const meta = {
-  title: 'Library/Private diary',
+  title: 'Library/Private Data/Private Diary',
   id: 'pages-library-private-diary',
   beforeEach() {
     setPrivateDiaryScenario();

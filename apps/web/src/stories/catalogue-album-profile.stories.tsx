@@ -111,7 +111,7 @@ function AlbumStory({
 }
 
 const meta = {
-  title: 'Catalogue/Released album catalogue editor',
+  title: 'Catalogue/Albums/Released Album Catalogue Editor',
   id: 'pages-catalogue-released-album-catalogue-editor',
   component: AlbumStory,
   parameters: {

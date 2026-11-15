@@ -55,7 +55,7 @@ function PublicOwners({ prepared = false }: { prepared?: boolean }) {
   );
 }
 const meta = {
-  title: 'Discovery/Home public owners',
+  title: 'Discovery/Home/Home Public Owners',
   id: 'pages-discovery-home-public-owners',
   component: PublicOwners,
   parameters: {

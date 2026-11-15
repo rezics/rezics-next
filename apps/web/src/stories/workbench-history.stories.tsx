@@ -133,7 +133,7 @@ function HistoryStory({
 }
 
 const meta = {
-  title: 'Moderation/Board decision history',
+  title: 'Moderation/Decisions/Board Decision History',
   id: 'pages-moderation-board-decision-history',
   component: HistoryStory,
   parameters: {

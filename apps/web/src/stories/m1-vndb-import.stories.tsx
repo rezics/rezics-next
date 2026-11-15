@@ -179,7 +179,7 @@ function VndbImportStory({ scenario = 'upload' }: { scenario?: Scenario }) {
   );
 }
 const meta = {
-  title: 'Library/VNDB import',
+  title: 'Library/Imports/VNDB Import',
   id: 'pages-library-vndb-import',
   component: VndbImportStory,
   parameters: { layout: 'fullscreen' },

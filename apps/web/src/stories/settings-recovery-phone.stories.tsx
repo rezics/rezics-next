@@ -18,7 +18,7 @@ const storyPath = '/settings?managedAccount=invalid&source=email';
 const localizedStoryUrl = () => localizeUrl(new URL(storyPath, 'https://rezics.local')).href;
 
 const meta = {
-  title: 'Account/Settings recovery',
+  title: 'Account/Settings/Settings Recovery',
   id: 'pages-account-settings-recovery',
   parameters: {
     layout: 'fullscreen',

@@ -43,7 +43,7 @@ function GameReaderStory({ scenario = 'work' }: { scenario?: GameExample }) {
   );
 }
 const meta = {
-  title: 'Catalogue/Game reader',
+  title: 'Catalogue/Games/Game Reader',
   id: 'pages-catalogue-game-reader',
   component: GameReaderStory,
   parameters: {

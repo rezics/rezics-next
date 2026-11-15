@@ -52,7 +52,7 @@ function PropertiesReview({ image, draft }: { image: boolean; draft: EditorMedia
 }
 
 const meta = {
-  title: 'Editor/Media controls',
+  title: 'Editor/Writing/Media Controls',
   id: 'editor-media-controls',
   parameters: { layout: 'padded' },
 } satisfies Meta;

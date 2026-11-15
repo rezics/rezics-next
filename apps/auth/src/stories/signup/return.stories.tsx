@@ -9,7 +9,7 @@ import { registrationPage, requirements } from './fixtures';
 import '../../styles.css';
 
 export default {
-  title: 'Account/Sign up/Return',
+  title: 'Account/Sign Up/Return',
   id: 'pages-account-sign-up-return',
   parameters: reviewParameters,
   decorators: [authLocale],

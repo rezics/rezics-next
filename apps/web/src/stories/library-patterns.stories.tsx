@@ -59,7 +59,7 @@ function illustrativeEntries(source: typeof entries, state: FixtureState) {
 }
 
 const meta = {
-  title: 'Library/Tracked entries',
+  title: 'Library/Entries/Tracked Entries',
   id: 'patterns-library-tracked-entries',
   parameters: {
     layout: 'fullscreen',

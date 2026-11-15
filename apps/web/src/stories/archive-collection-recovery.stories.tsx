@@ -210,7 +210,7 @@ const outcomes: RecoveryOutcomesPage = {
 };
 
 const meta = {
-  title: 'Library/Archive Collection recovery',
+  title: 'Library/Collections/Archive Collection Recovery',
   id: 'pages-library-archive-collection-recovery',
   component: ArchiveCollectionRecoveryUpload,
   parameters: { layout: 'fullscreen' },

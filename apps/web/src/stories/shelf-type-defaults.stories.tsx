@@ -15,7 +15,7 @@ const book = 'schema:Book',
   movie = 'schema:Movie',
   absent = 'schema:Unavailable';
 const meta = {
-  title: 'Library/Type layout defaults',
+  title: 'Library/Entries/Type Layout Defaults',
   id: 'patterns-library-type-layout-defaults',
   parameters: { layout: 'padded' },
 } satisfies Meta;

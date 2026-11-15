@@ -200,7 +200,7 @@ function DetailJourney({
 }
 
 const meta = {
-  title: 'Subjects/Detailed sources family',
+  title: 'Subjects/Sources/Detailed Sources Family',
   id: 'pages-subjects-detailed-sources-family',
   component: DetailJourney,
   parameters: {

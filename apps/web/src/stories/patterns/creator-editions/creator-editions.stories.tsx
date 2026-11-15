@@ -5,7 +5,7 @@ import { localizeHref } from '../../../paraglide/runtime.js';
 import { CreatorEditionsExample, creatorEditionFixture, publishedEditionFixture } from './creator-editions-fixtures';
 
 const meta = {
-  title: 'Content/CreatorEditions Workflow',
+  title: 'Content/Editions/Creator Editions Workflow',
   id: 'patterns-content-creatoreditions',
   component: CreatorEditionsExample,
   parameters: { layout: 'fullscreen' },

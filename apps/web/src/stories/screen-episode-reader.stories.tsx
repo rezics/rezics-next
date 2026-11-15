@@ -86,7 +86,7 @@ const orderedEntries: ScreenEpisodeEntry[] = [
 ];
 
 const meta = {
-  title: 'Subjects/Screen episode reader',
+  title: 'Subjects/Screen Works/Screen Episode Reader',
   id: 'pages-screen-episode-reader',
   component: ScreenEpisodeList,
   args: { locale: 'en', origin },

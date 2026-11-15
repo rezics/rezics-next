@@ -671,7 +671,7 @@ async function journey(canvasElement: HTMLElement) {
 }
 
 const meta = {
-  title: 'Components/EditorPerformance',
+  title: 'Editor/Writing/Performance',
   component: PerformanceHost,
   parameters: { layout: 'padded' },
 } satisfies Meta<typeof PerformanceHost>;

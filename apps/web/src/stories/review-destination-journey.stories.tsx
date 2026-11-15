@@ -120,7 +120,7 @@ function Examples({ session = 'signed-in' }: { session?: 'signed-in' | 'signed-o
 }
 
 const meta = {
-  title: 'Subjects/Review destination journey',
+  title: 'Subjects/Community/Review Destination Journey',
   id: 'patterns-subjects-review-destination-journey',
   parameters: {
     layout: 'fullscreen',

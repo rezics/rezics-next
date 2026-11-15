@@ -197,7 +197,7 @@ function HistoryExample({ scenario, locale }: { scenario: Scenario; locale: Loca
   );
 }
 const meta = {
-  title: 'Pages/Knowledge/History',
+  title: 'Content/Knowledge/History',
   component: HistoryExample,
   args: { scenario: 'Revisions', locale: 'en' },
   argTypes: { scenario: { control: false }, locale: { options: locales, control: 'select' } },

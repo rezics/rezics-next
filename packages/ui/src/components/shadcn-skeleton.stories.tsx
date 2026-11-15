@@ -6,7 +6,7 @@ import { withSurface } from '../stories/support.tsx';
 import { MetaLine } from './meta-line.tsx';
 
 const meta = {
-  title: 'shadcn/Skeleton',
+  title: 'Feedback/Skeleton',
   component: Skeleton,
   tags: ['autodocs'],
   decorators: [withSurface],

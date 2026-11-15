@@ -41,7 +41,7 @@ function CreateNames() {
 }
 
 const meta = {
-  title: 'Zones/Name validation',
+  title: 'Zones/Naming/Name Validation',
   id: 'patterns-zones-name-validation',
   render: () => <CreateNames />,
   parameters: {

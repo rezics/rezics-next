@@ -20,7 +20,7 @@ import {
   waitFor,
 } from '../../accounts-operations/story';
 
-export default { title: 'Account/Account security', id: 'pages-account-account-security', parameters: reviewParameters, decorators: [authLocale] };
+export default { title: 'Account/Security/Account Security', id: 'pages-account-account-security', parameters: reviewParameters, decorators: [authLocale] };
 export const initial: SecurityLoadResult = {
   kind: 'ready',
   accountId: storyAccount,

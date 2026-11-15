@@ -19,7 +19,7 @@ import { sessionQuery } from '../session/query';
 import { Button } from '@rezics/ui/shadcn/button';
 
 const meta = {
-  title: 'Account/Settings navigation',
+  title: 'Account/Settings/Settings Navigation',
   id: 'patterns-account-settings-navigation',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

@@ -93,7 +93,7 @@ function ContextualOrganizationHistory() {
 }
 
 const meta = {
-  title: 'Catalogue/Organization history Context visit',
+  title: 'Catalogue/People and Organizations/Organization History Context Visit',
   component: ContextualOrganizationHistory,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof ContextualOrganizationHistory>;

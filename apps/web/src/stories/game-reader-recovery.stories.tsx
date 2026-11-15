@@ -56,7 +56,7 @@ function RecoveryExample({ scenario = 'inspection' }: { scenario?: Scenario }) {
   );
 }
 const meta = {
-  title: 'Catalogue/Game reader recovery',
+  title: 'Catalogue/Games/Game Reader Recovery',
   id: 'pages-catalogue-game-reader-recovery',
   component: RecoveryExample,
   parameters: {

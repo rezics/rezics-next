@@ -105,7 +105,7 @@ function RoutedIndependentProgress({ scenario }: { scenario: Scenario }) {
 }
 
 const meta = {
-  title: 'Library/Independent progress measures',
+  title: 'Library/Progress/Independent Progress Measures',
   id: 'interfaces-library-independent-progress-measures',
   component: RoutedIndependentProgress,
   parameters: { layout: 'fullscreen' },

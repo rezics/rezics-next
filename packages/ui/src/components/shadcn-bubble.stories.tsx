@@ -4,7 +4,7 @@ import { Bubble, BubbleContent, BubbleGroup, BubbleReactions } from '@rezics/ui/
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Bubble',
+  title: 'Data Display/Bubble',
   component: Bubble,
   tags: ['autodocs'],
   decorators: [withSurface],

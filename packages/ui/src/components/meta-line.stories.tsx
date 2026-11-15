@@ -3,7 +3,7 @@ import { withSurface } from '../stories/support.tsx';
 import { MetaLine } from './meta-line.tsx';
 
 const meta = {
-  title: 'Components/Meta Line',
+  title: 'Data Display/Meta Line',
   component: MetaLine,
   args: { items: [] },
   decorators: [withSurface],

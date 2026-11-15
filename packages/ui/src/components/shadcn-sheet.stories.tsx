@@ -30,7 +30,7 @@ import { waitForFocus } from '../test/focus.ts';
 import { dismissed, settled, withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Sheet',
+  title: 'Overlays/Sheet',
   component: Sheet,
   tags: ['autodocs'],
   decorators: [withSurface],

@@ -36,7 +36,7 @@ function WideDocumentReader({ retirement = false }: { retirement?: boolean }) {
 }
 
 const meta = {
-  title: 'Community/Wide document reading',
+  title: 'Community/Authoring/Wide Document Reading',
   id: 'pages-community-wide-document-reading',
   component: WideDocumentReader,
   parameters: {

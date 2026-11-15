@@ -14,7 +14,7 @@ const shelves = [
 ];
 
 const meta = {
-  title: 'shadcn/Select',
+  title: 'Forms/Select',
   component: Select,
   tags: ['autodocs'],
   decorators: [withSurface],

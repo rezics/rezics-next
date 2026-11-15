@@ -16,7 +16,7 @@ import {
 import { settled, withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Command',
+  title: 'Overlays/Command',
   component: Command,
   tags: ['autodocs'],
   decorators: [withSurface],

@@ -4,7 +4,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@r
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Accordion',
+  title: 'Layout/Accordion',
   component: Accordion,
   tags: ['autodocs'],
   decorators: [withSurface],

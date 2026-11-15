@@ -64,7 +64,7 @@ function CountUnavailablePageStory() {
 }
 
 const meta = {
-  title: 'Subjects/Subject',
+  title: 'Subjects/Subject Page/Overview',
   id: 'pages-subjects-subject',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

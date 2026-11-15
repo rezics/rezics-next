@@ -5,7 +5,7 @@ import { m } from '../paraglide/messages.js';
 import { PatternStory, pagePaths } from './page';
 
 const meta = {
-  title: 'Library/Collection access',
+  title: 'Library/Collections/Collection Access',
   id: 'patterns-library-collection-access',
   parameters: {
     docs: {

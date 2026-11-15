@@ -76,7 +76,7 @@ function CurationAdviceStory({ scenario }: { scenario: Scenario }) {
 }
 
 const meta = {
-  title: 'Site Shell/Curation advice',
+  title: 'Site Shell/Curation/Curation Advice',
   id: 'patterns-presentation-curation-advice',
   component: CurationAdviceStory,
   decorators: [

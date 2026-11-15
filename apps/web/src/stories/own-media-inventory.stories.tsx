@@ -15,7 +15,7 @@ import type { OwnMediaRead } from '../media/own-inventory/actions';
 import type { OwnMediaInventoryEntry, OwnMediaInventoryPage } from '../media/own-inventory/wire';
 
 const meta = {
-  title: 'Library/My uploaded media',
+  title: 'Library/Private Data/My Uploaded Media',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;
 export default meta;

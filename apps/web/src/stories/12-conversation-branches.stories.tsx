@@ -107,7 +107,7 @@ function Journey(props: { boundaryStates?: boolean }) {
 }
 
 const meta = {
-  title: 'Community/Bounded conversation branches',
+  title: 'Community/Threads/Bounded Conversation Branches',
   id: 'pages-community-bounded-conversation-branches',
   component: Journey,
   parameters: {

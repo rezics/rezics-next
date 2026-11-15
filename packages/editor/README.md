@@ -17,8 +17,9 @@ editor dependency or re-exports. Preference consumers may import the pure leaf w
 
 ## Development
 
-Run `bun run storybook` to use the existing shared UI Storybook on port 6007. Moved stories retain their titles
-and IDs. The composed published review entry is `/ui/?path=/story/editor-overview--catalogue`; it links the
+Run `bun run storybook` to use the existing shared UI Storybook on port 6007. Follow the shared
+[sidebar](../../apps/web/.storybook/README.md#sidebar-organization) and [source layout](../../apps/web/.storybook/README.md#source-layout) conventions.
+The composed published review entry is `/ui/?path=/story/editor-overview--catalogue`; it links the
 implemented editor review states. Host save, publication and native acceptance remain separately scheduled.
 Build with `bun run --cwd packages/editor storybook:build`. Publish a source-only development snapshot with
 `bun run --cwd packages/editor storybook:deploy -- --local --source-only`. Both call the existing Web scripts;

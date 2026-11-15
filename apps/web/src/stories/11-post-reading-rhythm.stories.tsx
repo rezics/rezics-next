@@ -89,7 +89,7 @@ function ReadingJourney({ unavailable = false }: { unavailable?: boolean }) {
 }
 
 const meta = {
-  title: 'Community/Post reading rhythm',
+  title: 'Community/Posts/Post Reading Rhythm',
   id: 'interfaces-community-post-reading-rhythm',
   component: ReadingJourney,
   parameters: { layout: 'fullscreen' },

@@ -7,7 +7,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Input',
+  title: 'Forms/Input',
   component: Input,
   tags: ['autodocs'],
   decorators: [withSurface],

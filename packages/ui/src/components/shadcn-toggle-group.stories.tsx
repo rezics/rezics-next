@@ -4,7 +4,7 @@ import { ToggleGroup, ToggleGroupItem } from '@rezics/ui/shadcn/toggle-group';
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/ToggleGroup',
+  title: 'Actions/Toggle Group',
   component: ToggleGroup,
   tags: ['autodocs'],
   decorators: [withSurface],

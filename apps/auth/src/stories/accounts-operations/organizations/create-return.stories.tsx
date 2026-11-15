@@ -7,7 +7,7 @@ const phoneViewport = { viewport: { ...reviewParameters.viewport } };
 const desktopViewport = { viewport: { ...reviewParameters.viewport } };
 
 export default {
-  title: 'Account/Organization creation return',
+  title: 'Account/Organizations/Organization Creation Return',
   id: 'pages-account-organization-creation-return',
   parameters: reviewParameters,
   decorators: [authLocale],

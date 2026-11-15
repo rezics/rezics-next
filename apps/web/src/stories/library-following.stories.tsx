@@ -23,7 +23,7 @@ import {
 } from './page';
 
 const meta = {
-  title: 'Library/Following',
+  title: 'Library/Following/Following',
   id: 'pages-library-following',
   parameters: {
     layout: 'fullscreen',

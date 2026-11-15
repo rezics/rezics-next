@@ -2,7 +2,7 @@ import type { Meta } from '@storybook/react-vite';
 import pattern, * as directory from './board-directory.stories';
 
 const meta = {
-  title: 'Community/Board Directory Page',
+  title: 'Community/Boards/Board Directory',
   id: 'pages-community-board-directory',
   component: directory.DirectoryExample,
   parameters: pattern.parameters,

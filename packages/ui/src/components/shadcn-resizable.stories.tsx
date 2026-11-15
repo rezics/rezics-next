@@ -4,7 +4,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@rezics/ui
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Resizable',
+  title: 'Layout/Resizable',
   component: ResizablePanelGroup,
   tags: ['autodocs'],
   decorators: [withSurface],

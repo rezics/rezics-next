@@ -39,7 +39,7 @@ function CreateStory({ scenario = 'list' }: { scenario?: Scenario | 'loading' | 
 }
 
 const meta = {
-  title: 'Zones/Create',
+  title: 'Zones/Creation/Create',
   id: 'pages-zones-create',
   component: CreateStory,
   tags: ['autodocs'],

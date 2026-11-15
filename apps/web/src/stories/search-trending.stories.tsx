@@ -7,7 +7,7 @@ import { problem } from '../media/kernel';
 
 /** The actual shell/typed consumer. No qualified response is invented while native activation is pending. */
 const meta = {
-  title: 'Discovery/Search Trending',
+  title: 'Discovery/Search/Search Trending',
   id: 'pages-discovery-search-trending',
   parameters: { layout: 'fullscreen' },
   render: () => <PageStory visitor="Signed Out" path="/search" />,

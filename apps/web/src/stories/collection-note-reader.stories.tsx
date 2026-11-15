@@ -10,7 +10,7 @@ import { m } from '../paraglide/messages.js';
 import { Button } from '@rezics/ui/shadcn/button';
 
 const meta = {
-  title: 'Library/Collection Notes',
+  title: 'Library/Collections/Collection Notes',
   id: 'patterns-collection-notes',
   component: CollectionNoteReader,
   args: { note: null, occurrence: 'Supplied occurrence' },

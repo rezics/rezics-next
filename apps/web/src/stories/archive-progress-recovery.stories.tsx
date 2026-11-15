@@ -244,7 +244,7 @@ function ProgressStory({ stage }: { stage: Stage }) {
   ) : null;
 }
 const meta = {
-  title: 'Library/Archive progress recovery',
+  title: 'Library/Progress/Archive Progress Recovery',
   id: 'pages-library-archive-progress-recovery',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

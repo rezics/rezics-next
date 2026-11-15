@@ -106,7 +106,7 @@ function TransferExample({ scenario, locale }: { scenario: Scenario; locale: Loc
   );
 }
 const meta = {
-  title: 'Pages/Knowledge/Transfer',
+  title: 'Content/Knowledge/Transfer',
   component: TransferExample,
   args: { scenario: 'PublicExport', locale: 'en' },
   argTypes: { scenario: { control: false }, locale: { options: locales, control: 'select' } },

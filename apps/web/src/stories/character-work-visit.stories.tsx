@@ -155,7 +155,7 @@ function CharacterVisit({
   );
 }
 const meta = {
-  title: 'Subjects/Work appearances',
+  title: 'Subjects/Relationships/Work Appearances',
   id: 'pages-character-work-appearances',
   component: CharacterVisit,
   args: { locale: 'en', failed: false, paged: false, stale: false },

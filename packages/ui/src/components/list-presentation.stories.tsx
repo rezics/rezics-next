@@ -41,7 +41,7 @@ function imageSource(media: string) {
 }
 
 const meta = {
-  title: 'Components/List Presentation',
+  title: 'Data Display/List Presentation',
   component: MemberListRow,
   args: { href: '/book', subject: book, cover: null, src: imageSource, title: book.title },
   decorators: [withSurface],

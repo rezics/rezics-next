@@ -10,7 +10,7 @@ import { ContinueSection } from '../library/continue';
 import { continueCursorHref } from '../library/continue-address';
 
 const meta = {
-  title: 'Library/Continue Workflow',
+  title: 'Library/Continue/Continue Workflow',
   id: 'patterns-library-continue',
   parameters: {
     layout: 'fullscreen',

@@ -145,7 +145,7 @@ function Journey({ labels, retirement = false }: { labels: Labels; retirement?: 
 }
 
 const meta = {
-  title: 'Discovery/Search Constraint Identity',
+  title: 'Discovery/Search/Search Constraint Identity',
   id: 'pages-discovery-search-constraint-identity',
   parameters: {
     layout: 'fullscreen',

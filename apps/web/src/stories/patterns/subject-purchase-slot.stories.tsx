@@ -9,7 +9,7 @@ import recordedPage from '../../kernel/recorded/subject-page.json';
 import { PatternStory } from '../page';
 
 const meta = {
-  title: 'Subjects/Purchase entry slot',
+  title: 'Subjects/Subject Page/Purchase Entry Slot',
   id: 'patterns-subjects-purchase-entry-slot',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

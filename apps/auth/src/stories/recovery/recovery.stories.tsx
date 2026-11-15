@@ -14,7 +14,7 @@ import { authLocale, reviewParameters, button, fill, waitFor } from '../accounts
 import '../../styles.css';
 
 export default {
-  title: 'Account/Recovery return',
+  title: 'Account/Recovery/Recovery Return',
   id: 'pages-account-recovery-return',
   parameters: reviewParameters,
   decorators: [authLocale],

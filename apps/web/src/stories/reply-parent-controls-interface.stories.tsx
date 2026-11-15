@@ -104,7 +104,7 @@ function Controls() {
 }
 
 const meta = {
-  title: 'Community/Reply parent controls interface',
+  title: 'Community/Threads/Reply Parent Controls Interface',
   id: 'patterns-community-reply-parent-controls-interface',
   component: Controls,
   parameters: {

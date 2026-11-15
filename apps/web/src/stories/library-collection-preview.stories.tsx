@@ -15,7 +15,7 @@ import { PatternStory } from './page';
 import { m } from '../paraglide/messages.js';
 
 const meta = {
-  title: 'Library/Collection Preview',
+  title: 'Library/Collections/Collection Preview',
   id: 'patterns-collection-preview',
   tags: ['autodocs'],
   parameters: {

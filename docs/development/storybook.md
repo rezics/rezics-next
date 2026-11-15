@@ -2,19 +2,14 @@
 
 ## Catalogue and ownership
 
-The Web sidebar is organized by product area, with Library, Subjects, Discovery, Community, Commerce and Account
-first, followed by Catalogue, Zones, Imports, Content, Moderation and Site Shell. Use area and feature names, such
-as `Library/Collections/Collection Editor`. Group full pages and their connected compositions under the same area;
-when they would have the same title, distinguish the page from the workflow in the folder name. Shared primitives
-remain in the composed UI catalogue.
+See [sidebar organization](../../apps/web/.storybook/README.md#sidebar-organization) for browsing and display titles
+and [source layout](../../apps/web/.storybook/README.md#source-layout) for story placement across Web, Auth, UI and Editor.
 
 Pages still show route level states in the full site shell. Connected compositions show regional states from the
 same recorded or fake data without the shell. Page stories cover populated states when the page frame differs by
-viewer, plus empty, unavailable and error outcomes. Preserve explicit meta IDs and story export names when
-renaming a folder so existing story and docs links keep working, except when retiring a display-only ID. Name stories for persona
-and outcome (`Signed out`, `Owner, empty`, `Filter sheet open`), not preview settings. Keep the hierarchy
-compact and include every required behavior state, even when a folder needs more than eight. Regression stories carry the `!dev` tag; every distinct required state stays visible. Cross cutting exposure views use the `exposure` tag in
-the page they cover.
+viewer, plus empty, unavailable and error outcomes. Name stories for persona and outcome (`Signed out`,
+`Owner, empty`, `Filter sheet open`). Keep every distinct required state visible. Regression stories carry the
+`!dev` tag. Cross cutting exposure views use the `exposure` tag in the page they cover.
 
 Locale and theme are Storybook globals. Review the same canonical IDs at `phone390` and `desktop1280` using the
 viewport toolbar, with locale and theme globals; do not create width or theme behavior variants. Keep a locale fixture only when its admitted data or authored interaction differs,

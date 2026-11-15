@@ -28,7 +28,7 @@ async function realmsPageReady({ canvasElement }: { canvasElement: HTMLElement }
 }
 
 const meta = {
-  title: 'Account/Public Realms',
+  title: 'Account/Profile/Public Realms',
   id: 'pages-accounts-public-realms',
   component: Example,
   play: realmsPageReady,

@@ -50,7 +50,7 @@ const cards = () =>
     />
   ));
 const meta = {
-  title: 'Components/Cover Card',
+  title: 'Media/Cover Card',
   component: CoverCard,
   decorators: [withSurface],
   args: { href: '/book', title: subjects[0]!.title, cover: { subject: subjects[0]!, cover: null, src: () => '' } },

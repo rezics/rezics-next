@@ -87,7 +87,7 @@ function EvidenceReturn({ revised = false }: { revised?: boolean }) {
 }
 
 const meta = {
-  title: 'Catalogue/Statement review consumers',
+  title: 'Catalogue/Statements/Statement Review Consumers',
   id: 'pages-catalogue-statement-review-consumers',
   component: EvidenceReturn,
   parameters: {

@@ -147,7 +147,7 @@ function RichDraftCreateIllustration({ scenario }: { scenario: Scenario }) {
 }
 
 const meta = {
-  title: 'Studio/Structured initial draft',
+  title: 'Content/Studio/Structured Initial Draft',
   component: RichDraftCreateIllustration,
   args: { scenario: 'structured' },
   argTypes: { scenario: { control: false } },

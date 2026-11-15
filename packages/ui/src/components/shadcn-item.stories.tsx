@@ -18,7 +18,7 @@ import { withSurface } from '../stories/support.tsx';
 import { MetaLine } from './meta-line.tsx';
 
 const meta = {
-  title: 'shadcn/Item',
+  title: 'Data Display/Item',
   component: Item,
   tags: ['autodocs'],
   decorators: [withSurface],

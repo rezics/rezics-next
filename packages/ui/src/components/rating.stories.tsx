@@ -14,7 +14,7 @@ import {
 } from './rating.tsx';
 
 const meta = {
-  title: 'Components/Rating',
+  title: 'Forms/Rating',
   component: RatingSummary,
   tags: ['autodocs'],
   decorators: [withSurface],

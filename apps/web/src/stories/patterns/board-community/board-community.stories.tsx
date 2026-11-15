@@ -12,7 +12,7 @@ import { PageStory, pagePaths } from '../../page';
 import { CommunityFixture } from './board-community-fixtures';
 
 const meta = {
-  title: 'Community/Community Feed',
+  title: 'Community/Feeds/Community Feed',
   id: 'patterns-community-community-feed',
   component: BoardCommunity,
   parameters: {

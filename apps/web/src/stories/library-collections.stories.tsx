@@ -13,7 +13,7 @@ import collectionRecording from '../kernel/recorded/library-collection.json';
 import collectionsRecording from '../kernel/recorded/library-collections.json';
 
 const meta = {
-  title: 'Library/Collections',
+  title: 'Library/Collections/Collection Directory',
   id: 'pages-library-collections',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

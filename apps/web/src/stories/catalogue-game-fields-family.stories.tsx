@@ -153,7 +153,7 @@ function Family({
   );
 }
 const meta = {
-  title: 'Catalogue/Game fields family',
+  title: 'Catalogue/Games/Game Fields Family',
   id: 'pages-catalogue-game-fields-family',
   component: Family,
   tags: ['autodocs'],

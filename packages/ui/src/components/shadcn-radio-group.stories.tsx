@@ -5,7 +5,7 @@ import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/RadioGroup',
+  title: 'Forms/Radio Group',
   component: RadioGroup,
   tags: ['autodocs'],
   decorators: [withSurface],

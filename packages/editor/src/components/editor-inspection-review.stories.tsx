@@ -81,7 +81,7 @@ function InspectionReview({
 }
 
 const meta = {
-  title: 'Editor/Inspection',
+  title: 'Editor/Writing/Inspection',
   id: 'editor-inspection-review',
   parameters: {
     layout: 'padded',

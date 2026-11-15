@@ -28,8 +28,8 @@ const productAreas = [
 ];
 
 function hasCatalogueTitle(title: string): boolean {
-  const [area, ...sections] = title.split('/');
-  return productAreas.includes(area ?? '') && sections.length > 0 && sections.every((section) => section.trim());
+  const [area, feature, surface, extra] = title.split('/');
+  return productAreas.includes(area ?? '') && Boolean(feature?.trim() && surface?.trim()) && extra === undefined;
 }
 
 function readIndex(path: string): Index {
@@ -99,7 +99,31 @@ describe('Storybook catalogue', () => {
           .map((entry) => entry.title.split('/')[0]!),
       ),
     ];
-    expect(uiTitles).toEqual(['Components', 'shadcn']);
+    expect(uiTitles).toEqual([
+      'Actions',
+      'Forms',
+      'Navigation',
+      'Overlays',
+      'Data Display',
+      'Feedback',
+      'Media',
+      'Layout',
+      'Editor',
+    ]);
+    const uiStories = Object.values(ui.entries).filter((entry) => entry.type === 'story');
+    for (const entry of uiStories) {
+      const [category, group, component, extra] = entry.title.split('/');
+      if (category === 'Editor' && entry.title !== 'Editor/Overview') {
+        expect(['Writing', 'Reading', 'Preferences'], entry.title).toContain(group!);
+        expect(component?.trim(), entry.title).toBeTruthy();
+        expect(extra, entry.title).toBeUndefined();
+      } else {
+        expect(group?.trim(), entry.title).toBeTruthy();
+        expect(component, entry.title).toBeUndefined();
+      }
+    }
+    for (const title of ['Actions/Button', 'Forms/Checkbox', 'Media/Cover', 'Editor/Reading/Document Body'])
+      expect(uiStories.some((entry) => entry.title === title), title).toBe(true);
     expect(Object.values(web.entries).some((entry) => entry.title === 'Overview')).toBe(true);
     expect(
       Object.values(web.entries).some((entry) => entry.title === 'Review' || entry.title.startsWith('Review/')),
@@ -113,11 +137,7 @@ describe('Storybook catalogue', () => {
     await page.goto(`${server.url}index.html?path=/docs/${docsId('Overview')}`);
     const tree = page.locator('#storybook-explorer-tree');
     await tree.waitFor();
-    for (let index = 0; index < Object.keys(web.entries).length; index++) {
-      const expand = tree.getByLabel('Expand').first();
-      if (!(await expand.count())) break;
-      await expand.click();
-    }
+    await page.getByText('UI Library', { exact: true }).waitFor();
     const sidebar = (await tree.innerText()).split('\n');
     const at = (label: string) => sidebar.indexOf(label);
     expect(at('Overview')).toBeGreaterThanOrEqual(0);
@@ -145,9 +165,7 @@ describe('Storybook catalogue', () => {
     expect(new Set(stories.map((entry) => `${entry.title}\0${entry.name}`)).size).toBe(stories.length);
     for (const title of ['Patterns/Unknown shared folder', 'Pages/Unknown/Page', 'Library/'])
       expect(hasCatalogueTitle(title), title).toBe(false);
-    expect(stories.some((entry) => entry.title === 'Discovery/Search')).toBe(true);
-    expect(stories.some((entry) => entry.title === 'Discovery/Search Empty')).toBe(false);
-    expect(stories.some((entry) => entry.title === 'Discovery/Search Typed')).toBe(false);
+    expect(stories.some((entry) => entry.title === 'Discovery/Search/Search Page')).toBe(true);
     expect(
       stories.filter(
         (entry) =>
@@ -155,7 +173,6 @@ describe('Storybook catalogue', () => {
           /\b(?:390|1280)(?:px)?\b|\b(?:phone|mobile|desktop|tablet|narrow|light|dark)\b/i.test(entry.name),
       ),
     ).toEqual([]);
-    expect(stories.some((entry) => entry.title === 'Library/Collection details')).toBe(false);
     const page = await browser.newPage();
     await page.goto(`${server.url}index.html?path=/docs/${docsId('Overview')}`);
     const tree = page.locator('#storybook-explorer-tree');
@@ -184,7 +201,7 @@ describe('Storybook catalogue', () => {
     const index = readIndex(resolve(output, 'index.json'));
     const families = [
       {
-        title: 'Library/Collection',
+        title: 'Library/Collections/Collection Page',
         id: 'pages-library-collection',
         file: 'library-collection.stories.tsx',
         states: [
@@ -222,7 +239,7 @@ describe('Storybook catalogue', () => {
         ],
       },
       {
-        title: 'Subjects/Subject',
+        title: 'Subjects/Subject Page/Overview',
         id: 'pages-subjects-subject',
         file: 'subject.stories.tsx',
         states: [
@@ -256,7 +273,7 @@ describe('Storybook catalogue', () => {
         ],
       },
       {
-        title: 'Discovery/Search',
+        title: 'Discovery/Search/Search Page',
         id: 'pages-discovery-search',
         file: 'search-rating.stories.tsx',
         states: [
@@ -278,7 +295,7 @@ describe('Storybook catalogue', () => {
         ],
       },
       {
-        title: 'Community/Thread',
+        title: 'Community/Threads/Thread Page',
         id: 'pages-community-thread',
         file: 'thread-media.stories.tsx',
         states: [
@@ -361,11 +378,11 @@ describe('Storybook catalogue', () => {
     const stories = Object.values(readIndex(resolve(output, 'index.json')).entries).filter(
       (entry) => entry.type === 'story',
     );
-    const pattern = stories.find((entry) => entry.title === 'Account/Shell' && entry.name === 'Member');
+    const pattern = stories.find((entry) => entry.title === 'Account/Account Menu/Shell' && entry.name === 'Member');
     const phone = stories.find((entry) => entry.id === 'pages-discovery-search--active-facet');
     expect(pattern).toBeDefined();
     expect(phone).toBeDefined();
-    expect(stories.some((entry) => entry.title === 'Library/Cover wall' && entry.name === 'Mixed media wall')).toBe(
+    expect(stories.some((entry) => entry.title === 'Library/Collections/Cover Wall' && entry.name === 'Mixed media wall')).toBe(
       true,
     );
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -406,6 +423,7 @@ describe('Storybook catalogue', () => {
 
     const docs = ['apps/web/src/stories/overview.mdx'];
     const stories = Object.values(index.entries).filter((entry) => entry.type === 'story');
+    const ui = readIndex(resolve(output, 'ui/index.json'));
     for (const path of docs) {
       const source = readFileSync(resolve(root, path), 'utf8');
       for (const [, module] of source.matchAll(/from ['"](\.\.\/[^'"]+\.stories)['"]/g)) {
@@ -415,8 +433,10 @@ describe('Storybook catalogue', () => {
           `${path} story module is indexed: ${moduleSuffix}`,
         ).toBe(true);
       }
-      for (const [, storyId] of source.matchAll(/\?path=\/story\/([\w-]+)/g))
-        expect(index.entries[storyId!]?.type, `${path} links to story ${storyId}`).toBe('story');
+      for (const [, uiPath, storyId] of source.matchAll(/(\/ui\/)?\?path=\/story\/([\w-]+)/g)) {
+        const catalogue = uiPath ? ui : index;
+        expect(catalogue.entries[storyId!]?.type, `${path} links to story ${storyId}`).toBe('story');
+      }
     }
     expect(Object.values(index.entries).some((entry) => entry.type === 'docs' && entry.title === 'Overview')).toBe(
       true,

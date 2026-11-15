@@ -15,7 +15,7 @@ import { PatternStory } from './page';
 const admitted = ['personal_library', 'reading_progress', 'library_label.assignment_list', 'library_label.unassign'];
 const label = { id: '0192f3a0-6c1e-7b2a-9d4e-000000000801', name: 'Reading list' };
 const meta = {
-  title: 'Library/Label shelf table family',
+  title: 'Library/Labels/Label Shelf Table Family',
   id: 'patterns-library-label-shelf-table-family',
   parameters: {
     layout: 'fullscreen',

@@ -14,7 +14,7 @@ import { withSurface } from '../stories/support.tsx';
 import { metaText } from './meta-line.tsx';
 
 const meta = {
-  title: 'Components/Content section',
+  title: 'Layout/Content Section',
   id: 'shadcn-card',
   component: ContentSection,
   tags: ['autodocs'],

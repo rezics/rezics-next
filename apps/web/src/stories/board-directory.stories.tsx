@@ -133,7 +133,7 @@ export function DirectoryExample({
 }
 
 const meta = {
-  title: 'Community/Board Directory Workflow',
+  title: 'Community/Boards/Board Directory Workflow',
   id: 'patterns-community-board-directory',
   component: DirectoryExample,
   excludeStories: ['DirectoryExample'],

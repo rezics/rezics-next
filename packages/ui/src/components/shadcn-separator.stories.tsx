@@ -4,7 +4,7 @@ import { Separator } from '@rezics/ui/shadcn/separator';
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Separator',
+  title: 'Layout/Separator',
   component: Separator,
   tags: ['autodocs'],
   decorators: [withSurface],

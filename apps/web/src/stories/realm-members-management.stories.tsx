@@ -146,7 +146,7 @@ const threeWindows: RealmMembersSource = {
   },
 };
 const meta = {
-  title: 'Community/Realm members management',
+  title: 'Community/Realm Membership/Realm Members Management',
   id: 'patterns-community-realm-members-management',
   component: RealmMembersPage,
   decorators: [

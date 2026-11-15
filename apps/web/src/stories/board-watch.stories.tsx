@@ -19,7 +19,7 @@ const boardId = pageBase.board.id;
 const accountId = 'board-watch-reader';
 
 const meta = {
-  title: 'Community/Board watch',
+  title: 'Community/Boards/Board Watch',
   id: 'pages-community-board-watch',
   parameters: {
     layout: 'fullscreen',

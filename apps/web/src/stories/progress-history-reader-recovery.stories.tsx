@@ -10,7 +10,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 
 // UNRUN: supplied DTO presentation cases, not native read, authorization or responsive evidence.
 const meta = {
-  title: 'Library/Progress history reader recovery',
+  title: 'Library/Progress/Progress History Reader Recovery',
   id: 'pages-library-progress-history-reader-recovery',
   parameters: {
     layout: 'fullscreen',

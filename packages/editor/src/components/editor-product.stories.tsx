@@ -61,7 +61,7 @@ function EditorProductHost({
 }
 
 const meta = {
-  title: 'Components/EditorProduct',
+  title: 'Editor/Writing/Editor Product',
   component: EditorProductHost,
   parameters: { layout: 'padded' },
 } satisfies Meta<typeof EditorProductHost>;

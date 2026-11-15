@@ -99,7 +99,7 @@ function CurrentVisit({ concealed = false, long = false }: { concealed?: boolean
 }
 
 const meta = {
-  title: 'Catalogue/Person biography current visit',
+  title: 'Catalogue/People and Organizations/Person Biography Current Visit',
   id: 'pages-catalogue-person-biography-current-visit',
   component: CurrentVisit,
   tags: ['autodocs'],

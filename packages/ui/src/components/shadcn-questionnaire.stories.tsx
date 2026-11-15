@@ -20,7 +20,7 @@ import {
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Questionnaire',
+  title: 'Forms/Questionnaire',
   component: Questionnaire,
   tags: ['autodocs'],
   decorators: [withSurface],

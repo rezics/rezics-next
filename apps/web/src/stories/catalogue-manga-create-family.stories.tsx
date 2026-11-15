@@ -37,7 +37,7 @@ function MangaCreationStory({
   );
 }
 const meta = {
-  title: 'Catalogue/Manga creation family',
+  title: 'Catalogue/Manga/Manga Creation Family',
   id: 'pages-catalogue-manga-creation-family',
   component: MangaCreationStory,
   args: { direction: 'ltr' },

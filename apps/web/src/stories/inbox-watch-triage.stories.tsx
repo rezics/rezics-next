@@ -17,7 +17,7 @@ import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Account/Inbox update triage',
+  title: 'Account/Inbox/Inbox Update Triage',
   id: 'pages-account-inbox-update-triage',
   parameters: {
     layout: 'fullscreen',

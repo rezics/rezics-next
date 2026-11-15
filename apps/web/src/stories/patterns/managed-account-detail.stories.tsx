@@ -103,7 +103,7 @@ function ConnectedDetail({ member = false, paging = false, failed, waiting = fal
 }
 
 const meta = {
-  title: 'Account/Managed account detail',
+  title: 'Account/Managed Accounts/Managed Account Detail',
   id: 'patterns-account-managed-account-detail',
   component: Example,
   parameters: { layout: 'padded' },

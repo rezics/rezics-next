@@ -119,7 +119,7 @@ function ProfileRoute({ mode }: { mode: PeopleMode }) {
 }
 
 const meta = {
-  title: 'Catalogue/Person and organization catalogue editor',
+  title: 'Catalogue/People and Organizations/Person and Organization Catalogue Editor',
   id: 'pages-catalogue-person-and-organization-catalogue-editor',
   component: ProfileStory,
   tags: ['autodocs'],

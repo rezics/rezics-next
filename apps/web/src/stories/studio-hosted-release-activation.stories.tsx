@@ -187,7 +187,7 @@ function StoryFrame({ scenario }: { scenario: Scenario }) {
   );
 }
 const meta = {
-  title: 'Pages/Studio/Prepared Book activation (illustrative)',
+  title: 'Content/Studio/Prepared Book Activation (illustrative)',
   component: StoryFrame,
   parameters: {
     layout: 'fullscreen',

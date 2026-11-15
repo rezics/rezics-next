@@ -4,7 +4,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@rezics/ui/shadcn
 import { settled, withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Hover card',
+  title: 'Overlays/Hover Card',
   component: HoverCard,
   tags: ['autodocs'],
   decorators: [withSurface],

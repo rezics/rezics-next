@@ -5,7 +5,7 @@ import { MalResultPage } from '../library/personal-mal-import/results';
 import { labelReviewRow as row } from '../library/personal-mal-import/labels.fixture';
 
 const meta = {
-  title: 'Library/MAL label adoption',
+  title: 'Library/Imports/MAL Label Adoption',
   component: MalRowReview,
   args: { row, busy: false, onSave: () => {} },
   parameters: {

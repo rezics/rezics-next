@@ -6,7 +6,7 @@ import { EditionPublicationExample, editionId, fixedText, imageAlt, subjectId } 
 import { selectSharedOption } from '../../shared-select-interaction';
 
 const meta = {
-  title: 'Content/EditionPublication Workflow',
+  title: 'Content/Editions/Edition Publication Workflow',
   id: 'patterns-content-editionpublication',
   component: EditionPublicationExample,
   parameters: { layout: 'fullscreen' },

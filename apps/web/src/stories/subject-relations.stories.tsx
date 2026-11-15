@@ -6,7 +6,7 @@ import subjectRecording from '../kernel/recorded/subject.json';
 import { PageStory, pageReady } from './page';
 import { subjectViewHref } from '../subject/subject-href';
 
-const meta = { title: 'Subjects/Subject Relations', id: 'pages-subjects-subject-relations', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Subjects/Relationships/Subject Relations', id: 'pages-subjects-subject-relations', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

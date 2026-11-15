@@ -203,7 +203,7 @@ function HomeReviewPostContext({ scenario }: { scenario: Scenario }) {
 }
 
 const meta = {
-  title: 'Discovery/Home review-post context',
+  title: 'Discovery/Home/Home Review-post Context',
   id: 'pages-discovery-home-review-post-context',
   component: HomeReviewPostContext,
   parameters: {

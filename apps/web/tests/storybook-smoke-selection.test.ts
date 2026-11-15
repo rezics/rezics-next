@@ -25,18 +25,18 @@ function story(id: string, title: string, name: string): SmokeStoryEntry {
 const webIndex: SmokeStoryIndex = {
   entries: Object.fromEntries(
     [
-      story('pages-subjects-subject--count-unavailable', 'Subjects/Subject', 'Count Unavailable'),
-      story('pages-subjects-subject--signed-in', 'Subjects/Subject', 'Member'),
-      story('pages-library-copies--none', 'Library/Copies', 'None'),
-      story('pages-library-copies--many-copies', 'Library/Copies', 'Owner'),
-      story('patterns-account-shell--signed-out', 'Account/Shell', 'Signed out, account menu open'),
-      story('patterns-account-shell--member-account-menu-open', 'Account/Shell', 'Member, account menu open'),
+      story('pages-subjects-subject--count-unavailable', 'Subjects/Subject Page/Overview', 'Count Unavailable'),
+      story('pages-subjects-subject--signed-in', 'Subjects/Subject Page/Overview', 'Member'),
+      story('pages-library-copies--none', 'Library/Copies/Copies', 'None'),
+      story('pages-library-copies--many-copies', 'Library/Copies/Copies', 'Owner'),
+      story('patterns-account-shell--signed-out', 'Account/Account Menu/Shell', 'Signed out, account menu open'),
+      story('patterns-account-shell--member-account-menu-open', 'Account/Account Menu/Shell', 'Member, account menu open'),
     ].map((entry) => [entry.id, entry] as const),
   ),
 };
 const uiIndex: SmokeStoryIndex = {
   entries: {
-    'components-cover-card--default': story('components-cover-card--default', 'Components/Cover Card', 'Default'),
+    'media-cover-card--grid': story('media-cover-card--grid', 'Media/Cover Card', 'Grid'),
   },
 };
 
@@ -50,7 +50,7 @@ test('selects named full-page stories for the null-cover subject and recorded-co
   expect(subjectPage.reads.r0?.body?.summary?.cover).toBeNull();
   expect(stories.shell.id).toBe('patterns-account-shell--signed-out');
   expect(stories.signedInShell.id).toBe('patterns-account-shell--member-account-menu-open');
-  expect(stories.uiCoverCard.id).toBe('components-cover-card--default');
+  expect(stories.uiCoverCard.id).toBe('media-cover-card--grid');
   expect(stories.subject.id).toBe('pages-subjects-subject--signed-in');
   expect(stories.copies.id).toBe('pages-library-copies--many-copies');
   expect(stories.coverMedia).toBe(copyRecording.copies?.[1]?.subject?.cover?.media);
@@ -202,7 +202,7 @@ test('publication smoke keeps all six scenario assertions with independent finis
   expect(visits).toEqual([
     webIndex.entries['patterns-account-shell--signed-out']!.id,
     webIndex.entries['patterns-account-shell--member-account-menu-open']!.id,
-    'ui_components-cover-card--default',
+    'ui_media-cover-card--grid',
     webIndex.entries['patterns-account-shell--signed-out']!.id,
     webIndex.entries['pages-subjects-subject--signed-in']!.id,
     webIndex.entries['pages-library-copies--many-copies']!.id,

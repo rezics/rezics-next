@@ -284,7 +284,7 @@ function BookJourney({
 }
 
 const meta = {
-  title: 'Books/Hosted Book reader',
+  title: 'Library/Books/Hosted Book Reader',
   id: 'interfaces-hosted-book-reader',
   component: BookJourney,
   parameters: { layout: 'fullscreen', readerJourney: false },

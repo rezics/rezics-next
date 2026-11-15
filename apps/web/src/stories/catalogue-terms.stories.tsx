@@ -31,7 +31,7 @@ function TermsStory({ scenario = 'ready' }: { scenario?: TermsScenario }) {
 }
 
 const meta = {
-  title: 'Catalogue/Subject terms',
+  title: 'Catalogue/Vocabulary/Subject Terms',
   id: 'pages-catalogue-subject-terms',
   component: TermsStory,
   tags: ['autodocs'],

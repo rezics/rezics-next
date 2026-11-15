@@ -13,7 +13,7 @@ import { PatternStory, pagePaths } from './page';
 import { Button } from '@rezics/ui/shadcn/button';
 
 const meta = {
-  title: 'Library/Copy reading context',
+  title: 'Library/Copies/Copy Reading Context',
   id: 'patterns-library-copy-reading-context',
   parameters: {
     layout: 'fullscreen',

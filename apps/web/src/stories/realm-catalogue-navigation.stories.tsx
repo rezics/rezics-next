@@ -7,7 +7,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { searchLoaderDeps, searchParams } from '../search/search-params';
 
 const meta = {
-  title: 'Community/Realm Catalogue Navigation',
+  title: 'Community/Realm Presentation/Realm Catalogue Navigation',
   id: 'pages-community-realm-catalogue-navigation',
   parameters: {
     layout: 'fullscreen',

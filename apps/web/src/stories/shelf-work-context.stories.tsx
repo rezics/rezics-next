@@ -10,7 +10,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Library/Identifying work context',
+  title: 'Library/Entries/Identifying Work Context',
   id: 'patterns-library-identifying-work-context',
   parameters: {
     layout: 'fullscreen',

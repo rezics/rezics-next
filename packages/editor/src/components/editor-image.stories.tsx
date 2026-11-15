@@ -120,7 +120,7 @@ function drop(textbox: HTMLElement, files: File[], offset = 0) {
   );
 }
 const meta = {
-  title: 'Components/Editor Image',
+  title: 'Editor/Writing/Image',
   component: RichTextEditor,
   args: { value: fromPlainText('', 'blocks'), onChange: () => undefined, label: 'Post' },
   parameters: { layout: 'padded' },

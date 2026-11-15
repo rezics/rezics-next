@@ -11,7 +11,7 @@ import realmRecording from '../kernel/recorded/realm.json';
 import { PageStory, PatternStory, pageReady } from './page';
 
 const meta = {
-  title: 'Subjects/Library Sign-in Return Context',
+  title: 'Subjects/Library and Rating/Library Sign-in Return Context',
   id: 'pages-subjects-library-sign-in-return-context',
   parameters: {
     layout: 'fullscreen',
