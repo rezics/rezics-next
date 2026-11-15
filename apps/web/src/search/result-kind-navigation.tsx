@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { useRouter } from '@tanstack/react-router';
 import {
   NavigationMenu,
@@ -22,6 +23,9 @@ export function ResultKindNavigation({
   locale: string;
   disabled?: boolean;
 }) {
+  const uid = useId();
+  const selectedId = `${uid}-selected`;
+  const moreId = `${uid}-more`;
   const router = useRouter({ warn: false });
   const selected = state.kinds ?? [];
   const messageLocale = { locale: locale as never };
@@ -40,19 +44,21 @@ export function ResultKindNavigation({
       return { id, text: label.text || id, lang: label.lang, current: selected.length === 1 && selected[0] === id };
     }),
   ];
+  const describedBy = [selected.length > 1 ? selectedId : undefined, moreId].filter(Boolean).join(' ');
   return (
     <NavigationMenu
       aria-label={m.search_result_kinds({}, messageLocale)}
-      className="w-full max-w-full flex-col items-start gap-2"
+      aria-describedby={describedBy}
+      className="min-w-0 w-full max-w-full flex-col items-start gap-2"
     >
-      <NavigationMenuList className="max-w-full flex-wrap justify-start gap-1">
+      <NavigationMenuList className="min-w-0 w-full max-w-full flex-wrap justify-start gap-1">
         {destinations.map(({ id, text, lang, current }) => (
-          <NavigationMenuItem key={id === undefined ? 'all' : `kind:${id}`} className="max-w-full">
+          <NavigationMenuItem key={id === undefined ? 'all' : `kind:${id}`} className="min-w-0 max-w-full">
             <NavigationMenuLink
               href={discoverySearchHref(locale, { ...state, kinds: id ? [id] : undefined, cursor: undefined })}
               aria-current={current ? 'page' : undefined}
               aria-disabled={disabled || undefined}
-              className="min-h-11 max-w-full break-words whitespace-normal md:min-h-9 [@media(pointer:coarse)]:min-h-11 aria-[current=page]:bg-primary aria-[current=page]:text-primary-foreground aria-[current=page]:hover:bg-primary/80 aria-disabled:opacity-50"
+              className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal wrap-anywhere text-start md:min-h-9 [@media(pointer:coarse)]:min-h-11 aria-[current=page]:bg-primary aria-[current=page]:text-primary-foreground aria-[current=page]:hover:bg-primary/80 aria-disabled:opacity-50"
               onClick={(event) => {
                 if (
                   event.defaultPrevented ||
@@ -70,20 +76,24 @@ export function ResultKindNavigation({
                 }
               }}
             >
-              <span lang={lang}>{text}</span>
+              <span lang={lang} className="min-w-0 wrap-anywhere">
+                {text}
+              </span>
             </NavigationMenuLink>
           </NavigationMenuItem>
         ))}
       </NavigationMenuList>
       {selected.length > 1 && (
-        <p className="text-sm text-muted-foreground">
+        <p id={selectedId} className="min-w-0 text-sm text-muted-foreground wrap-anywhere">
           {m.search_kind_navigation_selected(
             { kinds: selected.map((id) => localizedLabel(choices.get(id) ?? {}, locale).text || id).join(', ') },
             messageLocale,
           )}
         </p>
       )}
-      <p className="text-sm text-muted-foreground">{m.search_kind_navigation_more({}, messageLocale)}</p>
+      <p id={moreId} className="min-w-0 text-sm text-muted-foreground wrap-anywhere">
+        {m.search_kind_navigation_more({}, messageLocale)}
+      </p>
     </NavigationMenu>
   );
 }
