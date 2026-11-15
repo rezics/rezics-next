@@ -12,7 +12,7 @@ import {
 } from '@rezics/ui/shadcn/dropdown-menu';
 import { TooltipProvider } from '@rezics/ui/shadcn/tooltip';
 import type { Editor } from '@tiptap/core';
-import { TextSelection } from '@tiptap/pm/state';
+import { AllSelection, TextSelection } from '@tiptap/pm/state';
 import { BubbleMenu } from '@tiptap/react/menus';
 import { Bold, ChevronDown, Code, Ellipsis, EyeOff, Italic, Link, Strikethrough, Underline } from 'lucide-react';
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
@@ -152,7 +152,7 @@ export function SelectionMenu({
           visible &&
           isCurrent() &&
           current.isEditable &&
-          live.selection instanceof TextSelection &&
+          (live.selection instanceof TextSelection || live.selection instanceof AllSelection) &&
           !live.selection.empty &&
           (view.hasFocus() || element.contains(document.activeElement) || holdsFocus.current || markMenu.current)
         }

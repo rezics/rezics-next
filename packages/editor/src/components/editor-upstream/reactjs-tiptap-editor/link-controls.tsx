@@ -39,6 +39,7 @@ export function LinkEditBlock({
   const composing = useRef(false);
   return (
     <div
+      data-slot="editor-link-field"
       className="min-w-0 w-full p-1"
       onCompositionStart={() => {
         composing.current = true;
