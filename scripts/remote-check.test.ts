@@ -10700,4 +10700,20 @@ time.sleep(10)`] }] });
   expect(existsSync(join(run.run, 'command-invoked'))).toBe(false);
   const retained = join(fixture.directory, 'receipts', run.run.split('/').at(-1)!, 'preparation-status.json');
   expect(JSON.parse(readFileSync(retained, 'utf8')).diagnostics).toEqual(receipt.diagnostics);
+  const resource = JSON.parse(readFileSync(join(run.run, 'physical-resources.json'), 'utf8'));
+  const evidence = { schema: 1, host: 'a', run: run.run.split('/').at(-1)!, status: 'infrastructure-failure',
+    phase: 'abort', diagnostics: receipt.diagnostics,
+    preparationReceiptSha256: 'a'.repeat(64), resourcesReceiptSha256: 'b'.repeat(64),
+    resources: { schema: 1, host: 'a', run: run.run.split('/').at(-1)!, boot: resource.boot,
+      supervisor: resource.supervisor, startedMonoMs: resource.startedMonoMs, commandStartedMonoMs: null,
+      terminalMonoMs: resource.terminalMonoMs, terminalSampleMonoMs: resource.samples.at(-1).monoMs,
+      sampleCount: resource.samples.length, commandSampleCount: 0 } };
+  const identity = { host: 'a', run: evidence.run };
+  expect(parseRemotePreparationAbortEvidence(evidence, identity)).toEqual(evidence);
+  expect(parseRemotePreparationAbortEvidence({ ...evidence,
+    diagnostics: { ...receipt.diagnostics, signal: 9 } }, identity)).toBeNull();
+  expect(parseRemotePreparationAbortEvidence({ ...evidence,
+    diagnostics: { ...receipt.diagnostics, logTail: 'x'.repeat(8193) } }, identity)).toBeNull();
+  expect(parseRemotePreparationAbortEvidence({ ...evidence,
+    diagnostics: { ...receipt.diagnostics, phaseElapsedMs: -1 } }, identity)).toBeNull();
 });
