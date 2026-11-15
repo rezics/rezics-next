@@ -167,6 +167,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
   let closed = false;
   let closing: Promise<void> | undefined;
   let cleanupFailure: { error: unknown } | undefined;
+  let publicationBindingFailure: string | undefined;
   const track = <T>(operation: () => Promise<T>): Promise<T> => {
     if (closed) return Promise.reject(new ProblemError('index_not_ready'));
     const promise = operation();
@@ -408,8 +409,27 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
           },
           context,
         );
-        if (resolved.status !== 'resolved')
-          return { status: resolved.status, reason: 'source_pending' as const, cost: resolved.cost };
+        if (resolved.status !== 'resolved') {
+          const failure = `${generation}:${resolved.status}:${resolved.reason}`;
+          if (publicationBindingFailure !== failure) {
+            publicationBindingFailure = failure;
+            console.warn(
+              JSON.stringify({
+                event: 'search.public_preparation.source_binding',
+                prefix: config.prefix,
+                generation,
+                status: resolved.status,
+                reason: resolved.reason,
+              }),
+            );
+          }
+          return {
+            status: resolved.status,
+            reason: resolved.reason === 'deadline' ? ('deadline' as const) : ('source_pending' as const),
+            cost: resolved.cost,
+          };
+        }
+        publicationBindingFailure = undefined;
         const registered = await custody.register(
           {
             definition: resolved.definition,
