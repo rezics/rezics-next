@@ -191,7 +191,7 @@ flock -x ${shell(lock)} sh -c ${shell(gcBody)} || echo 'check-git: store age pru
 }
 
 const CHECK_REF = /^refs\/checks\/[a-zA-Z0-9-]+$/;
-const RELEASE_TIMEOUT_MS = 2000;
+const RELEASE_TIMEOUT_MS = 10_000;
 export const CHECK_GIT_RELEASE_RETRY_MS = 60_000;
 type GitPushOutcome = {
   kind: 'deadline' | 'exit' | 'signal' | 'execution';
@@ -375,7 +375,7 @@ export async function sweepCheckGit(
   now = Date.now(),
   options: { deadlineMs?: number; limit?: number; signal?: AbortSignal } = {},
 ): Promise<CheckGitSweepResult> {
-  const deadlineMs = Math.min(Date.now() + 10_000, options.deadlineMs ?? Infinity);
+  const deadlineMs = Math.min(Date.now() + RELEASE_TIMEOUT_MS, options.deadlineMs ?? Infinity);
   const directory = join(resolve(workspace), '.temp/check-git-publications');
   const pattern = /^[a-zA-Z0-9-]+\.json$/;
   const cursorPath = join(directory, '.sweep-cursor');
