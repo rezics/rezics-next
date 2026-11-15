@@ -10636,7 +10636,11 @@ test('pre-command status proves live preparation and never treats missing or amb
       device: info.dev, inode: info.ino, invocation: 'fixture' } };
   const probe = () => spawnSync('sh', ['-c', preparationStatusScript(directory, 'a', marker.run)
     .replaceAll('/sys/fs/cgroup', cgroups)], { encoding: 'utf8' }).stdout.trim();
-  const write = (name: string, value: unknown) => writeFileSync(join(directory, name), JSON.stringify(value));
+  const write = (name: string, value: unknown) => {
+    const target = name === 'physical-resources.json' ? join(root, 'receipts', marker.run) : directory;
+    mkdirSync(target, { recursive: true });
+    writeFileSync(join(target, name), JSON.stringify(value));
+  };
   try {
     expect(probe()).toBe('UNKNOWN');
     write('.remote-check-supervisor', marker); write('physical-resources.json', resource);

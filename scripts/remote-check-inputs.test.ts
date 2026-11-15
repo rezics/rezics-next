@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import {
   chmodSync,
+  existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -16,6 +17,7 @@ import { dirname, join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
 import {
   preparedInputEvidenceProgram,
+  preparationStatusScript,
   dependencyPreparationProgram,
   REMOTE_CHECK_PRODUCER_CONTROL_FILES,
   REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES,
@@ -123,9 +125,10 @@ function writeSourceManifest(fixture: Fixture, manifest = fixture.manifest): voi
   chmodSync(path, 0o600);
 }
 
-function createFixture(): Fixture {
+function createFixture(suppliedRoot?: string): Fixture {
   mkdirSync(join(repository, '.temp'), { recursive: true });
-  const root = mkdtempSync(join(repository, '.temp', 'remote-check-input-custody-'));
+  const root = suppliedRoot ?? mkdtempSync(join(repository, '.temp', 'remote-check-input-custody-'));
+  mkdirSync(root, { recursive: true });
   const entries = [
     fileEntry(root, 'package.json', '{"name":"fixture","private":true}\n'),
     fileEntry(root, 'src/main.ts', 'export const value = 1;\n'),
@@ -279,7 +282,7 @@ function addPreparedControls(fixture: Fixture, cacheState: 'hit' | 'miss' = 'mis
       host: fixture.host,
       run: fixture.run,
       deadline: 123.456,
-      limitMs: 60_000,
+      limitMs: 900_000,
     }) + '\n',
   );
   writeOwned(
@@ -295,7 +298,7 @@ function addPreparedControls(fixture: Fixture, cacheState: 'hit' | 'miss' = 'mis
       packages: [],
       nativeChecks: [],
       installerSeconds: cacheState === 'hit' ? null : 1.113,
-      phaseSeconds: { 'cache-io-pressure-wait': 260.388 },
+      phaseSeconds: { 'host-pressure-wait-io': 260.388 },
     }) + '\n',
   );
   const cache = join(fixture.root, 'bun-runtime-transpiler-cache');
@@ -730,4 +733,72 @@ test('prepared input evidence ignores only validated controls and keeps generate
   } finally {
     cleanup(fixture);
   }
+});
+
+
+test('actual live resource bind preserves source and prepared control stages while supporting PREPARING recovery', () => {
+  const hostRoot = mkdtempSync(join(repository, '.temp', 'resource-bind-contract-'));
+  const fixture = createFixture(join(hostRoot, 'runs', run));
+  const cgroups = join(hostRoot, 'cgroups');
+  const probe = preparationStatusScript(fixture.root, host, run).replaceAll('/sys/fs/cgroup', cgroups);
+  const program = String.raw`import ast,json,os,subprocess,sys,time
+from pathlib import Path
+from types import SimpleNamespace
+arguments=json.loads(sys.stdin.read())
+module=ast.parse(arguments['producer'])
+# Load the actual producer definitions without executing its CLI dispatch.
+body=[node for node in module.body if isinstance(node,(ast.Import,ast.ImportFrom,ast.Assign,ast.AnnAssign,ast.FunctionDef,ast.ClassDef))]
+ns={}
+exec(compile(ast.Module(body=body,type_ignores=[]),'actual-producer-definitions','exec'),ns)
+os.setsid()
+root=Path(arguments['root']); run=arguments['run']; host=arguments['host']
+fields=Path('/proc/self/stat').read_text().rsplit(')',1)[1].split()
+start=fields[19]
+relative='/rezics.slice/rezics-check.slice/rezics-check-'+run.replace('-','_')+'.slice'
+group=Path(arguments['cgroups']+relative)
+group.mkdir(parents=True)
+(group/'cgroup.events').write_text('populated 1\n')
+class FixturePath(type(Path())):
+    def read_text(self,*args,**kwargs):
+        if str(self)=='/proc/'+str(os.getpid())+'/cgroup':
+            return '0::'+relative+'/rezics-check-'+run+'.scope\n'
+        return super().read_text(*args,**kwargs)
+ns['Path']=FixturePath
+ns['RESOURCE_CGROUP_ROOT']=arguments['cgroups']
+ns['owned_processes']=lambda:{os.getpid():start}
+ns['subprocess']=SimpleNamespace(run=lambda *args,**kwargs:SimpleNamespace(stdout='fixture-invocation'),TimeoutExpired=subprocess.TimeoutExpired,
+    PIPE=subprocess.PIPE,DEVNULL=subprocess.DEVNULL)
+resource=ns['Resources'](host,run,root,time.monotonic())
+marker={'schema':1,'host':host,'run':run,'pid':os.getpid(),'started':start,'group':os.getpgrp(),'uid':os.getuid()}
+(root/'.remote-check-supervisor').write_text(json.dumps(marker))
+resource.bind()
+assert resource.path==group
+assert not (root/'physical-resources.json').exists(), 'live binding cannot publish a terminal run-root control'
+retained=root.parent.parent/'receipts'/run/'physical-resources.json'
+assert json.loads(retained.read_text())['supervisor']==resource.receipt['supervisor']
+status=subprocess.run(['sh','-c',arguments['probe']],text=True,capture_output=True)
+assert status.returncode==0, status.stderr
+assert status.stdout.strip()=='PREPARING',status.stdout
+print('actual-bind-live-PREPARING')
+`;
+  try {
+    const bound = spawnSync('python3', ['-c', program], {
+      input: JSON.stringify({ producer: dependencyPreparationProgram, root: fixture.root, host, run, cgroups, probe }),
+      encoding: 'utf8', timeout: 5000,
+    });
+    expect(bound.status, bound.stderr).toBe(0);
+    expect(bound.stdout).toContain('actual-bind-live-PREPARING');
+    expect(existsSync(join(fixture.root, 'physical-resources.json'))).toBe(false);
+    const source = runSource(fixture);
+    expect(source.status, source.stderr).toBe(0);
+    addPreparedControls(fixture);
+    const prepared = runPrepared(fixture, join(fixture.root, '.temp', 'bind-prepared-evidence'));
+    expect(prepared.status, prepared.stderr).toBe(0);
+    expect(existsSync(join(fixture.root, 'physical-resources.json'))).toBe(false);
+    // The real stage validator must still reject early terminal publication; the repair changes only custody path.
+    writeOwned(fixture.root, 'physical-resources.json', '{}');
+    const rejected = runPrepared(fixture, join(fixture.root, '.temp', 'bind-wrong-stage'));
+    expect(rejected.status).not.toBe(0);
+    expect(rejected.stderr).toContain('producer control appeared at the wrong lifecycle stage: physical-resources.json');
+  } finally { rmSync(hostRoot, { recursive: true, force: true }); }
 });
