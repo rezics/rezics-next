@@ -66,6 +66,7 @@ import {
   reconcileRemoteRun,
   runScript,
   statusScript,
+  preparationStatusScript,
   retainedPreparationAbortScript,
   repositoryBun,
   remoteLaunch,
@@ -1027,7 +1028,9 @@ if (script.includes('/proc/loadavg')) {
   if (config.statusWarning) console.error(config.statusWarning);
   if (config.statusAlwaysFails || config.statusFailureProbes?.includes(attempt)) process.exit(255);
   const statusFile = dir + '/' + hostKey + '.status';
-  if (existsSync(statusFile)) console.log(readFileSync(statusFile, 'utf8'));
+  if (config.statusPreparingProbes?.includes(attempt)) console.log('PREPARING');
+  else if (config.statusUnknownProbes?.includes(attempt)) console.log('UNKNOWN');
+  else if (existsSync(statusFile)) console.log(readFileSync(statusFile, 'utf8'));
   else {
     const runCount = Number(existsSync(dir + '/' + hostKey + '.run') ? readFileSync(dir + '/' + hostKey + '.run', 'utf8') : '0');
     if (runCount > 0 && runCount <= (config.preCommandFailures ?? 0)) console.log('NOT_STARTED');
@@ -1378,6 +1381,8 @@ type HostConfig = {
   transportFailures?: number;
   statusAlwaysFails?: boolean;
   statusFailureProbes?: number[];
+  statusPreparingProbes?: number[];
+  statusUnknownProbes?: number[];
   statusCleaningProbes?: number[];
   statusCompleteAfter?: number;
   statusWarning?: string;
@@ -8330,6 +8335,7 @@ sys.exit(child.wait())
       bound?: number;
       lifetime?: number;
       priority?: string;
+      prepare?: { cwd: string; command: string[] }[];
       version?: string;
       lock?: string;
       delay?: string;
@@ -8367,6 +8373,9 @@ sys.exit(child.wait())
       settings.bound ?? 5_000,
       undefined,
       settings.lifetime,
+      undefined,
+      undefined,
+      settings.prepare,
     )
       // Preserve paths to this fixture's checkout when the outer suite itself runs on a check host.
       .replaceAll(repository, '__FIXTURE_OUTER_CHECKOUT__')
@@ -10606,4 +10615,89 @@ test('retained terminal preparation abort settles a hanging transport without a 
   expect(fixture.events().some(event => event.kind === 'stop')).toBe(false);
   expect(fixture.events().filter(event => event.kind === 'run')).toHaveLength(1);
   expect(slotMarkers(fixture.env, 'a')).toEqual([]);
+});
+
+
+test('pre-command status proves live preparation and never treats missing or ambiguous evidence as no-start', () => {
+  const root = mkdtempSync(join(tmpdir(), 'preparing-status-'));
+  const directory = join(root, 'runs', 'owned-preparation');
+  const cgroups = join(root, 'cgroups');
+  const group = join(cgroups, 'rezics.slice/rezics-check.slice/rezics-check-owned_preparation.slice');
+  mkdirSync(directory, { recursive: true }); mkdirSync(group, { recursive: true });
+  const fields = readFileSync('/proc/self/stat', 'utf8').split(')').at(-1)!.trim().split(/\s+/);
+  const owner = { pid: process.pid, start: fields[19], group: Number(fields[2]) };
+  const marker = { schema: 1, host: 'a', run: 'owned-preparation', pid: owner.pid, started: owner.start,
+    group: owner.group, uid: process.getuid?.() ?? 0 };
+  const info = statSync(group);
+  const resource = { schema: 1, host: 'a', run: marker.run,
+    boot: readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim(), supervisor: owner,
+    commandStartedMonoMs: null,
+    cgroup: { path: '/rezics.slice/rezics-check.slice/rezics-check-owned_preparation.slice',
+      device: info.dev, inode: info.ino, invocation: 'fixture' } };
+  const probe = () => spawnSync('sh', ['-c', preparationStatusScript(directory, 'a', marker.run)
+    .replaceAll('/sys/fs/cgroup', cgroups)], { encoding: 'utf8' }).stdout.trim();
+  const write = (name: string, value: unknown) => writeFileSync(join(directory, name), JSON.stringify(value));
+  try {
+    expect(probe()).toBe('UNKNOWN');
+    write('.remote-check-supervisor', marker); write('physical-resources.json', resource);
+    writeFileSync(join(group, 'cgroup.events'), 'populated 1\n');
+    expect(probe()).toBe('PREPARING');
+    write('physical-resources.json', { ...resource, boot: 'foreign-boot' });
+    expect(probe()).toBe('UNKNOWN');
+    write('physical-resources.json', resource);
+    write('.remote-check-supervisor', { ...marker, pid: 2147483647 });
+    expect(probe()).toBe('UNKNOWN');
+    const dead = { pid: 2147483647, start: '1', group: 2147483647 };
+    write('.remote-check-supervisor', { ...marker, pid: dead.pid, started: dead.start, group: dead.group });
+    write('physical-resources.json', { ...resource, supervisor: dead });
+    expect(probe()).toBe('UNKNOWN');
+    writeFileSync(join(group, 'cgroup.events'), 'populated 0\n');
+    expect(probe()).toBe('NOT_STARTED');
+    write('.preparation-started', {});
+    expect(probe()).toBe('UNKNOWN');
+    rmSync(join(directory, '.preparation-started'));
+    write('.command-result', 7);
+    expect(probe()).toBe('UNKNOWN');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('transient SSH255 preserves live or unknown preparation until the same run reaches its native result', async () => {
+  const fixture = scenario({ a: { available: 8e9, transportFailures: 1, statusPreparingProbes: [1, 2],
+    statusUnknownProbes: [3], statusCompleteAfter: 4, exit: 7 } });
+  const result = await remote(fixture.env, workspace(), ['true']);
+  expect(result.code, result.stderr).toBe(7);
+  const events = fixture.events();
+  expect(events.filter(event => event.kind === 'run')).toHaveLength(1);
+  expect(events.filter(event => event.kind === 'status')).toHaveLength(4);
+  expect(events.filter(event => event.kind === 'stop')).toHaveLength(0);
+  expect(result.stderr).not.toContain('retrying transport failure');
+  expect(slotMarkers(fixture.env, 'a')).toEqual([]);
+});
+
+test('generation before native start retains its bounded output and original supervisor signal diagnostics', () => {
+  const fixture = preparationFixture();
+  const run = fixture.create({ bound: 10_000, timeout: 15_000, prepare: [{ cwd: '.', command: ['python3', '-c',
+    `import json,os,pathlib,signal,time
+root=pathlib.Path.cwd()
+print('GENERATION_CAUSE_MARKER',flush=True)
+end=time.monotonic()+3
+while time.monotonic()<end:
+    p=root/'.temp/check-host/preparation-output'
+    if p.exists() and 'GENERATION_CAUSE_MARKER' in p.read_text(errors='replace'): break
+    time.sleep(.01)
+owner=json.loads((root/'.remote-check-supervisor').read_text())
+os.kill(owner['pid'],signal.SIGHUP)
+time.sleep(10)`] }] });
+  const result = run.execute();
+  expect(result.status, result.stderr).toBe(129);
+  const receipt = run.receipt();
+  expect(receipt).toMatchObject({ schema: 1, phase: 'abort',
+    diagnostics: { signal: 1, stalledPhase: 'generation' } });
+  expect(receipt.diagnostics.logTail).toContain('GENERATION_CAUSE_MARKER');
+  expect(Buffer.byteLength(receipt.diagnostics.logTail)).toBeLessThanOrEqual(8192);
+  expect(receipt.diagnostics.ownedProcesses.length).toBeLessThanOrEqual(16);
+  expect(existsSync(join(run.run, 'command-started'))).toBe(false);
+  expect(existsSync(join(run.run, 'command-invoked'))).toBe(false);
+  const retained = join(fixture.directory, 'receipts', run.run.split('/').at(-1)!, 'preparation-status.json');
+  expect(JSON.parse(readFileSync(retained, 'utf8')).diagnostics).toEqual(receipt.diagnostics);
 });
