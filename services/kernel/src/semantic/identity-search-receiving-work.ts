@@ -191,6 +191,19 @@ function observeNativeCheckouts(pool: Pool) {
   } as Pool['connect'];
 }
 export const receivingSqlKey = (sql: string) => sql.trim().replace(/;$/, '').replace(/\s+/g, ' ');
+function undeclaredSqlDetail(sql: string): string {
+  const key = receivingSqlKey(sql);
+  const hash = (value: string) => createHash('sha256').update(value).digest('hex');
+  const detail = `Search receiving undeclared SQL: sha256 ${hash(key)}`;
+  if (key.length > 65_536) return detail;
+  const lists = key.match(/'\{[1-9][0-9]*(?:,[1-9][0-9]*)*\}'::pg_catalog\.oid\[\]/g);
+  const first = lists?.[0];
+  if (!first || lists?.length !== 2 || first !== lists[1]) return detail;
+  const oids = first.match(/[0-9]+/g);
+  if (!oids?.every((oid) => Number(oid) <= 4_294_967_295)) return detail;
+  const shape = key.replaceAll(first, "'{}'::pg_catalog.oid[]");
+  return `${detail}; oid-list-normalized sha256 ${hash(shape)}`;
+}
 function valid(value: object, keys: readonly string[]) {
   return keys.every(
     (key) =>
@@ -426,10 +439,7 @@ export async function withSearchReceivingWork<T>(
             child,
             (sql, values) => {
               const footprint = declaration.footprint(sql, values);
-              if (!footprint)
-                throw refused(
-                  `Search receiving undeclared SQL: sha256 ${createHash('sha256').update(receivingSqlKey(sql)).digest('hex')}`,
-                );
+              if (!footprint) throw refused(undeclaredSqlDetail(sql));
               if (capturePlanning.getStore()) {
                 const axis = axes.find((axis) => footprint[axis] > child.available(axis));
                 if (axis)
