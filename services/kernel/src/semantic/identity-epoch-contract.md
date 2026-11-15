@@ -1668,14 +1668,17 @@ terminal drain is not a substitute because it refuses a pending job and changes 
 The transition verifies the saved job/epoch/scope/unit plan digest, current native effect frame, source owner
 and image, and the admitted generation/version and matching pending/prearm ownership. Released foreign-home
 evidence must retain its existing native binding; the Source transaction never reads foreign control rows.
-An active closure is eligible only without an outstanding successor or export obligation. An incompatible or
-missing binding refuses without changing custody.
+Foreign-control active points stay unavailable until a control-home producer deposits bound prepared/acquired
+evidence the source command can consume locally. An active closure is eligible only without an outstanding
+successor or export obligation. An incompatible or missing binding refuses without changing custody.
 
 Point withdrawal changes only that mapping's closure state and current-command mutation XID through the
 existing fields. It preserves the Original rows, group generation, version, membership and counters. It neither
 claims a foreign successor/claim nor clears one, and it supplies no participant ACK, disposal or refund. The
 current command's mutation XID binds the actual Source write; another job, unit, command or stale source image
 cannot consume it. Same-unit replay uses its actual retained native effect rather than withdrawing again.
+A later same-job unit of that original re-binds the withdrawn point's mutation XID in its own command before
+Source SQL or mapping publication writes, then retires it again before commit.
 
 The existing mapping publication/source handoff must retire only that distinguishable same-job point binding
 and leave the Source withdrawn for existing output-closure enrollment. It does not manufacture an active ACK,
