@@ -175,7 +175,11 @@ function definitionProblem(error: unknown): never {
     if (error.code === 'missing') throw new ProblemError('semantic_not_ready');
     throw new ProblemError('invalid_request');
   }
-  if (error instanceof LeafReservationUnavailable) throw new ProblemError('overloaded');
+  if (error instanceof LeafReservationUnavailable) {
+    const problem = new ProblemError('overloaded');
+    problem.stack += `\nCaused by: ${error.stack}`;
+    throw problem;
+  }
   if (error instanceof ExtensionInputError)
     throw new ProblemError('invalid_request', {
       errors: error.violations.map(({ pointer, code }) => ({ pointer: `/extension${pointer}`, code })),
