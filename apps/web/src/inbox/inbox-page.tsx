@@ -52,6 +52,7 @@ import {
 } from './inbox-read';
 import { InboxNoticeActorVisual, inboxNoticeActorPresentation } from './inbox-notice-actor';
 import type { InboxContentPort } from './ports/content';
+import { inboxNoticeSummary } from './notice-summary';
 import {
   inboxAcknowledgementRecovery,
   inboxAcknowledgementRetryAllowed,
@@ -176,7 +177,9 @@ export function InboxRows({
           );
           const kind = kindLabel(item);
           const text =
-            item.summary ?? (hiddenLegacyItem ? m.inbox_unavailable_item() : item.text) ?? m.inbox_unavailable_item();
+            inboxNoticeSummary(item) ??
+            (hiddenLegacyItem ? m.inbox_unavailable_item() : item.text) ??
+            m.inbox_unavailable_item();
           const explanation =
             item.kind === 'thread_watch' || item.watch === 'thread'
               ? m.inbox_thread_activity_text()
@@ -314,10 +317,7 @@ export function InboxRows({
                     </div>
                   ) : null}
                   {context ? (
-                    <div
-                      data-content-item-slot="context"
-                      className="mt-4 max-w-prose border-s-2 border-border ps-3"
-                    >
+                    <div data-content-item-slot="context" className="mt-4 max-w-prose border-s-2 border-border ps-3">
                       <p className="text-xs font-medium text-muted-foreground">{m.inbox_notice_context()}</p>
                       <p className="mt-1 wrap-anywhere text-sm leading-relaxed">{context}</p>
                     </div>
@@ -1390,10 +1390,7 @@ export function ViewerInboxPage({
       ) : (
         <>
           {readable ? (
-            <section
-              aria-label={m.inbox_triage_scope()}
-              className="mt-5 rounded-xl border border-border p-3 sm:p-4"
-            >
+            <section aria-label={m.inbox_triage_scope()} className="mt-5 rounded-xl border border-border p-3 sm:p-4">
               <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 space-y-2">
                   <div role="group" aria-label={m.inbox_triage_filter_group()} className="flex min-w-0 flex-wrap gap-2">
@@ -1538,10 +1535,9 @@ export function ViewerInboxPage({
             )
           ) : null}
           {acknowledgementRecovery}
-          {
-            (pageQuery.isFetching && readable && !continuing) ||
-            failure ||
-            (failed ? !seenNeedsAccess : readable?.next) ? (
+          {(pageQuery.isFetching && readable && !continuing) ||
+          failure ||
+          (failed ? !seenNeedsAccess : readable?.next) ? (
             <div data-inbox-continuation className="mt-5 space-y-3 border-t border-border pt-4">
               {pageQuery.isFetching && readable && !continuing ? (
                 <p role="status" className="text-muted-foreground">
@@ -1576,8 +1572,7 @@ export function ViewerInboxPage({
                 </Button>
               ) : null}
             </div>
-            ) : null
-          }
+          ) : null}
         </>
       )}
     </div>

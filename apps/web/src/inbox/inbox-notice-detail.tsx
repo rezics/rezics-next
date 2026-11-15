@@ -6,6 +6,7 @@ import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { inboxOpenHref, inboxTargetContext, type InboxSelection } from './inbox-read';
 import { InboxNoticeActorVisual, inboxNoticeActorPresentation } from './inbox-notice-actor';
 import type { InboxContentPort } from './ports/content';
+import { inboxNoticeSummary } from './notice-summary';
 
 export function inboxNoticeBackHref(selection: InboxSelection, cursor?: string): string {
   const query = new URLSearchParams({ selection });
@@ -68,8 +69,11 @@ export function InboxNoticeDetailView({
           <div className="min-w-0 wrap-anywhere">
             <header className="max-w-prose">
               <p className="text-sm font-medium text-muted-foreground">{m.inbox_notice_detail_heading()}</p>
-              <h1 id="inbox-notice-heading" className="mt-2 font-display text-3xl font-semibold tracking-tight wrap-anywhere">
-                {notice.summary}
+              <h1
+                id="inbox-notice-heading"
+                className="mt-2 font-display text-3xl font-semibold tracking-tight wrap-anywhere"
+              >
+                {inboxNoticeSummary(notice)}
               </h1>
               <div className="mt-5 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-3">
                 <div className="flex min-w-0 items-center gap-3">
