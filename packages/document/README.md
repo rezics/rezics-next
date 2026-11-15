@@ -65,12 +65,12 @@ contains one empty paragraph. Empty paragraph content can be omitted.
 
 Decision: Blocks tables have a static per-table expanded-map bound of 65,536
 cells, checked before ProseMirror node construction or `TableMap.get`. For a
-table with `R` rows and total cell column span `S`, `R × S` bounds the dense
-map: the map height is `R`, and its width cannot exceed the sum of every cell's
-column span, including cells active from earlier rows. Safe-integer addition
-and multiplication must prove that bound; otherwise the snapshot is invalid.
-The same bound limits span placement work because each cell can occupy at most
-`R` rows. Ordinary valid merged cells remain valid. The limit is a static
+table with `R` rows, `R × W` bounds the dense map, where `W` is the largest
+sum of column spans introduced in a row and still active from earlier rows.
+An array of row-end totals tracks active spans in one pass over the supplied
+cells. Safe-integer addition and multiplication must prove the bound.
+The same bound limits span placement work. Rows covered entirely by earlier
+rowspans still count toward the map height. The limit is a static
 contract choice, not a hardware maximum or a deployed-capacity measurement;
 validation of the supplied JSON remains proportional to its explicit input.
 

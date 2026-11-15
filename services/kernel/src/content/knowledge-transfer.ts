@@ -96,6 +96,7 @@ export async function copyKnowledgeDocument(
   context: KnowledgeCommandContext,
 ) {
   input = structuredClone(input);
+  context = { ...context };
   if (actor.kind !== 'account') throw new KnowledgeNotFoundError();
   // Source is selected per command attempt before opening the destination transaction. The request pins
   // an exact revision, so a retry can never substitute a newer live publication or a hidden head.

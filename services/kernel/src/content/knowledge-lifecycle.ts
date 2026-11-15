@@ -202,7 +202,8 @@ export async function changeKnowledgeLifecycle(
   input: KnowledgeLifecycleInput,
   context: KnowledgeCommandContext,
 ) {
-  const owner = await knowledgeOwner(deps.pool, documentId);
+  context = { ...context };
+  const owner = await knowledgeOwner(deps.pool, documentId, context.deadline);
   if (!owner || actor.kind !== 'account' || actor.accountId !== owner.owner_account_id)
     throw new KnowledgeNotFoundError();
   const route = owner.route;

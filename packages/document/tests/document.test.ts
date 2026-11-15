@@ -373,13 +373,13 @@ test('table map preflight bounds expanded grids and retains ordinary merged cell
   expect(checkDocument(snapshot([merged]))).toBe(true);
 
   const small = table([row('r1', [cell('a', 2)]), row('r2', [cell('b')])]);
-  expect(tableMapFitsBudget(small, 6)).toBe(true);
-  expect(tableMapFitsBudget(small, 5)).toBe(false);
+  expect(tableMapFitsBudget(small, 4)).toBe(true);
+  expect(tableMapFitsBudget(small, 3)).toBe(false);
 
   const overflowingSum = table([row('r1', [cell('a', Number.MAX_SAFE_INTEGER), cell('b')])]);
   expect(tableMapFitsBudget(overflowingSum, Number.MAX_SAFE_INTEGER)).toBe(false);
-  const halfSafeInteger = Math.floor(Number.MAX_SAFE_INTEGER / 2);
-  const overflowingProduct = table([row('r1', [cell('a', halfSafeInteger)]), row('r2', [cell('b', halfSafeInteger)])]);
+  const halfSafeInteger = Math.floor(Number.MAX_SAFE_INTEGER / 2) + 1;
+  const overflowingProduct = table([row('r1', [cell('a', halfSafeInteger)]), row('r2', [cell('b')])]);
   expect(tableMapFitsBudget(overflowingProduct, Number.MAX_SAFE_INTEGER)).toBe(false);
 
   const beyondProfileBudget = table([row('r1', [cell('wide', DOCUMENT_TABLE_MAP_CELL_BUDGET + 1)])]);

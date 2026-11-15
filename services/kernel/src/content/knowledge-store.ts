@@ -105,40 +105,50 @@ function storedSubjectIds(ids: (string | null)[]): string[] {
 export async function knowledgeOwner(
   pool: Pool,
   documentId: string,
+  deadline?: number,
 ): Promise<Readonly<{ route: number; notebook_id: string; owner_account_id: string }> | null> {
   const route = routeOf(documentId);
   if (route === null) return null;
-  return withReadTransaction(pool, async (client) => {
-    const partition = await readPartition(client, partitionOf(route));
-    if (!partition) return null;
-    const result = await client.query<{ notebook_id: string; owner_account_id: string }>(
-      `SELECT d.notebook_id,n.owner_account_id
-       FROM content.knowledge_document d
-       JOIN content.knowledge_notebook n ON n.route=d.route AND n.notebook_id=d.notebook_id
-       WHERE d.route=$1 AND d.document_id=$2 AND NOT d.account_erased AND NOT n.account_erased`,
-      [route, documentId],
-    );
-    const row = result.rows[0];
-    return row ? { route, ...row } : null;
-  });
+  return withReadTransaction(
+    pool,
+    async (client) => {
+      const partition = await readPartition(client, partitionOf(route));
+      if (!partition) return null;
+      const result = await client.query<{ notebook_id: string; owner_account_id: string }>(
+        `SELECT d.notebook_id,n.owner_account_id
+         FROM content.knowledge_document d
+         JOIN content.knowledge_notebook n ON n.route=d.route AND n.notebook_id=d.notebook_id
+         WHERE d.route=$1 AND d.document_id=$2 AND NOT d.account_erased AND NOT n.account_erased`,
+        [route, documentId],
+      );
+      const row = result.rows[0];
+      return row ? { route, ...row } : null;
+    },
+    deadline,
+  );
 }
 
 export async function knowledgeNotebookOwner(
   pool: Pool,
   notebookId: string,
+  deadline?: number,
 ): Promise<Readonly<{ route: number; owner_account_id: string; subject_id: string }> | null> {
   const route = routeOf(notebookId);
   if (route === null) return null;
-  return withReadTransaction(pool, async (client) => {
-    const partition = await readPartition(client, partitionOf(route));
-    if (!partition) return null;
-    const result = await client.query<{ owner_account_id: string; subject_id: string }>(
-      `SELECT owner_account_id,subject_id FROM content.knowledge_notebook WHERE route=$1 AND notebook_id=$2 AND NOT account_erased`,
-      [route, notebookId],
-    );
-    const row = result.rows[0];
-    return row ? { route, ...row } : null;
-  });
+  return withReadTransaction(
+    pool,
+    async (client) => {
+      const partition = await readPartition(client, partitionOf(route));
+      if (!partition) return null;
+      const result = await client.query<{ owner_account_id: string; subject_id: string }>(
+        `SELECT owner_account_id,subject_id FROM content.knowledge_notebook WHERE route=$1 AND notebook_id=$2 AND NOT account_erased`,
+        [route, notebookId],
+      );
+      const row = result.rows[0];
+      return row ? { route, ...row } : null;
+    },
+    deadline,
+  );
 }
 
 export async function knowledgeSelectedSubject(
@@ -146,20 +156,25 @@ export async function knowledgeSelectedSubject(
   route: number,
   documentId: string,
   revisionId: string,
+  deadline?: number,
 ): Promise<Readonly<{ subject_id: string; subject_ids: string[] }> | null> {
-  return withReadTransaction(pool, async (client) => {
-    const partition = await readPartition(client, partitionOf(route));
-    if (!partition) return null;
-    const result = await client.query<{ subject_id: string; subject_ids: string[] }>(
-      `SELECT n.subject_id,r.subject_ids
-       FROM content.knowledge_document d
-       JOIN content.knowledge_notebook n ON n.route=d.route AND n.notebook_id=d.notebook_id
-       JOIN content.knowledge_revision r ON r.route=d.route AND r.document_id=d.document_id AND r.revision_id=$3
-       WHERE d.route=$1 AND d.document_id=$2`,
-      [route, documentId, revisionId],
-    );
-    return result.rows[0] ?? null;
-  });
+  return withReadTransaction(
+    pool,
+    async (client) => {
+      const partition = await readPartition(client, partitionOf(route));
+      if (!partition) return null;
+      const result = await client.query<{ subject_id: string; subject_ids: string[] }>(
+        `SELECT n.subject_id,r.subject_ids
+         FROM content.knowledge_document d
+         JOIN content.knowledge_notebook n ON n.route=d.route AND n.notebook_id=d.notebook_id
+         JOIN content.knowledge_revision r ON r.route=d.route AND r.document_id=d.document_id AND r.revision_id=$3
+         WHERE d.route=$1 AND d.document_id=$2`,
+        [route, documentId, revisionId],
+      );
+      return result.rows[0] ?? null;
+    },
+    deadline,
+  );
 }
 
 export async function knowledgePrivateRow(

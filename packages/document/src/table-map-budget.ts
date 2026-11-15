@@ -15,18 +15,22 @@ function safeMultiply(left: number, right: number): number | null {
 }
 
 /**
- * Prove a table's conservative expanded-grid bound without constructing a ProseMirror node or map.
- * TableMap's width is no greater than the sum of every cell's colspan; its height is the row count.
+ * Prove the dense TableMap bound from each row's new cells and active rowspans.
+ * A row-end sweep counts carried columns without constructing a ProseMirror node or map.
  */
 export function tableMapFitsBudget(table: DocumentNode, budget: number): boolean {
   if (!Number.isSafeInteger(budget) || budget < 0 || table.type !== 'table') return false;
   const rows = table.content;
-  if (!rows?.length) return false;
+  if (!rows?.length || rows.length > budget || rows.length > DOCUMENT_TABLE_MAP_CELL_BUDGET) return false;
 
-  let totalColumnSpan = 0;
+  const endingColumnSpans = new Array<number>(rows.length + 1).fill(0);
+  const maximumWidth = Math.floor(budget / rows.length);
+  let activeColumnSpan = 0;
+  let widestRow = 0;
   for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
     const row = rows[rowIndex]!;
     if (row.type !== 'tableRow') return false;
+    let rowWidth = activeColumnSpan - endingColumnSpans[rowIndex]!;
     for (const cell of row.content ?? []) {
       if (cell.type !== 'tableCell' && cell.type !== 'tableHeader') return false;
       const rawColspan = cell.attrs?.colspan;
@@ -43,14 +47,21 @@ export function tableMapFitsBudget(table: DocumentNode, budget: number): boolean
         rowspan > rows.length - rowIndex
       )
         return false;
-      const nextTotal = safeAdd(totalColumnSpan, colspan);
-      if (nextTotal === null) return false;
-      totalColumnSpan = nextTotal;
+      const nextWidth = safeAdd(rowWidth, colspan);
+      if (nextWidth === null || nextWidth > maximumWidth) return false;
+      rowWidth = nextWidth;
+
+      const endRow = rowIndex + rowspan;
+      const nextEnding = safeAdd(endingColumnSpans[endRow]!, colspan);
+      if (nextEnding === null) return false;
+      endingColumnSpans[endRow] = nextEnding;
     }
+    widestRow = Math.max(widestRow, rowWidth);
+    activeColumnSpan = rowWidth;
   }
 
-  const expandedCells = safeMultiply(rows.length, totalColumnSpan);
-  return totalColumnSpan > 0 && expandedCells !== null && expandedCells <= budget;
+  const expandedCells = safeMultiply(rows.length, widestRow);
+  return widestRow > 0 && expandedCells !== null && expandedCells <= budget;
 }
 
 /** Check all tables in a block before ProseMirror can create a dense TableMap. */
