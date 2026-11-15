@@ -112,8 +112,24 @@ export function PublicReviewDetails({ context: supplied, locale }: { context: un
   const questionLabel = typeof questionRecord?.label === 'string' ? questionRecord.label : undefined;
   const questionRevision = questionRecord?.revision;
   const citedUnits = citation?.units;
+  const voteRevision =
+    typeof citation?.voteRevision === 'number' && Number.isSafeInteger(citation.voteRevision)
+      ? citation.voteRevision
+      : undefined;
+  const grain = questionRecord?.grain;
+  const recordedGrain =
+    grain === 'work' || grain === 'release' || grain === 'episode' || grain === 'character' ? grain : undefined;
+  const scaleRecord = record(questionRecord?.scale) ? questionRecord.scale : undefined;
+  const recordedScale =
+    typeof scaleRecord?.min === 'number' &&
+    Number.isFinite(scaleRecord.min) &&
+    typeof scaleRecord.max === 'number' &&
+    Number.isFinite(scaleRecord.max) &&
+    typeof scaleRecord.displayStep === 'number' &&
+    Number.isFinite(scaleRecord.displayStep)
+      ? { min: scaleRecord.min, max: scaleRecord.max, displayStep: scaleRecord.displayStep }
+      : undefined;
   const question =
-    subjectId &&
     citation?.state === 'available' &&
     questionId &&
     questionLabel !== undefined &&
@@ -121,15 +137,26 @@ export function PublicReviewDetails({ context: supplied, locale }: { context: un
     Number.isSafeInteger(questionRevision) &&
     typeof citedUnits === 'number' &&
     Number.isSafeInteger(citedUnits)
-      ? { id: questionId, label: questionLabel, revision: questionRevision, units: citedUnits }
+      ? {
+          id: questionId,
+          label: questionLabel,
+          revision: questionRevision,
+          voteRevision,
+          units: citedUnits,
+          grain: recordedGrain,
+          scale: recordedScale,
+        }
       : undefined;
   const status =
-    citation?.state === 'withheld' || citation?.state === 'absent'
-      ? m.post_history_score_concealed({}, options)
-      : citation?.state === 'failed'
-        ? m.post_history_score_failed({}, options)
-        : undefined;
+    citation?.state === 'absent'
+      ? m.thread_review_citation_absent({}, options)
+      : citation?.state === 'withheld'
+        ? m.post_history_score_concealed({}, options)
+        : citation?.state === 'failed'
+          ? m.post_history_score_failed({}, options)
+          : undefined;
   if (!subjectId && !question && !status) return null;
+  const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 20 });
   return (
     <section className="min-w-0 space-y-1" data-feed-review-context>
       {subjectId ? (
@@ -145,26 +172,54 @@ export function PublicReviewDetails({ context: supplied, locale }: { context: un
         </p>
       ) : null}
       {question ? (
-        <div className="min-w-0" data-feed-review-citation>
+        <div
+          className="min-w-0"
+          data-feed-review-citation
+          data-feed-review-question={question.id}
+          data-feed-review-question-revision={question.revision}
+          data-feed-review-vote-revision={question.voteRevision}
+          data-feed-review-units={question.units}
+          data-feed-review-question-grain={question.grain}
+          data-feed-review-scale-min={question.scale?.min}
+          data-feed-review-scale-max={question.scale?.max}
+          data-feed-review-scale-step={question.scale?.displayStep}
+        >
           <p>
             {m.post_history_question({}, options)}: <bdi>{question.label}</bdi>
           </p>
-          <p className="flex min-w-0 flex-wrap gap-x-2 text-xs text-muted-foreground">
-            <span>{m.post_history_citation_identity()}</span>
-            <bdi data-feed-review-question={question.id}>{question.id}</bdi>
-            <span data-feed-review-question-revision={question.revision}>
-              {m.thread_history_version({ number: question.revision }, options)}
-            </span>
-          </p>
-          <p
-            data-feed-review-units={question.units}
-            data-feed-review-vote-revision={
-              typeof citation?.voteRevision === 'number' && Number.isSafeInteger(citation.voteRevision)
-                ? citation.voteRevision
-                : undefined
-            }
-          >
-            {m.home_feed_review_cited_units({ units: new Intl.NumberFormat(locale).format(question.units) }, options)}
+          {question.voteRevision === undefined ? (
+            <p className="flex min-w-0 flex-wrap gap-x-2 text-xs text-muted-foreground">
+              <span>{m.post_history_citation_identity()}</span>
+              <bdi>{question.id}</bdi>
+              <span>{m.home_feed_review_cited_units({ units: number.format(question.units) }, options)}</span>
+            </p>
+          ) : (
+            <p className="min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+              {m.thread_provenance_vote(
+                {
+                  units: number.format(question.units),
+                  questionId: question.id,
+                  revision: number.format(question.voteRevision),
+                },
+                options,
+              )}
+            </p>
+          )}
+          <p className="min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+            {m.rating_question_revision({ revision: number.format(question.revision) }, options)}
+            {question.scale ? (
+              <>
+                {' · '}
+                {m.subject_community_recorded_scale(
+                  {
+                    min: number.format(question.scale.min),
+                    max: number.format(question.scale.max),
+                    step: number.format(question.scale.displayStep),
+                  },
+                  options,
+                )}
+              </>
+            ) : null}
           </p>
         </div>
       ) : status ? (
