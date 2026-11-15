@@ -112,7 +112,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -126,7 +126,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -140,7 +140,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -154,7 +154,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -168,7 +168,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -182,7 +182,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -196,7 +196,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -437,7 +437,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -451,7 +451,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -465,7 +465,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -479,7 +479,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -493,7 +493,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -507,7 +507,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -521,7 +521,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -650,7 +650,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -664,7 +664,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -678,7 +678,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -692,7 +692,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -706,7 +706,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -720,7 +720,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -734,7 +734,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -779,7 +779,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -793,7 +793,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -807,7 +807,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -821,7 +821,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -835,7 +835,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -849,7 +849,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -863,7 +863,7 @@ export declare function sourceStatisticRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1058,7 +1058,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1072,7 +1072,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1086,7 +1086,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1100,7 +1100,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1114,7 +1114,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1128,7 +1128,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1142,7 +1142,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1383,7 +1383,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1397,7 +1397,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1411,7 +1411,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1425,7 +1425,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1439,7 +1439,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1453,7 +1453,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1467,7 +1467,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1596,7 +1596,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1610,7 +1610,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1624,7 +1624,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1638,7 +1638,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1652,7 +1652,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1666,7 +1666,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1680,7 +1680,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1725,7 +1725,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1739,7 +1739,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1753,7 +1753,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1767,7 +1767,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1781,7 +1781,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1795,7 +1795,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1809,7 +1809,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2119,7 +2119,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -2130,7 +2130,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -2141,7 +2141,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -2152,7 +2152,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -2163,7 +2163,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -2203,7 +2203,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2214,7 +2214,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2225,7 +2225,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2236,7 +2236,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2247,7 +2247,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2258,7 +2258,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2269,7 +2269,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2332,7 +2332,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2343,7 +2343,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2354,7 +2354,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2365,7 +2365,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2376,7 +2376,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2387,7 +2387,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2398,7 +2398,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2441,7 +2441,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2452,7 +2452,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2478,7 +2478,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2746,7 +2746,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2757,7 +2757,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2768,7 +2768,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2779,7 +2779,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2790,7 +2790,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2816,7 +2816,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2855,7 +2855,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2866,7 +2866,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2877,7 +2877,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2888,7 +2888,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2899,7 +2899,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2910,7 +2910,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2921,7 +2921,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2965,7 +2965,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2976,7 +2976,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2987,7 +2987,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2998,7 +2998,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -3009,7 +3009,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -3020,7 +3020,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -3031,7 +3031,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -3071,7 +3071,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -3082,7 +3082,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -3093,7 +3093,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -3104,7 +3104,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -3115,7 +3115,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -3126,7 +3126,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -3137,7 +3137,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -3180,7 +3180,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -3191,7 +3191,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -3202,7 +3202,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -3213,7 +3213,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -3224,7 +3224,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -3235,7 +3235,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -3285,7 +3285,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3296,7 +3296,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3307,7 +3307,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3333,7 +3333,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3375,7 +3375,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -3386,7 +3386,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -3397,7 +3397,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -3408,7 +3408,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -3419,7 +3419,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -3430,7 +3430,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -3472,7 +3472,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3483,7 +3483,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3494,7 +3494,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3505,7 +3505,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3516,7 +3516,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3527,7 +3527,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3577,7 +3577,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3588,7 +3588,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3599,7 +3599,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3610,7 +3610,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3621,7 +3621,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3632,7 +3632,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3643,7 +3643,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3693,7 +3693,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3704,7 +3704,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3715,7 +3715,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3726,7 +3726,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3737,7 +3737,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3748,7 +3748,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3759,7 +3759,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3805,7 +3805,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3816,7 +3816,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3827,7 +3827,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3838,7 +3838,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3849,7 +3849,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3860,7 +3860,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3871,7 +3871,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3921,7 +3921,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3932,7 +3932,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3943,7 +3943,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3954,7 +3954,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3965,7 +3965,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3976,7 +3976,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -3987,7 +3987,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -4033,7 +4033,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -4044,7 +4044,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -4055,7 +4055,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -4066,7 +4066,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -4077,7 +4077,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -4088,7 +4088,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -4099,7 +4099,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -4159,7 +4159,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4170,7 +4170,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4181,7 +4181,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4192,7 +4192,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4203,7 +4203,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4214,7 +4214,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4225,7 +4225,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4389,7 +4389,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4400,7 +4400,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4411,7 +4411,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4437,7 +4437,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4527,7 +4527,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -4538,7 +4538,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -4549,7 +4549,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -4575,7 +4575,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -4629,7 +4629,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4640,7 +4640,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4651,7 +4651,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4677,7 +4677,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4705,7 +4705,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -4802,7 +4802,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4813,7 +4813,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4824,7 +4824,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4850,7 +4850,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4888,7 +4888,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4899,7 +4899,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4910,7 +4910,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4936,7 +4936,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6441,7 +6441,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6452,7 +6452,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6463,7 +6463,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6489,7 +6489,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6676,7 +6676,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6687,7 +6687,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6698,7 +6698,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6724,7 +6724,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6761,7 +6761,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6772,7 +6772,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6783,7 +6783,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6794,7 +6794,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6805,7 +6805,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6816,7 +6816,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6827,7 +6827,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6864,7 +6864,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6875,7 +6875,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6886,7 +6886,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6897,7 +6897,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6908,7 +6908,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6919,7 +6919,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6930,7 +6930,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6977,7 +6977,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6988,7 +6988,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6999,7 +6999,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7025,7 +7025,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7070,7 +7070,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7081,7 +7081,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7092,7 +7092,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7103,7 +7103,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7129,7 +7129,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7170,7 +7170,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7181,7 +7181,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7192,7 +7192,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7203,7 +7203,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7229,7 +7229,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7268,7 +7268,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7279,7 +7279,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7290,7 +7290,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7301,7 +7301,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7312,7 +7312,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7323,7 +7323,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7334,7 +7334,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7389,7 +7389,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7400,7 +7400,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7411,7 +7411,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7422,7 +7422,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7433,7 +7433,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7444,7 +7444,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7455,7 +7455,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7506,7 +7506,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -7517,7 +7517,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -7528,7 +7528,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -7539,7 +7539,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -7550,7 +7550,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -7561,7 +7561,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -7572,7 +7572,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -7618,7 +7618,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -7629,7 +7629,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -7640,7 +7640,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -7651,7 +7651,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -7662,7 +7662,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -7673,7 +7673,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -7684,7 +7684,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -7722,7 +7722,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7733,7 +7733,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7744,7 +7744,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7755,7 +7755,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7766,7 +7766,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7815,7 +7815,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -7826,7 +7826,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -7837,7 +7837,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -7848,7 +7848,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -7874,7 +7874,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -7914,7 +7914,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -7925,7 +7925,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -7936,7 +7936,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -7947,7 +7947,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -7973,7 +7973,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8016,7 +8016,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8027,7 +8027,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8038,7 +8038,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8049,7 +8049,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8075,7 +8075,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8116,7 +8116,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8127,7 +8127,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8138,7 +8138,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8149,7 +8149,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8175,7 +8175,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8205,7 +8205,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8216,7 +8216,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8227,7 +8227,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8238,7 +8238,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8264,7 +8264,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8301,7 +8301,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8312,7 +8312,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8323,7 +8323,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8334,7 +8334,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8345,7 +8345,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8379,7 +8379,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8390,7 +8390,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8416,7 +8416,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8447,7 +8447,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -8458,7 +8458,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -8469,7 +8469,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -8499,7 +8499,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8510,7 +8510,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8521,7 +8521,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8560,7 +8560,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8571,7 +8571,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8582,7 +8582,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8593,7 +8593,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8604,7 +8604,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8615,7 +8615,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8626,7 +8626,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8669,7 +8669,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8680,7 +8680,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8691,7 +8691,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8702,7 +8702,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8713,7 +8713,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8724,7 +8724,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8768,7 +8768,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -8779,7 +8779,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -8790,7 +8790,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -8801,7 +8801,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -8812,7 +8812,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -8823,7 +8823,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -8834,7 +8834,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -8874,7 +8874,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8885,7 +8885,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8911,7 +8911,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8949,7 +8949,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8960,7 +8960,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8986,7 +8986,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9053,7 +9053,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9064,7 +9064,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9075,7 +9075,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9086,7 +9086,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9097,7 +9097,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9108,7 +9108,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9119,7 +9119,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9217,7 +9217,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -9228,7 +9228,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -9239,7 +9239,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -9250,7 +9250,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -9261,7 +9261,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -9272,7 +9272,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -9283,7 +9283,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -9327,7 +9327,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9338,7 +9338,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9349,7 +9349,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9360,7 +9360,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9371,7 +9371,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9382,7 +9382,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9393,7 +9393,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9445,7 +9445,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -9459,7 +9459,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -9473,7 +9473,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -9487,7 +9487,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -9501,7 +9501,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -9515,7 +9515,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -9529,7 +9529,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -9706,7 +9706,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
         }[];
         'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
     };
-}, {}, "/v1/subjects/:id/source-statistics/:source/observations">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, params, query, authorizeCommand, admission, job }: {
+}, {}, "/v1/subjects/:id/source-statistics/:source/observations">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, params, query, authorize, admission, job }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -9722,7 +9722,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -9733,7 +9733,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -9744,7 +9744,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -9755,7 +9755,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -9766,7 +9766,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -9777,7 +9777,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -9788,7 +9788,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -9960,7 +9960,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -9971,7 +9971,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -9982,7 +9982,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -9993,7 +9993,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -10004,7 +10004,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -10015,7 +10015,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -10026,7 +10026,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -10208,7 +10208,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10222,7 +10222,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10236,7 +10236,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10250,7 +10250,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10264,7 +10264,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10278,7 +10278,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10292,7 +10292,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10693,7 +10693,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10707,7 +10707,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10721,7 +10721,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10735,7 +10735,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10749,7 +10749,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10763,7 +10763,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10777,7 +10777,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{

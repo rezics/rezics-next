@@ -30,7 +30,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -44,7 +44,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -58,7 +58,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -72,7 +72,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -86,7 +86,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -207,7 +207,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -221,7 +221,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -235,7 +235,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -249,7 +249,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -263,7 +263,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -277,7 +277,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -405,7 +405,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -419,7 +419,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -433,7 +433,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -447,7 +447,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -461,7 +461,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -508,7 +508,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -522,7 +522,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -536,7 +536,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -550,7 +550,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -564,7 +564,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -633,7 +633,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -647,7 +647,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -661,7 +661,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -675,7 +675,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -689,7 +689,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -770,7 +770,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -784,7 +784,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -798,7 +798,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -812,7 +812,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -826,7 +826,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -840,7 +840,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -854,7 +854,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -902,7 +902,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -916,7 +916,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -930,7 +930,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -944,7 +944,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -958,7 +958,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -972,7 +972,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -986,7 +986,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1026,7 +1026,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1040,7 +1040,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1054,7 +1054,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1068,7 +1068,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1082,7 +1082,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1096,7 +1096,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1110,7 +1110,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1194,7 +1194,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1208,7 +1208,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1222,7 +1222,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1236,7 +1236,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1250,7 +1250,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1264,7 +1264,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1278,7 +1278,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1327,7 +1327,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1341,7 +1341,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1355,7 +1355,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1369,7 +1369,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1383,7 +1383,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1397,7 +1397,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1411,7 +1411,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1450,7 +1450,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1464,7 +1464,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1478,7 +1478,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1492,7 +1492,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1506,7 +1506,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1520,7 +1520,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1534,7 +1534,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1580,7 +1580,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1594,7 +1594,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1608,7 +1608,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1622,7 +1622,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1636,7 +1636,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1695,7 +1695,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1709,7 +1709,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1723,7 +1723,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1737,7 +1737,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1751,7 +1751,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1834,7 +1834,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1941,7 +1941,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1955,7 +1955,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1969,7 +1969,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1983,7 +1983,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -1997,7 +1997,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2011,7 +2011,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2025,7 +2025,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2124,7 +2124,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2138,7 +2138,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2152,7 +2152,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2166,7 +2166,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2180,7 +2180,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2194,7 +2194,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2208,7 +2208,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2288,7 +2288,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2302,7 +2302,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2316,7 +2316,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2330,7 +2330,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2344,7 +2344,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2358,7 +2358,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2372,7 +2372,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2454,7 +2454,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2468,7 +2468,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2482,7 +2482,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2496,7 +2496,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2510,7 +2510,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2524,7 +2524,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2538,7 +2538,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2591,7 +2591,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2605,7 +2605,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2619,7 +2619,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2633,7 +2633,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2647,7 +2647,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2683,7 +2683,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2720,7 +2720,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2734,7 +2734,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2748,7 +2748,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2762,7 +2762,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2776,7 +2776,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2836,7 +2836,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2850,7 +2850,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2864,7 +2864,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2878,7 +2878,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2892,7 +2892,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2950,7 +2950,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2964,7 +2964,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2978,7 +2978,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2992,7 +2992,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3006,7 +3006,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3020,7 +3020,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3034,7 +3034,7 @@ export declare function ratingRouteDeclarations(): {
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3091,7 +3091,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3105,7 +3105,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3119,7 +3119,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3133,7 +3133,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3147,7 +3147,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3268,7 +3268,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3282,7 +3282,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3296,7 +3296,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3310,7 +3310,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3324,7 +3324,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3338,7 +3338,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3466,7 +3466,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3480,7 +3480,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3494,7 +3494,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3508,7 +3508,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3522,7 +3522,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3569,7 +3569,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3583,7 +3583,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3597,7 +3597,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3611,7 +3611,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3625,7 +3625,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3694,7 +3694,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3708,7 +3708,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3722,7 +3722,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3736,7 +3736,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3750,7 +3750,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3831,7 +3831,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3845,7 +3845,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3859,7 +3859,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3873,7 +3873,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3887,7 +3887,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3901,7 +3901,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3915,7 +3915,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3963,7 +3963,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3977,7 +3977,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3991,7 +3991,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4005,7 +4005,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4019,7 +4019,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4033,7 +4033,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4047,7 +4047,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4087,7 +4087,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4101,7 +4101,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4115,7 +4115,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4129,7 +4129,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4143,7 +4143,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4157,7 +4157,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4171,7 +4171,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4255,7 +4255,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4269,7 +4269,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4283,7 +4283,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4297,7 +4297,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4311,7 +4311,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4325,7 +4325,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4339,7 +4339,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4388,7 +4388,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4402,7 +4402,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4416,7 +4416,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4430,7 +4430,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4444,7 +4444,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4458,7 +4458,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4472,7 +4472,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4511,7 +4511,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4525,7 +4525,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4539,7 +4539,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4553,7 +4553,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4567,7 +4567,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4581,7 +4581,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4595,7 +4595,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4641,7 +4641,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4655,7 +4655,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4669,7 +4669,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4683,7 +4683,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4697,7 +4697,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4756,7 +4756,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4770,7 +4770,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4784,7 +4784,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4798,7 +4798,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4812,7 +4812,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4895,7 +4895,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5002,7 +5002,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5016,7 +5016,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5030,7 +5030,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5044,7 +5044,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5058,7 +5058,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5072,7 +5072,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5086,7 +5086,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5185,7 +5185,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5199,7 +5199,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5213,7 +5213,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5227,7 +5227,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5241,7 +5241,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5255,7 +5255,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5269,7 +5269,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5349,7 +5349,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5363,7 +5363,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5377,7 +5377,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5391,7 +5391,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5405,7 +5405,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5419,7 +5419,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5433,7 +5433,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5515,7 +5515,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5529,7 +5529,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5543,7 +5543,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5557,7 +5557,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5571,7 +5571,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5585,7 +5585,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5599,7 +5599,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5652,7 +5652,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5666,7 +5666,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5680,7 +5680,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5694,7 +5694,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5708,7 +5708,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5744,7 +5744,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5781,7 +5781,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5795,7 +5795,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5809,7 +5809,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5823,7 +5823,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5837,7 +5837,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5897,7 +5897,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5911,7 +5911,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5925,7 +5925,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5939,7 +5939,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -5953,7 +5953,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6011,7 +6011,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6025,7 +6025,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6039,7 +6039,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6053,7 +6053,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6067,7 +6067,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6081,7 +6081,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6095,7 +6095,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6163,7 +6163,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6177,7 +6177,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6191,7 +6191,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6205,7 +6205,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6219,7 +6219,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6233,7 +6233,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6247,7 +6247,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6377,7 +6377,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6391,7 +6391,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6405,7 +6405,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6419,7 +6419,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6433,7 +6433,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6447,7 +6447,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6461,7 +6461,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6578,7 +6578,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6592,7 +6592,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6606,7 +6606,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6620,7 +6620,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6634,7 +6634,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6648,7 +6648,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6662,7 +6662,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                     status: import("typebox").TLiteral<number>;
                     code: import("typebox").TSchema;
                     retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                     request_id: import("typebox").TString;
                     detail?: import("typebox").TOptional<import("typebox").TString>;
                     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -6837,7 +6837,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -6848,7 +6848,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -6859,7 +6859,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -6870,7 +6870,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -6881,7 +6881,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -6921,7 +6921,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6932,7 +6932,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6943,7 +6943,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6954,7 +6954,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6965,7 +6965,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6976,7 +6976,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6987,7 +6987,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7050,7 +7050,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7061,7 +7061,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7072,7 +7072,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7083,7 +7083,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7094,7 +7094,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7105,7 +7105,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7116,7 +7116,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7159,7 +7159,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7170,7 +7170,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7196,7 +7196,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7464,7 +7464,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7475,7 +7475,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7486,7 +7486,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7497,7 +7497,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7508,7 +7508,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7534,7 +7534,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7573,7 +7573,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7584,7 +7584,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7595,7 +7595,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7606,7 +7606,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7617,7 +7617,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7628,7 +7628,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7639,7 +7639,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7683,7 +7683,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7694,7 +7694,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7705,7 +7705,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7716,7 +7716,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7727,7 +7727,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7738,7 +7738,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7749,7 +7749,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7789,7 +7789,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7800,7 +7800,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7811,7 +7811,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7822,7 +7822,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7833,7 +7833,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7844,7 +7844,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7855,7 +7855,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7898,7 +7898,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7909,7 +7909,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7920,7 +7920,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7931,7 +7931,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7942,7 +7942,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7953,7 +7953,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8003,7 +8003,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8014,7 +8014,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8025,7 +8025,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8051,7 +8051,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8093,7 +8093,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8104,7 +8104,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8115,7 +8115,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8126,7 +8126,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8137,7 +8137,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8148,7 +8148,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8190,7 +8190,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8201,7 +8201,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8212,7 +8212,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8223,7 +8223,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8234,7 +8234,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8245,7 +8245,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8295,7 +8295,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8306,7 +8306,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8317,7 +8317,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8328,7 +8328,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8339,7 +8339,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8350,7 +8350,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8361,7 +8361,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8411,7 +8411,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8422,7 +8422,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8433,7 +8433,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8444,7 +8444,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8455,7 +8455,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8466,7 +8466,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8477,7 +8477,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8523,7 +8523,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8534,7 +8534,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8545,7 +8545,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8556,7 +8556,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8567,7 +8567,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8578,7 +8578,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8589,7 +8589,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8639,7 +8639,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8650,7 +8650,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8661,7 +8661,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8672,7 +8672,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8683,7 +8683,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8694,7 +8694,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8705,7 +8705,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8751,7 +8751,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8762,7 +8762,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8773,7 +8773,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8784,7 +8784,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8795,7 +8795,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8806,7 +8806,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8817,7 +8817,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8877,7 +8877,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8888,7 +8888,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8899,7 +8899,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8910,7 +8910,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8921,7 +8921,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8932,7 +8932,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8943,7 +8943,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9107,7 +9107,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9118,7 +9118,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9129,7 +9129,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9155,7 +9155,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9245,7 +9245,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -9256,7 +9256,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -9267,7 +9267,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -9293,7 +9293,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -9347,7 +9347,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9358,7 +9358,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9369,7 +9369,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9395,7 +9395,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9423,7 +9423,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -9520,7 +9520,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9531,7 +9531,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9542,7 +9542,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9568,7 +9568,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9606,7 +9606,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9617,7 +9617,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9628,7 +9628,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9654,7 +9654,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11159,7 +11159,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11170,7 +11170,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11181,7 +11181,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11207,7 +11207,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11394,7 +11394,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11405,7 +11405,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11416,7 +11416,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11442,7 +11442,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11479,7 +11479,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11490,7 +11490,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11501,7 +11501,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11512,7 +11512,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11523,7 +11523,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11534,7 +11534,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11545,7 +11545,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11582,7 +11582,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11593,7 +11593,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11604,7 +11604,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11615,7 +11615,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11626,7 +11626,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11637,7 +11637,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11648,7 +11648,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11695,7 +11695,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11706,7 +11706,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11717,7 +11717,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11743,7 +11743,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11788,7 +11788,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -11799,7 +11799,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -11810,7 +11810,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -11821,7 +11821,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -11847,7 +11847,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -11888,7 +11888,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -11899,7 +11899,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -11910,7 +11910,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -11921,7 +11921,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -11947,7 +11947,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -11986,7 +11986,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11997,7 +11997,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12008,7 +12008,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12019,7 +12019,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12030,7 +12030,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12041,7 +12041,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12052,7 +12052,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12107,7 +12107,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12118,7 +12118,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12129,7 +12129,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12140,7 +12140,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12151,7 +12151,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12162,7 +12162,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12173,7 +12173,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12224,7 +12224,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12235,7 +12235,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12246,7 +12246,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12257,7 +12257,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12268,7 +12268,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12279,7 +12279,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12290,7 +12290,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12336,7 +12336,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12347,7 +12347,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12358,7 +12358,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12369,7 +12369,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12380,7 +12380,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12391,7 +12391,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12402,7 +12402,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12440,7 +12440,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12451,7 +12451,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12462,7 +12462,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12473,7 +12473,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12484,7 +12484,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12533,7 +12533,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12544,7 +12544,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12555,7 +12555,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12566,7 +12566,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12592,7 +12592,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12632,7 +12632,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -12643,7 +12643,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -12654,7 +12654,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -12665,7 +12665,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -12691,7 +12691,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -12734,7 +12734,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12745,7 +12745,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12756,7 +12756,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12767,7 +12767,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12793,7 +12793,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12834,7 +12834,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12845,7 +12845,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12856,7 +12856,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12867,7 +12867,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12893,7 +12893,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12923,7 +12923,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12934,7 +12934,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12945,7 +12945,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12956,7 +12956,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12982,7 +12982,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13019,7 +13019,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13030,7 +13030,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13041,7 +13041,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13052,7 +13052,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13063,7 +13063,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13097,7 +13097,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -13108,7 +13108,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -13134,7 +13134,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -13165,7 +13165,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -13176,7 +13176,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -13187,7 +13187,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -13217,7 +13217,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13228,7 +13228,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13239,7 +13239,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13278,7 +13278,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13289,7 +13289,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13300,7 +13300,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13311,7 +13311,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13322,7 +13322,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13333,7 +13333,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13344,7 +13344,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13387,7 +13387,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13398,7 +13398,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13409,7 +13409,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13420,7 +13420,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13431,7 +13431,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13442,7 +13442,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13486,7 +13486,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -13497,7 +13497,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -13508,7 +13508,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -13519,7 +13519,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -13530,7 +13530,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -13541,7 +13541,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -13552,7 +13552,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -13592,7 +13592,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -13603,7 +13603,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -13629,7 +13629,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -13667,7 +13667,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -13678,7 +13678,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -13704,7 +13704,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -13808,7 +13808,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13819,7 +13819,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13830,7 +13830,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13841,7 +13841,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13852,7 +13852,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13863,7 +13863,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13874,7 +13874,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13994,7 +13994,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14005,7 +14005,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14016,7 +14016,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14027,7 +14027,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14038,7 +14038,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14049,7 +14049,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14060,7 +14060,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14118,7 +14118,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14129,7 +14129,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14140,7 +14140,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14151,7 +14151,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14162,7 +14162,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14173,7 +14173,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14184,7 +14184,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14300,7 +14300,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -14311,7 +14311,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -14322,7 +14322,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -14333,7 +14333,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -14359,7 +14359,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -14481,7 +14481,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -14492,7 +14492,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -14503,7 +14503,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -14514,7 +14514,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -14525,7 +14525,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -14551,7 +14551,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -14596,7 +14596,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -14607,7 +14607,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -14618,7 +14618,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -14629,7 +14629,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -14655,7 +14655,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -14718,7 +14718,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -14729,7 +14729,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -14740,7 +14740,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -14751,7 +14751,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -14777,7 +14777,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -14819,7 +14819,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14830,7 +14830,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14841,7 +14841,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14852,7 +14852,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14878,7 +14878,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14923,7 +14923,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -14934,7 +14934,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -14945,7 +14945,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -14956,7 +14956,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -14967,7 +14967,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -14978,7 +14978,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -14989,7 +14989,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15029,7 +15029,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15040,7 +15040,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15051,7 +15051,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15062,7 +15062,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15073,7 +15073,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15084,7 +15084,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15095,7 +15095,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15136,7 +15136,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15147,7 +15147,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15158,7 +15158,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15169,7 +15169,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15180,7 +15180,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15191,7 +15191,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15202,7 +15202,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15250,7 +15250,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15261,7 +15261,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15272,7 +15272,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15283,7 +15283,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15294,7 +15294,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15305,7 +15305,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15316,7 +15316,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15357,7 +15357,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15368,7 +15368,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15379,7 +15379,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15390,7 +15390,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15401,7 +15401,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15412,7 +15412,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15423,7 +15423,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15467,7 +15467,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15478,7 +15478,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15489,7 +15489,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15500,7 +15500,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15511,7 +15511,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15522,7 +15522,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15533,7 +15533,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15584,7 +15584,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15595,7 +15595,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15606,7 +15606,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15617,7 +15617,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15643,7 +15643,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -15749,7 +15749,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -15760,7 +15760,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -15771,7 +15771,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -15782,7 +15782,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -15793,7 +15793,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -15819,7 +15819,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -15900,7 +15900,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -15911,7 +15911,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -15922,7 +15922,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -15933,7 +15933,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -15944,7 +15944,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -15955,7 +15955,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -15966,7 +15966,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16007,7 +16007,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16018,7 +16018,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16029,7 +16029,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16040,7 +16040,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16051,7 +16051,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16062,7 +16062,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16073,7 +16073,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16115,7 +16115,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16126,7 +16126,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16137,7 +16137,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16148,7 +16148,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16159,7 +16159,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16170,7 +16170,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16181,7 +16181,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16223,7 +16223,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16234,7 +16234,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16245,7 +16245,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16256,7 +16256,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16267,7 +16267,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16278,7 +16278,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16289,7 +16289,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16345,7 +16345,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16356,7 +16356,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16367,7 +16367,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16378,7 +16378,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16389,7 +16389,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16415,7 +16415,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16467,7 +16467,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -16478,7 +16478,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -16489,7 +16489,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -16500,7 +16500,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -16526,7 +16526,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -16580,7 +16580,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -16591,7 +16591,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -16602,7 +16602,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -16613,7 +16613,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -16639,7 +16639,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -16681,7 +16681,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -16695,7 +16695,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -16709,7 +16709,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -16723,7 +16723,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -16737,7 +16737,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -16751,7 +16751,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -16765,7 +16765,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -16834,7 +16834,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -16845,7 +16845,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -16856,7 +16856,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -16867,7 +16867,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -16878,7 +16878,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -16889,7 +16889,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -16900,7 +16900,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -16932,7 +16932,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -16943,7 +16943,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -16954,7 +16954,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -16965,7 +16965,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -16976,7 +16976,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -16987,7 +16987,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -16998,7 +16998,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -17034,7 +17034,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -17048,7 +17048,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -17062,7 +17062,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -17076,7 +17076,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -17090,7 +17090,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -17104,7 +17104,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -17118,7 +17118,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -17226,7 +17226,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -17240,7 +17240,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -17254,7 +17254,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -17268,7 +17268,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -17282,7 +17282,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -17296,7 +17296,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -17310,7 +17310,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
