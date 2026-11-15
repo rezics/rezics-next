@@ -12,7 +12,13 @@ import type { Release } from '@rezics/definitions';
 import { relationSource } from './search-relations.ts';
 import { readRelease } from './definition-release-read.ts';
 import type { Pool, PoolClient } from 'pg';
-import { CommandUnavailableError } from '../access/unavailable.ts';
+import {
+  AccessUnavailableError,
+  classifyUnavailability,
+  CommandUnavailableError,
+  requireAccessDeadline,
+  throwAccessUnavailable,
+} from '../access/unavailable.ts';
 import { withoutFencedEntries } from './fences.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import type { IndexedStatement, IndexedSubject, SubjectSnapshot, SubjectSource } from '../search/source.ts';
@@ -25,8 +31,8 @@ import readPosition from './search-source-position.sql';
 import readStatements from './search-source-statements.sql';
 import readSubjects from './search-source-subjects.sql';
 import { accessCheck } from '../request/access.ts';
-import { mintReadTime } from '../command/command.ts';
-import { classifyUnavailability, requireAccessDeadline } from '../access/unavailable.ts';
+import { DEFAULT_REQUEST_DEADLINE_MS, mintReadTime } from '../command/command.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { subjectReadEligibility } from './eligibility.ts';
 import { withPublicStatementReader } from './statement-disclosure.ts';
@@ -42,7 +48,7 @@ import type {
 } from './public-filter-source-contract.ts';
 import readVisibility from './read-visibility.sql';
 import { withReadTransaction } from './read.ts';
-import { withRequestDeadline } from '../request/deadline.ts';
+import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 
 export { readPartition };
 
@@ -144,6 +150,31 @@ export async function inSearchSnapshot<T>(pool: Pool, work: (client: PoolClient)
   return withReadTransaction(pool, work);
 }
 
+/** Repair one unreadied subject on the caller's Search deadline, then let the read refuse. */
+async function resumeSelection(pool: Pool, deadline: number, pending: Pick<SubjectRow, 'route' | 'id'>): Promise<void> {
+  await withBoundedReadConnection(
+    pool,
+    deadline,
+    async (client) => {
+      requireAccessDeadline(deadline);
+      await rebuildSelection.run(client, { route: pending.route, subject_id: pending.id });
+      requireAccessDeadline(deadline);
+    },
+    {
+      deadlineError: () => new AccessUnavailableError('deadline'),
+      mapError(error) {
+        try {
+          // The bounded lifetime selects the deadline race; classify its settled failure without checking time again.
+          throwAccessUnavailable(error);
+        } catch (mapped) {
+          return mapped;
+        }
+        return error;
+      },
+    },
+  );
+}
+
 export function subjectSource(
   pool: Pool,
   routeKey?: Uint8Array,
@@ -170,7 +201,9 @@ export function subjectSource(
       }
       const pairs = [...requested].map(([id, route]) => ({ id, route }));
 
-      const snapshot = await inSearchSnapshot(pool, async (client) => {
+      // Keep the original cut for the snapshot, any selection repair, and relation disclosure.
+      const deadline = deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+      const snapshot = await withReadTransaction(pool, async (client) => {
         const positionRow = await readPosition.run(client, { partition_no: partition });
         if (!positionRow) throw new CommandUnavailableError('fenced', partition);
         if (positionRow.writeState === 'moved')
@@ -306,23 +339,24 @@ export function subjectSource(
           });
         }
         return { partition, position, subjects, relation };
-      });
+      }, deadline);
       if ('pending' in snapshot && snapshot.pending) {
-        if (snapshot.rebuild)
-          await rebuildSelection.run(pool, {
-            route: snapshot.pending.route,
-            subject_id: snapshot.pending.id,
-          });
+        if (snapshot.rebuild) await resumeSelection(pool, deadline, snapshot.pending);
         throw new CommandUnavailableError('contention', partition);
       }
       // Release the source owner before independently anchoring foreign identities or tuples.
-      const relation = 'relation' in snapshot ? await relations.finish(snapshot.relation) : new Map();
+      const relation =
+        'relation' in snapshot
+          ? await withRequestDeadline(deadline, () => relations.finish(snapshot.relation))
+          : new Map();
+      requireAccessDeadline(deadline);
       for (const subject of snapshot.subjects) {
         const selected = relation.get(subject.id);
         if (!selected) continue;
         subject.statements.push(...selected.statements);
         if (selected.overflow.length) subject.relationFacetOverflow = selected.overflow;
       }
+      requireAccessDeadline(deadline);
       return { partition: snapshot.partition, position: snapshot.position, subjects: snapshot.subjects };
     },
 
