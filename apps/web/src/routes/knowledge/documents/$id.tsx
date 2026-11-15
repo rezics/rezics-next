@@ -18,11 +18,8 @@ export const Route = createFileRoute('/knowledge/documents/$id')({
   pendingMs: 0,
   validateSearch: knowledgeDocumentSearch,
   loader: async ({ params, context, location }) => {
-    const request = knowledgeDocumentRequest(
-      params.id,
-      (location.search as { revisionId?: string }).revisionId,
-      getLocale(),
-    );
+    const search = knowledgeDocumentSearch(location.search);
+    const request = knowledgeDocumentRequest(params.id, search.revisionId, getLocale(), search);
     if (!request) throw notFound();
     return loadKnowledgeDocumentVisit(context.queryClient, request);
   },

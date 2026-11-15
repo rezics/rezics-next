@@ -147,10 +147,28 @@ export function KnowledgeDocumentPage({
   const displayed: KnowledgeReadState =
     page.state === 'ready' && !document ? { state: 'unavailable', status: 502 } : page;
   const preparing = displayed.state === 'preparing' || retrying;
+  const body = useRef<HTMLDivElement>(null);
+  const blockId = request.citation?.blockId;
+  useLayoutEffect(() => {
+    const region = body.current;
+    if (!region || !document || preparing || blockId === undefined) return;
+    const target = region.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(blockId)}"]`);
+    if (!target || region.ownerDocument.activeElement !== region.ownerDocument.body) return;
+    const previousTabIndex = target.getAttribute('tabindex');
+    target.tabIndex = -1;
+    target.scrollIntoView?.({ block: 'center' });
+    target.focus({ preventScroll: true });
+    return () => {
+      if (previousTabIndex === null) target.removeAttribute('tabindex');
+      else target.setAttribute('tabindex', previousTabIndex);
+    };
+  }, [blockId, document, preparing]);
   const subject = document ? subjectHref({ id: document.subjectId, label: '' }, locale) : null;
   const liveHref = knowledgeLiveHref(locale, request.documentId);
   const exactHref = document
-    ? knowledgeCitationHref(locale, document)
+    ? request.citation
+      ? knowledgeExactHref(locale, document.documentId, document.revisionId, request.citation)
+      : knowledgeCitationHref(locale, document)
     : request.revisionId
       ? knowledgeExactHref(locale, request.documentId, request.revisionId)
       : liveHref;
@@ -161,7 +179,7 @@ export function KnowledgeDocumentPage({
       </Button>
     ) : null;
   const currentOpen =
-    exact && lostPage !== page ? (
+    exact && !request.citation && lostPage !== page ? (
       <a
         href={liveHref}
         className={buttonVariants({ variant: retry ? 'outline' : 'default', className: controlClass() })}
@@ -223,19 +241,21 @@ export function KnowledgeDocumentPage({
       ) : null}
       {!preparing && document ? (
         <>
-          <KnowledgeReferenceBody
-            key={`${document.documentId}:${document.revisionId}`}
-            document={document.body}
-            references={document.references}
-            locale={locale}
-            mediaSelection={{
-              representation: 'public',
-              documentId: document.documentId,
-              revisionId: document.revisionId,
-              sourceSha256: document.sourceSha256,
-              publicationId: document.publicationId,
-            }}
-          />
+          <div ref={body} className="min-w-0">
+            <KnowledgeReferenceBody
+              key={`${document.documentId}:${document.revisionId}`}
+              document={document.body}
+              references={document.references}
+              locale={locale}
+              mediaSelection={{
+                representation: 'public',
+                documentId: document.documentId,
+                revisionId: document.revisionId,
+                sourceSha256: document.sourceSha256,
+                publicationId: document.publicationId,
+              }}
+            />
+          </div>
           <KnowledgeDetails label={m.knowledge_workspace_details()}>
             {document ? (
               <dl className="grid gap-3 text-sm sm:grid-cols-2">

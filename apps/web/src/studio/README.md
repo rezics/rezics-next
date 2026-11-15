@@ -457,8 +457,11 @@ contracts; and the read-only main checkout `.reference/INDEX.md`. The brief's ap
 Account, session incarnation, source, credential, locale and departure retire selections, abort pending requests and
 fence late results and focus. Shared wrapping controls and eight-locale point and draft-command messages retain
 the existing Studio appearance. Review/recovery requests keyboard focus only while the initiating focus remains;
-subsequent focus, pointer or Tab movement cancels that request. Legacy body editing, native recovery,
-remove/update and publication keep their existing entry paths.
+subsequent focus, pointer or Tab movement cancels that request. An available chapter on the bounded draft outline
+opens the shared private Studio editor and revision comparison for that Post. Saving leaves the outline and release
+selections intact. To change the outline selection, the author can explicitly read the current saved draft of that
+same Post before reviewing the update. Book history and staged release preparation are reachable from the bounded
+tools.
 
 Continuation acceptance source extends `studio-hosted-draft-points.test.tsx` and the delivered
 `studio-hosted-root-append.test.tsx`: fresh-head continuation, repeated activation, failed/denied read retry,
