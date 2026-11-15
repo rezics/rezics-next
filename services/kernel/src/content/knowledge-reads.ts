@@ -39,9 +39,11 @@ import {
   knowledgePrivateRow,
   knowledgePublicRow,
   knowledgePublicSelection,
+  type KnowledgeOwnedNotebookRow,
 } from './knowledge-store.ts';
 import { admitsKnowledgeAncestorPath } from './knowledge-tree.ts';
 import { readKnowledgeOrderPage } from './knowledge-order.ts';
+import { readKnowledgeOwnedSubjectNotebookPage } from './knowledge-subject-notebooks.ts';
 
 function route(id: string): number {
   const value = routeOf(id);
@@ -266,10 +268,20 @@ export async function readKnowledgeOwnedNotebooks(
   const limit = request.limit;
   if (readContext.actor.kind !== 'account' || readContext.actor.accountId !== accountId)
     throw new KnowledgeNotFoundError();
+  if (request.subjectId !== undefined) {
+    const result = await readKnowledgeOwnedSubjectNotebookPage(deps, readContext.actor, readContext.deadline, {
+      subjectId: request.subjectId,
+      limit,
+      ...(request.cursor === undefined ? {} : { cursor: request.cursor }),
+    });
+    return {
+      value: { notebooks: result.rows.map(ownedNotebookView), next: result.next },
+      anchors: [result.anchor],
+    };
+  }
   const binding = knowledgeCursorBinding('GET /v1/accounts/:accountId/knowledge/notebooks', accountId, {
     limit,
     route: sourceRoute,
-    ...(request.subjectId ? { subjectId: request.subjectId } : {}),
   });
   const cursor = await readCursor(deps, binding, request.cursor);
   if (
@@ -291,15 +303,13 @@ export async function readKnowledgeOwnedNotebooks(
   );
   const result = await snapshot(deps, accountId, readContext, async (client) => {
     if (!(await check(client))) return null;
-    const rows = await knowledgeOwnedNotebookPage(
+    return knowledgeOwnedNotebookPage(
       client,
       sourceRoute,
       accountId,
       after ? { createdAt: after[0]!, notebookId: after[1]! } : null,
       limit + 1,
-      request.subjectId,
     );
-    return rows;
   });
   if (!result.value) throw new KnowledgeNotFoundError();
   if (cursor && cursor.epoch !== result.anchor.epoch) throw new KnowledgeStaleCursorError();
@@ -320,16 +330,20 @@ export async function readKnowledgeOwnedNotebooks(
       : null;
   return {
     value: {
-      notebooks: page.map((row) => ({
-        notebookId: row.notebook_id,
-        subjectId: row.subject_id,
-        title: row.title,
-        structureRevisionId: row.structure_revision_id,
-        createdAt: row.created_at.toISOString(),
-      })),
+      notebooks: page.map(ownedNotebookView),
       next,
     },
     anchors: [result.anchor],
+  };
+}
+
+function ownedNotebookView(row: KnowledgeOwnedNotebookRow) {
+  return {
+    notebookId: row.notebook_id,
+    subjectId: row.subject_id,
+    title: row.title,
+    structureRevisionId: row.structure_revision_id,
+    createdAt: row.created_at.toISOString(),
   };
 }
 

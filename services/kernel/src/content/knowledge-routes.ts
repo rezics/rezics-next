@@ -289,6 +289,7 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
         },
       },
       async ({ params: { accountId }, query, actor, admission, job, session, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
         const result = await operation(() =>
           admission.run('normal', job, () =>
             readKnowledgeOwnedNotebooks(
@@ -300,7 +301,6 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
           ),
         );
         for (const anchor of result.anchors) session.record(sessionComponent(anchor));
-        set.headers['cache-control'] = 'private, no-store';
         return result.value;
       },
     )
