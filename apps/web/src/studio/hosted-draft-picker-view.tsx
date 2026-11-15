@@ -34,6 +34,7 @@ export function HostedDraftPickerView({
         ref={trigger}
         type="button"
         variant="outline"
+        className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
         aria-expanded={expanded}
         aria-controls={`${id}-picker`}
         disabled={disabled || state.kind === 'ended' || expanded}
@@ -53,29 +54,33 @@ export function HostedDraftPickerView({
             <>
               {state.page.preparing ? <p role="status">{m.own_drafts_preparing({}, { locale })}</p> : null}
               {!state.page.rows.length && !state.page.preparing ? <p>{m.own_drafts_empty({}, { locale })}</p> : null}
-              <ol className="studio-draft-list">
-                {state.page.rows.map((entry) => (
-                  <li key={entry.id}>
-                    <Button
-                      type="button"
-                      variant="ghost"
+              {state.page.rows.length ? (
+                <ol className="studio-draft-list">
+                  {state.page.rows.map((entry) => (
+                    <DraftPickerRow
+                      key={entry.id}
+                      title={entry.title ?? m.own_drafts_no_title({}, { locale })}
+                      status={
+                        picker.canSelect(entry)
+                          ? m.studio_book_picker_saved({}, { locale })
+                          : m.studio_account_continue_drafts({}, { locale })
+                      }
+                      savedAt={entry.savedAt}
                       disabled={disabled || busy || !picker.canSelect(entry)}
-                      onClick={() => onSelect(entry.id)}
-                    >
-                      {entry.title ?? m.own_drafts_no_title({}, { locale })}
-                    </Button>
-                    <span className="studio-help">
-                      {picker.canSelect(entry)
-                        ? m.studio_book_picker_saved({}, { locale })
-                        : m.studio_account_continue_drafts({}, { locale })}
-                    </span>
-                    <time dateTime={entry.savedAt}>{entry.savedAt}</time>
-                  </li>
-                ))}
-              </ol>
+                      onSelect={() => onSelect(entry.id)}
+                    />
+                  ))}
+                </ol>
+              ) : null}
               {state.selecting ? <p role="status">{m.studio_book_picker_opening({}, { locale })}</p> : null}
               {state.page.next ? (
-                <Button type="button" variant="outline" disabled={disabled || busy} onClick={() => void picker.next()}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal"
+                  disabled={disabled || busy}
+                  onClick={() => void picker.next()}
+                >
                   {m.studio_book_picker_next({}, { locale })}
                 </Button>
               ) : null}
@@ -83,16 +88,29 @@ export function HostedDraftPickerView({
           ) : null}
           <div className="studio-action-row">
             {state.kind === 'failed' ? (
-              <Button type="button" variant="outline" disabled={disabled} onClick={() => void picker.retry()}>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal"
+                disabled={disabled}
+                onClick={() => void picker.retry()}
+              >
                 {m.own_drafts_retry({}, { locale })}
               </Button>
             ) : null}
-            <Button type="button" variant="outline" disabled={disabled || busy} onClick={() => void picker.restart()}>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal"
+              disabled={disabled || busy}
+              onClick={() => void picker.restart()}
+            >
               {m.own_drafts_restart({}, { locale })}
             </Button>
             <Button
               type="button"
               variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal"
               onClick={() => {
                 returnFocus.current = true;
                 picker.close();
@@ -104,5 +122,41 @@ export function HostedDraftPickerView({
         </section>
       ) : null}
     </div>
+  );
+}
+
+function DraftPickerRow({
+  title,
+  status,
+  savedAt,
+  disabled,
+  onSelect,
+}: {
+  title: string;
+  status: string;
+  savedAt: string;
+  disabled: boolean;
+  onSelect(): void;
+}) {
+  const id = useId();
+  return (
+    <li className="min-w-0">
+      <Button
+        type="button"
+        variant="ghost"
+        className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
+        aria-describedby={`${id}-status ${id}-saved`}
+        disabled={disabled}
+        onClick={onSelect}
+      >
+        {title}
+      </Button>
+      <span id={`${id}-status`} className="studio-help">
+        {status}
+      </span>
+      <time id={`${id}-saved`} className="studio-help studio-break" dateTime={savedAt}>
+        {savedAt}
+      </time>
+    </li>
   );
 }

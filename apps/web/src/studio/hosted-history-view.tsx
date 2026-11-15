@@ -15,7 +15,14 @@ export function HostedHistoryDisclosure({ binding }: { binding: HostedHistoryBin
   const options = { locale: getLocale() };
   return (
     <div className="studio-stack">
-      <Button type="button" variant="outline" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}>
+      <Button
+        type="button"
+        variant="outline"
+        className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen(!open)}
+      >
         {open ? m.studio_book_history_hide({}, options) : m.studio_book_history_show({}, options)}
       </Button>
       <div id={id}>{open ? <MountedHistory binding={binding} /> : null}</div>
@@ -117,9 +124,9 @@ export function HostedHistoryPanel({ visit }: { visit: HostedHistoryVisit }) {
           {state.page.items.length ? (
             <ol className="studio-history-list" aria-label={m.studio_book_history_list({}, options)}>
               {state.page.items.map((entry) => (
-                <li key={entry.revisionId} className="studio-stack">
+                <li key={entry.revisionId} className="studio-stack min-w-0">
                   <div className="studio-action-row">
-                    <strong>
+                    <strong className="min-w-0 [overflow-wrap:anywhere]">
                       {entry.kind === 'structure'
                         ? m.studio_book_history_structure({}, options)
                         : m.studio_book_history_release({}, options)}
@@ -134,6 +141,7 @@ export function HostedHistoryPanel({ visit }: { visit: HostedHistoryVisit }) {
                   <Button
                     type="button"
                     variant="outline"
+                    className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
                     aria-label={m.studio_book_history_inspect_title({ title: versionTitle(entry) }, options)}
                     aria-pressed={
                       state.selection.kind !== 'none' && state.selection.entry.revisionId === entry.revisionId
@@ -157,14 +165,24 @@ export function HostedHistoryPanel({ visit }: { visit: HostedHistoryVisit }) {
           )}
           <div className="studio-action-row">
             {state.page.nextCursor !== null ? (
-              <Button type="button" variant="outline" onClick={() => void visit.next()}>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal"
+                onClick={() => void visit.next()}
+              >
                 {m.studio_book_history_older({}, options)}
               </Button>
             ) : (
               <p className="studio-help">{m.studio_book_history_complete({}, options)}</p>
             )}
             {state.cursor !== null ? (
-              <Button type="button" variant="ghost" onClick={() => void visit.restart()}>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal"
+                onClick={() => void visit.restart()}
+              >
                 {m.studio_book_history_newest({}, options)}
               </Button>
             ) : null}
@@ -181,10 +199,13 @@ export function HostedHistoryPanel({ visit }: { visit: HostedHistoryVisit }) {
               aria-busy={state.selection.kind === 'loading'}
             >
               <div className="studio-section-heading">
-                <h4>{m.studio_book_history_readonly_title({ title: versionTitle(state.selection.entry) }, options)}</h4>
+                <h4 className="min-w-0 [overflow-wrap:anywhere]">
+                  {m.studio_book_history_readonly_title({ title: versionTitle(state.selection.entry) }, options)}
+                </h4>
                 <Button
                   type="button"
                   variant="ghost"
+                  className="h-auto min-h-11 min-w-11 max-w-full shrink-0 whitespace-normal"
                   aria-label={m.studio_book_history_close_title(
                     { title: versionTitle(state.selection.entry) },
                     options,
@@ -261,7 +282,12 @@ function HistorySelection({ selection, visit }: { selection: HostedHistorySelect
         </p>
       )}
       {page.nextCursor !== null ? (
-        <Button type="button" variant="outline" onClick={() => void visit.nextOutline()}>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal"
+          onClick={() => void visit.nextOutline()}
+        >
           {m.studio_book_history_outline_next({}, options)}
         </Button>
       ) : (
@@ -278,7 +304,7 @@ function HistoryOutline({ page, title }: { page: HostedOutlineWindowPage; title:
     <ol className="studio-toc-branch" aria-label={m.studio_book_history_outline_title({ title }, options)}>
       {page.items.map((item) => (
         <li key={item.occurrenceId}>
-          <div className="studio-toc-entry">
+          <div className="studio-toc-entry min-w-0">
             {item.availability === 'unavailable' ? (
               <p>
                 {item.kind === 'part'
@@ -287,7 +313,7 @@ function HistoryOutline({ page, title }: { page: HostedOutlineWindowPage; title:
               </p>
             ) : (
               <>
-                <strong>{item.title}</strong>
+                <strong className="studio-break">{item.title}</strong>
                 {item.kind === 'chapter' ? (
                   <dl className="studio-help studio-break">
                     <dt>{m.book_reader_chapter({}, options)}</dt>
