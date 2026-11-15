@@ -62,15 +62,19 @@ test('ordinary Knowledge upload completes through website Auth, processes real b
   });
   expect(foreignReservation.outcome).toBe('denied');
   const reservationRequestId = crypto.randomUUID();
-  const reserved = await driver.reserve('author', {
+  const reservation = {
     requestId: reservationRequestId, containerId: document.documentId,
-    purpose: 'knowledge-image', type: source.type, length: source.bytes.length, sha256: source.sha256,
-  });
+    purpose: 'knowledge-image' as const, type: source.type, length: source.bytes.length, sha256: source.sha256,
+  };
+  const reserved = await driver.reserve('author', reservation);
   if (reserved.outcome !== 'permitted') throw new Error(`Knowledge image reservation: ${reserved.outcome}`);
   const mediaId = reserved.media.id;
   expect(reserved.media).toMatchObject({
     purpose: 'knowledge-image', containerId: document.documentId, uploaderId: author.actor.accountId, state: 'reserved',
   });
+  const replayed = await driver.reserve('author', reservation);
+  if (replayed.outcome !== 'permitted') throw new Error(`Knowledge image reservation replay: ${replayed.outcome}`);
+  expect(replayed.media.id).toBe(mediaId);
   await driver.placeOriginal(mediaId, source.bytes);
   const completion = {
     reservationRequestId, containerId: document.documentId,
@@ -78,6 +82,7 @@ test('ordinary Knowledge upload completes through website Auth, processes real b
   };
   expect(await driver.complete('other-worker', { ...completion, requestId: crypto.randomUUID() })).toBe('denied');
   const completionRequestId = crypto.randomUUID();
+  expect(await driver.complete('worker', { ...completion, requestId: completionRequestId })).toBe('permitted');
   expect(await driver.complete('worker', { ...completion, requestId: completionRequestId })).toBe('permitted');
   const authentication = await driver.authenticationEvidence('worker', completionRequestId);
   expect(authentication.sub).toBe(author.actor.accountId);

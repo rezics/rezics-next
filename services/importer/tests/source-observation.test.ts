@@ -21,7 +21,7 @@ import { RUN_TABLES, RunStore } from '../src/run-store.ts';
 import { parseObservationArgs, runObservationsCli } from '../src/source-observation-cli.ts';
 
 const subjectId = '00000000-0000-4000-8000-000000000101';
-const registration = createSourceRegistration('vndb');
+const registration = createSourceRegistration('vndb', { sourceSnapshotAsOf: '2026-10-25' });
 
 function storedHead(id: string, row?: Record<string, unknown>): ImportSourceObservationHead {
   if (!row) return { state: 'empty', digest: null, observation: null };
