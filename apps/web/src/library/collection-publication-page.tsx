@@ -651,7 +651,7 @@ function CurrentPublicationPage({
     staleTime: 0,
     refetchOnMount: 'always',
   });
-  function canPublish() {
+  function canPublish(mode: 'selected' | 'query' = 'selected') {
     const csrf = owner.credential();
     if (!csrf) return false;
     // Consult the actual cache before a replacement render commits, including a rotated credential's read.
@@ -667,10 +667,13 @@ function CurrentPublicationPage({
       current?.viewer?.subject === subject &&
       current.address.id === address.id &&
       current.address.cursor === address.cursor &&
-      current.source.state === 'ready' &&
-      current.source.page.id === address.id &&
-      current.source.page.curatorAccountId === subject &&
-      current.source.page.builtinKind === undefined
+      ((mode === 'query' &&
+        current.builtin?.id === address.id &&
+        owner.operationCurrent('collection.update', true)) ||
+        (current.source.state === 'ready' &&
+          current.source.page.id === address.id &&
+          current.source.page.curatorAccountId === subject &&
+          current.source.page.builtinKind === undefined))
     );
   }
   const data = query.data;
@@ -694,8 +697,12 @@ function CurrentPublicationPage({
           },
         };
   const mode: CollectionPublicationWorkspaceMode =
-    wholeQuery && page.source.state === 'ready' ? 'query' : 'selected';
-  const querySource = mode === 'query' && page.source.state === 'ready' ? page.source : null;
+    page.builtin || (wholeQuery && page.source.state === 'ready') ? 'query' : 'selected';
+  const querySource =
+    page.builtin ??
+    (mode === 'query' && page.source.state === 'ready'
+      ? { revision: page.source.revision, visibility: page.source.page.visibility }
+      : null);
   const modeNavigation = page.source.state === 'ready' ? (
     <div
       className="flex min-w-0 flex-wrap items-center gap-2"
@@ -741,9 +748,9 @@ function CurrentPublicationPage({
               subject={subject}
               collectionId={address.id}
               revision={querySource.revision}
-              visibility={querySource.page.visibility}
+              visibility={querySource.visibility}
               isCurrent={owner.isOwnerCurrent}
-              canBegin={canPublish}
+              canBegin={() => canPublish('query')}
               capture={() => {
                 const csrf = owner.credential();
                 if (!csrf || !owner.isCurrent()) return null;

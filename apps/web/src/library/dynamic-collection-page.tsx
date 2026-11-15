@@ -28,7 +28,10 @@ import { isOrdinarySavedQuery, RuleEditLink, savedQueryResultsAddress } from './
 import { admitsCollectionOperation } from './collection-records';
 import { CollectionAccessState } from './collection-access';
 import { SavedQueryManagement } from './saved-query-management';
-import { SavedQueryPublicationAction } from './saved-query-publication';
+import { SavedQueryPublicationAction, savedQueryPublicationActionClassName } from './saved-query-publication';
+import { publicationHref } from './collection-publication-link';
+import { useOperationAdmission } from '../kernel/exposure';
+import { BuiltinCollectionMetadata } from './builtin-collection-metadata';
 import { SavedFilterReviewEntry, SavedFilterReviewScopeBoundary } from './saved-filter-review';
 import type { ManagedSavedQuery } from './saved-query-management/controller';
 import type { QueryKey } from '@tanstack/react-query';
@@ -272,6 +275,12 @@ function DynamicCollectionPageLifetime({
   }
   const locale = getLocale();
   const saved = isOrdinarySavedQuery(current);
+  const publicationAdmission = useOperationAdmission('collection.update');
+  const canPublishBuiltin =
+    publicationAdmission === 'available' &&
+    viewerId !== null &&
+    current.curatorAccountId === viewerId &&
+    (current.builtinKind === 'everything' || current.builtinKind === 'state');
   const ownerResults = Boolean(saved && viewerId && current.curatorAccountId === viewerId);
   const savedIdentity = {
     id: current.id,
@@ -323,6 +332,11 @@ function DynamicCollectionPageLifetime({
                 resultsHref={resultsHref}
               />
               <SavedQueryPublicationAction collection={savedIdentity} viewerId={viewerId} allowed={ownerResults} />
+              {canPublishBuiltin ? (
+                <a href={publicationHref(current.id)} className={savedQueryPublicationActionClassName}>
+                  {m.library_query_publication_heading()}
+                </a>
+              ) : null}
               <CollectionReadActions
                 onShare={() => copyLink(`/${locale}/collections/${encodeURIComponent(current.id)}`)}
               />
@@ -334,6 +348,22 @@ function DynamicCollectionPageLifetime({
             </div>
           ) : null}
           <CollectionDescriptionReader description={current.description} className="mt-3" />
+          {canPublishBuiltin && readCurrent && current.revision !== undefined && current.visibility ? (
+            <BuiltinCollectionMetadata
+              collectionId={current.id}
+              revision={current.revision}
+              title={current.title}
+              description={current.description}
+              visibility={current.visibility}
+              readCurrent={readCurrent}
+              onRead={(next) => {
+                if (!active.current) return;
+                setCurrent(next);
+                observed.current += 1;
+                setObservation(observed.current);
+              }}
+            />
+          ) : null}
           <CollectionPresentationSummary
             dynamic
             kind={current.presentationKindSource === 'owner' ? current.presentationKind : null}

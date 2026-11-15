@@ -17,6 +17,7 @@ import { activeRelease } from '../semantic/definitions.ts';
 import { builtinCollectionId, type BuiltinCollectionKey } from './builtin-identity.ts';
 import { createBuiltinRuntime } from './builtin-runtime.ts';
 import { readBuiltinStateReference } from './builtin-reference-store.ts';
+import type { CollectionChanges } from './collection-model.ts';
 import type { SavedCollectionRule } from './collection-rules.ts';
 import { enterShelfWrite } from './shelf-counter-owner.ts';
 import { createShelfCounters } from './shelf-counters.ts';
@@ -28,7 +29,7 @@ export type BuiltinMaterialization = Readonly<{
   key: Key;
   rule: SavedCollectionRule;
   authorization: CommandAuthorization;
-  materialize(tx: CommandTransaction): Promise<void>;
+  materialize(tx: CommandTransaction, metadata?: Partial<Omit<CollectionChanges, 'visibility'>>): Promise<void>;
 }>;
 const unavailable = () => new ProblemError('dependency_unavailable');
 function filter(key: Key) {
@@ -231,7 +232,7 @@ export async function prepareBuiltinMaterialization(
     key,
     rule,
     authorization,
-    async materialize(tx) {
+    async materialize(tx, metadata) {
       inserted = null;
       const command = currentCommand(tx);
       await shareAccount(tx, actor.accountId);
@@ -244,9 +245,10 @@ export async function prepareBuiltinMaterialization(
       await enterShelfWrite({ client: tx, route, accountId: actor.accountId });
       const at = authoritativeTimeValue(command.time);
       await tx.query(
-        `INSERT INTO library.collection(route,collection_id,curator_account_id,title,visibility,membership_kind,
-      builtin_kind,builtin_release_digest,builtin_profile_id,builtin_state_set_id,builtin_state_id,created_at,updated_at,transaction_id,state,revision)
-      VALUES($1,$2,$3,$11,'private','dynamic',$4,$5,$6,$7,$8,$9::timestamptz,$9::timestamptz,$10,'active',1)`,
+        `INSERT INTO library.collection(route,collection_id,curator_account_id,title,description,
+      presentation_kind,cover_media_id,visibility,membership_kind,builtin_kind,builtin_release_digest,builtin_profile_id,
+      builtin_state_set_id,builtin_state_id,created_at,updated_at,transaction_id,state,revision)
+      VALUES($1,$2,$3,$11,$12,$13,$14,'private','dynamic',$4,$5,$6,$7,$8,$9::timestamptz,$9::timestamptz,$10,'active',1)`,
         [
           route,
           input.collectionId,
@@ -258,7 +260,10 @@ export async function prepareBuiltinMaterialization(
           key.kind === 'state' ? key.stateId : null,
           at,
           command.transactionId,
-          key.kind === 'everything' ? 'Everything' : key.stateId,
+          metadata?.title ?? (key.kind === 'everything' ? 'Everything' : key.stateId),
+          metadata?.description ?? null,
+          metadata?.presentationKind ?? null,
+          metadata?.coverMediaId ?? null,
         ],
       );
       inserted = { transactionId: command.transactionId, at };

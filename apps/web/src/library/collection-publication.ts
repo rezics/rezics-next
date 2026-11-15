@@ -29,6 +29,7 @@ export type PublicationResult =
 export type PublicationPage = {
   viewer: PublicationViewer | null;
   address: PublicationAddress;
+  builtin?: { id: string; revision: number; visibility: 'private' | 'unlisted' | 'public' };
   source:
     | { state: 'ready'; page: DynamicCollectionPage; revision: number }
     | { state: 'denied' | 'unsupported' | 'unavailable' | 'preparing' };
@@ -211,7 +212,20 @@ export async function loadCollectionPublication(
     const csrfToken = requestCsrfToken(request);
     if (!subject || !collectionResultMatches(page, { ...address, editor: true }, 'session', subject))
       return { viewer: null, address, source: { state: 'denied' } };
-    return { viewer: { subject, csrfToken }, address, source: publicationSource(page, subject) };
+    const builtin =
+      'preparing' in page &&
+      (page.builtinKind === 'everything' || page.builtinKind === 'state') &&
+      page.curatorAccountId === subject &&
+      (page.revision === 0 || revision(page.revision)) &&
+      page.visibility
+        ? { id: page.id, revision: page.revision, visibility: page.visibility }
+        : undefined;
+    return {
+      viewer: { subject, csrfToken },
+      address,
+      source: publicationSource(page, subject),
+      ...(builtin === undefined ? {} : { builtin }),
+    };
   } catch (error) {
     if (isRedirect(error) || isNotFound(error)) throw error;
     return unavailablePublicationPage(null, address);
