@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import { AsyncLocalStorage, AsyncResource } from 'node:async_hooks';
+import { createHash } from 'node:crypto';
 import type { WorkDimensions, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import { NativeCollectionWork, instrumentNativeCollectionWork } from '../library/collection-source-work.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
@@ -425,21 +426,24 @@ export async function withSearchReceivingWork<T>(
             child,
             (sql, values) => {
               const footprint = declaration.footprint(sql, values);
-              if (footprint && capturePlanning.getStore()) {
+              if (!footprint)
+                throw refused(
+                  `Search receiving undeclared SQL: sha256 ${createHash('sha256').update(receivingSqlKey(sql)).digest('hex')}`,
+                );
+              if (capturePlanning.getStore()) {
                 const axis = axes.find((axis) => footprint[axis] > child.available(axis));
                 if (axis)
                   throw refused(
                     `Search receiving capture unavailable funding: original ${axis} requires ${footprint[axis]}, remaining ${child.available(axis)}`,
                   );
               }
-              if (footprint)
-                chargeNative({
-                  rows: footprint.nativeRows,
-                  points: footprint.nativePoints,
-                  statements: footprint.statements,
-                  bytes: footprint.bytes,
-                  engineRequests: 0,
-                });
+              chargeNative({
+                rows: footprint.nativeRows,
+                points: footprint.nativePoints,
+                statements: footprint.statements,
+                bytes: footprint.bytes,
+                engineRequests: 0,
+              });
               return footprint;
             },
             async () =>

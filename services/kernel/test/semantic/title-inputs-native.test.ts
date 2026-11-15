@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createKernel } from '../../src/http/kernel.ts';
 import { createSemanticTitleInputsAdapter } from '../../src/semantic/adapters/title-inputs.ts';
@@ -12,6 +12,10 @@ const idempotency = () => ({ 'Idempotency-Key': `"${randomUUID()}"` });
 beforeAll(async () => {
   driver = await createSemanticDriver(createKernel, { originalCapabilities: true });
 });
+
+afterEach(async () => {
+  await driver?.fixtures.stopIdentityWorker();
+}, 60_000);
 
 afterAll(async () => {
   await driver?.close();

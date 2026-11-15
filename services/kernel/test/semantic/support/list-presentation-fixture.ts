@@ -8,6 +8,8 @@ import type { Actor } from '../../../src/request/access.ts';
 import { partitionOf, routeOf } from '../../../src/route/route.ts';
 import { activeRelease, bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { linkProjection } from '../../../src/semantic/links.ts';
+import { isRelationProperty, relationSlotForApi } from '../../../src/semantic/item.ts';
+import { latestAdoption } from '../../../src/semantic/slots.ts';
 import { nativeFixture } from '../../access/native-account-bindings-fixture.ts';
 import { createPersonas } from '../../support/personas.ts';
 import { testKernel, testRouteKey } from '../../support/test-kernel.ts';
@@ -96,6 +98,9 @@ export async function createListPresentationFixture(options: { poolMax?: number;
     'definitions:publish',
     'definitions:activate',
   ];
+  const candidateStatements = new Map<string, { subject: string; statement: unknown }>();
+  const record = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value);
   type Persona = keyof typeof personas | 'anonymous';
   async function call(
     method: string,
@@ -122,6 +127,9 @@ export async function createListPresentationFixture(options: { poolMax?: number;
     expect([200, 201, 202], `${method} ${path}: ${response.status} ${JSON.stringify(response.body)}`).toContain(
       response.status,
     );
+    const proposalSubject = /^\/v1\/subjects\/([^/]+)\/candidates$/.exec(path)?.[1];
+    if (method === 'POST' && proposalSubject && record(body) && typeof response.body.candidate === 'string')
+      candidateStatements.set(response.body.candidate, { subject: proposalSubject, statement: body.statement });
     return response.body;
   }
   async function grant(persona: 'editor' | 'reader', action: string, resource = global) {
@@ -182,28 +190,95 @@ export async function createListPresentationFixture(options: { poolMax?: number;
     await drain();
     return result.candidate as string;
   }
-  async function adopt(id: string, property: string, candidates: string[], expectedHead: number | null = null) {
-    for (const candidate of candidates)
-      await checked('POST', `/v1/subjects/${id}/candidates/${candidate}:accept`, {
+  async function adopt(id: string, property: string, candidates: string[], expectedHead?: number | null) {
+    const active = await activeRelease(pool);
+    if (!active) throw new Error('List adoption requires an active release');
+    const relation = active.release.properties[property]?.relation;
+    type Address = { target?: string; sameAs?: string; key?: string };
+    const groups = new Map<string, { address: Address; candidates: string[] }>();
+    for (const candidate of candidates) {
+      const proposed = candidateStatements.get(candidate);
+      if (!proposed || proposed.subject !== id || !record(proposed.statement))
+        throw new Error('List adoption requires its actual proposed candidate');
+      const statement = proposed.statement;
+      if (!record(statement.property) || statement.property.id !== property || !record(statement.value))
+        throw new Error('List adoption property does not match its proposal');
+      const address: Address = {};
+      if (isRelationProperty(active.release, property)) {
+        const qualifiers = Array.isArray(statement.qualifiers) ? statement.qualifiers : [];
+        const qualifierValue = (name: string) => {
+          for (const qualifier of qualifiers) {
+            if (!record(qualifier) || !record(qualifier.property) || qualifier.property.id !== name) continue;
+            if (record(qualifier.value) && qualifier.value.type === 'value' && typeof qualifier.value.content === 'string')
+              return qualifier.value.content;
+          }
+          return undefined;
+        };
+        if (statement.value.type === 'value' && typeof statement.value.content === 'string' && routeOf(statement.value.content) !== null) {
+          address.target = statement.value.content;
+          const key = relation?.slotKey && qualifierValue(relation.slotKey);
+          if (typeof key === 'string') address.key = key;
+        } else if (statement.value.type === 'somevalue') {
+          const sameAs = qualifierValue('schema:sameAs');
+          if (sameAs !== undefined) address.sameAs = sameAs;
+        }
+      }
+      const slot = relationSlotForApi(id, property, relation, address);
+      const group = groups.get(slot) ?? { address, candidates: [] };
+      group.candidates.push(candidate);
+      groups.set(slot, group);
+    }
+    if (!groups.size)
+      groups.set(relationSlotForApi(id, property, relation, {}), { address: {}, candidates: [] });
+    for (const [slot, group] of groups) {
+      for (const candidate of group.candidates)
+        await checked('POST', `/v1/subjects/${id}/candidates/${candidate}:accept`, {
+          context: GLOBAL_CONTEXT,
+          expected_head: null,
+        });
+      const current = expectedHead === undefined ? await latestAdoption(pool, id, property, GLOBAL_CONTEXT, slot) : null;
+      await checked('POST', `/v1/subjects/${id}:adopt`, {
         context: GLOBAL_CONTEXT,
-        expected_head: null,
+        property,
+        ...group.address,
+        expected_head: expectedHead === undefined ? current?.head ?? null : expectedHead,
+        mode: 'replace',
+        selection: group.candidates.map((candidate) => ({ candidate, rank: 'normal' })),
       });
-    await checked('POST', `/v1/subjects/${id}:adopt`, {
-      context: GLOBAL_CONTEXT,
-      property,
-      expected_head: expectedHead,
-      mode: 'replace',
-      selection: candidates.map((candidate) => ({ candidate, rank: 'normal' })),
-    });
+    }
     await drain();
   }
   async function hide(id: string) {
     await checked('POST', `/v1/subjects/${id}:hide`, { reason: 'List disclosure test' });
   }
-  async function batch(command: BatchCommand) {
+  async function batch(command: Extract<BatchCommand, { op: 'create' }>): Promise<{ id: string; revision: number }>;
+  async function batch(command: Extract<BatchCommand, { op: 'propose' }>): Promise<{ candidate: string; revision: number }>;
+  async function batch(command: Extract<BatchCommand, { op: 'retract' }>): Promise<{ revision: number }>;
+  async function batch(command: BatchCommand): Promise<{ id?: string; candidate?: string; revision: number }>;
+  async function batch(command: BatchCommand): Promise<{ id?: string; candidate?: string; revision: number }> {
     const result = await checked('POST', '/v1/subjects:batchWrite', { commands: [command] });
-    expect(result.results[0].status, JSON.stringify(result)).toBeLessThan(300);
-    return result.results[0].value as Record<string, any>;
+    const rows: unknown = result.results;
+    if (!Array.isArray(rows) || rows.length !== 1 || !record(rows[0]))
+      throw new Error('List batch returned an invalid result count');
+    const row = rows[0];
+    expect(row.status, JSON.stringify(result)).toBeLessThan(300);
+    if ((row.status !== 200 && row.status !== 201) || row.key !== command.key || !record(row.value))
+      throw new Error('List batch did not return the requested successful outcome');
+    const value = row.value;
+    if (typeof value.revision !== 'number' || !Number.isSafeInteger(value.revision) || value.revision < 1)
+      throw new Error('List batch returned an invalid revision');
+    const revision = value.revision;
+    if (command.op === 'create') {
+      if (typeof value.id !== 'string' || routeOf(value.id) === null) throw new Error('List batch returned no native subject');
+      return { id: value.id, revision };
+    }
+    if (command.op === 'propose') {
+      if (typeof value.candidate !== 'string' || routeOf(value.candidate) !== routeOf(command.subject))
+        throw new Error('List batch returned no native candidate on its subject route');
+      candidateStatements.set(value.candidate, { subject: command.subject, statement: command.statement });
+      return { candidate: value.candidate, revision };
+    }
+    return { revision };
   }
   async function imported(property: string, content: unknown) {
     const source: Source = {
@@ -223,7 +298,7 @@ export async function createListPresentationFixture(options: { poolMax?: number;
         labels: { en: 'Native imported book' },
       },
     });
-    const id = result.id as string;
+    const id = result.id;
     const proposed = await batch({
       op: 'propose',
       key: randomUUID(),
@@ -243,7 +318,7 @@ export async function createListPresentationFixture(options: { poolMax?: number;
         ],
       },
     });
-    await adopt(id, property, [proposed.candidate as string]);
+    await adopt(id, property, [proposed.candidate]);
     homes.add(partitionOf(routeOf(id)!));
     await drain();
     return { id, source };
