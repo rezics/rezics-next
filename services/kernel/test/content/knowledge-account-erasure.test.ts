@@ -398,7 +398,12 @@ test('account disposition retains all selected revisions and media without priva
       )
     ).rows;
     expect(retained).toHaveLength(2);
-    retained.forEach((row, index) => expect(row).toEqual({ ...selectedBytes[index], author_account_id: null }));
+    expect(selectedBytes).toHaveLength(2);
+    retained.forEach((row, index) => {
+      const selected = selectedBytes[index];
+      if (!selected) throw new Error('selected revision bytes missing');
+      expect(row).toEqual({ ...selected, author_account_id: null });
+    });
     expect(retained.every((row) => row.media_ids.length === 1 && row.media_ids[0] === mediaId)).toBe(true);
     expect(retained.some((row) => row.revision_id === unselected.revisionId)).toBe(false);
     const documents = (

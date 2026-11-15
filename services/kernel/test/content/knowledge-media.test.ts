@@ -30,10 +30,10 @@ async function workspace(subjectId: string, other = false) {
   }, { other });
   expect(document.status).toBe(201);
   const ownerId = (other ? fixture.system.actors.other : fixture.author).actor.accountId;
-  return {
-    ...document.value,
-    privatePath: `/v1/accounts/${ownerId}/knowledge/notebooks/${notebook.value.notebookId}/documents/${document.value.documentId}`,
-  };
+  const privatePath = `/v1/accounts/${ownerId}/knowledge/notebooks/${notebook.value.notebookId}/documents/${document.value.documentId}`;
+  const owned = await fixture.call('GET', privatePath, undefined, { other });
+  expect(owned.status).toBe(200);
+  return { ...owned.value.document, privatePath };
 }
 
 /** Injected prepared-image fixture only. Reservation uses the native HTTP route;
@@ -175,8 +175,10 @@ test('prepared Knowledge images disclose only exact admitted sources and close a
   };
   expect((await download(image.id, selectedAgain, { anonymous: true })).status).toBe(200);
   expect((await download(image.id, publicSource, { anonymous: true })).status).toBe(404);
+  const lifecycle = await fixture.call('GET', `${document.privatePath}/lifecycle`);
+  expect(lifecycle.status).toBe(200);
   await fixture.command(`/v1/knowledge/documents/${document.documentId}:trash`, {
-    expectedGeneration: '0', expectedStructureRevisionId: document.structureRevisionId,
+    expectedGeneration: '0', expectedStructureRevisionId: lifecycle.value.structureRevisionId,
   }, 200);
   expect((await download(image.id, selectedAgain, { anonymous: true })).status).toBe(404);
   expect((await presentations(image.id, selectedAgain, true)).value.images).toEqual([]);
