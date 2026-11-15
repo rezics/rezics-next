@@ -8,12 +8,13 @@ import { importLibraryShelfHref, importLibraryWorkHref } from './navigation';
 import type { ImportLibraryRow } from './presentation';
 import { ImportLibraryVote } from './vote';
 import type { ShelfLayout, ShelfSize } from '../shelf-params';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0 space-y-1">
       <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 break-words">{children}</dd>
+      <dd className="h-auto min-w-0 break-words">{children}</dd>
     </div>
   );
 }
@@ -58,7 +59,7 @@ export function ImportLibraryInspection({
         <p className="text-sm text-muted-foreground">{m.library_vndb_browse_inspection_help()}</p>
         <div className="flex min-w-0 items-center gap-3">
           <SubjectCover subject={row.subject} ratio={rowRatio([row.subject])} />
-          <h3 lang={row.titleLanguage} className="min-w-0 break-words text-lg font-semibold">
+          <h3 lang={row.titleLanguage} className="h-auto min-w-0 break-words text-lg font-semibold">
             {row.title}
           </h3>
         </div>
@@ -98,13 +99,13 @@ export function ImportLibraryInspection({
         <ImportLibraryVote row={row} detailed />
         <div className="flex flex-wrap gap-3">
           {work ? (
-            <a href={work} className={vndbActionClass + ' inline-flex items-center rounded-md border text-primary'}>
+            <a href={work} className={buttonVariants({ variant: 'outline', className: vndbActionClass })}>
               {m.library_vndb_browse_inspection_work()}
             </a>
           ) : null}
           <a
             href={importLibraryShelfHref(locale, layout, size)}
-            className={vndbActionClass + ' inline-flex items-center rounded-md border text-primary'}
+            className={buttonVariants({ variant: 'outline', className: vndbActionClass })}
           >
             {m.library_vndb_library_open()}
           </a>

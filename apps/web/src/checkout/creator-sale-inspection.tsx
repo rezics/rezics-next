@@ -167,7 +167,7 @@ export function CreatorSaleInspection({ sale, locale, close, isCurrent, prepareD
         </p>
       </section>
       <details className="min-w-0 rounded-lg border p-4">
-        <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.creator_review_historical_detail()}</summary>
+        <summary className="cursor-pointer font-medium">{m.creator_review_historical_detail()}</summary>
         <div className="space-y-4 pt-4">
           <p className="text-sm text-muted-foreground">{m.creator_review_historical_terms_hint()}</p>
           <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
@@ -233,7 +233,7 @@ export function CreatorSaleInspection({ sale, locale, close, isCurrent, prepareD
           >
             <SelectTrigger
               id="creator-sale-reference-kind"
-              className="min-h-11 w-full min-w-0 rounded-md border bg-background px-3 py-2 text-sm"
+              className="w-full min-w-0"
             >
               <SelectValue />
             </SelectTrigger>
@@ -248,7 +248,7 @@ export function CreatorSaleInspection({ sale, locale, close, isCurrent, prepareD
           </Select>
         </Field>
         <details className="min-w-0 rounded-lg border p-3">
-          <summary className="min-h-11 cursor-pointer py-2 text-sm font-medium">
+          <summary className="cursor-pointer text-sm font-medium">
             {m.creator_review_reference_preview()}
           </summary>
           <pre className="min-w-0 select-text whitespace-pre-wrap pt-3 font-mono text-sm [overflow-wrap:anywhere]">
@@ -258,7 +258,7 @@ export function CreatorSaleInspection({ sale, locale, close, isCurrent, prepareD
         </details>
         <Button
           variant="outline"
-          className="min-h-11 whitespace-normal"
+          className="h-auto min-h-7 whitespace-normal"
           disabled={copy === 'pending'}
           onClick={copyReference}
         >
@@ -289,7 +289,7 @@ export function CreatorSaleInspection({ sale, locale, close, isCurrent, prepareD
               <Button
                 key={label}
                 variant="outline"
-                className="min-h-11 whitespace-normal"
+                className="h-auto min-h-7 whitespace-normal"
                 nativeButton={false}
                 render={
                   <a

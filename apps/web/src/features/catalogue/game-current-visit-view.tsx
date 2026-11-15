@@ -27,12 +27,12 @@ export function GameVisitNotice({
       )}
       <nav className="flex flex-wrap gap-3">
         {visit?.source && (
-          <a className="inline-flex min-h-11 items-center underline" href={visit.source}>
+          <a className="inline-flex items-center underline" href={visit.source}>
             {m.game_visit_return({}, o)}
           </a>
         )}
         {globalHref && (
-          <a className="inline-flex min-h-11 items-center underline" href={globalHref}>
+          <a className="inline-flex items-center underline" href={globalHref}>
             {m.game_visit_global({}, o)}
           </a>
         )}

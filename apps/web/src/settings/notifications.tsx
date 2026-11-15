@@ -36,7 +36,7 @@ import { useSettingsNavigationDraft } from './reading-navigation';
 import { useSettingsAmbient } from './adapters/ambient-view.tsx';
 import { useSettingsCurrent, useSettingsReadCurrent, useSettingsDisposal } from './settings-session-owner';
 
-const preferenceActionClassName = 'h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal wrap-anywhere';
+const preferenceActionClassName = 'h-auto max-w-full whitespace-normal wrap-anywhere min-h-7';
 
 type NotificationFocusAction = 'restore' | 'apply' | 'keep-current' | 'retry' | 'reload';
 type NotificationFocusRequest = {
@@ -330,8 +330,8 @@ export function NotificationsCard({
                     <input form={formId} type="hidden" name="csrf_token" value={csrfToken ?? ''} />
                     <input form={formId} type="hidden" name="expectedVersion" value={state.known.version} />
                     <input form={formId} type="hidden" name="notificationKind" value={kind} />
-                    <FieldLabel htmlFor={id} className="min-h-11 cursor-pointer has-data-disabled:cursor-not-allowed">
-                      <Field orientation="horizontal" className="min-h-11">
+                    <FieldLabel htmlFor={id} className="cursor-pointer has-data-disabled:cursor-not-allowed">
+                      <Field orientation="horizontal">
                         <FieldContent className="min-w-0">
                           <FieldTitle className="max-w-full wrap-anywhere">{name}</FieldTitle>
                           {policy ? (
@@ -377,7 +377,7 @@ export function NotificationsCard({
                       </Field>
                     </FieldLabel>
                     <Button
-                      className={preferenceActionClassName}
+                      className="h-auto min-h-6 max-w-full whitespace-normal wrap-anywhere"
                       type="submit"
                       form={formId}
                       size="sm"

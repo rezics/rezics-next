@@ -15,7 +15,6 @@ import {
   type LocaleDestination,
   type LocaleNavigationLocation,
 } from './locale-navigation/routing';
-const headerControlClass = 'h-11 rounded-full border border-border/60 focus-visible:ring-2 focus-visible:ring-ring';
 const noSubscription = () => () => {};
 function useHydrated() {
   return useSyncExternalStore(
@@ -155,15 +154,8 @@ export function ThemeControl() {
         },
       ]}
       trigger={
-        <Button
-          className={headerControlClass}
-          variant="ghost"
-          size="icon-lg"
-          disabled={!hydrated}
-          aria-label={m.shell_theme()}
-          title={m.shell_theme()}
-        >
-          <Icon aria-hidden="true" className="size-5" />
+        <Button variant="ghost" size="icon" disabled={!hydrated} aria-label={m.shell_theme()} title={m.shell_theme()}>
+          <Icon aria-hidden="true" />
         </Button>
       }
     />
@@ -295,12 +287,8 @@ export function LanguageControl() {
           ]}
           trigger={
             <Button
-              className={cn(
-                headerControlClass,
-                'h-auto min-h-11 max-w-36 whitespace-normal break-words bg-transparent px-3 py-2 leading-tight hover:bg-accent/60',
-              )}
+              className="h-auto min-h-7 max-w-36 whitespace-normal break-words"
               variant="ghost"
-              size="lg"
               disabled={!hydrated || pendingLocale !== null}
               aria-label={`${m.shell_language({}, { locale })}: ${names[locale]}`}
               title={`${m.shell_language({}, { locale })}: ${names[locale]}`}
@@ -331,7 +319,7 @@ export function LanguageControl() {
       ) : null}
       <noscript>
         <details>
-          <summary className="min-h-11 cursor-pointer rounded-lg border border-border/60 px-3 py-2">
+          <summary className="min-h-7 cursor-pointer rounded-md border border-border px-2 py-0.5 text-xs">
             {m.shell_language({}, { locale })}: {names[locale]}
           </summary>
           {destinations.every((destination) => destination.kind === 'home') ? (
@@ -346,7 +334,7 @@ export function LanguageControl() {
                 lang={destination.locale}
                 href={destination.href}
                 aria-label={optionLabel(destination)}
-                className="min-h-11 break-words px-3 py-2"
+                className="block min-h-7 break-words rounded-md px-2 py-0.5 text-xs"
               >
                 {names[destination.locale]}
               </a>

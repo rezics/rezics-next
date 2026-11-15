@@ -251,7 +251,7 @@ export function LiteraryCurrentAssertionInspection({
           disabled={busy}
           onValueChange={(nextSelectValue) => choose(nextSelectValue ?? '')}
         >
-          <SelectTrigger aria-label={m.literary_visit_statement({}, o)} className="w-full min-w-0 min-h-11">
+          <SelectTrigger aria-label={m.literary_visit_statement({}, o)} className="w-full min-w-0">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -302,7 +302,7 @@ export function LiteraryCurrentAssertionInspection({
           )}
           {!!revealed.statement.references.length && (
             <details>
-              <summary className="min-h-11 cursor-pointer py-2">{m.correction_references({}, o)}</summary>
+              <summary className="cursor-pointer">{m.correction_references({}, o)}</summary>
               <ol className="space-y-3">
                 {revealed.statement.references.map((reference, index) => (
                   <li key={index} className="border-s-2 border-border ps-3">

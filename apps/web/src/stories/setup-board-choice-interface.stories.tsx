@@ -95,12 +95,12 @@ function BoardChoiceExample({
     <div dir={direction} className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-6 p-6 text-foreground">
       {replaceable ? (
         <div className="flex flex-wrap gap-3">
-          <Button className="h-auto min-h-11 whitespace-normal" onClick={() => setSourceRevision((value) => value + 1)}>
+          <Button className="h-auto min-h-7 whitespace-normal" onClick={() => setSourceRevision((value) => value + 1)}>
             Replace display source
           </Button>
           <Button
-            className="h-auto min-h-11 whitespace-normal"
-            onClick={() => setScheme((value) => (value === schemeId ? otherSchemeId : schemeId))}
+ className="h-auto min-h-7 whitespace-normal"
+ onClick={() => setScheme((value) => (value === schemeId ? otherSchemeId : schemeId))}
           >
             Change supplied scheme
           </Button>

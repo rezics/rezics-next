@@ -513,8 +513,8 @@ function SignupActivePageState({
       <AuthPage heading={m.auth_signup_heading()}>
         {departure}
         <AuthTask>
-          <AuthTaskSection className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
-            <AuthNotice className="max-w-prose border-primary/30 bg-primary/5">
+          <AuthTaskSection className="rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10">
+            <AuthNotice className="max-w-prose">
               <p role="status">{m.auth_signup_already_signed_in()}</p>
             </AuthNotice>
             <AuthHelp aria-label={m.auth_signup_continue()}>
@@ -552,7 +552,7 @@ function SignupActivePageState({
       <AuthPage heading={m.auth_signup_heading()}>
         {departure}
         <AuthTask>
-          <AuthTaskSection className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
+          <AuthTaskSection className="rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10">
             {phase.kind === 'uncertain' ? (
               <SignupUncertainty phase={phase} query={journey.query} follow={follow} unavailable />
             ) : phase.kind === 'dispatched' ? (
@@ -632,16 +632,15 @@ function SignupCompletion({
   }, [phase.kind]);
   return (
     <AuthTask aria-busy={phase.kind === 'signing-in'}>
-      <AuthTaskSection className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
-        <AuthNotice className="max-w-prose border-primary/30 bg-primary/5">
+      <AuthTaskSection className="rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10">
+        <AuthNotice className="max-w-prose">
           <p role="status">{phase.kind === 'signing-in' ? m.auth_signup_signing_in() : m.auth_signup_created()}</p>
         </AuthNotice>
         {phase.kind === 'sign-in-failed' ? (
           <ErrorAlert
             ref={alert}
             tabIndex={-1}
-            className="max-w-prose focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-4
-              focus:ring-offset-background"
+            className="max-w-prose outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
           >
             <p>{phase.message}</p>
           </ErrorAlert>
@@ -663,11 +662,11 @@ function SignupRefusal({
 }) {
   return (
     <AuthTask>
-      <AuthTaskSection className="rounded-xl border border-destructive/25 bg-card p-4 shadow-sm sm:p-5">
+      <AuthTaskSection className="rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10">
         <div
           tabIndex={-1}
           id="signup-refusal"
-          className="max-w-prose rounded-lg focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-4 focus:ring-offset-background"
+          className="max-w-prose rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
         >
           <ErrorAlert>
             <p>{message}</p>
@@ -697,7 +696,7 @@ function SignupUncertainty({
   return (
     <div
       id={uncertainPanelId}
-      className="grid min-w-0 gap-4 rounded-xl border border-destructive/25 bg-card p-4 shadow-sm [overflow-wrap:anywhere] sm:p-5"
+      className="grid min-w-0 gap-4 rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10 [overflow-wrap:anywhere]"
     >
       <ErrorAlert tabIndex={-1} className="max-w-prose">
         <h2 className="text-lg font-semibold tracking-tight">{m.auth_signup_uncertain_title()}</h2>
@@ -894,11 +893,11 @@ function SignupForm({
   return (
     <>
       {journey.freshAfterReturn === 'created' ? (
-        <AuthNotice className="max-w-prose border-primary/30 bg-primary/5" role="status">
+        <AuthNotice className="max-w-prose" role="status">
           {m.auth_signup_return_new_attempt_created()}
         </AuthNotice>
       ) : journey.freshAfterReturn === 'unresolved' ? (
-        <AuthNotice className="max-w-prose border-primary/30 bg-primary/5" role="status">
+        <AuthNotice className="max-w-prose" role="status">
           {m.auth_signup_return_new_attempt()}
         </AuthNotice>
       ) : null}
@@ -915,12 +914,12 @@ function SignupForm({
         {draftForm && values ? (
           <section
             aria-label={`${m.auth_signup_handle()}, ${m.auth_signup_email()}, ${m.auth_signup_password()}`}
-            className="grid min-w-0 gap-4 rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5"
+            className="grid min-w-0 gap-4 rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10"
           >
             <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <span
                 aria-hidden="true"
-                className="grid size-7 shrink-0 place-items-center rounded-full bg-muted text-foreground"
+                className="grid size-6 shrink-0 place-items-center rounded-lg bg-muted text-xs text-foreground"
               >
                 01
               </span>
@@ -935,7 +934,7 @@ function SignupForm({
               onChange={change}
               handleNotice={
                 phase.kind === 'handle-unavailable' ? (
-                  <ErrorAlert className="max-w-prose border-destructive/30">
+                  <ErrorAlert className="max-w-prose">
                     <p>{m.auth_signup_handle_correction_body()}</p>
                     <AuthActions>
                       <Button type="button" disabled={!handleCorrectionReady} onClick={useCorrectedHandle}>
@@ -952,7 +951,7 @@ function SignupForm({
           <div
             ref={alert}
             tabIndex={-1}
-            className="rounded-lg focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-4 focus:ring-offset-background"
+            className="rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
           >
             <SignupUncertainty
               phase={phase}
@@ -965,25 +964,25 @@ function SignupForm({
         ) : null}
         <section
           aria-label={m.auth_signup_turnstile_required()}
-          className="grid min-w-0 gap-4 rounded-xl border border-border bg-muted/20 p-4 sm:p-5"
+          className="grid min-w-0 gap-4 rounded-lg bg-muted/40 p-4 ring-1 ring-foreground/10"
         >
           <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             <span
               aria-hidden="true"
-              className="grid size-7 shrink-0 place-items-center rounded-full bg-muted text-foreground"
+              className="grid size-6 shrink-0 place-items-center rounded-lg bg-muted text-xs text-foreground"
             >
               02
             </span>
             <span>{m.auth_signup_turnstile_required()}</span>
           </div>
           <Field
-            className="min-w-0 gap-3 rounded-lg border border-border bg-background p-3 sm:p-4"
+            className="min-w-0 gap-3"
             data-invalid={Boolean(turnstileError) || challengeStatus === 'failed'}
           >
             <div
               id="signup-turnstile"
               tabIndex={-1}
-              className="rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-4 focus:ring-offset-background"
+              className="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
               aria-describedby={['signup-verification-hint', turnstileError ? turnstileErrorId : null]
                 .filter(Boolean)
                 .join(' ')}
@@ -1031,12 +1030,12 @@ function SignupForm({
         {phase.kind === 'dispatched' ? (
           <section
             aria-label={m.auth_signup_heading()}
-            className="grid min-w-0 gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4"
+            className="grid min-w-0 gap-3 rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10"
           >
             <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <span
                 aria-hidden="true"
-                className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/10 text-foreground"
+                className="grid size-6 shrink-0 place-items-center rounded-lg bg-muted text-xs text-foreground"
               >
                 03
               </span>
@@ -1049,12 +1048,12 @@ function SignupForm({
         ) : phase.kind === 'draft' ? (
           <section
             aria-label={m.auth_signup_heading()}
-            className="grid min-w-0 gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 sm:p-5"
+            className="grid min-w-0 gap-3 rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10"
           >
             <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <span
                 aria-hidden="true"
-                className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/10 text-foreground"
+                className="grid size-6 shrink-0 place-items-center rounded-lg bg-muted text-xs text-foreground"
               >
                 03
               </span>

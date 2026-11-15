@@ -57,7 +57,7 @@ import { CharacterIdentityVisit } from '../catalogue/character-identity-visit/vi
 import { identityProperty } from '../catalogue/character-relationships/reading';
 
 const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const productionRead: ConnectionRead = (data, signal) => loadSubjectConnections({ data, signal });
 type Viewer = { state: string; subject?: string | null; csrfToken: string | null };
 
@@ -449,7 +449,7 @@ function ConnectionsReading({
                     void window.load(group, { stream: value ?? '' });
                   }}
                 >
-                  <SharedSelect.SelectTrigger className="min-h-11 w-full max-w-full">
+                  <SharedSelect.SelectTrigger className="w-full max-w-full">
                     <SharedSelect.SelectValue />
                   </SharedSelect.SelectTrigger>
                   <SharedSelect.SelectContent>
@@ -717,7 +717,7 @@ function NativeNeighbourhood({
                 <label
                   key={stream.property}
                   htmlFor={`${id}-${index}`}
-                  className="flex min-h-11 min-w-0 items-center gap-3 [overflow-wrap:anywhere]"
+                  className="flex min-w-0 items-center gap-3 [overflow-wrap:anywhere]"
                 >
                   <input
                     id={`${id}-${index}`}
@@ -746,7 +746,7 @@ function NativeNeighbourhood({
                 ]}
                 onValueChange={(value) => value !== null && setDepth(value)}
               >
-                <SharedSelect.SelectTrigger className="min-h-11">
+                <SharedSelect.SelectTrigger>
                   <SharedSelect.SelectValue />
                 </SharedSelect.SelectTrigger>
                 <SharedSelect.SelectContent>

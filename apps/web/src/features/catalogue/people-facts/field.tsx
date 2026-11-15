@@ -1,9 +1,14 @@
 import { useRef, useState } from 'react';
+import { Input } from '@rezics/ui/shadcn/input';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { m } from '../../../paraglide/messages.js';
 import { ProfileFact, type ProfileReading } from '../person-reader/reader';
 import type { PersonField } from '../person-reader/model';
 import { factFieldAnchor, factVisitBounds } from './model';
 import { factControl, useFactVisit } from './visit';
+
+const factButton = cn(buttonVariants({ variant: 'outline' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]');
 
 /** Read only visible assertion text: closed evidence and unrevealed spoilers never enter a filter. */
 function displayedText(node: Node): string {
@@ -65,12 +70,12 @@ export function PeopleFactField({ field, reading }: { field: PersonField; readin
               <p className="text-sm text-muted-foreground">{m.people_facts_scope({}, o)}</p>
               <label className="block space-y-1">
                 <span>{m.people_facts_filter({}, o)}</span>
-                <input
+                <Input
                   disabled={visit?.inspecting}
                   type="search"
                   maxLength={factVisitBounds.filter}
                   value={filter}
-                  className="block min-h-11 w-full rounded border p-2"
+                  className="w-full"
                   onChange={(event) => {
                     const query = event.currentTarget.value.slice(0, factVisitBounds.filter);
                     setFilter(query);
@@ -95,7 +100,7 @@ export function PeopleFactField({ field, reading }: { field: PersonField; readin
                   }}
                 />
               </label>
-              <button type="button" className={factControl} disabled={visit?.inspecting} onClick={reset}>
+              <button type="button" className={factButton} disabled={visit?.inspecting} onClick={reset}>
                 {m.people_facts_reset({}, o)}
               </button>
               {matches?.size === 0 && <p role="status">{m.people_facts_empty({}, o)}</p>}
@@ -122,7 +127,7 @@ export function PeopleFactField({ field, reading }: { field: PersonField; readin
             <nav aria-label={m.people_facts_window({}, o)} className="flex flex-wrap gap-3">
               <button
                 type="button"
-                className={factControl}
+                className={factButton}
                 disabled={visit?.inspecting || offset === 0}
                 onClick={() => move(Math.max(0, offset - factVisitBounds.rows))}
               >
@@ -130,7 +135,7 @@ export function PeopleFactField({ field, reading }: { field: PersonField; readin
               </button>
               <button
                 type="button"
-                className={factControl}
+                className={factButton}
                 disabled={visit?.inspecting || offset + factVisitBounds.rows >= admitted.length}
                 onClick={() => move(offset + factVisitBounds.rows)}
               >
@@ -138,7 +143,7 @@ export function PeopleFactField({ field, reading }: { field: PersonField; readin
               </button>
               <button
                 type="button"
-                className={factControl}
+                className={factButton}
                 disabled={visit?.inspecting}
                 onClick={() => {
                   reset();
@@ -152,7 +157,7 @@ export function PeopleFactField({ field, reading }: { field: PersonField; readin
           ) : visit?.projection ? (
             <button
               type="button"
-              className={factControl}
+              className={factButton}
               disabled={visit?.inspecting}
               onClick={() => {
                 reset();

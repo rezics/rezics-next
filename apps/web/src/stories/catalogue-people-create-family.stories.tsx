@@ -1,6 +1,7 @@
 import { chooseSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { Button } from '@rezics/ui/shadcn/button';
 import { useMemo, useState } from 'react';
 import { PeopleProfileEditor } from '../features/catalogue/people-profile-view';
 import { peopleProfiles, type PeopleRead } from '../features/catalogue/people-profile';
@@ -100,13 +101,9 @@ function CreateFamilyStory({
       <AppShell>
         <div dir={rtl ? 'rtl' : 'ltr'} className="min-w-0 space-y-8">
           {retire && (
-            <button
-              type="button"
-              className="min-h-11 underline focus-visible:outline-2"
-              onClick={() => setRetired(true)}
-            >
+            <Button type="button" onClick={() => setRetired(true)}>
               {m.account_sign_out()}
-            </button>
+            </Button>
           )}
           <CandidateReaderBoundary
             observed={

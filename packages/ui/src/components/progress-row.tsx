@@ -10,7 +10,7 @@ export function ProgressRow({ value, label, menu }: { value: number | null; labe
         <Progress
           value={value * 100}
           aria-label={label}
-          className="min-w-0 flex-1 [&_[data-slot=progress-track]]:h-1"
+          className="min-w-0 flex-1"
         />
       )}
       <span className="shrink-0 tabular-nums">{label}</span>

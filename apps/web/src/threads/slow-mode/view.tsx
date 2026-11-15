@@ -20,7 +20,7 @@ import {
 import { rememberSlowModeRead, useSlowModePort, useSlowModeRead, type SlowModeVisit } from './caller';
 
 const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full shrink px-4 py-2 leading-snug whitespace-normal [overflow-wrap:anywhere] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
+  'h-auto min-h-7 max-w-full shrink leading-snug whitespace-normal [overflow-wrap:anywhere]';
 
 function intervalLabel(seconds: SlowModeInterval): string {
   return seconds === 0 ? m.slow_mode_interval_off() : m.slow_mode_interval_seconds({ seconds });
@@ -346,9 +346,9 @@ function SlowModeSettingForm({
               aria-labelledby={`${ids}-legend`}
             >
               {intervals.map((interval) => (
-                <Field key={interval} orientation="horizontal" className="min-h-11 items-center">
+                <Field key={interval} orientation="horizontal" className="items-center">
                   <RadioGroupItem id={`${ids}-${interval}`} value={String(interval)} />
-                  <FieldLabel htmlFor={`${ids}-${interval}`} className="min-h-11 items-center">
+                  <FieldLabel htmlFor={`${ids}-${interval}`} className="items-center">
                     {intervalLabel(interval)}
                   </FieldLabel>
                 </Field>

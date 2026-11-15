@@ -1,9 +1,9 @@
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Button } from '@rezics/ui/shadcn/button';
 import { useEffect, useId, useRef } from 'react';
 import { m } from '../../paraglide/messages.js';
 import type { ChooserCollectionRow } from '../subject-collection-journey/model';
 
-const buttonClass = `${buttonVariants({ variant: 'outline' })} h-auto min-h-[44px] min-w-0 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]`;
+const buttonClass = 'h-auto min-h-7 min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 /** Read the supplied destination without hydrating or deriving any additional facts. */
 export function ReceivedCollectionDetails({
@@ -44,7 +44,7 @@ export function ReceivedCollectionDetails({
     <section
       data-collection-inspection
       aria-labelledby={titleId}
-      className="mt-3 min-w-0 space-y-3 rounded-md border border-border bg-muted/30 p-3 text-sm [overflow-wrap:anywhere]"
+      className="h-auto mt-3 min-w-0 space-y-3 rounded-md border border-border bg-muted/30 p-3 text-sm [overflow-wrap:anywhere]"
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.preventDefault();
@@ -60,9 +60,9 @@ export function ReceivedCollectionDetails({
             {row.title}
           </h4>
         </div>
-        <button type="button" className={buttonClass} onClick={onClose}>
+        <Button type="button" variant="outline" className={buttonClass} onClick={onClose}>
           {m.library_destination_close()}
-        </button>
+        </Button>
       </div>
       <dl className="min-w-0 space-y-3">
         <div>
@@ -94,9 +94,9 @@ export function ReceivedCollectionDetails({
         </div>
       </dl>
       <p className="text-muted-foreground">{m.library_destination_add_meaning()}</p>
-      <button type="button" className={buttonClass} disabled={!canChoose} onClick={onChoose}>
+      <Button type="button" variant="outline" className={buttonClass} disabled={!canChoose} onClick={onChoose}>
         {m.library_destination_choose()}
-      </button>
+      </Button>
     </section>
   );
 }

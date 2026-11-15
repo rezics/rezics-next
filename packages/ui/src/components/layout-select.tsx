@@ -26,7 +26,8 @@ export function LayoutSelect<Layout extends string>({
       <SelectTrigger
         aria-label={label}
         data-slot="layout-select"
-        className={cn('min-h-11 min-w-0 max-w-full sm:min-h-8', className)}
+        size="default"
+        className={cn('min-w-0 max-w-full', className)}
       >
         <SelectValue />
       </SelectTrigger>

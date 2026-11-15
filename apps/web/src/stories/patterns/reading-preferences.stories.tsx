@@ -215,10 +215,10 @@ function ReadingLeaveEditor() {
     <SettingsNavigationProvider>
       <div className="mx-auto flex max-w-2xl flex-col gap-4">
         <nav aria-label={m.settings_sections_label()} className="flex flex-wrap gap-4">
-          <Link to="/" className="min-h-11 content-center underline">
+          <Link to="/" className="underline">
             {m.nav_home()}
           </Link>
-          <Link to="." search={{ section: 'reading' }} hash="reading" className="min-h-11 content-center underline">
+          <Link to="." search={{ section: 'reading' }} hash="reading" className="underline">
             {m.settings_reading_heading()}
           </Link>
         </nav>

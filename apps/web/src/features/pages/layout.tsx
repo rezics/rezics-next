@@ -1,5 +1,5 @@
 import { APPEARANCE, platformRegistry } from '@rezics/composition';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { createContext, isValidElement, useContext, type ReactNode } from 'react';
 import { pageText, usePageLocale, usePageMessages } from './data';
@@ -13,13 +13,10 @@ export const pageDefinitions = platformRegistry.components.map((component) => ({
 const rootClass = [
   'flex w-full flex-col gap-8 font-sans text-base text-foreground',
   'data-[density=compact]:gap-4',
-  'data-[surface=cards]:[&>*]:rounded-2xl data-[surface=cards]:[&>*]:border data-[surface=cards]:[&>*]:border-border/60',
+  'data-[surface=cards]:[&>*]:rounded-lg data-[surface=cards]:[&>*]:border data-[surface=cards]:[&>*]:border-border',
   'data-[surface=cards]:[&>*]:bg-card data-[surface=cards]:[&>*]:text-card-foreground',
-  'data-[surface=cards]:[&>*]:px-6 data-[surface=cards]:[&>*]:py-5 data-[surface=cards]:[&>*]:shadow-(--aura-shadow-card)',
+  'data-[surface=cards]:[&>*]:px-6 data-[surface=cards]:[&>*]:py-5',
   'data-[density=compact]:data-[surface=cards]:[&>*]:px-4 data-[density=compact]:data-[surface=cards]:[&>*]:py-3',
-  'data-[surface=cards]:data-[radius=sm]:[&>*]:rounded-lg',
-  'data-[surface=cards]:data-[radius=md]:[&>*]:rounded-2xl',
-  'data-[surface=cards]:data-[radius=lg]:[&>*]:rounded-3xl',
 ].join(' ');
 
 const stackGap = {
@@ -214,7 +211,7 @@ function SearchBox(props: Record<string, unknown>) {
       role="search"
       method="get"
       action={`/${encodeURIComponent(locale)}/search`}
-      className="flex min-w-0 w-full max-w-3xl flex-wrap items-start gap-2"
+      className="flex min-w-0 w-full max-w-3xl flex-wrap items-center gap-2"
     >
       <Input
         type="search"
@@ -222,13 +219,9 @@ function SearchBox(props: Record<string, unknown>) {
         placeholder={placeholder.text}
         aria-label={placeholder.text}
         lang={placeholder.lang}
-        className="h-12 min-w-0 max-w-full flex-[1_1_16rem] rounded-xl px-4 text-base"
+        className="min-w-0 max-w-full flex-[1_1_16rem]"
       />
-      <Button
-        type="submit"
-        size="lg"
-        className="h-auto min-h-12 min-w-11 max-w-full shrink rounded-xl px-5 py-3 text-base whitespace-normal"
-      >
+      <Button type="submit" className="h-auto min-h-7 max-w-full shrink whitespace-normal">
         <span className="min-w-0 wrap-anywhere">{messages.search}</span>
       </Button>
     </form>
@@ -249,7 +242,7 @@ function LinkGrid(props: Record<string, unknown>) {
             <a
               href={href}
               lang={label.lang}
-              className="flex min-h-14 min-w-0 w-full items-center justify-center rounded-xl border border-border/70 bg-card px-4 py-3 text-center font-semibold text-card-foreground shadow-sm transition-colors hover:border-link/50 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className={`${buttonVariants({ variant: 'outline' })} h-auto min-h-7 w-full max-w-full whitespace-normal text-center`}
             >
               <span className="min-w-0 wrap-anywhere">{label.text}</span>
             </a>

@@ -7,6 +7,7 @@ import { CollectionNoteReader } from '../library/collection-note-reader';
 import { CollectionReadMembers } from '../library/collection-page';
 import { subjectOf, type CollectionMember } from '../library/reads';
 import { m } from '../paraglide/messages.js';
+import { Button } from '@rezics/ui/shadcn/button';
 
 const meta = {
   title: 'Library/Collection Notes',
@@ -139,9 +140,9 @@ function WithdrawnNotes() {
   const [retired, setRetired] = useState(false);
   return (
     <>
-      <button type="button" className="m-4 min-h-11" onClick={() => setRetired(true)}>
+      <Button type="button" className="m-4" variant="outline" size="sm" onClick={() => setRetired(true)}>
         Withdraw supplied rows
-      </button>
+      </Button>
       {(['occurrence', 'list', 'grid'] as const).map((presentation) => (
         <ReadPresentation key={presentation} presentation={presentation} items={retired ? [] : members.slice(0, 2)} />
       ))}

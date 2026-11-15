@@ -55,7 +55,7 @@ export function RealmParticipationView({
         </ContentItemHeading>
         <div data-content-item-slot="state" className="min-w-0 space-y-2 empty:hidden">
           {pending ? (
-            <Badge variant="secondary" className="h-auto max-w-full whitespace-normal py-1 text-start">
+            <Badge variant="secondary" className="h-auto min-h-5 max-w-full whitespace-normal text-start">
               {m.realm_state_pending()}
             </Badge>
           ) : null}
@@ -104,16 +104,15 @@ export function RealmParticipationView({
         >
           {state === 'member' && !problem ? (
             <>
-              <Badge className="h-auto max-w-full whitespace-normal py-1 text-start">
+              <Badge className="h-auto min-h-5 max-w-full whitespace-normal text-start">
                 {memberLabel ?? m.realm_state_member()}
               </Badge>
               {!leaveRecovery && (admittedAction === undefined || admittedAction === 'leave') ? (
                 <Button
                   key="leave"
-                  size="lg"
                   type="button"
                   variant="outline"
-                  className="h-auto min-h-11 min-w-11 max-w-full bg-background px-6 py-2 text-start text-base whitespace-normal text-foreground dark:bg-background"
+                  className="h-auto min-h-7 max-w-full text-start whitespace-normal"
                   disabled={!ready || busy}
                   onClick={() => onChange('leave')}
                 >
@@ -129,9 +128,8 @@ export function RealmParticipationView({
           (admittedAction === undefined || admittedAction === 'join') ? (
             <Button
               key="join"
-              size="lg"
               type="button"
-              className="h-auto min-h-11 min-w-11 max-w-full px-6 py-2 text-start text-base whitespace-normal"
+              className="h-auto min-h-7 max-w-full text-start whitespace-normal"
               disabled={!ready || busy}
               onClick={() => onChange('join')}
             >
@@ -143,7 +141,7 @@ export function RealmParticipationView({
               key="retry"
               type="button"
               variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full bg-background py-2 text-start whitespace-normal text-foreground dark:bg-background"
+              className="h-auto min-h-7 max-w-full text-start whitespace-normal"
               disabled={busy || refresh === 'checking' || (problem?.outcome === 'closed' && !ready)}
               onClick={onRetry}
             >

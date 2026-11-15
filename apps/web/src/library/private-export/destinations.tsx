@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { m } from '../../paraglide/messages.js';
 import { localizeHref } from '../../paraglide/runtime.js';
 import { actionClass } from './controls';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 
 export type ArchiveRecoveryDestination = 'export' | 'collections' | 'entries' | 'progress';
 
@@ -48,7 +49,7 @@ export function ArchiveRecoveryDestinations({ current }: { current?: ArchiveReco
             {destinations.map((item) => (
               <li key={item.href} className="space-y-1 py-3 first:pt-0">
                 <Link
-                  className={`${actionClass} -ml-3 inline-flex items-center font-medium underline underline-offset-4`}
+                  className={buttonVariants({ variant: 'link', className: `${actionClass} -ml-3` })}
                   to={item.href}
                   search={{}}
                   preload={false}
@@ -73,7 +74,7 @@ export function ArchiveRecoveryDestinations({ current }: { current?: ArchiveReco
         .map((item) => (
           <a
             key={item.href}
-            className={`${actionClass} inline-flex items-center underline`}
+            className={buttonVariants({ variant: 'link', className: actionClass })}
             href={localizeHref(item.href)}
           >
             {item.label()}

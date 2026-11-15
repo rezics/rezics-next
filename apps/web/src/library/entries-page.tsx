@@ -1,7 +1,7 @@
 import { useCallback, useState, type ReactNode, type MouseEventHandler } from 'react';
 import { ShelfEmpty } from '@rezics/ui/shelf-empty';
 import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { EntryRestoreFeedback, EntryUndoForm } from './entry-undo';
 import { ContinueSection, useContinueRefresh } from './continue';
 import { LibraryNavigation } from './library-nav';
@@ -60,7 +60,7 @@ function LabelShelfWindowActions({ links }: { links: LabelShelfWindowLinks }) {
         <a
           href={links.previous.href}
           onClick={links.previous.onClick}
-          className={`${buttonVariants({ variant: 'outline', size: 'lg' })} min-h-11 min-w-11`}
+          className={`${buttonVariants({ variant: 'outline', size: 'sm' })}`}
         >
           {m.library_label_previous_page()}
         </a>
@@ -69,7 +69,7 @@ function LabelShelfWindowActions({ links }: { links: LabelShelfWindowLinks }) {
         <a
           href={links.first.href}
           onClick={links.first.onClick}
-          className={`${buttonVariants({ variant: 'outline', size: 'lg' })} min-h-11 min-w-11`}
+          className={`${buttonVariants({ variant: 'outline', size: 'sm' })}`}
         >
           {m.library_label_first_page()}
         </a>
@@ -78,7 +78,7 @@ function LabelShelfWindowActions({ links }: { links: LabelShelfWindowLinks }) {
         <a
           href={links.next.href}
           onClick={links.next.onClick}
-          className={`${buttonVariants({ variant: 'outline', size: 'lg' })} min-h-11 min-w-11`}
+          className={`${buttonVariants({ variant: 'outline', size: 'sm' })}`}
         >
           {m.library_more()}
         </a>
@@ -87,7 +87,7 @@ function LabelShelfWindowActions({ links }: { links: LabelShelfWindowLinks }) {
         <a
           href={links.retry.href}
           onClick={links.retry.onClick}
-          className={`${buttonVariants({ variant: 'outline', size: 'lg' })} min-h-11 min-w-11`}
+          className={`${buttonVariants({ variant: 'outline', size: 'sm' })}`}
         >
           {m.library_label_retry_page()}
         </a>
@@ -214,7 +214,7 @@ export function PersonalLibraryPage({
               {summary ? <ShelfSummaryCount page={summary.page} locale={locale} /> : null}
             </p>
           </div>
-          <a href={`/${locale}/search`} className={buttonVariants({ size: 'lg' })}>
+          <a href={`/${locale}/search`} className={buttonVariants()}>
             {m.library_browse()}
           </a>
         </div>
@@ -414,7 +414,7 @@ export function PersonalLibraryPage({
           {!page.readState ? windowRetry : null}
           {windowControls?.previous !== undefined ? (
             <a
-              className={`${buttonVariants({ variant: 'outline' })} min-h-11 min-w-11`}
+              className={`${buttonVariants({ variant: 'outline', size: 'sm' })}`}
               aria-disabled={windowControls.busy}
               href={windowControls.href(windowControls.previous)}
               onClick={(event) => {
@@ -428,7 +428,7 @@ export function PersonalLibraryPage({
           ) : null}
           {windowControls?.first ? (
             <a
-              className={`${buttonVariants({ variant: 'outline' })} min-h-11 min-w-11`}
+              className={`${buttonVariants({ variant: 'outline', size: 'sm' })}`}
               aria-disabled={windowControls.busy}
               href={windowControls.href(null)}
               onClick={(event) => {
@@ -442,7 +442,7 @@ export function PersonalLibraryPage({
           ) : null}
           {page.next && !page.readState ? (
             <a
-              className={`${buttonVariants({ variant: 'outline' })} min-h-11 min-w-11`}
+              className={`${buttonVariants({ variant: 'outline', size: 'sm' })}`}
               aria-disabled={windowControls?.busy}
               href={
                 windowControls ? windowControls.href(page.next) : shelfHref(locale, { ...firstPage, cursor: page.next })
@@ -640,9 +640,9 @@ export function LabelShelfPage({
             <input type="hidden" name="idempotencyKey" value={page.undoKey} />
             <input type="hidden" name="revision" value={page.undo.revision} />
             <input type="hidden" name="csrf_token" value={page.csrfToken ?? ''} />
-            <button type="submit" className={buttonVariants({ variant: 'outline' })}>
+            <Button type="submit" variant="outline" size="sm">
               {m.library_subject_label_undo()}
-            </button>
+            </Button>
           </form>
         </Exposure>
       ) : null}

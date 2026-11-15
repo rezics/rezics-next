@@ -49,7 +49,7 @@ import {
 } from './reading-preferences';
 import { useSettingsCurrent, useSettingsReadCurrent } from './settings-session-owner';
 
-const preferenceActionClassName = 'h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal wrap-anywhere';
+const preferenceActionClassName = 'h-auto max-w-full whitespace-normal wrap-anywhere min-h-7';
 
 const levels: {
   value: SpoilerLevel;

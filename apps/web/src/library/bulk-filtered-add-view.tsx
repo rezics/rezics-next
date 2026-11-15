@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { CollectionMoveChooser } from './collection-move-chooser';
@@ -325,7 +325,10 @@ function FilteredAddLifetime({
                 {phaseLabel(operation.phase)} · {m.library_filtered_add_deadline({ deadline: operation.expiresAt })}
               </p>
               {operation.reason ? <p role="status">{reasonLabel(operation.reason)}</p> : null}
-              <a className="underline" href={`/${getLocale()}/library/operations/${encodeURIComponent(operation.id)}`}>
+              <a
+                className={buttonVariants({ variant: 'link', size: 'sm' })}
+                href={`/${getLocale()}/library/operations/${encodeURIComponent(operation.id)}`}
+              >
                 {m.library_filtered_add_recovery()}
               </a>
             </>

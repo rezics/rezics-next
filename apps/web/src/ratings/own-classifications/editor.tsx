@@ -1,6 +1,7 @@
 import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
 import type { OwnVotesDepartureControl } from '../own-votes/departure';
@@ -148,7 +149,7 @@ export function ClassificationEditor({
                 value !== null && current() && setAssessment(value === 'oppose' ? 'oppose' : 'support')
               }
             >
-              <SharedSelect.SelectTrigger className="min-h-11 max-w-full rounded border bg-background p-2">
+              <SharedSelect.SelectTrigger className="w-full max-w-full">
                 <SharedSelect.SelectValue />
               </SharedSelect.SelectTrigger>
               <SharedSelect.SelectContent>
@@ -163,20 +164,18 @@ export function ClassificationEditor({
               </SharedSelect.SelectContent>
             </SharedSelect.Select>
           </label>
-          <label className="flex min-h-11 items-center gap-2">
-            <input
-              type="checkbox"
+          <label className="flex items-center gap-2">
+            <Checkbox
               checked={falsePositive}
-              onChange={(event) => current() && setFalsePositive(event.currentTarget.checked)}
+              onCheckedChange={(checked) => current() && setFalsePositive(checked === true)}
             />
             {m.subject_classification_assessment_lie({}, options)}
           </label>
-          <Button className="min-h-11 whitespace-normal" disabled={!dirty} onClick={() => void send('PUT')}>
+          <Button className="h-auto min-h-7 max-w-full whitespace-normal" disabled={!dirty} onClick={() => void send('PUT')}>
             {m.subject_classification_assessment_change({}, options)}
           </Button>
           {dirty ? (
             <Button
-              className="min-h-11"
               variant="outline"
               onClick={() => {
                 if (current()) {
@@ -191,7 +190,7 @@ export function ClassificationEditor({
         </fieldset>
       ) : null}
       {clearAllowed && !locked ? (
-        <Button className="min-h-11 whitespace-normal" variant="outline" onClick={() => current() && setConfirm(true)}>
+        <Button className="h-auto min-h-7 max-w-full whitespace-normal" variant="outline" onClick={() => current() && setConfirm(true)}>
           {m.subject_classification_assessment_withdraw({}, options)}
         </Button>
       ) : null}
@@ -199,12 +198,12 @@ export function ClassificationEditor({
         <div
           role="group"
           aria-label={m.subject_classification_assessment_withdraw({}, options)}
-          className="flex flex-wrap gap-3"
+          className="flex flex-wrap items-center gap-2"
         >
-          <Button className="min-h-11" onClick={() => void send('DELETE')}>
+          <Button onClick={() => void send('DELETE')}>
             {m.library_my_ratings_confirm_clear({}, options)}
           </Button>
-          <Button className="min-h-11" variant="outline" onClick={() => current() && setConfirm(false)}>
+          <Button variant="outline" onClick={() => current() && setConfirm(false)}>
             {m.library_my_ratings_cancel({}, options)}
           </Button>
         </div>
@@ -223,12 +222,12 @@ export function ClassificationEditor({
         </p>
       ) : null}
       {feedback === 'uncertain' ? (
-        <div className="flex flex-wrap gap-3">
-          <Button className="min-h-11" disabled={busy} onClick={() => void send(original.current!.method, true)}>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button disabled={busy} onClick={() => void send(original.current!.method, true)}>
             {m.subject_classification_assessment_retry({}, options)}
           </Button>
           {original.current?.readback ? (
-            <Button className="min-h-11" disabled={busy} onClick={() => void inspectCurrent()}>
+            <Button disabled={busy} onClick={() => void inspectCurrent()}>
               {m.own_classifications_readback({}, options)}
             </Button>
           ) : null}
@@ -249,7 +248,7 @@ export function ClassificationEditor({
         </div>
       ) : null}
       {feedback && feedback !== 'uncertain' ? (
-        <Button className="min-h-11" onClick={() => current() && void refresh()}>
+        <Button onClick={() => current() && void refresh()}>
           {m.own_classifications_refresh({}, options)}
         </Button>
       ) : null}

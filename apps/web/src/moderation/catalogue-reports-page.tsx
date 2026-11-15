@@ -142,19 +142,20 @@ export function CatalogueReportsView({
         <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(16rem,0.8fr)_minmax(0,1.6fr)]">
           <nav aria-label={m.moderation_reports_tab()} className="grid content-start gap-2">
             {page.reports.map((report) => (
-              <button
+              <Button
                 key={report.id}
                 type="button"
+                variant={report.id === page.selectedId ? 'secondary' : 'outline'}
                 aria-pressed={report.id === page.selectedId}
                 onClick={() => onSelect(report.id)}
-                className="grid min-h-16 gap-1 rounded-xl border p-3 text-start hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-pressed:border-primary aria-pressed:bg-accent"
+                className="grid h-auto min-h-7 w-full gap-1 whitespace-normal p-3 text-start"
               >
                 <span className="font-medium">{report.target.id}</span>
                 <span className="text-sm text-muted-foreground">
                   {dateLabel(report.createdAt)}
                   {outcomeLabel(report) ? ` · ${outcomeLabel(report)}` : ''}
                 </span>
-              </button>
+              </Button>
             ))}
             {page.next ? (
               <Button className="mt-2" variant="outline" onClick={() => onNext(page.next!)}>

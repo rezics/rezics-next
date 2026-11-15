@@ -495,7 +495,7 @@ function HistoryDisclosure({
         type="button"
         variant="ghost"
         size="sm"
-        className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+        className="h-auto min-h-6 max-w-full text-start whitespace-normal [overflow-wrap:anywhere]"
         aria-expanded={open}
         aria-controls={regionId}
         onClick={toggle}
@@ -573,7 +573,7 @@ function HistoryDisclosure({
             <Button
               type="button"
               variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="h-auto min-h-7 max-w-full text-start whitespace-normal [overflow-wrap:anywhere]"
               onClick={restartHistory}
             >
               {m.revision_return_restart()}
@@ -588,7 +588,7 @@ function HistoryDisclosure({
             <Button
               type="button"
               variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="h-auto min-h-7 max-w-full text-start whitespace-normal [overflow-wrap:anywhere]"
               onClick={restartHistory}
             >
               {m.revision_return_restart()}
@@ -627,7 +627,7 @@ function HistoryDisclosure({
             type="button"
             variant="outline"
             size="sm"
-            className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="h-auto min-h-6 max-w-full text-start whitespace-normal [overflow-wrap:anywhere]"
             disabled={loading}
             onKeyDown={(event) => {
               keyboardActivation.current =
@@ -671,7 +671,7 @@ function HistoryDisclosure({
           <Button
             type="button"
             variant="outline"
-            className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="h-auto min-h-7 max-w-full text-start whitespace-normal [overflow-wrap:anywhere]"
             onClick={restartHistory}
           >
             {m.revision_return_restart()}

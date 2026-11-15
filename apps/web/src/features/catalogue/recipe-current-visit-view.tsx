@@ -20,12 +20,12 @@ export function RecipeVisitNotice({
       {invalid && <PageHeading>{m.recipe_edit({}, o)}</PageHeading>}
       <p role="alert">{invalid ? m.recipe_visit_invalid({}, o) : m.recipe_visit_unsupported({}, o)}</p>
       {sourceHref && (
-        <a className="inline-flex min-h-11 items-center underline" href={sourceHref}>
+        <a className="inline-flex items-center underline" href={sourceHref}>
           {m.recipe_visit_return({}, o)}
         </a>
       )}
       {globalHref && (
-        <a className="inline-flex min-h-11 items-center underline" href={globalHref}>
+        <a className="inline-flex items-center underline" href={globalHref}>
           {m.recipe_visit_global({}, o)}
         </a>
       )}
@@ -105,7 +105,7 @@ export function RecipeCurrentVisitReturn({
     <div className="space-y-2" data-recipe-return-state={invalid ? 'invalid' : state}>
       <p role="status">{message}</p>
       {restartHref && (
-        <a className="inline-flex min-h-11 items-center underline" href={restartHref}>
+        <a className="inline-flex items-center underline" href={restartHref}>
           {m.recipe_return_restart({}, o)}
         </a>
       )}

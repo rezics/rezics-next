@@ -22,7 +22,7 @@ export type RelationsViewData = {
 
 const PAGE_LIMIT = 100;
 const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] px-4 py-3 text-center focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 /**
  * The reads of the Relations view: the subject's overview page, which carries the subject for the frame and the

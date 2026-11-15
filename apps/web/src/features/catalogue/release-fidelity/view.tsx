@@ -1,4 +1,5 @@
 import { CatalogueCurrentReading, catalogueEditor, useEditorLifetime } from '../editor-lifetime';
+import { cn } from '@rezics/ui/utils';
 import { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
 import { useId, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -75,11 +76,13 @@ export type ReleaseFidelityTransport = {
 };
 
 const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
+const actionSm =
+  'h-auto min-h-6 max-w-full justify-start whitespace-normal text-start [overflow-wrap:anywhere]';
 const linkClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8';
+  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
 const summaryClass =
-  'cursor-pointer rounded-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 max-md:min-w-11 max-md:py-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:py-2';
+  'cursor-pointer font-medium [overflow-wrap:anywhere]';
 
 function relationSlot(row: ReleaseRow, stream: ReleaseStream, context: string): RelationSlot | undefined {
   if (!row.statement) return;
@@ -902,7 +905,7 @@ function ReleaseFidelityLive({
                 <h2
                   ref={listHeading}
                   tabIndex={-1}
-                  className="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  className="text-lg font-semibold "
                 >
                   {m.release_fidelity_related({}, o)}
                 </h2>
@@ -1193,13 +1196,13 @@ function ReleaseFidelityLive({
               )}
               <nav className="flex flex-wrap gap-2" data-slot="release-return">
                 {workHref && (
-                  <a href={workHref} className={`${buttonVariants({ variant: 'outline', size: 'sm' })} ${actionClass}`}>
+                  <a href={workHref} className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), actionSm)}>
                     {m.release_fidelity_return({}, o)}
                   </a>
                 )}
                 <a
                   href={destination(`${href}/changes`, 'changes', 'related')}
-                  className={`${buttonVariants({ variant: 'outline', size: 'sm' })} ${actionClass}`}
+                  className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), actionSm)}
                 >
                   {catalogueEntries.changes({ id, title: title.text, locale }).label}
                   {context !== candidateContext ? `: ${m.release_fidelity_visit_unsupported({}, o)}` : ''}

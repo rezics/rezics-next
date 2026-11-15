@@ -3,6 +3,7 @@ import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
 import { BangumiAction } from './controls';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 
 function Shell({ children }: { children: ReactNode }) {
   return (
@@ -55,7 +56,7 @@ export function BangumiCancelledNotice({ onReturn }: { onReturn: () => void }) {
         <BangumiAction type="button" variant="outline" onClick={onReturn}>
           {m.library_bangumi_return_review()}
         </BangumiAction>
-        <a href={`/${locale}/library`} className="inline-flex min-h-11 items-center px-3 py-2 underline">
+        <a href={`/${locale}/library`} className={buttonVariants({ variant: 'link' })}>
           {m.library_bangumi_return_library()}
         </a>
       </div>
@@ -69,7 +70,7 @@ export function BangumiRemovedNotice() {
     <section className="space-y-4" data-bangumi-stage="removed">
       <p role="status">{m.library_bangumi_removed()}</p>
       <p className="text-sm text-muted-foreground">{m.library_bangumi_erasure_limit()}</p>
-      <a href={`/${locale}/library`} className="inline-flex min-h-11 items-center px-3 py-2 underline">
+      <a href={`/${locale}/library`} className={buttonVariants({ variant: 'link' })}>
         {m.library_bangumi_return_library()}
       </a>
     </section>

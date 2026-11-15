@@ -83,10 +83,10 @@ function PreparedHistory({
         {failed ? <p role="status">{m.thread_history_page_failed()}</p> : null}
         {hasMore ? (
           <Button
-            type="button"
-            variant="outline"
-            className="h-auto min-h-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere]"
-            onClick={() => {
+ type="button"
+ variant="outline"
+ className="h-auto min-h-7 max-w-full text-start whitespace-normal [overflow-wrap:anywhere]"
+ onClick={() => {
               setLoaded(loaded + 10);
               setFailed(false);
               setAdded(true);

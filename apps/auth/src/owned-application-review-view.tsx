@@ -53,7 +53,7 @@ export function OwnedApplicationReview(options: OwnedApplicationReviewOptions) {
         ref={review.heading}
         id={`${id}-heading`}
         tabIndex={-1}
-        className="font-semibold focus-visible:outline-2 focus-visible:outline-ring"
+        className="font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
       >
         {m.auth_inventory_clients_heading()}
       </h2>
@@ -78,7 +78,7 @@ export function OwnedApplicationReview(options: OwnedApplicationReviewOptions) {
               const expanded = review.expanded === row.client_id;
               const detailsId = `${id}-details-${index}`;
               return (
-                <Item key={row.client_id} render={<li />} variant="outline" className="min-w-0">
+                <Item key={row.client_id} render={<li />} size="sm" variant="outline" className="min-w-0">
                   <ItemContent className="min-w-0 gap-3">
                     <p className="font-medium wrap-anywhere">{name}</p>
                     <div className="grid min-w-0 gap-1">
@@ -90,6 +90,7 @@ export function OwnedApplicationReview(options: OwnedApplicationReviewOptions) {
                     </Badge>
                     <Button
                       type="button"
+                      size="sm"
                       variant="outline"
                       className="self-start text-start"
                       data-owned-control={index}
@@ -105,19 +106,20 @@ export function OwnedApplicationReview(options: OwnedApplicationReviewOptions) {
                         id={detailsId}
                         role="region"
                         aria-labelledby={`${detailsId}-heading`}
-                        className="grid min-w-0 gap-3 rounded-md border p-4"
+                        className="grid min-w-0 gap-3 rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10"
                       >
                         <h3
                           ref={detailsHeading}
                           id={`${detailsId}-heading`}
                           tabIndex={-1}
-                          className="grid min-w-0 gap-1 font-semibold focus-visible:outline-2 focus-visible:outline-ring"
+                          className="grid min-w-0 gap-1 font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
                         >
                           <span>{name}</span>
                           <code className="select-text font-mono text-sm wrap-anywhere">{row.client_id}</code>
                         </h3>
                         <Button
                           type="button"
+                          size="sm"
                           variant="outline"
                           className="justify-self-start"
                           disabled={review.copy === 'pending'}
@@ -144,6 +146,7 @@ export function OwnedApplicationReview(options: OwnedApplicationReviewOptions) {
                         ) : null}
                         <Button
                           type="button"
+                          size="sm"
                           variant="outline"
                           className="justify-self-start"
                           onClick={() => close(row.client_id, index)}
@@ -164,30 +167,35 @@ export function OwnedApplicationReview(options: OwnedApplicationReviewOptions) {
       {!retired ? (
         <nav
           aria-label={m.auth_inventory_clients_heading()}
-          className="flex min-w-0 flex-wrap gap-3"
+          className="flex min-w-0 flex-wrap items-center gap-2"
           aria-busy={pending}
         >
           {failure ? (
-            <Button type="button" variant="outline" disabled={pending} onClick={review.retry}>
+            <Button type="button" size="sm"
+                      variant="outline" disabled={pending} onClick={review.retry}>
               {m.auth_owned_retry()}
             </Button>
           ) : null}
           {review.previous ? (
-            <Button type="button" variant="outline" disabled={pending} onClick={review.previousPage}>
+            <Button type="button" size="sm"
+                      variant="outline" disabled={pending} onClick={review.previousPage}>
               {m.auth_inventory_previous()}
             </Button>
           ) : null}
           {page?.next ? (
-            <Button type="button" variant="outline" disabled={pending} onClick={review.next}>
+            <Button type="button" size="sm"
+                      variant="outline" disabled={pending} onClick={review.next}>
               {m.auth_inventory_next()}
             </Button>
           ) : null}
           {review.accepted ? (
-            <Button type="button" variant="outline" disabled={pending} onClick={review.reload}>
+            <Button type="button" size="sm"
+                      variant="outline" disabled={pending} onClick={review.reload}>
               {m.auth_owned_reload()}
             </Button>
           ) : null}
-          <Button type="button" variant="outline" disabled={pending} onClick={review.restart}>
+          <Button type="button" size="sm"
+                      variant="outline" disabled={pending} onClick={review.restart}>
             {m.auth_owned_restart()}
           </Button>
         </nav>

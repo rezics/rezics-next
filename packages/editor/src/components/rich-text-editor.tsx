@@ -1238,7 +1238,6 @@ export function RichTextEditor({
       <Button
         type="button"
         variant="outline"
-        className="min-h-11 shrink-0"
         onPointerDown={(event) => event.preventDefault()}
         onClick={() => runEditorCommand(imageCommand, editor, openLink, openImage, isCurrent)}
       >
@@ -1488,17 +1487,19 @@ export function RichTextEditor({
                 <p>
                   {resolvedLabels.uploadFailed}: {entry.file.name}
                 </p>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={!editable}
-                  onClick={() => uploads.current?.retry(entry.id)}
-                >
-                  {resolvedLabels.retryUpload}
-                </Button>
-                <Button type="button" variant="ghost" onClick={() => uploads.current?.dismiss(entry.id)}>
-                  {resolvedLabels.dismissUpload}
-                </Button>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={!editable}
+                    onClick={() => uploads.current?.retry(entry.id)}
+                  >
+                    {resolvedLabels.retryUpload}
+                  </Button>
+                  <Button type="button" variant="ghost" onClick={() => uploads.current?.dismiss(entry.id)}>
+                    {resolvedLabels.dismissUpload}
+                  </Button>
+                </div>
               </div>
             ))}
         </>

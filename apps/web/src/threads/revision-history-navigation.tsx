@@ -35,7 +35,7 @@ type RevisionHistoryNavigationProps = {
 };
 
 const navigationAction =
-  'h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'h-auto min-h-7 max-w-full text-start whitespace-normal [overflow-wrap:anywhere]';
 
 /**
  * Page-local inspection of supplied entries. No read function or QueryClient is owned here.
@@ -177,7 +177,7 @@ export function RevisionHistoryNavigation(props: RevisionHistoryNavigationProps)
           {m.revision_history_loaded_help()}
         </p>
         <details className="min-w-0 text-sm text-muted-foreground">
-          <summary className="inline-flex min-h-11 max-w-full cursor-pointer items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          <summary className="inline-flex max-w-full cursor-pointer items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             {m.revision_history_about()}
           </summary>
           <div className="space-y-2 pt-2">
@@ -208,7 +208,7 @@ export function RevisionHistoryNavigation(props: RevisionHistoryNavigationProps)
                 <SharedSelect.SelectTrigger
                   id={`${prefix}-destination`}
                   aria-describedby={helpId}
-                  className="min-h-11 w-full min-w-0 max-w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  className="w-full min-w-0 max-w-full"
                 >
                   <SharedSelect.SelectValue />
                 </SharedSelect.SelectTrigger>

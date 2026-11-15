@@ -76,7 +76,7 @@ export function SubjectOfferRows({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                  className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                   aria-label={m.subject_choice_inspect_label(
                     { title: offer.title, id: offer.id, revision: offer.revision },
                     { locale },
@@ -90,7 +90,7 @@ export function SubjectOfferRows({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                  className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                   aria-label={m.subject_choice_toggle_label(
                     { title: offer.title, id: offer.id, revision: offer.revision },
                     { locale },
@@ -105,7 +105,7 @@ export function SubjectOfferRows({
                   <p className="max-w-prose text-sm text-muted-foreground">{m.subject_choice_full({}, { locale })}</p>
                 )}
                 <details className="min-w-0">
-                  <summary className="min-h-11 cursor-pointer content-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                  <summary className="cursor-pointer content-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                     {m.commerce_full_title({}, { locale })}
                   </summary>
                   <p className="break-words py-2 text-sm [overflow-wrap:anywhere]">{offer.title}</p>

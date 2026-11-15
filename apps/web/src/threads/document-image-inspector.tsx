@@ -8,6 +8,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@rezics/ui/shadcn/dialog';
+import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import type { DocumentImagePresentation } from './document-media';
 import { DocumentImageInspectionControls } from './document-image-inspection-controls';
@@ -50,12 +51,7 @@ export function DocumentImageInspector({
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
       <DialogTrigger
-        render={
-          <button
-            type="button"
-            className="min-h-11 rounded-md px-3 text-sm font-medium underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          />
-        }
+        render={<Button type="button" variant="link" size="sm" className="h-auto min-h-6 whitespace-normal" />}
       >
         {m.document_image_inspect({}, options)}
       </DialogTrigger>
@@ -81,10 +77,11 @@ export function DocumentImageInspector({
             </div>
             <DialogClose
               render={
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="icon-sm"
                   aria-label={m.document_image_inspection_close({}, options)}
-                  className="min-h-11 min-w-11 shrink-0 rounded-md border px-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 />
               }
             >

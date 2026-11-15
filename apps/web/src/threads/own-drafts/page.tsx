@@ -78,7 +78,7 @@ type FocusHandoff = {
   listener: (event: FocusEvent) => void;
 };
 
-const control = 'min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const control = 'max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 function timestamp(value: string, locale: OwnDraftLocale): string {
   const parsed = new Date(value);
@@ -1074,7 +1074,7 @@ function BoundOwnDraftsPage({
                         {selection.entry.subjectIds.map((id) => (
                           <li key={id}>
                             <a
-                              className="inline-flex min-h-11 items-center underline"
+                              className="inline-flex items-center underline"
                               href={subjectHref({ id, label: '' }, locale).href}
                               target="_blank"
                               rel="noreferrer"
@@ -1318,15 +1318,21 @@ function BoundOwnDraftsPage({
                     {m.own_drafts_inspect({}, { locale })}
                   </Button>
                   {entry.kind === 'discussion' && entry.documentKind === 'opening' ? (
-                    <a
-                      className={`${control} mt-3 inline-flex items-center rounded-md border border-border px-3 py-2 underline underline-offset-2`}
-                      href={localizeHref(
-                        `/studio?postId=${encodeURIComponent(entry.id)}${page.coordinate === null ? '' : `&draftCursor=${encodeURIComponent(page.coordinate)}`}`,
-                        { locale },
-                      )}
+                    <Button
+                      nativeButton={false}
+                      variant="outline"
+                      className={`${control} mt-3 h-auto min-h-7`}
+                      render={
+                        <a
+                          href={localizeHref(
+                            `/studio?postId=${encodeURIComponent(entry.id)}${page.coordinate === null ? '' : `&draftCursor=${encodeURIComponent(page.coordinate)}`}`,
+                            { locale },
+                          )}
+                        />
+                      }
                     >
                       {m.own_drafts_open_studio({}, { locale })}
-                    </a>
+                    </Button>
                   ) : null}
                 </li>
               ))}

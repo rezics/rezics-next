@@ -14,6 +14,8 @@ import {
   type WritingStorage,
 } from '../threads/local-writing-draft';
 import { m } from '../paraglide/messages.js';
+import { Input } from '@rezics/ui/shadcn/input';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
 
 type Scenario = 'writing' | 'preview' | 'unknown' | 'storage' | 'corrupt' | 'attachments';
 class PreparedStorage implements WritingStorage {
@@ -106,18 +108,18 @@ function Example({ scenario, long }: { scenario: Scenario; long: boolean }) {
           <>
             <label className="block">
               {m.thread_title_label()}
-              <input
-                className="h-11 w-full rounded border border-border bg-background p-2"
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
+              <Input 
+ className="w-full"
+ value={title}
+ onChange={(event) => setTitle(event.target.value)}
               />
             </label>
             <label className="block">
               {m.thread_new_body_label()}
-              <textarea
-                className="min-h-40 w-full rounded border border-border bg-background p-3"
-                value={documentText(body)}
-                onChange={(event) => setBody(fromPlainText(event.target.value, 'blocks'))}
+              <Textarea 
+ className="min-h-40 w-full"
+ value={documentText(body)}
+ onChange={(event) => setBody(fromPlainText(event.target.value, 'blocks'))}
               />
             </label>
             {draft ? (
@@ -138,12 +140,12 @@ function Example({ scenario, long }: { scenario: Scenario; long: boolean }) {
             ) : null}
             {notice ? <p role="status">{m.thread_draft_attachments()}</p> : null}
             <div className="flex flex-wrap gap-2">
-              <Button className="min-h-11" onClick={reload}>
+              <Button onClick={reload}>
                 Prepared reload
               </Button>
               <Button
-                className="min-h-11"
-                onClick={() => {
+ 
+ onClick={() => {
                   if (draft?.beginSubmission()) {
                     draft.settle('success');
                     setBody(fromPlainText('', 'blocks'));
@@ -155,8 +157,8 @@ function Example({ scenario, long }: { scenario: Scenario; long: boolean }) {
                 Prepared confirmed submit
               </Button>
               <Button
-                className="min-h-11"
-                onClick={() => {
+ 
+ onClick={() => {
                   if (draft?.beginSubmission()) {
                     draft.settle('unknown');
                     setUnknown(true);
@@ -166,16 +168,16 @@ function Example({ scenario, long }: { scenario: Scenario; long: boolean }) {
                 Prepared lost response
               </Button>
               <Button
-                className="min-h-11"
-                onClick={() => {
+ 
+ onClick={() => {
                   if (draft?.beginSubmission()) draft.settle('refused');
                 }}
               >
                 Prepared refusal
               </Button>
               <Button
-                className="min-h-11"
-                onClick={() => {
+ 
+ onClick={() => {
                   owner.abort();
                   setRetired(true);
                 }}

@@ -9,6 +9,7 @@ import {
   type FormEvent,
   type MutableRefObject,
 } from 'react';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
@@ -470,7 +471,7 @@ function RenameReview({
     return (
       <AuthPage returnToSecurity heading={m.auth_rename_heading()}>
         <div className="min-w-0 space-y-6">
-          <section className="min-w-0 max-w-prose rounded-lg border border-border p-4 sm:p-6">
+          <section className="min-w-0 max-w-prose rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10">
             <Alert role="status">
               <AlertDescription>{m.auth_rename_success({ handle: renamed })}</AlertDescription>
             </Alert>
@@ -490,7 +491,7 @@ function RenameReview({
         </div>
         <div ref={reviewFocus} tabIndex={-1} aria-label={m.auth_rename_heading()} className="min-w-0 space-y-6">
           {pending || current ? (
-            <section className="min-w-0 max-w-prose space-y-4 rounded-lg border border-border p-4 sm:p-6">
+            <section className="min-w-0 max-w-prose space-y-4 rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10">
               {pending ? <p role="status">{m.auth_inventory_loading()}</p> : null}
               {!current ? null : current.kind === 'ready' ? (
                 <div className="min-w-0 space-y-2">
@@ -522,7 +523,7 @@ function RenameReview({
                   <div className="border-t border-border pt-4">
                     <Button
                       type="button"
-                      className="min-h-11 w-full"
+                      className="w-full"
                       disabled={pending}
                       aria-busy={pending}
                       onClick={() => void continueWithManagementAuthentication()}
@@ -572,7 +573,7 @@ function RenameReview({
                   <AlertDescription>{m.auth_rename_reconfirm()}</AlertDescription>
                 </Alert>
               ) : null}
-              <section className="min-w-0 space-y-5 rounded-lg border border-border p-4 sm:p-6">
+              <section className="min-w-0 space-y-5 rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10">
                 <Field data-invalid={Boolean(inputError)}>
                   <FieldLabel htmlFor="rename-handle">{m.auth_rename_handle()}</FieldLabel>
                   <p id="rename-handle-help" className="max-w-prose break-words text-sm text-muted-foreground">
@@ -602,23 +603,17 @@ function RenameReview({
                   {inputError ? <FieldError id="rename-handle-error">{inputError}</FieldError> : null}
                 </Field>
                 {candidate ? (
-                  <div className="min-w-0 rounded-md border border-border p-4 sm:p-5">
-                    <Field>
-                      <FieldLabel
-                        className="min-w-0 items-start gap-3 break-words [overflow-wrap:anywhere]"
-                        htmlFor="rename-confirm"
-                      >
-                        <input
-                          id="rename-confirm"
-                          type="checkbox"
-                          checked={confirmed}
-                          disabled={pending}
-                          onChange={(event) => setConfirmed(event.target.checked)}
-                        />
-                        {m.auth_rename_confirm({ handle: candidate })}
-                      </FieldLabel>
-                    </Field>
-                  </div>
+                  <Field orientation="horizontal" className="items-start">
+                    <Checkbox
+                      id="rename-confirm"
+                      checked={confirmed}
+                      disabled={pending}
+                      onCheckedChange={(checked) => setConfirmed(checked === true)}
+                    />
+                    <FieldLabel className="min-w-0 font-normal wrap-anywhere" htmlFor="rename-confirm">
+                      {m.auth_rename_confirm({ handle: candidate })}
+                    </FieldLabel>
+                  </Field>
                 ) : null}
               </section>
               <div className="space-y-4 border-t border-border pt-5">
@@ -629,7 +624,7 @@ function RenameReview({
                 ) : null}
                 <Button
                   type="submit"
-                  className="min-h-11 w-full"
+                  className="w-full"
                   disabled={pending || !confirmed || !candidate}
                   aria-busy={pending}
                 >
@@ -642,7 +637,7 @@ function RenameReview({
             <RenameRecoveryNotice history={outcome} observed={current?.kind === 'ready'} />
             <Button
               type="button"
-              className="min-h-11 w-full"
+              className="w-full"
               disabled={pending}
               aria-busy={pending}
               onClick={() => {

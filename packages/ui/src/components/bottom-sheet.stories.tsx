@@ -23,7 +23,7 @@ function Example({ kind, locale = 'en' }: { kind: Kind; locale?: 'en' | 'ja' }) 
         title={locale === 'ja' ? 'フィルター' : 'Filters'}
         before={
           kind === 'back' ? (
-            <Button variant="ghost" className="min-h-11">
+            <Button variant="ghost">
               {locale === 'ja' ? '戻る' : 'Back'}
             </Button>
           ) : undefined

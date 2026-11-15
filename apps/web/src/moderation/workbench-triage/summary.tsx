@@ -1,3 +1,4 @@
+import { Badge } from '@rezics/ui/shadcn/badge';
 import type { WorkbenchCase } from '../workbench-queue/read';
 import { getLocale } from '../../paraglide/runtime.js';
 import { workbenchTriageSummaryFields, type WorkbenchTriageField } from './labels';
@@ -42,12 +43,13 @@ export function WorkbenchTriageSummary({ item, locale = getLocale() }: { item: W
           </>
         ) : null}
         {outcome ? (
-          <span
+          <Badge
+            variant="secondary"
             data-triage-presence={outcome.presence}
-            className="rounded-md bg-secondary px-2 py-1 font-medium text-secondary-foreground"
+            className="h-auto min-h-5 max-w-full whitespace-normal"
           >
             {outcome.value}
-          </span>
+          </Badge>
         ) : null}
         {created ? (
           <span className="basis-full sm:ml-auto sm:basis-auto">

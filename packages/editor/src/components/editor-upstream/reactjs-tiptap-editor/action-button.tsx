@@ -19,15 +19,14 @@ export const ActionButton = forwardRef<HTMLButtonElement, ActionButtonProps>(fun
   { label, icon, action, pressed, className, children, onMouseDown, onPointerDown, ...props },
   ref,
 ) {
+  const iconOnly = children == null || children === false;
   const common = {
     ...props,
     ref,
     type: 'button' as const,
     'aria-label': label,
-    className: cn(
-      'min-h-11 min-w-11 shrink-0 rounded-xl aria-pressed:bg-primary/10 aria-pressed:text-primary',
-      className,
-    ),
+    // Labeled controls keep the default h-7 floor and may wrap.
+    className: cn(!iconOnly && 'h-auto min-h-7 whitespace-normal', className),
     onMouseDown: (event: MouseEvent<HTMLButtonElement>) => {
       onMouseDown?.(event);
       event.preventDefault();
@@ -48,6 +47,7 @@ export const ActionButton = forwardRef<HTMLButtonElement, ActionButtonProps>(fun
       <Button
         {...common}
         variant="ghost"
+        size={iconOnly ? 'icon' : 'default'}
         onClick={() => {
           if (!props.disabled) action?.();
         }}
@@ -57,6 +57,7 @@ export const ActionButton = forwardRef<HTMLButtonElement, ActionButtonProps>(fun
     ) : (
       <Toggle
         {...common}
+        size="default"
         pressed={pressed}
         onPressedChange={() => {
           if (!props.disabled) action?.();

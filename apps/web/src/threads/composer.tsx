@@ -70,7 +70,7 @@ type WritingRequest<Result, Value> = {
 
 // Deliberate form actions only; the rich editor owns its formatting and image controls.
 const authoringActionClassName =
-  'h-auto min-h-11 min-w-11 max-w-full shrink px-4 py-2 leading-snug whitespace-normal [overflow-wrap:anywhere] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
+  'h-auto min-h-7 max-w-full shrink leading-snug whitespace-normal [overflow-wrap:anywhere]';
 
 function writingActionLabel(action: WritingAction): string {
   switch (action) {
@@ -1412,7 +1412,7 @@ function PostComposerContent<T, Context = undefined>({
             <Input
               ref={titleHost}
               id="thread-title"
-              className="h-11 min-w-0 max-w-full border-border bg-background px-3"
+              className="min-w-0 max-w-full"
               value={title}
               onChange={(event) => {
                 invalidateWriting();
@@ -1460,7 +1460,7 @@ function PostComposerContent<T, Context = undefined>({
               <Button
                 type="submit"
                 form={formId}
-                className={`${authoringActionClassName} w-full max-w-full sm:w-auto disabled:bg-primary disabled:text-primary-foreground disabled:opacity-100`}
+                className={`${authoringActionClassName} w-full max-w-full sm:w-auto`}
                 disabled={!ready || submitting || pendingUploads > 0}
               >
                 {m.thread_write_send()}

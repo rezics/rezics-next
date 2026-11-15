@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { createKernelClient } from '@rezics/client';
+import { Button } from '@rezics/ui/shadcn/button';
 import { createYearlyGoalVisit } from '../library/yearly-goal-current';
 import { readYearlyGoal, writeYearlyGoal } from '../library/yearly-goal-native';
 import { YearlyGoalPage, type YearlyGoalSnapshot } from '../library/yearly-goal-page';
@@ -290,16 +291,16 @@ function ReplacedReader() {
   useEffect(() => () => native.retire(), [native]);
   return (
     <>
-      <button
+      <Button
         type="button"
-        className="min-h-11 min-w-11 border px-4"
+        variant="outline"
         onClick={() => {
           native.retire();
           setOwner('owner-b');
         }}
       >
         Replace current reader
-      </button>
+      </Button>
       <YearlyGoalPage year={2026} sessionState="signed-in" viewerSubject={owner} api={native.api} />
     </>
   );

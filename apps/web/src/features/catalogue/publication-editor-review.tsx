@@ -15,7 +15,7 @@ import {
 } from './publication-editor-guidance';
 
 const actionClassName =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center';
 
 export function PublicationReview({
   id,

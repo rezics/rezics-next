@@ -8,7 +8,7 @@ import { m } from '../paraglide/messages.js';
 import { PageHeading } from './page-heading';
 
 export type RouteStateKind = 'missing' | 'closed' | 'error' | 'unavailable';
-export const routeStateControl = 'min-h-11 h-auto max-w-full whitespace-normal break-words px-4 py-2 text-center';
+export const routeStateControl = 'h-auto min-h-7 max-w-full whitespace-normal break-words text-center';
 
 /** Route content uses the shared Empty slots; AppShell owns main, skip navigation and providers. */
 export function RouteState({
@@ -72,8 +72,8 @@ export function RouteState({
     <section ref={section} data-route-state={kind} className="mx-auto w-full min-w-0 py-4 md:py-10">
       <Empty className="min-h-72 rounded-none px-0 py-6 md:min-h-80 md:px-6 md:py-10">
         <EmptyHeader className="max-w-xl gap-4">
-          <EmptyMedia variant="icon" className="size-14 rounded-2xl bg-muted text-muted-foreground">
-            <Icon aria-hidden="true" className="size-7" />
+          <EmptyMedia variant="icon">
+            <Icon aria-hidden="true" />
           </EmptyMedia>
           <PageHeading className="max-w-full break-words text-2xl sm:text-3xl">{title}</PageHeading>
           <EmptyDescription className="max-w-prose break-words text-base leading-7">{description}</EmptyDescription>
@@ -96,16 +96,15 @@ export function RouteState({
                 aria-disabled={retryDisabled || retrying ? 'true' : undefined}
                 tabIndex={retryDisabled || retrying ? -1 : undefined}
                 hidden={retryDisabled || retrying || undefined}
-                className={cn(buttonVariants({ size: 'lg', variant: 'default' }), routeStateControl)}
+                className={cn(buttonVariants({ variant: 'default' }), routeStateControl)}
                 href={retryHref}
               >
-                <RotateCw aria-hidden="true" className="size-4" />
+                <RotateCw aria-hidden="true" />
                 {m.status_retry({}, { locale })}
               </a>
             ) : null}
             {onRetry ? (
               <Button
-                size="lg"
                 className={routeStateControl}
                 onClick={onRetry}
                 disabled={retrying || retryDisabled}
@@ -113,7 +112,7 @@ export function RouteState({
               >
                 <RotateCw
                   aria-hidden="true"
-                  className={retrying ? 'size-4 motion-safe:animate-spin motion-reduce:animate-none' : 'size-4'}
+                  className={retrying ? 'motion-safe:animate-spin motion-reduce:animate-none' : undefined}
                 />
                 {retrying ? m.status_retrying({}, { locale }) : m.status_retry({}, { locale })}
               </Button>
@@ -122,7 +121,7 @@ export function RouteState({
               <a
                 data-slot="button"
                 data-session-sign-in=""
-                className={cn(buttonVariants({ size: 'lg', variant: 'outline' }), routeStateControl)}
+                className={cn(buttonVariants({ variant: 'outline' }), routeStateControl)}
                 href={signInHref}
               >
                 {m.account_sign_in({}, { locale })}
@@ -132,7 +131,7 @@ export function RouteState({
               <a
                 data-slot="button"
                 className={cn(
-                  buttonVariants({ size: 'lg', variant: retryHref || onRetry ? 'outline' : 'default' }),
+                  buttonVariants({ variant: retryHref || onRetry ? 'outline' : 'default' }),
                   routeStateControl,
                 )}
                 href={returnHref}
@@ -143,20 +142,20 @@ export function RouteState({
             <a
               data-slot="button"
               className={cn(
-                buttonVariants({ size: 'lg', variant: onRetry || retryHref || returnHref ? 'outline' : 'default' }),
+                buttonVariants({ variant: onRetry || retryHref || returnHref ? 'outline' : 'default' }),
                 routeStateControl,
               )}
               href={`/${locale}`}
             >
-              <House aria-hidden="true" className="size-4" />
+              <House aria-hidden="true" />
               {m.status_home({}, { locale })}
             </a>
             <a
               data-slot="button"
-              className={cn(buttonVariants({ size: 'lg', variant: 'outline' }), routeStateControl)}
+              className={cn(buttonVariants({ variant: 'outline' }), routeStateControl)}
               href={`/${locale}/search`}
             >
-              <Search aria-hidden="true" className="size-4" />
+              <Search aria-hidden="true" />
               {m.status_search({}, { locale })}
             </a>
           </div>

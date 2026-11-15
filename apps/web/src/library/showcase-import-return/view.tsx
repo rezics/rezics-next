@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type MouseEvent, type Ref } from 'r
 import { Link } from '@tanstack/react-router';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { vndbActionClass } from '../personal-list-import/controls';
 import type { ShelfLayout, ShelfSize } from '../shelf-params';
 import type { ImportLibraryRead } from './read';
@@ -114,7 +115,7 @@ export function ImportLibraryView({
   return (
     <section
       id={importLibraryAnchor}
-      className="min-w-0 space-y-4 rounded-lg border p-4 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:items-center [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
+      className="min-w-0 space-y-4 rounded-lg border p-4 [&_a]:inline-flex [&_a]:items-center"
       data-vndb-library-return
       onClickCapture={(event) => {
         const anchor = (event.target as Element).closest<HTMLAnchorElement>('a');
@@ -135,7 +136,7 @@ export function ImportLibraryView({
       <ImportLibraryReadState snapshot={snapshot} available={available} returned={returned} />
       <ImportLibraryPageControls snapshot={snapshot} available={available} actions={actions} />
       <div className="flex flex-wrap items-start gap-3">
-        <Link to={href as never} className={vndbActionClass + ' inline-flex items-center rounded-md border'}>
+        <Link to={href as never} className={buttonVariants({ variant: 'outline', className: vndbActionClass })}>
           {m.library_vndb_library_open()}
         </Link>
       </div>

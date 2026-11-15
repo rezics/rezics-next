@@ -1,7 +1,7 @@
 import { admitMineCollectionsAddress, type MineCollectionsAddressError } from './mine-collections-address';
 import { MineCollectionsAddressRecovery } from './mine-collections-address-recovery';
 import { Exposure, useOperation, useOperationAdmission } from '../kernel/exposure';
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from '@rezics/ui/shadcn/empty';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { PlusIcon } from 'lucide-react';
@@ -445,19 +445,15 @@ export function MineCollectionsPageView({
           </EmptyHeader>
           <EmptyContent>
             {page.state === 'denied' ? (
-              <a href={exploreHref} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
+              <a href={exploreHref} className={buttonVariants({ variant: 'outline' })}>
                 {exploreLabel}
               </a>
             ) : onRetry ? (
-              <button
-                type="button"
-                className={buttonVariants({ variant: 'outline', size: 'lg' })}
-                onClick={(event) => onRetry(event.currentTarget)}
-              >
+              <Button type="button" variant="outline" onClick={(event) => onRetry(event.currentTarget)}>
                 {m.library_collections_retry()}
-              </button>
+              </Button>
             ) : (
-              <a href={currentHref} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
+              <a href={currentHref} className={buttonVariants({ variant: 'outline' })}>
                 {m.library_collections_retry()}
               </a>
             )}
@@ -519,7 +515,7 @@ export function MineCollectionsPageView({
                   if (onMove && !onMove('previous', windowSnapshot.coordinates.at(-2) ?? null, event.currentTarget))
                     event.preventDefault();
                 }}
-                className={buttonVariants({ variant: 'outline', size: 'lg' })}
+                className={buttonVariants({ variant: 'outline' })}
               >
                 {m.library_collections_previous()}
               </Link>
@@ -540,7 +536,7 @@ export function MineCollectionsPageView({
                     return;
                   if (onMove && !onMove('first', null, event.currentTarget)) event.preventDefault();
                 }}
-                className={buttonVariants({ variant: 'outline', size: 'lg' })}
+                className={buttonVariants({ variant: 'outline' })}
               >
                 {m.library_collections_first_page()}
               </Link>
@@ -561,7 +557,7 @@ export function MineCollectionsPageView({
                     return;
                   if (onMove && !onMove('next', page.next, event.currentTarget)) event.preventDefault();
                 }}
-                className={buttonVariants({ variant: 'outline', size: 'lg' })}
+                className={buttonVariants({ variant: 'outline' })}
               >
                 {m.library_collection_more()}
               </Link>

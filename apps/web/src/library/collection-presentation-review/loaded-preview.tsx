@@ -46,7 +46,7 @@ export function LoadedOccurrencePreview({
       </div>
       {context.types.length ? (
         <details className="min-w-0 rounded-lg border border-border p-3" data-loaded-type-context>
-          <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.collection_choice_mixed_context()}</summary>
+          <summary className="cursor-pointer font-medium">{m.collection_choice_mixed_context()}</summary>
           <p className="py-2 text-sm text-muted-foreground">{m.collection_choice_mixed_context_help()}</p>
           <ul className="grid min-w-0 gap-3 sm:grid-cols-2">
             {context.types.map((type) => (

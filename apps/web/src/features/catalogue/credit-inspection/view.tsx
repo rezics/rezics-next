@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@rezics/ui/shadcn/dialog';
 import { m } from '../../../paraglide/messages.js';
 import { creditDestinationHref } from './destinations';
@@ -20,9 +21,9 @@ import {
   type CreditVisit,
 } from './model';
 
-const wrapTarget = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2';
+const wrapTarget = 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
 const wrapLink =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center py-2 underline whitespace-normal [overflow-wrap:anywhere]';
+  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
 
 /** Independent destinations keep the bounded original credit window mounted in its original tab. */
 function DisclosedTarget({ children, ...props }: LinkProps) {
@@ -192,7 +193,7 @@ export function CreditInspection({
           <section aria-label={m.credit_revision({}, o)} className="space-y-2">
             <h3 className="font-medium">{m.credit_revision({}, o)}</h3>
             <details className="min-w-0">
-              <summary className="min-h-11 min-w-11 max-w-full cursor-pointer py-2 whitespace-normal [overflow-wrap:anywhere]">
+              <summary className="max-w-full cursor-pointer whitespace-normal [overflow-wrap:anywhere]">
                 {m.credit_technical({}, o)}
               </summary>
               <p>{statement.property.id}</p>

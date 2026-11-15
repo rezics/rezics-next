@@ -8,6 +8,7 @@ import { m } from '../paraglide/messages.js';
 import { PatternStory } from './page';
 import { AppShell } from '../shell/shell';
 import { requestRealmMemberAddition } from '../community/space';
+import { Button } from '@rezics/ui/shadcn/button';
 
 const realmId = '01a1a000-0000-7000-8000-000000000021';
 const rows = ['01a1a000-0000-7000-8000-000000000031', '01a1a000-0000-7000-8000-000000000032'].map(
@@ -268,9 +269,9 @@ function RevokedVisit() {
   const caller = useMemo<MembersCaller>(() => ({ current: () => current }), [current]);
   return (
     <div className="space-y-6">
-      <button className="min-h-11 rounded-lg border px-4" onClick={() => setCurrent(false)}>
+      <Button type="button" variant="outline" size="sm" onClick={() => setCurrent(false)}>
         Revoke illustrative authority
-      </button>
+      </Button>
       <RealmMembersPage realmId={realmId} source={ready} caller={caller} />
     </div>
   );

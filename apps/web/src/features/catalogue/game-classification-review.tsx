@@ -26,7 +26,7 @@ import {
 import { GameClassificationReuseNotes } from './game-classification-view';
 
 const wrap =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 [@media(max-width:639px)_and_(pointer:coarse)]:min-h-11';
+  'h-auto min-h-7 max-w-full whitespace-normal break-words';
 
 export type GameReuseSession = {
   source: ReuseSource;

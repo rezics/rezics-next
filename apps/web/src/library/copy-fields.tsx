@@ -1,5 +1,8 @@
 import { useId } from 'react';
+import { Alert } from '@rezics/ui/shadcn/alert';
+import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Input } from '@rezics/ui/shadcn/input';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
@@ -23,9 +26,6 @@ export type CopyDraft = {
   mediaCondition: string;
   packagingCondition: string;
 };
-
-const inputClass =
-  'min-h-11 min-w-0 w-full max-w-full rounded-lg border border-border bg-background px-3 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 export function copyFieldLabel(field: CopyTextField): string {
   switch (field) {
@@ -65,31 +65,34 @@ export function CopyValidationSummary({
 }) {
   if (!fields.length) return null;
   return (
-    <section
-      role="alert"
-      aria-labelledby={`${prefix}-errors`}
-      className="min-w-0 space-y-2 rounded-lg border border-destructive p-4"
-    >
+    <Alert variant="destructive" role="alert" aria-labelledby={`${prefix}-errors`} className="min-w-0">
       <h3 id={`${prefix}-errors`} className="font-medium">
         {m.library_copy_editor_correct_fields()}
       </h3>
       <ul className="list-inside list-disc">
         {fields.map((field) => (
           <li key={field}>
-            <a
-              className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
-              href={`#${prefix}-${field}`}
-              onClick={(event) => {
-                event.preventDefault();
-                onFocusField(field);
-              }}
+            <Button
+              variant="link"
+              size="sm"
+              className="h-auto min-h-6 max-w-full justify-start px-0 whitespace-normal [overflow-wrap:anywhere]"
+              nativeButton={false}
+              render={
+                <a
+                  href={`#${prefix}-${field}`}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    onFocusField(field);
+                  }}
+                />
+              }
             >
               {fieldMessage(field, true)}
-            </a>
+            </Button>
           </li>
         ))}
       </ul>
-    </section>
+    </Alert>
   );
 }
 
@@ -123,14 +126,13 @@ function CopyTextInput({
       {field === 'note' ? (
         <Textarea
           {...attributes}
-          className="min-h-36 min-w-0 w-full max-w-full resize-y text-base [overflow-wrap:anywhere]"
+          className="min-h-36 min-w-0 max-w-full resize-y [overflow-wrap:anywhere]"
           rows={6}
           onChange={(event) => onChange(event.currentTarget.value)}
         />
       ) : (
-        <input
+        <Input
           {...attributes}
-          className={inputClass}
           type="text"
           onChange={(event) => onChange(event.currentTarget.value)}
         />
@@ -197,15 +199,17 @@ export function CopyOptionalFields({
 }) {
   return (
     <section className="min-w-0 space-y-4">
-      <button
+      <Button
         type="button"
-        className="min-h-11 max-w-full rounded-md py-2 text-left text-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        variant="link"
+        size="sm"
+        className="h-auto min-h-6 max-w-full justify-start px-0 text-left whitespace-normal [overflow-wrap:anywhere]"
         aria-controls={`${prefix}-optional`}
         aria-expanded={expanded}
         onClick={() => onExpandedChange(!expanded)}
       >
         {expanded ? m.library_copy_less() : m.library_copy_more()}
-      </button>
+      </Button>
       <div id={`${prefix}-optional`} hidden={!expanded} className="min-w-0 space-y-5">
         <header className="space-y-1">
           <h3 className="font-medium">{m.library_copy_editor_optional_title()}</h3>
@@ -345,7 +349,7 @@ function CopyConditionSelect({
     return (
       <Field>
         <FieldLabel htmlFor={id}>{label}</FieldLabel>
-        <p id={id} className="min-h-11 py-2">
+        <p id={id}>
           {copyConditionDisplayText(current)}
         </p>
       </Field>
@@ -368,7 +372,7 @@ function CopyConditionSelect({
         value={value || null}
         onValueChange={(next) => onChange(next ?? '')}
       >
-        <SelectTrigger id={id} aria-labelledby={`${id}-label`} className={`${inputClass} min-h-11 text-base`}>
+        <SelectTrigger id={id} aria-labelledby={`${id}-label`} className="w-full min-w-0 max-w-full">
           <SelectValue />
         </SelectTrigger>
         <SelectContent alignItemWithTrigger={false}>
@@ -420,7 +424,7 @@ export function CopyChoiceField({
           id={id}
           aria-labelledby={`${id}-label`}
           lang={selected?.labelLanguage}
-          className={`${inputClass} min-h-11 text-base`}
+          className="w-full min-w-0 max-w-full"
         >
           <SelectValue />
         </SelectTrigger>

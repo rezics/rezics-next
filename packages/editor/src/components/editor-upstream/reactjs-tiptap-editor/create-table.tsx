@@ -143,8 +143,8 @@ function TableSizePicker({
                 aria-label={`${rowLabel}: ${row}, ${columnLabel}: ${col}`}
                 aria-selected={valid && row <= size.rows && col <= size.cols}
                 className={cn(
-                  'size-5 rounded-xs border border-[var(--control)]',
-                  valid && row <= size.rows && col <= size.cols && 'bg-primary/25 border-primary',
+                  'size-5 rounded-xs border border-border',
+                  valid && row <= size.rows && col <= size.cols && 'border-primary bg-accent',
                 )}
               />
             ))}
@@ -201,11 +201,11 @@ function TableSizePicker({
           {labels.tableHeader ?? productControlLabels.tableHeader}
         </FieldLabel>
       </Field>
-      <div className="flex min-w-0 flex-wrap justify-end gap-2">
-        <Button type="button" variant="ghost" className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal" onClick={onCancel}>
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+        <Button type="button" variant="ghost" className="h-auto min-h-7 min-w-0 max-w-full whitespace-normal" onClick={onCancel}>
           {labels.cancel}
         </Button>
-        <Button type="submit" disabled={!valid} className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal">
+        <Button type="submit" disabled={!valid} className="h-auto min-h-7 min-w-0 max-w-full whitespace-normal">
           {labels.insertTable ?? productControlLabels.insertTable}
         </Button>
       </div>

@@ -122,7 +122,7 @@ function KnowledgeImage({
         <Button
           type="button"
           variant="outline"
-          className="min-h-11 whitespace-normal"
+          className="h-auto min-h-7 max-w-full whitespace-normal"
           onClick={() => {
             setAttempt((value) => value + 1);
             setPhase('initial');

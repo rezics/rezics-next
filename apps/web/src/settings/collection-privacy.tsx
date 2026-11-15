@@ -56,7 +56,7 @@ import {
   useSettingsDisposal,
 } from './settings-session-owner';
 
-const preferenceActionClassName = 'h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal wrap-anywhere';
+const preferenceActionClassName = 'h-auto max-w-full whitespace-normal wrap-anywhere min-h-7';
 const noPagerSubscribe = () => () => {};
 const noPagerSnapshot = () => null;
 type PagerActivationKind = 'keyboard' | 'pointer';
@@ -318,7 +318,7 @@ function CollectionRowView({
               id={id}
               aria-labelledby={`${id}-label`}
               aria-describedby={`${id}-current`}
-              className="w-full min-w-0 max-w-full h-auto min-h-11 min-w-11"
+              className="w-full min-w-0 max-w-full h-auto min-h-7"
             >
               <SelectValue />
             </SelectTrigger>

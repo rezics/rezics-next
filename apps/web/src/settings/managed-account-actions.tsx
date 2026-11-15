@@ -140,8 +140,8 @@ function TargetActions({ viewerId, csrfToken, authCsrfToken, io, authNavigation,
                       href={href}
                       referrerPolicy="no-referrer"
                       className={cn(
-                        buttonVariants({ variant: 'outline', size: 'lg' }),
-                        'h-auto min-h-11 max-w-full whitespace-normal py-2 text-start',
+                        buttonVariants({ variant: 'outline' }),
+                        'h-auto max-w-full whitespace-normal text-start min-h-7',
                       )}
                     >
                       {labels[name]()}

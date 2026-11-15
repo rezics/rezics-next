@@ -62,7 +62,7 @@ export function CollectionNoteReader({
           aria-expanded={expanded}
           aria-controls={textId}
           aria-label={`${action}: ${occurrence}`}
-          className="h-auto min-h-11 max-w-full justify-start whitespace-normal rounded-sm px-0 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="h-auto min-h-7 max-w-full justify-start whitespace-normal text-start"
           onClick={() => changeExpanded(!expanded)}
           onBlur={() => {
             const text = textRef.current;

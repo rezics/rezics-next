@@ -1,5 +1,6 @@
 import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../../paraglide/messages.js';
 import { useCandidateReading, type CandidateReading } from './candidate-reading-application';
 import { subjectHref } from '../../subject/load-subject';
@@ -286,8 +287,8 @@ function ConceptVisitView({
               <summary className={linkClass}>{m.concept_visit_identity({}, o)}</summary>
               <label className="block">
                 {m.concept_explore_identity({}, o)}
-                <input
-                  className="block w-full font-mono"
+                <Input
+                  className="font-mono"
                   readOnly
                   value={read.public.subject.id}
                   onFocus={(event) => event.currentTarget.select()}

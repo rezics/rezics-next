@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef } from 'react';
 import { Link } from '@tanstack/react-router';
+import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { MyRealmsCurrentRowView } from './my-realms-current/states';
@@ -101,21 +102,28 @@ export function MyRealmsPageView({
               ...(navigation?.first ? [{ kind: 'first' as const, cursor: null, label: m.realms_first_page() }] : []),
               ...(next ? [{ kind: 'next' as const, cursor: next, label: m.realms_more() }] : []),
             ].map(({ kind, cursor, label }) => (
-              <Link
+              <Button
                 key={kind}
-                to="/realms"
-                search={cursor === null ? {} : { cursor }}
-                preload={false}
-                onClick={(event) => {
-                  if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
-                    return;
-                  if (onMove && !onMove(kind, cursor, event.detail === 0 ? event.currentTarget : undefined))
-                    event.preventDefault();
-                }}
-                className="inline-flex min-h-11 min-w-11 max-w-full items-center justify-center whitespace-normal rounded-lg border border-border px-4 py-2 text-start text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                variant="outline"
+                size="sm"
+                className="h-auto min-h-6 max-w-full whitespace-normal"
+                nativeButton={false}
+                render={
+                  <Link
+                    to="/realms"
+                    search={cursor === null ? {} : { cursor }}
+                    preload={false}
+                    onClick={(event) => {
+                      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+                        return;
+                      if (onMove && !onMove(kind, cursor, event.detail === 0 ? event.currentTarget : undefined))
+                        event.preventDefault();
+                    }}
+                  />
+                }
               >
                 {label}
-              </Link>
+              </Button>
             ))}
           </nav>
         ) : null}

@@ -599,7 +599,7 @@ function MangaCreate({
           <p className="break-all font-mono text-sm">{created.id}</p>
           {created.reader.state === 'ready' ? (
             <MangaNavigationLink
-              className={buttonVariants({ className: 'h-auto min-h-11 max-w-full whitespace-normal text-start' })}
+              className={buttonVariants({ className: 'h-auto min-h-7 max-w-full whitespace-normal text-start' })}
               href={created.reader.href}
             >
               {m.candidate_view_public({}, o)}
@@ -612,7 +612,7 @@ function MangaCreate({
                   : m.catalogue_create_reader_unavailable({}, o)}
               </p>
               <Button
-                className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                 disabled={busy}
                 onClick={async () => {
                   if (!lifetime.active()) return;
@@ -646,7 +646,7 @@ function MangaCreate({
         className={buttonVariants({
           variant: 'outline',
           className:
-            'h-auto min-h-11 max-w-full whitespace-normal text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+            'h-auto min-h-7 max-w-full whitespace-normal text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
         })}
         href={`/${locale}/search${terms[0]?.label.trim() ? `?q=${encodeURIComponent(terms[0].label.trim())}` : ''}`}
       >
@@ -852,7 +852,7 @@ function MangaCreate({
             </ContentItemFrame>
           ))}
           <Button
-            className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+            className="h-auto min-h-7 max-w-full whitespace-normal text-start"
             id={`${termsId}-add-language`}
             type="button"
             variant="outline"
@@ -985,7 +985,7 @@ function MangaCreate({
         {failure && (
           <ContentItemFrame
             as="div"
-            className="min-w-0 space-y-3 py-4 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:items-center [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-offset-2 [&_a]:focus-visible:outline-ring"
+            className="min-w-0 space-y-3 py-4 [&_a]:inline-flex [&_a]:items-center [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-offset-2 [&_a]:focus-visible:outline-ring"
           >
             <EditorFailure locale={locale} reason={failure.reason} />
             {!!failure.errors?.length && (
@@ -1021,7 +1021,7 @@ function MangaCreate({
             )}
             {failure.reason === 'conflict' && (
               <Button
-                className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                 type="button"
                 variant="outline"
                 onClick={() => {
@@ -1038,7 +1038,7 @@ function MangaCreate({
         )}
         <Button
           id="create-subject-submit"
-          className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+          className="h-auto min-h-7 max-w-full whitespace-normal text-start"
           type="submit"
           disabled={
             busy ||
@@ -1181,7 +1181,7 @@ function MangaCreateReviewView({
                   </p>
                 )}
                 <details open>
-                  <summary className="min-h-11 cursor-pointer content-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                  <summary className="cursor-pointer content-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                     {m.catalogue_creation_technical_details({}, o)}
                   </summary>
                   <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-3 font-mono text-xs">
@@ -1282,7 +1282,7 @@ function AddField({
         </Select>
       </Field>
       <Button
-        className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+        className="h-auto min-h-7 max-w-full whitespace-normal text-start"
         type="button"
         variant="outline"
         disabled={disabled || !fields.includes(property)}
@@ -1314,7 +1314,7 @@ export function MangaPublicVisitNotice({
   const returnHref = origin?.returnHref ?? (visit?.kind === 'global' ? visit.returnHref : undefined);
   const unsupported = !!origin && (origin.context !== candidateContext || !!origin.realm);
   const link =
-    'inline-flex min-h-11 items-center rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+    'inline-flex items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
   return (
     <section className="space-y-3 p-4" aria-label={m.manga_edit({}, o)}>
       {(visit?.kind === 'invalid' || unsupported || changed) && (

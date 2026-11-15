@@ -1,5 +1,6 @@
+import { cn } from '@rezics/ui/utils';
 import { useEffect, useRef, useState } from 'react';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { readCollectionDestination, type CollectionDestination } from './collection-read';
@@ -21,9 +22,8 @@ import type { CollectionMoveAnchor, CollectionMoveChoice } from './collection-pl
 export type { CollectionMoveAnchor, CollectionMoveChoice };
 
 const controlClass =
-  'min-h-11 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] text-left focus-visible:outline-2 focus-visible:outline-offset-2';
-const linkClass =
-  'min-h-11 max-w-full break-words [overflow-wrap:anywhere] underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2';
+  'h-auto min-h-7 max-w-full whitespace-normal break-words text-start [overflow-wrap:anywhere]';
+const linkClass = cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]');
 
 type ReadAttempt =
   | { kind: 'choices'; visit: BoundedPageVisit }
@@ -348,7 +348,7 @@ export function CollectionMoveChooser({
                 <Button
                   type="button"
                   variant={destinationId === choice.id ? 'default' : 'outline'}
-                  className={`${controlClass} w-full justify-start px-3 py-2`}
+                  className={`${controlClass} w-full justify-start`}
                   data-move-destination={choice.id}
                   disabled={disabled || loading || !!choiceIssue}
                   aria-pressed={destinationId === choice.id}
@@ -475,7 +475,7 @@ export function CollectionMoveChooser({
                   <Button
                     type="button"
                     variant={selectedAnchor?.id === member.id && selectionReady ? 'default' : 'outline'}
-                    className={`${controlClass} w-full justify-start px-3 py-2`}
+                    className={`${controlClass} w-full justify-start`}
                     data-move-anchor={member.id}
                     disabled={disabled || loading || !!placementIssue}
                     aria-pressed={selectedAnchor?.id === member.id && selectionReady}

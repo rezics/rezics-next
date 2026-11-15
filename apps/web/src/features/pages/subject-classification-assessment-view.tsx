@@ -31,12 +31,12 @@ import { providerStatisticLabel, type Statistic } from './subject-ratings';
 import { sourceObservationHref } from '../catalogue/source-observation/contract';
 
 const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2 text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const sectionClass = 'min-w-0 space-y-4 in-data-[density=compact]:space-y-3';
 const headingClass =
   'text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl';
 const summaryClass =
-  'list-item list-inside min-h-11 min-w-11 max-w-full cursor-pointer rounded-sm px-2 py-3 text-start text-sm font-medium whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'list-item list-inside max-w-full cursor-pointer text-start text-sm font-medium whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 export const ClassificationAssessmentContext = createContext<ClassificationAssessmentSnapshot | null>(null);
 export const ClassificationAssessmentSelectionContext = createContext<DisclosedClassificationAssociation[] | null>(
@@ -169,7 +169,7 @@ function ClassificationSourceReports({
                     const href = sourceObservationHref(sourcesHref, item.source, item.observation?.digest);
                     return (
                       <a
-                        className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                        className="inline-flex max-w-full items-center text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                         href={href ?? sourcesHref}
                       >
                         {m.subject_classification_source_record({ record: item.sourceRecordId }, options)}

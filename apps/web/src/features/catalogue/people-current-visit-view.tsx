@@ -40,7 +40,7 @@ export function PeopleCurrentVisitView({
         >
           {m.people_current_visit_choose_global({}, o)}
         </a>
-        <a className="inline-flex min-h-11 items-center underline" href={peopleCurrentVisitReturnHref(visit.origin)}>
+        <a className="inline-flex items-center underline" href={peopleCurrentVisitReturnHref(visit.origin)}>
           {m.people_current_visit_return({}, o)}
         </a>
       </article>

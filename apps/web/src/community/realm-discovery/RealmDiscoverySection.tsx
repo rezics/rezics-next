@@ -96,7 +96,7 @@ export function RealmDiscoverySection({
             </p>
           )}
           {state.next !== null && onNext && !retry ? (
-            <Button variant="outline" className="min-h-11" disabled={pending} onClick={onNext}>
+            <Button variant="outline" disabled={pending} onClick={onNext}>
               {m.realm_discovery_continue({}, options)}
             </Button>
           ) : null}
@@ -106,7 +106,7 @@ export function RealmDiscoverySection({
             </p>
           ) : null}
           {retry && !pending && onRetry ? (
-            <Button variant="outline" className="min-h-11" onClick={onRetry}>
+            <Button variant="outline" onClick={onRetry}>
               {retryLabel}
             </Button>
           ) : null}
@@ -132,7 +132,7 @@ export function RealmDiscoverySection({
                 : m.realm_discovery_unavailable({}, options)}
           </p>
           {(state.kind === 'unavailable' || state.kind === 'restart') && onRetry ? (
-            <Button variant="outline" className="min-h-11" onClick={onRetry}>
+            <Button variant="outline" onClick={onRetry}>
               {retryLabel}
             </Button>
           ) : null}

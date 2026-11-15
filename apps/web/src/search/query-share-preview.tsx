@@ -2,6 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from
 import { useQueryClient } from '@tanstack/react-query';
 import { addressLease, browserObservation, type AddressLease } from '../session';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { locales } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { queryShareUrl, shareUnavailable, type QueryShare } from './query-share';
@@ -198,12 +199,11 @@ function ShareVisit({ locale, changed, prepare, reader }: PreviewProps & { reade
                       >
                         {m.search_share_select({}, options)}
                       </Button>
-                      <textarea
+                      <Textarea
                         ref={link}
                         aria-label={m.search_share_copy({}, options)}
                         readOnly
                         value={url}
-                        className="w-full"
                         onFocus={(event) => event.currentTarget.select()}
                       />
                     </>

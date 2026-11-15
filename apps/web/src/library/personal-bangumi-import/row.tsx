@@ -11,23 +11,9 @@ import type {
 import { BangumiAction, BangumiCheck } from './controls';
 import { BangumiEvidencePanel } from './fields';
 import { BangumiLabelAdoption } from './labels';
-import {
-  bangumiCanChooseTarget,
-  bangumiHasUnsupportedProposal,
-  bangumiMatchLabel,
-  bangumiOutcomeLabel,
-  bangumiMediumLabel,
-  bangumiNeedsReplace,
-  bangumiTitle,
-} from './meaning';
+import { bangumiCanChooseTarget, bangumiHasUnsupportedProposal, bangumiMatchLabel, bangumiOutcomeLabel, bangumiMediumLabel, bangumiNeedsReplace, bangumiTitle } from './meaning';
 import { BangumiTargetSearch } from './target';
-import {
-  BangumiScoreOutcomeView,
-  BangumiScoreReviewPanel,
-  scoreDraftFrom,
-  scoreSelectionFromDraft,
-  type BangumiScoreDraft,
-} from './score';
+import { BangumiScoreOutcomeView, BangumiScoreReviewPanel, scoreDraftFrom, scoreSelectionFromDraft, type BangumiScoreDraft } from './score';
 import type { BangumiVisit } from './visit';
 
 export type RowDraft = {
@@ -99,12 +85,12 @@ export function BangumiRowReview({
       data-bangumi-match={match ?? 'pending'}
     >
       <header className="space-y-1">
-        <h3 className="text-lg font-medium [overflow-wrap:anywhere]">{title}</h3>
+        <h3 className="h-auto text-lg font-medium [overflow-wrap:anywhere]">{title}</h3>
         <p className="text-sm text-muted-foreground">
           {bangumiMediumLabel(row.evidence.medium)} · {bangumiMatchLabel(match, draft.skip)}
         </p>
         {typeof row.evidence.source.subject_id === 'number' ? (
-          <p className="text-sm [overflow-wrap:anywhere]">
+          <p className="h-auto text-sm [overflow-wrap:anywhere]">
             {m.library_bangumi_identifier({ value: String(row.evidence.source.subject_id) })}
           </p>
         ) : null}

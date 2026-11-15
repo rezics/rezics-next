@@ -7,7 +7,7 @@ import { m } from '../../paraglide/messages.js';
 import type { ChangeDetail, CurrentOperationsRead } from './subject-changes';
 
 const actionClassName =
-  'relative z-10 h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'relative z-10 h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 function currentReviewHref(pageHref: string | undefined, address: CurrentCandidateAddress) {
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

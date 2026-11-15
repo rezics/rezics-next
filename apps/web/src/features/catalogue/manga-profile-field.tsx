@@ -402,7 +402,7 @@ export function MangaInitialField({
                 </Select>
               </Field>
               <Button
-                className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                 type="button"
                 variant="outline"
                 disabled={disabled || !qualifierAllowed}
@@ -637,7 +637,7 @@ export function MangaRowRemove({
       ) : (
         <Button
           ref={trigger}
-          className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+          className="h-auto min-h-7 max-w-full whitespace-normal text-start"
           type="button"
           variant="ghost"
           disabled={disabled}

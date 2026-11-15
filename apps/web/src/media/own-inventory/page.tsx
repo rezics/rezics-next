@@ -366,7 +366,7 @@ export function OwnMediaInventoryWorkspace({
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
-              className="min-h-11"
+             
               disabled={!episodeAuthority || !episodeRow}
               onClick={() => {
                 if (!episodeRow || !episodeAuthority || !isCurrent()) return;
@@ -378,7 +378,7 @@ export function OwnMediaInventoryWorkspace({
             </Button>
             <Button
               variant="outline"
-              className="min-h-11"
+             
               onClick={retryErase}
               disabled={busy || !retryAdmitted || feedback?.kind !== 'uncertain'}
             >
@@ -404,7 +404,7 @@ export function OwnMediaInventoryWorkspace({
               to="/library/media"
               onClick={admitPageMovement}
               aria-disabled={!!episode}
-              className={`${buttonVariants({ variant: 'outline', size: 'lg' })} min-h-11`}
+              className={`${buttonVariants({ variant: 'outline' })}`}
             >
               {m.own_media_restart_action()}
             </Link>
@@ -449,20 +449,21 @@ export function OwnMediaInventoryWorkspace({
                     <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
                       <div className="grid min-w-0 gap-2">
                         <h2 className="min-w-0">
-                          <button
+                          <Button
                             ref={(node) => {
                               if (node) rowButtons.current.set(entry.id, node);
                               else rowButtons.current.delete(entry.id);
                             }}
                             type="button"
-                            className="min-h-11 max-w-full rounded text-left font-medium underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                            variant="link"
+                            className="h-auto min-h-7 max-w-full justify-start whitespace-normal text-start"
                             aria-expanded={expanded}
                             onClick={() => choose(entry)}
                           >
                             <span className="break-words">{purposeText(entry.purpose)}</span>
                             {' · '}
                             <span className="break-words">{stateText(entry.state)}</span>
-                          </button>
+                          </Button>
                         </h2>
                         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                           {entry.declaredMediaType ? (
@@ -483,7 +484,11 @@ export function OwnMediaInventoryWorkspace({
                                 <Link
                                   to="/threads/$id"
                                   params={{ id: entry.container.id }}
-                                  className="min-h-11 content-center text-primary underline underline-offset-4"
+                                  className={buttonVariants({
+                                    variant: 'link',
+                                    size: 'sm',
+                                    className: 'h-auto min-h-6 px-0',
+                                  })}
                                   onClick={() => subject && rememberReturn(entry, subject, cursor, locale)}
                                 >
                                   {m.own_media_open_container()}
@@ -492,7 +497,11 @@ export function OwnMediaInventoryWorkspace({
                                 <Link
                                   to="/realms/$id"
                                   params={{ id: entry.container.id }}
-                                  className="min-h-11 content-center text-primary underline underline-offset-4"
+                                  className={buttonVariants({
+                                    variant: 'link',
+                                    size: 'sm',
+                                    className: 'h-auto min-h-6 px-0',
+                                  })}
                                   onClick={() => subject && rememberReturn(entry, subject, cursor, locale)}
                                 >
                                   {m.own_media_open_container()}
@@ -513,7 +522,11 @@ export function OwnMediaInventoryWorkspace({
                             <a
                               key={variant}
                               href={href}
-                              className="inline-flex min-h-11 items-center rounded-md border px-3 text-sm font-medium underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                              className={buttonVariants({
+                                variant: 'outline',
+                                size: 'sm',
+                                className: 'h-auto min-h-6 max-w-full whitespace-normal',
+                              })}
                               onClick={(event) => {
                                 if (!isCurrent() || !activeEntry || activeEntry.id !== entry.id) event.preventDefault();
                               }}
@@ -594,7 +607,7 @@ export function OwnMediaInventoryWorkspace({
                 search={{ cursor: page.nextCursor }}
                 onClick={admitPageMovement}
                 aria-disabled={!!episode}
-                className={`${buttonVariants({ variant: 'outline', size: 'lg' })} min-h-11`}
+                className={`${buttonVariants({ variant: 'outline' })}`}
               >
                 {m.own_media_continue()}
               </Link>

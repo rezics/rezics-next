@@ -9,6 +9,7 @@ import type {
 } from './contract';
 import { BangumiCheck } from './controls';
 import { bangumiOutcomeLabel } from './meaning';
+import { Input } from '@rezics/ui/shadcn/input';
 
 export type BangumiScoreDraft = { action: 'preserve' | 'set' | 'clear'; units: string };
 
@@ -80,7 +81,7 @@ export function BangumiScoreReviewPanel({
   return (
     <section className="space-y-3 rounded-md border p-3" aria-label={m.library_bangumi_score_title()}>
       <h4 className="font-medium">{m.library_bangumi_score_title()}</h4>
-      <p className="text-sm [overflow-wrap:anywhere]">
+      <p className="h-auto text-sm [overflow-wrap:anywhere]">
         {m.library_bangumi_score_source({
           state:
             review.source.state === 'score'
@@ -99,7 +100,7 @@ export function BangumiScoreReviewPanel({
       {hasTarget ? (
         <>
           {question ? (
-            <div className="space-y-1 text-sm [overflow-wrap:anywhere]">
+            <div className="h-auto space-y-1 text-sm [overflow-wrap:anywhere]">
               <p>
                 {m.library_bangumi_score_question({
                   label: question.label,
@@ -116,7 +117,7 @@ export function BangumiScoreReviewPanel({
           ) : (
             <p className="text-sm">{m.library_bangumi_score_question_unavailable({ id: review.native.questionId })}</p>
           )}
-          <p className="text-sm [overflow-wrap:anywhere]">
+          <p className="h-auto text-sm [overflow-wrap:anywhere]">
             {current === null
               ? m.library_bangumi_score_current_unknown()
               : current.state === 'absent'
@@ -129,7 +130,7 @@ export function BangumiScoreReviewPanel({
                       at: current.at,
                     })}
           </p>
-          <p className="text-sm [overflow-wrap:anywhere]">
+          <p className="h-auto text-sm [overflow-wrap:anywhere]">
             {review.native.admission.status === 'reviewed'
               ? m.library_bangumi_score_admission_reviewed({ reason: review.native.admission.reason })
               : m.library_bangumi_score_admission_unavailable({ reason: review.native.admission.reason })}
@@ -139,7 +140,7 @@ export function BangumiScoreReviewPanel({
       <fieldset className="space-y-1" disabled={disabled}>
         <legend className="font-medium">{m.library_bangumi_score_action()}</legend>
         {(['preserve', 'set', 'clear'] as const).map((action) => (
-          <label key={action} className="flex min-h-11 items-center gap-3 rounded-md px-2 py-2">
+          <label key={action} className="flex items-center gap-3 rounded-md px-2 py-2">
             <input
               type="radio"
               name={`${base}-score`}
@@ -155,8 +156,8 @@ export function BangumiScoreReviewPanel({
       {draft.action === 'set' && question ? (
         <label className="grid gap-1 sm:max-w-xs">
           <span className="font-medium">{m.library_bangumi_score_units()}</span>
-          <input
-            className="min-h-11 rounded-md border bg-background px-3"
+          <Input
+           
             type="number"
             inputMode="numeric"
             min={question.scale.minimum}
@@ -197,7 +198,7 @@ export function BangumiScoreConfirmation({
   return (
     <div className="space-y-2 rounded-md bg-muted/40 p-3" data-bangumi-score-confirm={row.ordinal}>
       {selection.action === 'set' ? (
-        <p className="[overflow-wrap:anywhere]">
+        <p className="h-auto [overflow-wrap:anywhere]">
           {m.library_bangumi_score_confirm_set({
             units: selection.units,
             question: questionId ?? m.library_bangumi_score_question_missing(),
@@ -205,14 +206,14 @@ export function BangumiScoreConfirmation({
           })}
         </p>
       ) : selection.action === 'clear' ? (
-        <p className="[overflow-wrap:anywhere]">
+        <p className="h-auto [overflow-wrap:anywhere]">
           {m.library_bangumi_score_confirm_clear({
             question: questionId ?? m.library_bangumi_score_question_missing(),
             revision: revision ?? m.library_bangumi_score_question_missing(),
           })}
         </p>
       ) : (
-        <p className="[overflow-wrap:anywhere]">
+        <p className="h-auto [overflow-wrap:anywhere]">
           {m.library_bangumi_score_confirm_preserve({
             question: questionId ?? m.library_bangumi_score_question_missing(),
           })}
@@ -257,10 +258,10 @@ export function BangumiScoreOutcomeView({ outcome }: { outcome: BangumiScoreOutc
         {m.library_bangumi_score_outcome({ action: scoreAction(outcome.action), status: scoreStatus(outcome.status) })}
       </p>
       {outcome.reason ? (
-        <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{outcome.reason}</p>
+        <p className="h-auto text-sm text-muted-foreground [overflow-wrap:anywhere]">{outcome.reason}</p>
       ) : null}
       {outcome.vote ? (
-        <p className="text-sm [overflow-wrap:anywhere]">
+        <p className="h-auto text-sm [overflow-wrap:anywhere]">
           {m.library_bangumi_score_receipt_vote({
             units: outcome.vote.units,
             revision: outcome.vote.revision,
@@ -284,19 +285,19 @@ export function BangumiCurrentFacts({
     <section className="mt-3 space-y-2 rounded-md border p-3" aria-label={m.library_bangumi_current_facts()}>
       <h4 className="font-medium">{m.library_bangumi_current_facts()}</h4>
       {entry?.status === 'present' ? (
-        <p className="[overflow-wrap:anywhere]">
+        <p className="h-auto [overflow-wrap:anywhere]">
           {m.library_bangumi_current({ state: entry.state, revision: entry.revision })}
         </p>
       ) : entry?.status === 'absent' ? (
         <p>{m.library_bangumi_absence()}</p>
       ) : entry ? (
-        <p className="[overflow-wrap:anywhere]">
+        <p className="h-auto [overflow-wrap:anywhere]">
           {m.library_bangumi_entry_readback_unavailable({ reason: entry.reason })}
         </p>
       ) : null}
       {vote?.status === 'current' ? (
         vote.vote.state === 'set' ? (
-          <p className="[overflow-wrap:anywhere]">
+          <p className="h-auto [overflow-wrap:anywhere]">
             {m.library_bangumi_score_readback_set({
               units: vote.vote.units,
               revision: vote.vote.revision,
@@ -309,7 +310,7 @@ export function BangumiCurrentFacts({
           <p>{m.library_bangumi_score_readback_absent()}</p>
         )
       ) : vote ? (
-        <p className="[overflow-wrap:anywhere]">
+        <p className="h-auto [overflow-wrap:anywhere]">
           {m.library_bangumi_score_readback_unavailable({ reason: vote.reason })}
         </p>
       ) : null}

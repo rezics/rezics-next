@@ -1,6 +1,7 @@
 import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { type CompositionDocument } from '@rezics/composition';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel, FieldDescription } from '@rezics/ui/shadcn/field';
@@ -25,8 +26,7 @@ export { EditorFailure } from './error-guidance';
 
 const CompositionEditor = lazy(() => import('./composition'));
 const SavedPreview = lazy(() => import('./preview'));
-const actionButtonClass =
-  'h-auto min-h-11 max-w-full whitespace-normal break-words py-2 text-start pointer-coarse:min-h-12';
+const actionButtonClass = 'h-auto min-h-7 max-w-full whitespace-normal break-words text-start';
 
 export function EditorLoading() {
   return (
@@ -405,7 +405,7 @@ export function ZoneConfigurationEditor({
           <section
             tabIndex={-1}
             data-correction-section=""
-            className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 shadow-sm sm:p-6 xl:col-start-1 xl:row-start-2"
+            className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6 xl:col-start-1 xl:row-start-2"
             aria-labelledby="zone-pages-heading"
             aria-describedby={descriptions['zone-pages-heading']}
           >
@@ -436,7 +436,7 @@ export function ZoneConfigurationEditor({
                   session.clearPreview();
                 }}
               >
-                <SharedSelect.SelectTrigger id="zone-page" className="max-md:min-h-11 pointer-coarse:min-h-11">
+                <SharedSelect.SelectTrigger id="zone-page" className="w-full">
                   <SharedSelect.SelectValue />
                 </SharedSelect.SelectTrigger>
                 <SharedSelect.SelectContent>
@@ -455,7 +455,7 @@ export function ZoneConfigurationEditor({
                 role="status"
                 aria-live="polite"
                 aria-atomic="true"
-                className="min-w-0 rounded-lg border border-primary/20 bg-muted/30 p-4"
+                className="min-w-0 rounded-lg border border-border p-4"
               >
                 <p className="text-sm text-muted-foreground">{m.zone_editor_page()}</p>
                 <p className="break-all text-lg font-semibold">{route || m.zone_home()}</p>
@@ -565,7 +565,7 @@ export function ZoneConfigurationEditor({
           <section
             tabIndex={-1}
             data-correction-section=""
-            className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 shadow-sm sm:p-6 xl:col-start-2 xl:row-span-2 xl:row-start-1"
+            className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6 xl:col-start-2 xl:row-span-2 xl:row-start-1"
             aria-labelledby="zone-sources-heading"
             aria-describedby={
               [descriptions['zone-scopes'], descriptions['zone-mounts']].filter(Boolean).join(' ') || undefined
@@ -678,7 +678,7 @@ export function ZoneConfigurationEditor({
           </section>
           </div>
           <section
-            className="space-y-5 rounded-xl border-2 border-primary/20 bg-card p-4 shadow-sm sm:p-6"
+            className="space-y-5 rounded-xl border border-border bg-card p-4 sm:p-6"
             aria-labelledby="zone-head-actions-heading"
           >
             <div className="space-y-4">
@@ -778,7 +778,7 @@ export function ZoneConfigurationEditor({
                         id="zone-visibility"
                         aria-invalid={invalid('zone-visibility')}
                         aria-describedby={descriptions['zone-visibility']}
-                        className="max-md:min-h-11 pointer-coarse:min-h-11"
+                        className="w-full"
                       >
                         <SharedSelect.SelectValue />
                       </SharedSelect.SelectTrigger>
@@ -817,7 +817,7 @@ export function ZoneConfigurationEditor({
             </div>
           </section>
           <section
-            className="space-y-4 rounded-xl border border-border bg-card p-4 shadow-sm sm:p-6"
+            className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
             aria-labelledby="zone-preview-heading"
           >
             <h2 id="zone-preview-heading" className="text-xl font-semibold">
@@ -837,7 +837,12 @@ export function ZoneConfigurationEditor({
               >
                 {m.zone_editor_preview()}
               </Button>
-              <a className="text-primary underline" href={href} target="_blank" rel="noopener noreferrer">
+              <a
+                className={cn(buttonVariants({ variant: 'outline' }), actionButtonClass)}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 {m.zone_editor_open()}
               </a>
               <Button
@@ -885,7 +890,7 @@ export function ZoneConfigurationEditor({
             ) : null}
             {state.preview?.kind === 'ready' ? (
               <Suspense fallback={<EditorLoading />}>
-                <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-background shadow-sm">
+                <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-background">
                   <SavedPreview page={state.preview.value} route={route} locale={locale} />
                 </div>
               </Suspense>

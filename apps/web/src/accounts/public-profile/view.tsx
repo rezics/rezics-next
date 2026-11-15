@@ -1,7 +1,8 @@
 import type { MouseEvent, Ref } from 'react';
 import { realmsWindowHref } from './realm-windows/address';
 import type { Movement } from './realm-windows/visit';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { ContentItem } from '@rezics/ui/content-item';
 import { m } from '../../paraglide/messages.js';
@@ -32,7 +33,7 @@ export function PublicAccountState({
         <EmptyDescription>{text}</EmptyDescription>
       </EmptyHeader>
       {state === 'unavailable' && retry && (
-        <Button variant="outline" className="min-h-11 min-w-11 whitespace-normal wrap-anywhere" onClick={retry}>
+        <Button variant="outline" className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere" onClick={retry}>
           {m.public_account_retry()}
         </Button>
       )}
@@ -46,7 +47,7 @@ export function PublicAccountLinks({ handle, locale, realms }: { handle: string;
     <nav aria-label={m.public_account_more()} className="text-sm">
       <a
         href={accountHref(locale, handle, 'realms')}
-        className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+        className="inline-flex items-center text-primary underline underline-offset-4"
       >
         {m.public_account_realms()}
       </a>
@@ -86,8 +87,10 @@ export function PublicRealmsPage({
     event.preventDefault();
     navigation.move(movement, cursor, event.currentTarget);
   };
-  const actionClass =
-    'inline-flex min-h-11 min-w-11 items-center wrap-anywhere text-primary underline underline-offset-4';
+  const actionClass = cn(
+    buttonVariants({ variant: 'outline', size: 'sm' }),
+    'h-auto min-h-6 max-w-full whitespace-normal wrap-anywhere',
+  );
   return (
     <article
       ref={regionRef}
@@ -98,7 +101,7 @@ export function PublicRealmsPage({
       <header className="min-w-0 space-y-2 wrap-anywhere">
         <a
           href={accountHref(locale, handle)}
-          className="inline-flex min-h-11 items-center text-sm text-primary underline underline-offset-4"
+          className="inline-flex items-center text-sm text-primary underline underline-offset-4"
         >
           {title}
         </a>

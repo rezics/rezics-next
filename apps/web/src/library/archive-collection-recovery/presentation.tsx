@@ -2,9 +2,10 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import type { CollectionTypeOption } from '../collection-presentation';
 import { ReleasedTypeChoices } from '../collection-presentation-review/type-options';
-import { actionClass } from '../private-export/controls';
+
 import { EvidenceDetails } from '../archive-progress-recovery/review';
 import type { RecoveryPresentationChoice, RecoveryPresentationEvidence, RecoveryStatus } from './contract';
+import { Button } from '@rezics/ui/shadcn/button';
 
 async function readPresentationTypes(): Promise<readonly CollectionTypeOption[] | null> {
   const { readArchiveRecoveryPresentationTypes } = await import('./server');
@@ -36,7 +37,7 @@ export function RecoveryPresentationSummary({
     <dl className="grid min-w-0 gap-3 text-sm sm:grid-cols-2" data-recovery-presentation-choice>
       <div className="grid min-w-0 gap-1">
         <dt className="font-medium">{m.library_archive_recovery_presentation_kind()}</dt>
-        <dd className="[overflow-wrap:anywhere]">{choice.kind ?? m.library_collection_mixed_label()}</dd>
+        <dd className="h-auto [overflow-wrap:anywhere]">{choice.kind ?? m.library_collection_mixed_label()}</dd>
       </div>
       <div className="grid min-w-0 gap-1">
         <dt className="font-medium">{m.library_archive_recovery_presentation_source()}</dt>
@@ -44,7 +45,7 @@ export function RecoveryPresentationSummary({
       </div>
       <div className="grid min-w-0 gap-1 sm:col-span-2">
         <dt className="font-medium">{m.library_archive_recovery_presentation_release()}</dt>
-        <dd className="[overflow-wrap:anywhere]">
+        <dd className="h-auto [overflow-wrap:anywhere]">
           {choice.releaseDigest ?? m.library_archive_recovery_presentation_no_release()}
         </dd>
       </div>
@@ -118,7 +119,7 @@ export function RecoveryPresentationChoices({
       <p className="text-sm">{m.library_archive_recovery_presentation_choice_help()}</p>
       {evidence ? (
         <div className="grid min-w-0 gap-2 rounded-lg bg-muted/40 p-3" data-archived-presentation>
-          <p className="text-sm [overflow-wrap:anywhere]">
+          <p className="h-auto text-sm [overflow-wrap:anywhere]">
             <span className="font-medium">{m.library_archive_recovery_presentation_archived()}: </span>
             {evidence.presentationKind ?? m.library_collection_mixed_label()}
           </p>
@@ -138,14 +139,14 @@ export function RecoveryPresentationChoices({
         name="archive-recovery-presentation"
       />
       {!pending && types === null ? (
-        <button
+        <Button
           type="button"
-          className={`${actionClass} w-fit max-w-full rounded-md border text-start [overflow-wrap:anywhere]`}
+          variant="outline" className="h-auto min-h-7 w-fit max-w-full text-start [overflow-wrap:anywhere]"
           disabled={disabled}
           onClick={() => setAttempt((value) => value + 1)}
         >
           {m.library_archive_recovery_presentation_retry_types()}
-        </button>
+        </Button>
       ) : null}
     </section>
   );

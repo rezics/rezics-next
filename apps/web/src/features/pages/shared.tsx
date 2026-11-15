@@ -126,7 +126,7 @@ export function ProfileDetails({
       data-slot="people-profile-details"
       className="min-w-0 border-t border-border pt-4"
     >
-      <summary className="flex min-h-11 cursor-pointer items-center py-2 font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+      <summary className="flex cursor-pointer items-center font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
         {m.subject_details({}, { locale: locale as never })}
       </summary>
       <div className="min-w-0 space-y-6 pt-4 [overflow-wrap:anywhere]">{children}</div>

@@ -23,11 +23,6 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-// The Rhea duration color (muted foreground at 70%) is 3:1 on the page in the light theme; the plain token clears 4.5:1.
-// Rhea dims a pending line to 60% opacity, which is 2.5:1 on the page in the light theme; italic marks it instead.
-const pendingColor = 'data-[status=pending]:opacity-100 data-[status=pending]:italic';
-const durationColor = 'text-muted-foreground';
-
 export const Default: Story = {
   render: () => (
     <Trace className="max-w-sm">
@@ -36,12 +31,12 @@ export const Default: Story = {
           <SearchIcon />
         </TraceIcon>
         <TraceTitle>Searched the catalog</TraceTitle>
-        <TraceDescription className={durationColor}>1.2s</TraceDescription>
+        <TraceDescription>1.2s</TraceDescription>
       </TraceLine>
       <TraceLine status="running">
         <TraceTitle>Reading reviews</TraceTitle>
       </TraceLine>
-      <TraceLine status="pending" className={pendingColor}>
+      <TraceLine status="pending">
         <TraceTitle>Writing a summary</TraceTitle>
       </TraceLine>
       <TraceLine status="error">
@@ -88,7 +83,7 @@ export const LongCJKTitle: Story = {
       <TraceCollapsible>
         <TraceCollapsibleTrigger>
           <TraceTitle>检索《三体》第三部：死神永生与更多的长标题作品名称，用来检查截断</TraceTitle>
-          <TraceDescription className={durationColor}>2.4 秒</TraceDescription>
+          <TraceDescription>2.4 秒</TraceDescription>
         </TraceCollapsibleTrigger>
         <TraceCollapsibleContent>文明之间的黑暗森林法则，每个文明都是带枪的猎人。</TraceCollapsibleContent>
       </TraceCollapsible>

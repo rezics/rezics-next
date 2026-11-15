@@ -66,7 +66,7 @@ function recentRegion(board: RealmBoard, boardHref: string, current: () => boole
                 onContextMenu={(event) => {
                   if (!current()) event.preventDefault();
                 }}
-                className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 text-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+                className="inline-flex max-w-full items-center text-sm underline-offset-4 hover:underline"
               >
                 {thread.title ?? m.threads_untitled()}
               </a>
@@ -152,7 +152,7 @@ export function RealmCommunityBoards({
                         onContextMenu={(event) => {
                           if (!current()) event.preventDefault();
                         }}
-                        className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+                        className="inline-flex max-w-full items-center underline-offset-4 hover:underline"
                         data-slot="realm-board-link"
                       >
                         {board.title ?? m.threads_untitled()}

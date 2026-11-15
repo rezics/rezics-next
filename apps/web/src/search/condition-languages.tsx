@@ -162,7 +162,7 @@ export function ConditionLanguages({
           disabled={disabled || atLimit || available.length === 0}
           onValueChange={(nextSelectValue) => setSelected(nextSelectValue ?? '')}
         >
-          <SelectTrigger id={selectId} aria-invalid={invalid || undefined} aria-describedby={errorId}>
+          <SelectTrigger id={selectId} aria-invalid={invalid || undefined} aria-describedby={errorId} className="min-w-0 w-auto flex-1">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -179,7 +179,6 @@ export function ConditionLanguages({
         <Button
           type="button"
           variant="outline"
-          size="sm"
           disabled={disabled || atLimit || !selected}
           onClick={() => {
             update({ type: 'add', tag: selected });
@@ -244,6 +243,7 @@ export function ConditionLanguages({
           <Input
             {...composition.handlers}
             id={`${selectId}-custom`}
+            className="min-w-0 w-auto flex-1"
             value={customTag}
             maxLength={35}
             autoComplete="off"
@@ -267,7 +267,6 @@ export function ConditionLanguages({
           <Button
             type="button"
             variant="outline"
-            size="sm"
             disabled={disabled || atLimit || !customTag.trim()}
             onClick={() => addCustomTag(customTag)}
           >

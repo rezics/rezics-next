@@ -1,11 +1,12 @@
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { useEffect, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
 import type { SpaceEntryRow } from './contract';
 import type { SpaceEntryCommands } from './commands';
 
-const control =
-  'relative z-10 inline-flex min-h-11 items-center rounded-md border px-3 py-2 text-sm disabled:opacity-60';
+const control = 'relative z-10 h-auto min-h-7 max-w-full whitespace-normal';
 export function SpaceEntryControls({
   id,
   row,
@@ -70,19 +71,20 @@ export function SpaceEntryControls({
   return (
     <div className="flex flex-wrap items-center gap-2" data-search-space-actions={id}>
       {signIn ? (
-        <a className={control} href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`}>
+        <a className={cn(buttonVariants({ variant: 'outline' }), control)} href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`}>
           {m.search_space_sign_in({}, options)}
         </a>
       ) : (
-        <button
+        <Button
           className={control}
+          variant="outline"
           type="button"
           onClick={() => void change()}
           disabled={!ready || state === 'pending' || state === 'uncertain' || state === 'successful'}
           aria-busy={state === 'pending'}
         >
           {state === 'pending' ? m.search_space_pending({}, options) : followLabel}
-        </button>
+        </Button>
       )}
       {!signIn &&
       (!follow || follow.state === 'unavailable' || (follow.state === 'current' && follow.action !== 'allowed')) ? (
@@ -94,7 +96,7 @@ export function SpaceEntryControls({
       ) : null}
       {href && row?.entry === 'allowed' ? (
         <a
-          className={control}
+          className={cn(buttonVariants({ variant: 'outline' }), control)}
           href={href}
           onClick={(event) => {
             if (commands && !commands.current()) event.preventDefault();

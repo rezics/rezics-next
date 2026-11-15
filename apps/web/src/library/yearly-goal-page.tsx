@@ -1,11 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import type { ReportedYearSummary } from './private-diary/native';
 import type { NativeYearlyGoal } from './yearly-goal-native';
 
-const control =
-  'inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border px-4 py-2 text-sm underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const control = buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 max-w-full whitespace-normal' });
+const actionClass = 'h-auto min-h-7 max-w-full whitespace-normal';
 const focusIndicator = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const useFocusEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
 
@@ -351,11 +353,11 @@ function YearlyGoalScreen({
   return (
     <main className="mx-auto w-full min-w-0 max-w-4xl space-y-6 px-4 py-6">
       <nav aria-label={m.library_nav_sidebar_label()} className="flex flex-wrap gap-3">
-        <a href={`/${locale}/library`} className={`${control} underline`}>
+        <a href={`/${locale}/library`} className={control}>
           {m.library_nav_tracked_entries()}
         </a>
         {year !== undefined ? (
-          <a href={`/${locale}/library/history?year=${year}`} className={`${control} underline`}>
+          <a href={`/${locale}/library/history?year=${year}`} className={control}>
             {m.library_diary_nav()}
           </a>
         ) : null}
@@ -367,7 +369,7 @@ function YearlyGoalScreen({
       <form action={path} method="get" className="flex flex-wrap items-end gap-3">
         <div className="grid gap-2">
           <label htmlFor="yearly-goal-year">{m.library_diary_year_select()}</label>
-          <input
+          <Input
             key={year ?? 'invalid'}
             id="yearly-goal-year"
             name="year"
@@ -380,12 +382,12 @@ function YearlyGoalScreen({
             defaultValue={year}
             aria-invalid={year === undefined || undefined}
             aria-describedby={year === undefined ? 'yearly-goal-year-error' : undefined}
-            className="min-h-11 w-32 rounded-lg border bg-background px-3"
+            className="w-32"
           />
         </div>
-        <button type="submit" className={control}>
+        <Button variant="outline" type="submit" className={actionClass}>
           {m.library_diary_year_show()}
-        </button>
+        </Button>
       </form>
       {year === undefined ? (
         <p id="yearly-goal-year-error" role="alert">
@@ -397,12 +399,12 @@ function YearlyGoalScreen({
             <h2 className="text-lg font-medium">{m.library_diary_year_heading({ year })}</h2>
             <nav aria-label={m.library_diary_period_navigation()} className="flex flex-wrap gap-3">
               {year > 1 ? (
-                <a href={`${path}?year=${year - 1}`} className={`${control} underline`}>
+                <a href={`${path}?year=${year - 1}`} className={control}>
                   {m.library_yearly_goal_previous()}
                 </a>
               ) : null}
               {year < 9999 ? (
-                <a href={`${path}?year=${year + 1}`} className={`${control} underline`}>
+                <a href={`${path}?year=${year + 1}`} className={control}>
                   {m.library_yearly_goal_next()}
                 </a>
               ) : null}
@@ -416,7 +418,7 @@ function YearlyGoalScreen({
             <p role="status">{m.shell_account_unavailable()}</p>
           ) : null}
           {sessionState === 'signed-out' ? (
-            <a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} className={`${control} underline`}>
+            <a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} className={control}>
               {m.account_sign_in()}
             </a>
           ) : null}
@@ -443,14 +445,14 @@ function YearlyGoalScreen({
                   {m.library_yearly_goal_unavailable()}
                 </p>
                 {api && operation === null ? (
-                  <button
+                  <Button variant="outline"
                     type="button"
-                    className={control}
+                    className={actionClass}
                     disabled={busy}
                     onClick={() => void refreshCurrent('manual')}
                   >
                     {m.library_selection_retry()}
-                  </button>
+                  </Button>
                 ) : null}
               </>
             ) : null}
@@ -484,7 +486,7 @@ function YearlyGoalScreen({
                   mode === 'edit' && snapshot.viewer.actions.editTarget.allowed ? (
                     <form className="grid max-w-sm gap-3" onSubmit={submitTarget}>
                       <label htmlFor="yearly-goal-target-value">{m.library_yearly_goal_target()}</label>
-                      <input
+                      <Input
                         ref={editInputRef}
                         id="yearly-goal-target-value"
                         type="text"
@@ -499,7 +501,6 @@ function YearlyGoalScreen({
                         }}
                         aria-invalid={invalidTarget || undefined}
                         aria-describedby={invalidTarget ? 'yearly-goal-target-error' : undefined}
-                        className="min-h-11 rounded-lg border bg-background px-3"
                       />
                       {invalidTarget ? (
                         <p id="yearly-goal-target-error" role="alert">
@@ -509,57 +510,57 @@ function YearlyGoalScreen({
                       {operation === 'stale' ? <p role="alert">{m.library_yearly_goal_stale()}</p> : null}
                       {operation === 'review' ? <p role="status">{m.library_yearly_goal_review()}</p> : null}
                       <div className="flex flex-wrap gap-3">
-                        <button type="submit" className={control} disabled={busy}>
+                        <Button variant="outline" type="submit" className={actionClass} disabled={busy}>
                           {m.library_yearly_goal_save()}
-                        </button>
-                        <button type="button" className={control} disabled={busy} onClick={cancel}>
+                        </Button>
+                        <Button variant="outline" type="button" className={actionClass} disabled={busy} onClick={cancel}>
                           {m.library_yearly_goal_cancel()}
-                        </button>
+                        </Button>
                       </div>
                     </form>
                   ) : mode === 'clear' ? (
                     <div className="flex flex-wrap items-center gap-3">
                       {snapshot.target.state === 'set' && snapshot.viewer.actions.clearTarget.allowed ? (
-                        <button
+                        <Button variant="outline"
                           ref={clearConfirmRef}
                           type="button"
-                          className={control}
+                          className={actionClass}
                           disabled={busy}
                           onClick={() => commandFor(null)}
                         >
                           {m.library_yearly_goal_clear()}
-                        </button>
+                        </Button>
                       ) : (
                         <p role="status">{m.library_yearly_goal_target_none()}</p>
                       )}
-                      <button type="button" className={control} disabled={busy} onClick={cancel}>
+                      <Button variant="outline" type="button" className={actionClass} disabled={busy} onClick={cancel}>
                         {m.library_yearly_goal_cancel()}
-                      </button>
+                      </Button>
                       {operation === 'review' ? <p role="status">{m.library_yearly_goal_review()}</p> : null}
                     </div>
                   ) : (
                     <div className="flex flex-wrap gap-3">
                       {snapshot.viewer.actions.editTarget.allowed ? (
-                        <button
+                        <Button variant="outline"
                           ref={editActionRef}
                           type="button"
-                          className={control}
+                          className={actionClass}
                           disabled={busy}
                           onClick={beginEdit}
                         >
                           {m.library_yearly_goal_edit()}
-                        </button>
+                        </Button>
                       ) : null}
                       {snapshot.target.state === 'set' && snapshot.viewer.actions.clearTarget.allowed ? (
-                        <button
+                        <Button variant="outline"
                           ref={clearActionRef}
                           type="button"
-                          className={control}
+                          className={actionClass}
                           disabled={busy}
                           onClick={beginClear}
                         >
                           {m.library_yearly_goal_clear()}
-                        </button>
+                        </Button>
                       ) : null}
                     </div>
                   )
@@ -576,44 +577,44 @@ function YearlyGoalScreen({
             {operation === 'stale' ? (
               <div className="space-y-3" role="alert">
                 <p>{m.library_yearly_goal_stale()}</p>
-                <button
+                <Button variant="outline"
                   ref={refreshActionRef}
                   type="button"
-                  className={control}
+                  className={actionClass}
                   onClick={() => void refreshCurrent('conflict')}
                 >
                   {m.library_yearly_goal_refresh()}
-                </button>
+                </Button>
               </div>
             ) : null}
             {operation === 'review' ? (
-              <button
+              <Button variant="outline"
                 ref={refreshActionRef}
                 type="button"
-                className={control}
+                className={actionClass}
                 onClick={() => void refreshCurrent('conflict')}
               >
                 {m.library_yearly_goal_refresh()}
-              </button>
+              </Button>
             ) : null}
             {operation === 'uncertain' ? (
               <div className="space-y-3" role="alert">
                 <p>{m.library_yearly_goal_uncertain()}</p>
-                <button ref={retryExactRef} type="button" className={control} onClick={retryExact}>
+                <Button variant="outline" ref={retryExactRef} type="button" className={actionClass} onClick={retryExact}>
                   {m.library_yearly_goal_retry_exact()}
-                </button>
+                </Button>
               </div>
             ) : null}
             {operation === 'denied' ? <p role="alert">{m.ctxw_denied()}</p> : null}
             {['unavailable', 'key-conflict', 'erased', 'invalid'].includes(operation ?? '') ? (
-              <button
+              <Button variant="outline"
                 ref={readbackRetryRef}
                 type="button"
-                className={control}
+                className={actionClass}
                 onClick={() => void refreshCurrent('readback')}
               >
                 {m.library_selection_retry()}
-              </button>
+              </Button>
             ) : null}
           </section>
           <section aria-labelledby="yearly-goal-progress" className="space-y-4 rounded-lg border p-4">
@@ -631,9 +632,9 @@ function YearlyGoalScreen({
             )}
             <p className="text-sm text-muted-foreground">{m.library_yearly_goal_coverage()}</p>
             {snapshot && !pending ? (
-              <button type="button" className={control} disabled={busy} onClick={() => void refreshCurrent('manual')}>
+              <Button variant="outline" type="button" className={actionClass} disabled={busy} onClick={() => void refreshCurrent('manual')}>
                 {m.library_yearly_goal_refresh()}
-              </button>
+              </Button>
             ) : null}
           </section>
         </>
@@ -648,7 +649,7 @@ function SummaryView({ year, summary }: { year: number; summary: ReportedYearSum
       {month === undefined ? null : (
         <a
           href={`/${getLocale()}/library/history?year=${year}&month=${month}`}
-          className="inline-flex min-h-11 min-w-11 items-center text-start font-medium underline"
+          className="text-start font-medium underline underline-offset-4"
         >
           {month === 'unallocated' ? m.library_diary_year_unallocated() : monthName(month)}
         </a>

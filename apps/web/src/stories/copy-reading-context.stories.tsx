@@ -10,6 +10,7 @@ import { subjectOf } from '../library/reads';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { PatternStory, pagePaths } from './page';
+import { Button } from '@rezics/ui/shadcn/button';
 
 const meta = {
   title: 'Library/Copy reading context',
@@ -138,9 +139,9 @@ function ReaderReplacementPage() {
     <StoryPage>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <p role="status">{reader} inventory</p>
-        <button type="button" className="min-h-11 rounded-md border px-3" onClick={() => setReader('Bob')}>
+        <Button type="button" variant="outline" size="sm" onClick={() => setReader('Bob')}>
           Replace reader
-        </button>
+        </Button>
       </div>
       <CopiesPage page={page(reader === 'Alice' ? [aliceCopy] : [bobCopy])} />
     </StoryPage>

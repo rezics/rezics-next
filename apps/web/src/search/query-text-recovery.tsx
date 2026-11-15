@@ -1,4 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
 import {
   diagnoseText,
   TEXT_LIMITS,
@@ -110,10 +113,10 @@ export function QueryTextRecovery({
           {label ?? m.search_text_label({}, options)}
         </label>
         {control === 'search' ? (
-          <input
+          <Input
             ref={input}
             id={inputId}
-            className="min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="min-w-0 flex-1"
             type="search"
             value={draft}
             autoCapitalize="off"
@@ -128,7 +131,7 @@ export function QueryTextRecovery({
             }}
           />
         ) : (
-          <textarea
+          <Textarea
             ref={textarea}
             id={inputId}
             value={draft}
@@ -138,7 +141,7 @@ export function QueryTextRecovery({
             spellCheck={false}
             aria-invalid={issue ? true : undefined}
             aria-describedby={`${id}-help${issue ? ` ${id}-error` : ''}`}
-            className="min-h-32 w-full rounded-md border bg-background p-3 text-foreground"
+            className="min-h-32"
             onChange={(event) => {
               if (frame.current !== undefined) cancelAnimationFrame(frame.current);
               frame.current = undefined;
@@ -158,13 +161,9 @@ export function QueryTextRecovery({
         >
           {m.search_text_grammar({}, options)}
         </p>
-        <button
-          type="submit"
-          disabled={waiting}
-          className="rounded-md bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50"
-        >
+        <Button type="submit" disabled={waiting}>
           {applyLabel ?? m.search_input_recovery_apply({}, options)}
-        </button>
+        </Button>
         {waiting && (
           <p role="status" className="text-sm">
             {m.search_recovery_wait({}, options)}

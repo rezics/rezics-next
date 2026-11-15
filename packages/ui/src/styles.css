@@ -1,12 +1,12 @@
-/* Rezics UI: a maintained fork of SharkUI d43c3c2 (MIT) styled as Rezics Aura. */
+/* Rezics UI. Official shadcn Mira + Neutral (light and dark) is the appearance baseline.
+   Base UI remains the primitive library. This file keeps fonts, CJK fallbacks, system and
+   explicit dark handling, animation hooks, safe scrolling, and minimal aliases. */
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 @import './hitbox.css';
 
-/* shadcn's Rhea defaults come first; the Aura tokens below are layered after them. The cloned components in
-   src/shadcn/ use shadcn's data-selected="true", while the Ark components set a bare data-selected, so the variant
-   matches both. */
+/* Cloned components use data-selected="true". A bare data-selected still matches. */
 @custom-variant data-selected {
   &:where([data-selected='true']),
   &:where([data-selected]:not([data-selected='false'])) {
@@ -33,8 +33,8 @@
 }
 
 @theme inline {
-  /* Stacks are set per locale on :root below. SharkUI titles use font-heading;
-     Rezics headings are interface text, so it maps to the sans stack. */
+  /* Stacks are set per locale on :root below. Headings use the interface sans stack.
+     Work titles use the serif stack. */
   --font-sans: var(--font-interface);
   --font-heading: var(--font-interface);
   /* Work titles only: Iowan Old Style where installed, else Source Serif 4. */
@@ -102,17 +102,6 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-
-  /* Aura radius scale (arca-ui/aura, --radius: 1rem). Pills (badges, avatars,
-     switches) use rounded-full. */
-  --radius-xs: calc(var(--radius) - 8px);
-  --radius-sm: calc(var(--radius) - 4px); /* 12px: cover images, checkboxes */
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius); /* 16px: small inputs, xs buttons, keyboard hints */
-  --radius-xl: calc(var(--radius) + 4px); /* 20px: buttons, inputs, tabs, menu items */
-  --radius-2xl: calc(var(--radius) + 8px); /* 24px: cards, menus, popovers, alerts */
-  --radius-3xl: calc(var(--radius) + 14px); /* 30px: dialogs, sheets, feature headers */
-  --radius-4xl: calc(var(--radius) + 20px);
 
   --animate-slide-up: slideUp 0.2s ease-out;
   --animate-slide-down: slideDown 0.2s ease-out;
@@ -288,315 +277,125 @@
       transform: translate3d(100%, 0, 0);
     }
   }
+
+  --radius-sm: calc(var(--radius) * 0.6);
+
+  --radius-md: calc(var(--radius) * 0.8);
+
+  --radius-lg: var(--radius);
+
+  --radius-xl: calc(var(--radius) * 1.4);
+
+  --radius-2xl: calc(var(--radius) * 1.8);
+
+  --radius-3xl: calc(var(--radius) * 2.2);
+
+  --radius-4xl: calc(var(--radius) * 2.6)
 }
 
-/*
- * Rezics Aura. Structure follows arca-ui/aura; colors are Rezics.
- * --brand is the logo red. It fails small-text contrast, so use it only for
- * non-text marks: logo, active vote arrow, unread dots, chart marks.
- * Colored text and filled buttons use --primary (ink blue).
- * SharkUI convention: --X-foreground is the text-safe tone of semantic color X.
- */
+/* Self-hosted faces. Official Neutral color tokens are applied by the shadcn CLI. */
 :root {
-  --radius: 1rem;
+  color-scheme: light;
 
-  /* The app self-hosts the variable faces; the plain names match local installs. */
   --font-interface: 'Manrope Variable', 'Manrope', ui-sans-serif, system-ui, sans-serif;
   --font-work-serif: 'Iowan Old Style', 'Source Serif 4 Variable', 'Source Serif 4', Georgia, serif;
   --font-code: 'Geist Mono Variable', 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-}
 
-/* Colors switch on <html>, and also inside any .dark element (a dark story or panel). */
-:root,
-.dark {
-  color-scheme: light;
+  /* Logo identity only. Never use this for text or controls. */
+  --brand: #df3d35;
 
-  --background: #f9f6f2;
-  --foreground: #2b343d;
-  --card: #fefcf9;
-  --card-foreground: #2b343d;
-  --popover: #fefcf9;
-  --popover-foreground: #2b343d;
-
-  --primary: #2f63ad;
-  --primary-foreground: #ffffff;
-  --secondary: #efece7;
-  --secondary-foreground: #2b343d;
-  --muted: #efece7;
-  --muted-foreground: #5d646c;
-  --accent: #e4ecf7;
-  --accent-foreground: #1f4a85;
-
-  --brand: #df3d35; /* logo, active upvote, unread dots, chart marks: never text */
-  --rating: #bf7a0e; /* stars and rating bars */
-  --vote-down: #6a5bb5; /* active downvote, kept apart from blue actions */
-
-  /* Rhea uses --destructive for error and action text: match the text-safe accent ink.
-     Keep red in --destructive-solid for non-text danger affordances below. */
-  --destructive: #1f4a85;
-  --destructive-foreground: #1f4a85;
-  --destructive-solid: #c42840;
-  --info: #65bae1;
-  --info-foreground: #1f6f93;
-  --success: #4aa651;
-  --success-foreground: #28722f; /* 4.8:1 on its 12% tint over every light surface */
-  --warning: #e6b55d;
-  --warning-foreground: #8a5a00;
-
-  --border: #dad7d0;
-  --input: #dad7d0;
-  /* Opaque control boundaries and off tracks; border/input keep softer decoration. */
-  --control: #827d75;
-  --ring: #2f63ad;
-
-  --sidebar: #f7f5f1;
-  --sidebar-foreground: #2b343d;
-  --sidebar-primary: #2f63ad;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e4ecf7;
-  --sidebar-accent-foreground: #1f4a85;
-  --sidebar-border: #e4e1da;
-  --sidebar-ring: #2f63ad;
-
-  --chart-1: #2f63ad;
-  --chart-2: #1d8a7a;
-  --chart-3: #bf7a0e;
-  --chart-4: #df3d35;
-  --chart-5: #6a5bb5;
-
+  /* Names custom components already use, pointed at official tokens. */
+  --rating: var(--foreground);
+  --vote-down: var(--muted-foreground);
+  --success: var(--foreground);
+  --success-foreground: var(--background);
+  --info: var(--muted-foreground);
+  --info-foreground: var(--foreground);
+  --warning: var(--foreground);
+  --warning-foreground: var(--background);
+  --destructive-solid: var(--destructive);
+  --control: var(--border);
   --code: var(--card);
   --code-foreground: var(--foreground);
-  --code-highlight: color-mix(in oklab, var(--foreground) 5%, var(--code));
+  --code-highlight: color-mix(in oklab, var(--foreground) 5%, var(--card));
 
-  --aura-grid: color-mix(in oklab, var(--foreground) 7%, transparent);
-  --aura-grid-strong: color-mix(in oklab, var(--foreground) 10%, transparent);
-  --aura-glow-1: color-mix(in oklab, var(--primary) 14%, transparent);
-  --aura-glow-2: color-mix(in oklab, var(--accent) 18%, transparent);
-  --aura-glow-3: color-mix(in oklab, var(--brand) 8%, transparent);
-  --aura-shadow-card:
-    0 1px 0 0 color-mix(in oklab, var(--foreground) 7%, transparent),
-    0 22px 48px -36px color-mix(in oklab, var(--foreground) 40%, transparent);
-  --aura-shadow-card-hover:
-    0 1px 0 0 color-mix(in oklab, var(--foreground) 8%, transparent),
-    0 30px 72px -44px color-mix(in oklab, var(--foreground) 45%, transparent);
-  --aura-shadow-float:
-    0 2px 4px -1px color-mix(in oklab, var(--foreground) 8%, transparent),
-    0 12px 24px -4px color-mix(in oklab, var(--foreground) 12%, transparent),
-    0 32px 64px -12px color-mix(in oklab, var(--foreground) 16%, transparent);
+  /* Flat stand-ins for retired Aura canvas hooks. */
+  --aura-grid: transparent;
+  --aura-grid-strong: transparent;
+  --aura-glow-1: transparent;
+  --aura-glow-2: transparent;
+  --aura-glow-3: transparent;
+  --aura-shadow-card: 0 1px 2px color-mix(in oklab, var(--foreground) 8%, transparent);
+  --aura-shadow-card-hover: 0 1px 2px color-mix(in oklab, var(--foreground) 12%, transparent);
+  --aura-shadow-float: 0 1px 2px color-mix(in oklab, var(--foreground) 10%, transparent);
 
-  /* Dark mode overrides, applied by .dark or by the system preference. */
   @variant dark {
     color-scheme: dark;
-
-    --background: #0d1218;
-    --foreground: #e7e4df;
-    --card: #151b21;
-    --card-foreground: #e7e4df;
-    --popover: #151b21;
-    --popover-foreground: #e7e4df;
-
-    --primary: #86aee8;
-    --primary-foreground: #0b1626;
-    --secondary: #232a30;
-    --secondary-foreground: #e7e4df;
-    --muted: #232a30;
-    --muted-foreground: #a29e96;
-    --accent: #1b2a3f;
-    --accent-foreground: #c9dbf5;
-
-    --brand: #f0524c;
-    --rating: #e9a93a;
-    --vote-down: #a99cf0;
-
-    --destructive: #c9dbf5;
-    --destructive-foreground: #c9dbf5;
-    --destructive-solid: #d63a50;
-    --info: #3bacda;
-    --info-foreground: #8fd0ee;
-    --success: #3a9742;
-    --success-foreground: #7fcf86;
-    --warning: #dca331;
-    --warning-foreground: #f0c46a;
-
-    --border: #2a2e33;
-    --input: #2a2e33;
-    --control: #7a8088;
-    --ring: #86aee8;
-
-    --sidebar: #11171d;
-    --sidebar-foreground: #e7e4df;
-    --sidebar-primary: #86aee8;
-    --sidebar-primary-foreground: #0b1626;
-    --sidebar-accent: #1b2a3f;
-    --sidebar-accent-foreground: #c9dbf5;
-    --sidebar-border: #2a2e33;
-    --sidebar-ring: #86aee8;
-
-    --chart-1: #86aee8;
-    --chart-2: #4fc1ad;
-    --chart-3: #e9a93a;
-    --chart-4: #f0524c;
-    --chart-5: #a99cf0;
-  }
-}
-
-/* Reader opt-in. Keep the warm grounds, decorative borders and semantic danger/disabled states.
-   Let forced-colors use the browser's palette and control treatment. */
-@media (forced-colors: none) {
-  :root[data-contrast='more'],
-  :root[data-contrast='more'] .dark {
-    --foreground: #171f27;
-    --card-foreground: #171f27;
-    --popover-foreground: #171f27;
-    --secondary-foreground: #171f27;
-    --muted-foreground: #41484f;
-    --primary: #184477;
-    --primary-foreground: #ffffff;
-    --accent: #d6e4f5;
-    --accent-foreground: #12345d;
-    --control: #49443e;
-    --ring: #123f78;
-    --sidebar-foreground: #171f27;
-    --sidebar-primary: #184477;
-    --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #d6e4f5;
-    --sidebar-accent-foreground: #12345d;
-    --sidebar-ring: #123f78;
-
-    @variant dark {
-      --foreground: #faf6ef;
-      --card-foreground: #faf6ef;
-      --popover-foreground: #faf6ef;
-      --secondary-foreground: #faf6ef;
-      --muted-foreground: #d1cac0;
-      --primary: #b2d1fc;
-      --primary-foreground: #071528;
-      --accent: #263f5e;
-      --accent-foreground: #f4f7fc;
-      --control: #bcb5aa;
-      --ring: #bfd8ff;
-      --sidebar-foreground: #faf6ef;
-      --sidebar-primary: #b2d1fc;
-      --sidebar-primary-foreground: #071528;
-      --sidebar-accent: #263f5e;
-      --sidebar-accent-foreground: #f4f7fc;
-      --sidebar-ring: #bfd8ff;
-    }
   }
 
-  :root[data-contrast='more']
-    :is(
-      [data-slot='checkbox']:not([data-checked]),
-      [data-slot='radio-group-item']:not([data-checked]),
-      [data-slot='switch']:not([data-checked]),
-      [data-slot='button'][class*='border-border'],
-      [data-slot='toggle'].border,
-      [data-slot='toggle-group-item'].border
-    ):not(:disabled, [data-disabled], [aria-disabled='true'], [aria-invalid='true']) {
-    border-color: var(--control);
-  }
+  --background: oklch(1 0 0);
 
-  :root[data-contrast='more']
-    :is(
-      [data-slot='tabs-list'][data-variant='default'] > [data-slot='tabs-trigger'][data-active],
-      [data-slot='toggle'][aria-pressed='true'],
-      [data-slot='toggle-group-item'][aria-pressed='true']
-    ) {
-    background-color: var(--accent);
-    color: var(--accent-foreground);
-  }
+  --foreground: oklch(0.145 0 0);
 
-  :root[data-contrast='more'] :is([data-slot], a, button, input, select, textarea):focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
-  }
-}
+  --card: oklch(1 0 0);
 
-/* Adapt generated Rhea states without changing their text, focus rings or control behavior. */
-[data-slot='button'].text-destructive,
-:is(
-    [data-slot='dropdown-menu-item'],
-    [data-slot='context-menu-item'],
-    [data-slot='menubar-item']
-  )[data-variant='destructive']:is(:focus, [data-highlighted]) {
-  background-color: color-mix(in srgb, var(--destructive-solid) 10%, transparent);
-  @variant dark {
-    background-color: color-mix(in srgb, var(--destructive-solid) 20%, transparent);
-  }
-}
+  --card-foreground: oklch(0.145 0 0);
 
-[data-slot='button'].text-destructive:hover {
-  background-color: color-mix(in srgb, var(--destructive-solid) 20%, transparent);
-  @variant dark {
-    background-color: color-mix(in srgb, var(--destructive-solid) 30%, transparent);
-  }
-}
+  --popover: oklch(1 0 0);
 
-:is([data-slot='button'], [data-slot='alert']).text-destructive > svg,
-:is(
-    [data-slot='dropdown-menu-item'],
-    [data-slot='context-menu-item'],
-    [data-slot='menubar-item']
-  )[data-variant='destructive']
-  > svg {
-  stroke: var(--destructive-solid);
-}
+  --popover-foreground: oklch(0.145 0 0);
 
-/* Editable surfaces use the opaque control tone (at least 3:1 on Aura grounds),
-   while decorative card borders retain --border. Grouped inputs have one boundary. */
-:is(
-  [data-slot='input'],
-  [data-slot='textarea'],
-  [data-slot='input-group'],
-  [data-slot='combobox-chips'],
-  [data-slot='native-select'],
-  [data-slot='select-trigger']
-) {
-  border-color: var(--control);
-}
+  --primary: oklch(0.205 0 0);
 
-:is(
-  [data-slot='input'],
-  [data-slot='textarea'],
-  [data-slot='native-select'],
-  [data-slot='select-trigger']
-):focus-visible,
-[data-slot='input-group']:has([data-slot='input-group-control']:focus-visible),
-[data-slot='combobox-chips']:focus-within {
-  border-color: var(--ring);
-}
+  --primary-foreground: oklch(0.985 0 0);
 
-[data-slot][aria-invalid='true'],
-:is([data-slot='input-group'], [data-slot='combobox-chips']):has([aria-invalid='true']) {
-  border-color: var(--destructive-solid);
-}
+  --secondary: oklch(0.97 0 0);
 
-/* Keep desktop density. Grow actual controls on phones and coarse pointers,
-   without turning inline tokens or editor toolbar buttons into standalone actions. */
-@media (pointer: coarse), (max-width: 767px) {
-  :is(
-    [data-slot='input'],
-    [data-slot='textarea'],
-    [data-slot='input-group'],
-    [data-slot='input-group-control'],
-    [data-slot='combobox-chips'],
-    [data-slot='combobox-item'],
-    [data-slot='native-select'],
-    [data-slot='select-trigger']
-  ) {
-    min-block-size: 44px;
-  }
+  --secondary-foreground: oklch(0.205 0 0);
 
-  :is([data-slot='button'], [data-slot='input-group-button'], [data-slot='combobox-clear']):not(
-    :where([data-slot='combobox-chip'] *, [role='toolbar'] *)
-  ) {
-    min-block-size: 44px;
-    min-inline-size: 44px;
-  }
+  --muted: oklch(0.97 0 0);
 
-  [data-slot='input-group-addon']:is([data-align='inline-start'], [data-align='inline-end']) {
-    padding-block: 0;
-  }
+  --muted-foreground: oklch(0.556 0 0);
+
+  --accent: oklch(0.97 0 0);
+
+  --accent-foreground: oklch(0.205 0 0);
+
+  --destructive: oklch(0.577 0.245 27.325);
+
+  --border: oklch(0.922 0 0);
+
+  --input: oklch(0.922 0 0);
+
+  --ring: oklch(0.708 0 0);
+
+  --chart-1: oklch(0.87 0 0);
+
+  --chart-2: oklch(0.556 0 0);
+
+  --chart-3: oklch(0.439 0 0);
+
+  --chart-4: oklch(0.371 0 0);
+
+  --chart-5: oklch(0.269 0 0);
+
+  --radius: 0.625rem;
+
+  --sidebar: oklch(0.985 0 0);
+
+  --sidebar-foreground: oklch(0.145 0 0);
+
+  --sidebar-primary: oklch(0.205 0 0);
+
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+
+  --sidebar-accent: oklch(0.97 0 0);
+
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+
+  --sidebar-border: oklch(0.922 0 0);
+
+  --sidebar-ring: oklch(0.708 0 0)
 }
 
 /* Simplified Chinese interface: Latin keeps Manrope and Source Serif; Han falls
@@ -679,32 +478,74 @@
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track, transparent);
 }
 
-/* Aura canvas: glows plus a 120px and 24px grid. Use on page grounds, not inside cards. */
-@utility aura-canvas {
-  background-color: var(--background);
-  background-image:
-    radial-gradient(1100px circle at 18% 10%, var(--aura-glow-2) 0%, transparent 58%),
-    radial-gradient(1200px circle at 86% 18%, var(--aura-glow-1) 0%, transparent 55%),
-    radial-gradient(900px circle at 50% 110%, var(--aura-glow-3) 0%, transparent 55%),
-    linear-gradient(to right, var(--aura-grid-strong) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--aura-grid-strong) 1px, transparent 1px),
-    linear-gradient(to right, var(--aura-grid) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--aura-grid) 1px, transparent 1px);
-  background-size:
-    auto,
-    auto,
-    auto,
-    120px 120px,
-    120px 120px,
-    24px 24px,
-    24px 24px;
+/* Official Mira does not inset popups. Keep them inside the dynamic viewport and safe areas.
+   These rules sit in the base layer, so a caller's max-height or overflow utilities still win. */
+@layer base {
+  :is([data-slot='dialog-content'], [data-slot='alert-dialog-content']) {
+    max-height: calc(100dvh - 2rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    overflow-wrap: anywhere;
+  }
+
+  [data-slot='sheet-content'] {
+    max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    overflow-wrap: anywhere;
+  }
+
+  [data-slot='sheet-footer'] {
+    flex-shrink: 0;
+  }
 }
 
-/* Aura gradient surface for feature cards such as a Realm header. */
+/* Retired Aura hooks. Flat official surfaces so existing class names keep working. */
+@utility aura-canvas {
+  background-color: var(--background);
+}
+
 @utility aura-surface {
   background-color: var(--card);
-  background-image:
-    radial-gradient(120% 90% at 12% 18%, color-mix(in oklab, var(--brand) 12%, transparent) 0%, transparent 60%),
-    radial-gradient(100% 90% at 88% 18%, color-mix(in oklab, var(--primary) 16%, transparent) 0%, transparent 62%),
-    linear-gradient(135deg, color-mix(in oklab, var(--foreground) 5%, transparent) 0%, transparent 65%);
+}
+
+/* Official Neutral dark tokens from the shadcn CLI. The dark variant matches an explicit
+   `.dark` root or panel, and the system preference when `<html>` has no `.light` class. */
+:root,
+.dark {
+  @variant dark {
+    color-scheme: dark;
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.922 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.488 0.243 264.376);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.556 0 0);
+    --brand: #f0524c;
+  }
 }

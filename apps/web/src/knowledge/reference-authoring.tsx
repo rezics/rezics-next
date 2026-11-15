@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type MouseEvent } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import {
   parseReferenceTarget,
   referenceBlocks,
@@ -68,8 +70,8 @@ export function KnowledgeReferenceAuthoring({
   const headingRef = useRef<HTMLHeadingElement>(null);
   const addRef = useRef<HTMLButtonElement>(null);
   const entryInputRef = useRef<HTMLInputElement>(null);
-  const entryKindRef = useRef<HTMLSelectElement>(null);
-  const sourceBlockRef = useRef<HTMLSelectElement>(null);
+  const entryKindRef = useRef<HTMLButtonElement>(null);
+  const sourceBlockRef = useRef<HTMLButtonElement>(null);
   const entryLegendRef = useRef<HTMLLegendElement>(null);
   const repairHeadingRef = useRef<HTMLHeadingElement>(null);
   const editActions = useRef(new Map<string, HTMLButtonElement>());
@@ -187,24 +189,42 @@ export function KnowledgeReferenceAuthoring({
       </label>
     );
   }
-  function select(name: 'kind' | 'role' | 'sourceBlockId', title: string, options: ReactNode) {
+  function select(
+    name: 'kind' | 'role' | 'sourceBlockId',
+    title: string,
+    options: readonly { value: string; label: string }[],
+  ) {
+    const selected = editing![name];
     return (
-      <label className="block min-w-0 space-y-2" htmlFor={`${fields}-${name}`}>
-        <span className="block text-sm font-medium">{title}</span>
-        <select
-          id={`${fields}-${name}`}
-          ref={name === 'kind' ? entryKindRef : name === 'sourceBlockId' ? sourceBlockRef : undefined}
-          value={editing![name]}
-          className={`${referenceInput} rounded-md border py-2 text-sm`}
+      <Field className="min-w-0">
+        <FieldLabel htmlFor={`${fields}-${name}`}>{title}</FieldLabel>
+        <SharedSelect.Select
+          value={selected === '' ? null : selected}
+          items={options.map((option) => ({ value: option.value === '' ? null : option.value, label: option.label }))}
           disabled={disabled}
-          onChange={(event) => {
+          onValueChange={(value) => {
             setInvalid(false);
-            setEditing({ ...editing!, [name]: event.currentTarget.value });
+            setEditing({ ...editing!, [name]: value ?? '' });
           }}
         >
-          {options}
-        </select>
-      </label>
+          <SharedSelect.SelectTrigger
+            id={`${fields}-${name}`}
+            className="w-full max-w-full"
+            ref={name === 'kind' ? entryKindRef : name === 'sourceBlockId' ? sourceBlockRef : undefined}
+          >
+            <SharedSelect.SelectValue />
+          </SharedSelect.SelectTrigger>
+          <SharedSelect.SelectContent>
+            <SharedSelect.SelectGroup>
+              {options.map((option) => (
+                <SharedSelect.SelectItem key={option.value || 'none'} value={option.value === '' ? null : option.value}>
+                  {option.label}
+                </SharedSelect.SelectItem>
+              ))}
+            </SharedSelect.SelectGroup>
+          </SharedSelect.SelectContent>
+        </SharedSelect.Select>
+      </Field>
     );
   }
   function apply(event: MouseEvent<HTMLButtonElement>) {
@@ -327,24 +347,16 @@ export function KnowledgeReferenceAuthoring({
                 <p className="break-all pt-2 text-sm text-muted-foreground">{editing.id}</p>
               </details>
               <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-                {select(
-                  'kind',
-                  copy.kind,
-                  <>
-                    {editing.kind === 'unavailable' ? <option value="unavailable">{copy.unavailable}</option> : null}
-                    <option value="subject">{copy.subject}</option>
-                    <option value="document">{copy.live}</option>
-                    <option value="revision">{copy.exact}</option>
-                  </>,
-                )}
+                {select('kind', copy.kind, [
+                  ...(editing.kind === 'unavailable' ? [{ value: 'unavailable', label: copy.unavailable }] : []),
+                  { value: 'subject', label: copy.subject },
+                  { value: 'document', label: copy.live },
+                  { value: 'revision', label: copy.exact },
+                ])}
                 {select(
                   'role',
                   copy.role,
-                  referenceRoles.map((role) => (
-                    <option key={role} value={role}>
-                      {copy.roles[role]}
-                    </option>
-                  )),
+                  referenceRoles.map((role) => ({ value: role, label: copy.roles[role] })),
                 )}
               </div>
               {editing.kind === 'subject'
@@ -359,21 +371,13 @@ export function KnowledgeReferenceAuthoring({
                   {field('blockId', copy.blockId)}
                 </>
               ) : null}
-              {select(
-                'sourceBlockId',
-                copy.sourceBlock,
-                <>
-                  <option value="">{copy.whole}</option>
-                  {editing.sourceBlockId && !blocks.includes(editing.sourceBlockId) ? (
-                    <option value={editing.sourceBlockId}>{editing.sourceBlockId}</option>
-                  ) : null}
-                  {blocks.map((block) => (
-                    <option key={block} value={block}>
-                      {block}
-                    </option>
-                  ))}
-                </>,
-              )}
+              {select('sourceBlockId', copy.sourceBlock, [
+                { value: '', label: copy.whole },
+                ...(editing.sourceBlockId && !blocks.includes(editing.sourceBlockId)
+                  ? [{ value: editing.sourceBlockId, label: editing.sourceBlockId }]
+                  : []),
+                ...blocks.map((block) => ({ value: block, label: block })),
+              ])}
               {field('label', copy.label, 512)}
               <p className="text-sm text-muted-foreground">
                 {editing.kind === 'revision' ? copy.exactHint : editing.kind === 'document' ? copy.liveHint : null}

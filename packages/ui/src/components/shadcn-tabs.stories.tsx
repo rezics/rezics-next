@@ -11,13 +11,9 @@ const meta = {
   render: (args) => (
     <Tabs defaultValue="overview" className="max-w-md" {...args}>
       <TabsList aria-label="Work sections">
-        <TabsTrigger className={quiet} value="overview">
-          Overview
-        </TabsTrigger>
-        <TabsTrigger className={quiet} value="reviews">
-          Reviews
-        </TabsTrigger>
-        <TabsTrigger className={quiet} value="editions" disabled>
+        <TabsTrigger value="overview">Overview</TabsTrigger>
+        <TabsTrigger value="reviews">Reviews</TabsTrigger>
+        <TabsTrigger value="editions" disabled>
           Editions
         </TabsTrigger>
       </TabsList>
@@ -29,9 +25,6 @@ const meta = {
 } satisfies Meta<typeof Tabs>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-
-// The Rhea inactive tab color (foreground at 60%) is 3.5:1 on the muted tab list in the light theme; this token pair clears 4.5:1.
-const quiet = 'text-muted-foreground';
 
 export const Default: Story = {
   async play({ canvasElement }) {
@@ -58,12 +51,8 @@ export const Line: Story = {
   render: () => (
     <Tabs defaultValue="works">
       <TabsList variant="line" aria-label="Profile sections">
-        <TabsTrigger className={quiet} value="works">
-          Works
-        </TabsTrigger>
-        <TabsTrigger className={quiet} value="people">
-          People
-        </TabsTrigger>
+        <TabsTrigger value="works">Works</TabsTrigger>
+        <TabsTrigger value="people">People</TabsTrigger>
       </TabsList>
       <TabsContent value="works">Works list</TabsContent>
       <TabsContent value="people">People list</TabsContent>
@@ -80,10 +69,10 @@ export const LongCJKLabels: Story = {
   render: () => (
     <Tabs defaultValue="a" className="max-w-xs">
       <TabsList aria-label="分区" className="h-auto! w-full flex-wrap">
-        <TabsTrigger className={`${quiet} h-auto whitespace-normal py-1`} value="a">
+        <TabsTrigger className="h-auto whitespace-normal" value="a">
           作品的完整长标题与别名
         </TabsTrigger>
-        <TabsTrigger className={`${quiet} h-auto whitespace-normal py-1`} value="b">
+        <TabsTrigger className="h-auto whitespace-normal" value="b">
           相关人物与评论
         </TabsTrigger>
       </TabsList>

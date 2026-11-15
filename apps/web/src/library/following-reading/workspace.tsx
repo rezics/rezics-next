@@ -53,7 +53,7 @@ export function FollowingWorkspace({
           <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">{m.following_reading_intro()}</p>
         </div>
         {onRefresh ? (
-          <Button className="min-h-11" variant="outline" disabled={refreshDisabled} onClick={onRefresh}>
+          <Button variant="outline" disabled={refreshDisabled} onClick={onRefresh}>
             {m.following_reading_refresh()}
           </Button>
         ) : null}
@@ -76,7 +76,7 @@ export function FollowingWorkspace({
             <Button
               key={value}
               variant={variant}
-              className="min-h-11"
+             
               disabled
               aria-current={kind === value ? 'page' : undefined}
             >
@@ -88,7 +88,7 @@ export function FollowingWorkspace({
               to="/library/following"
               search={value === 'all' ? {} : { kind: value }}
               aria-current={kind === value ? 'page' : undefined}
-              className={buttonVariants({ variant, className: 'min-h-11' })}
+              className={buttonVariants({ variant })}
               onClick={(event) => onMove?.(event, { cursor: null, kind: value }, 'kind')}
             >
               {label}
@@ -107,7 +107,7 @@ export function FollowingWorkspace({
               {selection.title}
             </span>
           </p>
-          <Button className="min-h-11 shrink-0" variant="ghost" onClick={selection.close}>
+          <Button className="shrink-0" variant="ghost" onClick={selection.close}>
             {m.following_reading_close()}
           </Button>
         </div>

@@ -35,22 +35,13 @@ export function EmptyState({
       data-density={density}
       data-tone={tone}
       className={cn(
-        'border border-border/70 bg-card/60',
         density === 'page' ? 'min-h-72 px-5 py-9 sm:px-10 sm:py-12' : 'gap-3 px-4 py-5 sm:px-6',
         className,
       )}
     >
       <EmptyHeader className="w-full max-w-lg gap-3">
         {icon ? (
-          <EmptyMedia
-            aria-hidden="true"
-            variant="icon"
-            className={cn(
-              'mb-0 rounded-2xl [&_svg]:size-6',
-              density === 'page' ? 'size-14' : 'size-10',
-              tone === 'attention' ? 'bg-muted text-foreground' : 'bg-primary/10 text-primary',
-            )}
-          >
+          <EmptyMedia aria-hidden="true" variant="icon">
             {icon}
           </EmptyMedia>
         ) : null}
@@ -67,7 +58,7 @@ export function EmptyState({
         </div>
       </EmptyHeader>
       {actions ? (
-        <EmptyContent className="max-w-lg flex-row flex-wrap justify-center gap-2 [&_a]:min-h-11 [&_button]:min-h-11">
+        <EmptyContent className="max-w-lg flex-row flex-wrap justify-center gap-2">
           {actions}
         </EmptyContent>
       ) : null}

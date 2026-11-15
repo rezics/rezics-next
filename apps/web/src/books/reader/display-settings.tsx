@@ -72,7 +72,7 @@ export function useBookDisplay() {
 }
 
 type DisplayOwner = ReturnType<typeof useBookDisplay>;
-const control = 'min-h-11 min-w-11 whitespace-normal';
+const control = 'h-auto min-h-6 whitespace-normal';
 
 export function BookDisplaySettings({ display, change, storageAvailable, locale }: DisplayOwner & { locale: string }) {
   const options = { locale: locale as never };
@@ -89,6 +89,7 @@ export function BookDisplaySettings({ display, change, storageAvailable, locale 
           <Button
             key={value}
             type="button"
+            size="sm"
             variant={display[key] === value ? 'secondary' : 'outline'}
             className={control}
             aria-pressed={display[key] === value}
@@ -102,7 +103,7 @@ export function BookDisplaySettings({ display, change, storageAvailable, locale 
   );
   return (
     <details data-slot="book-display-settings" className="group/display min-w-0 border-b pb-3">
-      <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-sm text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
+      <summary className="flex cursor-pointer items-center justify-between gap-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
         {m.book_reader_display_settings({}, options)}
         <ChevronDown aria-hidden="true" className="size-4 shrink-0 group-open/display:rotate-180" />
       </summary>
@@ -113,7 +114,7 @@ export function BookDisplaySettings({ display, change, storageAvailable, locale 
             <Button
               type="button"
               variant="outline"
-              className={control}
+              size="icon-sm"
               disabled={index <= 0}
               aria-label={m.book_reader_display_smaller({}, options)}
               onClick={() => change({ size: bookTextSizes[index - 1]! })}
@@ -126,7 +127,7 @@ export function BookDisplaySettings({ display, change, storageAvailable, locale 
             <Button
               type="button"
               variant="outline"
-              className={control}
+              size="icon-sm"
               disabled={index >= bookTextSizes.length - 1}
               aria-label={m.book_reader_display_larger({}, options)}
               onClick={() => change({ size: bookTextSizes[index + 1]! })}
@@ -147,6 +148,7 @@ export function BookDisplaySettings({ display, change, storageAvailable, locale 
         <div className="flex items-end">
           <Button
             type="button"
+            size="sm"
             variant={display.indent ? 'secondary' : 'outline'}
             className={control}
             aria-pressed={display.indent}
@@ -164,7 +166,7 @@ export function BookDisplaySettings({ display, change, storageAvailable, locale 
           ['strict', m.book_reader_display_strict({}, options)],
         ])}
         <div className="space-y-2 sm:col-span-2">
-          <Button type="button" variant="ghost" className={control} onClick={() => change(defaultBookDisplay)}>
+          <Button type="button" size="sm" variant="ghost" className={control} onClick={() => change(defaultBookDisplay)}>
             {m.book_reader_display_reset({}, options)}
           </Button>
           <p role={storageAvailable ? undefined : 'status'} className="text-sm text-muted-foreground">

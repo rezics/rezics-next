@@ -396,7 +396,7 @@ function SpaceSetupEntryLink({ spaceId, read }: { spaceId: string; read: SetupSn
     <Link
       to="/realms/new"
       search={{ spaceId }}
-      className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
+      className="inline-flex items-center text-primary underline underline-offset-4"
     >
       {m.space_setup_entry()}
     </Link>

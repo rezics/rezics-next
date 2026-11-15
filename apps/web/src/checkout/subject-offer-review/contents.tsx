@@ -19,7 +19,7 @@ export function OfferReadingContents({ reading, locale }: { reading: SubjectOffe
       <Button
         type="button"
         variant="outline"
-        className="h-auto min-h-11 whitespace-normal text-start"
+        className="h-auto min-h-7 whitespace-normal text-start"
         onClick={() => focus('price')}
       >
         {m.subject_choice_jump_price({}, { locale })}
@@ -27,7 +27,7 @@ export function OfferReadingContents({ reading, locale }: { reading: SubjectOffe
       <Button
         type="button"
         variant="outline"
-        className="h-auto min-h-11 whitespace-normal text-start"
+        className="h-auto min-h-7 whitespace-normal text-start"
         onClick={() => focus('terms')}
       >
         {m.subject_choice_jump_terms({}, { locale })}
@@ -35,7 +35,7 @@ export function OfferReadingContents({ reading, locale }: { reading: SubjectOffe
       <Button
         type="button"
         variant="outline"
-        className="h-auto min-h-11 whitespace-normal text-start"
+        className="h-auto min-h-7 whitespace-normal text-start"
         onClick={() => focus('references')}
       >
         {m.subject_choice_jump_references({}, { locale })}
@@ -43,7 +43,7 @@ export function OfferReadingContents({ reading, locale }: { reading: SubjectOffe
       <Button
         type="button"
         variant="outline"
-        className="h-auto min-h-11 whitespace-normal text-start"
+        className="h-auto min-h-7 whitespace-normal text-start"
         onClick={() => focus('next')}
       >
         {m.subject_choice_jump_next({}, { locale })}

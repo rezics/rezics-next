@@ -1,4 +1,6 @@
 import type { SubjectRead } from '@rezics/client';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { pageDocumentReferences, pickText } from '@rezics/composition';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { m } from '../../../paraglide/messages.js';
@@ -28,7 +30,7 @@ import { peopleOccupationConcept } from '../people-biography';
 
 export const personReaderAnchor = 'person-biography';
 const control =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center py-2 underline whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
 const options = (locale: string) => ({ locale: locale as never });
 const title = (kind: 'biography' | 'occupations' | 'languages', locale: string) =>
   kind === 'biography'
@@ -339,7 +341,7 @@ export function ProfileDefinitions({
       </p>
       <button
         type="button"
-        className={control}
+        className={cn(buttonVariants({ variant: 'outline' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]')}
         aria-disabled={!result}
         onClick={() => {
           if (result) {

@@ -1,3 +1,4 @@
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { getLocale, locales } from '../paraglide/runtime.js';
 import { Exposure } from '../kernel/exposure';
@@ -7,8 +8,7 @@ import type { PersonalLibraryView } from './entries-read';
 import type { ShelfSummaryState } from './shelf-summary-observation';
 
 export type ShelfSummaryPresentation = { page: ShelfSummaryState; retry: () => unknown };
-const target =
-  'inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2';
+const target = buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 max-w-full whitespace-normal' });
 const firstUseImports = libraryNavigation.filter(
   (destination) =>
     destination.kind === 'navigation' &&
@@ -93,7 +93,7 @@ export function ShelfSummaryNavigation({
             const link = (
               <li key={bucket}>
                 <a
-                  className={`inline-flex min-h-11 items-center gap-2 border-b-2 px-3 py-2 text-sm whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-[-2px] ${current ? 'border-primary font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}`}
+                  className={`inline-flex items-center gap-2 border-b-2 px-3 py-1.5 text-sm whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-[-2px] ${current ? 'border-primary font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}`}
                   href={
                     bucket === 'collections'
                       ? `/${locale}/library/collections`
@@ -127,9 +127,9 @@ export function ShelfSummaryNavigation({
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground" role="status">
           <p>{message}</p>
           {['unavailable', 'preparing', 'stale'].includes(page.state) ? (
-            <button type="button" className={target} onClick={() => void retry()}>
+            <Button type="button" variant="outline" size="sm" onClick={() => void retry()}>
               {m.library_summary_retry()}
-            </button>
+            </Button>
           ) : null}
         </div>
       ) : null}

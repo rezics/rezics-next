@@ -45,8 +45,7 @@ export type CollectionPresentationFieldsProps = {
   saveConfirmed?: boolean;
 };
 
-const selectClass =
-  'block min-h-11 w-full min-w-0 rounded-lg border border-border bg-background px-3 text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60';
+const selectClass = 'w-full min-w-0';
 
 /** This region edits the existing metadata draft. Opening, closing and reviewing never submit the form. */
 export function CollectionPresentationFields({
@@ -210,7 +209,7 @@ export function CollectionPresentationFields({
             <Button
               type="button"
               variant="outline"
-              className="min-h-11 max-w-full whitespace-normal text-start"
+              className="h-auto min-h-7 max-w-full whitespace-normal text-start"
               disabled={disabled || kind === null}
               onClick={() => changeKind(null)}
             >
@@ -220,7 +219,7 @@ export function CollectionPresentationFields({
               <Button
                 type="button"
                 variant="ghost"
-                className="min-h-11 max-w-full whitespace-normal text-start"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                 disabled={disabled}
                 onClick={() => changeKind(savedKind)}
               >
@@ -276,7 +275,7 @@ export function CollectionPresentationFields({
               <Button
                 type="button"
                 variant="outline"
-                className="min-h-11 max-w-full whitespace-normal text-start"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                 disabled={disabled || coverMediaId === null}
                 onClick={() => changeCover(null)}
               >
@@ -286,7 +285,7 @@ export function CollectionPresentationFields({
                 <Button
                   type="button"
                   variant="ghost"
-                  className="min-h-11 max-w-full whitespace-normal text-start"
+                  className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                   disabled={disabled}
                   onClick={() => changeCover(savedCoverMediaId)}
                 >
@@ -309,7 +308,7 @@ export function CollectionPresentationFields({
           ref={trigger}
           type="button"
           variant="outline"
-          className="min-h-11 max-w-full whitespace-normal text-start"
+          className="h-auto min-h-7 max-w-full whitespace-normal text-start"
           aria-expanded={open}
           aria-controls={`${id}-review`}
           onClick={() => (open ? close() : review())}
@@ -354,7 +353,7 @@ export function CollectionPresentationFields({
               <Button
                 type="button"
                 variant="outline"
-                className="min-h-11 max-w-full whitespace-normal text-start"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                 disabled={disabled}
                 onClick={() => close('kind')}
                 data-correct-presentation="type"
@@ -436,14 +435,14 @@ export function CollectionPresentationFields({
               <Button
                 type="button"
                 variant="outline"
-                className="min-h-11 max-w-full whitespace-normal"
+                className="h-auto min-h-7 max-w-full whitespace-normal"
                 onClick={() => close()}
               >
                 {m.collection_choice_return_editor()}
               </Button>
               <Button
                 type="button"
-                className="min-h-11 max-w-full whitespace-normal"
+                className="h-auto min-h-7 max-w-full whitespace-normal"
                 disabled={disabled || saveConfirmed}
                 onClick={returnToSave}
                 data-review-return-save

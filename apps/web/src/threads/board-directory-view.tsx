@@ -26,7 +26,9 @@ type Props = {
 };
 
 const actionClassName =
-  'h-auto min-h-11 min-w-11 max-w-full shrink whitespace-normal px-4 py-2 text-center [overflow-wrap:anywhere]';
+  'h-auto min-h-7 max-w-full shrink whitespace-normal text-center [overflow-wrap:anywhere]';
+const compactActionClassName =
+  'h-auto min-h-6 max-w-full shrink whitespace-normal text-center [overflow-wrap:anywhere]';
 
 /** Shared directory region for the route and its Patterns/Pages stories. Listing never grants creation. */
 export function BoardDirectory({ request, contribution, result, previous, onNavigate, onRetry }: Props) {
@@ -85,7 +87,7 @@ export function BoardDirectory({ request, contribution, result, previous, onNavi
         <p className="max-w-2xl text-muted-foreground">{m.board_directory_description()}</p>
         {contribution ? <p>{m.board_directory_subject({ title: contribution.subjectTitle })}</p> : null}
       </header>
-      <nav aria-label={m.board_directory_purpose()} className="flex flex-wrap gap-2">
+      <nav aria-label={m.board_directory_purpose()} className="flex flex-wrap items-center gap-2">
         {(['discussion', 'reviews'] as const).map((purpose) => {
           const destination = { purpose, limit: request.limit };
           return (
@@ -95,7 +97,7 @@ export function BoardDirectory({ request, contribution, result, previous, onNavi
               onClick={navigate(destination)}
               aria-current={request.purpose === purpose ? 'page' : undefined}
               className={cn(
-                buttonVariants({ variant: request.purpose === purpose ? 'secondary' : 'ghost', size: 'lg' }),
+                buttonVariants({ variant: request.purpose === purpose ? 'secondary' : 'ghost' }),
                 actionClassName,
               )}
             >
@@ -118,7 +120,6 @@ export function BoardDirectory({ request, contribution, result, previous, onNavi
             <Button
               ref={retryButton}
               variant="outline"
-              size="lg"
               className={actionClassName}
               onClick={(event) => {
                 if (event.detail === 0) setKeyboardRetry(requestIdentity);
@@ -131,7 +132,7 @@ export function BoardDirectory({ request, contribution, result, previous, onNavi
               <a
                 href={boardDirectoryHref({ purpose: request.purpose, limit: request.limit }, locale, contribution)}
                 onClick={navigate({ purpose: request.purpose, limit: request.limit })}
-                className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), actionClassName)}
+                className={cn(buttonVariants({ variant: 'outline' }), actionClassName)}
               >
                 {m.board_directory_restart()}
               </a>
@@ -190,7 +191,7 @@ export function BoardDirectory({ request, contribution, result, previous, onNavi
                               : m.board_directory_discuss_named({ title, subject: contribution.subjectTitle })
                             : m.board_directory_open_named({ title })
                         }
-                        className={cn(buttonVariants({ variant: 'outline' }), actionClassName)}
+                        className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), compactActionClassName)}
                       >
                         {write ? writeLabel : m.board_directory_open()}
                       </a>
@@ -207,12 +208,12 @@ export function BoardDirectory({ request, contribution, result, previous, onNavi
         ) : null}
       </section>
       {result.state === 'ready' && (canGoBack || next) ? (
-        <nav aria-label={m.board_directory_pages()} className="flex flex-wrap gap-3">
+        <nav aria-label={m.board_directory_pages()} className="flex flex-wrap items-center gap-2">
           {canGoBack && previous ? (
             <a
               href={boardDirectoryHref(previous.request, locale, contribution)}
               onClick={navigate(previous.request)}
-              className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), actionClassName)}
+              className={cn(buttonVariants({ variant: 'outline' }), actionClassName)}
             >
               {m.board_directory_previous()}
             </a>
@@ -221,7 +222,7 @@ export function BoardDirectory({ request, contribution, result, previous, onNavi
             <a
               href={boardDirectoryHref({ ...request, cursor: next }, locale, contribution)}
               onClick={navigate({ ...request, cursor: next })}
-              className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), actionClassName)}
+              className={cn(buttonVariants({ variant: 'outline' }), actionClassName)}
             >
               {m.board_directory_next()}
             </a>

@@ -1,5 +1,6 @@
+import { cn } from '@rezics/ui/utils';
 import { useEffect, useRef, useState } from 'react';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { readCollectionMetadataHistoryChange, readCollectionMetadataHistoryPage } from './collection-commands';
@@ -294,14 +295,14 @@ function MetadataHistoryVisit({ collectionId, isCurrent, source = defaultSource 
         if (event.currentTarget.open && isCurrent()) setHasOpened(true);
       }}
     >
-      <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_collection_metadata_history()}</summary>
+      <summary className="cursor-pointer font-medium">{m.library_collection_metadata_history()}</summary>
       <div className="space-y-4 pt-3">
         <p className="max-w-3xl text-sm text-muted-foreground">{m.library_collection_metadata_history_description()}</p>
         {cursor !== null ? (
           <Button
             type="button"
             variant="outline"
-            className="min-h-11 h-auto whitespace-normal break-words"
+            className="h-auto min-h-7 whitespace-normal break-words"
             onClick={() => readPage(null)}
           >
             {m.library_collection_metadata_history_first_page()}
@@ -314,7 +315,7 @@ function MetadataHistoryVisit({ collectionId, isCurrent, source = defaultSource 
             <Button
               type="button"
               variant="outline"
-              className="min-h-11 h-auto whitespace-normal break-words"
+              className="h-auto min-h-7 whitespace-normal break-words"
               onClick={() => readPage(cursor)}
             >
               {m.library_collection_move_retry()}
@@ -334,10 +335,10 @@ function MetadataHistoryVisit({ collectionId, isCurrent, source = defaultSource 
                   const checked = selected.includes(item.revision);
                   return (
                     <li key={item.revision} className="rounded-xl border border-border p-3">
-                      <label className="flex min-h-11 items-start gap-3">
+                      <label className="flex items-start gap-3">
                         <input
                           type="checkbox"
-                          className="mt-1 size-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
+                          className="mt-1 size-4 shrink-0 accent-primary outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
                           checked={checked}
                           disabled={!checked && selected.length >= 2}
                           aria-label={m.library_collection_metadata_history_select({ revision: item.revision })}
@@ -369,7 +370,7 @@ function MetadataHistoryVisit({ collectionId, isCurrent, source = defaultSource 
               <Button
                 type="button"
                 variant="outline"
-                className="min-h-11 h-auto whitespace-normal break-words"
+                className="h-auto min-h-7 whitespace-normal break-words"
                 disabled={selected.length !== 2 || busy}
                 onClick={compareSelected}
               >
@@ -379,14 +380,14 @@ function MetadataHistoryVisit({ collectionId, isCurrent, source = defaultSource 
                 <Button
                   type="button"
                   variant="outline"
-                  className="min-h-11 h-auto whitespace-normal break-words"
+                  className="h-auto min-h-7 whitespace-normal break-words"
                   onClick={() => readPage(page.value.next)}
                 >
                   {m.library_collection_metadata_history_next_page()}
                 </Button>
               ) : null}
               <a
-                className="inline-flex min-h-11 items-center rounded-lg px-3 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-primary"
+                className={cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full whitespace-normal')}
                 href="#collection-edit-form"
                 onClick={(event) => {
                   if (!isCurrent()) {
@@ -419,7 +420,7 @@ function MetadataHistoryVisit({ collectionId, isCurrent, source = defaultSource 
                   <Button
                     type="button"
                     variant="outline"
-                    className="min-h-11 h-auto whitespace-normal break-words"
+                    className="h-auto min-h-7 whitespace-normal break-words"
                     disabled={busy}
                     onClick={() => void compare(comparison.request)}
                   >

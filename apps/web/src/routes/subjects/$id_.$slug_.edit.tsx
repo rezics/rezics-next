@@ -38,6 +38,7 @@ import {
   parseFactsPublicVisit,
 } from '../../features/catalogue/facts-public-visit';
 import { FactsPublicReturnLink, FactsPublicVisitNotice } from '../../features/catalogue/subject-facts-entry';
+import { Button } from '@rezics/ui/shadcn/button';
 import { subjectGraphVisitReturn } from '../../features/pages/subject-visit-navigation';
 import { subjectHref } from '../../subject/subject-href';
 
@@ -235,7 +236,7 @@ function CorrectionRoute(): ReactElement {
       returnHref ? (
         <p className="px-6 pt-4">
           <Link
-            className="inline-flex min-h-11 items-center rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             to={returnHref as never}
           >
             {m.changes_return_to_changes()}
@@ -300,9 +301,9 @@ function CorrectionRoute(): ReactElement {
       <div className="space-y-3 p-6">
         {publicVisitReturn}
         <EditorFailure reason="unavailable" locale={locale} />
-        <button type="button" onClick={() => candidateWork.live() && void query.refetch()}>
+        <Button type="button" variant="outline" onClick={() => candidateWork.live() && void query.refetch()}>
           {m.correction_reload()}
-        </button>
+        </Button>
       </div>
     );
   if (!query.data)
@@ -384,7 +385,7 @@ function CorrectionRoute(): ReactElement {
       {correctionReturnLink}
       {returnTo === 'sources' && (
         <a
-          className="inline-flex min-h-11 items-center underline"
+          className="underline underline-offset-4"
           href={`${`/${locale}/subjects/${id}/${encodeURIComponent(slug)}`}/sources#subject-sources-heading`}
         >
           {m.subject_sources()}

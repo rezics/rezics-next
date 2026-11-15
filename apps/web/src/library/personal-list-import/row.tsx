@@ -146,15 +146,15 @@ export function VndbRowReview({
       data-vndb-match={row.match.status}
     >
       <header className="space-y-1">
-        <h3 className="break-words text-lg font-medium">{row.title || m.library_vndb_untitled()}</h3>
+        <h3 className="h-auto break-words text-lg font-medium">{row.title || m.library_vndb_untitled()}</h3>
         {row.identifier ? (
-          <p className="break-words text-sm">{m.library_vndb_identifier({ value: row.identifier.value })}</p>
+          <p className="h-auto break-words text-sm">{m.library_vndb_identifier({ value: row.identifier.value })}</p>
         ) : null}
-        <p className="break-words text-sm text-muted-foreground">
+        <p className="h-auto break-words text-sm text-muted-foreground">
           {m.library_vndb_match({ status: row.match.status })}
         </p>
         {row.match.candidates.length ? (
-          <p className="break-words text-sm">{m.library_vndb_candidates({ ids: row.match.candidates.join(', ') })}</p>
+          <p className="h-auto break-words text-sm">{m.library_vndb_candidates({ ids: row.match.candidates.join(', ') })}</p>
         ) : null}
         {row.decision ? <p role="status">{m.library_vndb_review_status({ status: row.decision.status })}</p> : null}
         <ImportTarget target={targetId ?? row.decision?.targetId} />
@@ -193,7 +193,7 @@ export function VndbRowReview({
           <div className="space-y-3">
             {row.target ? (
               <div className="space-y-2 rounded-md border p-3">
-                <p className="break-words text-sm">{m.library_vndb_target_id({ id: row.target.targetId })}</p>
+                <p className="h-auto break-words text-sm">{m.library_vndb_target_id({ id: row.target.targetId })}</p>
                 <VndbAction
                   type="button"
                   variant="outline"
@@ -222,7 +222,7 @@ export function VndbRowReview({
             />
             {targetId && action === 'state' ? (
               <Field>
-                <FieldLabel id={`${id}-state-label`} htmlFor={`${id}-state`} className="min-h-11 items-center">
+                <FieldLabel id={`${id}-state-label`} htmlFor={`${id}-state`} className="items-center">
                   {m.library_vndb_state_label()}
                 </FieldLabel>
                 <Select<string, false>
@@ -234,7 +234,7 @@ export function VndbRowReview({
                   <SelectTrigger
                     id={`${id}-state`}
                     aria-labelledby={`${id}-state-label`}
-                    className="min-h-11 w-full rounded-md border bg-background px-3"
+                    className='w-full'
                   >
                     <SelectValue />
                   </SelectTrigger>

@@ -1,3 +1,5 @@
+import { cn } from '@rezics/ui/utils';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 export const action =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal [overflow-wrap:anywhere] rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-export const linkClass = `${action} text-primary underline underline-offset-4`;
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
+export const linkClass = cn(buttonVariants({ variant: 'link' }), action, 'underline');

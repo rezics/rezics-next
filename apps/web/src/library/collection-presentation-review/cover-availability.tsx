@@ -7,7 +7,7 @@ export function CoverAvailability({ members }: { members: readonly CollectionMem
   const availability = loadedCoverAvailability(members);
   return (
     <details className="min-w-0 rounded-lg border border-border p-3" data-cover-availability>
-      <summary className="min-h-11 cursor-pointer py-2 font-medium">
+      <summary className="cursor-pointer font-medium">
         {m.collection_choice_cover_availability_heading()}
       </summary>
       <div className="space-y-4 pt-2">

@@ -1,4 +1,5 @@
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { cn } from '@rezics/ui/utils';
@@ -29,7 +30,7 @@ import {
 import { publicationCommand } from './native';
 
 const actionClassName =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
 const recoveryClassName = 'rounded-sm focus:outline-2 focus:outline-offset-4 focus:outline-ring';
 
 export type DefinitionPublicationWorkspaceProps = {
@@ -266,7 +267,7 @@ export function DefinitionPublicationWorkspace({
             : m.definition_publication_intro({}, o)}
         </p>
         <a
-          className={buttonVariants({ variant: 'outline', className: actionClassName })}
+          className={cn(buttonVariants({ variant: 'outline' }), actionClassName )}
           href={definitionGuideHref(locale)}
         >
           {m.definition_publication_guide({}, o)}
@@ -302,12 +303,12 @@ export function DefinitionPublicationWorkspace({
         <form className="space-y-4" onSubmit={onPublish}>
           <Field>
             <FieldLabel htmlFor={fileId}>{m.definition_publication_file({}, o)}</FieldLabel>
-            <input
+            <Input
               id={fileId}
               type="file"
               disabled={busy !== null || uncertain !== null}
               accept="application/json,.json,.yaml,.yml"
-              className={cn(actionClassName, 'block w-full')}
+              className="w-full"
               onChange={(event) => void onFile(event)}
             />
           </Field>
@@ -449,7 +450,7 @@ export function DefinitionPublicationWorkspace({
           )}
           {independent?.subject && (
             <a
-              className={buttonVariants({ variant: 'outline', className: actionClassName })}
+              className={cn(buttonVariants({ variant: 'outline' }), actionClassName )}
               href={`/${locale}/subjects/${independent.subject}`}
             >
               {m.definition_publication_read_subject({}, o)}
@@ -457,7 +458,7 @@ export function DefinitionPublicationWorkspace({
           )}
           {independent?.digest && (
             <a
-              className={buttonVariants({ variant: 'outline', className: actionClassName })}
+              className={cn(buttonVariants({ variant: 'outline' }), actionClassName )}
               href={definitionGuideHref(locale, { release: independent.digest })}
             >
               {m.definition_publication_read_release({}, o)}

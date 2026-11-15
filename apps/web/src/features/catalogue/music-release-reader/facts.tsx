@@ -1,4 +1,6 @@
 import type { ComponentProps, MouseEvent } from 'react';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { m } from '../../../paraglide/messages.js';
 import { CandidateValue } from '../../pages/data';
 import { subjectHref } from '../../../subject/subject-href';
@@ -13,7 +15,7 @@ import { musicReleaseLinkHref, musicReleaseReturnHref, type MusicReleaseReturn }
 type Ready = Extract<MusicReleaseRead, { ok: true }>;
 type Statement = Ready['public']['subject']['statements'][string][number];
 const action =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center break-words underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
 export function MusicReleaseFacts({
   page,
   locale,

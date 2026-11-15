@@ -22,13 +22,13 @@ import {
 } from './index';
 
 const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const linkClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'inline-flex max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const selectClass =
-  'h-auto data-[size=default]:h-auto data-[size=sm]:h-auto min-h-11 w-full min-w-0 max-w-full whitespace-normal *:data-[slot=select-value]:line-clamp-none *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:whitespace-normal [overflow-wrap:anywhere]';
+  'h-auto min-h-7 data-[size=default]:h-auto data-[size=sm]:h-auto data-[size=sm]:min-h-6 w-full min-w-0 max-w-full whitespace-normal *:data-[slot=select-value]:line-clamp-none *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:whitespace-normal [overflow-wrap:anywhere]';
 const selectItemClass =
-  'min-h-11 min-w-0 whitespace-normal [&_[data-slot=select-item-text]]:whitespace-normal [&>span]:min-w-0 [&>span]:shrink [&>span]:whitespace-normal [overflow-wrap:anywhere]';
+  'min-w-0 whitespace-normal [&_[data-slot=select-item-text]]:whitespace-normal [&>span]:min-w-0 [&>span]:shrink [&>span]:whitespace-normal [overflow-wrap:anywhere]';
 
 export type { GraphBrowserTransport } from './index';
 

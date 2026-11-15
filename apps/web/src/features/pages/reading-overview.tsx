@@ -112,7 +112,7 @@ export function ReadingOverviewSections({ children }: { children?: ReactNode }) 
 export function ReadingOverviewTools({ children, locale }: { children?: ReactNode; locale: string }) {
   return (
     <details data-slot="reading-overview-tools" className="group min-w-0 border-t border-border pt-5">
-      <summary className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+      <summary className="flex cursor-pointer items-center gap-2 text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
         {m.subject_details({}, { locale: locale as never })}
       </summary>
       <div className="min-w-0 space-y-6 pt-5 [overflow-wrap:anywhere]">{children}</div>

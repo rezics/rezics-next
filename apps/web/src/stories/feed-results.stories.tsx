@@ -14,6 +14,7 @@ import { FeedResults, type FeedResultsAvailability, type FeedResultsMessages } f
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
+import { Button } from '@rezics/ui/shadcn/button';
 import type { MyRealmsPage } from '../community/space';
 import type { MyRealmsCurrentRow, MyRealmsNativePage } from '../community/my-realms-current/contract';
 import { formatMyRealmsCurrent } from '../community/my-realms-native';
@@ -113,13 +114,14 @@ function RealmResults({
         nextControl={
           next ? (
             <nav aria-label={m.realms_heading()}>
-              <Link
-                to="/realms"
-                search={{ cursor: next }}
-                className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
+              <Button
+                variant="outline"
+                size="sm"
+                nativeButton={false}
+                render={<Link to="/realms" search={{ cursor: next }} />}
               >
                 {m.realms_more()}
-              </Link>
+              </Button>
             </nav>
           ) : undefined
         }

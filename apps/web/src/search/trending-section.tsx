@@ -1,3 +1,4 @@
+import { Button } from '@rezics/ui/shadcn/button';
 import { TrendingUp } from 'lucide-react';
 import { useCallback, useContext, useEffect, useLayoutEffect as useBrowserLayoutEffect, useRef } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
@@ -119,15 +120,16 @@ export function TrendingSearchesSection({
         <ul>
           {rows.map(({ key, query, display }, index) => (
             <li key={key}>
-              <button
+              <Button
                 ref={index === 0 ? focus.firstTermRef : undefined}
                 type="button"
-                className="flex min-h-11 w-full items-center gap-3 rounded-xl px-2 text-start text-sm outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+                variant="ghost"
+                className="h-auto min-h-7 w-full justify-start gap-3 whitespace-normal px-2 text-start"
                 onClick={() => onSelect?.(query)}
               >
-                <TrendingUp aria-hidden="true" className="size-4 shrink-0" />
-                <span>{display}</span>
-              </button>
+                <TrendingUp aria-hidden="true" />
+                <span className="min-w-0 wrap-anywhere">{display}</span>
+              </Button>
             </li>
           ))}
         </ul>
@@ -145,10 +147,11 @@ export function TrendingSearchesSection({
       {onRetry && state.status !== 'ready' && (
         <>
           {waiting && <p className="px-2 text-sm text-muted-foreground">{m.search_recovery_wait({}, options)}</p>}
-          <button
+          <Button
             ref={focus.retryRef}
             type="button"
-            className="min-h-11 rounded-xl px-2 text-sm outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            variant="ghost"
+            size="sm"
             disabled={waiting || state.status === 'loading'}
             onClick={(event) => {
               focus.requestRetryFocus(event.currentTarget);
@@ -156,7 +159,7 @@ export function TrendingSearchesSection({
             }}
           >
             {m.search_facet_retry({}, options)}
-          </button>
+          </Button>
         </>
       )}
     </section>

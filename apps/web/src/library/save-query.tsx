@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { useCollectionOwnerCurrent } from './collection-owner-current';
 import {
@@ -31,7 +32,7 @@ export function SaveQueryLink({ id, selection }: { id: string; selection: SavedQ
   return (
     <Link
       to="/library/rules/new"
-      className="inline-flex min-h-11 items-center rounded-lg border border-border px-4"
+      className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 max-w-full whitespace-normal' })}
       onClick={(event) => {
         if (
           event.defaultPrevented ||

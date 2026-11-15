@@ -26,7 +26,7 @@ export function AccountDeletionRecovery({
   return (
     <section
       aria-labelledby="account-delete-recovery-heading"
-      className="mt-6 grid gap-3 rounded-lg border border-border p-4"
+      className="mt-6 grid gap-3 rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10"
       data-account-deletion-recovery={unknown ? 'unknown' : attempt.phase}
     >
       {unknown ? (

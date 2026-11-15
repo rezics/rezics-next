@@ -5,19 +5,11 @@ import { m } from '../../paraglide/messages.js';
 import { actionClass } from '../private-export/controls';
 import { EvidenceDetails } from '../archive-progress-recovery/review';
 import { sectionLabel } from '../archive-entry-recovery/presentation';
-import {
-  RECOVERY_SELECTED_OCCURRENCES,
-  RECOVERY_ID,
-  type RecoveryCollection,
-  type RecoveryCollectionsPage,
-  type RecoveryOccurrence,
-  type RecoveryOccurrencesPage,
-  type RecoveryReview,
-  type RecoveryPresentationChoice,
-  type RecoveryPresentationEvidence,
-} from './contract';
+import { RECOVERY_SELECTED_OCCURRENCES, RECOVERY_ID, type RecoveryCollection, type RecoveryCollectionsPage, type RecoveryOccurrence, type RecoveryOccurrencesPage, type RecoveryReview, type RecoveryPresentationChoice, type RecoveryPresentationEvidence } from './contract';
 import { RecoveryPresentationChoices } from './presentation';
 import { canSelectOccurrence, selectionLimitReached, type OccurrenceSelection } from './selection';
+import { NativeCheckbox } from '@rezics/ui/native-checkbox';
+import { Button } from '@rezics/ui/shadcn/button';
 
 function Coverage({ page }: { page: RecoveryCollectionsPage }) {
   return (
@@ -61,8 +53,8 @@ function CollectionOption({
   return (
     <li className="grid min-w-0 gap-3 rounded-lg border p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div className="grid min-w-0 gap-2">
-        <h3 className="break-words font-semibold">{collection.title || m.library_archive_recovery_untitled()}</h3>
-        {collection.description ? <p className="break-words text-sm">{collection.description}</p> : null}
+        <h3 className="h-auto break-words font-semibold">{collection.title || m.library_archive_recovery_untitled()}</h3>
+        {collection.description ? <p className="h-auto break-words text-sm">{collection.description}</p> : null}
         <p className="text-sm text-muted-foreground">
           {m.library_archive_recovery_collection_members({ count: collection.memberCount })}
           {' · '}
@@ -77,14 +69,14 @@ function CollectionOption({
         </p>
         <EvidenceDetails value={collection} />
       </div>
-      <button
+      <Button
         type="button"
-        className={actionClass}
+        variant="outline" className={actionClass}
         disabled={disabled || !collection.eligible}
         onClick={() => onChoose(collection)}
       >
         {m.library_archive_recovery_choose_collection()}
-      </button>
+      </Button>
     </li>
   );
 }
@@ -119,22 +111,22 @@ export function ArchiveCollectionChooser({
           </div>
           <div className="flex flex-wrap gap-2">
             {canPrevious ? (
-              <button className={actionClass} type="button" disabled={busy} onClick={onPrevious}>
+              <Button variant="outline" className={actionClass} type="button" disabled={busy} onClick={onPrevious}>
                 {m.library_window_previous()}
-              </button>
+              </Button>
             ) : null}
-            <button className={actionClass} type="button" disabled={busy} onClick={onFirst}>
+            <Button variant="outline" className={actionClass} type="button" disabled={busy} onClick={onFirst}>
               {m.library_archive_recovery_first_page()}
-            </button>
+            </Button>
             {page.next ? (
-              <button
-                className={actionClass}
+              <Button
+                variant="outline" className={actionClass}
                 type="button"
                 disabled={busy}
                 onClick={(event) => onNext(page.next!, event)}
               >
                 {m.library_archive_recovery_next_page()}
-              </button>
+              </Button>
             ) : null}
           </div>
         </div>
@@ -182,10 +174,9 @@ function OccurrenceRow({
   const unavailable = !canSelectOccurrence(row);
   return (
     <li className="grid min-w-0 gap-3 rounded-lg border p-4 sm:grid-cols-[auto_minmax(0,1fr)]">
-      <label className="flex min-h-11 items-center gap-3 sm:items-start sm:pt-1">
-        <input
-          type="checkbox"
-          className="size-5 shrink-0 accent-primary"
+      <label className="flex items-center gap-3 sm:items-start sm:pt-1">
+        <NativeCheckbox
+          className='shrink-0'
           checked={selected}
           disabled={disabled || unavailable || (!selected && limitReached)}
           onChange={() => onToggle(row)}
@@ -199,7 +190,7 @@ function OccurrenceRow({
             ? m.library_archive_present_title_unavailable()
             : m.library_archive_recovery_subject_missing()}
         </p>
-        <p className="whitespace-pre-wrap break-words text-sm">
+        <p className="h-auto whitespace-pre-wrap break-words text-sm">
           <span className="font-medium">{noteLabel(row)}: </span>
           {row.note ?? m.library_archive_recovery_note_none()}
         </p>
@@ -256,34 +247,34 @@ export function ArchiveOccurrenceChooser({
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <button className={actionClass} type="button" disabled={busy} onClick={onCollections}>
+        <Button variant="outline" className={actionClass} type="button" disabled={busy} onClick={onCollections}>
           {m.library_archive_recovery_back_collections()}
-        </button>
-        <button
-          className={actionClass}
+        </Button>
+        <Button
+          variant="outline" className={actionClass}
           type="button"
           disabled={busy || !rows.some(canSelectOccurrence)}
           onClick={() => onTogglePage(rows)}
         >
           {m.library_archive_recovery_select_page()}
-        </button>
-        <button className={actionClass} type="button" disabled={busy} onClick={onFirst}>
+        </Button>
+        <Button variant="outline" className={actionClass} type="button" disabled={busy} onClick={onFirst}>
           {m.library_archive_recovery_first_page()}
-        </button>
+        </Button>
         {canPrevious ? (
-          <button className={actionClass} type="button" disabled={busy} onClick={onPrevious}>
+          <Button variant="outline" className={actionClass} type="button" disabled={busy} onClick={onPrevious}>
             {m.library_window_previous()}
-          </button>
+          </Button>
         ) : null}
         {showReviewAction && onReview ? (
-          <button className={actionClass} type="button" disabled={busy || !selected.size} onClick={onReview}>
+          <Button variant="outline" className={actionClass} type="button" disabled={busy || !selected.size} onClick={onReview}>
             {m.library_archive_recovery_open_review()}
-          </button>
+          </Button>
         ) : null}
         {page.next ? (
-          <button className={actionClass} type="button" disabled={busy} onClick={(event) => onPage(page.next!, event)}>
+          <Button variant="outline" className={actionClass} type="button" disabled={busy} onClick={(event) => onPage(page.next!, event)}>
             {m.library_archive_recovery_next_page()}
-          </button>
+          </Button>
         ) : null}
       </div>
       {rows.length ? (
@@ -339,7 +330,7 @@ function SealedPresentationChoice({ choice }: { choice: RecoveryPresentationChoi
       <dl className="grid min-w-0 gap-2 text-sm sm:grid-cols-2">
         <div className="grid min-w-0 gap-1">
           <dt className="font-medium">{m.library_archive_recovery_presentation_kind()}</dt>
-          <dd className="[overflow-wrap:anywhere]">{choice.kind ?? m.library_collection_mixed_label()}</dd>
+          <dd className="h-auto [overflow-wrap:anywhere]">{choice.kind ?? m.library_collection_mixed_label()}</dd>
         </div>
         <div className="grid min-w-0 gap-1">
           <dt className="font-medium">{m.library_archive_recovery_presentation_source()}</dt>
@@ -394,11 +385,11 @@ export function ArchiveRecoveryReview({
           </div>
           <div className="grid gap-1">
             <dt className="font-medium">{m.library_archive_recovery_title_label()}</dt>
-            <dd className="break-words">{collection.title || m.library_archive_recovery_untitled()}</dd>
+            <dd className="h-auto break-words">{collection.title || m.library_archive_recovery_untitled()}</dd>
           </div>
           <div className="grid gap-1 sm:col-span-2">
             <dt className="font-medium">{m.library_archive_recovery_description_label()}</dt>
-            <dd className="whitespace-pre-wrap break-words">
+            <dd className="h-auto whitespace-pre-wrap break-words">
               {collection.description || m.library_archive_recovery_no_description()}
             </dd>
           </div>
@@ -464,7 +455,7 @@ export function ArchiveRecoveryReview({
                 {(row.sourceSubjectId && targets.get(row.sourceSubjectId)?.title) ||
                   m.library_archive_present_title_unavailable()}
               </p>
-              <p className="whitespace-pre-wrap break-words text-sm">
+              <p className="h-auto whitespace-pre-wrap break-words text-sm">
                 <span className="font-medium">{noteLabel(row)}: </span>
                 {row.note ?? m.library_archive_recovery_note_none()}
               </p>
@@ -524,24 +515,23 @@ export function ArchiveRecoveryReview({
           <p>{m.library_archive_recovery_destination_private()}</p>
           <p>{m.library_archive_recovery_note_choice_help()}</p>
           <EvidenceDetails value={review} title={m.library_archive_progress_exact()} />
-          <label className="flex min-h-11 items-start gap-3 rounded-md bg-muted/40 p-3">
-            <input
-              type="checkbox"
-              className="mt-1 size-5 shrink-0 accent-primary"
+          <label className="flex items-start gap-3 rounded-md bg-muted/40 p-3">
+            <NativeCheckbox
+              className='mt-1 shrink-0'
               checked={confirmed}
               disabled={busy}
               onChange={(event) => setConfirmed(event.currentTarget.checked)}
             />
             <span>{m.library_archive_recovery_confirm_private()}</span>
           </label>
-          <button type="button" className={actionClass} disabled={busy || !confirmed} onClick={onApply}>
+          <Button type="button" variant="outline" className={actionClass} disabled={busy || !confirmed} onClick={onApply}>
             {busy ? m.library_archive_recovery_applying() : m.library_archive_recovery_apply_action()}
-          </button>
+          </Button>
         </div>
       ) : (
-        <button type="button" className={actionClass} disabled={busy || !selected.size} onClick={onSubmit}>
+        <Button type="button" variant="outline" className={actionClass} disabled={busy || !selected.size} onClick={onSubmit}>
           {m.library_archive_recovery_review_action()}
-        </button>
+        </Button>
       )}
     </section>
   );

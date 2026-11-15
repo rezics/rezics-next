@@ -53,14 +53,14 @@ export function ExactRevisionView({
           <HistoryReturnLink
             target={historyReturn}
             revisionId={identity.revisionId}
-            className="inline-flex min-h-11 max-w-full items-center rounded-sm text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="inline-flex max-w-full items-center rounded-sm text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
           />
         ) : fallbackHref ? (
           <div className="min-w-0 space-y-2">
             <p className="text-sm text-muted-foreground">{m.revision_return_unavailable()}</p>
             <a
               href={fallbackHref}
-              className="inline-flex min-h-11 max-w-full items-center rounded-sm text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="inline-flex max-w-full items-center rounded-sm text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               {m.exact_revision_back()}
             </a>
@@ -82,7 +82,7 @@ export function ExactRevisionView({
             <Button
               type="button"
               variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="h-auto min-h-7 max-w-full text-start whitespace-normal [overflow-wrap:anywhere]"
               onClick={onRetry}
             >
               {m.exact_revision_retry()}
@@ -128,7 +128,7 @@ export function ExactRevisionView({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  className="h-auto min-h-6 max-w-full text-start whitespace-normal [overflow-wrap:anywhere]"
                 />
               }
             >

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
 import type {
   SourceObservationInspection,
@@ -24,9 +25,9 @@ type State =
       selected: SourceObservationItem | null;
       request: SourceObservationRequest;
     };
-const controlClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]';
+const controlClass = 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
 const linkClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
 
 function ObservationDetails({
   item,

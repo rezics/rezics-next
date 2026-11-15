@@ -1,3 +1,5 @@
+import { cn } from '@rezics/ui/utils';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
@@ -63,7 +65,7 @@ export function CollectionPublicationReview({ review }: { review: PublicationRev
           return (
             <li key={id}>
               <a
-                className="inline-flex min-h-11 items-center py-2 text-primary underline underline-offset-4"
+                className={cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full whitespace-normal')}
                 href={subjectHref({ id, label: title.text }, locale).href}
                 lang={title.lang}
               >

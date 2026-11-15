@@ -40,7 +40,7 @@ import {
 import type { InitialSubject } from './create-subject';
 import type { Violation } from '@rezics/definitions/validate';
 
-const wrap = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2';
+const wrap = 'h-auto min-h-7 max-w-full whitespace-normal break-words';
 
 function asFactDraft(
   fact: GenericCreateFact,
@@ -773,7 +773,7 @@ export function GenericCreateFactsWorkspace({
                 )}
                 {prefix && localErrors.length > 0 && (
                   <details className="min-w-0 text-sm">
-                    <summary className="min-h-11 cursor-pointer content-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                    <summary className="cursor-pointer content-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                       {m.catalogue_creation_technical_details({}, options)}
                     </summary>
                     <ul className="list-disc break-all ps-5">

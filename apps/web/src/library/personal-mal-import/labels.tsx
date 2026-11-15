@@ -6,6 +6,7 @@ import { m } from '../../paraglide/messages.js';
 import type { MalAssignment, MalLabelReview, MalLabelSelection, MalPreviewRow } from './contract';
 import { useMalImportPort } from './port';
 import { MalAction } from './controls';
+import { Input } from '@rezics/ui/shadcn/input';
 
 /** Render only the native evidence projection. Never tokenize a display value or XML here. */
 export function MalLabelsReview({
@@ -31,21 +32,21 @@ export function MalLabelsReview({
           {evidence.grammar} · {evidence.kind} · {evidence.reason}
         </p>
         {evidence.raw !== undefined ? (
-          <pre className="whitespace-pre-wrap [overflow-wrap:anywhere]">{evidence.raw}</pre>
+          <pre className="h-auto whitespace-pre-wrap [overflow-wrap:anywhere]">{evidence.raw}</pre>
         ) : null}
       </ImportDetails>
       {evidence.values.map((value) => {
         const selected = labels?.find((s) => s.value === value.index);
         return (
           <div key={value.index} className="space-y-2 border-t pt-2">
-            <p className="[overflow-wrap:anywhere]">
+            <p className="h-auto [overflow-wrap:anywhere]">
               #{value.index}: {value.value}
             </p>
             <ImportDetails>
-              <pre className="whitespace-pre-wrap [overflow-wrap:anywhere]">{value.raw}</pre>
+              <pre className="h-auto whitespace-pre-wrap [overflow-wrap:anywhere]">{value.raw}</pre>
             </ImportDetails>
             {value.duplicateOf !== null ? <p>{m.library_mal_label_duplicate({ index: value.duplicateOf })}</p> : null}
-            <label className="flex min-h-11 items-center gap-2" htmlFor={`${base}-${value.index}`}>
+            <label className="flex items-center gap-2" htmlFor={`${base}-${value.index}`}>
               <input
                 id={`${base}-${value.index}`}
                 type="checkbox"
@@ -103,7 +104,7 @@ function LabelTarget({
               onChange({ ...selection, target: value === 'new' ? { name: '' } : { labelId: '', revision: 1 } });
           }}
         >
-          <SelectTrigger id={`${id}-mode`} aria-labelledby={`${id}-mode-label`} className="min-h-11 w-full border">
+          <SelectTrigger id={`${id}-mode`} aria-labelledby={`${id}-mode-label`} className='w-full'>
             <SelectValue />
           </SelectTrigger>
           <SelectContent alignItemWithTrigger={false}>
@@ -120,9 +121,9 @@ function LabelTarget({
       {'name' in target ? (
         <>
           <label htmlFor={`${id}-name`}>{m.library_mal_label_name()}</label>
-          <input
+          <Input
             id={`${id}-name`}
-            className="min-h-11 min-w-0 border p-2"
+            className='min-w-0'
             value={target.name}
             onChange={(e) => onChange({ ...selection, target: { name: e.target.value } })}
           />
@@ -130,16 +131,16 @@ function LabelTarget({
       ) : (
         <>
           <label htmlFor={`${id}-identity`}>{m.library_mal_label_id()}</label>
-          <input
+          <Input
             id={`${id}-identity`}
-            className="min-h-11 min-w-0 border p-2"
+            className='min-w-0'
             value={target.labelId}
             onChange={(e) => onChange({ ...selection, target: { ...target, labelId: e.target.value } })}
           />
           <label htmlFor={`${id}-revision`}>{m.library_mal_label_revision()}</label>
-          <input
+          <Input
             id={`${id}-revision`}
-            className="min-h-11 min-w-0 border p-2"
+            className='min-w-0'
             type="number"
             min={1}
             value={target.revision}
@@ -154,7 +155,7 @@ function LabelTarget({
 export function MalReviewedLabels({ review }: { review: MalLabelReview | undefined }) {
   if (!review) return null;
   return (
-    <ul className="space-y-2 [overflow-wrap:anywhere]" aria-label={m.library_mal_label_adoption()}>
+    <ul className="h-auto space-y-2 [overflow-wrap:anywhere]" aria-label={m.library_mal_label_adoption()}>
       {review.selections.map((selection) => (
         <li key={selection.value}>
           #{selection.value}: {selection.sourceValue} · {selection.status} · {selection.reason}
@@ -205,7 +206,7 @@ export function MalCurrentAssignments({ subjectId, disabled = false }: { subject
   }
   return (
     <section
-      className="mt-3 space-y-2 border-t pt-3 [overflow-wrap:anywhere]"
+      className="h-auto mt-3 space-y-2 border-t pt-3 [overflow-wrap:anywhere]"
       aria-label={m.library_mal_label_current()}
     >
       <h4 className="font-medium">{m.library_mal_label_current()}</h4>
@@ -247,11 +248,11 @@ export function MalRetainedSource({ id }: { id: string }) {
   }, [port, id, opened]);
   return (
     <details onToggle={(event) => setOpened(event.currentTarget.open)}>
-      <summary className="min-h-11 cursor-pointer py-2">{m.library_mal_label_source()}</summary>
+      <summary className="cursor-pointer py-2">{m.library_mal_label_source()}</summary>
       {xml === null ? (
         <p>{m.library_mal_unavailable()}</p>
       ) : (
-        <pre className="whitespace-pre-wrap [overflow-wrap:anywhere]">{xml}</pre>
+        <pre className="h-auto whitespace-pre-wrap [overflow-wrap:anywhere]">{xml}</pre>
       )}
     </details>
   );

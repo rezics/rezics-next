@@ -691,7 +691,7 @@ function SpaceHome({
             {participation ? (
               <aside
                 data-slot="space-home-participation"
-                className="min-w-0 max-w-full rounded-xl border border-border bg-card p-3 sm:p-4 [&>*]:min-w-0 [&>*]:max-w-full [&_a]:h-auto [&_a]:min-h-11 [&_a]:max-w-full [&_a]:whitespace-normal [&_button]:h-auto [&_button]:min-h-11 [&_button]:max-w-full [&_button]:whitespace-normal"
+                className="min-w-0 max-w-full rounded-xl border border-border bg-card p-3 sm:p-4 [&>*]:min-w-0 [&>*]:max-w-full [&_a]:h-auto [&_a]:max-w-full [&_a]:whitespace-normal [&_button]:h-auto [&_button]:max-w-full [&_button]:whitespace-normal"
               >
                 {participation}
               </aside>
@@ -753,7 +753,7 @@ function SpaceHome({
           <Button
             ref={managementTrigger}
             variant="outline"
-            className="h-auto min-h-11 max-w-full whitespace-normal"
+            className="h-auto min-h-7 max-w-full whitespace-normal"
             aria-expanded={entered}
             aria-controls={managementId}
             onClick={() => (entered ? closeManagement() : setEntered(true))}
@@ -781,7 +781,7 @@ function SpaceHome({
               >
                 {m.community_manage()}
               </h2>
-              <Button variant="ghost" className="h-auto min-h-11 whitespace-normal" onClick={closeManagement}>
+              <Button variant="ghost" className="h-auto min-h-7 whitespace-normal" onClick={closeManagement}>
                 {m.community_manage_close()}
               </Button>
             </header>
@@ -791,13 +791,14 @@ function SpaceHome({
             <ResourceAccessLink resourceId={page.realm?.id ?? page.space.id} />
           ) : null}
           {entered && !managementRestricted && page.realm ? (
-            <Link
-              to="/realms/$id/questions"
-              params={{ id: page.realm.id }}
-              className="inline-flex rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted focus-visible:outline focus-visible:outline-2"
+            <Button
+              variant="outline"
+              className="h-auto min-h-7 max-w-full whitespace-normal"
+              nativeButton={false}
+              render={<Link to="/realms/$id/questions" params={{ id: page.realm.id }} />}
             >
               {m.realm_question_management_link()}
-            </Link>
+            </Button>
           ) : null}
           {entered && !managementRestricted && page.realm ? (
             <RealmMembersEntry realmId={page.realm.id} appearance={admissions.appearance === true} setup={setup} />

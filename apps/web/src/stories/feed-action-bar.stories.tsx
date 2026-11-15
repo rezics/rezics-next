@@ -80,7 +80,7 @@ function PreparedCard({
             reply={{ onReply: () => setReplies((n) => n + 1) }}
             library={{ href: `/${locale}/subjects/prepared/work?slot=collections` }}
           >
-            <a className="inline-flex min-h-11 items-center text-sm underline" href={`/${locale}/library/progress`}>
+            <a className="inline-flex items-center underline" href={`/${locale}/library/progress`}>
               Continue
             </a>
           </FeedActionBar>

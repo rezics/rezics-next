@@ -85,7 +85,7 @@ export function classificationFields(
 }
 
 const actionClassName =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 export type CharacterClassificationProps = {
   onHold?: (property: string, holding: boolean) => void;
@@ -868,7 +868,7 @@ function CharacterClassificationLive({
                   >
                     <SelectTrigger
                       id={selectedValueId}
-                      className="w-full min-w-0 max-w-full min-h-11 [&:focus-visible]:outline-2 [&:focus-visible]:outline-offset-2 [&:focus-visible]:outline-ring md:pointer-fine:min-h-8"
+                      className="w-full min-w-0 max-w-full [&:focus-visible]:outline-2 [&:focus-visible]:outline-offset-2 [&:focus-visible]:outline-ring"
                       aria-label={m.facts_choose_value({}, o)}
                     >
                       <SelectValue />
@@ -1048,7 +1048,7 @@ function CharacterClassificationLive({
                   </Button>
                 )}
                 {reviewing && reviewTransport && (
-                  <div className="min-w-0 [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:py-2 [&_button]:[overflow-wrap:anywhere] [&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-ring [&_[data-slot=select-trigger]]:w-full [&_[data-slot=select-trigger]]:min-h-11 [&_label]:flex-wrap [&_label]:whitespace-normal">
+                  <div className="min-w-0 [&_button]:h-auto [&_button]:min-h-7 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:[overflow-wrap:anywhere] [&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-ring [&_[data-slot=select-trigger]]:w-full [&_label]:flex-wrap [&_label]:whitespace-normal">
                     <CandidateReview
                       id={read.public.subject.id}
                       locale={locale}

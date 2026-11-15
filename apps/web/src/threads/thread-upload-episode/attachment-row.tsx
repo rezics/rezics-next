@@ -97,12 +97,12 @@ export function ComposerAttachmentRow({
                   : m.thread_attachment_no_recovery()}
         </p>
       ) : null}
-      <div className="mt-2 flex min-w-0 flex-wrap gap-2">
+      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
         {retry ? (
           <Button
             type="button"
             variant="secondary"
-            className="h-auto min-h-11 whitespace-normal"
+            className="h-auto min-h-7 whitespace-normal"
             onClick={() => {
               deliberate(actions.retry);
             }}
@@ -113,7 +113,7 @@ export function ComposerAttachmentRow({
         <Button
           type="button"
           variant="ghost"
-          className="h-auto min-h-11 whitespace-normal"
+          className="h-auto min-h-7 whitespace-normal"
           onClick={() => deliberate(actions.dismiss)}
         >
           {m.editor_dismiss_upload()}
@@ -122,7 +122,7 @@ export function ComposerAttachmentRow({
           <Button
             type="button"
             variant="outline"
-            className="h-auto min-h-11 whitespace-normal"
+            className="h-auto min-h-7 whitespace-normal"
             onClick={() => {
               if (current()) input.current?.click();
             }}

@@ -1,5 +1,6 @@
 import { BottomSheet } from '@rezics/ui/bottom-sheet';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { Dialog, DialogContent, DialogTitle } from '@rezics/ui/shadcn/dialog';
 import { useIsMobile } from '@rezics/ui/hooks/use-mobile';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
@@ -12,7 +13,7 @@ type CopyState = 'idle' | 'pending' | 'success' | 'denied' | 'unavailable';
 
 // One References visit at a time in each document, even when several published posts are mounted.
 const activeReferences = new WeakMap<Document, () => void>();
-const control = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]';
+const control = 'h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]';
 
 function webLocation(entry: PostReferenceEntry) {
   return entry.href.startsWith('/') ? entry.label : new URL(entry.href).hostname;
@@ -179,7 +180,7 @@ export function PostReferenceView({
           <label htmlFor={addressId} className="block text-sm font-medium">
             {m.post_references_destination({}, options)}
           </label>
-          <textarea
+          <Textarea
             ref={address}
             id={addressId}
             aria-label={m.post_references_destination({}, options)}
@@ -187,17 +188,18 @@ export function PostReferenceView({
             rows={4}
             wrap="soft"
             dir="ltr"
-            className="block min-h-24 w-full min-w-0 max-w-full resize-y rounded-md border bg-background p-3 font-mono text-sm [overflow-wrap:anywhere] [unicode-bidi:plaintext] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="min-h-24 w-full min-w-0 max-w-full resize-y font-mono text-sm [overflow-wrap:anywhere] [unicode-bidi:plaintext]"
             value={selected.href}
           />
-          <div className="flex max-w-full flex-wrap gap-2">
-            <a
-              href={selected.href}
-              rel="noopener noreferrer nofollow ugc"
-              className={`${control} inline-flex items-center justify-center rounded-md border px-3 py-2 underline underline-offset-4`}
+          <div className="flex max-w-full flex-wrap items-center gap-2">
+            <Button
+              nativeButton={false}
+              variant="outline"
+              className={control}
+              render={<a href={selected.href} rel="noopener noreferrer nofollow ugc" />}
             >
               {m.post_references_follow({}, options)}
-            </a>
+            </Button>
             <Button
               type="button"
               variant="outline"

@@ -359,7 +359,7 @@ function LifecycleControlsView({
                   state.destination ? (
                     <a
                       href={state.destination}
-                      className="inline-flex min-h-11 items-center whitespace-normal font-medium underline underline-offset-4 [overflow-wrap:anywhere]"
+                      className="inline-flex items-center whitespace-normal font-medium underline underline-offset-4 [overflow-wrap:anywhere]"
                     >
                       {m.container_lifecycle_open()}
                     </a>
@@ -395,7 +395,7 @@ function LifecycleControlsView({
               <div className="min-w-0 space-y-2 text-sm">
                 {state.outcome !== 'conflict' ? <p role="alert">{m.container_lifecycle_refused()}</p> : null}
                 <details className="min-w-0">
-                  <summary className="min-h-11 cursor-pointer py-2 font-medium underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                  <summary className="cursor-pointer font-medium underline underline-offset-4">
                     {m.community_management_details_problem_summary()}
                   </summary>
                   <dl className="grid min-w-0 gap-2 pt-2 sm:grid-cols-2">
@@ -427,7 +427,7 @@ function LifecycleControlsView({
               </p>
             ) : null}
             <div className="flex flex-wrap gap-2">
-              <Button className="min-h-11 whitespace-normal [overflow-wrap:anywhere]" onClick={() => void control.retry()}>
+              <Button className="whitespace-normal [overflow-wrap:anywhere]" onClick={() => void control.retry()}>
                 {m.container_lifecycle_retry()}
               </Button>
             </div>
@@ -436,7 +436,7 @@ function LifecycleControlsView({
         {reviewAvailable ? (
           <div className="flex flex-wrap gap-2">
             <Button
-              className="min-h-11 whitespace-normal [overflow-wrap:anywhere]"
+              className="whitespace-normal [overflow-wrap:anywhere]"
               variant="outline"
               onClick={() => {
                 setConfirmation(null);
@@ -469,7 +469,7 @@ function LifecycleControlsView({
               {actions.map((action) => (
                 <Button
                   key={action}
-                  className="min-h-11 whitespace-normal [overflow-wrap:anywhere]"
+                  className="whitespace-normal [overflow-wrap:anywhere]"
                   ref={(element) => {
                     if (element) actionButtonRefs.current.set(action, element);
                     else actionButtonRefs.current.delete(action);
@@ -498,7 +498,7 @@ function LifecycleControlsView({
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Button
-                    className="min-h-11 whitespace-normal [overflow-wrap:anywhere]"
+                    className="whitespace-normal [overflow-wrap:anywhere]"
                     variant={confirmation === 'remove' ? 'destructive' : 'default'}
                     onClick={(event) => {
                       const action = confirmation;
@@ -524,7 +524,7 @@ function LifecycleControlsView({
                     {m.container_lifecycle_confirm()}
                   </Button>
                   <Button
-                    className="min-h-11 whitespace-normal [overflow-wrap:anywhere]"
+                    className="whitespace-normal [overflow-wrap:anywhere]"
                     ref={cancelButtonRef}
                     variant="outline"
                     onClick={(event) => {
@@ -541,7 +541,7 @@ function LifecycleControlsView({
         ) : null}
         {showRetainedReason ? (
           <details className="min-w-0">
-            <summary className="min-h-11 cursor-pointer py-2 font-medium underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            <summary className="cursor-pointer font-medium underline underline-offset-4">
               {m.container_lifecycle_reason()}
             </summary>
             <div className="pt-2">
@@ -563,7 +563,7 @@ function LifecycleControlsView({
         ) : null}
         <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
           <Button
-            className="min-h-11 whitespace-normal [overflow-wrap:anywhere]"
+            className="whitespace-normal [overflow-wrap:anywhere]"
             variant="outline"
             disabled={state.busy}
             onClick={() => {

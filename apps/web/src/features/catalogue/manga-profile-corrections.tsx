@@ -246,7 +246,7 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload, search = 
               {pickText(read!.release.types[subject.type]?.labels ?? {}, locale).text || m.guide_missing({}, o)}
             </p>
             <p className="text-sm font-medium">{m.specialist_identity_scope({}, o)}</p>
-            <div className="flex min-w-0 flex-wrap gap-3 [&>a]:h-auto [&>a]:max-w-full [&>a]:whitespace-normal [&>a]:break-words [&>a]:[overflow-wrap:anywhere]">
+            <div className="flex min-w-0 flex-wrap gap-3 [&>a]:h-auto [&>a]:min-h-7 [&>a]:max-w-full [&>a]:whitespace-normal [&>a]:break-words [&>a]:[overflow-wrap:anywhere]">
               <a className={buttonVariants({ variant: 'outline' })} href={`${href}/terms`}>
                 {m.catalogue_terms_title({}, o)}
               </a>
@@ -256,7 +256,7 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload, search = 
               <DefinitionGuideLink locale={locale} address={{ type: subject.type }} />
             </div>
             <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3">
-              <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
+              <summary className="min-h-7 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                 {m.specialist_identity_names({}, o)}
               </summary>
               <dl className="mt-3 min-w-0 space-y-3">
@@ -296,7 +296,7 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload, search = 
               </dl>
             </details>
             <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3 border-t border-border pt-4">
-              <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
+              <summary className="min-h-7 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                 {m.specialist_identity_reference({}, o)}
               </summary>
               <dl className="mt-3 min-w-0 space-y-3">
@@ -375,7 +375,7 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload, search = 
                     <section key={property} className="min-w-0 [overflow-wrap:anywhere]">
                       <ContentItemFrame
                         as="div"
-                        className="min-w-0 space-y-3 rounded-xl bg-card p-4 sm:p-5 [&_a]:inline-flex [&_a]:min-h-11 md:pointer-fine:[&_a]:min-h-8 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:whitespace-normal [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
+                        className="min-w-0 space-y-3 rounded-xl bg-card p-4 sm:p-5 [&_a]:inline-flex [&_a]:max-w-full [&_a]:items-center [&_a]:whitespace-normal [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
                       >
                         <ContentItemHeading
                           level={3}
@@ -477,14 +477,14 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload, search = 
             </ContentItemHeading>
             <div className="flex min-w-0 flex-col flex-wrap gap-2 sm:flex-row">
               <Button
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 [overflow-wrap:anywhere] md:pointer-fine:min-h-8 md:pointer-fine:py-1"
+                className="h-auto min-h-7 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
                 disabled={busy || disabled || !ports || !changed.length || needsReconciliation}
                 onClick={() => void submit()}
               >
                 {busy ? m.correction_saving({}, o) : m.facts_submit({}, o)}
               </Button>
               <Button
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 [overflow-wrap:anywhere] md:pointer-fine:min-h-8 md:pointer-fine:py-1"
+                className="h-auto min-h-7 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
                 variant="outline"
                 disabled={busy}
                 onClick={(event) => {

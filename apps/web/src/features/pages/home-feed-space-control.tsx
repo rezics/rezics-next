@@ -33,7 +33,7 @@ export function HomeFeedSpaceControl({
   };
   return (
     <section
-      className="space-y-3 [&_button]:min-h-11 [&_button]:whitespace-normal [&_input]:min-h-11"
+      className="space-y-3 [&_button]:whitespace-normal"
       aria-label={m.home_space_label({}, options)}
       aria-busy={busy}
     >

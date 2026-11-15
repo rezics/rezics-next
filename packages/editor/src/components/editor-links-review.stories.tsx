@@ -29,13 +29,13 @@ const longLabels: RichTextEditorLabels = {
 
 function idle() {}
 
-/** Existing link-menu chrome, inheriting toolbar width and theme. */
+/** Static link-menu frame. Surface matches generated Mira popover chrome; width stays in the review column. */
 function LinkMenuFixture({ children }: { children: ReactNode }) {
   return (
     <div
       role="group"
       aria-label={richTextEditorLabels.link}
-      className="flex w-full min-w-0 max-w-80 flex-col gap-1 rounded-2xl bg-popover p-2 text-popover-foreground shadow-lg ring-1 ring-foreground/5 dark:ring-foreground/10"
+      className="flex w-full min-w-0 max-w-80 flex-col gap-4 rounded-lg bg-popover p-2.5 text-popover-foreground shadow-md ring-1 ring-foreground/10"
     >
       {children}
     </div>

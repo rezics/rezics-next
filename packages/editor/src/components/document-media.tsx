@@ -83,7 +83,7 @@ export function DocumentImageView({
         <Button
           type="button"
           variant="outline"
-          className="min-h-11 max-w-full whitespace-normal [overflow-wrap:anywhere]"
+          className="h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
           onClick={() => {
             if (isCurrent()) setRevealed(true);
           }}

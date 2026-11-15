@@ -2,7 +2,8 @@ import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState
 import type { CollectionWindowReading } from '../../../features/pages/account-profile-port';
 import { useOperation } from '../../../kernel/exposure';
 import { m } from '../../../paraglide/messages.js';
-import { linkClass } from '../../../features/pages/shared';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { CollectionVisit, collectionWindowHref, type Coordinate, type Movement } from './visit';
 
 type Navigation = {
@@ -96,7 +97,7 @@ export function CollectionWindowControls({
       href={collectionWindowHref(search, hash, cursor)}
       aria-disabled={visit.pending || undefined}
       onClick={(event) => move(event, movement, cursor)}
-      className={`${linkClass} inline-flex min-h-11 min-w-11 items-center text-sm font-medium`}
+      className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-auto min-h-6 max-w-full whitespace-normal')}
     >
       {label}
     </a>

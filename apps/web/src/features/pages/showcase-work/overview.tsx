@@ -1,3 +1,4 @@
+import { Button } from '@rezics/ui/shadcn/button';
 import { useContext, useId, useMemo } from 'react';
 import type { PageContinuation } from '@rezics/composition';
 import type { SubjectPageData, subjectBody } from '../subject';
@@ -17,7 +18,7 @@ import { uncoveredWorkDestinations, workDestinations, workFranchiseGroups, WORK_
 import { useWorkRegionReturn } from './return';
 
 const workLink =
-  'inline-flex min-h-11 min-w-11 w-full flex-col items-start justify-center gap-1 rounded-sm py-2 text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'inline-flex w-full flex-col items-start justify-center gap-1 text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 type PresentationProps = {
   definitions: Record<string, RelationDefinition>;
@@ -231,15 +232,17 @@ export function WorkFranchiseReading(props: WorkFranchiseReadingProps) {
                 (() => {
                   const continuation = region.continuation;
                   const next = (
-                    <button
+                    <Button
                       type="button"
-                      className={workLink}
+                      variant="link"
+                      size="sm"
+                      className="h-auto min-h-6 w-full max-w-full justify-start whitespace-normal"
                       onClick={() => {
                         if (journey.current()) props.onContinue?.(continuation);
                       }}
                     >
                       {m.subject_connections_next({}, options)}
-                    </button>
+                    </Button>
                   );
                   return group.relations.some((relation) => spoilerLevel(relation.statement) > readerSpoiler) ? (
                     <SpoilerGate
@@ -420,7 +423,7 @@ export function WorkFranchiseReading(props: WorkFranchiseReadingProps) {
         <p>
           <Link
             href={relationsHref}
-            className="inline-flex min-h-11 min-w-11 items-center rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="inline-flex items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             {m.subject_view_all({ label: m.subject_relations({}, options) }, options)}
           </Link>

@@ -887,7 +887,7 @@ function RealmBansVisit({
             <Button
               type="button"
               variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+              className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
               disabled={disabled}
               onClick={(event) => browse('refresh', windows.current.active.cursor, event)}
             >
@@ -898,7 +898,7 @@ function RealmBansVisit({
             ref={restartAction}
             type="button"
             variant="outline"
-            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+            className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
             disabled={disabled || view.state === 'loading'}
             onClick={(event) => browse('restart', undefined, event)}
           >
@@ -921,7 +921,7 @@ function RealmBansVisit({
               ref={retryReadAction}
               type="button"
               variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+              className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
               disabled={disabled}
               onClick={(event) => {
                 if (!gate.current() || generation.current !== renderGeneration) return;
@@ -957,7 +957,7 @@ function RealmBansVisit({
                       <Button
                         type="button"
                         variant="outline"
-                        className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+                        className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
                         disabled={disabled || (!!ban.unban && !realmBanEpisodeAdvice(ban, realmId))}
                         onClick={(event) => {
                           if (
@@ -995,7 +995,7 @@ function RealmBansVisit({
                           <div className="flex flex-wrap gap-2">
                             <Button
                               type="button"
-                              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+                              className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
                               disabled={disabled}
                               onClick={(event) => {
                                 const review = unbanReview.current;
@@ -1017,7 +1017,7 @@ function RealmBansVisit({
                             <Button
                               type="button"
                               variant="ghost"
-                              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+                              className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
                               disabled={disabled}
                               onClick={(event) => {
                                 const review = unbanReview.current;
@@ -1049,7 +1049,7 @@ function RealmBansVisit({
               <Button
                 type="button"
                 variant="outline"
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+                className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
                 disabled={disabled || windows.current.previous.length === 0}
                 onClick={(event) => browse('previous', windows.current.previous.at(-1)!.cursor, event)}
               >
@@ -1059,7 +1059,7 @@ function RealmBansVisit({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+                  className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
                   disabled={disabled}
                   onClick={(event) => {
                     if (!gate.current() || generation.current !== renderGeneration) return;
@@ -1077,7 +1077,7 @@ function RealmBansVisit({
           <details className="min-w-0 rounded-xl border px-4 py-3">
             <summary
               id={`${id}-authoring-context`}
-              className="min-h-11 min-w-11 cursor-pointer content-center whitespace-normal wrap-anywhere font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="cursor-pointer content-center whitespace-normal wrap-anywhere font-semibold"
             >
               {m.realm_bans_ban()}
             </summary>
@@ -1105,7 +1105,6 @@ function RealmBansVisit({
                   <FieldLabel htmlFor={`${id}-account`}>{m.realm_bans_account()}</FieldLabel>
                   <Input
                     id={`${id}-account`}
-                    className="min-h-11 min-w-11"
                     required
                     autoComplete="off"
                     spellCheck={false}
@@ -1125,7 +1124,7 @@ function RealmBansVisit({
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+                    className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
                     disabled={disabled || !query.trim() || target.state === 'pending'}
                     onClick={() => void findTarget()}
                   >
@@ -1143,7 +1142,7 @@ function RealmBansVisit({
                       <Button
                         type="button"
                         variant="outline"
-                        className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+                        className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
                         disabled={disabled}
                         onClick={() => {
                           if (!gate.current() || working.current || uncertain.current) return;
@@ -1169,7 +1168,7 @@ function RealmBansVisit({
                   <FieldLabel htmlFor={`${id}-reason`}>{m.realm_bans_reason()}</FieldLabel>
                   <Textarea
                     id={`${id}-reason`}
-                    className="min-w-0 max-w-full pointer-coarse:min-w-11"
+                    className="min-w-0 max-w-full"
                     maxLength={1024}
                     value={reason}
                     disabled={disabled}
@@ -1193,7 +1192,7 @@ function RealmBansVisit({
                 <Button
                   ref={banTrigger}
                   type="submit"
-                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+                  className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
                   disabled={disabled || !selected || target.state !== 'ready'}
                 >
                   {m.realm_bans_ban()}
@@ -1220,7 +1219,7 @@ function RealmBansVisit({
                     <div className="flex flex-wrap gap-2">
                       <Button
                         type="button"
-                        className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+                        className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
                         disabled={disabled}
                         onClick={(event) => void submitBan(event.currentTarget)}
                       >
@@ -1229,7 +1228,7 @@ function RealmBansVisit({
                       <Button
                         type="button"
                         variant="ghost"
-                        className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+                        className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
                         disabled={disabled}
                         onClick={(event) => {
                           const review = banReview.current;
@@ -1258,7 +1257,7 @@ function RealmBansVisit({
           <details className="min-w-0 rounded-xl border px-4 py-3">
             <summary
               id={`${id}-inspection-context`}
-              className="min-h-11 min-w-11 cursor-pointer content-center whitespace-normal wrap-anywhere font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="cursor-pointer content-center whitespace-normal wrap-anywhere font-semibold"
             >
               {m.realm_bans_inspect_heading()}
             </summary>
@@ -1319,7 +1318,7 @@ function RealmBansVisit({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+                  className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
                   disabled={disabled}
                   onClick={(event) => {
                     if (!gate.current() || !selectedMember.current() || working.current || uncertain.current) return;
@@ -1345,7 +1344,7 @@ function RealmBansVisit({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+                  className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
                   disabled={disabled}
                   onClick={(event) => {
                     if (!gate.current() || !selectedMember.current() || working.current || uncertain.current) return;
@@ -1404,7 +1403,7 @@ function RealmBansVisit({
                   <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
-                      className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+                      className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
                       disabled={disabled}
                       onClick={(event) => {
                         const review = selectedReviewIntent.current;
@@ -1426,7 +1425,7 @@ function RealmBansVisit({
                     <Button
                       type="button"
                       variant="ghost"
-                      className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+                      className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
                       disabled={disabled}
                       onClick={(event) => {
                         const review = selectedReviewIntent.current;
@@ -1484,7 +1483,7 @@ function RealmBansVisit({
               <Button
                 type="button"
                 variant="outline"
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+                className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
                 disabled={busy || view.state !== 'ready'}
                 onClick={() => void change(retry)}
               >

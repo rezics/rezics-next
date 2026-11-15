@@ -6,16 +6,11 @@ import type {
 } from '@rezics/client';
 import { m } from '../../paraglide/messages.js';
 import type { AnnotationDraft, AnnotationConfirmation, AnnotationField, AnnotationIssues } from './contract';
-import {
-  AnnotationEditor,
-  type AnnotationEditorRefs,
-} from './annotation-editor';
+import { AnnotationEditor, type AnnotationEditorRefs } from './annotation-editor';
 import { AnnotationNote, AnnotationPriority, AnnotationReview, AnnotationSaved } from './annotation-review';
 import { AnnotationDeparture, type AnnotationDepartureIntent } from './annotation-departure';
-import {
-  SourceCorrectionEditor,
-  type SourceCorrectionNotice,
-} from './source-correction-editor';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { SourceCorrectionEditor, type SourceCorrectionNotice } from './source-correction-editor';
 
 function privacyText(value: PersonalEntryObservation['privacy']) {
   if (value.status === 'absent') return m.library_rich_source_not_supplied();
@@ -157,11 +152,11 @@ export function EntryWorkspace({ subject, entry, diaryHref, onDiaryClick, annota
           <h2 id="rich-private-entry-heading" className="text-lg font-semibold">
             {m.library_rich_entry_heading()}
           </h2>
-          <p className="mt-1 break-words text-sm font-medium">{subject.label}</p>
+          <p className="h-auto mt-1 break-words text-sm font-medium">{subject.label}</p>
           <p className="mt-1 text-sm text-muted-foreground">{m.library_rich_entry_private_help()}</p>
         </div>
         <a
-          className="inline-flex min-h-11 w-full shrink-0 items-center justify-center rounded-md border px-3 text-sm sm:w-auto"
+         className={buttonVariants({ variant: 'outline', className: 'w-full shrink-0 sm:w-auto' })}
           href={diaryHref}
           onClick={onDiaryClick}
         >
@@ -208,13 +203,13 @@ export function EntryWorkspace({ subject, entry, diaryHref, onDiaryClick, annota
               <p>{annotation.uncertain ? m.library_rich_entry_uncertain() : m.library_annotation_saving()}</p>
               <p className="text-sm text-muted-foreground">{m.library_annotation_pending_help()}</p>
               {annotation.uncertain ? (
-                <button
+                <Button
                   type="button"
-                  className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground"
+                  variant="default"
                   onClick={annotation.onRetry}
                 >
                   {m.library_rich_entry_retry()}
-                </button>
+                </Button>
               ) : null}
             </div>
           ) : null}
@@ -228,7 +223,7 @@ export function EntryWorkspace({ subject, entry, diaryHref, onDiaryClick, annota
               className="space-y-3 rounded-md border border-amber-600 p-3"
             >
               <h3 className="font-semibold">{m.library_rich_entry_conflict()}</h3>
-              <dl className="grid gap-3 break-words sm:grid-cols-2">
+              <dl className="h-auto grid gap-3 break-words sm:grid-cols-2">
                 <div className="min-w-0">
                   <dt className="text-sm font-medium">{m.library_rich_entry_note()}</dt>
                   <dd className="mt-1">
@@ -245,21 +240,21 @@ export function EntryWorkspace({ subject, entry, diaryHref, onDiaryClick, annota
               {annotation.refreshing ? (
                 <p role="status">{m.library_rich_entry_refreshing()}</p>
               ) : annotation.reviewLatestAvailable ? (
-                <button
+                <Button
                   type="button"
-                  className="min-h-11 w-full rounded-md bg-primary px-4 text-primary-foreground sm:w-auto"
+                  variant="default" className='w-full sm:w-auto'
                   onClick={annotation.onReviewLatest}
                 >
                   {m.library_rich_entry_review_latest()}
-                </button>
+                </Button>
               ) : (
-                <button
+                <Button
                   type="button"
-                  className="min-h-11 w-full rounded-md border px-3 sm:w-auto"
+                  variant="outline" className='w-full sm:w-auto'
                   onClick={annotation.onRefreshConflict}
                 >
                   {m.library_selection_retry()}
-                </button>
+                </Button>
               )}
             </div>
           ) : null}
@@ -306,26 +301,26 @@ export function EntryWorkspace({ subject, entry, diaryHref, onDiaryClick, annota
                     <dl className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
                       <div className="min-w-0 sm:col-span-2">
                         <dt className="text-sm font-medium">{m.library_rich_entry_privacy()}</dt>
-                        <dd className="mt-1 break-words">{privacyText(observation.privacy)}</dd>
+                        <dd className="h-auto mt-1 break-words">{privacyText(observation.privacy)}</dd>
                       </div>
                       <div className="min-w-0">
                         <dt className="text-sm font-medium">{m.library_rich_entry_source_created()}</dt>
-                        <dd className="mt-1 break-words">{timestampText(observation.sourceCreated)}</dd>
+                        <dd className="h-auto mt-1 break-words">{timestampText(observation.sourceCreated)}</dd>
                       </div>
                       <div className="min-w-0">
                         <dt className="text-sm font-medium">{m.library_rich_entry_source_updated()}</dt>
-                        <dd className="mt-1 break-words">{timestampText(observation.sourceUpdated)}</dd>
+                        <dd className="h-auto mt-1 break-words">{timestampText(observation.sourceUpdated)}</dd>
                       </div>
                     </dl>
 
                     <div className="mt-3 space-y-2 border-t pt-3 text-sm">
-                      <p className="break-words text-muted-foreground">
+                      <p className="h-auto break-words text-muted-foreground">
                         {m.library_rich_entry_current_source_revision({ revision: observation.revision })}
                       </p>
                       <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
                         <div className="min-w-0">
                           <dt className="font-medium text-muted-foreground">{m.library_rich_entry_provider()}</dt>
-                          <dd className="mt-1 break-words">{observation.provider}</dd>
+                          <dd className="h-auto mt-1 break-words">{observation.provider}</dd>
                         </div>
                         <div className="min-w-0">
                           <dt className="font-medium text-muted-foreground">{m.library_rich_entry_record()}</dt>
@@ -333,19 +328,19 @@ export function EntryWorkspace({ subject, entry, diaryHref, onDiaryClick, annota
                         </div>
                         <div className="min-w-0 sm:col-span-2">
                           <dt className="font-medium text-muted-foreground">{m.library_rich_entry_native_recorded()}</dt>
-                          <dd className="mt-1 break-words">{observation.recordedAt}</dd>
+                          <dd className="h-auto mt-1 break-words">{observation.recordedAt}</dd>
                         </div>
                       </dl>
                     </div>
 
-                    <button
+                    <Button
                       type="button"
-                      className="mt-3 min-h-11 w-full rounded-md border px-3 sm:w-auto"
+                      variant="outline" className='mt-3 w-full sm:w-auto'
                       disabled={!source.writeAllowed || annotation.pending || source.pending}
                       onClick={(event) => source.onOpen(observation, event)}
                     >
                       {m.library_rich_entry_edit_source_facts()}
-                    </button>
+                    </Button>
                     {open && source.baseline ? correctionEditor(source.baseline, source.displayed) : null}
                   </li>
                 );

@@ -8,7 +8,7 @@ import {
 } from './authoring.ts';
 
 const controlClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words px-4 py-2 leading-snug focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'h-auto min-h-7 max-w-full whitespace-normal break-words leading-snug';
 
 function localeOptions(locale: string) {
   return { locale: locale as never };

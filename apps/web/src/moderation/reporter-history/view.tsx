@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Badge } from '@rezics/ui/shadcn/badge';
+import { Button } from '@rezics/ui/shadcn/button';
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { viewerExposureLifetime, viewerExposureQuery } from '../../kernel/viewer-exposure';
 import { m } from '../../paraglide/messages.js';
@@ -177,8 +178,7 @@ function ReporterHistoryVisit({
 
 type Retry = () => void | Promise<void>;
 
-const historyControl =
-  'min-h-11 min-w-11 max-w-full rounded-md border px-4 py-2 text-sm font-medium whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const historyControl = 'h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere';
 
 export function ReporterHistoryPage({
   result,
@@ -222,9 +222,9 @@ export function ReporterHistoryPage({
             <p className="max-w-prose text-base leading-7 text-muted-foreground">{m.reporter_history_intro()}</p>
           </div>
           {onRefresh && result.state === 'loaded' ? (
-            <button type="button" className={historyControl} onClick={() => void onRefresh()}>
+            <Button type="button" variant="outline" className={historyControl} onClick={() => void onRefresh()}>
               {m.reporter_status_refresh()}
-            </button>
+            </Button>
           ) : null}
         </header>
         {result.state === 'loading' ? (
@@ -246,9 +246,9 @@ export function ReporterHistoryPage({
         {result.state === 'expired' ? (
           <div role="alert" className="space-y-3 rounded-xl border bg-muted/20 p-4">
             <p className="leading-7">{m.reporter_history_expired()}</p>
-            <button type="button" className={historyControl} onClick={() => void onRestart()}>
+            <Button type="button" variant="outline" className={historyControl} onClick={() => void onRestart()}>
               {m.reporter_history_restart()}
-            </button>
+            </Button>
           </div>
         ) : null}
         {result.state === 'retired' ? (
@@ -259,14 +259,14 @@ export function ReporterHistoryPage({
         {result.state === 'loaded' && result.page.state === 'ready' && (onPrevious || onFirst) ? (
           <nav aria-label={m.reporter_history_heading()} className="flex flex-wrap gap-3">
             {onPrevious ? (
-              <button type="button" className={historyControl} onClick={() => void onPrevious()}>
+              <Button type="button" variant="outline" size="sm" className="h-auto min-h-6 max-w-full whitespace-normal wrap-anywhere" onClick={() => void onPrevious()}>
                 {m.library_collections_previous()}
-              </button>
+              </Button>
             ) : null}
             {onFirst ? (
-              <button type="button" className={historyControl} onClick={() => void onFirst()}>
+              <Button type="button" variant="outline" size="sm" className="h-auto min-h-6 max-w-full whitespace-normal wrap-anywhere" onClick={() => void onFirst()}>
                 {m.library_collections_first_page()}
-              </button>
+              </Button>
             ) : null}
           </nav>
         ) : null}
@@ -288,9 +288,9 @@ function HistoryFailure({ message, retry }: { message: string; retry: Retry }) {
   return (
     <div role="alert" className="space-y-3 rounded-xl border bg-muted/20 p-4">
       <p className="leading-7">{message}</p>
-      <button type="button" className={historyControl} onClick={() => void retry()}>
+      <Button type="button" variant="outline" className={historyControl} onClick={() => void retry()}>
         {m.reporter_history_retry()}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -377,9 +377,9 @@ function ReporterHistoryResults({
       ) : null}
       {page.state === 'ready' && page.nextCursor !== null ? (
         <nav aria-label={m.reporter_history_heading()} className="flex flex-wrap justify-end border-t pt-5">
-          <button type="button" className={historyControl} onClick={() => void onContinue()}>
+          <Button type="button" variant="outline" size="sm" className="h-auto min-h-6 max-w-full whitespace-normal wrap-anywhere" onClick={() => void onContinue()}>
             {m.reporter_history_continue()}
-          </button>
+          </Button>
         </nav>
       ) : null}
     </div>
@@ -413,7 +413,7 @@ function HistoryEntry({
       state={
         <Badge
           variant={entry.outcome === 'actioned' ? 'default' : 'secondary'}
-          className="h-auto max-w-full whitespace-normal wrap-anywhere"
+          className="h-auto min-h-5 max-w-full whitespace-normal wrap-anywhere"
         >
           {outcomeLabel(entry)}
         </Badge>
@@ -446,45 +446,56 @@ function HistoryEntry({
       actions={
         <div className="min-w-0 space-y-2" role="group" aria-label={targetLabel} aria-describedby={actionHintId}>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <button
+            <Button
               type="button"
-              className={`${historyControl} ${selected ? 'border-primary bg-primary/10' : 'bg-background hover:bg-muted'}`}
+              variant={selected ? 'secondary' : 'outline'}
+              size="sm"
+              className="h-auto min-h-6 max-w-full whitespace-normal wrap-anywhere"
               data-report-id={entry.id}
               aria-pressed={selected}
               onClick={() => void onSelect(entry.id)}
             >
               {selected ? m.reporter_history_selected() : m.reporter_history_select()}
-            </button>
+            </Button>
             {statusHref ? (
-              <a
-                className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-md bg-muted/50 px-3 py-2 text-sm font-medium whitespace-normal underline underline-offset-4 wrap-anywhere hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                href={statusHref}
-                data-reporter-status
-                onClick={(event) => {
-                  if (
-                    !onOpenStatus ||
-                    event.defaultPrevented ||
-                    event.button !== 0 ||
-                    event.metaKey ||
-                    event.ctrlKey ||
-                    event.shiftKey ||
-                    event.altKey
-                  )
-                    return;
-                  event.preventDefault();
-                  void onOpenStatus(entry.id, query.cursor);
-                }}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-auto min-h-6 max-w-full whitespace-normal wrap-anywhere"
+                nativeButton={false}
+                render={
+                  <a
+                    href={statusHref}
+                    data-reporter-status
+                    onClick={(event) => {
+                      if (
+                        !onOpenStatus ||
+                        event.defaultPrevented ||
+                        event.button !== 0 ||
+                        event.metaKey ||
+                        event.ctrlKey ||
+                        event.shiftKey ||
+                        event.altKey
+                      )
+                        return;
+                      event.preventDefault();
+                      void onOpenStatus(entry.id, query.cursor);
+                    }}
+                  />
+                }
               >
                 {m.reporter_status_view()}
-              </a>
+              </Button>
             ) : (
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="sm"
                 disabled
-                className={`${historyControl} border-transparent text-muted-foreground opacity-60`}
+                className="h-auto min-h-6 max-w-full whitespace-normal wrap-anywhere"
               >
                 {m.reporter_status_view()}
-              </button>
+              </Button>
             )}
           </div>
           <p id={actionHintId} className="max-w-prose text-sm leading-6 text-muted-foreground">
@@ -499,7 +510,7 @@ function HistoryEntry({
 function HistoryReference({ entry }: { entry: ReporterHistoryEntry }) {
   return (
     <details className="text-sm">
-      <summary className="min-h-11 min-w-11 w-fit cursor-pointer rounded-md py-3 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+      <summary className="w-fit cursor-pointer font-medium">
         {m.reporter_status_reference()}
       </summary>
       <dl className="relative z-20 space-y-3 pb-2">

@@ -82,11 +82,11 @@ export function StatementNotice({
       <p>{label}</p>
       {kind !== 'preparing' &&
         (onRetry ? (
-          <Button type="button" variant="outline" className="min-h-11 min-w-11" onClick={onRetry}>
+          <Button type="button" variant="outline" onClick={onRetry}>
             {m.statements_retry()}
           </Button>
         ) : (
-          <Button variant="outline" className="min-h-11 min-w-11" nativeButton={false} render={<a href={retryHref} />}>
+          <Button variant="outline" nativeButton={false} render={<a href={retryHref} />}>
             {m.statements_retry()}
           </Button>
         ))}
@@ -151,7 +151,7 @@ export function CreatorStatementsPage({
           {m.statements_heading()}
         </PageHeading>
         {page.kind !== 'preparing' && (
-          <Button variant="outline" className="min-h-11" nativeButton={false} render={<a href={href} />}>
+          <Button variant="outline" nativeButton={false} render={<a href={href} />}>
             {m.statements_refresh()}
           </Button>
         )}
@@ -228,7 +228,7 @@ function StatementListPagination({
       {hasPrevious && (
         <Button
           variant="outline"
-          className="min-h-11 min-w-11"
+         
           nativeButton={false}
           render={
             <Link
@@ -245,7 +245,7 @@ function StatementListPagination({
       {restart && (
         <Button
           variant="outline"
-          className="min-h-11 min-w-11"
+         
           nativeButton={false}
           render={<Link preload={false} to="/creator/statements" search={{}} onClick={onMovement} />}
         >
@@ -255,7 +255,7 @@ function StatementListPagination({
       {next && (
         <Button
           variant="outline"
-          className="min-h-11 min-w-11"
+         
           nativeButton={false}
           render={<Link preload={false} to="/creator/statements" search={{ cursor: next }} onClick={onMovement} />}
         >

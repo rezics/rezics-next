@@ -857,7 +857,7 @@ export function CollectionList(props: Record<string, unknown>) {
                 >
                   <ContentItemTitleLink
                     as={Link}
-                    className={`block min-h-11 content-center rounded-sm ${linkClass} ${linkColor} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
+                    className={`block content-center ${linkClass} ${linkColor} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
                     href={`/${encodeURIComponent(value.locale)}/collections/${encodeURIComponent(collection.id)}`}
                   >
                     {collectionTitle}
@@ -1575,7 +1575,7 @@ function SummaryContent({
           >
             <SharedSelect.SelectTrigger
               id={`${id}-synopsis-choice`}
-              className="min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              className="w-full px-3 text-sm"
             >
               <SharedSelect.SelectValue />
             </SharedSelect.SelectTrigger>
@@ -1881,7 +1881,7 @@ export function SourcesSection({
                 {webUrl(record.url) ? (
                   <ContentItemTitleLink
                     stretch={false}
-                    className={`block min-h-11 content-center rounded-sm ${linkClass} ${linkColor} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
+                    className={`block content-center ${linkClass} ${linkColor} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
                     href={record.url}
                   >
                     {record.name}
@@ -1900,7 +1900,7 @@ export function SourcesSection({
                       {value.licence}:{' '}
                       {record.licence.url && webUrl(record.licence.url) ? (
                         <a
-                          className={`inline-block min-h-11 min-w-11 max-w-full content-center rounded-sm align-middle ${linkClass} ${linkColor} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
+                          className={`inline-block max-w-full content-center align-middle ${linkClass} ${linkColor} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
                           href={record.licence.url}
                         >
                           {record.licence.id}

@@ -62,7 +62,7 @@ export function ImageUploadDialog({
             id={`${id}-file-button`}
             type="button"
             variant="outline"
-            className="min-h-11 w-full"
+            className="h-auto min-h-7 w-full whitespace-normal"
             onClick={() => {
               if (isCurrent()) fileInput.current?.click();
             }}
@@ -95,17 +95,18 @@ export function ImageUploadDialog({
             }}
           />
         </Field>
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Button
             type="button"
             variant="ghost"
+            className="h-auto min-h-7 max-w-full whitespace-normal"
             onClick={() => {
               if (isCurrent()) onCancel();
             }}
           >
             {labels.cancel}
           </Button>
-          <Button type="submit" disabled={!file}>
+          <Button type="submit" className="h-auto min-h-7 max-w-full whitespace-normal" disabled={!file}>
             {labels.insertImage}
           </Button>
         </div>

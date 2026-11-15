@@ -424,7 +424,7 @@ function AppealsView({
       </header>
       <nav aria-label={m.moderation_tabs_label()} className="flex min-w-0 flex-wrap gap-2 border-b pb-2">
         <a
-          className="inline-flex min-h-11 min-w-11 max-w-full items-center border-b-2 border-transparent px-3 py-2 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="inline-flex max-w-full items-center border-b-2 border-transparent px-3 hover:underline "
           href={reportsHref}
           onClick={(event) => navigateOrdinaryLink(event, reportsHref)}
         >
@@ -432,7 +432,7 @@ function AppealsView({
         </a>
         <span
           aria-current="page"
-          className="inline-flex min-h-11 min-w-11 max-w-full items-center border-b-2 border-primary px-3 py-2 font-semibold underline underline-offset-4"
+          className="inline-flex max-w-full items-center border-b-2 border-primary px-3 font-semibold underline underline-offset-4"
         >
           {m.moderation_appeals_tab()}
         </span>

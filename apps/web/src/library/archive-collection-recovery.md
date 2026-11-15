@@ -88,8 +88,8 @@ A new request supersedes an older response. A changed destination ID, archive so
 unmount or expiry retires Collection coordinates and deferred focus. A status or outcome read with the same
 Collection ID does not move this window. Collection reads also preserve sealed review operands and any uncertain
 write command. Keyboard activation moves focus to the Collection heading only after that exact current read succeeds;
-subsequent focus, pointer or keyboard movement cancels the deferred focus. Controls wrap, retain 44px targets and
-visible focus, and use all eight locales.
+subsequent focus, pointer or keyboard movement cancels the deferred focus. Controls wrap and retain visible focus,
+and use all eight locales.
 
 ## Bounds and checks
 

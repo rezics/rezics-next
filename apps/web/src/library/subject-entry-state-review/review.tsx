@@ -1,12 +1,5 @@
-import { buttonVariants } from '@rezics/ui/shadcn/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-} from '@rezics/ui/shadcn/select';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { Loader2Icon } from 'lucide-react';
 import { Fragment, useId, useLayoutEffect, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
@@ -15,9 +8,6 @@ import type { SubjectSlotEntry, SubjectLibraryMutationResponse, LibraryEntryStat
 import type { SlotLifetime } from '../subject-library-current-origin';
 import type { SubjectReference } from '../subject-ref';
 
-const primaryClass = buttonVariants({ variant: 'default' });
-const secondaryClass = buttonVariants({ variant: 'outline' });
-const focusClass = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const unknownStateValue = '__library_unknown_received_state__';
 const removeStateValue = '__library_remove_received_state__';
 
@@ -159,10 +149,9 @@ function LibraryStateSelect({
         <SelectTrigger
           aria-busy={busy ? true : undefined}
           aria-label={m.library_subject_entry()}
-          data-entry-state-trigger
-          className={`${primaryClass} h-auto min-h-[44px] max-w-full whitespace-normal [overflow-wrap:anywhere]`}
+          data-entry-state-trigger className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]"
         >
-          {busy ? <Loader2Icon aria-hidden className="size-4 animate-spin motion-reduce:animate-none" /> : null}
+          {busy ? <Loader2Icon aria-hidden className="animate-spin motion-reduce:animate-none" /> : null}
           <SelectValue placeholder={m.library_subject_add()} />
         </SelectTrigger>
         <SelectContent alignItemWithTrigger={false}>
@@ -188,17 +177,17 @@ function ReviewValues({ draft, receivedLabel }: { draft: Draft; receivedLabel: s
   return (
     <dl className="grid min-w-0 gap-x-4 gap-y-2 text-sm sm:grid-cols-[max-content_minmax(0,1fr)]">
       <dt className="font-medium text-muted-foreground">{m.library_entry_review_subject()}</dt>
-      <dd className="m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">{draft.subject.label}</dd>
+      <dd className="h-auto m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">{draft.subject.label}</dd>
       <dt className="font-medium text-muted-foreground">{m.library_entry_review_reference()}</dt>
-      <dd className="m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">
+      <dd className="h-auto m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">
         <code>{draft.subject.id}</code>
       </dd>
       <dt className="font-medium text-muted-foreground">{m.library_entry_review_received()}</dt>
-      <dd className="m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">
+      <dd className="h-auto m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">
         <ReceivedValue entry={draft.basis ? { subjectId: draft.basis.subjectId } : null} label={receivedLabel} />
       </dd>
       <dt className="font-medium text-muted-foreground">{m.library_entry_review_proposed()}</dt>
-      <dd className="m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">{draft.label}</dd>
+      <dd className="h-auto m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">{draft.label}</dd>
     </dl>
   );
 }
@@ -220,29 +209,29 @@ function ConflictReview({
     <div
       data-entry-state-conflict
       role="status"
-      className="min-w-0 max-w-2xl basis-full rounded-md border border-border p-3 text-sm [overflow-wrap:anywhere]"
+      className="h-auto min-w-0 max-w-2xl basis-full rounded-md border border-border p-3 text-sm [overflow-wrap:anywhere]"
     >
       <p className="m-0 font-medium">{m.library_conflict()}</p>
       {conflict.hasAcceptedBasis ? (
         <dl className="mt-2 grid min-w-0 gap-x-4 gap-y-2 sm:grid-cols-[max-content_minmax(0,1fr)]">
           <dt className="font-medium text-muted-foreground">{m.library_entry_review_received()}</dt>
-          <dd className="m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">
+          <dd className="h-auto m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">
             <ReceivedValue entry={entry} label={receivedLabel} />
           </dd>
           <dt className="font-medium text-muted-foreground">{m.library_entry_review_proposed()}</dt>
-          <dd className="m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">{conflict.stateLabel}</dd>
+          <dd className="h-auto m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">{conflict.stateLabel}</dd>
         </dl>
       ) : (
         <p className="mt-2 mb-0">{m.library_entry_review_conflict_unavailable()}</p>
       )}
       {canReview ? (
-        <button
+        <Button
           type="button"
-          className={`${secondaryClass} mt-3 max-w-full whitespace-normal ${focusClass}`}
+          variant="outline" className="h-auto min-h-7 mt-3 max-w-full whitespace-normal"
           onClick={onReview}
         >
           {m.library_entry_review_conflict_review()}
-        </button>
+        </Button>
       ) : null}
     </div>
   );
@@ -473,7 +462,7 @@ export function SubjectEntryStateReview({
         <section
           aria-labelledby={headingId}
           data-entry-state-review-card
-          className="min-w-0 max-w-2xl basis-full rounded-md border border-border p-3 [overflow-wrap:anywhere]"
+          className="h-auto min-w-0 max-w-2xl basis-full rounded-md border border-border p-3 [overflow-wrap:anywhere]"
         >
           <h3 ref={heading} id={headingId} tabIndex={-1} className="m-0 text-sm font-semibold">
             {m.library_entry_review_heading()}
@@ -485,37 +474,37 @@ export function SubjectEntryStateReview({
             </p>
           ) : null}
           <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
-            <button
+            <Button
               type="button"
-              className={`${primaryClass} min-h-[44px] max-w-full whitespace-normal ${focusClass}`}
+              variant="default" className="h-auto min-h-7 max-w-full whitespace-normal"
               disabled={
                 disabled || busy || uncertain || saving || !lifetime.current('library_entry.get', 'library_entry.put')
               }
               onClick={() => void saveChoice()}
             >
               {saving || busy ? (
-                <Loader2Icon aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />
+                <Loader2Icon aria-hidden className="animate-spin motion-reduce:animate-none" />
               ) : null}
               {draft.kind === 'keep-current' || (entry && draft.state === entry.state)
                 ? m.library_entry_review_no_change_confirm()
                 : m.library_entry_review_save()}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className={`${secondaryClass} min-h-[44px] max-w-full whitespace-normal ${focusClass}`}
+              variant="outline" className="h-auto min-h-7 max-w-full whitespace-normal"
               disabled={disabled || busy || uncertain || saving}
               onClick={editChoice}
             >
               {m.library_entry_review_edit()}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className={`${secondaryClass} min-h-[44px] max-w-full whitespace-normal ${focusClass}`}
+              variant="outline" className="h-auto min-h-7 max-w-full whitespace-normal"
               disabled={saving}
               onClick={discardChoice}
             >
               {m.library_entry_review_discard()}
-            </button>
+            </Button>
           </div>
         </section>
       ) : null}
@@ -536,13 +525,13 @@ export function SubjectEntryStateReview({
           />
           {draft && stage === 'edit' ? (
             <div className="flex min-w-0 max-w-2xl basis-full flex-wrap items-center gap-2" data-entry-state-editing>
-              <p className="m-0 min-w-0 break-words text-sm [overflow-wrap:anywhere]">
+              <p className="h-auto m-0 min-w-0 break-words text-sm [overflow-wrap:anywhere]">
                 <span className="font-medium">{m.library_entry_review_proposed()}: </span>
                 {draft.label}
               </p>
-              <button
+              <Button
                 type="button"
-                className={`${primaryClass} min-h-[44px] max-w-full whitespace-normal ${focusClass}`}
+                variant="default" className="h-auto min-h-7 max-w-full whitespace-normal"
                 disabled={disabled || busy || uncertain || saving}
                 onClick={() => {
                   if (
@@ -556,26 +545,26 @@ export function SubjectEntryStateReview({
                 }}
               >
                 {m.library_entry_review_review_choice()}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className={`${secondaryClass} min-h-[44px] max-w-full whitespace-normal ${focusClass}`}
+                variant="outline" className="h-auto min-h-7 max-w-full whitespace-normal"
                 disabled={saving}
                 onClick={discardChoice}
               >
                 {m.library_entry_review_discard()}
-              </button>
+              </Button>
             </div>
           ) : null}
           {!draft && entry && !uncertain ? (
-            <button
+            <Button
               type="button"
-              className={`${secondaryClass} min-h-[44px] max-w-full whitespace-normal ${focusClass}`}
+              variant="outline" className="h-auto min-h-7 max-w-full whitespace-normal"
               disabled={disabled || busy || saving}
               onClick={keepCurrent}
             >
               {m.library_entry_review_keep_current()}
-            </button>
+            </Button>
           ) : null}
         </>
       ) : null}

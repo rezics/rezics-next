@@ -183,11 +183,11 @@ export function useCollectionDraftNavigation(options: CollectionDraftNavigationO
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel className="min-h-11" ref={stayButton} onClick={() => choose(false)}>
+              <AlertDialogCancel ref={stayButton} onClick={() => choose(false)}>
                 {m.library_collection_draft_navigation_stay()}
               </AlertDialogCancel>
               {!options.locked || options.creation ? (
-                <AlertDialogAction className="min-h-11" onClick={() => choose(true)}>
+                <AlertDialogAction onClick={() => choose(true)}>
                   {m.library_collection_draft_navigation_leave()}
                 </AlertDialogAction>
               ) : null}

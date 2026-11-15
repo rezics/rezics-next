@@ -72,7 +72,7 @@ export function CurationFailureNotice({
               <p>{correction?.describe(pointer) ?? m.curation_correction_unknown({}, options)}</p>
               {correction && (
                 <Button
-                  className="min-h-11 max-w-full whitespace-normal [overflow-wrap:anywhere]"
+                  className="max-w-full whitespace-normal [overflow-wrap:anywhere]"
                   disabled={busy}
                   onClick={() => correction.correct(pointer)}
                 >
@@ -450,7 +450,7 @@ export function CurationPublicationRecovery({
   const revisedValid = invalid && draftValid;
   const laterChanges = !!intent && (!draftValid || draftDigest !== originalDigest);
   const retryAllowed = publishedDigest ? advice.activate : advice.publish;
-  const controlClass = 'min-h-11 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+  const controlClass = 'max-w-full whitespace-normal [overflow-wrap:anywhere]';
   return (
     <section
       ref={focus.regionRef}

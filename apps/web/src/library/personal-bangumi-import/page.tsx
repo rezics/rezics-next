@@ -19,13 +19,7 @@ import type { BangumiLabelPanelState } from './contract';
 import { BangumiApplying, BangumiCancelledNotice, BangumiRemovedNotice, BangumiSignedOut } from './states';
 import { BangumiUploadForm } from './upload';
 import { useBangumiVisit, type BangumiVisit } from './visit';
-import {
-  captureStageFocusHandoff,
-  consumeStageFocusHandoff,
-  createStageFocusTracker,
-  watchStageFocusMovement,
-  type StageFocusTracker,
-} from '../personal-import-stage-focus';
+import { captureStageFocusHandoff, consumeStageFocusHandoff, createStageFocusTracker, watchStageFocusMovement, type StageFocusTracker } from '../personal-import-stage-focus';
 
 function noticeText(notice: BangumiJourneySnapshot['notice']): string | null {
   if (!notice) return null;

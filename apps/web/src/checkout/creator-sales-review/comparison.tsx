@@ -91,7 +91,7 @@ function ComparisonSale({ sale, locale, reading }: { sale: CreatorSale; locale: 
       <div className="flex flex-wrap gap-3 border-t pt-4">
         <Button
           variant="outline"
-          className="min-h-11 whitespace-normal"
+          className="h-auto min-h-7 whitespace-normal"
           aria-describedby={`comparison-${sale.orderId}`}
           onClick={(event) => reading.select(sale.orderId, event.currentTarget)}
         >
@@ -99,7 +99,7 @@ function ComparisonSale({ sale, locale, reading }: { sale: CreatorSale; locale: 
         </Button>
         <Button
           variant="ghost"
-          className="min-h-11 whitespace-normal"
+          className="h-auto min-h-7 whitespace-normal"
           aria-describedby={`comparison-${sale.orderId}`}
           onClick={() => reading.toggleComparison(sale.orderId)}
         >
@@ -118,7 +118,7 @@ function ComparisonContext({ sales }: { sales: readonly CreatorSale[] }) {
   const settlementCount = new Set(sales.map((sale) => sale.settlement)).size;
   return (
     <details className="min-w-0 rounded-lg border p-4">
-      <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.creator_review_comparison_context()}</summary>
+      <summary className="cursor-pointer font-medium">{m.creator_review_comparison_context()}</summary>
       <div className="min-w-0 space-y-4 pt-4">
         <p className="text-sm text-muted-foreground">{m.creator_review_comparison_context_hint()}</p>
         <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
@@ -187,7 +187,7 @@ export function CreatorSalesComparison({ reading, locale }: { reading: Compariso
         ))}
       </div>
       <p className="max-w-prose text-sm text-muted-foreground">{m.creator_sale_statements_hint()}</p>
-      <Button variant="outline" className="min-h-11 whitespace-normal" onClick={reading.closeComparison}>
+      <Button variant="outline" className="h-auto min-h-7 whitespace-normal" onClick={reading.closeComparison}>
         {m.creator_review_close_comparison()}
       </Button>
     </section>
@@ -234,7 +234,7 @@ export function CreatorSalesComparisonSelection({
               <span className="block select-text font-mono [overflow-wrap:anywhere]">{sale.orderId}</span>
               <Button
                 variant="ghost"
-                className="min-h-11"
+               
                 onClick={() => reading.toggleComparison(sale.orderId)}
                 aria-label={`${m.creator_review_remove()}: ${sale.orderId}`}
               >
@@ -248,7 +248,7 @@ export function CreatorSalesComparisonSelection({
         <Button
           ref={openButton}
           variant="outline"
-          className="min-h-11 whitespace-normal"
+          className="h-auto min-h-7 whitespace-normal"
           disabled={reading.comparisonIds.length < 2}
           aria-expanded={reading.comparisonOpen}
           aria-controls={reading.comparisonOpen ? 'creator-sales-comparison' : undefined}
@@ -258,7 +258,7 @@ export function CreatorSalesComparisonSelection({
         </Button>
         <Button
           variant="ghost"
-          className="min-h-11 whitespace-normal"
+          className="h-auto min-h-7 whitespace-normal"
           disabled={reading.comparisonIds.length === 0}
           onClick={reading.clearComparison}
         >

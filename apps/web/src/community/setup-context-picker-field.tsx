@@ -239,7 +239,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
             <Button
               type="button"
               variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="h-auto min-h-7 max-w-full text-start whitespace-normal"
               aria-describedby={`${id}-current-reading`}
               disabled={disabled || current.phase === 'loading'}
               onClick={() => void picker.retryCurrent(current.id, currentVersion)}
@@ -250,7 +250,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
               <Button
                 type="button"
                 variant="ghost"
-                className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="h-auto min-h-7 max-w-full text-start whitespace-normal"
                 aria-describedby={`${id}-current-reading`}
                 disabled={disabled}
                 onClick={(event) =>
@@ -289,7 +289,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
               <Button
                 type="button"
                 variant="outline"
-                className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="h-auto min-h-7 max-w-full text-start whitespace-normal"
                 aria-describedby={`${id}-selected-label ${id}-selected-description`}
                 disabled={disabled}
                 onClick={(event) =>
@@ -304,7 +304,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
             <Button
               type="button"
               variant="ghost"
-              className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="h-auto min-h-7 max-w-full text-start whitespace-normal"
               aria-describedby={`${id}-selected-label ${id}-selected-description`}
               disabled={disabled}
               onClick={(event) =>
@@ -327,7 +327,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
           type="search"
           value={state.query}
           maxLength={256}
-          className="h-auto min-h-11 ps-9 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="ps-9"
           placeholder={m.setup_context_placeholder()}
           aria-describedby={`${id}-hint`}
           disabled={disabled}
@@ -366,8 +366,9 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
                 >
                   {page.contexts.map((choice) => (
                     <li key={choice.id} className="min-w-0">
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
                         disabled={disabled}
                         aria-describedby={`${id}-results-reading`}
                         onClick={(event) =>
@@ -379,7 +380,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
                             }),
                           )
                         }
-                        className="flex h-auto min-h-14 min-w-0 w-full max-w-full flex-col gap-1 rounded-lg px-4 py-3 text-start whitespace-normal hover:bg-muted focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
+                        className="h-auto min-h-7 w-full max-w-full flex-col items-start gap-1 whitespace-normal text-start"
                       >
                         <span className="min-w-0 max-w-full text-sm font-medium leading-relaxed">
                           <bdi>{choice.label}</bdi>
@@ -387,7 +388,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
                         <span className="min-w-0 max-w-full break-all font-mono text-xs leading-relaxed text-muted-foreground">
                           <bdi dir="ltr">{choice.id}</bdi>
                         </span>
-                      </button>
+                      </Button>
                     </li>
                   ))}
                 </ul>
@@ -398,7 +399,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  className="h-auto min-h-7 max-w-full text-start whitespace-normal"
                   disabled={disabled}
                   aria-describedby={`${id}-results-reading`}
                   onClick={(event) =>
@@ -426,7 +427,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  className="h-auto min-h-7 max-w-full text-start whitespace-normal"
                   aria-describedby={`${id}-page-error-reading`}
                   disabled={disabled}
                   onClick={(event) =>
@@ -445,7 +446,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    className="h-auto min-h-7 max-w-full text-start whitespace-normal"
                     aria-describedby={`${id}-page-error-reading`}
                     disabled={disabled}
                     onClick={(event) =>
@@ -484,7 +485,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
         open={referenceOpen}
         onToggle={(event) => setReferenceOpen(event.currentTarget.open)}
       >
-        <summary className="min-h-11 min-w-11 max-w-full cursor-pointer content-center rounded-md py-2 text-start text-sm font-medium whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring">
+        <summary className="max-w-full cursor-pointer content-center text-start text-sm font-medium whitespace-normal">
           {m.space_setup_load_existing()}
         </summary>
         <div className="mt-3 flex min-w-0 flex-col gap-3">
@@ -502,13 +503,13 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
               maxLength={36}
               disabled={disabled || selected?.phase === 'loading'}
               aria-describedby={`${id}-reference-hint`}
-              className="h-auto min-h-11 min-w-0 flex-1 basis-64 font-mono text-sm focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="min-w-0 flex-1 basis-64 font-mono text-sm"
               onChange={(event) => picker.reference(event.target.value, reference, referenceVersion)}
             />
             <Button
               type="button"
               variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="h-auto min-h-7 max-w-full text-start whitespace-normal"
               aria-describedby={`${id}-reference-hint`}
               disabled={
                 disabled ||

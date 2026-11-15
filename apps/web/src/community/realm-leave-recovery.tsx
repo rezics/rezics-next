@@ -42,12 +42,12 @@ export function RealmLeaveRecovery({
         </ContentItemHeading>
         <ListRowControl
           data-content-item-slot="actions"
-          className="flex min-w-0 flex-wrap items-center gap-3 [&_a]:h-auto [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-offset-2 [&_a]:focus-visible:outline-ring"
+          className="flex min-w-0 flex-wrap items-center gap-3 [&_a]:h-auto [&_a]:max-w-full [&_a]:whitespace-normal"
         >
           {!refused ? (
             <Button
               type="button"
-              className="h-auto min-h-11 min-w-11 max-w-full px-6 py-2 text-start text-base whitespace-normal"
+              className="h-auto min-h-7 max-w-full text-start whitespace-normal"
               disabled={busy || !ready}
               onClick={onRetry}
             >
@@ -57,7 +57,7 @@ export function RealmLeaveRecovery({
           <Button
             type="button"
             variant={refused ? 'default' : 'outline'}
-            className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal"
+            className="h-auto min-h-7 max-w-full text-start whitespace-normal"
             disabled={busy}
             onClick={onCheck}
           >
@@ -67,7 +67,7 @@ export function RealmLeaveRecovery({
             <Button
               type="button"
               variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal"
+              className="h-auto min-h-7 max-w-full text-start whitespace-normal"
               onClick={() => setReviewAccess(true)}
             >
               {m.realm_leave_review_access()}

@@ -243,7 +243,7 @@ export function HostedBookVisitView({
   };
   const options = { locale };
   const linkClass =
-    'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal rounded-sm underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring [overflow-wrap:anywhere]';
+    'inline-flex max-w-full items-center whitespace-normal underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring [overflow-wrap:anywhere]';
   const ordinaryActivation = (event: MouseEvent<HTMLAnchorElement>) =>
     event.button === 0 && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey;
   const failure =
@@ -322,7 +322,7 @@ export function HostedBookVisitView({
           {!page ? (
             <Button
               variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
+              className="h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
               onClick={(event) => {
                 coordinates.captureCatalogueFocus(null, event.detail === 0);
                 reload();
@@ -422,7 +422,7 @@ export function HostedBookVisitView({
         <div className="flex min-w-0 flex-wrap gap-2">
           {catalogueReturnLink}
           <Button
-            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
+            className="h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
             variant="outline"
             onClick={(event) => reread(event.detail === 0 ? { kind: 'heading' } : null)}
           >

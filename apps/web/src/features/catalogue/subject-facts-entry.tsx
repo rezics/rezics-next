@@ -22,7 +22,7 @@ export function SubjectFactsEntry({
       href={entry.href}
       className={cn(
         buttonVariants({ variant: 'outline', size: 'sm' }),
-        'h-auto min-h-11 min-w-11 max-w-full shrink whitespace-normal py-2 text-center [overflow-wrap:anywhere] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:py-1',
+        'h-auto min-h-6 max-w-full shrink whitespace-normal text-center [overflow-wrap:anywhere] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
       )}
     >
       {entry.label}
@@ -60,7 +60,7 @@ export function FactsPublicVisitNotice({
         <FactsPublicReturnLink href={returnHref} locale={locale} />
         {state === 'unsupported' && freshHref && (
           <a
-            className="inline-flex min-h-11 items-center rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="inline-flex items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             href={freshHref}
           >
             {m.facts_public_fresh_global({}, o)}
@@ -74,7 +74,7 @@ export function FactsPublicVisitNotice({
 export function FactsPublicReturnLink({ href, locale }: { href: string; locale: string }) {
   return (
     <a
-      className="inline-flex min-h-11 items-center rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      className="inline-flex items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       href={href}
     >
       {subjectGraphVisitReturn(href, locale)

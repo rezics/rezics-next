@@ -184,7 +184,7 @@ function ThreadCard({
             <Button
               type="button"
               variant="ghost"
-              className="min-h-11 max-w-full whitespace-normal"
+              className="max-w-full whitespace-normal"
               aria-expanded={revealed}
               onClick={() => setRevealed((value) => !value)}
             >
@@ -554,7 +554,7 @@ function BoardFeedVisit({
           <BoardSortNav boardId={boardId} sort={sort} returnTo={requestSearch.returnTo} />
           {refreshedAt ? (
             <details className="min-w-0 max-w-full text-xs text-muted-foreground sm:max-w-prose">
-              <summary className="min-h-11 min-w-11 cursor-pointer content-center rounded-lg px-2 py-2 whitespace-normal hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+              <summary className="cursor-pointer content-center rounded-lg px-2 whitespace-normal hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                 <time dateTime={refreshedAt} title={fullDateTime(refreshedAt, locale)}>
                   {m.board_feed_order_help()}
                 </time>
@@ -578,7 +578,7 @@ function BoardFeedVisit({
       {pins.malformed ? (
         <div className="flex min-w-0 flex-wrap items-center gap-2" data-slot="board-reading-malformed" role="status">
           <p className="min-w-0 text-sm text-muted-foreground">{m.board_reading_malformed()}</p>
-          <Button type="button" variant="outline" className="min-h-11 min-w-11" onClick={pins.refresh}>
+          <Button type="button" variant="outline" onClick={pins.refresh}>
             {m.board_community_retry()}
           </Button>
         </div>
@@ -594,7 +594,7 @@ function BoardFeedVisit({
             search={boardOrderSearch(requestSearch, sort)}
             className={buttonVariants({
               variant: 'outline',
-              className: 'h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal',
+              className: 'h-auto min-h-7 max-w-full whitespace-normal',
             })}
           >
             {m.board_reading_restart()}
@@ -643,8 +643,7 @@ function BoardFeedVisit({
             state={{ __boardNextPage: true } as never}
             className={buttonVariants({
               variant: 'outline',
-              size: 'lg',
-              className: 'h-auto min-h-11 min-w-11 w-full max-w-full py-3 whitespace-normal',
+              className: 'h-auto min-h-7 w-full max-w-full whitespace-normal',
             })}
           >
             {m.threads_next_page()}

@@ -319,7 +319,7 @@ export function AuthoringDepartureProvider({
           <Button
             type="button"
             variant="outline"
-            className="h-auto min-h-11 min-w-11 max-w-full shrink px-4 py-3 text-center leading-snug whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring sm:w-fit"
+            className="h-auto min-h-7 max-w-full shrink text-center leading-snug whitespace-normal [overflow-wrap:anywhere] sm:w-fit"
             onClick={() => window.location.reload()}
           >
             <span className="min-w-0">{m.settings_reload()}</span>
@@ -418,13 +418,13 @@ function DepartureDialog({
       <AlertDialogFooter className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-stretch gap-3 sm:grid-cols-2">
         <AlertDialogCancel
           ref={stayButton}
-          className="h-auto min-h-11 min-w-11 max-w-full shrink px-4 py-3 text-center leading-snug whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
+          className="h-auto min-h-7 max-w-full shrink text-center leading-snug whitespace-normal [overflow-wrap:anywhere]"
         >
           <span className="min-w-0">{m.thread_authoring_stay()}</span>
         </AlertDialogCancel>
         <AlertDialogAction
           variant="destructive"
-          className="h-auto min-h-11 min-w-11 max-w-full shrink px-4 py-3 text-center leading-snug whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
+          className="h-auto min-h-7 max-w-full shrink text-center leading-snug whitespace-normal [overflow-wrap:anywhere]"
           onClick={navigation.leave}
         >
           <span className="min-w-0">

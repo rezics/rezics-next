@@ -21,7 +21,8 @@ import {
 } from 'react';
 import { useLocation, useRouter } from '@tanstack/react-router';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import {
   ContentSection,
   ContentSectionBody,
@@ -88,7 +89,10 @@ export function ManagedAccountSelectionUnavailable({
     <ContentSection className="min-w-0 max-w-full">
       <ContentSectionHeader className="min-w-0">
         <a
-          className="inline-flex min-h-11 max-w-full items-center rounded-2xl px-3 py-2 text-sm leading-5 whitespace-normal break-words text-primary underline underline-offset-4 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+          className={cn(
+            buttonVariants({ variant: 'link' }),
+            'h-auto min-h-7 max-w-full justify-start whitespace-normal break-words',
+          )}
           href={backHref}
           onClick={onBack}
         >
@@ -203,7 +207,7 @@ function SettingsFailure({
             <Button
               type="button"
               variant="outline"
-              className="h-auto min-h-11 max-w-full whitespace-normal break-words px-4 py-2 text-start leading-5"
+              className="h-auto max-w-full whitespace-normal break-words text-start min-h-7"
               disabled={waiting}
               onClick={onRetry}
             >
@@ -484,7 +488,7 @@ function SettingsSections({
                     <Button
                       type="button"
                       variant="outline"
-                      className="h-auto min-h-11 max-w-full whitespace-normal break-words px-4 py-2 text-start leading-5"
+                      className="h-auto max-w-full whitespace-normal break-words text-start min-h-7"
                       onClick={() => void router.invalidate()}
                     >
                       {m.settings_retry()}
@@ -616,7 +620,7 @@ export function SettingsSessionRecovery({
         <Button
           type="button"
           variant="outline"
-          className="h-auto min-h-11 max-w-full whitespace-normal break-words px-4 py-2 text-start leading-5"
+          className="h-auto max-w-full whitespace-normal break-words text-start min-h-7"
           disabled={pending}
           onClick={onRetry}
         >

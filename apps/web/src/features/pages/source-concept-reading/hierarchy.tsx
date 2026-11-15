@@ -7,9 +7,9 @@ import { conceptVisitHistoryLimit } from './navigation';
 import type { ConceptVisit } from './visit';
 
 export const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 export const linkClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'inline-flex max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 export function HierarchyLinks({
   rows,

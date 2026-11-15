@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { EntityPicker } from '@rezics/ui/entity-picker';
+import { Button } from '@rezics/ui/shadcn/button';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
@@ -185,9 +186,9 @@ function Operand({
                     </>
                   )}
                 </span>
-                <button type="button" className="shrink-0 text-sm underline" onClick={() => onRemove(index)}>
+                <Button type="button" variant="link" size="sm" className="h-auto min-h-6 shrink-0 whitespace-normal" onClick={() => onRemove(index)}>
                   {m.refinement_remove({ value: selected?.label ?? label }, opts)}
-                </button>
+                </Button>
               </li>
             );
           })}
@@ -221,9 +222,11 @@ function Operand({
         </p>
       )}
       {(retryAvailable || (unresolved && !loading && !error)) && available && (
-        <button
+        <Button
           type="button"
-          className="text-sm underline"
+          variant="link"
+          size="sm"
+          className="h-auto min-h-6 whitespace-normal"
           onClick={() => {
             if (!reader.current()) return;
             if (error instanceof ConditionEntityLookupError && error.failure === 'restart') retryMetadata();
@@ -235,7 +238,7 @@ function Operand({
           }}
         >
           {m.character_person_retry({}, opts)}
-        </button>
+        </Button>
       )}
     </section>
   );
@@ -296,9 +299,9 @@ export function CharacterPersonSelectionFields({
       ) : !metadata ? (
         <div role="status">
           <p>{m.condition_metadata_unavailable({}, opts)}</p>
-          <button className="text-sm underline" type="button" onClick={retryMetadata}>
+          <Button variant="link" size="sm" className="h-auto min-h-6 whitespace-normal" type="button" onClick={retryMetadata}>
             {m.character_person_retry({}, opts)}
-          </button>
+          </Button>
         </div>
       ) : null}
       {!worksMode && (

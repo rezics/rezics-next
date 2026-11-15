@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
 import type { SubjectOffer } from '../subject-offers';
@@ -35,13 +36,11 @@ function SuppliedDifferences({ first, second, locale }: { first: SubjectOffer; s
         {m.subject_choice_differences_meaning({}, { locale })}
       </p>
       <div className="space-y-2">
-        <label htmlFor={filterId} className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-medium">
-          <input
+        <label htmlFor={filterId} className="flex cursor-pointer items-center gap-3 text-sm font-medium">
+          <Checkbox
             id={filterId}
-            type="checkbox"
             checked={showMatches}
-            onChange={(event) => setShowMatches(event.currentTarget.checked)}
-            className="size-5 shrink-0 accent-primary"
+            onCheckedChange={(checked) => setShowMatches(checked)}
           />
           {m.subject_choice_show_matches({}, { locale })}
         </label>
@@ -126,7 +125,7 @@ function SuppliedDifferences({ first, second, locale }: { first: SubjectOffer; s
             : m.subject_choice_different_editions({}, { locale })}
       </p>
       <details className="min-w-0 rounded-lg border px-4">
-        <summary className="min-h-11 cursor-pointer content-center py-3 font-medium focus-visible:outline-2 focus-visible:outline-ring">
+        <summary className="cursor-pointer content-center font-medium focus-visible:outline-2 focus-visible:outline-ring">
           {m.subject_choice_differences_meaning({}, { locale })}
         </summary>
         <ul className="list-disc space-y-3 pb-4 pl-5 text-sm leading-relaxed text-muted-foreground">
@@ -177,7 +176,7 @@ function ComparisonOperand({
         <Button
           type="button"
           variant="outline"
-          className="h-auto min-h-11 whitespace-normal text-start"
+          className="h-auto min-h-7 whitespace-normal text-start"
           aria-label={m.subject_choice_remove_label({ position, title: offer.title }, { locale })}
           onClick={() => reading.remove(offer)}
         >
@@ -189,7 +188,7 @@ function ComparisonOperand({
         <Button
           type="button"
           variant="outline"
-          className="h-auto min-h-11 whitespace-normal text-start"
+          className="h-auto min-h-7 whitespace-normal text-start"
           onClick={() => reading.returnToRow(offer)}
         >
           {m.subject_choice_return({}, { locale })}
@@ -240,10 +239,10 @@ export function SubjectOfferComparison({
         </h2>
         <p className="max-w-prose text-sm leading-relaxed">{m.subject_choice_compare_intro({}, { locale })}</p>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" className="min-h-11" onClick={reading.close}>
+          <Button type="button" variant="outline" onClick={reading.close}>
             {m.subject_choice_edit({}, { locale })}
           </Button>
-          <Button type="button" variant="outline" className="min-h-11" onClick={reading.clear}>
+          <Button type="button" variant="outline" onClick={reading.clear}>
             {m.subject_choice_clear({}, { locale })}
           </Button>
         </div>

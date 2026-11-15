@@ -149,7 +149,6 @@ function BookCheckpointRecovery({ scenario = 'saved' }: { scenario?: Scenario })
           {scenario === 'replaced-visit' ? (
             <div className="flex flex-wrap gap-2">
               <Button
-                className="min-h-11 min-w-11"
                 variant="outline"
                 disabled={!pending}
                 onClick={() => setGeneration((value) => value + 1)}
@@ -157,7 +156,6 @@ function BookCheckpointRecovery({ scenario = 'saved' }: { scenario?: Scenario })
                 Replace reading visit
               </Button>
               <Button
-                className="min-h-11 min-w-11"
                 variant="outline"
                 disabled={!pending || generation === 0}
                 onClick={() => {

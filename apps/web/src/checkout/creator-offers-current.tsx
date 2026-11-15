@@ -296,7 +296,7 @@ function CreatorRead({
           <p>{m.creator_unavailable()}</p>
           <Button
             variant="outline"
-            className="min-h-11"
+           
             disabled={query.isFetching}
             onClick={() => void query.refetch()}
           >

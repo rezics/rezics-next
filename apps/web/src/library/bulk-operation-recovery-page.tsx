@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { usePrivateReportOrigin } from './private-report-current-origin';
@@ -85,19 +86,20 @@ function OperationReader({
                 ? ''
                 : readMessage(state.read)}
       </p>
-      <button
+      <Button
         type="button"
-        className="min-h-11 underline"
+        variant="outline"
+        size="sm"
         disabled={!allowed || state?.read === 'loading'}
         onClick={() => void model.current?.read()}
       >
         {m.bulk_operation_recover()}
-      </button>
+      </Button>
       {operation && (
         <>
           <OperationDetails operation={operation} />
           {operation.action === 'remove_from_library' && (
-            <a className="inline-flex min-h-11 items-center underline" href={bulkOperationUndoHref(getLocale(), id)}>
+            <a className={buttonVariants({ variant: 'link', size: 'sm' })} href={bulkOperationUndoHref(getLocale(), id)}>
               {m.library_bulk_undo_title()}
             </a>
           )}
@@ -123,9 +125,10 @@ function OperationReader({
               ))}
             </ul>
             {state?.page?.next && (
-              <button type="button" className="min-h-11 underline" onClick={() => void model.current?.more()}>
+              <Button type="button" variant="outline"
+        size="sm" onClick={() => void model.current?.more()}>
                 {m.bulk_operation_more()}
-              </button>
+              </Button>
             )}
           </section>
         </>
@@ -134,14 +137,15 @@ function OperationReader({
         <section className="space-y-3">
           <p>{m.bulk_operation_cancel_effect()}</p>
           {cancellable && !cancellation && (
-            <button
+            <Button
               type="button"
-              className="min-h-11 underline"
+              variant="destructive"
+              size="sm"
               disabled={!origin.read().csrfToken}
               onClick={() => void model.current?.cancel()}
             >
               {m.bulk_operation_cancel()}
-            </button>
+            </Button>
           )}
           {cancellation && (
             <p role="status">
@@ -155,14 +159,15 @@ function OperationReader({
             </p>
           )}
           {cancellation === 'uncertain' && (
-            <button
+            <Button
               type="button"
-              className="min-h-11 underline"
+              variant="destructive"
+              size="sm"
               disabled={!origin.read().csrfToken}
               onClick={() => void model.current?.cancel(true)}
             >
               {m.bulk_operation_retry_cancel()}
-            </button>
+            </Button>
           )}
         </section>
       )}

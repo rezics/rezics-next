@@ -77,7 +77,7 @@ export function FollowingReadingRow({
           {controls}
           <Button
             data-following-inspect=""
-            className="min-h-11"
+           
             variant={selected ? 'secondary' : 'outline'}
             disabled={disabled}
             aria-disabled={suspended || undefined}
@@ -95,7 +95,7 @@ export function FollowingReadingRow({
           <a
             href={href}
             aria-label={m.following_reading_open({ title: title.text })}
-            className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+           className={buttonVariants({ variant: 'outline' })}
           >
             {m.following_reading_open_action()}
           </a>

@@ -7,14 +7,16 @@ import { measureValueKind } from '../independent-measures/contract';
 import { EpisodeChecklistEditor } from '../episode-checklist/editor';
 import { preparingVisit } from '../episode-checklist/controller';
 import type { ProgressChoices } from '../progress-profile';
-import { actionClass } from '../private-export/controls';
+
 import { ProgressRecoveryJourney, type Snapshot } from './controller';
 import type { ReviewInput } from './native';
 import { Evidence, EvidenceDetails, progressModeLabel } from './review';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 
 type Journey = ProgressRecoveryJourney<ProgressChoices>;
 type View = Snapshot<ProgressChoices>;
-const action = `${actionClass} rounded-md border disabled:opacity-50`;
+const action = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 const uuid = '[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}';
 
 export function MappingPanel({ journey, snap }: { journey: Journey; snap: View }) {
@@ -76,7 +78,7 @@ export function MappingPanel({ journey, snap }: { journey: Journey; snap: View }
     <section className="space-y-4 rounded-md border p-4">
       <h2 className="text-xl font-semibold">{m.library_archive_progress_mapping()}</h2>
       <details>
-        <summary className={action}>{m.library_archive_progress_source()}</summary>
+        <summary className={`${action} cursor-pointer`}>{m.library_archive_progress_source()}</summary>
         <Evidence value={source} />
       </details>
       <IndependentMeasuresReadout
@@ -102,8 +104,7 @@ export function MappingPanel({ journey, snap }: { journey: Journey; snap: View }
       >
         <label className="block space-y-2">
           <span>{m.library_archive_progress_subject()}</span>
-          <input
-            className={`${action} w-full`}
+          <Input className="w-full"
             required
             pattern={uuid}
             value={subject}
@@ -114,9 +115,9 @@ export function MappingPanel({ journey, snap }: { journey: Journey; snap: View }
             }}
           />
         </label>
-        <button className={action} disabled={locked}>
+        <Button variant="outline" className={action} disabled={locked}>
           {m.library_archive_progress_profile()}
-        </button>
+        </Button>
       </form>
       {snap.mappedSubject ? (
         <>
@@ -141,8 +142,7 @@ export function MappingPanel({ journey, snap }: { journey: Journey; snap: View }
               >
                 <SelectTrigger
                   id={profilePairSelectId}
-                  aria-labelledby={`${profilePairSelectId}-label`}
-                  className={`${action} w-full`}
+                  aria-labelledby={`${profilePairSelectId}-label`} className="w-full"
                 >
                   <SelectValue />
                 </SelectTrigger>
@@ -200,8 +200,7 @@ export function MappingPanel({ journey, snap }: { journey: Journey; snap: View }
                 >
                   <SelectTrigger
                     id={`${additionalMeasureSelectId}-${measure.unit}`}
-                    aria-labelledby={`${additionalMeasureSelectId}-${measure.unit}-label`}
-                    className={`${action} w-full`}
+                    aria-labelledby={`${additionalMeasureSelectId}-${measure.unit}-label`} className="w-full"
                   >
                     <SelectValue />
                   </SelectTrigger>
@@ -230,8 +229,8 @@ export function MappingPanel({ journey, snap }: { journey: Journey; snap: View }
         <EvidenceDetails value={snap.units} />
         {choice?.mode === 'completed_units' && body ? (
           <>
-            <button
-              className={action}
+            <Button
+              variant="outline" className={action}
               disabled={locked || !episodeUnits.length}
               onClick={() =>
                 void journey.review(
@@ -241,7 +240,7 @@ export function MappingPanel({ journey, snap }: { journey: Journey; snap: View }
               }
             >
               {m.library_archive_progress_membership()}
-            </button>
+            </Button>
             <EpisodeChecklistEditor
               visit={visit}
               busy={locked}
@@ -266,9 +265,9 @@ export function MappingPanel({ journey, snap }: { journey: Journey; snap: View }
           onNext={(after) => void journey.page('units', after)}
         />
       </section>
-      <button className={action} disabled={locked || !body} onClick={() => body && void journey.review(body)}>
+      <Button variant="outline" className={action} disabled={locked || !body} onClick={() => body && void journey.review(body)}>
         {m.library_archive_progress_review()}
-      </button>
+      </Button>
     </section>
   );
 }
@@ -286,13 +285,13 @@ export function Pager({
 }) {
   return (
     <div className="flex flex-wrap gap-3">
-      <button className={action} disabled={disabled} onClick={onFirst}>
+      <Button variant="outline" className={action} disabled={disabled} onClick={onFirst}>
         {m.buyer_history_first()}
-      </button>
+      </Button>
       {next !== null && next !== undefined ? (
-        <button className={action} disabled={disabled} onClick={() => onNext(next)}>
+        <Button variant="outline" className={action} disabled={disabled} onClick={() => onNext(next)}>
           {m.buyer_history_next()}
-        </button>
+        </Button>
       ) : null}
     </div>
   );

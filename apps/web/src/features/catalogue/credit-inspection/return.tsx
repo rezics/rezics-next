@@ -25,7 +25,7 @@ export function CreditInspectionAction({
     <>
       <Button
         variant="outline"
-        className="mt-2 h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2"
+        className="mt-2 h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]"
         data-credit-statement={statement}
         onClick={(event) => onOpen(event.currentTarget)}
       >

@@ -34,7 +34,7 @@ export function AutomatedCreationReturnView({
         id="automated-return-heading"
         ref={heading}
         tabIndex={-1}
-        className="focus:outline-2 focus:outline-offset-2 focus:outline-ring"
+        className="outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
       >
         {m.auth_automated_history_heading()}
       </h2>
@@ -59,7 +59,7 @@ export function AutomatedCreationReturnView({
           id="automated-return-dismissed"
           role="status"
           tabIndex={-1}
-          className="focus:outline-2 focus:outline-offset-2 focus:outline-ring"
+          className="outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
         >
           {m.auth_automated_history_dismissed()}
         </p>

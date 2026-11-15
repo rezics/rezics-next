@@ -1,3 +1,5 @@
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { m } from '../paraglide/messages.js';
 import type { MouseEvent } from 'react';
 import type { SettingsOperationAdmission } from './ports/shell';
@@ -76,7 +78,11 @@ export function SectionsNavigation({
               href={`#${section.id}`}
               aria-current={selected === section.id ? 'location' : undefined}
               onClick={(event) => onSelect?.(section.id, event)}
-              className="flex min-h-11 min-w-0 flex-col justify-center gap-1 rounded-md border border-border px-3 py-2 break-words text-muted-foreground hover:bg-muted hover:text-foreground aria-[current=location]:border-primary aria-[current=location]:bg-muted aria-[current=location]:font-semibold aria-[current=location]:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className={cn(
+                buttonVariants({ variant: 'outline', size: 'sm' }),
+                'h-auto min-h-6 w-full min-w-0 flex-col items-start justify-center gap-1 whitespace-normal break-words text-start font-normal text-muted-foreground',
+                'aria-[current=location]:border-primary aria-[current=location]:bg-muted aria-[current=location]:font-semibold aria-[current=location]:text-primary',
+              )}
             >
               <span>{section.label}</span>
               {section.status ? <span className="text-xs">{section.status}</span> : null}

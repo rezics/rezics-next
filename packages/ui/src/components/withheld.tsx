@@ -20,7 +20,7 @@ export type WithheldProps = (
 export function Withheld(props: WithheldProps) {
   const { shape, labels, className, style } = props;
   const message = { ...withheldLabels, ...labels }.withheld;
-  const surface = cn('min-w-0 rounded-sm bg-muted text-sm text-muted-foreground', className);
+  const surface = cn('min-w-0 rounded-lg bg-muted text-sm text-muted-foreground', className);
 
   if (props.shape === 'image') {
     return (

@@ -3,7 +3,7 @@
 @import '@fontsource-variable/geist-mono';
 @import '../src/styles.css';
 @import '../../editor/src/styles.css';
-@import './preview-palette.css';
+@import './preview-canvas.css';
 
 @source "../src/**/*.{ts,tsx}";
 @source "./**/*.{ts,tsx}";

@@ -3,6 +3,7 @@ import type { PropertyDefinition } from '@rezics/definitions';
 import { ContentItemFrame, ContentItemHeading, ContentItemTitleLink } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Input } from '@rezics/ui/shadcn/input';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { cn } from '@rezics/ui/utils';
 import {
@@ -47,13 +48,15 @@ import {
 } from './definition-guide';
 
 const actionClassName =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+  'h-auto min-h-7 max-w-full whitespace-normal';
 const recoveryClassName = 'rounded-sm focus:outline-2 focus:outline-offset-4 focus:outline-ring';
-const linkClassName =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const linkClassName = buttonVariants({
+  variant: 'link',
+  className: 'h-auto min-h-7 max-w-full justify-start whitespace-normal text-start',
+});
 // Keep native summary display and its disclosure marker, including keyboard activation.
 const summaryClassName =
-  'min-h-11 min-w-11 max-w-full cursor-pointer whitespace-normal rounded-sm py-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-0 md:pointer-fine:py-0';
+  'max-w-full cursor-pointer whitespace-normal focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 type GuideFocusIntent = {
   opener: HTMLElement;
@@ -785,8 +788,7 @@ function ActiveGuide({
       <form className="space-y-3" onSubmit={submitPrefix}>
         <Field>
           <FieldLabel htmlFor={prefixId}>{m.guide_prefix_label({}, o)}</FieldLabel>
-          <input
-            className="flex min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-base shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring md:pointer-fine:min-h-8 md:pointer-fine:text-sm"
+          <Input
             id={prefixId}
             maxLength={512}
             value={search.draft}
@@ -801,8 +803,7 @@ function ActiveGuide({
       <form className="space-y-3" onSubmit={submitExact}>
         <Field>
           <FieldLabel htmlFor={exactId}>{m.guide_exact_id_label({}, o)}</FieldLabel>
-          <input
-            className="flex min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-base shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring md:pointer-fine:min-h-8 md:pointer-fine:text-sm"
+          <Input
             id={exactId}
             maxLength={guideIdentifierLimit}
             value={searchExactDraft}
@@ -859,9 +860,10 @@ function ActiveGuide({
             <ul className="space-y-2">
               {page.types.map((entry) => (
                 <li key={entry.typeId}>
-                  <button
+                  <Button
                     type="button"
-                    className={cn(linkClassName, 'text-left')}
+                    variant="link"
+                    className="h-auto min-h-7 max-w-full justify-start whitespace-normal text-start"
                     onKeyDown={(event) => armGuideFocusIntent(focusIntent, event, key)}
                     onBlur={(event) => cancelGuideFocusIntentOnBlur(focusIntent, event)}
                     onClick={(event) =>
@@ -884,7 +886,7 @@ function ActiveGuide({
                   >
                     <span>{entry.label}</span>
                     <code className="break-all text-sm">{entry.typeId}</code>
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -1224,7 +1226,7 @@ export function DefinitionGuideContent({
                 }
               >
                 <SelectTrigger
-                  className="w-full min-w-0 max-w-full min-h-11 min-w-11 md:pointer-fine:min-h-8"
+                  className="w-full min-w-0 max-w-full"
                   id={typeId}
                   aria-describedby={type ? `${typeId}-meaning` : undefined}
                 >
@@ -1343,7 +1345,7 @@ export function DefinitionGuideLink({
   const o = { locale: locale as never };
   return (
     <a
-      className="inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal text-sm text-primary underline underline-offset-4 [overflow-wrap:anywhere]"
+      className="inline-flex max-w-full items-center whitespace-normal text-sm text-primary underline underline-offset-4 [overflow-wrap:anywhere]"
       href={definitionGuideHref(locale, address)}
       target="_blank"
       rel="noopener noreferrer"

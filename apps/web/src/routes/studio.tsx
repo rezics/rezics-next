@@ -436,7 +436,7 @@ function BookPublicationTools({ owner, locale }: { owner: HostedOwnedBook; local
   return (
     <nav className="studio-action-row">
       <a
-        className="inline-flex min-h-11 items-center rounded-md px-3 py-2 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        className="underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         href={localizeHref(
           `/studio?catalogueId=${owner.item.catalogueId}&prepare=1&ownerAccount=${owner.viewer.accountId}&ownerEpoch=${owner.viewer.authnEpoch}`,
           { locale: locale },

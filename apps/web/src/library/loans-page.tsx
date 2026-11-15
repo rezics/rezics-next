@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
+import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { Exposure } from '../kernel/exposure';
@@ -152,14 +153,15 @@ export function LoansPage({
       ) : null}
       {empty ? <p role="status">{empty}</p> : null}
       {page.inventoryState === 'unavailable' ? (
-        <button
+        <Button
           type="button"
-          className={loanQuiet}
+          variant="outline"
+          className="h-auto min-h-7 max-w-full whitespace-normal"
           disabled={!current}
           onClick={(event) => refreshCurrent(event.currentTarget)}
         >
           {m.library_loans_refresh()}
-        </button>
+        </Button>
       ) : null}
       {page.items.length ? (
         <ul className="m-0 list-none space-y-4 p-0">
@@ -167,15 +169,16 @@ export function LoansPage({
             <li key={item.loan.id} className="min-w-0 space-y-4 rounded-xl border border-border p-4 sm:p-5">
               <LoanIdentity item={item} />
               <LoanFacts loan={item.loan} today={page.boundary?.today ?? null} />
-              <button
+              <Button
                 type="button"
-                className={loanQuiet}
+                variant="outline"
+                className="h-auto min-h-7 max-w-full whitespace-normal"
                 aria-expanded={selected?.item === item && selected.expanded}
                 disabled={!current || (locked && selected?.item !== item)}
                 onClick={(event) => select(item, event.currentTarget)}
               >
                 {m.library_loans_inspect()}
-              </button>
+              </Button>
               {selected?.item === item ? (
                 <SelectedLoan
                   item={item}
@@ -256,9 +259,9 @@ function SelectedLoan({
         >
           {m.library_loans_inspect()}
         </h3>
-        <button type="button" className={loanQuiet} onClick={onClose}>
+        <Button type="button" variant="outline" className="h-auto min-h-7 max-w-full whitespace-normal" onClick={onClose}>
           {m.library_loans_close()}
-        </button>
+        </Button>
       </header>
       <LoanControls
         loan={item.loan}

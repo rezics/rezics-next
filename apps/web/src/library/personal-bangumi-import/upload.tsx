@@ -4,6 +4,7 @@ import { ImportDetails } from '../personal-list-import/presentation';
 import { m } from '../../paraglide/messages.js';
 import { BANGUMI_FORMAT, BANGUMI_ROWS, BANGUMI_UPLOAD_BYTES } from './contract';
 import { BangumiAction } from './controls';
+import { Input } from '@rezics/ui/shadcn/input';
 
 export function BangumiUploadForm({
   busy,
@@ -69,10 +70,10 @@ export function BangumiUploadForm({
         </p>
       </ImportDetails>
       <Field>
-        <FieldLabel htmlFor={inputId} className="min-h-11 items-center">
+        <FieldLabel htmlFor={inputId} className="items-center">
           {m.library_bangumi_file_label()}
         </FieldLabel>
-        <input
+        <Input
           ref={input}
           id={inputId}
           type="file"
@@ -80,7 +81,7 @@ export function BangumiUploadForm({
           accept="application/json,.json"
           aria-describedby={`${attestId} ${formatId} ${helpId}`}
           disabled={busy || disabled}
-          className="min-h-11 w-full max-w-full text-sm file:me-3 file:min-h-11 file:rounded-md file:border file:px-3"
+          className='w-full max-w-full file:me-3'
         />
       </Field>
       <BangumiAction type="submit" disabled={busy || disabled} aria-busy={busy}>
@@ -91,9 +92,9 @@ export function BangumiUploadForm({
           <p>{m.library_import_reopen_help()}</p>
           <Field>
             <FieldLabel htmlFor={retainedIdInput}>{m.library_anilist_retained_id()}</FieldLabel>
-            <input
+            <Input
               id={retainedIdInput}
-              className="min-h-11 w-full rounded-md border px-3"
+              className='w-full'
               value={retainedId}
               disabled={busy || disabled}
               autoComplete="off"

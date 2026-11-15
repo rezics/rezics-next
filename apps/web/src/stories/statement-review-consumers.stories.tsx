@@ -66,18 +66,18 @@ function EvidenceReturn({ revised = false }: { revised?: boolean }) {
       <div className="min-w-0 space-y-3 border-t border-border pt-4">
         <label htmlFor="original-literary-url">{m.correction_url({}, o)}</label>
         <Input
-          ref={field}
-          id="original-literary-url"
-          type="url"
-          value={value}
-          className="min-h-11"
-          onChange={(event) => setValue(event.target.value)}
+ ref={field}
+ id="original-literary-url"
+ type="url"
+ value={value}
+ 
+ onChange={(event) => setValue(event.target.value)}
         />
         <Button
-          type="button"
-          variant="outline"
-          className="min-h-11 whitespace-normal"
-          onClick={() => document.querySelector<HTMLElement>('[data-literary-create-review] button')?.focus()}
+ type="button"
+ variant="outline"
+ className="whitespace-normal h-auto min-h-7"
+ onClick={() => document.querySelector<HTMLElement>('[data-literary-create-review] button')?.focus()}
         >
           {m.literary_review_title({}, o)}
         </Button>

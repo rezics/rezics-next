@@ -6,6 +6,7 @@ import { m } from '../../paraglide/messages.js';
 import { ANILIST_ROWS, ANILIST_SCORE_FORMATS, ANILIST_UPLOAD_BYTES, type AniListScoreFormat } from './contract';
 import { AniListAction } from './controls';
 import { aniListScoreFormatLabel } from './meaning';
+import { Input } from '@rezics/ui/shadcn/input';
 
 export function AniListUploadForm({
   busy,
@@ -81,7 +82,7 @@ export function AniListUploadForm({
         </p>
       </ImportDetails>
       <Field>
-        <FieldLabel id={`${scoreId}-label`} htmlFor={scoreId} className="min-h-11 items-center">
+        <FieldLabel id={`${scoreId}-label`} htmlFor={scoreId} className="items-center">
           {m.library_anilist_score_format()}
         </FieldLabel>
         <Select<string, false>
@@ -97,7 +98,7 @@ export function AniListUploadForm({
             id={scoreId}
             aria-labelledby={`${scoreId}-label`}
             {...{ 'data-anilist-score-format': true }}
-            className="min-h-11 w-full max-w-full rounded-md border bg-background px-3"
+            className='w-full max-w-full'
           >
             <SelectValue />
           </SelectTrigger>
@@ -113,10 +114,10 @@ export function AniListUploadForm({
         </Select>
       </Field>
       <Field>
-        <FieldLabel htmlFor={inputId} className="min-h-11 items-center">
+        <FieldLabel htmlFor={inputId} className="items-center">
           {m.library_anilist_file_label()}
         </FieldLabel>
-        <input
+        <Input
           ref={input}
           id={inputId}
           type="file"
@@ -124,7 +125,7 @@ export function AniListUploadForm({
           accept="application/json,.json"
           aria-describedby={`${attestId} ${formatId} ${helpId}`}
           disabled={busy || disabled}
-          className="min-h-11 w-full max-w-full text-sm file:me-3 file:min-h-11 file:rounded-md file:border file:px-3"
+          className='w-full max-w-full file:me-3'
         />
       </Field>
       <AniListAction type="submit" disabled={busy || disabled} aria-busy={busy}>
@@ -135,9 +136,9 @@ export function AniListUploadForm({
           <p>{m.library_import_reopen_help()}</p>
           <Field>
             <FieldLabel htmlFor={retainedIdInput}>{m.library_anilist_retained_id()}</FieldLabel>
-            <input
+            <Input
               id={retainedIdInput}
-              className="min-h-11 w-full rounded border px-3"
+              className='w-full'
               value={retainedId}
               disabled={busy || disabled}
               onChange={(event) => setRetainedId(event.target.value)}

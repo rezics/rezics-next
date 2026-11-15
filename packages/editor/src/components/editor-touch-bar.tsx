@@ -107,12 +107,9 @@ function scrollSelectionAboveBar(editor: Editor, bar: HTMLElement | null) {
   window.scrollBy({ top: overflow, behavior: 'auto' });
 }
 
-/** Controls keep a thumb-sized target even when a visible label follows the icon. */
-const barButton = 'min-h-11 min-w-11 shrink-0 focus-visible:text-primary [&_svg:not([class*=size-])]:size-5';
-
 /**
  * Formatting at the document entry point, docked above the keyboard on coarse pointers. Pointer controls preserve
- * the editor selection; the adopted block groups use the public responsive Menu.
+ * the editor selection; the adopted block groups use the public responsive Menu. Actions use official button sizes.
  */
 export function EditorTouchBar({
   editor,
@@ -257,11 +254,8 @@ export function EditorTouchBar({
         onFocus={() => {
           if (isCurrent()) setTabStop(command.id);
         }}
-        className={cn(barButton, command.id === 'undo' || command.id === 'redo' ? 'size-11' : 'gap-1.5 px-2.5')}
       >
-        {command.active ? (
-          <span className="text-xs sm:text-sm">{editorCommandLabel(labels, command.label)}</span>
-        ) : null}
+        {command.active ? editorCommandLabel(labels, command.label) : null}
       </ActionButton>
     );
   }
@@ -295,10 +289,10 @@ export function EditorTouchBar({
               onFocusChange(false);
           }}
           className={cn(
-            'flex min-h-[3.25rem] items-center gap-1 bg-popover px-2 text-popover-foreground',
+            'flex items-center gap-1 bg-popover px-2 text-popover-foreground',
             docked
-              ? 'fixed inset-x-0 z-40 border-t border-border/60'
-              : 'relative mb-2 min-w-0 rounded-xl border border-border/60',
+              ? 'fixed inset-x-0 z-40 border-t border-border'
+              : 'relative mb-2 min-w-0 rounded-xl border border-border',
             docked && inset === 0 && 'pb-[env(safe-area-inset-bottom)]',
           )}
         >
@@ -328,7 +322,6 @@ export function EditorTouchBar({
                   <Button
                     type="button"
                     variant="ghost"
-                    className={cn(barButton, 'gap-1.5 px-2.5', blocksOpen && 'bg-primary/10 text-primary')}
                     aria-label={labels.blocks}
                     data-editor-block-trigger
                     tabIndex={activeTabStop === 'blocks' ? 0 : -1}
@@ -338,7 +331,7 @@ export function EditorTouchBar({
                     onMouseDown={(event) => event.preventDefault()}
                   >
                     <Blocks aria-hidden="true" />
-                    <span className="text-xs sm:text-sm">{labels.blocks}</span>
+                    {labels.blocks}
                     <ChevronDown aria-hidden="true" />
                   </Button>
                 }
@@ -355,7 +348,7 @@ export function EditorTouchBar({
                 <Button
                   type="button"
                   variant="ghost"
-                  className={cn(barButton, 'size-11')}
+                  size="icon"
                   aria-label={labels.hideKeyboard}
                   tabIndex={activeTabStop === 'hideKeyboard' ? 0 : -1}
                   onFocus={() => {

@@ -5,7 +5,7 @@ import { subjectHref } from '../../subject/subject-href';
 import { ClassificationEditor, type ClassificationCommands } from './editor';
 import type { OwnClassification } from './types';
 
-export const classificationControl = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2';
+export const classificationControl = 'h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere';
 
 /** Supplied detail belongs to exactly one original inventory occurrence. */
 export function ClassificationInspection({
@@ -67,7 +67,7 @@ export function ClassificationInspection({
       {row.state === 'available' ? (
         <>
           <details>
-            <summary className={`${classificationControl} cursor-pointer rounded py-3 underline`}>
+            <summary className={`${classificationControl} cursor-pointer underline`}>
               {m.own_classifications_technical({}, options)}
             </summary>
             <div className="min-w-0 space-y-3 pt-3">
@@ -90,7 +90,7 @@ export function ClassificationInspection({
                   </div>
                 ))}
               </dl>
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap items-center gap-2">
                 {[row.subject, row.target].map((summary, position) => (
                   <a
                     key={position}

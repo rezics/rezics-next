@@ -177,7 +177,7 @@ function OwnerShelfTypeDefaults({
       <Button
         type="button"
         variant="outline"
-        className="min-h-11 max-w-full whitespace-normal"
+        className="max-w-full whitespace-normal"
         disabled={!subject || busy || !currentChoice()}
         onClick={() => void read(page && page.state !== 'loaded' ? 'retry' : 'read')}
       >
@@ -214,7 +214,7 @@ function OwnerShelfTypeDefaults({
             <SelectTrigger
               id={typeScopeSelectId}
               aria-labelledby={`${typeScopeSelectId}-label`}
-              className="min-h-11 w-full min-w-0 rounded-md border bg-background px-3 py-2"
+              className="w-full min-w-0"
             >
               <SelectValue />
             </SelectTrigger>
@@ -263,7 +263,7 @@ function OwnerShelfTypeDefaults({
                 <SelectTrigger
                   id={typeLayoutSelectId}
                   aria-labelledby={`${typeLayoutSelectId}-label`}
-                  className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
+                  className="max-w-full"
                 >
                   <SelectValue />
                 </SelectTrigger>
@@ -284,7 +284,7 @@ function OwnerShelfTypeDefaults({
             <Button
               type="button"
               variant="outline"
-              className="min-h-11 max-w-full whitespace-normal"
+              className="max-w-full whitespace-normal"
               disabled={disabled || !currentChoice()}
               onClick={() => {
                 if (currentChoice()) onChange(selected, undefined);
@@ -295,7 +295,7 @@ function OwnerShelfTypeDefaults({
           ) : null}
           {choice && libraryShelfType(selected) ? (
             <a
-              className={`${buttonVariants({ variant: 'outline' })} min-h-11 max-w-full whitespace-normal`}
+              className={`${buttonVariants({ variant: 'outline' })} max-w-full whitespace-normal`}
               href={shelfHref(locale, { type: selected })}
               onClick={(event) => {
                 if (!currentChoice()) event.preventDefault();
@@ -310,7 +310,8 @@ function OwnerShelfTypeDefaults({
         <Button
           type="button"
           variant="outline"
-          className="min-h-11 max-w-full whitespace-normal"
+          size="sm"
+          className="h-auto min-h-6 max-w-full whitespace-normal"
           disabled={busy || !currentChoice()}
           onClick={() => void read('next', page.next!)}
         >
@@ -321,7 +322,8 @@ function OwnerShelfTypeDefaults({
         <Button
           type="button"
           variant="outline"
-          className="min-h-11 max-w-full whitespace-normal"
+          size="sm"
+          className="h-auto min-h-6 max-w-full whitespace-normal"
           disabled={busy || !currentChoice()}
           onClick={() => void read('previous')}
         >
@@ -332,7 +334,8 @@ function OwnerShelfTypeDefaults({
         <Button
           type="button"
           variant="outline"
-          className="min-h-11 max-w-full whitespace-normal"
+          size="sm"
+          className="h-auto min-h-6 max-w-full whitespace-normal"
           disabled={busy || !currentChoice()}
           onClick={() => void read('first')}
         >

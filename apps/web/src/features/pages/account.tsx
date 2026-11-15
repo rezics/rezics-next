@@ -1,4 +1,5 @@
 import { useOperation } from '../../kernel/exposure';
+import { Button } from '@rezics/ui/shadcn/button';
 import { Cover } from '@rezics/ui/cover';
 import { ContentItem } from '@rezics/ui/content-item';
 import { useId, useSyncExternalStore, type SyntheticEvent } from 'react';
@@ -50,15 +51,17 @@ function AccountManagementLinks({ id, value }: { id: string; value: OverviewValu
     return (
       <p role="status" className="text-sm text-muted-foreground">
         {m.settings_unavailable_title({}, options)}{' '}
-        <button
+        <Button
           type="button"
-          className={linkClass}
+          variant="link"
+          size="sm"
+          className="h-auto min-h-6 whitespace-normal"
           onClick={() => {
             if (currentReader()) void query.refetch();
           }}
         >
           {m.settings_retry({}, options)}
-        </button>
+        </Button>
       </p>
     );
   const allowed = (action: string, operation: string) => accountOperationAllowed(query.data, action, operation);
@@ -152,7 +155,7 @@ export function AccountIdentity(props: Record<string, unknown>) {
   return (
     <div
       data-slot="agent-profile-card"
-      className="rounded-2xl border border-border/60 bg-card p-4 shadow-(--aura-shadow-card) sm:p-6"
+      className="rounded-lg border border-border bg-card p-4 sm:p-6"
     >
       <div
         data-slot="agent-header"
@@ -233,7 +236,7 @@ export function AccountIdentity(props: Record<string, unknown>) {
                     {links.map((link) => (
                       <li key={link.url} className="min-w-0 max-w-full">
                         <a
-                          className={`${linkClass} ${linkColor} inline-flex min-h-11 max-w-full items-center font-medium wrap-anywhere`}
+                          className={`${linkClass} ${linkColor} inline-flex max-w-full items-center font-medium wrap-anywhere`}
                           href={link.url}
                           rel="nofollow noopener noreferrer ugc"
                         >

@@ -1,3 +1,4 @@
+import { authLinkClass } from './button';
 import { m } from './paraglide/messages.js';
 import './account-home-guide.css';
 
@@ -9,13 +10,13 @@ export function AccountHomeGuide() {
         <h2 id="auth-home-settings-heading">{m.auth_home_settings_heading()}</h2>
         <p>{m.auth_home_settings_description()}</p>
         <nav aria-label={m.auth_home_navigation_label()}>
-          <a className="auth-home-link" href="/account/rename">
+          <a className={authLinkClass('outline', 'auth-home-link')} href="/account/rename">
             <span>
               <strong>{m.auth_home_rename()}</strong>
               <small>{m.auth_home_rename_description()}</small>
             </span>
           </a>
-          <a className="auth-home-link auth-home-delete" href="/account/delete">
+          <a className={authLinkClass('destructive', 'auth-home-link auth-home-delete')} href="/account/delete">
             <span>
               <strong>{m.auth_home_delete()}</strong>
               <small>{m.auth_home_delete_description()}</small>
@@ -27,7 +28,7 @@ export function AccountHomeGuide() {
       <section className="auth-home-guide-group" aria-labelledby="auth-home-security-heading">
         <h2 id="auth-home-security-heading">{m.auth_home_security_group()}</h2>
         <nav aria-labelledby="auth-home-security-heading">
-          <a className="auth-home-link" href="/security">
+          <a className={authLinkClass('outline', 'auth-home-link')} href="/security">
             <span>
               <strong>{m.auth_home_security()}</strong>
               <small>{m.auth_home_security_description()}</small>
@@ -40,13 +41,13 @@ export function AccountHomeGuide() {
         <h2 id="auth-home-accounts-heading">{m.auth_home_accounts_group()}</h2>
         <p>{m.auth_home_accounts_description()}</p>
         <nav aria-labelledby="auth-home-accounts-heading">
-          <a className="auth-home-link" href="/organizations/new">
+          <a className={authLinkClass('outline', 'auth-home-link')} href="/organizations/new">
             <span>
               <strong>{m.auth_home_organization()}</strong>
               <small>{m.auth_home_organization_description()}</small>
             </span>
           </a>
-          <a className="auth-home-link" href="/automated/new">
+          <a className={authLinkClass('outline', 'auth-home-link')} href="/automated/new">
             <span>
               <strong>{m.auth_home_automated()}</strong>
               <small>{m.auth_home_automated_description()}</small>

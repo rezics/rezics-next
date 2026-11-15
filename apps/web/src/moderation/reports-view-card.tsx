@@ -418,7 +418,7 @@ export function ReportReviewCard({
                     ) : null}
                     {failure === 'sign-in' ? (
                       <a
-                        className="inline-flex min-h-11 items-center underline"
+                        className="inline-flex items-center underline"
                         href={`/auth/sign-in?return_to=${encodeURIComponent(window.location.pathname + window.location.search)}`}
                       >
                         {m.moderation_queue_sign_in()}
@@ -451,7 +451,7 @@ export function ReportReviewCard({
           </dl>
           {report.evidence ? (
             <details className="min-w-0 border-t pt-2">
-              <summary className="min-h-11 cursor-pointer rounded-sm py-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+              <summary className=" cursor-pointer text-sm font-medium ">
                 {m.moderation_submitted_evidence_label()}
               </summary>
               <p className="mt-1 max-w-prose whitespace-pre-wrap text-sm leading-7 [overflow-wrap:anywhere]">

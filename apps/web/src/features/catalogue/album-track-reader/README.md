@@ -58,5 +58,5 @@ accepted-window bounds. Projection/rendering are O(N + admitted bytes), N ≤ 20
 
 Stories are source examples, not native publication or rendered passes. Focused tests exercise generated native
 operation seams, identity/order/qualifier retention, unavailable continuation, exact retries and retirement. Phone
-390/desktop1280, both themes and all eight locales use wrapping shell/domain components and 44px controls;
+390/desktop1280, both themes and all eight locales use wrapping shell/domain components;
 browser and native verification remain with integration.

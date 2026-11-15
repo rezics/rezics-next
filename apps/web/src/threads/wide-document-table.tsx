@@ -28,7 +28,7 @@ export function WideDocumentTable({
         <Button
           type="button"
           variant="outline"
-          className="min-h-11 min-w-11 max-w-full whitespace-normal px-3 text-start [overflow-wrap:anywhere]"
+          className="max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
           onClick={(event) =>
             onInspect({ kind: 'table', descriptor, children, caption, language, direction }, event.currentTarget)
           }

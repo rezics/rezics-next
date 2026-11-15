@@ -86,7 +86,7 @@ export function CreatorPaymentAttestationFormView({
               disabled={locked || !admitted}
               aria-describedby={`${fieldId}-help ${fieldId}-validation`}
               aria-invalid={!!reference && !validPaymentReference(reference)}
-              className="min-h-11"
+             
               onChange={(event) => onReferenceChange(event.target.value)}
             />
             <p id={`${fieldId}-validation`} className="text-sm text-muted-foreground">
@@ -140,7 +140,7 @@ export function CreatorPaymentAttestationFormView({
             <Button
               type="button"
               variant="outline"
-              className="min-h-11"
+             
               disabled={!admitted || attempt.busy}
               onClick={() => {
                 if (!isCurrent() || !attempt.beginCorrection()) return;
@@ -154,7 +154,7 @@ export function CreatorPaymentAttestationFormView({
           {attempt.correctionEditing ? (
             <Button
               type="submit"
-              className="min-h-11"
+             
               disabled={!admitted || attempt.busy || !attempt.canSubmitCorrection(reference)}
             >
               {m.payment_attestation_correction_submit()}
@@ -163,7 +163,7 @@ export function CreatorPaymentAttestationFormView({
             (!locked || canRetry) && (
               <Button
                 type="submit"
-                className="min-h-11"
+               
                 disabled={!admitted || attempt.busy || (!locked && !validPaymentReference(reference))}
               >
                 {locked ? m.payment_attestation_retry() : m.payment_attestation_submit()}
@@ -174,7 +174,7 @@ export function CreatorPaymentAttestationFormView({
             <Button
               type="button"
               variant="outline"
-              className="min-h-11"
+             
               disabled={!isCurrent() || refreshing}
               onClick={() => void onRefresh()}
             >

@@ -79,7 +79,7 @@ export function CoverComparison({
         <Button
           type="button"
           variant="outline"
-          className="min-h-11 max-w-full whitespace-normal text-start"
+          className="h-auto min-h-7 max-w-full whitespace-normal text-start"
           disabled={disabled}
           onClick={onCorrect}
           data-correct-presentation="cover"
@@ -170,7 +170,7 @@ export function LoadedCoverGallery({
     <fieldset className="min-w-0 space-y-3" disabled={disabled} data-loaded-cover-gallery>
       <legend className="font-semibold">{m.collection_choice_cover_options()}</legend>
       <p className="text-sm text-muted-foreground">{m.library_collection_cover_existing()}</p>
-      <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-border p-3 has-[:checked]:border-primary has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring">
+      <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 has-[:checked]:border-primary has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring/30">
         <input
           type="radio"
           name={groupName}
@@ -214,7 +214,7 @@ export function LoadedCoverGallery({
                         decorative
                       />
                     </div>
-                    <label className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-start gap-2 rounded-sm p-1 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring">
+                    <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2 rounded-sm p-1 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring/30">
                       <input
                         type="radio"
                         name={groupName}

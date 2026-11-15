@@ -43,7 +43,7 @@ export function RealmHomeHeader({
       <Link
         to="/realms/$id"
         params={{ id: realm.id }}
-        className="inline-block min-h-11 min-w-11 max-w-full rounded-md py-1 align-top underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        className="inline-block max-w-full py-1 align-top underline-offset-4 hover:underline"
       >
         {name}
       </Link>
@@ -94,7 +94,7 @@ export function RealmHomeHeader({
           {participation ? (
             <aside
               data-slot="realm-home-participation"
-              className="min-w-0 max-w-full rounded-xl border border-border bg-background/70 p-3 sm:p-4 [&>*]:min-w-0 [&>*]:max-w-full [&_a]:h-auto [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:whitespace-normal [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:whitespace-normal"
+              className="min-w-0 max-w-full rounded-xl border border-border bg-background/70 p-3 sm:p-4 [&>*]:min-w-0 [&>*]:max-w-full [&_a]:h-auto [&_a]:max-w-full [&_a]:whitespace-normal [&_button]:h-auto [&_button]:max-w-full [&_button]:whitespace-normal"
             >
               {participation}
             </aside>
@@ -103,7 +103,7 @@ export function RealmHomeHeader({
       </div>
       <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(15rem,0.75fr)]">
         <section
-          className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4 sm:p-5 [&_a]:h-auto [&_a]:min-h-11 [&_a]:max-w-full [&_a]:whitespace-normal"
+          className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4 sm:p-5 [&_a]:h-auto [&_a]:max-w-full [&_a]:whitespace-normal"
           aria-labelledby={rulesHeadingId}
         >
           <RulesHeading id={rulesHeadingId} className="text-base font-semibold">

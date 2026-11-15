@@ -11,6 +11,7 @@ import { CollectionFollowControl } from './collection-context/follow';
 import { AccountFollowControl } from './account-context/follow';
 import { writeCollectionFollow } from './collection-context/actions';
 import { collectionFollowSource } from './collection-context/schema';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
 import { changeQuestionBoundRating } from '../features/pages/rating-actions';
@@ -564,7 +565,7 @@ export function useDiscoveryPersonalResults(input: {
         return <p role="status">{m.library_follow_unavailable({}, options)}</p>;
       return session.state === 'signed-out' ? (
         <a
-          className="inline-flex min-h-11 items-center text-primary underline"
+          className={buttonVariants({ variant: 'link' })}
           href={`/auth/sign-in?return_to=${encodeURIComponent(input.returnTo)}`}
         >
           {m.account_sign_in({}, options)}
@@ -586,7 +587,7 @@ export function useDiscoveryPersonalResults(input: {
             : 'unavailable';
       return state === 'signed-out' ? (
         <a
-          className="inline-flex min-h-11 items-center text-primary underline"
+          className={buttonVariants({ variant: 'link' })}
           href={`/auth/sign-in?return_to=${encodeURIComponent(input.returnTo)}`}
         >
           {m.account_sign_in({}, options)}
@@ -668,15 +669,15 @@ export function useDiscoveryPersonalResults(input: {
             ? m.discovery_loading({}, { locale: locales.find((locale) => locale === input.locale) ?? 'en' })
             : m.discovery_personal_retired({}, { locale: locales.find((locale) => locale === input.locale) ?? 'en' })}
         </p>
-        <button
+        <Button
           type="button"
+          variant="outline"
           data-discovery-read-retry
           disabled={currentRecovery.state.status === 'pending'}
-          className="min-h-11 rounded-md border px-3 py-2"
           onClick={currentRecovery.retry}
         >
           {m.collection_discovery_retry({}, { locale: locales.find((locale) => locale === input.locale) ?? 'en' })}
-        </button>
+        </Button>
       </div>
     ) : null;
   return {

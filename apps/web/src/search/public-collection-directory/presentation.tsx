@@ -12,7 +12,7 @@ export function renderPublicCollection(collection: PublicCollectionSummary, loca
       <a
         href={`/${locale}/collections/${encodeURIComponent(collection.id)}`}
         lang={collection.titleLanguage}
-        className="block min-h-11 rounded-sm font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        className="block font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
         {collection.title || m.subject_value_unlabelled({}, options)}
       </a>

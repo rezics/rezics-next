@@ -1,4 +1,5 @@
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { buttonVariants, Button } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import type { Release } from '@rezics/definitions';
 import type { Related } from '../../../subject/read-contract';
@@ -7,6 +8,9 @@ import { SourceTagWeight } from '../source-tag-weight';
 import { m } from '../../../paraglide/messages.js';
 import type { WorkTagReturnSelection } from './entry';
 import { conceptLabel, WORK_TAG_PAGE_SIZE, type WorkTagAssertion, type WorkTagProjection } from './model';
+
+const compactWrap =
+  'h-auto min-h-6 max-w-full justify-start whitespace-normal text-start [overflow-wrap:anywhere]';
 
 function queryHref(path: string, params: URLSearchParams): string {
   const query = params.toString();
@@ -73,14 +77,14 @@ function TagDetails({
           href={queryHref(concept.href, conceptQuery)}
           lang={label.lang ?? undefined}
           dir="auto"
-          className={`${buttonVariants({ variant: 'outline', size: 'sm' })} min-h-11 min-w-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]`}
+          className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), compactWrap)}
         >
           {label.text}
         </a>
         <a
           data-tag-action="evidence"
           href={queryHref(concept.href, evidenceQuery)}
-          className={`${buttonVariants({ variant: 'link', size: 'sm' })} min-h-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]`}
+          className={cn(buttonVariants({ variant: 'link', size: 'sm' }), compactWrap, 'underline')}
         >
           {m.subject_work_tag_why({}, o)}
         </a>
@@ -225,22 +229,26 @@ export function WorkTagReadingView({
       </dl>
       {lastPage > 0 ? (
         <nav aria-label={m.subject_work_tag_navigation({}, o)} className="flex flex-wrap gap-2">
-          <button
+          <Button
             type="button"
-            className={buttonVariants({ variant: 'outline', size: 'sm' })}
+            variant="outline"
+            size="sm"
+            className={compactWrap}
             disabled={page === 0}
             onClick={() => setPage((current) => Math.max(0, current - 1))}
           >
             {m.subject_work_tag_previous({}, o)}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className={buttonVariants({ variant: 'outline', size: 'sm' })}
+            variant="outline"
+            size="sm"
+            className={compactWrap}
             disabled={page >= lastPage}
             onClick={() => setPage((current) => Math.min(lastPage, current + 1))}
           >
             {m.subject_work_tag_next({}, o)}
-          </button>
+          </Button>
         </nav>
       ) : null}
     </section>

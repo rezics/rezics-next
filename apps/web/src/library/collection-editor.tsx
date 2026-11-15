@@ -25,8 +25,7 @@ import type { CollectionMember, LibrarySubject } from './reads';
 export { applyCollectionMemberEditPlan, buildCollectionMemberEditPlan } from './collection-member-edit-plan';
 export type { CollectionMemberEditOperation } from './collection-member-edit-plan';
 
-export const fieldClass =
-  'mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary';
+export const fieldClass = 'w-full min-w-0';
 
 /** Secondary draft controls; the page keeps membership and command authority. */
 export function CollectionMetadataEditor({
@@ -84,7 +83,7 @@ export function CollectionMetadataEditor({
           id="collection-edit-details-trigger"
           ref={detailsSummaryRef}
           aria-controls="collection-edit-fields"
-          className="min-h-11 scroll-mt-4 cursor-pointer rounded-lg py-2 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="scroll-mt-4 cursor-pointer rounded-lg font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           {m.library_collection_details()}
         </summary>
@@ -94,7 +93,6 @@ export function CollectionMetadataEditor({
             <Input
               id="collection-edit-title"
               disabled={disabled}
-              className="min-h-11"
               onChange={(event) => onTitleChange(event.target.value)}
               required
               {...collectionTextInputAttributes({
@@ -138,9 +136,6 @@ export function CollectionMetadataEditor({
 }
 
 const dragType = 'application/x-rezics-collection-member';
-/** Reorder and occurrence actions remain 44px for keyboard and pointer users at every width. */
-const actionTargetClass = 'size-11';
-
 /** Shared read-only ListRows for dynamic results, which have no curated member ids or notes. */
 export function CollectionSubjectList({
   subjects,
@@ -210,8 +205,7 @@ export function CollectionSubjectList({
                       type="button"
                       aria-label={actionsLabel}
                       title={actionsLabel}
-                      size="icon-lg"
-                      className={actionTargetClass}
+                      size="icon"
                       variant="ghost"
                     >
                       <EllipsisIcon aria-hidden="true" />
@@ -326,15 +320,14 @@ export function CollectionMemberList({
                 </span>
                 <span
                   aria-hidden="true"
-                  className="inline-flex size-11 cursor-grab items-center justify-center text-muted-foreground"
+                  className="inline-flex size-7 cursor-grab items-center justify-center text-muted-foreground"
                   data-drag-handle
                   draggable={!busy}
                   onDragStart={beginDrag}
                 >
-                  <GripVerticalIcon />
+                  <GripVerticalIcon aria-hidden="true" />
                 </span>
                 <Checkbox
-                  className="m-3.5 after:-inset-3.5 sm:m-0"
                   checked={selectedIds.has(member.id)}
                   disabled={busy || !onSelectionChange}
                   aria-label={m.library_collection_select_member({ title: actionContext })}
@@ -380,7 +373,7 @@ export function CollectionMemberList({
                   open={textSubmitted && !!collectionTextIssue('note', member.note) ? true : undefined}
                 >
                   <summary
-                    className="min-h-11 cursor-pointer py-2 text-sm text-primary"
+                    className="cursor-pointer text-sm text-primary"
                     aria-label={actionLabel(m.library_member_note())}
                   >
                     {m.library_member_note()}
@@ -425,8 +418,7 @@ export function CollectionMemberList({
                       aria-label={actionLabel(m.library_collection_actions())}
                       aria-description={editing && onBoundaryMove ? m.library_collection_boundary_help() : undefined}
                       title={actionLabel(m.library_collection_actions())}
-                      size="icon-lg"
-                      className={actionTargetClass}
+                      size="icon"
                       variant="ghost"
                     >
                       <EllipsisIcon aria-hidden="true" />
@@ -466,8 +458,7 @@ export function CollectionMemberList({
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon-lg"
-                    className={actionTargetClass}
+                    size="icon"
                     aria-label={actionLabel(m.library_member_move_up())}
                     title={actionLabel(m.library_member_move_up())}
                     disabled={busy || moveUpAfter === undefined}
@@ -478,8 +469,7 @@ export function CollectionMemberList({
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon-lg"
-                    className={actionTargetClass}
+                    size="icon"
                     aria-label={actionLabel(m.library_member_move_down())}
                     title={actionLabel(m.library_member_move_down())}
                     disabled={busy || nextAfter === undefined || (!firstPage && index === 0)}
@@ -490,8 +480,8 @@ export function CollectionMemberList({
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon-lg"
-                    className={`ms-2 ${actionTargetClass}`}
+                    size="icon"
+                    className="ms-2"
                     aria-label={actionLabel(m.library_member_remove())}
                     title={actionLabel(m.library_member_remove())}
                     disabled={busy}

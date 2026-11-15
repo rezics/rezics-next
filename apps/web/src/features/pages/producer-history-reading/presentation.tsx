@@ -1,9 +1,9 @@
 import type { ProducerHistoryMeaning } from '../../catalogue/producer-history';
 import { m } from '../../../paraglide/messages.js';
 
-export const actionClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] px-3 py-2';
+export const actionClass = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] px-3';
 export const linkClass =
-  'inline-flex min-h-11 max-w-full items-center py-2 font-sans font-semibold underline [overflow-wrap:anywhere]';
+  'inline-flex max-w-full items-center font-sans font-semibold underline [overflow-wrap:anywhere]';
 export const focusClass = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 export function meaningLabel(meaning: ProducerHistoryMeaning, locale: string) {

@@ -126,7 +126,7 @@ function SelectedFacts({ property, read, locale }: { property: string; read: Fac
   const o = { locale: locale as never };
   const selected = read.public.subject.statements[property] ?? [];
   return (
-    <section className="min-w-0 space-y-3 [overflow-wrap:anywhere] [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:whitespace-normal [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring">
+    <section className="min-w-0 space-y-3 [overflow-wrap:anywhere] [&_a]:inline-flex [&_a]:max-w-full [&_a]:items-center [&_a]:whitespace-normal [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring">
       <ContentItemHeading level={4} className="text-sm font-semibold text-muted-foreground">
         {m.candidate_current({}, o)}
       </ContentItemHeading>
@@ -284,7 +284,7 @@ function FactDiscard({
         variant="outline"
         hidden={confirming}
         disabled={busy || locked || !!draft.command}
-        className="h-auto min-h-11 max-w-full whitespace-normal break-words"
+        className="h-auto min-h-7 max-w-full whitespace-normal break-words"
         onClick={() => {
           const now = latest.current;
           if (
@@ -499,7 +499,7 @@ function FactField({
                 >
                   <SelectTrigger
                     id={sourceId}
-                    className="w-full min-w-0 min-h-11"
+                    className="w-full min-w-0"
                     aria-label={m.facts_choose_value({}, o)}
                     aria-describedby={sourceUnavailable ? recoveryId : undefined}
                     aria-invalid={sourceUnavailable}
@@ -523,7 +523,7 @@ function FactField({
               <Button
                 type="button"
                 variant="outline"
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+                className="h-auto min-h-7 max-w-full whitespace-normal break-words"
                 disabled={!canEdit}
                 onClick={(event) => {
                   if (canEdit) stage(event, sourceSelected ? source : null);
@@ -535,7 +535,7 @@ function FactField({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+                  className="h-auto min-h-7 max-w-full whitespace-normal break-words"
                   disabled={busy || !canStage}
                   onClick={(event) => stage(event, null)}
                 >
@@ -586,13 +586,13 @@ function FactField({
               <Field orientation="horizontal" className="min-w-0">
                 <Checkbox
                   id={includeId}
-                  className="size-11 after:inset-0"
+                 
                   checked={draft.included}
                   disabled={busy || locked}
                   onCheckedChange={(included) => onChange({ ...draft, included: included === true }, draft)}
                 />
                 <FieldLabel
-                  className="min-h-11 min-w-0 items-center whitespace-normal [overflow-wrap:anywhere]"
+                  className="min-w-0 items-center whitespace-normal [overflow-wrap:anywhere]"
                   htmlFor={includeId}
                 >
                   {m.facts_include({}, o)}
@@ -624,7 +624,7 @@ function FactField({
                         }
                         className={buttonVariants({
                           variant: 'outline',
-                          className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2',
+                          className: 'h-auto min-h-7 max-w-full whitespace-normal break-words',
                         })}
                         onClick={(event) => {
                           if (
@@ -965,7 +965,7 @@ function SubjectFactsLive({
               <span lang={pageText(subject.labels, locale).lang}>
                 <a
                   href={href}
-                  className="inline-flex min-h-11 min-w-11 max-w-full items-center underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  className="inline-flex max-w-full items-center underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
                   {label}
                 </a>
@@ -1004,7 +1004,7 @@ function SubjectFactsLive({
         <>
           <nav
             aria-label={m.facts_other_editors({}, o)}
-            className="flex min-w-0 flex-wrap gap-3 [&_a]:h-auto [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:break-words [&_a]:py-2"
+            className="flex min-w-0 flex-wrap gap-3 [&_a]:h-auto [&_a]:min-h-7 [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:break-words"
           >
             <a className={buttonVariants({ variant: 'outline' })} href={`${href}/terms`}>
               {m.catalogue_terms_title({}, o)}
@@ -1135,7 +1135,7 @@ function SubjectFactsLive({
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+                    className="h-auto min-h-7 max-w-full whitespace-normal break-words"
                     disabled={busy || !changed.length}
                     onClick={() => lifetime.active() && setChangedReview({ status: 'current', fingerprint })}
                   >
@@ -1143,7 +1143,7 @@ function SubjectFactsLive({
                   </Button>
                   <Button
                     type="submit"
-                    className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+                    className="h-auto min-h-7 max-w-full whitespace-normal break-words"
                     disabled={
                       busy ||
                       !changed.length ||
@@ -1218,7 +1218,7 @@ function SubjectFactsLive({
       <Button
         type="button"
         variant="outline"
-        className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+        className="h-auto min-h-7 max-w-full whitespace-normal break-words"
         disabled={busy && !onReload}
         onClick={(event) => (onReload ? onReload(event) : void reload())}
       >

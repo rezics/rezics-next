@@ -1,24 +1,14 @@
 import { createContext, useContext, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'react';
 import type { FilterDocument } from '@rezics/filter';
-import {
-  collectionFacetRequest,
-  loadCollectionFacetValues,
-  type CollectionFacetLoader,
-} from '../collection-facet-values';
+import { collectionFacetRequest, loadCollectionFacetValues, type CollectionFacetLoader } from '../collection-facet-values';
 import { RuleEditLink } from '../saved-query-results';
 import { useCollectionOwnerCurrent } from '../collection-owner-current';
 import { requestLanguages } from '../../kernel/languages';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
-import {
-  disclosedValueLabel,
-  savedFilterFacetBatches,
-  savedFilterFacetType,
-  savedFilterReviewTree,
-  type CurrentFieldState,
-  type ReviewTree,
-} from './model';
+import { disclosedValueLabel, savedFilterFacetBatches, savedFilterFacetType, savedFilterReviewTree, type CurrentFieldState, type ReviewTree } from './model';
 import { readSavedFilterReview, type SavedFilterReviewPage } from './read';
+import { Button } from '@rezics/ui/shadcn/button';
 
 export type SavedFilterReviewScope = {
   id: string;
@@ -99,8 +89,7 @@ type ReviewInteractionIntent = {
 };
 
 const emptyLabels = () => ({}) as Record<string, Record<string, Record<string, string>>>;
-const reviewButtonClass =
-  'inline-flex min-h-11 min-w-0 max-w-full items-center justify-center break-words rounded-lg border border-border px-4 py-2 text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
+const reviewButtonClass = 'h-auto min-h-7 min-w-0 max-w-full break-words';
 
 /** Kept injectable so focused stories can exercise refusal and retired-reader outcomes without a fake native result. */
 export function SavedFilterReviewPanel({
@@ -364,7 +353,7 @@ export function SavedFilterReviewPanel({
         role="group"
         tabIndex={-1}
         aria-label={m.saved_filter_review_heading()}
-        className="min-w-0 break-words focus-visible:outline-2 focus-visible:outline-offset-2"
+        className="h-auto min-w-0 break-words focus-visible:outline-2 focus-visible:outline-offset-2"
       >
         <p className="text-sm text-muted-foreground" role="status">
           {m.saved_filter_review_denied()}
@@ -378,7 +367,7 @@ export function SavedFilterReviewPanel({
       role="group"
       tabIndex={-1}
       aria-label={m.saved_filter_review_heading()}
-      className="min-w-0 space-y-3 break-words focus-visible:outline-2 focus-visible:outline-offset-2"
+      className="h-auto min-w-0 space-y-3 break-words focus-visible:outline-2 focus-visible:outline-offset-2"
       onBlurCapture={(event) => {
         const intent = interactionIntentRef.current;
         if (!intent) return;
@@ -399,10 +388,10 @@ export function SavedFilterReviewPanel({
         if (intent && !isIntentFocusTarget(intent, event.target)) interactionIntentRef.current = null;
       }}
     >
-      <button
+      <Button
         ref={openerRef}
         type="button"
-        className={reviewButtonClass}
+        variant="outline" className={reviewButtonClass}
         aria-expanded={expanded}
         aria-controls={expanded ? panelId : undefined}
         disabled={!authorized || shown.phase === 'reading'}
@@ -413,7 +402,7 @@ export function SavedFilterReviewPanel({
         }
       >
         {expanded ? m.saved_filter_review_return() : m.saved_filter_review_open()}
-      </button>
+      </Button>
       {shown.phase === 'closed' ? (
         shown.returned ? (
           <p role="status">{m.saved_filter_review_returned()}</p>
@@ -445,43 +434,43 @@ export function SavedFilterReviewPanel({
               <h3
                 ref={resultRef}
                 tabIndex={-1}
-                className="break-words text-base font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
+                className="h-auto break-words text-base font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
               >
                 {shown.phase === 'ready' ? shown.page.title : scope.title}
               </h3>
               <p className="max-w-prose text-sm text-muted-foreground">{m.saved_filter_review_intro()}</p>
             </div>
-            <button
+            <Button
               type="button"
-              className={reviewButtonClass}
+              variant="outline" className={reviewButtonClass}
               onClick={(event) => returnUnchanged('return', event.currentTarget)}
             >
               {m.saved_filter_review_return()}
-            </button>
+            </Button>
           </div>
           {shown.phase === 'reading' ? <p role="status">{m.saved_filter_review_loading()}</p> : null}
           {shown.phase === 'denied' ? (
             <div role="alert" className="space-y-2">
               <p>{m.saved_filter_review_denied()}</p>
-              <button
+              <Button
                 type="button"
-                className={reviewButtonClass}
+                variant="outline" className={reviewButtonClass}
                 onClick={(event) => void openReview('read', event.currentTarget)}
               >
                 {m.saved_filter_review_retry()}
-              </button>
+              </Button>
             </div>
           ) : null}
           {shown.phase === 'unavailable' ? (
             <div role="alert" className="space-y-2">
               <p>{m.saved_filter_review_unavailable()}</p>
-              <button
+              <Button
                 type="button"
-                className={reviewButtonClass}
+                variant="outline" className={reviewButtonClass}
                 onClick={(event) => void openReview('read', event.currentTarget)}
               >
                 {m.saved_filter_review_retry()}
-              </button>
+              </Button>
             </div>
           ) : null}
           {shown.phase === 'ready' ? (
@@ -532,13 +521,13 @@ function ReviewContent({
         {page.accepted.state !== 'ready' ? (
           <div role="status" className="space-y-2">
             <p>{m.saved_filter_review_accepted_unavailable()}</p>
-            <button
+            <Button
               type="button"
-              className={reviewButtonClass}
+              variant="outline" className={reviewButtonClass}
               onClick={(event) => onRefresh(event.currentTarget)}
             >
               {m.saved_filter_review_retry()}
-            </button>
+            </Button>
           </div>
         ) : null}
         {page.current.state !== 'ready' ? (
@@ -572,14 +561,14 @@ function ReviewContent({
       <div className="min-w-0 space-y-2 border-t border-border pt-3">
         <p className="text-sm text-muted-foreground">{m.saved_filter_review_value_help()}</p>
         {!valueType ? <p role="status">{m.saved_filter_review_value_labels_no_scope()}</p> : null}
-        <button
+        <Button
           type="button"
-          className={reviewButtonClass}
+          variant="outline" className={reviewButtonClass}
           disabled={values.phase === 'loading' || !valueType || page.current.state !== 'ready'}
           onClick={(event) => onReadValues(event.currentTarget)}
         >
           {values.phase === 'loading' ? m.saved_filter_review_value_labels_loading() : valueButtonLabel}
-        </button>
+        </Button>
         <ValueStatus values={values} targetRef={valueStatusRef} />
       </div>
       <div className="space-y-2 border-t border-border pt-3">
@@ -657,7 +646,7 @@ function renderReviewTree(
                 ? disclosedValueLabel(labels, value.fieldId, entry.exact, locale)
                 : entry.currentTypeLabel;
             return (
-              <li key={value.path + '-value-' + index} className="min-w-0 break-words">
+              <li key={value.path + '-value-' + index} className="h-auto min-w-0 break-words">
                 {entry.acceptedLabel ? (
                   <span>
                     {m.saved_filter_review_accepted_label()} {entry.acceptedLabel}{' '}
@@ -685,7 +674,7 @@ function renderReviewTree(
       {value.qualifiers?.length ? (
         <ul className="min-w-0 space-y-2 border-l-2 border-border pl-3">
           {value.qualifiers.map((qualifier, index) => (
-            <li key={value.path + '-qualifier-' + index} className="min-w-0 break-words">
+            <li key={value.path + '-qualifier-' + index} className="h-auto min-w-0 break-words">
               <p>
                 {m.saved_filter_review_qualifier()} <code className="break-all">{qualifier.property}</code>
               </p>
@@ -711,7 +700,7 @@ function renderReviewTree(
                   return (
                     <li
                       key={value.path + '-qualifier-value-' + index + '-' + valueIndex}
-                      className="min-w-0 break-words"
+                      className="h-auto min-w-0 break-words"
                     >
                       {currentLabel ? (
                         <span>
@@ -755,7 +744,7 @@ function ValueStatus({ values, targetRef }: { values: ValueState; targetRef: Ref
     <div
       ref={targetRef}
       tabIndex={-1}
-      className="min-w-0 break-words focus-visible:outline-2 focus-visible:outline-offset-2"
+      className="h-auto min-w-0 break-words focus-visible:outline-2 focus-visible:outline-offset-2"
     >
       {message}
       {'partial' in values && values.partial ? (

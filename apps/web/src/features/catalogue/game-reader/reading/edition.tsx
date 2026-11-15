@@ -1,10 +1,11 @@
 import { useId, useLayoutEffect, useRef } from 'react';
+import { cn } from '@rezics/ui/utils';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../../../paraglide/messages.js';
 import type { GameReaderReady } from '../model';
 import { subjectHref, subjectUrlForView } from '../../../../subject/load-subject';
 import type { WorkReadingLink } from '../../work-reading-port';
-import { action } from './controls';
+import { action, linkClass } from './controls';
 import { GameEvidence } from './evidence';
 
 export type EditionSelection = {
@@ -76,10 +77,14 @@ export function EditionInspection({
       )}
       {statement && row.summary?.label?.value && page.editionTypes.includes(row.summary.type) ? (
         <nav className="flex min-w-0 flex-wrap gap-x-4 gap-y-2" aria-label={m.game_reader_open({}, o)}>
-          <Link href={subjectHref({ id: row.summary.id, label: row.summary.label.value }, locale).href}>
+          <Link
+            className={linkClass}
+            href={subjectHref({ id: row.summary.id, label: row.summary.label.value }, locale).href}
+          >
             {m.game_reader_open({}, o)}
           </Link>
           <Link
+            className={linkClass}
             href={subjectUrlForView(
               subjectHref({ id: row.summary.id, label: row.summary.label.value }, locale),
               'release',
@@ -140,7 +145,7 @@ export function EditionInspection({
       )}
       <button
         type="button"
-        className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+        className={cn(buttonVariants({ variant: 'outline' }), action)}
         onClick={(event) => {
           if (!current()) return;
           const restore =

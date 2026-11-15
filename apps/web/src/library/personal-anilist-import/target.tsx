@@ -37,7 +37,7 @@ export function AniListTargetSearch({
         }}
       />
       <Field>
-        <FieldLabel htmlFor={id} className="min-h-11 items-center">
+        <FieldLabel htmlFor={id} className="items-center">
           {m.library_anilist_target_id()}
         </FieldLabel>
         <Input
@@ -45,7 +45,7 @@ export function AniListTargetSearch({
           data-anilist-target
           value={typed}
           disabled={disabled}
-          className="min-h-11"
+         
           onChange={(event) => {
             setPicked(null);
             assign(event.target.value);

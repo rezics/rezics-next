@@ -8,7 +8,7 @@ import { EditorFailure, type StatementFieldsRead } from './statement-editor-view
 import { StatementSummary } from './statement-summary';
 
 const wrap =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] md:pointer-fine:min-h-8 md:pointer-fine:min-w-0 md:pointer-fine:py-1';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 export function LiteraryCreateReview({
   item,

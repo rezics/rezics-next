@@ -8,7 +8,7 @@ import { CoverCard, CoverGrid, type CoverDensity } from '@rezics/ui/cover-card';
 import { ProgressRow } from '@rezics/ui/progress-row';
 import { Tombstone } from '@rezics/ui/tombstone';
 import { ItemMenu, ItemMenuTriggerSlot, type ItemMenuEntry } from '@rezics/ui/item-menu';
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { RelativeTime } from '@rezics/ui/relative-time';
 import { ShelfList, ShelfListRow, type ShelfSelectionProps } from '@rezics/ui/shelf-list';
 import { ShelfTable, type ShelfColumn, type ShelfTableRow } from '@rezics/ui/shelf-table';
@@ -22,7 +22,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
-import { Button } from '@rezics/ui/shadcn/button';
 import { SelectionBar as SharedSelectionBar } from '@rezics/ui/selection-bar';
 import { useLocation, useNavigate } from '@tanstack/react-router';
 import { EllipsisIcon } from 'lucide-react';
@@ -320,11 +319,10 @@ function ShelfSelectionBar({
   const eligible = controls.rows.some((row) => controls.selectable(row.entry));
   return (
     <>
-      <div className="flex min-h-11 flex-wrap items-center gap-2" data-shelf-selection-launcher>
+      <div className="flex flex-wrap items-center gap-2" data-shelf-selection-launcher>
         {eligible ? (
           <Button
             variant="outline"
-            className="min-h-11"
             disabled={!controls.hydrated || controls.selectionPending}
             onClick={controls.selectPage}
           >
@@ -340,7 +338,6 @@ function ShelfSelectionBar({
         )}
       </div>
       {controls.selected.length ? (
-        <div className="[&_[data-slot=button]]:min-h-11">
           <SharedSelectionBar
             count={controls.selected.length}
             label={(count) => m.library_selection_count({ count })}
@@ -353,7 +350,6 @@ function ShelfSelectionBar({
               <Button
                 ref={launcher}
                 variant="outline"
-                className="min-h-11"
                 disabled={controls.selectionPending || !controls.isCurrent()}
                 onClick={openReview}
               >
@@ -364,7 +360,6 @@ function ShelfSelectionBar({
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <Button
                   variant="ghost"
-                  className="min-h-11"
                   disabled={controls.selectionPending}
                   onClick={controls.selectPage}
                 >
@@ -379,7 +374,6 @@ function ShelfSelectionBar({
             cancelLabel={m.library_selection_clear()}
             moreLabel={m.library_selection_more()}
           />
-        </div>
       ) : null}
       <SelectionReviewView
         open={reviewOpen}
@@ -1084,7 +1078,7 @@ function LabelAssignmentRemoveForm({
         type="submit"
         variant="outline"
         size="sm"
-        className="h-auto min-h-11 max-w-full whitespace-normal"
+        className="h-auto min-h-6 max-w-full whitespace-normal"
         aria-label={m.library_label_shelf_remove()}
         aria-describedby={labelNameId}
       >
@@ -1169,7 +1163,7 @@ function LabelShelfTiles({
                           type="button"
                           variant="ghost"
                           size="icon-sm"
-                          className="shrink-0 pointer-coarse:size-11"
+                          className="shrink-0"
                           aria-label={m.library_entry_actions({ title: title(entry) })}
                         >
                           <EllipsisIcon aria-hidden="true" />
@@ -1366,7 +1360,7 @@ function LabelShelfTiles({
                   type="button"
                   variant="ghost"
                   size="icon-sm"
-                  className="shrink-0 pointer-coarse:size-11"
+                  className="shrink-0"
                   aria-label={m.library_entry_actions({ title: entryTitle.text })}
                 >
                   <EllipsisIcon aria-hidden="true" />
@@ -1401,13 +1395,13 @@ export function ShelfScoreUnavailable({ locale, view }: { locale: string; view: 
       <div className="flex max-w-full flex-wrap gap-2">
         <a
           href={shelfHref(locale, restart)}
-          className={buttonVariants({ variant: 'outline', className: 'min-h-11 h-auto whitespace-normal' })}
+          className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 whitespace-normal' })}
         >
           {m.library_entries_first_page()}
         </a>
         <a
           href={shelfHref(locale, { ...restart, ...dateOrder })}
-          className={buttonVariants({ variant: 'outline', className: 'min-h-11 h-auto whitespace-normal' })}
+          className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 whitespace-normal' })}
         >
           {m.library_score_date_order()}
         </a>

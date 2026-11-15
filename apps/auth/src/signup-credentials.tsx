@@ -48,10 +48,10 @@ export function SignupCredentials({
     <div className="grid min-w-0 gap-4 [overflow-wrap:anywhere]">
       <section
         aria-label={m.auth_signup_handle()}
-        className="grid min-w-0 gap-3 rounded-lg border border-primary/25 bg-primary/5 p-3 sm:p-4"
+        className="grid min-w-0 gap-3 rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10"
       >
         <Field
-          className="min-w-0 gap-2 rounded-md border border-border bg-background p-3 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/40 sm:p-4"
+          className="min-w-0 gap-2"
           data-invalid={Boolean(errors.handle)}
         >
           <FieldLabel htmlFor={ids.handle}>{m.auth_signup_handle()}</FieldLabel>
@@ -82,13 +82,13 @@ export function SignupCredentials({
       </section>
       <section
         aria-label={`${m.auth_signup_email()}, ${m.auth_signup_password()}, ${m.auth_signup_confirm_password()}`}
-        className="grid min-w-0 gap-3 rounded-lg border border-border bg-muted/20 p-3 sm:p-4"
+        className="grid min-w-0 gap-3 rounded-lg bg-muted/40 p-4 ring-1 ring-foreground/10"
       >
         <p className="max-w-prose text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           {m.auth_signup_email()} · {m.auth_signup_password()}
         </p>
         <Field
-          className="min-w-0 gap-2 rounded-md border border-border bg-background p-3 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/40 sm:p-4"
+          className="min-w-0 gap-2"
           data-invalid={Boolean(errors.email)}
         >
           <FieldLabel htmlFor={ids.email}>{m.auth_signup_email()}</FieldLabel>
@@ -112,7 +112,7 @@ export function SignupCredentials({
           </p>
         </Field>
         <Field
-          className="min-w-0 gap-2 rounded-md border border-border bg-background p-3 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/40 sm:p-4"
+          className="min-w-0 gap-2"
           data-invalid={Boolean(errors.password)}
         >
           <FieldLabel htmlFor={ids.password}>{m.auth_signup_password()}</FieldLabel>
@@ -138,7 +138,7 @@ export function SignupCredentials({
           </p>
         </Field>
         <Field
-          className="min-w-0 gap-2 rounded-md border border-border bg-background p-3 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/40 sm:p-4"
+          className="min-w-0 gap-2"
           data-invalid={Boolean(errors.confirmation)}
         >
           <FieldLabel htmlFor={ids.confirmation}>{m.auth_signup_confirm_password()}</FieldLabel>

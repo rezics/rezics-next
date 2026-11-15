@@ -21,6 +21,7 @@ import { ImportLibraryReaderContext } from '../library/showcase-import-return/cu
 import type { ImportLibraryPage, ImportLibraryRead } from '../library/showcase-import-return/read';
 import { m } from '../paraglide/messages.js';
 import { PatternStory } from './page';
+import { Button } from '@rezics/ui/shadcn/button';
 
 function illustrativeLibraryPage(): ImportLibraryPage {
   const page = vndbLifecycleLibraryPage();
@@ -153,9 +154,9 @@ function VndbImportStory({ scenario = 'upload' }: { scenario?: Scenario }) {
           Library return. Opening stays still; locale and viewport changes are manual.
         </p>
         {scenario === 'library' ? (
-          <button type="button" className="min-h-11 underline" onClick={() => setReaderVersion((value) => value + 1)}>
+          <Button type="button" variant="link" size="sm" onClick={() => setReaderVersion((value) => value + 1)}>
             Replace illustrative Library source
-          </button>
+          </Button>
         ) : null}
         <a
           className="underline"

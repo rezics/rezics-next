@@ -508,10 +508,10 @@ function LoginForm({ query, attempt, restored }: { query: string; attempt: Login
         {showCredentials && pageData ? (
           <AuthTaskSection
             aria-label={m.auth_login_heading()}
-            className="rounded-lg border border-border p-4 sm:p-6"
+            className="rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10"
           >
             <h2>{m.auth_login_heading()}</h2>
-            <form className="grid min-w-0 gap-5" method="post" action="/signin" noValidate onSubmit={submit}>
+            <form className="grid min-w-0 gap-4" method="post" action="/signin" noValidate onSubmit={submit}>
               {message ? (
                 <ErrorAlert tabIndex={-1} ref={alert}>
                   {message}
@@ -555,7 +555,7 @@ function LoginForm({ query, attempt, restored }: { query: string; attempt: Login
                 />
                 {passwordError ? <FieldError id={passwordErrorId}>{passwordError}</FieldError> : null}
               </Field>
-              <div className="grid min-w-0 gap-5 border-t border-border pt-4 sm:grid-cols-2">
+              <div className="grid min-w-0 items-start gap-4 border-t border-border pt-4 sm:grid-cols-2">
                 <section aria-label={m.auth_login_password()} className="grid min-w-0 content-start gap-3">
                   <h3 className="text-base font-medium">{m.auth_login_password()}</h3>
                   <AuthActions>

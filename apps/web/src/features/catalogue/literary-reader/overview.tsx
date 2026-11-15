@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { cn } from '@rezics/ui/utils';
 import { useLiteraryVisitLocation } from '../literary-visit/location';
 import type { SelectedContext } from '@rezics/composition';
 import { m } from '../../../paraglide/messages.js';
@@ -68,7 +69,7 @@ export function LiteraryOverviewDestinations({
         {destinations.map(({ view, label }) => (
           <li key={view}>
             <a
-              className={`${literaryStyle.link} w-full justify-between gap-4`}
+              className={cn(literaryStyle.link, 'w-full justify-between gap-4')}
               href={literaryAddress({ id: subject, label: '', locale, view, realm, context }).replace(
                 /#literary-reader$/,
                 view === 'relations' ? '' : '#literary-reader',

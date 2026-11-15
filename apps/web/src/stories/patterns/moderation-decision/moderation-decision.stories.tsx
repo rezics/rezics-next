@@ -4,6 +4,7 @@ import { expect, fn, userEvent, within, waitFor } from 'storybook/test';
 import { DecisionPageView, DecisionReadStatus, type DecisionAppealAction } from '../../../moderation/decision-page';
 import type { DecisionPage } from '../../../moderation/decision-read';
 import { m } from '../../../paraglide/messages.js';
+import { Button } from '@rezics/ui/shadcn/button';
 import {
   decisionNow,
   expiredDecision,
@@ -186,15 +187,13 @@ function ReplacedOperation() {
   const refresh = useRef(async () => openDecision).current;
   return (
     <>
-      <button
-        className="min-h-11"
-        onClick={() => {
+      <Button type="button" variant="outline" size="sm" onClick={() => {
           setPage({ ...openDecision, nativeSourceFingerprint: 'replacement-native-source' });
           queueMicrotask(() => finish.current?.({ state: 'acknowledged', readback: pendingReadback }));
         }}
       >
         Replace native source
-      </button>
+      </Button>
       <DecisionPageView page={page} now={decisionNow} onAppeal={send} onRefresh={refresh} />
     </>
   );
@@ -218,15 +217,13 @@ function ContextReturn() {
   return away ? (
     <article className="space-y-4">
       <h1>Current context after reversal</h1>
-      <button
-        className="min-h-11"
-        onClick={() => {
+      <Button type="button" variant="outline" size="sm" onClick={() => {
           focusReturn.current = true;
           setAway(false);
         }}
       >
         {m.decision_heading()}
-      </button>
+      </Button>
     </article>
   ) : (
     <div

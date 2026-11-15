@@ -31,7 +31,7 @@ import { MusicContextCreateReview } from './music-context-create-review';
 
 const factsId = 'music-context-initial-facts';
 const formClass =
-  'inline-flex min-h-11 min-w-11 items-center justify-center whitespace-normal rounded-md border px-4 py-2';
+  'inline-flex items-center justify-center whitespace-normal border';
 
 function MusicContextCreateSessionLive({ locale, initial }: { locale: string; initial: MusicContextCreateRead }) {
   const { state } = useSession();

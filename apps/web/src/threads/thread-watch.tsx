@@ -9,7 +9,7 @@ import { useThreadWatchCurrent, type ThreadWatchProps, type ThreadWatchView } fr
 export type { ThreadWatchProps } from './thread-watch-current';
 
 const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full shrink whitespace-normal px-3 py-2 text-start leading-snug [overflow-wrap:anywhere]';
+  'h-auto min-h-6 max-w-full shrink whitespace-normal text-start leading-snug [overflow-wrap:anywhere]';
 
 function status(view: ThreadWatchView): string {
   const confirmation =
@@ -148,7 +148,7 @@ export function ThreadWatch(props: ThreadWatchProps) {
       {signedIn && props.admitted ? (
         <ConversationInspection label={m.conversation_watch_help()}>
           <p className="text-xs leading-relaxed text-muted-foreground">{m.thread_watch_guidance()}</p>
-          <a className="inline-flex min-h-11 items-center underline" href={`/${getLocale()}/settings#notifications`}>
+          <a className="inline-flex items-center underline" href={`/${getLocale()}/settings#notifications`}>
             {m.thread_watch_preferences()}
           </a>
         </ConversationInspection>

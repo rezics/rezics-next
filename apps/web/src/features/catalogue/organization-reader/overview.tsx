@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import type { SubjectRead } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 import type { PeopleRead } from '../people-profile';
@@ -134,7 +136,10 @@ export function OrganizationOverview({
             </p>
             {!pending && (
               <a
-                className="inline-flex min-h-11 max-w-full items-center rounded-md border border-border bg-background px-3 py-2 text-left underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
+                className={cn(
+                  buttonVariants({ variant: 'outline' }),
+                  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+                )}
                 href={href}
               >
                 {m.organization_reader_refresh({}, o)}

@@ -29,7 +29,7 @@ import type { Actions, Result } from '../contexts/model';
 import { CapturedSettings, ContextLabelRows, SettingsPicker, SettingsReview } from './context-settings-view';
 
 const actionControlClass =
-  'h-auto min-h-8 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] py-1 max-md:min-h-11 max-md:min-w-11 max-md:py-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:py-2';
+  'h-auto min-h-7 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]';
 
 /** Private, short-lived reading. A known tombstone exists only after this workspace's native delete response. */
 export const EditorialContextWorkspace = catalogueEditor(EditorialContextWorkspaceLive);

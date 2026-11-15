@@ -100,7 +100,7 @@ export function WorkbenchReportSelect({
         disabled={!selectable}
         onCheckedChange={() => controller.toggle(reportId)}
       />
-      <FieldLabel htmlFor={id} className="min-h-11">
+      <FieldLabel htmlFor={id}>
         {m.moderation_bulk_select_report({ number })}
       </FieldLabel>
     </Field>

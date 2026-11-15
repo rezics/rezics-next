@@ -11,7 +11,7 @@ export function SuppliedNames({
   onReturnReveal?: ((token: string | undefined) => void) | undefined;
 }) {
   return (
-    <div className="min-h-11 min-w-0 [overflow-wrap:anywhere]" data-slot="supplied-names">
+    <div className="min-w-0 [overflow-wrap:anywhere]" data-slot="supplied-names">
       <PeopleNamesEntry reading={reading} onReturnReveal={onReturnReveal} />
     </div>
   );

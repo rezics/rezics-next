@@ -225,7 +225,7 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
       <Button
         type="button"
         variant="outline"
-        className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal sm:min-h-9 [@media(pointer:coarse)]:min-h-11"
+        className="h-auto min-h-7 max-w-full whitespace-normal"
         onClick={expanded ? () => setExpanded(false) : openChooser}
         aria-expanded={expanded}
       >
@@ -270,7 +270,7 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
                         type="button"
                         variant={selectedRealm?.realmId === realm.realmId ? 'secondary' : 'outline'}
                         aria-pressed={selectedRealm?.realmId === realm.realmId}
-                        className="h-auto min-h-11 w-full min-w-11 justify-start whitespace-normal text-left [overflow-wrap:anywhere]"
+                        className="h-auto min-h-7 w-full justify-start whitespace-normal text-left [overflow-wrap:anywhere]"
                         onClick={() => chooseRealm(realm)}
                       >
                         <span dir="auto" className="block min-w-0 max-w-full">
@@ -355,7 +355,7 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
                         <Button
                           type="button"
                           variant="outline"
-                          className="mt-3 h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]"
+                          className="mt-3 h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]"
                           disabled={inspection.state === 'loading'}
                           onClick={() => void chooseBoard(board)}
                         >

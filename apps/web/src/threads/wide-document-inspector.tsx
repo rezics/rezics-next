@@ -322,7 +322,7 @@ function WideDocumentInspector({
                 <Button
                   type="button"
                   variant="outline"
-                  className="min-h-11 min-w-11 shrink-0 px-3"
+                  className="shrink-0"
                   aria-label={m.wide_document_inspector_close({}, options)}
                 />
               }
@@ -386,7 +386,7 @@ function CodeInspectionView({
           <Button
             type="button"
             variant="outline"
-            className="min-h-11 min-w-11 max-w-full whitespace-normal px-3 text-start [overflow-wrap:anywhere]"
+            className="max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
             aria-pressed={wrap}
             onClick={() => setWrap((current) => !current)}
           >
@@ -395,7 +395,7 @@ function CodeInspectionView({
           <Button
             type="button"
             variant="outline"
-            className="min-h-11 min-w-11 max-w-full whitespace-normal px-3 text-start [overflow-wrap:anywhere]"
+            className="max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
             disabled={!copyAvailable}
             onClick={() => onCopy(inspection.descriptor)}
           >

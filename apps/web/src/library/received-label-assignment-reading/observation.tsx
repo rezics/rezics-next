@@ -46,7 +46,7 @@ export function ReceivedAssignmentObservation({
     >
       <header className="min-w-0 space-y-2 border-b pb-4">
         <p className="text-sm text-muted-foreground">{m.library_received_reading_assignment({ position })}</p>
-        <h3 id={titleId} lang={title?.lang} dir="auto" className="text-lg font-semibold [overflow-wrap:anywhere]">
+        <h3 id={titleId} lang={title?.lang} dir="auto" className="h-auto text-lg font-semibold [overflow-wrap:anywhere]">
           {title?.text ?? m.library_subject_unavailable()}
         </h3>
         {row.subject?.typeLabel ? <p className="text-sm text-muted-foreground">{row.subject.typeLabel}</p> : null}
@@ -55,7 +55,7 @@ export function ReceivedAssignmentObservation({
             type="button"
             variant="outline"
             size="sm"
-            className="h-auto min-h-11 whitespace-normal break-words"
+            className="h-auto min-h-6 whitespace-normal break-words"
             aria-describedby={titleId}
             aria-pressed={replacing}
             onClick={() => {
@@ -69,7 +69,7 @@ export function ReceivedAssignmentObservation({
             type="button"
             variant="ghost"
             size="sm"
-            className="h-auto min-h-11 whitespace-normal break-words"
+            className="h-auto min-h-6 whitespace-normal break-words"
             aria-describedby={titleId}
             onClick={() => {
               if (isCurrent()) remove();
@@ -85,7 +85,7 @@ export function ReceivedAssignmentObservation({
           <h4 id={membershipId} className="font-medium">
             {m.library_received_reading_membership()}
           </h4>
-          <p className="whitespace-pre-wrap [overflow-wrap:anywhere]" dir="auto">
+          <p className="h-auto whitespace-pre-wrap [overflow-wrap:anywhere]" dir="auto">
             {label.name}
           </p>
           <p className="text-sm text-muted-foreground">{m.library_labels_member_scope()}</p>
@@ -94,7 +94,7 @@ export function ReceivedAssignmentObservation({
           <h4 id={entryId} className="font-medium">
             {m.library_received_reading_entry_state()}
           </h4>
-          <p className="[overflow-wrap:anywhere]" dir="auto">
+          <p className="h-auto [overflow-wrap:anywhere]" dir="auto">
             {row.state ? (row.stateLabel ?? m.library_other()) : m.library_received_reading_state_unavailable()}
           </p>
           {!row.entryIdentity ? (
@@ -112,7 +112,7 @@ export function ReceivedAssignmentObservation({
         <details className="min-w-0 space-y-2 py-4" data-received-work-context>
           <summary
             id={contextId}
-            className="flex min-h-11 cursor-pointer items-center font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="flex cursor-pointer items-center font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             {m.library_received_reading_work_context()}
           </summary>
@@ -129,10 +129,7 @@ export function ReceivedAssignmentObservation({
           {workHref ? (
             <a
               href={workHref}
-              className={buttonVariants({
-                variant: 'outline',
-                className: 'h-auto min-h-11 max-w-full whitespace-normal break-words',
-              })}
+             className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 max-w-full whitespace-normal break-words' })}
               aria-describedby={titleId}
               data-received-work-destination=""
               onClick={(event) => {

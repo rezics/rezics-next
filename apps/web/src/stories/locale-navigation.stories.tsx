@@ -19,6 +19,7 @@ import { AppearanceControls } from '../shell/appearance-controls';
 import { LocaleNavigationProvider } from '../shell/locale-navigation/context';
 import type { LocaleNavigationContextValue } from '../shell/locale-navigation/context';
 import type { Locale, LocaleNavigationLocation } from '../shell/locale-navigation/routing';
+import { Button } from '@rezics/ui/shadcn/button';
 
 type Journey = 'success' | 'canceled' | 'recovery';
 const initialLocation = '/en/subjects/reader-01?view=latest&return_to=%2Fsearch%3Fq%3Dmoon#chapter-4';
@@ -65,13 +66,10 @@ function ReaderSurface({ journey }: { journey: Journey }) {
           {location.hash}
         </code>
       </p>
-      <button
-        type="button"
-        className="min-h-11 rounded-lg border border-border px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        onClick={() => setDirty((value) => !value)}
+      <Button type="button" variant="outline" size="sm" onClick={() => setDirty((value) => !value)}
       >
         {dirty ? 'Draft is dirty' : 'Mark reader draft dirty'}
-      </button>
+      </Button>
       {blocker.status === 'blocked' ? (
         <section
           role="alertdialog"
@@ -84,20 +82,14 @@ function ReaderSurface({ journey }: { journey: Journey }) {
           </h2>
           <p className="text-sm">The current editor asks before leaving this page.</p>
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="min-h-11 rounded-lg border border-border px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() => blocker.reset?.()}
+            <Button type="button" variant="outline" size="sm" onClick={() => blocker.reset?.()}
             >
               Stay here
-            </button>
-            <button
-              type="button"
-              className="min-h-11 rounded-lg bg-primary px-3 text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() => blocker.proceed?.()}
+            </Button>
+            <Button type="button" variant="default" size="sm" onClick={() => blocker.proceed?.()}
             >
               Leave reader
-            </button>
+            </Button>
           </div>
         </section>
       ) : null}

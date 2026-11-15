@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { EllipsisIcon } from 'lucide-react';
 import { Button } from '../shadcn/button.tsx';
 import { ButtonGroup } from '../shadcn/button-group.tsx';
 import { Menu } from './menu.tsx';
@@ -31,7 +32,7 @@ export function SelectionBar({
     <div
       role={ariaLabel ? 'region' : undefined}
       aria-label={ariaLabel}
-      className="fixed inset-x-0 z-40 flex flex-wrap items-center justify-between gap-3 border-t bg-background p-3 shadow-lg"
+      className="fixed inset-x-0 z-40 flex flex-wrap items-center justify-between gap-3 border-t bg-background p-3"
       style={{ bottom: bottomOffset ?? 'calc(env(safe-area-inset-bottom, 0px) + var(--bottom-nav-height, 0px))' }}
     >
       {statusMessage ? (
@@ -45,7 +46,7 @@ export function SelectionBar({
       <ButtonGroup className="hidden sm:flex">
         {primaryAction}
         {actions}
-        <Button variant="outline" className="min-h-11" onClick={onCancel}>
+        <Button variant="outline" onClick={onCancel}>
           {cancelLabel}
         </Button>
       </ButtonGroup>
@@ -55,12 +56,12 @@ export function SelectionBar({
           title={moreLabel}
           content={actions}
           trigger={
-            <Button variant="outline" className="min-h-11" aria-label={moreLabel}>
-              ⋯
+            <Button variant="outline" size="icon" aria-label={moreLabel}>
+              <EllipsisIcon aria-hidden="true" />
             </Button>
           }
         />
-        <Button variant="outline" className="min-h-11" onClick={onCancel}>
+        <Button variant="outline" onClick={onCancel}>
           {cancelLabel}
         </Button>
       </div>

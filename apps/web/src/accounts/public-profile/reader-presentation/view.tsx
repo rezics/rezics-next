@@ -34,7 +34,7 @@ export function ProfileReadingStatus({ reading, locale }: { reading: ProfileRead
           type="button"
           variant="outline"
           size="sm"
-          className="min-h-11 max-w-full whitespace-normal text-start"
+          className="h-auto min-h-6 max-w-full whitespace-normal text-start"
           aria-disabled={reading.state === 'loading'}
           onClick={() => {
             if (reading.state !== 'loading') reading.retry?.();

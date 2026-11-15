@@ -29,7 +29,7 @@ function EntitlementCurrentContext({
             {subject.href ? (
               <a
                 href={subject.href}
-                className="inline-flex min-h-11 max-w-full items-center whitespace-normal text-primary underline underline-offset-4"
+                className="inline-flex max-w-full items-center whitespace-normal text-primary underline underline-offset-4"
               >
                 {m.entitlements_subject_link()}
               </a>
@@ -93,13 +93,13 @@ function EntitlementSupportingReferences({
           href={receiptHref}
           className={buttonVariants({
             variant: 'outline',
-            className: 'min-h-11 w-full max-w-full whitespace-normal text-center sm:w-fit',
+            className: 'h-auto min-h-7 w-full max-w-full whitespace-normal text-center sm:w-fit',
           })}
         >
           {m.order_receipt()}
         </a>
         <details className="min-w-0 text-sm sm:flex-1 sm:max-w-3xl">
-          <summary className="min-h-11 cursor-pointer content-center rounded-sm py-3 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          <summary className="cursor-pointer content-center rounded-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             {m.entitlements_technical_details()}
           </summary>
           <dl className="min-w-0 space-y-3 [overflow-wrap:anywhere]">
@@ -108,7 +108,7 @@ function EntitlementSupportingReferences({
               <dd>
                 <a
                   href={receiptHref}
-                  className="inline-flex min-h-11 max-w-full items-center break-all font-mono text-primary underline underline-offset-4"
+                  className="inline-flex max-w-full items-center break-all font-mono text-primary underline underline-offset-4"
                 >
                   {record.orderId}
                 </a>
@@ -151,7 +151,7 @@ export function EntitlementPage({
           href={purchaseHistoryHref(locale, 'entitlements', history)}
           className={buttonVariants({
             variant: 'link',
-            className: 'min-h-11 w-fit max-w-full justify-start whitespace-normal px-0 text-left',
+            className: 'h-auto min-h-7 w-fit max-w-full justify-start whitespace-normal px-0 text-left',
           })}
         >
           {m.entitlements_heading()}

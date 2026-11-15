@@ -1,12 +1,17 @@
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
+import { cn } from '@rezics/ui/utils';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 
 const uuidPattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}';
-const recoveryLinkClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm px-3 py-2 text-primary underline whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
+const recoveryLinkClass = cn(
+  buttonVariants({ variant: 'link' }),
+  'h-auto min-h-7 max-w-full whitespace-normal px-0',
+);
+const wrapAction = 'h-auto min-h-7 max-w-full whitespace-normal';
 
 export function FollowCountContextRecovery() {
   const destination = `/${getLocale()}/library/follow-counts`;
@@ -32,9 +37,7 @@ export function FollowCountContextRecovery() {
               <SelectTrigger
                 id="follow-count-context-type"
                 aria-labelledby={`${'follow-count-context-type'}-label`}
-                className={
-                  'flex min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-base text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring'
-                }
+                className="w-full max-w-full"
               >
                 <SelectValue />
               </SelectTrigger>
@@ -54,7 +57,7 @@ export function FollowCountContextRecovery() {
           <label htmlFor="follow-count-context-id" className="text-sm font-medium">
             {m.library_follow_count_context_id_label()}
           </label>
-          <input
+          <Input
             id="follow-count-context-id"
             name="targetId"
             type="text"
@@ -62,17 +65,13 @@ export function FollowCountContextRecovery() {
             maxLength={36}
             pattern={uuidPattern}
             aria-describedby="follow-count-context-id-help"
-            className="min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-base text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
           />
           <p id="follow-count-context-id-help" className="text-sm text-muted-foreground">
             {m.library_follow_count_context_id_help()}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Button
-            type="submit"
-            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
-          >
+          <Button type="submit" className={wrapAction}>
             {m.library_follow_count_context_submit()}
           </Button>
           <a href={destination} className={recoveryLinkClass}>

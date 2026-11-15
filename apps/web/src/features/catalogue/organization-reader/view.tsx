@@ -4,7 +4,14 @@ import { pickText } from '@rezics/composition';
 import { m } from '../../../paraglide/messages.js';
 import { subjectHref } from '../../../subject/subject-href';
 import { defaultReader, type Reader } from '../../../subject/reader';
-import { ExternalValue, PlainLink, spoilerLevel, type LinkProps, type PageLink } from '../../pages/shared';
+import {
+  ExternalValue,
+  PlainLink,
+  ProfileDetails,
+  spoilerLevel,
+  type LinkProps,
+  type PageLink,
+} from '../../pages/shared';
 import {
   organizationHistoryVisitReturn,
   type OrganizationHistoryVisitReturn,
@@ -19,8 +26,11 @@ import {
   organizationHistoryDestinationHref,
   replaceOrganizationHistoryAddress,
 } from './reading/visit';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { OrganizationValue, organizationControl as control } from './reading/value';
-import { ProfileDetails } from '../../pages/shared';
+
+const outlineControl = cn(buttonVariants({ variant: 'outline' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]');
 
 type Selection = {
   episode: number;
@@ -260,7 +270,7 @@ export function OrganizationReader({
   return (
     <section
       data-slot="organization-reader"
-      className="min-w-0 space-y-6 [overflow-wrap:anywhere] [&_a]:inline-flex [&_a]:min-h-11 [&_a]:items-center"
+      className="min-w-0 space-y-6 [overflow-wrap:anywhere] [&_a]:inline-flex [&_a]:[&_a]:items-center"
     >
       <h2
         ref={heading}
@@ -276,7 +286,7 @@ export function OrganizationReader({
               <p className="leading-relaxed">{m.organization_reader_changed({}, o)}</p>
               <button
                 type="button"
-                className={control + ' rounded-md border border-border bg-background px-3'}
+                className={outlineControl}
                 onClick={() => {
                   if (!episode.current()) return;
                   setChanged(false);
@@ -326,7 +336,7 @@ export function OrganizationReader({
           <p role="status" className="leading-relaxed text-muted-foreground">
             {m.organization_reader_unavailable({}, o)}
           </p>
-          <a href={href} className={control + ' rounded-md border border-border bg-background px-3'}>
+          <a href={href} className={outlineControl}>
             {m.organization_reader_refresh({}, o)}
           </a>
         </div>
@@ -395,18 +405,18 @@ function Inspection({
       tabIndex={-1}
       role="region"
       aria-label={m.organization_reader_inspect({}, o)}
-      className="min-w-0 space-y-4 rounded-xl border bg-card p-4 shadow-sm focus-visible:outline-2 focus-visible:outline-ring sm:p-5"
+      className="min-w-0 space-y-4 rounded-xl border bg-card p-4 focus-visible:outline-2 focus-visible:outline-ring sm:p-5"
     >
       <Evidence fact={fact} presentation={presentation} />
       <div className="space-y-3 border-t pt-3">
         <p className="text-sm leading-relaxed text-muted-foreground">{m.organization_reader_navigation({}, o)}</p>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-          <Link href={correction} className={control + ' rounded-md border border-border bg-background px-3'}>
+          <Link href={correction} className={outlineControl}>
             {m.facts_title({}, o)}
           </Link>
           <button
             type="button"
-            className={control + ' rounded-md border border-border bg-background px-3'}
+            className={outlineControl}
             onClick={close}
           >
             {m.organization_reader_return({}, o)}
@@ -591,7 +601,7 @@ function OrganizationFacts({
   const renderField = (field: (typeof model.fields)[number]) => (
     <section
       key={field.id}
-      className={`min-w-0 space-y-3 rounded-xl border bg-card p-4 shadow-sm sm:p-5 ${
+      className={`min-w-0 space-y-3 rounded-xl border bg-card p-4 sm:p-5 ${
         field.kind === 'dates'
           ? 'border-t-4 border-t-primary/70'
           : field.kind === 'relations'
@@ -638,7 +648,7 @@ function OrganizationFacts({
               </div>
               <button
                 type="button"
-                className={control + ' block border-t border-border pt-2 text-sm'}
+                className={cn(buttonVariants({ variant: 'ghost' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'w-full')}
                 onClick={(event) => open(fact, event)}
                 aria-expanded={inspecting}
                 data-organization-property={field.id}
@@ -725,13 +735,13 @@ function OrganizationFacts({
         <nav className="flex flex-col gap-2 sm:flex-row sm:flex-wrap" aria-label={m.facts_title({}, o)}>
           <CurrentLink
             href={`${currentHref.split('?')[0]}/relations${realm ? `?${new URLSearchParams({ realm })}` : ''}`}
-            className={control + ' w-full justify-start rounded-md border border-border bg-background px-3 sm:w-auto'}
+            className={cn(outlineControl, 'w-full sm:w-auto')}
           >
             {m.subject_relations({}, o)}
           </CurrentLink>
           <CurrentLink
             href={`${currentHref.split('?')[0]}/works${realm ? `?${new URLSearchParams({ realm })}` : ''}`}
-            className={control + ' w-full justify-start rounded-md border border-border bg-background px-3 sm:w-auto'}
+            className={cn(outlineControl, 'w-full sm:w-auto')}
           >
             {m.subject_works({}, o)}
           </CurrentLink>
@@ -788,7 +798,7 @@ function OrganizationFacts({
         <div className="min-w-0 space-y-4 border-t pt-4">
           <CurrentLink
             href={catalogueEntries.facts({ id: subject.id, label: title.text, locale }).href}
-            className={control + ' rounded-md border border-border bg-background px-3'}
+            className={outlineControl}
           >
             {m.facts_title({}, o)}
           </CurrentLink>

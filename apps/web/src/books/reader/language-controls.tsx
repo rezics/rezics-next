@@ -6,7 +6,7 @@ import { bookPreferredLanguages, type BookLanguageSource } from './languages';
 import { createBookLanguageVisit } from './language-state';
 import type { BookChapterAddress, BookChapterPage } from './source';
 
-const control = 'min-h-11 min-w-11 whitespace-normal text-start';
+const control = 'h-auto min-h-7 whitespace-normal text-start';
 
 export function BookLanguageControls({
   source,
@@ -41,7 +41,7 @@ export function BookLanguageControls({
         if (event.currentTarget.open && state.state === 'idle') void visit.load(null);
       }}
     >
-      <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-sm text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
+      <summary className="flex cursor-pointer items-center justify-between gap-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
         {m.book_reader_language_heading({}, options)}
         <ChevronDown aria-hidden="true" className="size-4 shrink-0 group-open/languages:rotate-180" />
       </summary>
@@ -84,7 +84,7 @@ export function BookLanguageControls({
                 <Button
                   type="button"
                   variant="ghost"
-                  className={`${control} h-auto w-full justify-start gap-3 py-3`}
+                  className={`${control} h-auto min-h-7 w-full justify-start gap-3`}
                   aria-pressed={page.address.selection.bodyLanguage === choice.language}
                   onClick={(event) =>
                     void visit.choose(

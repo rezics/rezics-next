@@ -23,7 +23,7 @@ import { boardRequestHref } from './board-navigation';
 import type { BoardPreparedNavigation } from './board-navigation';
 
 const actionControlLayout =
-  '[&_a]:h-auto [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:py-2 [&_a]:whitespace-normal [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:py-2 [&_button]:whitespace-normal [&_svg]:shrink-0';
+  '[&_a]:max-w-full [&_a]:whitespace-normal [&_button]:max-w-full [&_button]:whitespace-normal [&_svg]:shrink-0';
 
 function BoardCommunityAboutBody({
   page,
@@ -55,7 +55,7 @@ function BoardCommunityAboutBody({
       {contextRealm ? (
         <a
           href={`/${getLocale()}/realms/${contextRealm.id}`}
-          className="inline-flex min-h-11 max-w-full items-center break-words text-sm font-medium text-primary hover:underline"
+          className="inline-flex max-w-full items-center break-words text-sm font-medium text-primary hover:underline"
         >
           {contextRealm.title}
         </a>
@@ -154,7 +154,7 @@ export function BoardCommunity({
             </div>
             <div data-slot="board-community-actions" className="flex min-w-0 flex-col gap-3 md:w-56 md:shrink-0 md:items-end">
               {startAction ? (
-                <div data-slot="board-community-start" className={`flex min-w-0 max-w-full flex-wrap md:justify-end ${actionControlLayout}`}>
+                <div data-slot="board-community-start" className={`flex min-w-0 max-w-full flex-wrap items-center gap-2 md:justify-end ${actionControlLayout}`}>
                   {startAction}
                 </div>
               ) : null}
@@ -169,7 +169,7 @@ export function BoardCommunity({
             </div>
           </div>
           <details className="border-t border-border pt-3 xl:hidden">
-            <summary className="min-h-11 min-w-11 max-w-full cursor-pointer content-center rounded-lg py-2 text-sm font-semibold hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            <summary className="max-w-full cursor-pointer content-center rounded-lg text-sm font-semibold hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
               {m.board_community_about()}
             </summary>
             <div className="mt-3 min-w-0 space-y-4 rounded-2xl bg-muted/40 p-4 [overflow-wrap:anywhere] [&_a]:max-w-full [&_a]:whitespace-normal [&_pre]:whitespace-pre-wrap">
@@ -216,7 +216,7 @@ export function BoardCommunityMenu({ boardId, signedIn = false }: { boardId: str
     <Menu
       title={m.board_more_actions()}
       trigger={
-        <Button variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label={m.board_more_actions()}>
+        <Button variant="ghost" size="icon" aria-label={m.board_more_actions()}>
           <EllipsisIcon />
         </Button>
       }
@@ -274,7 +274,7 @@ export function BoardCommunityStatus({
           })}
           className={buttonVariants({
             variant: 'outline',
-            className: 'mt-4 h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal',
+            className: 'mt-4 h-auto min-h-7 max-w-full whitespace-normal',
           })}
         >
           {m.board_reading_restart()}
@@ -283,7 +283,7 @@ export function BoardCommunityStatus({
       {state === 'error' && onRetry ? (
         <Button
           variant="outline"
-          className="mt-4 h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal"
+          className="mt-4 h-auto min-h-7 max-w-full whitespace-normal"
           onClick={onRetry}
         >
           {m.board_community_retry()}

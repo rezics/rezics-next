@@ -11,9 +11,9 @@ import { CopyTextReader, dateText } from './text-reader';
 import type { CopyInventorySelection, RetiredCopy } from './selection';
 import { copyConditionDisplayText } from '../copy-condition';
 import type { CopyConditionDisplay } from '@rezics/client';
+import { Button } from '@rezics/ui/shadcn/button';
 
-const control =
-  'inline-flex min-h-11 min-w-11 max-w-full cursor-pointer items-center justify-center rounded-lg border border-border px-3 py-2 text-center text-sm whitespace-normal [overflow-wrap:anywhere] hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-default disabled:opacity-60';
+const control = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 /** Differences describe these supplied observations only; they make no claim about other holdings. */
 function Difference({ different, compared }: { different: boolean; compared: boolean }) {
@@ -39,7 +39,7 @@ function Fact({
   return (
     <div className="min-w-0 border-t border-border py-3">
       <dt className="text-sm font-semibold">{label}</dt>
-      <dd className="min-w-0 space-y-1 pt-1 text-sm [overflow-wrap:anywhere]">{children}</dd>
+      <dd className="h-auto min-w-0 space-y-1 pt-1 text-sm [overflow-wrap:anywhere]">{children}</dd>
       <Difference different={different} compared={compared} />
     </div>
   );
@@ -121,7 +121,7 @@ function ReceivedCopy({
         <p className="text-sm font-medium text-muted-foreground">
           {m.library_copy_compare_page_position({ position })}
         </p>
-        <h3 id={heading} lang={title?.lang} className="font-semibold [overflow-wrap:anywhere]">
+        <h3 id={heading} lang={title?.lang} className="h-auto font-semibold [overflow-wrap:anywhere]">
           {title?.text ?? m.library_subject_unavailable()}
         </h3>
         <p className="text-sm text-muted-foreground">{m.library_copy_compare_record_hint()}</p>
@@ -223,7 +223,7 @@ function ReceivedCopy({
           <dt className="sr-only">{m.library_copy_compare_identifiers()}</dt>
           <dd>
             <details>
-              <summary className="min-h-11 cursor-pointer content-center rounded-md py-2 text-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+              <summary className="cursor-pointer content-center rounded-md py-2 text-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                 {m.library_copy_compare_identifiers()}
               </summary>
               <p className="py-2 text-xs text-muted-foreground">{m.library_copy_compare_identifiers_hint()}</p>
@@ -246,9 +246,9 @@ function ReceivedCopy({
         </div>
       </dl>
       <footer className="min-w-0 space-y-2 border-t border-border pt-3">
-        <button
+        <Button
           type="button"
-          className={`${control} w-full`}
+          variant="outline" className="w-full"
           onClick={onEdit}
           disabled={editorOpen}
           aria-label={m.library_copy_compare_edit_named({
@@ -257,10 +257,10 @@ function ReceivedCopy({
           })}
         >
           {m.library_copy_compare_edit()}
-        </button>
-        <button type="button" className={`${control} w-full`} onClick={onRemove}>
+        </Button>
+        <Button type="button" variant="outline" className="w-full" onClick={onRemove}>
           {m.library_copy_compare_remove()}
-        </button>
+        </Button>
       </footer>
     </article>
   );
@@ -287,7 +287,7 @@ function RetiredObservation({
           : m.library_copy_compare_missing_record()}
       </p>
       <details>
-        <summary className="min-h-11 cursor-pointer content-center rounded-md py-2 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        <summary className="cursor-pointer content-center rounded-md py-2 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
           {m.library_copy_compare_previous_identity()}
         </summary>
         <dl className="space-y-2 py-2">
@@ -314,13 +314,13 @@ function RetiredObservation({
         </dl>
       </details>
       {current ? (
-        <button
+        <Button
           type="button"
-          className={control}
+          variant="outline" className={control}
           onClick={() => selection.returnToRow(current, `${regionId}-select-${current.id}`)}
         >
           {m.library_copy_compare_find_row()}
-        </button>
+        </Button>
       ) : null}
     </div>
   );
@@ -379,29 +379,29 @@ export function CopyInventoryReview({
         </div>
         <div className="flex min-w-0 flex-wrap gap-2">
           {!selection.open ? (
-            <button
+            <Button
               type="button"
-              className={control}
+              variant="outline" className={control}
               onClick={selection.show}
               aria-expanded={false}
               aria-controls={`${id}-body`}
             >
               {m.library_copy_compare_open()}
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
               type="button"
-              className={control}
+              variant="outline" className={control}
               onClick={selection.close}
               aria-expanded={true}
               aria-controls={`${id}-body`}
             >
               {m.library_copy_compare_close()}
-            </button>
+            </Button>
           )}
-          <button
+          <Button
             type="button"
-            className={control}
+            variant="outline" className={control}
             disabled={!selection.count && !selection.retired.length}
             onClick={() => {
               selection.reset();
@@ -409,7 +409,7 @@ export function CopyInventoryReview({
             }}
           >
             {m.library_copy_compare_reset()}
-          </button>
+          </Button>
         </div>
       </div>
       {selection.retired.length ? (
@@ -430,9 +430,9 @@ export function CopyInventoryReview({
               regionId={id}
             />
           ))}
-          <button type="button" className={control} onClick={selection.dismissRetired}>
+          <Button type="button" variant="outline" className={control} onClick={selection.dismissRetired}>
             {m.library_copy_compare_dismiss()}
-          </button>
+          </Button>
         </div>
       ) : null}
       {selection.count === 4 ? <p className="text-sm">{m.library_copy_compare_limit()}</p> : null}
@@ -441,9 +441,9 @@ export function CopyInventoryReview({
         {editorOpen ? (
           <div className="space-y-2 rounded-lg border border-border p-3 text-sm">
             <p>{m.library_copy_compare_editor_open()}</p>
-            <button type="button" className={control} onClick={onReturnToEditor}>
+            <Button type="button" variant="outline" className={control} onClick={onReturnToEditor}>
               {m.library_copy_compare_return_editor()}
-            </button>
+            </Button>
           </div>
         ) : null}
         {!selection.count ? (

@@ -28,8 +28,8 @@ import {
   type CompanionResetIntent,
 } from './curation-companion-state';
 
-const controlClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]';
-const selectClass = 'w-full min-w-0 max-w-full min-h-11';
+const controlClass = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const selectClass = 'w-full min-w-0 max-w-full';
 
 type CompanionViewControlsProps = {
   profile: PresentationProfile;

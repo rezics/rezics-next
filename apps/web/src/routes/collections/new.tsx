@@ -192,7 +192,6 @@ export function NewCollectionForm({
             <FieldLabel htmlFor="collection-new-title">{m.library_collection_title()}</FieldLabel>
             <Input
               id="collection-new-title"
-              className="min-h-11"
               name="title"
               required
               value={title}
@@ -242,7 +241,7 @@ export function NewCollectionForm({
             className="min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-5"
             data-collection-presentation-settings
           >
-            <summary className="min-h-11 cursor-pointer py-2 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            <summary className="cursor-pointer font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
               {m.collection_choice_heading()}
             </summary>
             <div className="pt-3">
@@ -270,9 +269,9 @@ export function NewCollectionForm({
         </section>
       ) : null}
       {failure ? <p role="alert">{failure}</p> : null}
-      <div className="sticky bottom-3 z-20 flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3 shadow-sm">
+      <div className="sticky bottom-3 z-20 flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3">
         <Button
-          className="h-auto min-h-11 max-w-full whitespace-normal px-5 py-3"
+          className="h-auto min-h-7 max-w-full whitespace-normal"
           disabled={retired || pending || visibility === ''}
           aria-busy={pending}
           type="submit"

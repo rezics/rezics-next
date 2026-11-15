@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { importLibraryReturnHref } from '../showcase-import-return/navigation';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 
 /** Presentation only: providers retain their own admission, review and command custody. */
 export function ImportJourney({ stage }: { stage: string }) {
@@ -38,8 +39,8 @@ export function ImportJourney({ stage }: { stage: string }) {
 
 export function ImportDetails({ title, children }: { title?: string; children: ReactNode }) {
   return (
-    <details className="min-w-0 border-t pt-2 text-sm [overflow-wrap:anywhere]">
-      <summary className="min-h-11 cursor-pointer py-3 font-medium underline decoration-muted-foreground/50 underline-offset-4">
+    <details className="h-auto min-w-0 border-t pt-2 text-sm [overflow-wrap:anywhere]">
+      <summary className="cursor-pointer py-3 font-medium underline decoration-muted-foreground/50 underline-offset-4">
         {title ?? m.library_import_evidence()}
       </summary>
       <div className="space-y-3 pb-3 pt-2">{children}</div>
@@ -49,7 +50,7 @@ export function ImportDetails({ title, children }: { title?: string; children: R
 
 export function ImportChoice({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="min-w-0 space-y-3 border-t pt-4 [overflow-wrap:anywhere]">
+    <section className="h-auto min-w-0 space-y-3 border-t pt-4 [overflow-wrap:anywhere]">
       <h4 className="font-semibold">{title}</h4>
       {children}
     </section>
@@ -58,7 +59,7 @@ export function ImportChoice({ title, children }: { title: string; children: Rea
 
 export function ImportTarget({ target }: { target: string | null | undefined }) {
   return (
-    <p className="text-sm [overflow-wrap:anywhere]" data-import-chosen-target>
+    <p className="h-auto text-sm [overflow-wrap:anywhere]" data-import-chosen-target>
       <span className="font-medium">{m.library_import_target()}: </span>
       {target ?? m.library_import_unmatched()}
     </p>
@@ -76,7 +77,7 @@ export function ImportEmpty({ results = false }: { results?: boolean }) {
 export function ImportReturn() {
   return (
     <a
-      className="inline-flex min-h-11 items-center underline underline-offset-4"
+     className={buttonVariants({ variant: 'link' })}
       href={importLibraryReturnHref(getLocale())}
     >
       {m.library_anilist_return_library()}

@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { ExactVersionDetails } from './revisions';
@@ -162,12 +163,11 @@ export function StudioPublication({
           ) : null}
           {expired ? <p role="status">{m.studio_release_expired({}, options)}</p> : null}
           <label className="studio-confirm" htmlFor={confirmationId}>
-            <input
+            <Checkbox
               id={confirmationId}
-              type="checkbox"
               checked={confirmed}
               disabled={blocked || expired}
-              onChange={(event) => setConfirmed(event.target.checked)}
+              onCheckedChange={(checked) => setConfirmed(checked)}
             />
             <span>
               {withdrawal
@@ -198,7 +198,7 @@ export function StudioPublication({
       ) : null}
       <Button
         type="button"
-        className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
+        className="h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
         variant={review ? 'outline' : 'default'}
         disabled={blocked || !hasTarget || Boolean(unsaved) || !controller.input.canPublish}
         onClick={() => void controller.reviewPublication()}

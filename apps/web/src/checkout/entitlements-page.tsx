@@ -50,7 +50,7 @@ export function EntitlementsAddressRecovery({
           href={purchaseHistoryHref(locale, 'orders', history)}
           className={buttonVariants({
             variant: 'link',
-            className: 'min-h-11 w-fit max-w-full justify-start whitespace-normal px-0 text-left',
+            className: 'h-auto min-h-7 w-fit max-w-full justify-start whitespace-normal px-0 text-left',
           })}
         >
           {m.entitlements_orders()}
@@ -61,7 +61,7 @@ export function EntitlementsAddressRecovery({
           <p>{m.buyer_entitlements_address_invalid()}</p>
           <a
             href={entitlementHistoryRepairHref(locale, history)}
-            className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+            className={buttonVariants({ variant: 'outline' })}
           >
             {m.buyer_entitlements_address_first_page()}
           </a>
@@ -97,13 +97,13 @@ export function EntitlementsState({
         {kind === 'cursor-error' ? (
           <a
             href={purchaseHistoryHref(locale, 'entitlements', { ...history, entitlementsCursor: undefined })}
-            className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+            className={buttonVariants({ variant: 'outline' })}
           >
             {m.buyer_history_first()}
           </a>
         ) : null}
         {retry || (kind !== 'denied' && kind !== 'cursor-error') ? (
-          <Button variant="outline" className="min-h-11" onClick={retry ?? (() => window.location.reload())}>
+          <Button variant="outline" onClick={retry ?? (() => window.location.reload())}>
             {m.buyer_history_retry()}
           </Button>
         ) : null}
@@ -140,7 +140,7 @@ export function EntitlementsPage({
           href={purchaseHistoryHref(locale, 'orders', history)}
           className={buttonVariants({
             variant: 'link',
-            className: 'min-h-11 w-fit max-w-full justify-start whitespace-normal px-0 text-left',
+            className: 'h-auto min-h-7 w-fit max-w-full justify-start whitespace-normal px-0 text-left',
           })}
         >
           {m.entitlements_orders()}

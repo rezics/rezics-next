@@ -298,7 +298,6 @@ export function EditorWorkbench({
           <Button
             type="button"
             variant="ghost"
-            className="size-11 shrink-0 p-0 md:w-auto md:px-3"
             aria-label={text.find}
             title={text.find}
             onClick={() => {
@@ -313,7 +312,6 @@ export function EditorWorkbench({
         <Button
           type="button"
           variant="ghost"
-          className="size-11 shrink-0 p-0 md:w-auto md:px-3"
           aria-label={text.commandPalette}
           title={text.commandPalette}
           onClick={() => {
@@ -327,7 +325,6 @@ export function EditorWorkbench({
           <Button
             type="button"
             variant="ghost"
-            className="size-11 shrink-0 p-0 md:w-auto md:px-3"
             aria-label={text.outline}
             title={text.outline}
             onClick={() => {
@@ -342,7 +339,6 @@ export function EditorWorkbench({
         <Button
           type="button"
           variant="ghost"
-          className="size-11 shrink-0 p-0 md:w-auto md:px-3"
           aria-label={text.editorSettings}
           title={text.editorSettings}
           onClick={() => {
@@ -375,7 +371,7 @@ export function EditorWorkbench({
           <div
             role="toolbar"
             aria-label={text.pinnedCommands}
-            className="flex min-w-0 flex-nowrap gap-1 overflow-x-auto overscroll-x-contain md:flex-wrap"
+            className="flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto overscroll-x-contain md:flex-wrap"
           >
             {pinned.map((command) => (
               <ActionButton

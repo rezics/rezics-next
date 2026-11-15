@@ -14,7 +14,7 @@ export function ReadingValue(props: Props) {
       <CandidateValue {...props} />
       {props.snak.value.type === 'value' ? (
         <details className="min-w-0 text-sm">
-          <summary className="min-h-11 cursor-pointer py-3 focus-visible:outline-2 focus-visible:outline-ring">
+          <summary className="cursor-pointer font-medium [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-ring">
             {m.music_location_time_evidence({}, { locale: props.locale as never })}
           </summary>
           <pre className="max-w-full whitespace-pre-wrap font-mono [overflow-wrap:anywhere]">

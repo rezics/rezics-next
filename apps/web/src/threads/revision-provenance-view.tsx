@@ -66,7 +66,7 @@ export function RevisionProvenance({
             <a
               href={subjectHref({ id: reviewTarget.subject.id, label: reviewTarget.subject.label.value }, locale).href}
               lang={reviewTarget.subject.label.language || undefined}
-              className="inline-flex min-h-11 max-w-full items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [overflow-wrap:anywhere]"
+              className="inline-flex max-w-full items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [overflow-wrap:anywhere]"
             >
               {reviewTarget.subject.label.value}
             </a>
@@ -120,7 +120,7 @@ export function RevisionProvenance({
       ) : null}
       {hasExactSourceDetails ? (
         <details className="min-w-0 [overflow-wrap:anywhere]">
-          <summary className="inline-flex min-h-11 cursor-pointer items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          <summary className="inline-flex cursor-pointer items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             {m.discussion_provenance_details_heading()}
           </summary>
           <dl className="mt-2 space-y-2 [overflow-wrap:anywhere]">

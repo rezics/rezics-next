@@ -62,7 +62,7 @@ export function ThreadReplyComposer({
               type="button"
               variant="ghost"
               size="sm"
-              className="h-auto min-h-11 min-w-11 max-w-full shrink px-3 py-2 text-left leading-snug whitespace-normal [overflow-wrap:anywhere]"
+              className="h-auto min-h-6 max-w-full shrink text-left leading-snug whitespace-normal [overflow-wrap:anywhere]"
               disabled={pending}
               onClick={onCancel}
             >

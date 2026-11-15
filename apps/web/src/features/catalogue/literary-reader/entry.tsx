@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { useQueryClient } from '@tanstack/react-query';
 import type { PageContinuation, SelectedContext } from '@rezics/composition';
 import type { ReleasedRelationDirectionResult } from '@rezics/definitions';
@@ -388,7 +390,11 @@ export function LiteraryReaderEntry({
               <p>{m.literary_grain_stream_missing({}, o)}</p>
               <a
                 href={freshAddress}
-                className="inline-flex min-h-11 min-w-11 max-w-full items-center py-2 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className={cn(
+                  buttonVariants({ variant: 'link' }),
+                  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+                  'underline',
+                )}
               >
                 {m.literary_grain_stream_recover({}, o)}
               </a>

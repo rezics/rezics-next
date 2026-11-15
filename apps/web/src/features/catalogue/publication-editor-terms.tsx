@@ -10,8 +10,8 @@ import type { PublicationCorrection, PublicationTerm } from './publication-edito
 import { publicationTermControl } from './publication-editor-guidance';
 
 const actionClassName =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1';
-const inputClassName = 'min-w-0 min-h-11 md:pointer-fine:min-h-8';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center';
+const inputClassName = 'min-w-0';
 const labelClassName = 'min-w-0 max-w-full flex-wrap [overflow-wrap:anywhere]';
 
 export function PublicationTerms({

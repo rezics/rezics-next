@@ -43,7 +43,7 @@ export function EditionIdentitySummary({ edition }: { edition: EditionMetadata }
 export function EditionTechnicalDetails({ edition }: { edition: EditionMetadata }) {
   return (
     <details className="min-w-0 text-xs">
-      <summary className="min-h-11 cursor-pointer py-3 text-muted-foreground">{m.edition_identity_details()}</summary>
+      <summary className="cursor-pointer text-muted-foreground">{m.edition_identity_details()}</summary>
       <dl className="space-y-3 [overflow-wrap:anywhere]">
         {[
           [m.creator_editions_reference(), edition.editionId],

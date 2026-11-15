@@ -1,14 +1,10 @@
 import { useId, useLayoutEffect, useRef } from 'react';
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import type { SlotLifetime } from '../subject-library-current-origin';
 import type { SubjectReference } from '../subject-ref';
 import type { SubjectSlotEntry } from '../subject-slot';
-import {
-  captureEntryStateBasis,
-  entryStateBasisMatches,
-  type EntryStateBasis,
-} from '../subject-entry-state-review/review';
+import { captureEntryStateBasis, entryStateBasisMatches, type EntryStateBasis } from '../subject-entry-state-review/review';
 
 export type ReviewedEntryRemoval = {
   subjectId: string;
@@ -57,10 +53,6 @@ export function entryRemovalReviewMatches(
   );
 }
 
-const primaryClass = buttonVariants({ variant: 'default' });
-const secondaryClass = buttonVariants({ variant: 'outline' });
-const focusClass = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-
 export function SubjectEntryRemovalReview({
   review,
   valid,
@@ -87,7 +79,7 @@ export function SubjectEntryRemovalReview({
       aria-labelledby={headingId}
       aria-describedby={descriptionId}
       data-entry-removal-review
-      className="min-w-0 max-w-2xl basis-full rounded-md border border-border p-3 [overflow-wrap:anywhere]"
+      className="h-auto min-w-0 max-w-2xl basis-full rounded-md border border-border p-3 [overflow-wrap:anywhere]"
     >
       <h3 ref={heading} id={headingId} tabIndex={-1} className="m-0 text-sm font-semibold">
         {m.library_entry_removal_heading()}
@@ -97,11 +89,11 @@ export function SubjectEntryRemovalReview({
       </p>
       <dl className="mt-3 grid min-w-0 gap-x-4 gap-y-2 text-sm sm:grid-cols-[max-content_minmax(0,1fr)]">
         <dt className="font-medium text-muted-foreground">{m.library_entry_review_subject()}</dt>
-        <dd className="m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">
+        <dd className="h-auto m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">
           {review.subjectLabel || m.library_subject_unavailable()}
         </dd>
         <dt className="font-medium text-muted-foreground">{m.library_entry_review_received()}</dt>
-        <dd className="m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">{review.stateLabel}</dd>
+        <dd className="h-auto m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">{review.stateLabel}</dd>
       </dl>
       {!valid ? (
         <p role="status" aria-live="polite" className="mt-3 mb-0 text-sm">
@@ -109,21 +101,21 @@ export function SubjectEntryRemovalReview({
         </p>
       ) : null}
       <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
-        <button
+        <Button
           type="button"
-          className={`${primaryClass} min-h-[44px] max-w-full whitespace-normal ${focusClass}`}
+          variant="default" className="h-auto min-h-7 max-w-full whitespace-normal"
           disabled={!valid || busy}
           onClick={() => onConfirm(review)}
         >
           {m.library_subject_remove()}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className={`${secondaryClass} min-h-[44px] max-w-full whitespace-normal ${focusClass}`}
+          variant="outline" className="h-auto min-h-7 max-w-full whitespace-normal"
           onClick={onKeep}
         >
           {m.library_entry_removal_keep()}
-        </button>
+        </Button>
       </div>
     </section>
   );

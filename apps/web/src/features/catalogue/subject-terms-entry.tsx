@@ -21,7 +21,7 @@ export function SubjectTermsEntry({
       href={entry.href}
       className={cn(
         buttonVariants({ variant: 'outline', size: 'sm' }),
-        'h-auto min-h-11 min-w-11 max-w-full shrink whitespace-normal py-2 text-center [overflow-wrap:anywhere] md:pointer-fine:min-h-8 md:pointer-fine:py-1',
+        'h-auto min-h-6 max-w-full shrink whitespace-normal text-center [overflow-wrap:anywhere]',
       )}
     >
       {entry.label}
@@ -68,12 +68,12 @@ export function SubjectTermsPublicVisitNotice({
         aria-label={m.subject_terms_public_navigation({}, { locale: locale as never })}
       >
         {showGeneralReturn && (
-          <a href={returnHref} className="min-h-11 rounded-sm text-primary underline underline-offset-4">
+          <a href={returnHref} className="text-primary underline underline-offset-4">
             {m.subject_terms_public_return({}, { locale: locale as never })}
           </a>
         )}
         {freshHref && (
-          <a href={freshHref} className="min-h-11 rounded-sm text-primary underline underline-offset-4">
+          <a href={freshHref} className="text-primary underline underline-offset-4">
             {m.subject_terms_public_fresh_global({}, { locale: locale as never })}
           </a>
         )}

@@ -10,6 +10,9 @@ import {
   SidebarFooter,
   SidebarHeader,
   SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
   SidebarProvider,
   SidebarTrigger,
 } from '@rezics/ui/shadcn/sidebar';
@@ -241,13 +244,15 @@ const MobileSidebar = () => (
     <Sidebar>
       <SidebarHeader>Library navigation</SidebarHeader>
       <SidebarContent>
-        <nav aria-label="Sidebar pages" className="grid gap-1 px-2">
+        <SidebarMenu aria-label="Sidebar pages">
           {mobileSidebarPages.map((page, index) => (
-            <a key={page} className="flex min-h-11 items-center rounded-lg px-3" href={`#sidebar-${index}`}>
-              {page}
-            </a>
+            <SidebarMenuItem key={page}>
+              <SidebarMenuButton render={<a href={`#sidebar-${index}`} />}>
+                <span>{page}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
           ))}
-        </nav>
+        </SidebarMenu>
       </SidebarContent>
       <SidebarFooter>Account</SidebarFooter>
     </Sidebar>

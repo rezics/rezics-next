@@ -211,7 +211,7 @@ export function PasswordChangeForm({
             </Button>
           ) : null}
           <p className="auth-security-hint">{m.auth_security_password_recovery_handoff()}</p>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <a href="/login">{m.auth_security_sign_in()}</a>
             <a href="/recovery">{m.auth_signup_recovery()}</a>
           </div>

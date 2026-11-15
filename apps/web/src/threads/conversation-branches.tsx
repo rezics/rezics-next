@@ -1,4 +1,5 @@
 import { Button } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import {
   createContext,
   useContext,
@@ -21,7 +22,7 @@ import {
 } from './conversation-page-model';
 
 const controlClass =
-  'h-auto min-h-11 min-w-11 max-w-full shrink rounded-md px-3 py-2 text-left text-sm leading-snug whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'h-auto min-h-7 max-w-full shrink text-left leading-snug whitespace-normal [overflow-wrap:anywhere]';
 
 type ParentNavigation = { exactHref: (parentId: string) => string };
 const ParentNavigationContext = createContext<ParentNavigation | undefined>(undefined);
@@ -199,7 +200,7 @@ export function ConversationBranches({
           <nav
             data-slot="conversation-return-navigation"
             aria-label={m.thread_branch_return_navigation()}
-            className="sticky top-20 z-10 flex min-w-0 flex-wrap items-center gap-1 rounded-xl border border-border/70 bg-background/95 p-2 shadow-sm backdrop-blur"
+            className="sticky top-20 z-10 flex min-w-0 flex-wrap items-center gap-1 rounded-xl border border-border p-2"
           >
             <Button type="button" variant="outline" className={controlClass} onClick={returnToOrigin}>
               {m.thread_branch_return({ position: returnPoint.index + 1 })}
@@ -241,12 +242,12 @@ export function ConversationBranches({
                   {opening ? (
                     <span
                       data-slot="conversation-opening-label"
-                      className="inline-flex min-h-7 items-center rounded-full border border-border/70 bg-background px-2 font-semibold text-foreground"
+                      className="inline-flex min-h-6 items-center rounded-full border border-border/70 bg-background px-2 font-semibold text-foreground"
                     >
                       {m.conversation_opening()}
                     </span>
                   ) : null}
-                  <a href={`#${row.anchorId}`} className={`${controlClass} inline-flex items-center hover:underline`}>
+                  <a href={`#${row.anchorId}`} className={cn(controlClass, 'inline-flex min-h-6 items-center hover:underline')}>
                     {m.thread_branch_position({ position: row.index + 1 })}
                   </a>
                   {row.relatedCount > 0 ? (
@@ -254,7 +255,7 @@ export function ConversationBranches({
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className={controlClass}
+                      className={cn(controlClass, 'min-h-6')}
                       aria-expanded={!collapsed}
                       aria-controls={row.related.map((index) => `branch-row-${thread.id}-${index}`).join(' ')}
                       onClick={(event) => toggle(row, event.currentTarget)}

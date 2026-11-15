@@ -2,6 +2,7 @@ import type { SearchLoaderDeps } from './search-params';
 import { discoverySearchHref, searchFormFields } from './search-params';
 import { useId } from 'react';
 import { m } from '../paraglide/messages.js';
+import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { RatingPopulationControl } from './rating-population-control';
@@ -84,7 +85,7 @@ export function SearchSort({
           disabled={disabled}
           defaultValue={(sort === 'rating' ? 'rating' : '') === '' ? null : sort === 'rating' ? 'rating' : ''}
         >
-          <SelectTrigger id={sortId} className="w-full min-w-0 block min-h-11">
+          <SelectTrigger id={sortId} className="w-full min-w-0">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -135,15 +136,11 @@ export function SearchSort({
           <input key={`${property}:${value}`} type="hidden" name={`f.${property}`} value={value} />
         )),
       )}
-      <button
-        type="submit"
-        disabled={disabled}
-        className="min-h-11 justify-self-end rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 sm:mt-6"
-      >
+      <Button type="submit" variant="outline" disabled={disabled} className="justify-self-end sm:mt-6">
         {m.search_sort_submit_button({}, messageLocale)}
-      </button>
+      </Button>
       <details className="order-last min-w-0 text-sm text-muted-foreground sm:col-span-3">
-        <summary className="min-h-11 cursor-pointer content-center rounded-lg px-2 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
+        <summary className="cursor-pointer content-center rounded-sm px-1 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
           {m.search_reader_rating_help_title({}, messageLocale)}
         </summary>
         <p className="mt-1 px-2 text-muted-foreground">

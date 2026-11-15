@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { EllipsisIcon } from 'lucide-react';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 import { Menu } from '@rezics/ui/menu';
 import { m } from '../paraglide/messages.js';
 
@@ -175,7 +176,6 @@ function CopyLink({ href, copyOnly }: { href: string; copyOnly: boolean }) {
             ref={trigger}
             variant="ghost"
             size="icon"
-            className="min-h-11 min-w-11"
             aria-label={m.thread_content_more_actions()}
           >
             <EllipsisIcon />
@@ -196,7 +196,7 @@ function CopyLink({ href, copyOnly }: { href: string; copyOnly: boolean }) {
               <label htmlFor={fieldId} className="block">
                 {m.board_feed_copy_url()}
               </label>
-              <input
+              <Input
                 ref={field}
                 id={fieldId}
                 aria-describedby={statusId}
@@ -211,9 +211,9 @@ function CopyLink({ href, copyOnly }: { href: string; copyOnly: boolean }) {
                   event.preventDefault();
                   close();
                 }}
-                className="min-h-11 w-full min-w-0 rounded-lg border border-input bg-background px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="w-full min-w-0"
               />
-              <Button type="button" variant="outline" className="min-h-11" onClick={close}>
+              <Button type="button" variant="outline" onClick={close}>
                 {m.board_feed_copy_close()}
               </Button>
             </>

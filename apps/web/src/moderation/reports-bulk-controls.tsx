@@ -155,7 +155,7 @@ export function ReportsBulkControls({
               <Button
                 type="button"
                 variant="outline"
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
                 onClick={controller.selectLoaded}
               >
                 {m.moderation_bulk_select_loaded()}
@@ -163,7 +163,7 @@ export function ReportsBulkControls({
               <Button
                 type="button"
                 variant="outline"
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
                 disabled={!snapshot.selected.length}
                 onClick={controller.clear}
               >
@@ -172,7 +172,7 @@ export function ReportsBulkControls({
               <Button
                 ref={trigger}
                 type="button"
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
                 disabled={!snapshot.selected.length}
                 onKeyDown={(event) => rememberKeyboardIntent(event, 'review')}
                 onClick={(event) => {
@@ -198,7 +198,7 @@ export function ReportsBulkControls({
             <div className="flex min-w-0 flex-wrap gap-2">
               <Button
                 type="button"
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
                 onKeyDown={(event) => rememberKeyboardIntent(event, 'results')}
                 onClick={(event) => {
                   acceptKeyboardIntent(event.currentTarget, 'results');
@@ -210,7 +210,7 @@ export function ReportsBulkControls({
               <Button
                 type="button"
                 variant="outline"
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
                 onKeyDown={(event) => rememberKeyboardIntent(event, 'trigger')}
                 onClick={(event) => {
                   acceptKeyboardIntent(event.currentTarget, 'trigger');
@@ -241,7 +241,7 @@ export function ReportsBulkControls({
                     <Button
                       type="button"
                       variant="outline"
-                      className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
+                      className="h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
                       disabled={snapshot.phase === 'running'}
                       onKeyDown={(event) => rememberKeyboardIntent(event, 'results')}
                       onClick={(event) => {
@@ -264,7 +264,7 @@ export function ReportsBulkControls({
               <Button
                 type="button"
                 variant="outline"
-                className="h-auto min-h-11 min-w-11 max-w-full self-start whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
+                className="h-auto min-h-7 max-w-full self-start whitespace-normal text-start [overflow-wrap:anywhere]"
                 onClick={() => void controller.refresh(onRefresh)}
               >
                 {m.moderation_bulk_refresh()}

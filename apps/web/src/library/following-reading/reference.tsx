@@ -21,7 +21,7 @@ export function FollowingReference({
       <dd className="flex min-w-0 flex-wrap items-center gap-2">
         <code className="select-text break-all text-sm">{value}</code>
         <Button
-          className="min-h-11"
+         
           variant="outline"
           aria-busy={busy}
           aria-label={m.following_reading_copy_reference({ label })}

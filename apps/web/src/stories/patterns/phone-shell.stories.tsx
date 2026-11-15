@@ -24,6 +24,7 @@ import { PageHeading } from '../../shell/page-heading';
 import { PatternStory, pageReady } from '../page';
 import recording from '../../kernel/recorded/search.json';
 import realmRecording from '../../kernel/recorded/realm.json';
+import { Button } from '@rezics/ui/shadcn/button';
 
 const params = searchLoaderDeps({
   q: 'Prince',
@@ -96,29 +97,29 @@ function CreationOwners({ transitions }: { transitions: boolean }) {
     });
   }
   return (
-    <div className="flex flex-wrap gap-3 py-4 [&>button]:rounded-xl [&>button]:border [&>button]:p-3">
+    <div className="flex flex-wrap gap-3 py-4">
       {first ? <CreationOwner actions={firstActions} /> : null}
       {second ? <CreationOwner actions={secondActions} /> : null}
-      <button type="button" onClick={() => setUpdated(true)}>
+      <Button type="button" variant="outline" size="sm" onClick={() => setUpdated(true)}>
         Update first owner
-      </button>
-      <button type="button" onClick={() => setFirst((value) => !value)}>
+      </Button>
+      <Button type="button" variant="outline" size="sm" onClick={() => setFirst((value) => !value)}>
         {first ? 'Unmount first owner' : 'Mount first owner'}
-      </button>
-      <button type="button" onClick={() => setSecond((value) => !value)}>
+      </Button>
+      <Button type="button" variant="outline" size="sm" onClick={() => setSecond((value) => !value)}>
         {second ? 'Unmount second owner' : 'Mount second owner'}
-      </button>
+      </Button>
       {transitions ? (
         <>
-          <button type="button" onClick={() => session('signed-out')}>
+          <Button type="button" variant="outline" size="sm" onClick={() => session('signed-out')}>
             Sign out
-          </button>
-          <button type="button" onClick={() => session('unavailable')}>
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => session('unavailable')}>
             Session unavailable
-          </button>
-          <button type="button" onClick={() => session('signed-in')}>
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => session('signed-in')}>
             Sign in
-          </button>
+          </Button>
         </>
       ) : null}
     </div>

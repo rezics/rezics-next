@@ -170,7 +170,7 @@ export function HomeFeedControls({
           ref={trigger}
           type="button"
           variant="outline"
-          className="min-h-11 whitespace-normal"
+          className="whitespace-normal"
           aria-expanded={open}
           aria-controls={id}
           aria-haspopup="dialog"
@@ -223,7 +223,7 @@ export function HomeFeedControls({
         data-home-filter-surface={phone ? 'sheet' : 'panel'}
         className={
           open
-            ? 'fixed inset-x-0 bottom-0 z-50 flex max-h-[90dvh] min-w-0 flex-col rounded-t-2xl border border-border bg-popover text-popover-foreground shadow-xl outline-none [overflow-wrap:anywhere] sm:absolute sm:inset-x-auto sm:top-full sm:bottom-auto sm:left-0 sm:mt-2 sm:max-h-[min(80dvh,48rem)] sm:w-[min(36rem,calc(100vw-3rem))] sm:rounded-2xl'
+            ? 'fixed inset-x-0 bottom-0 z-50 flex max-h-[90dvh] min-w-0 flex-col rounded-t-lg border border-border bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-none [overflow-wrap:anywhere] sm:absolute sm:inset-x-auto sm:top-full sm:bottom-auto sm:left-0 sm:mt-2 sm:max-h-[min(80dvh,48rem)] sm:w-[min(36rem,calc(100vw-3rem))] sm:rounded-lg'
             : 'hidden'
         }
         onKeyDown={(event) => {
@@ -253,7 +253,7 @@ export function HomeFeedControls({
               ref={close}
               type="button"
               variant="ghost"
-              className="min-h-11 whitespace-normal"
+              className="whitespace-normal"
               onClick={() => changeOpen(false, 'restore')}
             >
               {m.search_close_filters({}, options)}

@@ -592,7 +592,7 @@ function ConceptPicker({
                   }
                   disabled={disabled || !readyReference}
                 >
-                  <SelectTrigger ref={schemeSelect} id={schemeSelectId}>
+                  <SelectTrigger ref={schemeSelect} id={schemeSelectId} className="w-full min-w-0">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -622,7 +622,7 @@ function ConceptPicker({
                   }
                   disabled={disabled}
                 >
-                  <SelectTrigger id={modeSelectId}>
+                  <SelectTrigger id={modeSelectId} className="w-full min-w-0">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

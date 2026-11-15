@@ -3,9 +3,9 @@ import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import type { PanelValue, ReadingInsightsOverview } from './native';
 import { insightsDiaryHref } from './address';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 
-export const insightLink =
-  'inline-flex min-h-11 items-center py-2 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+export const insightLink = buttonVariants({ variant: 'link', className: 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]' });
 const cell = 'border-b border-border px-3 py-3 text-start align-top tabular-nums';
 export function Facts({ values }: { values: readonly (readonly [string, ReactNode])[] }) {
   return (
@@ -13,7 +13,7 @@ export function Facts({ values }: { values: readonly (readonly [string, ReactNod
       {values.map(([name, value]) => (
         <div key={name} className="min-w-0">
           <dt className="text-sm text-muted-foreground">{name}</dt>
-          <dd className="break-words font-medium tabular-nums">{value}</dd>
+          <dd className="h-auto break-words font-medium tabular-nums">{value}</dd>
         </div>
       ))}
     </dl>
@@ -35,7 +35,7 @@ function Coverage({ value }: { value: { initializedSessions: string | null; reta
 function Snapshot({ value }: { value: { revision: string; source?: string; retainedSourceRevision?: string } }) {
   return (
     <details className="text-sm">
-      <summary className="min-h-11 cursor-pointer py-3">{m.library_insights_exact_details()}</summary>
+      <summary className="cursor-pointer py-3">{m.library_insights_exact_details()}</summary>
       <Facts
         values={[
           [m.library_insights_snapshot(), value.revision],
@@ -92,7 +92,7 @@ export function InsightsPanel<T>({
           <div role="status">
             <p>{m.library_insights_failed()}</p>
             <details className="text-sm">
-              <summary className="min-h-11 cursor-pointer py-3">{m.library_insights_exact_details()}</summary>
+              <summary className="cursor-pointer py-3">{m.library_insights_exact_details()}</summary>
               <code>{value.reason}</code>
             </details>
           </div>
@@ -155,7 +155,7 @@ export function YearPanel({
       <nav aria-label={m.library_insights_diary()} className="flex flex-wrap gap-x-4">
         <a
           href={insightsDiaryHref(actions.diary, locale)}
-          className={insightLink}
+         className={insightLink}
           onClick={(event) => {
             if (!current()) event.preventDefault();
           }}
@@ -193,7 +193,7 @@ export function YearPanel({
               <tr key={label}>
                 <th scope="row" className={cell}>
                   <a
-                    className={insightLink}
+                   className={insightLink}
                     href={insightsDiaryHref(action, locale)}
                     onClick={(event) => {
                       if (!current()) event.preventDefault();
@@ -221,7 +221,7 @@ export function YearPanel({
       <p className="text-sm text-muted-foreground">{m.library_insights_native_only()}</p>
       <Coverage value={value.coverage} />
       <details>
-        <summary className="min-h-11 cursor-pointer py-3">{m.library_insights_precision()}</summary>
+        <summary className="cursor-pointer py-3">{m.library_insights_precision()}</summary>
         <div
           className="overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           role="region"
@@ -327,7 +327,7 @@ export function ProfilesPanel({ value }: { value: PanelValue<'profiles'> }) {
                   {row.label}
                   {row.profile ? (
                     <details className="mt-2 font-normal">
-                      <summary className="min-h-11 cursor-pointer py-2">{m.library_insights_exact_details()}</summary>
+                      <summary className="cursor-pointer py-2">{m.library_insights_exact_details()}</summary>
                       <ProfilePin value={row.profile} />
                     </details>
                   ) : null}
@@ -390,7 +390,7 @@ function ProgressScope({ value, title }: { value: Progress['active']; title: str
               ) : null}
               <GroupCounts value={group} />
               <details className="text-sm">
-                <summary className="min-h-11 cursor-pointer py-3">{m.library_insights_exact_details()}</summary>
+                <summary className="cursor-pointer py-3">{m.library_insights_exact_details()}</summary>
                 <div className="space-y-4">
                   <ProfilePin value={meaning.profilePin} />
                   <Facts

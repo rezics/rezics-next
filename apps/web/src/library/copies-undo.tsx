@@ -53,7 +53,7 @@ export function UndoNotice({
             ref={controlRef}
             variant="outline"
             disabled={pending}
-            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]"
             onClick={() => void undo()}
           >
             {m.editor_undo()}

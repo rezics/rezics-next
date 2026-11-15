@@ -16,6 +16,7 @@ import { m } from '../paraglide/messages.js';
 import { ReadingCard } from '../settings/reading-card';
 import { ReadingNavigation, SettingsNavigationProvider } from '../settings/reading-navigation';
 import { sessionQuery } from '../session/query';
+import { Button } from '@rezics/ui/shadcn/button';
 
 const meta = {
   title: 'Account/Settings navigation',
@@ -28,11 +29,7 @@ type Story = StoryObj<typeof meta>;
 function ChangeStoryViewer() {
   const client = useQueryClient();
   return (
-    <button
-      type="button"
-      className="min-h-11"
-      onClick={() =>
-        client.setQueryData(sessionQuery.queryKey, {
+    <Button type="button" variant="outline" size="sm" onClick={() => client.setQueryData(sessionQuery.queryKey, {
           state: 'signed-in',
           subject: 'next-phone-viewer',
           csrfToken: 'next-phone-session',
@@ -40,7 +37,7 @@ function ChangeStoryViewer() {
       }
     >
       Change viewer
-    </button>
+    </Button>
   );
 }
 
@@ -69,10 +66,10 @@ function SettingsEditor() {
     <SettingsNavigationProvider>
       <main className="mx-auto flex min-w-0 max-w-2xl flex-col gap-4 p-4">
         <nav aria-label={m.settings_sections_label()} className="flex flex-wrap gap-4">
-          <Link to="/" className="min-h-11 content-center underline">
+          <Link to="/" className="underline">
             {m.nav_home()}
           </Link>
-          <Link to="/accounts" className="min-h-11 content-center underline">
+          <Link to="/accounts" className="underline">
             {m.settings_account_heading()}
           </Link>
         </nav>

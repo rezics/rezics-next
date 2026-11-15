@@ -1,20 +1,16 @@
 import { useId } from 'react';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { publicCollectionDirectoryHref } from '../../search/contracts/collection-directory';
+import { publicCollectionDirectoryHref, type PublicCollectionDirectorySelection } from '../../search/contracts/collection-directory';
 import type { FormEvent, MouseEvent, Ref, ReactNode } from 'react';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
 import type { PublicCollectionDiscoveryState } from './read';
 import type { Coordinate, Movement } from './window-navigation';
 import { PublicCollectionDiscoveryWorkspace } from './discovery-workspace';
-import {
-  continuePublicCollectionDirectory,
-  parsePublicCollectionDirectoryAddress,
-  selectPublicCollectionDirectory,
-  type PublicCollectionDirectorySelection,
-} from '../../search/contracts/collection-directory';
+import { Input } from '@rezics/ui/shadcn/input';
+import { continuePublicCollectionDirectory, parsePublicCollectionDirectoryAddress, selectPublicCollectionDirectory } from '../../search/contracts/collection-directory';
 
 function messageOptions(locale: string) {
   return { locale: locales.find((value) => value === locale) ?? 'en' };
@@ -53,8 +49,7 @@ export function PublicCollectionDiscoveryPage<Row extends { id: string }>({
 }) {
   const orderSelectId = useId();
   const options = messageOptions(locale);
-  const controlClass =
-    'inline-flex min-h-11 min-w-11 max-w-full items-center justify-center rounded-md border border-input bg-background px-3 py-2 text-center text-sm font-medium text-primary underline-offset-4 hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring whitespace-normal';
+  const controlClass = 'h-auto min-h-7 max-w-full whitespace-normal';
   const hrefFor = (coordinate: Coordinate) =>
     navigation?.href(coordinate) ??
     publicCollectionDirectoryHref(locale, continuePublicCollectionDirectory(selection, coordinate ?? undefined));
@@ -75,7 +70,7 @@ export function PublicCollectionDiscoveryPage<Row extends { id: string }>({
       href={hrefFor(coordinate)}
       aria-disabled={navigation?.pending || retrying || undefined}
       onClick={navigation ? (event) => navigation.move(event, movement, coordinate) : undefined}
-      className={controlClass}
+     className={buttonVariants({ variant: 'outline', className: controlClass })}
     >
       {label}
     </a>
@@ -96,12 +91,12 @@ export function PublicCollectionDiscoveryPage<Row extends { id: string }>({
       <div className="grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-1">
         <label className="grid min-w-0 gap-1 text-sm font-medium">
           {m.collection_discovery_kind_label({}, options)}
-          <input
+          <Input
             name="presentationKind"
             defaultValue={selection.presentationKind ?? ''}
             maxLength={256}
             placeholder={m.collection_discovery_kind_placeholder({}, options)}
-            className="min-h-11 min-w-0 rounded-md border border-input bg-background px-3 font-normal"
+            className='min-w-0'
           />
         </label>
         <Field className="grid min-w-0 gap-1 text-sm font-medium">
@@ -112,7 +107,7 @@ export function PublicCollectionDiscoveryPage<Row extends { id: string }>({
             <SelectTrigger
               id={orderSelectId}
               aria-labelledby={`${orderSelectId}-label`}
-              className="min-h-11 min-w-0 rounded-md border border-input bg-background px-3 font-normal"
+              className='min-w-0'
             >
               <SelectValue />
             </SelectTrigger>
@@ -129,7 +124,7 @@ export function PublicCollectionDiscoveryPage<Row extends { id: string }>({
         </Field>
       </div>
       <details data-slot="public-collection-discovery-identity-filters" className="min-w-0 rounded-lg border p-3">
-        <summary className="min-h-11 cursor-pointer rounded-md py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        <summary className="h-auto cursor-pointer rounded-md py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
           <span className="block font-medium">
             {m.collection_discovery_curator_label({}, options)} · {m.collection_discovery_subject_label({}, options)}
           </span>
@@ -145,29 +140,29 @@ export function PublicCollectionDiscoveryPage<Row extends { id: string }>({
         <div className="mt-3 grid min-w-0 gap-3">
           <label className="grid min-w-0 gap-1 text-sm font-medium">
             {m.collection_discovery_curator_label({}, options)}
-            <input
+            <Input
               name="curator"
               defaultValue={selection.curator ?? ''}
               maxLength={36}
               pattern="[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
               placeholder={m.collection_discovery_identity_placeholder({}, options)}
-              className="min-h-11 min-w-0 rounded-md border border-input bg-background px-3 font-normal"
+              className='min-w-0'
             />
           </label>
           <label className="grid min-w-0 gap-1 text-sm font-medium">
             {m.collection_discovery_subject_label({}, options)}
-            <input
+            <Input
               name="subject"
               defaultValue={selection.subject ?? ''}
               maxLength={36}
               pattern="[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
               placeholder={m.collection_discovery_identity_placeholder({}, options)}
-              className="min-h-11 min-w-0 rounded-md border border-input bg-background px-3 font-normal"
+              className='min-w-0'
             />
           </label>
         </div>
       </details>
-      <Button type="submit" className="min-h-11 w-full">
+      <Button type="submit" className="w-full">
         {m.collection_discovery_apply({}, options)}
       </Button>
     </form>
@@ -230,7 +225,6 @@ export function PublicCollectionDiscoveryPage<Row extends { id: string }>({
             data-slot="retry"
             type="button"
             variant="outline"
-            className="min-h-11 min-w-11"
             disabled={retrying}
             onClick={onRetry}
           >

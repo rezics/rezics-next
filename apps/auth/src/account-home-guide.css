@@ -13,9 +13,9 @@
   display: grid;
   gap: 1rem;
   min-width: 0;
-  padding: clamp(1rem, 3vw, 1.5rem);
+  padding: 1rem;
   border: 1px solid var(--border);
-  border-radius: 0.9rem;
+  border-radius: var(--radius-lg);
 }
 
 .auth-account-identity h2,
@@ -81,9 +81,6 @@
 }
 
 .auth-home-identity-private summary {
-  display: flex;
-  align-items: center;
-  min-height: 2.75rem;
   cursor: pointer;
   text-underline-offset: 0.2em;
 }
@@ -112,7 +109,7 @@
   min-width: 0;
   padding: 1rem;
   border: 1px solid var(--border);
-  border-radius: 0.9rem;
+  border-radius: var(--radius-lg);
 }
 
 .auth-home-entries > p,
@@ -131,23 +128,11 @@
 
 .auth-home-entry-link,
 .auth-home-link {
-  display: flex;
-  align-items: center;
+  width: 100%;
   min-width: 0;
-  min-height: 2.75rem;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: 0.7rem;
-  color: var(--foreground);
-  line-height: 1.45;
-  text-decoration-thickness: 0.08em;
-  text-underline-offset: 0.2em;
+  justify-content: flex-start;
+  text-align: start;
   overflow-wrap: anywhere;
-}
-
-.auth-home-entry-link:first-child {
-  background: var(--muted);
-  font-weight: 600;
 }
 
 .auth-home-link span {
@@ -161,8 +146,8 @@
 }
 
 .auth-home-link small {
-  color: var(--muted-foreground);
   font-size: 0.875rem;
+  font-weight: 400;
   line-height: 1.5;
 }
 
@@ -178,8 +163,6 @@
 
 .auth-home-guide-group .auth-home-delete {
   margin-block-start: 0.25rem;
-  border-inline-start: 4px solid var(--foreground);
-  background: var(--muted);
 }
 
 .auth-home-selection {
@@ -195,7 +178,7 @@
   min-width: 0;
   padding: 1rem;
   border: 1px solid var(--border);
-  border-radius: 0.75rem;
+  border-radius: var(--radius-lg);
   overflow-wrap: anywhere;
 }
 
@@ -214,20 +197,15 @@
 
 .auth-home-selection a,
 .auth-home-location a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 2.75rem;
   color: var(--foreground);
   text-underline-offset: 0.2em;
 }
 
 .auth-home-selection a:focus-visible,
-.auth-home-entry-link:focus-visible,
-.auth-home-link:focus-visible,
 .auth-home-location a:focus-visible,
 .auth-home-identity-private summary:focus-visible {
   outline: 2px solid var(--ring);
-  outline-offset: 3px;
+  outline-offset: 2px;
 }
 
 .auth-home-location {

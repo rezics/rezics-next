@@ -39,7 +39,7 @@ export function ManagementReferences({
 }) {
   return (
     <details className="min-w-0 text-sm">
-      <summary className="min-h-11 min-w-11 cursor-pointer content-center rounded-md py-2 text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+      <summary className="cursor-pointer content-center text-muted-foreground">
         {label}
       </summary>
       <dl className="grid min-w-0 gap-3 py-3 sm:grid-cols-2">{children}</dl>

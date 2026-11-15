@@ -26,7 +26,7 @@ export function HostedBookReaderLink({
       href={hostedBookHref(catalogueId, locale, { release: releaseRevisionId, subject: subjectId })}
       target={target}
       rel={target === '_blank' ? 'noopener' : undefined}
-      className={buttonVariants({ variant: 'outline', className: 'min-h-11 min-w-11 whitespace-normal text-start' })}
+      className={buttonVariants({ variant: 'outline', className: 'whitespace-normal text-start' })}
     >
       {children ?? m.book_reader_contents({}, { locale })}
     </a>
@@ -44,7 +44,7 @@ export function HostedBookSubjectReaderLink({
   return (
     <a
       href={hostedBookSubjectHref(subjectId, locale as Locale)}
-      className={buttonVariants({ variant: 'outline', className: 'min-h-11 min-w-11 whitespace-normal text-start' })}
+      className={buttonVariants({ variant: 'outline', className: 'whitespace-normal text-start' })}
     >
       {m.book_reader_open_books({}, { locale: locale as Locale })}
     </a>

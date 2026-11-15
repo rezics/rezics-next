@@ -214,7 +214,7 @@ export function NavigationLinks({
                 aria-disabled="true"
                 aria-current={entry.current ? 'page' : undefined}
                 title={m.library_subject_unavailable({}, { locale: props.context.locale })}
-                className="flex min-h-11 min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-sm wrap-anywhere whitespace-normal text-muted-foreground"
+                className="flex min-h-8 min-w-0 items-center gap-2 rounded-[calc(var(--radius-sm)+2px)] p-2 text-xs wrap-anywhere whitespace-normal text-muted-foreground"
               >
                 {Icon && <Icon aria-hidden="true" className="size-4 shrink-0" />}
                 <span className="min-w-0 wrap-anywhere">{entry.label}</span>
@@ -225,7 +225,7 @@ export function NavigationLinks({
             <a
               href={entry.href}
               aria-current={entry.current ? 'page' : undefined}
-              className="flex min-h-11 min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-sm wrap-anywhere whitespace-normal outline-none hover:bg-accent focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-accent aria-[current=page]:font-medium"
+              className="flex min-h-8 min-w-0 items-center gap-2 rounded-[calc(var(--radius-sm)+2px)] p-2 text-xs wrap-anywhere whitespace-normal outline-none hover:bg-accent focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30 aria-[current=page]:bg-accent aria-[current=page]:font-medium"
             >
               {Icon && <Icon aria-hidden="true" className="size-4 shrink-0 text-sidebar-primary" />}
               <span className="min-w-0 wrap-anywhere">{entry.label}</span>

@@ -253,6 +253,7 @@ function TocEntry({
             <Button
               type="button"
               variant="ghost"
+              size="icon"
               className="studio-navigation-actions"
               aria-label={m.studio_book_organize_title({ title: placement.title }, { locale })}
             >

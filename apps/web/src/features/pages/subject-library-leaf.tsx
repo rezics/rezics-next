@@ -1,3 +1,4 @@
+import { Button } from '@rezics/ui/shadcn/button';
 import { queryOptions, useQuery } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { useLocation } from '@tanstack/react-router';
@@ -239,16 +240,18 @@ export function SubjectLibraryLeaf({
           (data.session !== 'signed-in' ||
             !data.entryAvailable ||
             (data.labels === null && observation.value.labelsAdmitted)))) ? (
-        <button
+        <Button
           type="button"
-          className="text-sm text-primary underline-offset-4 hover:underline disabled:opacity-50"
+          variant="link"
+          size="sm"
+          className="h-auto min-h-6 whitespace-normal"
           disabled={isFetching}
           onClick={() => {
             if (isCurrent()) void refetch();
           }}
         >
           {m.library_selection_retry()}
-        </button>
+        </Button>
       ) : null}
     </div>
   );

@@ -6,6 +6,8 @@ import { Exposure } from '../../kernel/exposure';
 import { subjectHref } from '../../subject/subject-href';
 import type { ChecklistRow, ChecklistVisit } from './contract';
 import { checklistActionClass, checklistPrimaryActionClass } from './states';
+import { NativeCheckbox } from '@rezics/ui/native-checkbox';
+import { Button } from '@rezics/ui/shadcn/button';
 
 function rowLabel(row: ChecklistRow, index: number): string {
   if (row.membership === 'unavailable' || row.episodeSubjectId === null) return m.library_progress_episodes_redacted();
@@ -109,17 +111,16 @@ export function EpisodeChecklistEditor({
             return (
               <li key={id ?? `redacted:${index}`} className="min-w-0 rounded-lg border border-border p-3">
                 {disabled || !id || row.completed === null ? (
-                  <p className="text-sm [overflow-wrap:anywhere]">
+                  <p className="h-auto text-sm [overflow-wrap:anywhere]">
                     {rowLabel(row, index)}
                     {row.membership === 'detached' ? ` · ${m.library_progress_episodes_detached()}` : ''}
                     {row.membership === 'unavailable' ? ` · ${m.library_progress_episodes_redacted()}` : ''}
                     {row.completed === false ? ` · ${m.library_progress_episodes_unmarked()}` : ''}
                   </p>
                 ) : (
-                  <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm [overflow-wrap:anywhere]">
-                    <input
-                      type="checkbox"
-                      className="size-5 shrink-0"
+                  <label className="h-auto flex cursor-pointer items-center gap-3 text-sm [overflow-wrap:anywhere]">
+                    <NativeCheckbox
+                      className='shrink-0'
                       checked={checked}
                       disabled={busy}
                       onChange={() => onToggle(id, row.completed === true)}
@@ -142,19 +143,19 @@ export function EpisodeChecklistEditor({
       )}
       <div className="flex flex-wrap gap-3">
         <Exposure operation="progress_session.record">
-          <button type="button" className={checklistPrimaryActionClass} disabled={busy || !dirty} onClick={onReview}>
+          <Button type="button" variant="default" className={checklistPrimaryActionClass} disabled={busy || !dirty} onClick={onReview}>
             {m.library_progress_episodes_apply()}
-          </button>
+          </Button>
         </Exposure>
         <Exposure operation="progress_session.record">
-          <button type="button" className={checklistActionClass} disabled={busy} onClick={onClear}>
+          <Button type="button" variant="outline" className={checklistActionClass} disabled={busy} onClick={onClear}>
             {m.library_progress_episodes_clear()}
-          </button>
+          </Button>
         </Exposure>
         {visit.retainedNext && onContinue ? (
-          <button type="button" className={checklistActionClass} disabled={busy} onClick={onContinue}>
+          <Button type="button" variant="outline" className={checklistActionClass} disabled={busy} onClick={onContinue}>
             {m.library_progress_episodes_continue()}
-          </button>
+          </Button>
         ) : null}
       </div>
     </section>
@@ -187,13 +188,13 @@ export function EpisodeChecklistReview({
       ) : (
         <ul className="space-y-2 text-sm">
           {visit.selection.add.map((id) => (
-            <li key={`add:${id}`} className="break-words">
+            <li key={`add:${id}`} className="h-auto break-words">
               {m.library_progress_episodes_mark()}: {admittedEpisodeName(visit, episodeFacts, id)}{' '}
               <code className="break-all text-xs">({id})</code>
             </li>
           ))}
           {visit.selection.remove.map((id) => (
-            <li key={`remove:${id}`} className="break-words">
+            <li key={`remove:${id}`} className="h-auto break-words">
               {m.library_progress_episodes_unmark()}: {admittedEpisodeName(visit, episodeFacts, id)}{' '}
               <code className="break-all text-xs">({id})</code>
             </li>
@@ -202,12 +203,12 @@ export function EpisodeChecklistReview({
       )}
       {visit.pending ? <p role="status">{m.library_progress_episodes_pending()}</p> : null}
       <div className="flex flex-wrap gap-3">
-        <button type="button" className={checklistPrimaryActionClass} disabled={busy} onClick={onConfirm}>
+        <Button type="button" variant="default" className={checklistPrimaryActionClass} disabled={busy} onClick={onConfirm}>
           {m.library_progress_confirm_correction()}
-        </button>
-        <button type="button" className={checklistActionClass} disabled={busy || !!visit.retry} onClick={onCancel}>
+        </Button>
+        <Button type="button" variant="outline" className={checklistActionClass} disabled={busy || !!visit.retry} onClick={onCancel}>
           {m.library_progress_cancel()}
-        </button>
+        </Button>
       </div>
     </section>
   );

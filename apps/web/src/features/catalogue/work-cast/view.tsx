@@ -1,4 +1,6 @@
 import { PAGE_GLOBAL_CONTEXT } from '@rezics/composition';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { CoverList } from '../../pages/cover-list';
 import type { Item, RowValue } from '../../pages/overview';
@@ -36,10 +38,14 @@ export type WorkCastNavigation = {
   restartHref?: string | undefined;
 };
 
+const castLink = cn(
+  buttonVariants({ variant: 'link' }),
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+  'underline',
+);
+
 function optionClass(selected: boolean): string {
-  return `min-h-11 min-w-11 rounded-md border px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
-    selected ? 'border-primary bg-primary text-primary-foreground' : 'border-input bg-background hover:bg-accent'
-  }`;
+  return cn(buttonVariants({ variant: selected ? 'default' : 'outline' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]');
 }
 
 function contextId(value: RowValue): string {
@@ -409,7 +415,7 @@ export function WorkCastWindow({
         <div role="status" className="space-y-2">
           <p>{m.work_cast_window_changed({}, options)}</p>
           {restartHref && (
-            <a data-slot="restart-group" className="inline-flex min-h-11 items-center underline" href={restartHref}>
+            <a data-slot="restart-group" className={castLink} href={restartHref}>
               {m.subject_relation_restart({}, options)}
             </a>
           )}
@@ -438,7 +444,7 @@ export function WorkCastWindow({
         <a
           data-slot="previous-group"
           href={previousWindowHref}
-          className="inline-flex min-h-11 items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className={castLink}
         >
           {m.work_cast_previous_window({}, options)}
         </a>

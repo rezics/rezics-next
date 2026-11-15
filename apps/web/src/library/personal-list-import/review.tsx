@@ -88,9 +88,9 @@ export function VndbReviewPage({
       </div>
       {snap.sourceVisible && snap.sourceXML !== null ? (
         <details id={sourcePanelId} open className="min-w-0 rounded-md border p-3" data-vndb-source-xml>
-          <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_vndb_source_summary()}</summary>
+          <summary className="cursor-pointer py-2 font-medium">{m.library_vndb_source_summary()}</summary>
           <p className="text-sm text-muted-foreground">{m.library_vndb_source_private()}</p>
-          <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words text-sm">{snap.sourceXML}</pre>
+          <pre className="h-auto max-h-96 overflow-auto whitespace-pre-wrap break-words text-sm">{snap.sourceXML}</pre>
         </details>
       ) : null}
       {current.length === 0 ? <ImportEmpty /> : null}

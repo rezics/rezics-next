@@ -41,7 +41,7 @@ export function SubjectOfferInspection({
           <p className="text-sm font-medium text-muted-foreground">
             {m.subject_choice_inspect_heading({}, { locale })}
           </p>
-          <Button type="button" variant="outline" className="min-h-11" onClick={reading.close}>
+          <Button type="button" variant="outline" onClick={reading.close}>
             {m.subject_choice_close({}, { locale })}
           </Button>
         </div>
@@ -74,14 +74,14 @@ export function SubjectOfferInspection({
           <Button
             type="button"
             variant="outline"
-            className="h-auto min-h-11 whitespace-normal text-start"
+            className="h-auto min-h-7 whitespace-normal text-start"
             aria-pressed={chosen}
             disabled={full}
             onClick={() => reading.toggle(offer, trigger)}
           >
             {chosen ? m.subject_choice_remove({}, { locale }) : m.subject_choice_add({}, { locale })}
           </Button>
-          <Button type="button" variant="outline" className="min-h-11" onClick={reading.close}>
+          <Button type="button" variant="outline" onClick={reading.close}>
             {m.subject_choice_return({}, { locale })}
           </Button>
           <OfferReviewLink offer={offer} href={destination(offer)} locale={locale} current={reading.current} />

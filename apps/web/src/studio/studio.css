@@ -106,50 +106,21 @@
   min-inline-size: 0;
 }
 .studio-workspace button,
-.studio-context-navigation button,
-.studio-workspace input:not([type='checkbox']),
-.studio-context-navigation input:not([type='checkbox']),
-.studio-workspace textarea,
-.studio-context-navigation textarea {
-  min-block-size: 2.75rem;
-}
-.studio-workspace button,
 .studio-context-navigation button {
   max-inline-size: 100%;
   white-space: normal;
   height: auto;
-  padding-block: 0.6rem;
-}
-.studio-workspace input[type='checkbox'],
-.studio-context-navigation input[type='checkbox'] {
-  inline-size: 1.2rem;
-  block-size: 1.2rem;
-  flex: 0 0 auto;
-  accent-color: var(--primary);
-}
-.studio-workspace textarea,
-.studio-context-navigation textarea {
-  inline-size: 100%;
-  min-inline-size: 0;
-  border: 1px solid var(--input);
-  border-radius: 0.5rem;
-  background: var(--background);
-  color: var(--foreground);
-  padding: 0.75rem;
-  font: inherit;
-  line-height: 1.5;
-  resize: vertical;
-}
-.studio-workspace :where(button, input, textarea, summary, a, [tabindex]):focus-visible,
-.studio-context-navigation :where(button, input, textarea, summary, a, [tabindex]):focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 3px;
+  min-height: 1.75rem;
 }
 .studio-workspace summary,
 .studio-context-navigation summary {
-  min-block-size: 2.75rem;
-  padding-block: 0.75rem;
   cursor: pointer;
+}
+.studio-workspace summary:focus-visible,
+.studio-context-navigation summary:focus-visible,
+.studio-skip:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 .studio-help {
   color: var(--muted-foreground);
@@ -308,8 +279,6 @@
   gap: 0.2rem;
 }
 .studio-release-choice {
-  min-inline-size: 2.75rem;
-  min-block-size: 2.75rem;
   display: inline-flex;
   justify-content: center;
   align-items: center;
@@ -335,10 +304,7 @@
 .studio-toc-actions > :not(summary) {
   margin-block: 0.6rem;
 }
-.studio-toc-actions > .studio-action-row button {
-  font-size: 0.75rem;
-  padding-inline: 0.6rem;
-}
+
 .studio-placement-form,
 .studio-new-draft,
 .studio-native-create {
@@ -433,9 +399,7 @@
 .studio-confirm {
   display: flex;
   gap: 0.75rem;
-  align-items: start;
-  min-block-size: 2.75rem;
-  padding-block: 0.5rem;
+  align-items: center;
   cursor: pointer;
 }
 .studio-history-list > li {
@@ -448,7 +412,6 @@
   padding-block: 2rem;
 }
 .studio-skip {
-  min-block-size: 2.75rem;
   display: inline-flex;
   align-items: center;
   text-decoration: underline;
@@ -534,13 +497,7 @@
 .studio-writing-canvas > input {
   font-size: clamp(1.15rem, 1.8vw, 1.4rem);
   font-weight: 600;
-  border-color: transparent;
-  box-shadow: none;
-  border-radius: 0.25rem;
-  padding-inline: 0;
-}
-.studio-writing-canvas > input:hover {
-  border-block-end-color: var(--border);
+  block-size: auto;
 }
 .studio-workbench-region {
   border-block-start: 1px solid var(--border);
@@ -552,8 +509,8 @@
 .studio-region-trigger {
   inline-size: 100%;
   justify-content: space-between;
-  padding-inline: 0;
-  border-radius: 0;
+  block-size: auto;
+  white-space: normal;
   text-align: start;
 }
 .studio-region-trigger:disabled {

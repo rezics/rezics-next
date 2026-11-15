@@ -11,7 +11,7 @@ import {
 } from './album-current-visit-model';
 
 const publicLinkClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal rounded-md underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
+  'inline-flex max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
 
 export function AlbumCurrentVisitGate({
   id,
@@ -62,7 +62,7 @@ export function AlbumCurrentVisitGate({
         </p>
         <Button
           type="button"
-          className="h-auto min-h-11 max-w-full whitespace-normal break-words py-2"
+          className="h-auto min-h-7 max-w-full whitespace-normal break-words"
           onClick={() => setChosenGlobal(true)}
         >
           {m.album_current_global_choice({}, o)}

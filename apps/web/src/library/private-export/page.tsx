@@ -172,7 +172,7 @@ export function ExportVisitView({
   const text = noticeText(snap.notice);
 
   return (
-    <main className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6 [overflow-wrap:anywhere]">
+    <main className="h-auto mx-auto w-full max-w-3xl space-y-6 px-4 py-6 [overflow-wrap:anywhere]">
       <PageHeading>{m.library_export_title()}</PageHeading>
       <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {announcement(snap)}

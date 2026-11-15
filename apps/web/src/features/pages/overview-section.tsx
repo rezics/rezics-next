@@ -12,7 +12,7 @@ export const headingClass =
 export const sectionClass = 'min-w-0 space-y-4 in-data-[density=compact]:space-y-3';
 const anchorClass = 'scroll-mt-32';
 const sectionTitleClass = `${headingClass} min-w-0 max-w-full [overflow-wrap:anywhere]`;
-const sectionActionClass = `${linkClass} ${linkColor} inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 text-sm font-medium whitespace-normal [overflow-wrap:anywhere] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`;
+const sectionActionClass = `${linkClass} ${linkColor} inline-flex max-w-full items-center text-sm font-medium whitespace-normal [overflow-wrap:anywhere] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`;
 
 export function useOverview(id: unknown): { value: OverviewValue; section: Section | undefined } | null {
   const value = useContext(OverviewContext);

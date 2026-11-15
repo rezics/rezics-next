@@ -29,7 +29,7 @@ type Created = Extract<CreateResult, { ok: true }>;
 type Session = 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
 
 const peopleActionTarget =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] md:pointer-fine:min-h-8 md:pointer-fine:min-w-0 md:pointer-fine:py-1';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 function createdIdentity(result: Created): CreatedCreditIdentity | undefined {
   const identity = result.reader.state === 'ready' ? result.reader.identity : undefined;

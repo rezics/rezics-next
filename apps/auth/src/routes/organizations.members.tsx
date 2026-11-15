@@ -18,6 +18,7 @@ import {
   type MembershipHistoryKind,
 } from '../organization-membership-return';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { AuthButton as Button } from '../button';
@@ -133,11 +134,11 @@ function DepartureChoice({ answer, focusFallback }: { answer: (leave: boolean) =
         event.preventDefault();
         answer(false);
       }}
-      className="rounded-md border bg-background p-6 text-foreground"
+      className="w-full max-w-[calc(100%-2rem)] rounded-xl bg-popover p-4 text-xs/relaxed text-popover-foreground ring-1 ring-foreground/10 sm:max-w-sm"
     >
       <h2 id="membership-departure">{m.auth_members_departure()}</h2>
       <p>{m.auth_account_operation_leave_notice()}</p>
-      <div className="mt-4 flex gap-2">
+      <div className="mt-4 flex flex-wrap items-center gap-2">
         <Button ref={stay} type="button" onClick={() => answer(false)}>
           {m.auth_members_stay()}
         </Button>
@@ -829,11 +830,11 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
   return (
     <AuthPage heading={m.auth_members_heading()}>
       {router ? (
-        <Link to="/security" className="inline-flex min-h-11 items-center underline underline-offset-4">
+        <Link to="/security" className="underline underline-offset-4">
           {m.auth_members_back()}
         </Link>
       ) : (
-        <a href="/security" className="inline-flex min-h-11 items-center underline underline-offset-4">
+        <a href="/security" className="underline underline-offset-4">
           {m.auth_members_back()}
         </a>
       )}
@@ -981,15 +982,17 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
             <p>{m.auth_members_authority()}</p>
             {!reauth ? (
               <form onSubmit={(event) => void submit(event)} className="space-y-4">
-                <label className="flex items-start gap-3">
-                  <input
-                    type="checkbox"
+                <Field orientation="horizontal" className="items-start">
+                  <Checkbox
+                    id="membership-confirm"
                     checked={confirmed}
                     disabled={busy || observed || acknowledged}
-                    onChange={(event) => setConfirmed(event.target.checked)}
+                    onCheckedChange={(checked) => setConfirmed(checked === true)}
                   />
-                  {m.auth_members_confirm_check()}
-                </label>
+                  <FieldLabel className="min-w-0 font-normal wrap-anywhere" htmlFor="membership-confirm">
+                    {m.auth_members_confirm_check()}
+                  </FieldLabel>
+                </Field>
                 <Button type="submit" aria-busy={busy} disabled={busy || !confirmed || observed || acknowledged}>
                   {command.unresolved ? m.auth_members_retry_exact() : m.auth_members_submit()}
                 </Button>

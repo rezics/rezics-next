@@ -7,7 +7,7 @@ import type { BookDestination } from './hosted-book-reader';
 import { sameSelection, type BookContentsAddress, type BookPage, type BookSelection } from './source';
 import { useShellContextNavigationSelection } from '../../shell/contextual-navigation';
 
-const control = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]';
+const control = 'h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]';
 type OutlineProps = {
   reader: BookReader;
   locale: string;

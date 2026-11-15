@@ -1,3 +1,5 @@
+import { cn } from '@rezics/ui/utils';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { LayoutSelect } from '@rezics/ui/layout-select';
 import { useRouter } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
@@ -37,7 +39,7 @@ export function CollectionLayoutSelect({
               key={option.value}
               href={href(option.value)}
               aria-current={value === option.value ? 'page' : undefined}
-              className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className={cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]')}
             >
               {option.label}
             </a>

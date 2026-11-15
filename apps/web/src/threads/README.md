@@ -450,7 +450,7 @@ Decision: Sections closes after a choice at both widths; the current visit keeps
 bookmark captured before the outline opens, including nested scroll containers and the last live reading focus.
 Phone uses the shared scrollable BottomSheet, desktop the shared Dialog. Dismissal restores launcher focus; a choice
 waits for modal dismissal before instant local scroll and heading focus. The existing six-rem shell offset also reserves the measured sticky launcher and a wrapping Return row.
-The compact sticky controls wrap, have 44px targets and never narrow the prose column. No state enters browser
+The compact sticky controls wrap and never narrow the prose column. No state enters browser
 history, addresses or storage. A disappeared target reports unavailability and focuses the live reader.
 
 One iterative O(B+N) projection runs per exact snapshot and live spoiler disclosure identity. Only source text and
@@ -693,7 +693,7 @@ Repeated labels and URLs remain separate occurrences in authored order with dist
 targets. The list makes no metadata requests and does not inspect media, shell, reply or provenance links.
 
 The ordinary renderer keeps authored text, admitted `href`, optional authored `title` and its normal anchor
-navigation. References opens only from its 44px control; a reader selects one occurrence, sees the full wrapping,
+navigation. References opens only from its control; a reader selects one occurrence, sees the full wrapping,
 isolated destination, and may follow its ordinary link, explicitly copy that exact address, or return to the source
 without changing the fragment, revision or reply target. `mailto:` destinations are identified by their scheme;
 web hostnames are location labels only. A denied or missing clipboard leaves the exact read-only address available

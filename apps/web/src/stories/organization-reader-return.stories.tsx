@@ -7,6 +7,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
+import { Button } from '@rezics/ui/shadcn/button';
 
 /** Interactive admitted-response variations; no native capture or authority is manufactured. */
 function ReturnStory({ state }: { state: 'changed' | 'retry' }) {
@@ -44,13 +45,10 @@ function ReturnStory({ state }: { state: 'changed' | 'retry' }) {
       <AppShell>
         <main className="mx-auto w-full max-w-4xl space-y-4 p-4 sm:p-6">
           {state === 'changed' && (
-            <button
-              type="button"
-              className="min-h-11 min-w-11 underline focus-visible:outline-2 focus-visible:outline-ring"
-              onClick={() => setReplacement((value) => !value)}
+            <Button type="button" variant="link" size="sm" onClick={() => setReplacement((value) => !value)}
             >
               {m.organization_reader_refresh({}, o)}
-            </button>
+            </Button>
           )}
           <OrganizationOverview
             id={fixture.read.subject.id}

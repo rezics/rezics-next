@@ -6,7 +6,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import type { PortableWriting, WritingPreview, WritingRepairs } from './portable-writing';
 
 export const writingActionClass =
-  'min-h-11 min-w-11 h-auto max-w-full px-3 py-2 whitespace-normal leading-snug [overflow-wrap:anywhere]';
+  'h-auto min-h-7 max-w-full whitespace-normal leading-snug [overflow-wrap:anywhere]';
 
 export function WritingRepairNotice({ repairs }: { repairs: WritingRepairs }) {
   if (!repairs.attachments && !repairs.components && !repairs.links) return null;

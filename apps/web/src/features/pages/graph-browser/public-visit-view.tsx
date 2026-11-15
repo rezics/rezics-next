@@ -28,7 +28,7 @@ export function GraphPublicVisitNotice({
           <a
             className={cn(
               buttonVariants({ variant: 'outline' }),
-              'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere]',
+              'h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]',
             )}
             href={returnHref}
           >
@@ -37,7 +37,7 @@ export function GraphPublicVisitNotice({
           <a
             className={cn(
               buttonVariants({ variant: 'default' }),
-              'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere]',
+              'h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]',
             )}
             href={graphGlobalVisitHref(path, returnHref)}
           >

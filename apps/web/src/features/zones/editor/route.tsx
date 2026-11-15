@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useLocation, useRouter } from '@tanstack/react-router';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
 import { useSession } from '../../../session/query';
 import {
@@ -74,7 +74,7 @@ export function ZoneEditorRoute({
           <>
             <EditorFailure failure={{ kind: 'failure', status: 401, code: 'unauthorized' }} />
             <a
-              className="underline"
+              className={buttonVariants({ variant: 'link' })}
               href={`/auth/sign-in?return_to=${encodeURIComponent(location.pathname + location.search)}`}
             >
               {m.zones_owner_sign_in({}, { locale: locale as never })}

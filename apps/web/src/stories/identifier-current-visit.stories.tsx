@@ -14,6 +14,7 @@ import { getLocale } from '../paraglide/runtime';
 import { m } from '../paraglide/messages.js';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
+import { Button } from '@rezics/ui/shadcn/button';
 
 function Example({ scenario = 'duplicates' }: { scenario?: 'duplicates' | 'recovery' | 'cancelled' }) {
   const locale = getLocale();
@@ -46,9 +47,9 @@ function Example({ scenario = 'duplicates' }: { scenario?: 'duplicates' | 'recov
           transport={transport}
         />
         {scenario === 'cancelled' && (
-          <button className="min-h-11 underline" type="button" onClick={() => releaseRead.current?.()}>
+          <Button type="button" variant="link" size="sm" onClick={() => releaseRead.current?.()}>
             {m.identifiers_inspect_continue({}, { locale: locale as never })}
-          </button>
+          </Button>
         )}
         {scenario === 'recovery' && (
           <IdentifiersProfile

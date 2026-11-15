@@ -13,17 +13,17 @@ index and manifest are ready. Set Web's `STORYBOOK_UI_URL` to this UI server's o
 
 Tests run in a private network namespace that holds only loopback, so changes to the host's network interfaces cannot interrupt browser requests. Run one test file with `bun run test <file>` to use the same isolation. Run `bun run test:stories:slow-frames` after changing a story or an editor or overlay component: it delays every animation frame by 400 ms, which reproduces the failures a loaded host causes.
 
-The logo red (`--brand`) marks identity and never colors text; use ink blue (`--primary`) for colored text and actions. Source Serif 4 sets the cover placeholder's title and Work titles marked inside documents; titles in rows, cards and page headings use Manrope. Fonts are self-hosted, and theme selection belongs on `<html>` without a script. Mark icons in red with `fill-*` or `stroke-*` utilities, never `text-brand`.
+The logo red (`--brand`) marks identity and never colors text or controls. Colored text and actions use the official Neutral `--primary`. Source Serif 4 sets the cover placeholder's title and Work titles marked inside documents; titles in rows, cards and page headings use Manrope. Fonts are self-hosted, with locale CJK fallbacks, and theme selection belongs on `<html>` without a script: `.dark` or `.light` is explicit, and no class follows the system preference. Mark the logo with `fill-brand` or `stroke-brand`, never `text-brand`.
 
 ## shadcn components
 
 Before building any interface piece, look it up in [SHADCN.md](SHADCN.md), which lists every item in the shadcn registry with its purpose and add command, and add it from shadcn when it exists. Build our own only for what shadcn does not offer, and say so in that component's doc comment.
 
-The package uses shadcn's Rhea style on the Base UI primitives (`components.json`, style `base-rhea`). `apps/web/components.json` shares that configuration, so `bunx shadcn@latest add <name>` run from either directory writes into `packages/ui`.
+The package uses official shadcn Mira on the Base UI primitives (`components.json`, style `base-mira`, base color Neutral, both light and dark). There is no Aura override theme. Visible controls use official Mira sizes on every pointer and viewport: `default` is h-7 (28px), `sm` is h-6, and `xs` is h-5, with matching icon sizes. `apps/web/components.json` shares that configuration, so `bunx shadcn@latest add <name>` run from either directory writes into `packages/ui`.
 
-- Files in `src/shadcn/` are exactly what the shadcn CLI writes. Never edit them by hand: brand changes belong in `src/styles.css`, and our own components in `src/components/`. Import them as `@rezics/ui/shadcn/<name>`; the package root is empty and consumers use explicit component entries.
+- Files in `src/shadcn/` are exactly what the shadcn CLI writes. Never edit them by hand. Import them as `@rezics/ui/shadcn/<name>`; the package root is empty and consumers use explicit component entries.
 - `src/components/` holds only what shadcn does not offer: the site's components (`Cover`, `Reactions`, `ContentActions`, `ReportDialog`, the rating components, `MediaImage`, `EntityPicker`) and a few small helpers and display pieces with no shadcn counterpart. A component there never wraps a control that shadcn provides.
-- The shadcn colour variables map to the Aura tokens in `src/styles.css`, layered after the Rhea defaults.
+- Official Neutral tokens live in `src/styles.css`. Rezics keeps font stacks, CJK fallbacks, system and explicit dark handling, animation hooks still required by custom components, safe-area and scroll behavior, the hitbox utility, logo identity, and minimal aliases so those components keep working. The aliases point at official surfaces and tokens. They do not recreate a palette, radius scale, shadow language or control-state theme. `aura-canvas` and `aura-surface` are flat official surfaces. Domain status colors are semantic aliases of official tokens.
 - Stories for shadcn components are `src/components/shadcn-<name>.stories.tsx`, titled `shadcn/<Name>`.
 - `shadcn-sync.json` records the last successful sync time and CLI version. The daily GitHub check opens one shared `shadcn-sync` issue when that sync is more than seven days old; it never syncs components. Anyone with repository issue access can also run `bun run shadcn:sync-check` in this directory.
 - Whoever takes the issue runs `bun run shadcn:sync` here as an ordinary task. It re-adds every cloned component from `shadcn@latest`, refreshes `shadcn-registry.json` and `SHADCN.md` with `scripts/shadcn-index.ts`, pins dependencies exactly, updates the sync record and shows the diff. Review all changes and run `bun run check` before committing. Include `Closes #<issue-number>` in the sync commit message; the issue closes when the commit reaches the default branch. The sync never runs automatically, so people do not redo it in parallel.
@@ -53,14 +53,13 @@ props for numeric value text. The rating components compose [Base UI slider part
 directly because the native range needs question-specific value text, including the unrated state. The actual
 `Slider.Thumb` supplies its native input's label and formatted value; the root remains a group. This specialization
 belongs in the rating components, not in a generic slider wrapper.
-Editable input, textarea, grouped combobox and select boundaries use `--control`, with at least 3:1 non-text
-contrast on Aura's light and dark surfaces. Decorative borders keep `--border`. Focus retains the blue ring;
-invalid fields retain the danger boundary and disabled controls retain their disabled state. Grouped inputs draw
-one outer boundary. Theme adaptations live in `styles.css`; the shared modal source applies the viewport contract below.
+Editable input, textarea, grouped combobox and select use the official Mira field styles. Match `Button`, `Input`
+and `Select` sizes within each row (`default` h-7, `sm` h-6, or `xs` h-5, with matching icon sizes). Grouped inputs keep the official group boundary. Focus, invalid and disabled states are the official
+component states. Tokens live in `styles.css`; the shared modal source applies the viewport contract below.
 
-Below 768px or with a coarse primary pointer, editable controls and standard action buttons have a minimum 44px
-target. Fine-pointer desktop controls retain their dense sizes. Inline combobox tokens and editor toolbar buttons
-keep their own composition; callers must not treat an inline token as a standalone action.
+Visible controls stay at those official sizes on every pointer and viewport. The hitbox utility can extend a
+pointer target without inflating the visible control. Inline combobox tokens and editor toolbar buttons keep
+their own composition; callers must not treat an inline token as a standalone action.
 
 ## Dialogs and sheets
 
@@ -76,7 +75,7 @@ pending, confirmation or close behavior.
 
 Use `Menu` from `@rezics/ui/menu` for package menus. It takes one ordered entry list for items, links, radio groups,
 submenu pages, separators and destructive actions. Below the `md` breakpoint, or with a coarse primary pointer, the
-menu opens as a bottom sheet with a title and touch rows at least 44px high. On wider fine-pointer screens it opens as
+menu opens as a bottom sheet with a title and rows at the official Mira size (`default` h-7, compact `sm` h-6 or `xs` h-5, matching icon sizes). On wider fine-pointer screens it opens as
 a dropdown anchored to its trigger. Menu labels, including the title and Back control, come from the caller's native
 locale messages. A submenu becomes a sheet page; browser Back returns to the previous page and then closes the sheet.
 Selecting a radio value closes the menu once. Escape closes either form, and focus returns to the trigger.
@@ -84,7 +83,7 @@ Decision: current item and link entries retain `aria-current="page"` and show a 
 the end of their row in both forms, including submenus. The marker adds no accessible-name text and is distinct
 from radio selection. Entry labels (items, links, submenus and radio options) wrap, including unbroken words,
 within viewport-bounded dropdown panels and the sheet width. Markers and submenu arrows keep their space;
-multiline touch rows grow above the 44px minimum. This treatment belongs to entry rows, not custom content.
+multiline rows grow with wrapped labels above that official Mira height. This treatment belongs to entry rows, not custom content.
 Decision: disabled link entries expose `aria-disabled="true"`, have no native destination or keyboard stop, and
 never select or close either menu form. Their labels and current markers remain visible; enabled neighbors retain
 native navigation. The `DisabledCurrentLink` story covers both presentations with fixture destinations.
@@ -134,7 +133,7 @@ UI supplies their generic primitives and does not import or re-export the editor
 ## Content feedback
 
 Decision: vote presentations keep every admitted reaction in a compact smile-plus picker with the caller's accessible
-React label and 44px phone/coarse targets; chip presentations retain the text trigger and all pressed states use ink blue.
+React label and official Mira sizes (`default` h-7, compact `sm` h-6 or `xs` h-5, matching icon sizes); chip presentations retain the text trigger and all pressed states use the official primary.
 
 `Reactions`, `ContentActions`, `ReportDialog` and the rating components use the shared `Menu` for choices and overflow actions, with shadcn primitives for buttons, confirmations, dialogs, fields, textareas, sliders and badges.
 
@@ -227,7 +226,7 @@ A suitability-withheld cover shows its decoded ThumbHash blurred behind the labe
 
 ### Sizes and loading
 
-`Cover` takes a named size (`xs` 48 px, `sm` 96 px, `md` 160 px, `lg` 240 px, `xl` 320 px wide in CSS pixels) or `fill` for a frame sized by its parent. It writes `srcset` from the variants the kernel returned, offers AVIF before WebP through `<picture>`, and sets `sizes` from the named size so the browser picks the smallest sufficient variant. It sets intrinsic `width` and `height` from the frame. Cover actions and suitability reveal sit outside the clipped artwork frame so even a short landscape thumbnail keeps a 44 px target; the artwork retains its configured ratio. Covers below the first viewport load lazily; the subject page's own cover loads eagerly with high fetch priority because it is usually the largest element.
+`Cover` takes a named size (`xs` 48 px, `sm` 96 px, `md` 160 px, `lg` 240 px, `xl` 320 px wide in CSS pixels) or `fill` for a frame sized by its parent. It writes `srcset` from the variants the kernel returned, offers AVIF before WebP through `<picture>`, and sets `sizes` from the named size so the browser picks the smallest sufficient variant. It sets intrinsic `width` and `height` from the frame. Cover actions and suitability reveal sit outside the clipped artwork frame at official Mira sizes (`default` h-7, or `sm` h-6 / `xs` h-5 when the frame is compact), with matching icon sizes; the artwork retains its configured ratio. Covers below the first viewport load lazily; the subject page's own cover loads eagerly with high fetch priority because it is usually the largest element.
 
 ### One summary everywhere
 
@@ -267,7 +266,7 @@ their own progress row inside a cover tile.
 
 A tile can take `status={{ label, href? }}`. The caller passes the status label already localized for the subject
 profile. The quiet, neutral chip sits in the caption after the title and byline and before progress; its ink uses the
-foreground or muted-foreground token. A long label wraps within the tile. When `href` is present, the chip is a separate link above the stretched subject link, with a 44 px target, so pointer
+foreground or muted-foreground token. A long label wraps within the tile. When `href` is present, the chip is a separate link above the stretched subject link at the official Mira size (`default` h-7, or `sm` h-6 in a compact caption), with a matching icon, so pointer
 and keyboard users can reach it; keyboard order is subject, status, then the menu.
 
 ## Navigation, selection and working context
@@ -314,7 +313,7 @@ Import `ListRow`, `ListRowLink` and `ListRowControl` from `@rezics/ui/list-row` 
 
 Import `ContentItem` and `ContentItemProps` from `@rezics/ui/content-item` for a shared content row. Place each item in an ordinary `ul` or `ol`; it renders exactly one `li`. The required `title` renders as a named `h2`, `h3` or `h4` (default `h2`). With `href`, one native `ListRowLink` is stretched across the row and labelled by that visible heading; without a destination, the heading remains plain text. No slot is nested inside the primary anchor, and there is no duplicate title link or tab stop.
 
-The optional slots render in this order: `visual`, `context`, `metadata`, `preview`, `state`, `actions`, `trailing`, with the title between context and metadata. A visual supplies its own cover or avatar width; omitting it leaves the content column flush with the row rather than an empty visual column. Use `metadata` for supplied facts and secondary links, `preview` for short content summaries, `state` for progress or status, and `actions`/`trailing` for actual independent controls. Independent controls sit above the stretched link; plain metadata remains part of the primary row hit area. Links, buttons, disclosure summaries and labelled controls have at least 44 px targets, including on touch.
+The optional slots render in this order: `visual`, `context`, `metadata`, `preview`, `state`, `actions`, `trailing`, with the title between context and metadata. A visual supplies its own cover or avatar width; omitting it leaves the content column flush with the row rather than an empty visual column. Use `metadata` for supplied facts and secondary links, `preview` for short content summaries, `state` for progress or status, and `actions`/`trailing` for actual independent controls. Independent controls sit above the stretched link; plain metadata remains part of the primary row hit area. Links, buttons, disclosure summaries and labelled controls use official Mira sizes (`default` h-7, compact `sm` h-6 or `xs` h-5, matching icon sizes), including on touch.
 
 Within `visual`, `context`, `metadata` and `preview`, the row raises each native link, button, disclosure summary, form label and form field individually and supplies a visible focus outline. Those slot wrappers stay in normal flow, so plain preview content keeps the primary row hit area. Do not put an entire preview inside `ListRowControl`; reserve that wrapper for the existing `state`, `actions` and `trailing` layers. Absolute and fixed controls keep their positioning; keyboard-focusable composite controls also receive the independent layer. See [the supported content-item composition](src/components/content-item.md) for a disclosure and form example.
 
@@ -326,7 +325,7 @@ phones; the retired `MobileFeedCard` is no longer a package export.
 Decision: preserve caller-owned cover ratios and presentation, wrap supplied titles/context/metadata/status, and
 place the independent control rail below text until the row itself reaches 40 rem. Wide rows bound that rail to
 40% of the remaining content width. Shared control layers preserve positioned cover actions, use visible focus and
-44 px targets, and exclude disclosures, labels, fields and composite controls from row selection. No identity
+official Mira sizes (`default` h-7, `sm` h-6, `xs` h-5, matching icons), and exclude disclosures, labels, fields and composite controls from row selection. No identity
 hydration, synthesized facts or renderer is added. Grid titles and supplied sort context wrap; table sorting retains
 `aria-sort` and a visible direction arrow. Cover reveal, selection and menus remain available without hover.
 
@@ -408,8 +407,8 @@ when only the position label is known.
 Import `EmptyState` from `@rezics/ui/empty-state` for an explained page or compact empty/recovery state.
 It composes the existing shadcn `Empty` family, with a decorative `icon`, semantic `title` heading
 (`headingLevel`, default 2), optional `description` and independent `actions`. `density="page"` provides
-feed-page spacing; `compact` fits a pending result. Both wrap long strings and action rows on a 390px phone
-and reserve at least 44px height for action links and buttons. Callers supply keyboard focus styles and
+feed-page spacing; `compact` fits a pending result. Both wrap long strings and action rows on a 390px phone.
+Action links and buttons use official Mira sizes (`default` h-7, compact `sm` h-6 or `xs` h-5, matching icon sizes). Callers supply keyboard focus styles and
 localized destinations; the frame never navigates, fetches or focuses.
 
 The default has no live role. Supply `role="status"` for an ordinary explained state or `role="alert"` for

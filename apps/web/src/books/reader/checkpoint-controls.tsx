@@ -25,9 +25,9 @@ export type HostedBookCheckpointControlsProps = {
   recoverCurrent?: () => void;
 };
 
-const control = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]';
+const control = 'h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]';
 
-/** Shared 44px controls; recovery announces a result without taking focus from another task. */
+/** Shared wrapping controls; recovery announces a result without taking focus from another task. */
 export function HostedBookCheckpointControls({
   locale,
   chapter,

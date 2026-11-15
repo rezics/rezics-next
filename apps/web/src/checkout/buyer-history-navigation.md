@@ -46,7 +46,7 @@ Failed movements retain their exact ticket for the reader's explicit Retry. Non-
 
 Only a focused keyboard-initiated movement can transfer focus to the admitted current heading, once. Failure,
 independent focus/input, replacement, cancellation and disposal consume that pending focus. Empty terminal pages
-retain Previous and First. Actions wrap with a 44px minimum height; ready/error states announce their result.
+retain Previous and First. Actions wrap; ready/error states announce their result.
 Existing receipt/Edition departure custody, current admission, no-store/noindex and command settlement remain owned
 by their existing readers. Synthetic typed consumer fixtures repair old recording shapes without amending recorded
 money evidence. Native, compiler, installed browser and original paired-journey acceptance remain integration work.

@@ -519,12 +519,12 @@ function CandidateReviewLive({
         </ul>
       )}
       <div className="flex flex-wrap gap-2">
-        <Button className="min-h-11" disabled={busy || !!request.current} onClick={() => void confirm()}>
+        <Button disabled={busy || !!request.current} onClick={() => void confirm()}>
           {action}
         </Button>
         <Button
           variant="outline"
-          className="min-h-11"
+         
           disabled={busy || !!request.current}
           onClick={cancelConfirmation}
         >
@@ -538,7 +538,7 @@ function CandidateReviewLive({
     <section
       id="candidate-review"
       aria-label={m.candidate_title({}, options)}
-      className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 [overflow-wrap:anywhere] sm:p-6 [&_button]:h-auto [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:text-start pointer-coarse:[&_[role=checkbox]]:size-11 [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:[overflow-wrap:anywhere] max-md:[&_a]:inline-flex max-md:[&_a]:min-h-11 max-md:[&_a]:min-w-11 max-md:[&_a]:items-center max-md:[&_a]:py-2 pointer-coarse:[&_a]:inline-flex pointer-coarse:[&_a]:min-h-11 pointer-coarse:[&_a]:min-w-11 pointer-coarse:[&_a]:items-center pointer-coarse:[&_a]:py-2 [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-offset-2 [&_a]:focus-visible:outline-ring"
+      className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 [overflow-wrap:anywhere] sm:p-6 [&_button]:h-auto [&_button]:min-h-7 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:text-start [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:[overflow-wrap:anywhere] max-md:[&_a]:inline-flex max-md:[&_a]:items-center pointer-coarse:[&_a]:inline-flex pointer-coarse:[&_a]:items-center [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-offset-2 [&_a]:focus-visible:outline-ring"
     >
       <div className="space-y-1">
         <ContentItemHeading level={2} className="text-xl font-semibold">
@@ -549,7 +549,7 @@ function CandidateReviewLive({
         </p>
         {safeReturnHref && !busy && confirmation === null && !request.current && (
           <Link
-            className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4"
+            className="inline-flex items-center text-sm font-medium text-primary underline underline-offset-4"
             to={safeReturnHref as never}
             onClick={(event) => {
               if (!work.live() || busy || confirmation !== null || request.current) event.preventDefault();
@@ -564,7 +564,7 @@ function CandidateReviewLive({
             <p>{m.candidate_actions_unavailable({}, options)}</p>
             <Button
               variant="outline"
-              className="min-h-11"
+             
               disabled={busy || !!request.current}
               onClick={() => void load()}
             >
@@ -580,7 +580,7 @@ function CandidateReviewLive({
         )}
       </div>
       {!opened ? (
-        <Button variant="outline" className="min-h-11" onClick={() => void load()}>
+        <Button variant="outline" onClick={() => void load()}>
           {m.candidate_entry({}, options)}
         </Button>
       ) : (
@@ -599,7 +599,7 @@ function CandidateReviewLive({
               </p>
               <Button
                 variant="outline"
-                className="min-h-11"
+               
                 disabled={busy}
                 onClick={() => void (request.current ? confirm() : load())}
               >
@@ -614,7 +614,7 @@ function CandidateReviewLive({
                   ? m.candidate_action_denied({}, options)
                   : m.candidate_actions_unavailable({}, options)}
               </p>
-              <Button variant="outline" className="min-h-11" disabled={busy} onClick={() => void load()}>
+              <Button variant="outline" disabled={busy} onClick={() => void load()}>
                 {m.candidate_reload({}, options)}
               </Button>
             </div>
@@ -651,7 +651,7 @@ function CandidateReviewLive({
                     {m.candidate_view_public({}, options)}
                   </a>
                 )}
-                <Button variant="outline" className="min-h-11" disabled={busy} onClick={() => void load()}>
+                <Button variant="outline" disabled={busy} onClick={() => void load()}>
                   {m.candidate_reload({}, options)}
                 </Button>
               </div>
@@ -683,7 +683,7 @@ function CandidateReviewLive({
                     void load(field);
                   }}
                 >
-                  <SharedSelect.SelectTrigger id="candidate-field" className="min-h-11 w-full">
+                  <SharedSelect.SelectTrigger id="candidate-field" className="w-full">
                     <SharedSelect.SelectValue />
                   </SharedSelect.SelectTrigger>
                   <SharedSelect.SelectContent>
@@ -728,7 +728,7 @@ function CandidateReviewLive({
                                 <CandidateProvenance candidate={item} read={current} locale={locale} />
                                 <Button
                                   variant="outline"
-                                  className="min-h-11"
+                                 
                                   disabled={locked || item.retracted !== null}
                                   onClick={() => {
                                     if (!work.live()) return;
@@ -746,7 +746,7 @@ function CandidateReviewLive({
                     {current.page.next && (
                       <Button
                         variant="outline"
-                        className="min-h-11"
+                       
                         disabled={locked || requiresReload}
                         onClick={() => void load(property, current.page!.next!)}
                       >
@@ -830,7 +830,7 @@ function CandidateReviewLive({
                             actionAllowed('accept') && (
                               <Button
                                 variant="outline"
-                                className="min-h-11"
+                               
                                 disabled={
                                   locked ||
                                   requiresReload ||
@@ -848,7 +848,7 @@ function CandidateReviewLive({
                             actionAllowed('reject') && (
                               <Button
                                 variant="outline"
-                                className="min-h-11"
+                               
                                 disabled={
                                   locked ||
                                   requiresReload ||
@@ -863,7 +863,7 @@ function CandidateReviewLive({
                             )}
                           <Button
                             variant="outline"
-                            className="min-h-11"
+                           
                             disabled={locked}
                             onClick={() => work.live() && setCandidate(undefined)}
                           >
@@ -912,7 +912,7 @@ function CandidateReviewLive({
                             >
                               <SharedSelect.SelectTrigger
                                 id="context-mode"
-                                className="max-md:min-h-11 pointer-coarse:min-h-11"
+                               
                               >
                                 <SharedSelect.SelectValue />
                               </SharedSelect.SelectTrigger>
@@ -970,7 +970,7 @@ function CandidateReviewLive({
                                         />
                                         <FieldLabel
                                           htmlFor={`include-${choice}`}
-                                          className="min-h-11 min-w-0 flex-wrap [overflow-wrap:anywhere]"
+                                          className="min-w-0 flex-wrap [overflow-wrap:anywhere]"
                                         >
                                           <span>{m.candidate_include({}, options)}</span>
                                           {value ? (
@@ -1002,7 +1002,7 @@ function CandidateReviewLive({
                                               if (value !== null) edit(choice, value as 'normal' | 'preferred');
                                             }}
                                           >
-                                            <SharedSelect.SelectTrigger id={`rank-${choice}`} className="min-h-11">
+                                            <SharedSelect.SelectTrigger id={`rank-${choice}`}>
                                               <SharedSelect.SelectValue />
                                             </SharedSelect.SelectTrigger>
                                             <SharedSelect.SelectContent>
@@ -1030,7 +1030,7 @@ function CandidateReviewLive({
                         {actionAllowed('adopt') && (
                           <Button
                             variant="outline"
-                            className="min-h-11 self-start"
+                            className="self-start"
                             disabled={
                               locked ||
                               requiresReload ||
@@ -1088,7 +1088,7 @@ function CandidateReviewLive({
           )}
           <Button
             variant="outline"
-            className="min-h-11"
+           
             disabled={locked}
             onClick={() => {
               if (!work.live()) return;
@@ -1134,7 +1134,7 @@ function CandidateProvenance({
       </p>
       {source && 'source' in source && (
         <details>
-          <summary className="min-h-8 cursor-pointer rounded-sm py-1 whitespace-normal [overflow-wrap:anywhere] max-md:min-h-11 max-md:py-2 pointer-coarse:min-h-11 pointer-coarse:py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          <summary className="min-h-7 cursor-pointer whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             {m.candidate_provenance({}, options)}
           </summary>
           <dl className="min-w-0 space-y-2 py-2">

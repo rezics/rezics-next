@@ -1,3 +1,4 @@
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { useQuery } from '@tanstack/react-query';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -29,14 +30,14 @@ export function CollectionShortcuts() {
         <a
           key={collection.id}
           href={`/${getLocale()}/collections/${encodeURIComponent(collection.id)}`}
-          className="rounded-full border px-3 py-1.5 text-sm hover:bg-accent"
+          className={buttonVariants({ variant: 'outline', size: 'sm' })}
         >
           {collection.title}
         </a>
       ))}
       <a
         href={`/${getLocale()}/library/collections`}
-        className="rounded-full border px-3 py-1.5 text-sm text-primary hover:bg-accent"
+        className={buttonVariants({ variant: 'outline', size: 'sm' })}
       >
         {m.library_all_collections()}
       </a>

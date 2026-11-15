@@ -6,6 +6,7 @@ import { HomeFeed } from '../features/pages/home-feed';
 import type { FeedItem, FeedPage } from '../features/pages/home-feed-read';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
+import { Button } from '@rezics/ui/shadcn/button';
 
 type FollowingPost = Extract<FeedItem, { summary: { threadId: string } }>;
 type ReviewContext = NonNullable<FollowingPost['summary']['reviewContext']>;
@@ -175,12 +176,10 @@ function HomeReviewPostContext({ scenario }: { scenario: Scenario }) {
       <div className="space-y-4 p-4 sm:p-8">
         {scenario === 'replacement' ? (
           <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-3">
-            <button className="min-h-11 rounded border px-3" onClick={() => setRevision((value) => value + 1)}>
+            <Button type="button" variant="outline" size="sm" onClick={() => setRevision((value) => value + 1)}>
               Replace page
-            </button>
-            <button
-              className="min-h-11 rounded border px-3"
-              onClick={() => {
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => {
                 const next = viewer === 'reader-a' ? 'reader-b' : 'reader-a';
                 client.setQueryData(['session'], {
                   state: 'signed-in',
@@ -191,7 +190,7 @@ function HomeReviewPostContext({ scenario }: { scenario: Scenario }) {
               }}
             >
               Switch viewer
-            </button>
+            </Button>
             <output aria-live="polite">
               Viewer: {viewer}; page: {revision + 1}
             </output>

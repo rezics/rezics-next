@@ -22,7 +22,7 @@ function InspectionContents({ reading }: { reading: CreatorOfferReading }) {
         <Button
           type="button"
           variant="outline"
-          className="h-auto min-h-11 whitespace-normal text-start"
+          className="h-auto min-h-7 whitespace-normal text-start"
           onClick={() => focus('changes')}
         >
           {m.creator_inspect_jump_changes()}
@@ -31,7 +31,7 @@ function InspectionContents({ reading }: { reading: CreatorOfferReading }) {
       <Button
         type="button"
         variant="outline"
-        className="h-auto min-h-11 whitespace-normal text-start"
+        className="h-auto min-h-7 whitespace-normal text-start"
         onClick={() => focus('price')}
       >
         {m.creator_inspect_jump_price()}
@@ -39,7 +39,7 @@ function InspectionContents({ reading }: { reading: CreatorOfferReading }) {
       <Button
         type="button"
         variant="outline"
-        className="h-auto min-h-11 whitespace-normal text-start"
+        className="h-auto min-h-7 whitespace-normal text-start"
         onClick={() => focus('terms')}
       >
         {m.creator_inspect_jump_terms()}
@@ -47,7 +47,7 @@ function InspectionContents({ reading }: { reading: CreatorOfferReading }) {
       <Button
         type="button"
         variant="outline"
-        className="h-auto min-h-11 whitespace-normal text-start"
+        className="h-auto min-h-7 whitespace-normal text-start"
         onClick={() => focus('references')}
       >
         {m.creator_inspect_jump_references()}
@@ -55,7 +55,7 @@ function InspectionContents({ reading }: { reading: CreatorOfferReading }) {
       <Button
         type="button"
         variant="outline"
-        className="h-auto min-h-11 whitespace-normal text-start"
+        className="h-auto min-h-7 whitespace-normal text-start"
         onClick={() => focus('management')}
       >
         {m.creator_inspect_jump_management()}
@@ -63,7 +63,7 @@ function InspectionContents({ reading }: { reading: CreatorOfferReading }) {
       <Button
         type="button"
         variant="outline"
-        className="h-auto min-h-11 whitespace-normal text-start"
+        className="h-auto min-h-7 whitespace-normal text-start"
         onClick={() => focus('reading')}
       >
         {m.creator_inspect_jump_reading()}
@@ -84,7 +84,7 @@ export function CreatorOfferInspectionTrigger({
     <Button
       type="button"
       variant="outline"
-      className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+      className="h-auto min-h-7 max-w-full whitespace-normal text-start"
       aria-label={m.creator_inspect_trigger_label({ title: offer.title, id: offer.id, revision: offer.revision })}
       aria-expanded={reading.selected(offer)}
       aria-controls={reading.inspectionId}
@@ -134,7 +134,7 @@ export function CreatorOfferInspection({
         <header className="min-w-0 space-y-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <p className="text-sm font-medium text-muted-foreground">{m.creator_inspect_heading()}</p>
-            <Button type="button" variant="outline" className="min-h-11" onClick={() => reading.close()}>
+            <Button type="button" variant="outline" onClick={() => reading.close()}>
               {m.creator_inspect_close()}
             </Button>
           </div>
@@ -278,7 +278,7 @@ export function CreatorOfferInspection({
             {canManage && (
               <Button
                 type="button"
-                className="h-auto min-h-11 whitespace-normal text-start"
+                className="h-auto min-h-7 whitespace-normal text-start"
                 onClick={reading.focusManagement}
               >
                 {m.creator_inspect_go_management()}
@@ -287,7 +287,7 @@ export function CreatorOfferInspection({
             <Button
               type="button"
               variant="outline"
-              className="h-auto min-h-11 whitespace-normal text-start"
+              className="h-auto min-h-7 whitespace-normal text-start"
               onClick={() => reading.close()}
             >
               {m.creator_inspect_back_row()}
@@ -316,7 +316,7 @@ export function CreatorOfferInspection({
           {publicHref && (
             <a
               href={publicHref}
-              className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-11 whitespace-normal' })}
+              className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 whitespace-normal' })}
             >
               {m.creator_inspect_public_offer()}
             </a>

@@ -23,7 +23,7 @@ import {
 } from './work-parts-ordering';
 
 const wrap =
-  'h-auto min-h-8 max-w-full whitespace-normal [overflow-wrap:anywhere] py-1.5 max-md:min-h-11 max-md:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 function identityLabel(draft: OrderingDraft, locale: string) {
   return draft.summary?.label?.value || m.subject_value_unlabelled({}, { locale: locale as never });
@@ -97,13 +97,13 @@ export function WorkPartsOrderingSelect({
     <Field orientation="horizontal" className="min-w-0">
       <Checkbox
         id={controlId}
-        className="size-11 after:inset-0"
+       
         checked={selected}
         disabled={busy || disabled}
         onCheckedChange={(value) => onToggle(value === true)}
       />
       <FieldLabel
-        className="min-h-11 min-w-0 items-center whitespace-normal [overflow-wrap:anywhere]"
+        className="min-w-0 items-center whitespace-normal [overflow-wrap:anywhere]"
         htmlFor={controlId}
       >
         {m.work_parts_order_select({}, o)}

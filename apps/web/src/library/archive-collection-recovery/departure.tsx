@@ -1,17 +1,9 @@
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@rezics/ui/shadcn/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@rezics/ui/shadcn/alert-dialog';
 import { useBlocker } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { actionClass } from '../private-export/controls';
+import { Button } from '@rezics/ui/shadcn/button';
 
 export function ArchiveRecoveryDeparture({
   active,
@@ -38,9 +30,9 @@ export function ArchiveRecoveryDeparture({
   return (
     <div className="flex flex-wrap gap-3">
       {canCancel ? (
-        <button type="button" className={actionClass} disabled={busy || locked} onClick={() => setConfirmCancel(true)}>
+        <Button type="button" variant="outline" className={actionClass} disabled={busy || locked} onClick={() => setConfirmCancel(true)}>
           {m.library_archive_recovery_cancel()}
-        </button>
+        </Button>
       ) : null}
       <AlertDialog open={confirmCancel} onOpenChange={setConfirmCancel}>
         <AlertDialogContent>

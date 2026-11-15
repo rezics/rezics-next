@@ -89,9 +89,9 @@ export type ScreenTransport = {
 };
 
 const screenActionClassName =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 const screenSummaryClassName =
-  'min-h-11 max-w-full cursor-pointer py-2 font-semibold [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+  'max-w-full cursor-pointer font-semibold [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 export const ScreenProfile = catalogueEditor(ScreenProfileLive);
 
@@ -879,7 +879,7 @@ function ScreenCorrection({
               <a
                 href={href}
                 lang={label.lang ?? undefined}
-                className="inline-flex min-h-11 min-w-11 max-w-full items-center [overflow-wrap:anywhere] py-1 font-sans text-2xl font-semibold underline md:pointer-fine:min-h-8"
+                className="inline-flex max-w-full items-center [overflow-wrap:anywhere] py-1 font-sans text-2xl font-semibold underline"
               >
                 {label.text || m.subject_value_unlabelled({}, o)}
               </a>
@@ -891,7 +891,7 @@ function ScreenCorrection({
               </p>
               {intro}
               <nav
-                className="flex min-w-0 flex-wrap items-start gap-2 [&>a]:h-auto [&>a]:min-h-11 [&>a]:min-w-11 [&>a]:max-w-full [&>a]:whitespace-normal [&>a]:py-2 [&>a]:[overflow-wrap:anywhere] md:pointer-fine:[&>a]:min-h-8 md:pointer-fine:[&>a]:py-1"
+                className="flex min-w-0 flex-wrap items-start gap-2 [&>a]:h-auto [&>a]:min-h-7 [&>a]:max-w-full [&>a]:whitespace-normal [&>a]:[overflow-wrap:anywhere]"
                 aria-label={m.facts_other_editors({}, o)}
               >
                 <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={href}>

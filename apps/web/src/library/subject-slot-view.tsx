@@ -6,8 +6,7 @@ import { labelReadMessage, SubjectLabelReadNotice } from './subject-labels.tsx';
 import { EntryUndoForm, EntryRemoveForm, EntryRestoreFeedback } from './entry-undo';
 import { Exposure, operationIsAdmitted, useOperation } from '../kernel/exposure';
 import { undoToast } from '@rezics/ui/undo-toast';
-import { buttonVariants } from '@rezics/ui/shadcn/button';
-import { cn } from '@rezics/ui/utils';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { useQueryClient } from '@tanstack/react-query';
 import { Menu } from '@rezics/ui/menu';
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
@@ -85,13 +84,9 @@ type SubjectSlotProps = {
 const buttonClass = buttonVariants({ variant: 'outline' });
 const primaryClass = buttonVariants({ variant: 'default' });
 const linkClass = 'text-sm text-primary underline-offset-4 hover:underline';
-const controlFocusClass = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const labelButtonClass = cn(
-  buttonClass,
-  'h-auto min-h-[44px] min-w-0 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]',
-  controlFocusClass,
-);
-const labelChoiceClass = `min-h-[44px] w-full min-w-0 rounded px-2 py-2 text-start text-sm whitespace-normal [overflow-wrap:anywhere] hover:bg-muted disabled:opacity-50 ${controlFocusClass}`;
+const labelButtonClass = 'h-auto min-h-7 min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const labelChoiceClass =
+  'h-auto min-h-7 w-full min-w-0 justify-start whitespace-normal text-start [overflow-wrap:anywhere]';
 const subscribe = () => () => {};
 type SlotAdmission = {
   signature: string;
@@ -1311,15 +1306,16 @@ function SubjectLibrarySlotView({
 
   function labelReviewApplyAction(review: SubjectLabelReview) {
     const button = (
-      <button
+      <Button
         type="button"
+        variant="outline"
         disabled={!labelReviewCanApply(review)}
         className={labelButtonClass}
         onClick={() => applyLabelReview(review)}
         data-subject-label-review-apply
       >
         {m.library_subject_label_review_apply()}
-      </button>
+      </Button>
     );
     return review.choice.kind === 'existing' ? (
       <Exposure operation="library_label.assign">{button}</Exposure>
@@ -1787,9 +1783,9 @@ function SubjectLibrarySlotView({
           </span>
           {entryDeleteAdmitted ? (
             <Exposure operation="library_entry.delete">
-              <button
+              <Button
                 type="button"
-                className={buttonClass}
+                variant="outline"
                 data-entry-removal-trigger
                 disabled={
                   !hydrated ||
@@ -1801,7 +1797,7 @@ function SubjectLibrarySlotView({
                 onClick={openEntryRemovalReview}
               >
                 {m.library_subject_remove()}
-              </button>
+              </Button>
             </Exposure>
           ) : null}
         </div>
@@ -1842,11 +1838,11 @@ function SubjectLibrarySlotView({
         uncertainEntry.current.input.action === 'clear' ? 'library_entry.delete' : 'library_entry.put',
       ) &&
       (uncertainEntry.current.input.action === 'clear' ? entryDeleteAdmitted : entryPutAdmitted) ? (
-        <button
+        <Button
           type="button"
+          variant="outline"
           data-entry-state-retry={uncertainEntry.current.input.action === 'save' ? true : undefined}
           data-entry-removal-retry={uncertainEntry.current.input.action === 'clear' ? true : undefined}
-          className={buttonClass}
           disabled={pending}
           onClick={() => {
             const original = uncertainEntry.current;
@@ -1864,19 +1860,19 @@ function SubjectLibrarySlotView({
           {uncertainEntry.current.input.action === 'save'
             ? m.library_entry_review_retry()
             : m.library_entry_removal_retry()}
-        </button>
+        </Button>
       ) : null}
 
       {hydrated && collectionLifetime.current() && uncertainMember.current ? (
-        <button
+        <Button
           type="button"
-          className={buttonClass}
+          variant="outline"
           onClick={() => {
             if (collectionLifetime.current() && uncertainMember.current) void mutate(uncertainMember.current.input);
           }}
         >
           {m.library_selection_retry()}
-        </button>
+        </Button>
       ) : null}
 
       {data.session === 'signed-in' && (!hydrated || collectionLifetime.current()) ? (
@@ -1885,9 +1881,9 @@ function SubjectLibrarySlotView({
             title={m.library_subject_add_collection()}
             closeOnNavigation
             trigger={
-              <button data-add-to-collection type="button" className={buttonClass}>
+              <Button data-add-to-collection type="button" variant="outline">
                 {m.library_subject_add_collection()}
-              </button>
+              </Button>
             }
             entries={[]}
             content={
@@ -1986,7 +1982,7 @@ function SubjectLibrarySlotView({
                   >
                     <a
                       href={`/${encodeURIComponent(locale)}/library?label=${encodeURIComponent(label.labelId)}`}
-                      className={`inline-flex min-h-[44px] min-w-[44px] items-center rounded-sm py-2 text-primary underline-offset-4 [overflow-wrap:anywhere] hover:underline ${controlFocusClass}`}
+                      className="min-w-0 text-primary underline-offset-4 [overflow-wrap:anywhere] hover:underline"
                     >
                       {label.name}
                     </a>
@@ -2005,14 +2001,15 @@ function SubjectLibrarySlotView({
                         <input type="hidden" name="idempotencyKey" value={data.labelRemoveKeys?.[label.id]} />
                         <input type="hidden" name="revision" value={label.revision} />
                         <input type="hidden" name="csrf_token" value={data.csrfToken ?? ''} />
-                        <button
+                        <Button
                           type="submit"
+                          variant="ghost"
+                          size="icon-sm"
                           disabled={!data.csrfToken || (hydrated && labelActionBlocked)}
                           aria-label={m.library_subject_label_remove({ name: label.name })}
-                          className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full px-2 text-muted-foreground hover:text-foreground disabled:opacity-50 ${controlFocusClass}`}
                         >
                           ×
-                        </button>
+                        </Button>
                       </form>
                     </Exposure>
                   </li>
@@ -2051,7 +2048,7 @@ function SubjectLibrarySlotView({
                   ref={labelPickerTrigger}
                   role="button"
                   aria-expanded={hydrated ? labelPickerOpen : undefined}
-                  className={`${labelButtonClass} cursor-pointer list-none`}
+                  className={`${buttonClass} ${labelButtonClass} cursor-pointer list-none`}
                 >
                   {m.library_subject_label_add()}
                 </summary>
@@ -2103,17 +2100,19 @@ function SubjectLibrarySlotView({
                       />
                       <div className="flex flex-wrap gap-2">
                         <Exposure operation="library_label.create">
-                          <button
+                          <Button
                             type="submit"
+                            variant="outline"
                             ref={labelSubmitElement}
                             disabled={!data.csrfToken || (hydrated && labelActionBlocked)}
                             className={labelButtonClass}
                           >
                             {m.library_subject_label_add()}
-                          </button>
+                          </Button>
                         </Exposure>
-                        <button
+                        <Button
                           type="button"
+                          variant="outline"
                           className={labelButtonClass}
                           onClick={() => {
                             if (!labelLifetime.current()) return;
@@ -2133,7 +2132,7 @@ function SubjectLibrarySlotView({
                           }}
                         >
                           {m.library_collection_cancel()}
-                        </button>
+                        </Button>
                       </div>
                       <SubjectLabelMore
                         key={searchSequence}
@@ -2170,8 +2169,9 @@ function SubjectLibrarySlotView({
                           {labelChoices.map((choice) => (
                             <li key={choice.id}>
                               <Exposure operation="library_label.assign">
-                                <button
+                                <Button
                                   type="button"
+                                  variant="ghost"
                                   disabled={!data.csrfToken || (hydrated && labelActionBlocked)}
                                   ref={(element) => {
                                     if (element) labelChoiceElements.current.set(choice.id, element);
@@ -2193,7 +2193,7 @@ function SubjectLibrarySlotView({
                                   }`}
                                 >
                                   {choice.name}
-                                </button>
+                                </Button>
                               </Exposure>
                             </li>
                           ))}
@@ -2204,8 +2204,9 @@ function SubjectLibrarySlotView({
                           ) ? (
                             <li>
                               <Exposure operation="library_label.create">
-                                <button
+                                <Button
                                   type="button"
+                                  variant="ghost"
                                   ref={labelCreateElement}
                                   disabled={!data.csrfToken || (hydrated && labelActionBlocked)}
                                   aria-pressed={labelReviewDraft?.kind === 'proposed'}
@@ -2217,7 +2218,7 @@ function SubjectLibrarySlotView({
                                   }`}
                                 >
                                   {m.library_subject_label_create({ name: normalizeLibraryLabelName(labelQuery) })}
-                                </button>
+                                </Button>
                               </Exposure>
                             </li>
                           ) : null}
@@ -2253,8 +2254,9 @@ function SubjectLibrarySlotView({
             ) : null}
             <SubjectLabelNotice {...(labelNotice !== undefined ? { result: labelNotice } : {})} />
             {labelRetryCurrent && labelOperation ? (
-              <button
+              <Button
                 type="button"
+                variant="outline"
                 data-subject-label-retry
                 className={labelButtonClass}
                 disabled={labelPending}
@@ -2263,7 +2265,7 @@ function SubjectLibrarySlotView({
                 }}
               >
                 {m.library_subject_label_retry_original()}
-              </button>
+              </Button>
             ) : null}
             {labelUndo ? (
               <form
@@ -2302,13 +2304,14 @@ function SubjectLibrarySlotView({
                 <span role="status" aria-live="polite">
                   {m.library_subject_label_removed_status()}
                 </span>
-                <button
+                <Button
                   type="submit"
+                  variant="link"
                   disabled={!data.csrfToken || labelActionBlocked}
-                  className={`${linkClass} min-h-[44px] min-w-[44px] rounded px-2 py-2 ${controlFocusClass}`}
+                  className="h-auto min-h-7 whitespace-normal"
                 >
                   {m.library_subject_label_undo()}
-                </button>
+                </Button>
               </form>
             ) : null}
           </div>

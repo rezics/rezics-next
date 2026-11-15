@@ -27,7 +27,7 @@ export function CollectionDiscoveryCard({ card, locale }: { card: PublicCollecti
           <h2 className="text-lg font-semibold leading-snug [overflow-wrap:anywhere] sm:text-xl">
             <a
               href={href}
-              className="inline-flex min-h-11 max-w-full items-center rounded-sm text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               {card.title}
             </a>
@@ -43,7 +43,7 @@ export function CollectionDiscoveryCard({ card, locale }: { card: PublicCollecti
                 {m.discovery_collection_curator({}, options)}{' '}
                 {card.curator.destination ? (
                   <a
-                    className="inline-flex min-h-11 items-center text-primary underline"
+                    className="text-primary underline"
                     href={`/${locale}${card.curator.destination}`}
                   >
                     {card.curator.label || m.discovery_unnamed_account({}, options)}
@@ -76,7 +76,7 @@ export function CollectionDiscoveryCard({ card, locale }: { card: PublicCollecti
                     href,
                     member.id,
                   )}
-                  className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 [overflow-wrap:anywhere]"
+                  className="text-primary underline underline-offset-4 [overflow-wrap:anywhere]"
                 >
                   {member.subject.label?.value || m.subject_value_unlabelled({}, options)}
                 </a>

@@ -3,7 +3,7 @@ import { ProgressDecimalInput } from './progress-decimal-input-field';
 import { progressAddressIssue, progressIndexAddress } from './progress-address';
 import { ProgressAddressCorrection } from './progress-address-correction';
 import { Exposure, useOperation } from '../kernel/exposure';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel, FieldLegend } from '@rezics/ui/shadcn/field';
 import { ProgressChoice } from './progress-actions';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -102,8 +102,10 @@ function stateLabel(state: ProgressIndex['sessions'][number]['state']): string {
   return m.library_progress_state_active();
 }
 
-const buttonClass =
-  'inline-flex min-h-[44px] min-w-0 max-w-full items-center justify-center rounded-lg border border-border px-4 py-2 text-center whitespace-normal wrap-anywhere text-primary underline-offset-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const buttonClass = buttonVariants({
+  variant: 'outline',
+  className: 'h-auto min-h-7 max-w-full whitespace-normal text-center wrap-anywhere',
+});
 
 function ProgressReturnRecovery({
   selection,
@@ -1225,14 +1227,14 @@ function ProgressIndexPageContent({
                 {m.library_progress_address_apply()}
               </Link>
               {filterSubject.length ? (
-                <Button type="button" variant="ghost" className="min-h-11" onClick={() => setFilterSubject([])}>
+                <Button type="button" variant="ghost" onClick={() => setFilterSubject([])}>
                   {m.library_progress_address_clear()}
                 </Button>
               ) : null}
             </div>
           </div>
           <details open={filterKind !== 'none' || undefined} className="group border-t border-border pt-3">
-            <summary className="min-h-11 cursor-pointer content-center text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            <summary className="cursor-pointer text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
               {m.library_progress_discovery_filter_by()}
             </summary>
             <div className="grid gap-4 pt-3 sm:grid-cols-2">
@@ -1266,7 +1268,6 @@ function ProgressIndexPageContent({
                   </FieldLabel>
                   <Input
                     id="progress-profile-filter"
-                    className="min-h-11"
                     value={filterValue}
                     onChange={(event) => setFilterValue(event.currentTarget.value)}
                   />
@@ -1279,7 +1280,7 @@ function ProgressIndexPageContent({
               to="/library/progress"
               search={{}}
               state={{} as never}
-              className="inline-flex min-h-11 items-center text-sm text-primary underline underline-offset-4"
+              className="text-sm text-primary underline underline-offset-4"
             >
               {m.library_progress_discovery_reset()}
             </Link>
@@ -1292,7 +1293,7 @@ function ProgressIndexPageContent({
             <div className="space-y-3 rounded-xl border border-border p-4">
               <p role="status">{m.library_progress_unavailable()}</p>
               {retry ? (
-                <Button variant="outline" className="min-h-11" disabled={loading} onClick={retry}>
+                <Button variant="outline" disabled={loading} onClick={retry}>
                   {m.library_progress_retry()}
                 </Button>
               ) : null}
@@ -1878,12 +1879,7 @@ function SessionRow({
                     <Menu
                       title={m.library_collection_actions()}
                       trigger={
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          className="min-h-[44px] min-w-[44px]"
-                          aria-label={m.library_collection_actions()}
-                        >
+                        <Button variant="ghost" size="icon-sm" aria-label={m.library_collection_actions()}>
                           <EllipsisIcon aria-hidden="true" />
                         </Button>
                       }

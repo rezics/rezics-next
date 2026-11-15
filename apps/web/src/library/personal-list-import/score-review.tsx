@@ -130,7 +130,7 @@ export function VndbScoreReview({
       data-vndb-score-review={scoreDecision?.status ?? (scoreNotice?.reviewId ? 'stale' : 'pending')}
     >
       <h4 className="font-medium">{m.library_vndb_score_title()}</h4>
-      <p className="break-words text-sm">{m.library_vndb_score_source({ value: sourceText(row) })}</p>
+      <p className="h-auto break-words text-sm">{m.library_vndb_score_source({ value: sourceText(row) })}</p>
       {source.scale ? (
         <p className="text-sm text-muted-foreground">
           {m.library_vndb_score_scale({ min: source.scale.min, max: source.scale.max, step: source.scale.step })}
@@ -138,11 +138,11 @@ export function VndbScoreReview({
       ) : null}
       {question ? (
         <div className="space-y-1 text-sm">
-          <p className="break-words font-medium">{m.library_vndb_score_question({ label: question.label })}</p>
-          <p className="break-words">
+          <p className="h-auto break-words font-medium">{m.library_vndb_score_question({ label: question.label })}</p>
+          <p className="h-auto break-words">
             {m.library_vndb_score_meaning({ meaning: question.meaning ?? m.library_vndb_score_meaning_unknown() })}
           </p>
-          <p className="break-words text-muted-foreground">
+          <p className="h-auto break-words text-muted-foreground">
             {m.library_vndb_score_question_basis({
               id: question.id,
               revision: question.revision,
@@ -156,22 +156,22 @@ export function VndbScoreReview({
       ) : (
         <p role="status">{m.library_vndb_score_question_unavailable()}</p>
       )}
-      <p className="break-words text-sm">{currentVoteLabel(row)}</p>
-      {previewTarget ? <p className="break-words text-sm">{m.library_vndb_target_id({ id: previewTarget })}</p> : null}
+      <p className="h-auto break-words text-sm">{currentVoteLabel(row)}</p>
+      {previewTarget ? <p className="h-auto break-words text-sm">{m.library_vndb_target_id({ id: previewTarget })}</p> : null}
       {row.kind === 'vn' && source.kind === 'value' && !sourceSupported ? (
-        <p className="break-words text-sm text-muted-foreground">{m.library_vndb_score_source_unsupported()}</p>
+        <p className="h-auto break-words text-sm text-muted-foreground">{m.library_vndb_score_source_unsupported()}</p>
       ) : null}
       {source.kind === 'invalid' && source.raw === '0' ? (
-        <p className="break-words text-sm text-muted-foreground">{m.library_vndb_score_zero_clear()}</p>
+        <p className="h-auto break-words text-sm text-muted-foreground">{m.library_vndb_score_zero_clear()}</p>
       ) : null}
       {row.kind !== 'vn' ? <p>{m.library_vndb_score_not_vn()}</p> : null}
       {!targetMatchesPreview ? <p role="status">{m.library_vndb_score_target_unavailable()}</p> : null}
       {sourceSupported && exactCandidate !== null ? (
-        <p className="break-words text-sm">{m.library_vndb_score_exact_candidate({ units: exactCandidate })}</p>
+        <p className="h-auto break-words text-sm">{m.library_vndb_score_exact_candidate({ units: exactCandidate })}</p>
       ) : sourceSupported ? (
-        <p className="break-words text-sm">{m.library_vndb_score_choose_native_units()}</p>
+        <p className="h-auto break-words text-sm">{m.library_vndb_score_choose_native_units()}</p>
       ) : null}
-      <p className="break-words text-sm text-muted-foreground">
+      <p className="h-auto break-words text-sm text-muted-foreground">
         {native.admission.status === 'conditional'
           ? m.library_vndb_score_apply_ready()
           : m.library_vndb_score_current_unavailable()}
@@ -184,15 +184,15 @@ export function VndbScoreReview({
               ? m.library_vndb_score_selected_vote({ units: scoreDecision.units ?? 0 })
               : m.library_vndb_score_selected_clear()}
           </p>
-          <p className="break-words">{m.library_vndb_score_receipt({ id: scoreDecision.reviewId })}</p>
-          <p className="break-words">{m.library_vndb_target_id({ id: scoreDecision.targetId })}</p>
+          <p className="h-auto break-words">{m.library_vndb_score_receipt({ id: scoreDecision.reviewId })}</p>
+          <p className="h-auto break-words">{m.library_vndb_target_id({ id: scoreDecision.targetId })}</p>
         </div>
       ) : null}
       {scoreNotice ? (
         <div role="status" className="space-y-1">
           <p>{noticeText(scoreNotice)}</p>
           {scoreNotice.reviewId ? (
-            <p className="break-words text-sm">{m.library_vndb_score_receipt({ id: scoreNotice.reviewId })}</p>
+            <p className="h-auto break-words text-sm">{m.library_vndb_score_receipt({ id: scoreNotice.reviewId })}</p>
           ) : null}
         </div>
       ) : null}
@@ -231,7 +231,7 @@ export function VndbScoreReview({
           </div>
           {choice === 'vote' && question ? (
             <Field>
-              <FieldLabel id={`${id}-units-label`} htmlFor={`${id}-units`} className="min-h-11 items-center">
+              <FieldLabel id={`${id}-units-label`} htmlFor={`${id}-units`} className="items-center">
                 {m.library_vndb_score_units()}
               </FieldLabel>
               <Select<string, false>
@@ -245,7 +245,7 @@ export function VndbScoreReview({
                 <SelectTrigger
                   id={`${id}-units`}
                   aria-labelledby={`${id}-units-label`}
-                  className="min-h-11 w-full rounded-md border bg-background px-3"
+                  className='w-full'
                 >
                   <SelectValue />
                 </SelectTrigger>

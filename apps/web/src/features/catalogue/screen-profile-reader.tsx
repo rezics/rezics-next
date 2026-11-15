@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from '@tanstack/react-router';
 import { useId, useLayoutEffect, useRef, useSyncExternalStore, type MouseEvent } from 'react';
 import { ContentItemHeading } from '@rezics/ui/content-item';
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import type { SubjectRead } from '@rezics/client';
 import { releaseDigest, type Release } from '@rezics/definitions';
 import { PAGE_GLOBAL_CONTEXT, pickText } from '@rezics/composition';
@@ -40,7 +40,7 @@ import {
 } from './screen-current-visit';
 
 const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 function options(locale: string) {
   return { locale: locale as never };
@@ -367,9 +367,9 @@ export function ScreenProfileReader({
       ) : null}
       {visit.state === 'empty' ? <p role="status">{screenStateCopy('empty', locale)}</p> : null}
       {onRetry && visit.state !== 'ready' && visit.state !== 'loading' ? (
-        <button type="button" className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`} onClick={onRetry}>
+        <Button type="button" variant="outline" className={actionClass} onClick={onRetry}>
           {m.correction_retry({}, o)}
-        </button>
+        </Button>
       ) : null}
       {publicRead && release && visit.state === 'ready' ? (
         <>

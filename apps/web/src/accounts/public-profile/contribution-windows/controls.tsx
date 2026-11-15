@@ -1,4 +1,6 @@
 import { Link } from '@tanstack/react-router';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { useLayoutEffect } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { m } from '../../../paraglide/messages.js';
@@ -16,8 +18,10 @@ import {
   retryContributionWindow,
 } from './state';
 
-const controlClass =
-  'inline-flex min-h-11 items-center justify-center rounded-md border border-border px-3 py-2 text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const controlClass = cn(
+  buttonVariants({ variant: 'outline', size: 'sm' }),
+  'h-auto min-h-6 max-w-full whitespace-normal',
+);
 
 function rawQueryWithoutCursor(search: string): string[] {
   const raw = search.startsWith('?') ? search.slice(1) : search;
@@ -139,17 +143,19 @@ export function ContributionWindowControls({
         </Link>
       )}
       {retryAvailable && (
-        <button
+        <Button
           type="button"
+          variant="outline"
+          size="sm"
           data-slot="retry"
-          className={controlClass}
+          className="h-auto min-h-6 max-w-full whitespace-normal"
           onClick={() => {
             retryContributionWindow({ owner, cursor, href });
             route.retry();
           }}
         >
           {m.public_account_retry({}, currentOptions)}
-        </button>
+        </Button>
       )}
     </nav>
   );

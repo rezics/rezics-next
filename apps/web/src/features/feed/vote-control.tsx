@@ -1,4 +1,5 @@
 import { ArrowBigDownIcon, ArrowBigUpIcon } from 'lucide-react';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { ThreadReactions, type ThreadReactionsProps } from '../../threads/thread-reactions';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
@@ -37,15 +38,14 @@ export function VoteControl({
   const arrow = (direction: 'upvote' | 'downvote') => {
     const Icon = direction === 'upvote' ? ArrowBigUpIcon : ArrowBigDownIcon;
     const label = direction === 'upvote' ? m.reaction_upvote({}, options) : m.reaction_downvote({}, options);
-    const className =
-      'inline-flex min-h-11 min-w-11 items-center justify-center rounded-full text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8 sm:min-w-8 pointer-coarse:min-h-11 pointer-coarse:min-w-11';
+    const className = buttonVariants({ variant: 'ghost', size: 'icon-sm' });
     return signedIn ? (
-      <button type="button" disabled className={className} aria-label={label}>
-        <Icon aria-hidden className="size-5 opacity-50" />
-      </button>
+      <Button type="button" variant="ghost" size="icon-sm" disabled aria-label={label}>
+        <Icon aria-hidden />
+      </Button>
     ) : (
       <a href={signIn} className={className} aria-label={label}>
-        <Icon aria-hidden className="size-5" />
+        <Icon aria-hidden />
       </a>
     );
   };
@@ -54,8 +54,9 @@ export function VoteControl({
       role="group"
       aria-label={m.feed_action_votes_unavailable({}, options)}
       data-slot="vote-unavailable"
+      data-plain={plain ? 'true' : undefined}
       title={m.feed_action_votes_unavailable({}, options)}
-      className={`inline-flex items-center rounded-full ${plain ? '' : 'bg-muted/70'}`}
+      className="inline-flex items-center"
     >
       {arrow('upvote')}
       <span className="min-w-8 px-1 text-center text-sm" aria-label={m.feed_action_votes_unavailable({}, options)}>

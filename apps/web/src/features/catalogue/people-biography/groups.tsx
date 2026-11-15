@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { ContentItemHeading } from '@rezics/ui/content-item';
 import { m } from '../../../paraglide/messages.js';
@@ -26,7 +28,7 @@ import {
 } from './index';
 
 const actionClass =
-  'inline-flex h-auto min-h-11 min-w-11 max-w-full items-center whitespace-normal py-2 [overflow-wrap:anywhere] underline md:pointer-fine:min-h-8 md:pointer-fine:min-w-0 md:pointer-fine:py-1';
+  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
 
 function groupTitle(kind: PeopleBiographyKind, locale: string) {
   const o = { locale: locale as never };
@@ -73,7 +75,7 @@ function BiographyGroup({
       id={`people-group-${group.kind}`}
       tabIndex={-1}
       data-slot={`people-group-${group.kind}`}
-      className="min-w-0 space-y-3 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      className="min-w-0 space-y-3 [overflow-wrap:anywhere] "
     >
       <ContentItemHeading level={2} className="text-xl font-semibold">
         {groupTitle(group.kind, locale)}

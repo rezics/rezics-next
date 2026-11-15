@@ -31,7 +31,7 @@ export function BuyerHistoryControls({
     <a
       href={purchaseHistoryHref(locale, list, position(cursor))}
       onClick={(event) => navigation?.move(movement, cursor, event)}
-      className={buttonVariants({ variant: 'outline', className: 'min-h-11 whitespace-normal text-center' })}
+      className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 whitespace-normal text-center' })}
     >
       {text}
     </a>

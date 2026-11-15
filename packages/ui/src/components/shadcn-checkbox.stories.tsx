@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { withSurface } from '../stories/support.tsx';
@@ -100,9 +101,9 @@ const Terms = () => {
           )}
         </div>
       </Field>
-      <button type="submit" className="mt-3 rounded-md border px-3 py-1 text-sm">
+      <Button type="submit" className="mt-3">
         Join
-      </button>
+      </Button>
     </form>
   );
 };

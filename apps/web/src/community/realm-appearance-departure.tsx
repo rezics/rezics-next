@@ -118,14 +118,14 @@ export function RealmAppearanceDeparture({
             <AlertDialogCancel
               ref={stayButton}
               variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full shrink px-4 py-3 text-center leading-snug whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
+              className="h-auto min-h-7 max-w-full shrink text-center leading-snug whitespace-normal [overflow-wrap:anywhere]"
               onClick={() => settle(true)}
             >
               <span className="min-w-0">{m.realm_appearance_stay()}</span>
             </AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
-              className="h-auto min-h-11 min-w-11 max-w-full shrink px-4 py-3 text-center leading-snug whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
+              className="h-auto min-h-7 max-w-full shrink text-center leading-snug whitespace-normal [overflow-wrap:anywhere]"
               onClick={() => settle(false)}
             >
               <span className="min-w-0">{m.realm_appearance_leave()}</span>

@@ -8,6 +8,7 @@ import {
   CodeBlockTitle,
 } from '@rezics/ui/shadcn/code-block';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
 import { MAX_WIDE_CODE_BYTES, type WideDocumentDescriptor } from './wide-document-reading';
 import type { WideDocumentCopyState } from './wide-document-copy';
@@ -51,7 +52,7 @@ export function WideDocumentCode({
           <Button
             type="button"
             variant="outline"
-            className="min-h-11 min-w-11 max-w-full whitespace-normal px-3 text-start [overflow-wrap:anywhere]"
+            className="max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
             aria-pressed={wrap}
             onClick={() => setWrap((current) => !current)}
           >
@@ -60,7 +61,7 @@ export function WideDocumentCode({
           <Button
             type="button"
             variant="outline"
-            className="min-h-11 min-w-11 max-w-full whitespace-normal px-3 text-start [overflow-wrap:anywhere]"
+            className="max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
             onClick={(event) =>
               onInspect(
                 {
@@ -81,7 +82,7 @@ export function WideDocumentCode({
           <Button
             type="button"
             variant="outline"
-            className="min-h-11 min-w-11 max-w-full whitespace-normal px-3 text-start [overflow-wrap:anywhere]"
+            className="max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
             disabled={!copyAvailable}
             onClick={() => onCopy(descriptor)}
           >
@@ -129,13 +130,13 @@ export function WideDocumentCopyFeedback({ state, locale }: { state: WideDocumen
       </p>
       <label className="grid min-w-0 gap-1 text-xs">
         <span>{m.wide_document_code_manual_copy({}, options)}</span>
-        <textarea
+        <Textarea
           readOnly
           rows={3}
           value={state.text}
           onFocus={(event) => event.currentTarget.select()}
           onClick={(event) => event.currentTarget.select()}
-          className="min-h-20 w-full min-w-0 resize-y rounded-md border bg-background p-2 font-mono text-xs leading-relaxed text-foreground"
+          className="min-h-20 w-full min-w-0 resize-y font-mono text-xs leading-relaxed"
         />
       </label>
     </div>

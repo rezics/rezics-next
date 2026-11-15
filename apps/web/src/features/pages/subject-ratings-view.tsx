@@ -38,9 +38,9 @@ const sectionClass = 'min-w-0 space-y-4 in-data-[density=compact]:space-y-3';
 const headingClass =
   'text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl';
 const summaryClass =
-  'list-item list-inside min-h-11 min-w-11 max-w-full cursor-pointer rounded-sm px-2 py-3 text-start text-sm font-medium whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'list-item list-inside max-w-full cursor-pointer text-start text-sm font-medium whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const linkClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm px-2 py-3 text-start text-sm font-medium whitespace-normal wrap-anywhere text-primary underline underline-offset-4 hover:text-primary/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'inline-flex max-w-full items-center text-start text-sm font-medium whitespace-normal wrap-anywhere text-primary underline underline-offset-4 hover:text-primary/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 export const RatingsContext = createContext<Ratings | RatingSources | null | undefined>(undefined);
 /** Story fixtures can show each display state without adding another request to the subject page. */
@@ -129,7 +129,7 @@ export function RatingSourceStatus({
               type="button"
               variant="outline"
               aria-disabled={waiting || undefined}
-              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2 text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               onClick={(event) => {
                 focus.noteActivation(event.currentTarget);
                 if (waiting || !admitRatingRetry(retryAt)) return;
@@ -631,7 +631,7 @@ function RatingComparisons({ data, id, locale }: { data: Ratings; id: string; lo
             variant="link"
             aria-expanded={expanded}
             aria-controls={`${id}-more-comparisons`}
-            className="mt-3 h-auto min-h-11 min-w-11 max-w-full justify-start whitespace-normal wrap-anywhere px-2 py-3 text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="mt-3 h-auto min-h-7 max-w-full justify-start whitespace-normal wrap-anywhere text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             onClick={() => setExpanded(!expanded)}
           >
             {expanded

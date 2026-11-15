@@ -9,7 +9,7 @@ import type { PostReadingPosition } from './post-reading-position';
 
 // Per document, one active visit. The registration holds no document text and is removed on retirement.
 const activeOutlines = new WeakMap<Document, () => void>();
-const control = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]';
+const control = 'h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]';
 
 export function PostReadingOutlineView({
   outline,

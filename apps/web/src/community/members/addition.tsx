@@ -170,7 +170,7 @@ export function MemberAddition({
               <Button
                 ref={confirm}
                 type="button"
-                className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                 disabled={!current()}
                 onClick={() => {
                   focusResult.current = true;
@@ -182,7 +182,7 @@ export function MemberAddition({
               <Button
                 type="button"
                 variant="ghost"
-                className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start"
                 disabled={!current()}
                 onClick={() => {
                   if (!current()) return;
@@ -202,7 +202,7 @@ export function MemberAddition({
               ref={trigger}
               type="button"
               variant="outline"
-              className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+              className="h-auto min-h-7 max-w-full whitespace-normal text-start"
               disabled={!current()}
               onClick={startReview}
             >
@@ -213,7 +213,7 @@ export function MemberAddition({
             <Button
               type="button"
               variant="outline"
-              className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+              className="h-auto min-h-7 max-w-full whitespace-normal text-start"
               disabled={!current()}
               onClick={() => void submit(intent)}
             >
@@ -224,7 +224,7 @@ export function MemberAddition({
             <Button
               type="button"
               variant="outline"
-              className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+              className="h-auto min-h-7 max-w-full whitespace-normal text-start"
               disabled={state.kind === 'checking' || !current()}
               onClick={() => void checkStatus(intent)}
             >

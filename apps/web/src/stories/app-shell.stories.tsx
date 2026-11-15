@@ -15,6 +15,8 @@ import { contextsNavigation } from '../features/contexts/navigation';
 import { UnreadBadgeView } from '../inbox/unread-badge';
 import { m } from '../paraglide/messages.js';
 import { PatternStory, pageReady } from './page';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 
 const meta = {
   title: 'Site Shell/App Shell',
@@ -138,17 +140,21 @@ function WorkspacePreview() {
         <ul className="grid min-w-0 gap-1">
           {[m.book_reader_root(), m.book_reader_contents()].map((label, index) => (
             <li key={index}>
-              <a
-                href="#shell-workspace-canvas"
+              <Button
+                type="button"
+                variant={selected === index ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-auto min-h-6 w-full min-w-0 justify-start whitespace-normal"
                 aria-current={selected === index ? 'location' : undefined}
-                className="flex min-w-0 items-center rounded-xl px-2 py-2 text-sm wrap-anywhere hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=location]:bg-accent"
+                nativeButton={false}
+                render={<a href="#shell-workspace-canvas" />}
                 onClick={(event) => {
                   event.preventDefault();
                   setSelected(index);
                 }}
               >
                 {label}
-              </a>
+              </Button>
             </li>
           ))}
         </ul>
@@ -157,11 +163,11 @@ function WorkspacePreview() {
         <label htmlFor="shell-workspace-title" className="text-sm font-medium">
           {m.studio_workspace_title()}
         </label>
-        <input
-          id="shell-workspace-title"
-          className="min-h-11 rounded-xl border px-3"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
+        <Input 
+ id="shell-workspace-title"
+ 
+ value={draft}
+ onChange={(event) => setDraft(event.target.value)}
         />
         <p className="text-sm text-muted-foreground">{m.studio_workspace_unsaved()}</p>
       </div>

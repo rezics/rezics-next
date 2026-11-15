@@ -571,7 +571,7 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
             ? { 'data-recipe-current-statement': statement.id }
             : {})}
           tabIndex={read.subject.type === 'schema:Recipe' ? -1 : undefined}
-          className="min-w-0 space-y-2 [overflow-wrap:anywhere] sm:col-start-2 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-ring [&_a]:focus-visible:outline-offset-2"
+          className="min-w-0 space-y-2 [overflow-wrap:anywhere] sm:col-start-2 [&_a]:inline-flex [&_a]:max-w-full [&_a]:items-center [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-ring [&_a]:focus-visible:outline-offset-2"
         >
           {statement.value.type === 'value' && statement.property.data_type === 'media' ? (
             <>

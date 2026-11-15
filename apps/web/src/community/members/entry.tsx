@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router';
+import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 
 type ManagementObservation =
@@ -20,12 +21,13 @@ export function RealmMembersEntry({
   const canManage = appearance || (setup?.kind === 'ready' && setup.realm?.id === realmId && setup.permitted.settings);
   if (!canManage) return null;
   return (
-    <Link
-      to="/realms/$id/members"
-      params={{ id: realmId }}
-      className="inline-flex min-h-11 max-w-full items-center rounded-lg border px-4 py-2 text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+    <Button
+      variant="outline"
+      className="h-auto min-h-7 max-w-full whitespace-normal"
+      nativeButton={false}
+      render={<Link to="/realms/$id/members" params={{ id: realmId }} />}
     >
       {m.realm_members_heading()}
-    </Link>
+    </Button>
   );
 }

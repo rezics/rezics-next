@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
 import { ValueExplanationEntry } from '../value-explanation-entry';
 import { CoverList } from '../../pages/cover-list';
@@ -132,25 +133,27 @@ export function CharacterIdentityVisit({
       {spoilerHidden && (
         <div className="space-y-2">
           <p role="status">{m.character_identity_visit_spoiler_hidden({}, o)}</p>
-          <button
+          <Button
             type="button"
-            className="inline-flex min-h-11 min-w-11 items-center underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+            variant="link"
+            className="h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]"
             aria-expanded={showSpoilers}
             onClick={() => setShowSpoilers(true)}
           >
             {m.character_identity_visit_reveal({}, o)}
-          </button>
+          </Button>
         </div>
       )}
       {showSpoilers && disclosure.spoiler.length > 0 && (
-        <button
+        <Button
           type="button"
-          className="inline-flex min-h-11 min-w-11 items-center underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+          variant="link"
+          className="h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]"
           aria-expanded={showSpoilers}
           onClick={() => setShowSpoilers(false)}
         >
           {m.subject_spoiler_hide({}, o)}
-        </button>
+        </Button>
       )}
       {disclosure.withheld && <p role="status">{m.character_identity_visit_withheld({}, o)}</p>}
       {more && <p role="status">{m.character_identity_visit_partial({}, o)}</p>}

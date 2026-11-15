@@ -1,4 +1,5 @@
 import { useContext } from 'react';
+import { cn } from '@rezics/ui/utils';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { m } from '../../../paraglide/messages.js';
@@ -12,7 +13,7 @@ import { PeopleBiographyOuterReturn, peopleBiographyAddress as biographyAddress 
 import { peopleBiographyHref, peopleSubjectLabel, type PeopleBiographyField } from './index';
 
 const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] md:pointer-fine:min-h-8 md:pointer-fine:min-w-0 md:pointer-fine:py-1';
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
 
 /** Biography is the existing authored document, never a short description rewritten as long text. */
 export function PeopleBiographyDocuments({
@@ -49,7 +50,7 @@ export function PeopleBiographyDocuments({
     field.editor === 'authored' ? field.id : undefined,
   );
   const authoredAction = (
-    <a className={buttonVariants({ variant: 'outline', className: actionClass + ' self-start' })} href={href}>
+    <a className={cn(buttonVariants({ variant: 'outline' }), actionClass + ' self-start' )} href={href}>
       {m.people_biography_edit({}, o)}
     </a>
   );
@@ -60,7 +61,7 @@ export function PeopleBiographyDocuments({
       id={peopleBiographyFieldAnchor(field.id)}
       tabIndex={-1}
       data-slot="people-biography"
-      className="min-w-0 space-y-3 py-3 sm:py-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      className="min-w-0 space-y-3 py-3 sm:py-4 "
     >
       <ContentItemHeading level={3} className="min-w-0 text-lg font-semibold" lang={field.label.lang ?? undefined}>
         {field.label.text || m.people_biography_title({}, o)}
@@ -78,7 +79,7 @@ export function PeopleBiographyDocuments({
           <article
             id={peopleBiographyAssertionAnchor(fact.id)}
             tabIndex={-1}
-            className="min-w-0 space-y-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="min-w-0 space-y-2 "
           >
             <PartValue part={fact.statement} read={read} locale={locale} />
             <p className="text-sm text-muted-foreground">
@@ -119,7 +120,7 @@ export function PeopleBiographyDocuments({
           authoredAction
         )
       ) : null}
-      <a className={actionClass + ' inline-flex items-center underline'} href={fallbackReturn}>
+      <a className={cn(buttonVariants({ variant: 'link' }), actionClass, 'underline')} href={fallbackReturn}>
         {m.people_biography_return({}, o)}
       </a>
     </ContentItemFrame>

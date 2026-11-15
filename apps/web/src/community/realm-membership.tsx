@@ -105,9 +105,7 @@ export function RealmMembership({
       >
         <div className="flex flex-wrap items-center gap-3">
           <Button
-            size="lg"
             nativeButton={false}
-            className="h-11 px-6 text-base"
             render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} />}
           >
             {m.realm_join()}
@@ -426,7 +424,7 @@ function NativeMembership({
         {attempt ? (
           <>
             <Button
-              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal px-6 py-2 text-start text-base"
+              className="h-auto min-h-7 max-w-full whitespace-normal text-start"
               disabled={busyNow || !current() || !caller.isCurrent() || session !== 'signed-in' || !subject || !csrfToken}
               onClick={(event) => void submit(null, event, attempt)}
             >
@@ -434,7 +432,7 @@ function NativeMembership({
             </Button>
             <Button
               variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start"
+              className="h-auto min-h-7 max-w-full whitespace-normal text-start"
               disabled={busyNow}
               onClick={discardAttempt}
             >
@@ -444,14 +442,14 @@ function NativeMembership({
         ) : signIn ? (
           <Button
             nativeButton={false}
-            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal px-6 py-2 text-start text-base"
+            className="h-auto min-h-7 max-w-full whitespace-normal text-start"
             render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} />}
           >
             {m.realm_sign_in_to_join()}
           </Button>
         ) : action ? (
           <Button
-            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal px-6 py-2 text-start text-base"
+            className="h-auto min-h-7 max-w-full whitespace-normal text-start"
             disabled={session !== 'signed-in' || !subject || !csrfToken || !current() || (action === 'join' && !canJoin)}
             onClick={(event) => void submit(action, event)}
           >
@@ -461,7 +459,7 @@ function NativeMembership({
         {adviceRetry ? (
           <Button
             variant="outline"
-            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start"
+            className="h-auto min-h-7 max-w-full whitespace-normal text-start"
             disabled={adviceRetryDisabled}
             onClick={() => void joinAdvice.refetch()}
           >

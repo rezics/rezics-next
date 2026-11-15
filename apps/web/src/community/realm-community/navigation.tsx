@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 
 /** Local section movement leaves the admitted route and its shelf cursors untouched. */
@@ -20,11 +21,13 @@ export function CommunitySectionNavigation({ catalogueId, current }: { catalogue
       </p>
       <div className="flex min-w-0 flex-wrap gap-2">
         {sections.map(({ id, label }) => (
-          <button
+          <Button
             key={id}
             type="button"
+            variant="outline"
+            size="sm"
             aria-controls={id}
-            className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-lg border border-border bg-background px-3 py-2 text-start text-sm font-medium whitespace-normal text-primary underline-offset-4 hover:bg-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="h-auto min-h-6 max-w-full whitespace-normal text-start"
             onClick={() => {
               if (!current()) return;
               const region = document.getElementById(id);
@@ -33,7 +36,7 @@ export function CommunitySectionNavigation({ catalogueId, current }: { catalogue
             }}
           >
             {label}
-          </button>
+          </Button>
         ))}
       </div>
     </nav>

@@ -1,3 +1,4 @@
+import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { copyConditionDraftOf } from './copy-condition';
 import type { CopyDraft } from './copy-fields';
@@ -44,7 +45,6 @@ export function CopyConflictReview({
   onReview: () => void;
   onAccept: () => void;
 }) {
-  const control = 'min-h-11 rounded-lg border border-border px-4 py-2 text-primary disabled:opacity-60';
   const copy = review.state === 'ready' ? review.copy : null;
   return (
     <section
@@ -52,9 +52,15 @@ export function CopyConflictReview({
       className="min-w-0 space-y-3 rounded-lg border border-border p-4"
     >
       <p>{m.library_copy_conflict_review_description()}</p>
-      <button type="button" className={control} disabled={disabled || review.state === 'loading'} onClick={onReview}>
+      <Button
+        type="button"
+        variant="outline"
+        className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]"
+        disabled={disabled || review.state === 'loading'}
+        onClick={onReview}
+      >
         {m.library_copy_conflict_review_open()}
-      </button>
+      </Button>
       {review.state === 'loading' ? <p role="status">{m.library_copy_detail_loading()}</p> : null}
       {review.state === 'unavailable' ? <p role="status">{m.library_copy_detail_unavailable()}</p> : null}
       {review.state === 'forbidden' ? <p role="alert">{m.library_copy_detail_forbidden()}</p> : null}
@@ -87,9 +93,15 @@ export function CopyConflictReview({
           {copy.meaning !== 'known' ? (
             <p>{copy.meaning === 'unknown' ? m.library_copy_meaning_unknown() : m.library_history_unavailable()}</p>
           ) : null}
-          <button type="button" className={control} disabled={disabled} onClick={onAccept}>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]"
+            disabled={disabled}
+            onClick={onAccept}
+          >
             {m.library_copy_conflict_review_accept()}
-          </button>
+          </Button>
         </>
       ) : null}
     </section>

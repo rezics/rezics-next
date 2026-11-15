@@ -238,7 +238,7 @@ function NewThreadEditor({
             {origin.returnTo ? (
               <a
                 data-slot="thread-create-return"
-                className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="text-sm font-medium text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 href={origin.returnTo}
               >
                 {m.library_subject_return_reader()}
@@ -343,7 +343,7 @@ function NewThreadEditor({
               to="/boards/$id"
               params={{ id: origin.boardId }}
               search={origin.returnTo ? { returnTo: origin.returnTo } : {}}
-              className={buttonVariants({ variant: 'outline', size: 'lg' })}
+              className={buttonVariants({ variant: 'outline' })}
             >
               {m.board_threads_heading()}
             </Link>

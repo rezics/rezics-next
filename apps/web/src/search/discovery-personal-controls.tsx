@@ -13,14 +13,13 @@ import {
   type DiscoveryEntryCapability,
 } from './discovery-personal-actions';
 import type { DiscoveryPersonalPage, DiscoveryPersonalTarget } from './discovery-personal-state';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 
 const subscribeBrowser = () => () => {};
 const browserSnapshot = () => true;
 const serverSnapshot = () => false;
 const serverRevision = () => 0;
-const controlClass =
-  'min-h-11 rounded-md border px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 /**
  * Controlled entry UI: no Subject read, session read, native writer or automatic retry lives in this component.
@@ -78,7 +77,7 @@ export function DiscoveryPersonalControls({
   })();
   if (capability.state === 'signed-out')
     return (
-      <a className={controlClass} href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`}>
+      <a className={buttonVariants({ variant: 'outline' })} href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`}>
         {m.account_sign_in({}, options)}
       </a>
     );
@@ -127,7 +126,7 @@ export function DiscoveryPersonalControls({
             >
               <SelectTrigger
                 id={id}
-                className={controlClass}
+                className="min-w-0 w-auto flex-1"
                 aria-disabled={!active}
                 onKeyDown={(event) => {
                   if (!active && event.key !== 'Tab' && event.key !== 'Escape') event.preventDefault();
@@ -146,9 +145,9 @@ export function DiscoveryPersonalControls({
                 </SelectGroup>
               </SelectContent>
             </Select>
-            <button type="submit" className={controlClass} disabled={!hydrated} aria-disabled={!active}>
+            <Button type="submit" variant="outline" disabled={!hydrated} aria-disabled={!active}>
               {m.library_subject_save({}, options)}
-            </button>
+            </Button>
           </div>
         </>
       ) : (
@@ -157,9 +156,9 @@ export function DiscoveryPersonalControls({
         </span>
       )}
       {capability.remove ? (
-        <button
+        <Button
           type="button"
-          className={controlClass}
+          variant="outline"
           disabled={!hydrated}
           aria-disabled={!active || target.entry.state !== 'present'}
           onClick={() => {
@@ -168,7 +167,7 @@ export function DiscoveryPersonalControls({
           }}
         >
           {m.library_remove({}, options)}
-        </button>
+        </Button>
       ) : null}
       {notice ? (
         <p id={`${id}-status`} role="status" className="text-sm" aria-live="polite">

@@ -62,7 +62,7 @@ hydration and query caches. Read admission may permit a healthy null-CSRF sessio
 commands still require current native write authority. Session, viewer, locale, route, exposure or source Collection
 replacement retires old reads and controls synchronously. Late responses cannot change another destination or move
 focus. Closing a destination browse focuses the chooser heading; closing review remounts the chooser and focuses its
-destination heading. Controls wrap long localized titles and retain 44px targets in all eight launch locales.
+destination heading. Controls wrap long localized titles in all eight launch locales.
 
 The destination-only bulk-add consumer shares this bounded destination chooser but does not select a placement or
 construct a transfer. Its producer's ordered Subject snapshot, duplicate-permitting versus skip-present mode,

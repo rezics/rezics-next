@@ -69,7 +69,7 @@ export function OwnVotesInspection({
                   {ownVoteValue(entry, locale)}
                 </p>
                 <Button
-                  className="h-auto min-h-11 max-w-full whitespace-normal wrap-anywhere py-2"
+                  className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
                   variant={selected ? 'secondary' : 'outline'}
                   aria-pressed={selected}
                   aria-expanded={selected}

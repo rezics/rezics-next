@@ -306,7 +306,7 @@ function ContributionLifecycleLive({
             {operation && state !== 'expired' && failure !== 'denied' && (
               <Button
                 type="button"
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2.5 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 variant={operation === 'delete' ? 'destructive' : 'default'}
                 data-contribution-action={pending.current ? 'retry' : operation}
                 disabled={busy}
@@ -332,7 +332,7 @@ function ContributionLifecycleLive({
               <Button
                 type="button"
                 variant="outline"
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2.5 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 disabled={busy}
                 onClick={() => void refresh()}
               >
@@ -358,11 +358,11 @@ function ContributionLifecycleLive({
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter className="min-w-0 sm:flex-wrap">
-              <AlertDialogCancel className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2.5 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+              <AlertDialogCancel className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                 {m.candidate_cancel({}, o)}
               </AlertDialogCancel>
               <AlertDialogAction
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2.5 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 variant={confirmation?.operation === 'delete' ? 'destructive' : 'default'}
                 disabled={busy}
                 onClick={(event) => confirmation && void change(event, { kind: 'confirm', confirmation })}

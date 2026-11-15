@@ -1,6 +1,7 @@
 import { Cover, sharedRatio } from '@rezics/ui/cover';
 import type { EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { MetaLine } from '@rezics/ui/meta-line';
+import { Button } from '@rezics/ui/shadcn/button';
 import { Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList } from '@rezics/ui/shadcn/combobox';
 import { useEffect, useId, useRef, useState } from 'react';
 import { coverSrc } from '../media/cover-src';
@@ -140,7 +141,7 @@ export function CopyEditionPicker({
         <ComboboxContent aria-busy={results.phase === 'loading'}>
           <ComboboxList aria-label={m.library_copy_edition()} tabIndex={results.items.length ? 0 : -1}>
             {(subject: EntityPickerSubject) => (
-              <ComboboxItem key={subject.id} value={subject} className="min-h-11 py-2">
+              <ComboboxItem key={subject.id} value={subject}>
                 <EditionIdentity subject={subject} />
               </ComboboxItem>
             )}
@@ -156,14 +157,16 @@ export function CopyEditionPicker({
         </p>
       ) : null}
       {results.phase === 'unavailable' || results.phase === 'forbidden' || results.phase === 'closed' ? (
-        <button
+        <Button
           type="button"
+          variant="link"
+          size="sm"
           disabled={disabled}
-          className="min-h-11 justify-self-start text-primary underline underline-offset-4"
+          className="h-auto min-h-6 justify-self-start px-0 whitespace-normal"
           onClick={() => search(text)}
         >
           {m.subject_view_retry()}
-        </button>
+        </Button>
       ) : null}
       {value ? <EditionIdentity subject={value} /> : null}
     </div>

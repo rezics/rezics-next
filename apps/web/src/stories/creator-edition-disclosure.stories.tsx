@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useLocation } from '@tanstack/react-router';
 import { expect, userEvent, within } from 'storybook/test';
+import { Button } from '@rezics/ui/shadcn/button';
 import { creatorEditionSearch } from '../checkout/creator-offer-address';
 import { CreatorOfferEditor } from '../checkout/creator-offer-editor';
 import type { CreatorEditorPageData, CreatorOfferGuard } from '../checkout/creator-offers';
@@ -195,9 +196,9 @@ function RetirementExample() {
       retired={retired}
       data={retired ? { ...ready, selling: false, editor: { kind: 'denied' } } : ready}
     >
-      <button type="button" className="mb-4 min-h-11 underline" onClick={() => setRetired(true)}>
+      <Button type="button" className="mb-4" onClick={() => setRetired(true)}>
         Retire supplied authority
-      </button>
+      </Button>
     </SuppliedEditor>
   );
 }

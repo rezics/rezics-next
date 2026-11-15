@@ -61,7 +61,7 @@ export function ProfileLinks({
                     if (input) labels.current.set(key, input);
                     else labels.current.delete(key);
                   }}
-                  className="min-h-11 min-w-0"
+                  className="min-w-0"
                   value={link.label}
                   required
                   pattern={String.raw`.*\S.*`}
@@ -78,7 +78,7 @@ export function ProfileLinks({
                 <FieldLabel htmlFor={`${ids}-url-${index}`}>{m.settings_profile_link_url()}</FieldLabel>
                 <Input
                   id={`${ids}-url-${index}`}
-                  className="min-h-11 min-w-0"
+                  className="min-w-0"
                   type="url"
                   value={link.url}
                   required
@@ -94,7 +94,7 @@ export function ProfileLinks({
               <Button
                 type="button"
                 variant="outline"
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+                className="h-auto max-w-full whitespace-normal break-words min-h-7"
                 disabled={disabled}
                 aria-labelledby={`${heading}-remove ${heading}`}
                 onClick={() => {
@@ -115,7 +115,7 @@ export function ProfileLinks({
         ref={add}
         type="button"
         variant="outline"
-        className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+        className="h-auto max-w-full whitespace-normal break-words min-h-7"
         disabled={disabled || links.length >= 5}
         onClick={() => {
           if (disabled || links.length >= 5) return;

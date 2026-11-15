@@ -69,7 +69,7 @@ export function ShelfListRow({
       <Menu
         title="Status"
         trigger={
-          <Button variant="outline" size="sm" className="min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere">
+          <Button variant="outline" size="sm" className="h-auto min-h-6 max-w-full whitespace-normal wrap-anywhere">
             {status}
           </Button>
         }
@@ -131,19 +131,17 @@ export function ShelfListRow({
               <div data-slot="shelf-list-row-stepper" className="flex shrink-0">
                 <Button
                   variant="ghost"
-                  size="icon-xs"
+                  size="icon-sm"
                   aria-label={stepper.decreaseLabel}
                   onClick={() => stepper.onStep(-1)}
-                  className="min-h-11 min-w-11"
                 >
                   <MinusIcon aria-hidden />
                 </Button>
                 <Button
                   variant="ghost"
-                  size="icon-xs"
+                  size="icon-sm"
                   aria-label={stepper.increaseLabel}
                   onClick={() => stepper.onStep(1)}
-                  className="min-h-11 min-w-11"
                 >
                   <PlusIcon aria-hidden />
                 </Button>

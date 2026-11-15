@@ -23,13 +23,13 @@ function FieldValue({ name, value }: { name: string; value: VndbSourceValue }) {
   const privateNote = name === 'notes';
   const sourceScore = name === 'score' || name === 'vote';
   return (
-    <li className="min-w-0 [overflow-wrap:anywhere]" data-vndb-field={name}>
+    <li className="h-auto min-w-0 [overflow-wrap:anywhere]" data-vndb-field={name}>
       <span className="font-medium">{fieldLabel(name)}: </span>
       <span className={privateNote ? 'whitespace-pre-wrap' : 'whitespace-normal'}>
         {sourceScore && value.kind === 'value' ? (value.raw ?? valueText(value)) : valueText(value)}
       </span>
       {value.raw !== null && value.kind !== 'value' ? (
-        <span className="block text-sm text-muted-foreground [overflow-wrap:anywhere]">
+        <span className="h-auto block text-sm text-muted-foreground [overflow-wrap:anywhere]">
           {m.library_vndb_raw({ value: value.raw })}
         </span>
       ) : null}
@@ -66,7 +66,7 @@ export function VndbEvidence({ row }: { row: VndbRow }) {
       ) : null}
       {notes.length ? (
         <details className="rounded-md border p-3">
-          <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_vndb_notes_summary()}</summary>
+          <summary className="cursor-pointer py-2 font-medium">{m.library_vndb_notes_summary()}</summary>
           <ul className="space-y-2">
             {notes.map(([name, value]) => (
               <FieldValue key={name} name={name} value={value} />
@@ -77,9 +77,9 @@ export function VndbEvidence({ row }: { row: VndbRow }) {
       ) : null}
       <p className="text-sm text-muted-foreground">{m.library_vndb_private_facts()}</p>
       <details className="rounded-md border p-3" data-vndb-unmapped>
-        <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_vndb_unmapped_summary()}</summary>
+        <summary className="cursor-pointer py-2 font-medium">{m.library_vndb_unmapped_summary()}</summary>
         <p className="mb-2 text-sm text-muted-foreground">{row.retainedReason}</p>
-        <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words text-sm">{evidence}</pre>
+        <pre className="h-auto max-h-96 overflow-auto whitespace-pre-wrap break-words text-sm">{evidence}</pre>
       </details>
     </div>
   );

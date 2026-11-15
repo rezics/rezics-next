@@ -7,13 +7,7 @@ import { displayLibraryTitle } from '../title';
 import { PersonalShelfOrigin } from '../personal-shelf-origin';
 import type { PersonalLibraryEntry } from '../entries-read';
 import type { ShelfRow } from '../shelf-rows';
-import {
-  captureReceivedEntryVisit,
-  receivedEntryObservation,
-  receivedEntryVisitIsCurrent,
-  type ReceivedEntryReadSource,
-  type ReceivedEntryVisit,
-} from './current';
+import { captureReceivedEntryVisit, receivedEntryObservation, receivedEntryVisitIsCurrent, type ReceivedEntryReadSource, type ReceivedEntryVisit } from './current';
 import { ReceivedEntryReader } from './view';
 
 type Reading = { visit: ReceivedEntryVisit; row: ShelfRow };
@@ -144,7 +138,7 @@ export function useReceivedEntryReading(source: Omit<ReceivedEntryReadSource, 'o
         type="button"
         variant="outline"
         size="sm"
-        className="relative z-20 h-auto min-h-11 max-w-full whitespace-normal break-words"
+        className="relative z-20 h-auto min-h-6 max-w-full whitespace-normal break-words"
         aria-label={m.library_entry_reading_open_named({ position, title: titleText }, options)}
         aria-controls={reading && selected ? readerId : undefined}
         aria-expanded={!!selected}

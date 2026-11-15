@@ -217,13 +217,13 @@ function ProgressDepartureBoundary({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel ref={stayButton} className="min-h-11 whitespace-normal" onClick={navigation.stay}>
+            <AlertDialogCancel ref={stayButton} className="h-auto min-h-7 whitespace-normal" onClick={navigation.stay}>
               {messages === 'progress'
                 ? m.library_progress_draft_navigation_stay()
                 : m.library_publication_note_draft_navigation_stay()}
             </AlertDialogCancel>
             {!navigation.isLocked() ? (
-              <AlertDialogAction className="min-h-11 whitespace-normal" onClick={navigation.discard}>
+              <AlertDialogAction className="h-auto min-h-7 whitespace-normal" onClick={navigation.discard}>
                 {journal
                   ? m.library_journal_draft_navigation_leave()
                   : messages === 'progress'

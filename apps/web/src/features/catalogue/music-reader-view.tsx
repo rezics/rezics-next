@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useSubjectCommunityReading } from '../pages/subject-community-lifetime';
 import { ContentItemHeading } from '@rezics/ui/content-item';
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { subjectHref } from '../../subject/subject-href';
 import { CandidateValue } from '../pages/data';
@@ -29,7 +29,7 @@ import {
 import type { SubjectRead } from '@rezics/client';
 
 const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 type EditionNavigation = {
   window: AlbumEditionWindow;
@@ -119,7 +119,7 @@ function FieldList({
             ) : value.targetId ? (
               <Link
                 href={subjectHref({ id: value.targetId, label: value.targetLabel ?? '' }, locale).href}
-                className={`${linkClass} ${linkColor} inline-flex min-h-11 min-w-11 max-w-full items-center [overflow-wrap:anywhere]`}
+                className={`${linkClass} ${linkColor} inline-flex max-w-full items-center [overflow-wrap:anywhere]`}
               >
                 {value.targetLabel || m.subject_value_unlabelled({}, options(locale))}
               </Link>
@@ -155,7 +155,7 @@ export function ProfileSourceList({ sources, locale }: { sources: readonly Profi
               {record.url.startsWith('https://') || record.url.startsWith('http://') ? (
                 <a
                   href={record.url}
-                  className={`${linkClass} ${linkColor} inline-flex min-h-11 min-w-11 max-w-full items-center`}
+                  className={`${linkClass} ${linkColor} inline-flex max-w-full items-center`}
                 >
                   {record.name}
                 </a>
@@ -293,7 +293,7 @@ function EditionList({
               <li key={`${row.subject}:${row.statement}`}>
                 <a
                   href={subjectHref({ id: row.subject, label }, locale).href}
-                  className={`${linkClass} ${linkColor} inline-flex min-h-11 min-w-11 max-w-full items-center [overflow-wrap:anywhere]`}
+                  className={`${linkClass} ${linkColor} inline-flex max-w-full items-center [overflow-wrap:anywhere]`}
                   target="_blank"
                   rel="noopener"
                 >
@@ -319,35 +319,38 @@ function EditionList({
       ) : null}
       {navigation ? (
         <div className="flex min-w-0 flex-wrap gap-3">
-          <button
+          <Button
             type="button"
-            className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`}
+            variant="outline"
+            className={actionClass}
             disabled={pending || !navigation.window.history.length}
             onClick={(event) => navigation.move('previous', event.detail === 0 ? event.currentTarget : undefined)}
           >
             {m.music_context_previous_page({}, o)}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`}
+            variant="outline"
+            className={actionClass}
             disabled={pending || !!failure || !editions?.ok || !editions.admitted || !editions.next}
             onClick={(event) => navigation.move('next', event.detail === 0 ? event.currentTarget : undefined)}
           >
             {m.music_context_next_page({}, o)}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`}
+            variant="outline"
+            className={actionClass}
             disabled={pending || failure?.reason !== 'unavailable'}
             onClick={(event) => navigation.move('retry', event.detail === 0 ? event.currentTarget : undefined)}
           >
             {m.music_context_retry_page({}, o)}
-          </button>
+          </Button>
         </div>
       ) : failure?.reason === 'unavailable' && onRetry ? (
-        <button type="button" className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`} onClick={onRetry}>
+        <Button type="button" variant="outline" className={actionClass} onClick={onRetry}>
           {m.correction_retry({}, o)}
-        </button>
+        </Button>
       ) : null}
     </section>
   );
@@ -402,9 +405,9 @@ export function MusicAlbumReader({
       ) : null}
       {visit.state === 'empty' ? <p role="status">{stateCopy('empty', locale, 'music')}</p> : null}
       {onRetry && visit.state !== 'ready' && visit.state !== 'loading' ? (
-        <button type="button" className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`} onClick={onRetry}>
+        <Button type="button" variant="outline" className={actionClass} onClick={onRetry}>
           {m.correction_retry({}, o)}
-        </button>
+        </Button>
       ) : null}
       {publicRead && visit.state === 'ready' ? (
         <ProfileReaderGroups

@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
 import { getLocale } from '../../paraglide/runtime.js';
+import { Button } from '@rezics/ui/shadcn/button';
 
 export const dateText = (value: string) =>
   value
@@ -32,15 +33,15 @@ export function CopyTextReader({
       >
         {value}
       </p>
-      <button
+      <Button
         type="button"
         aria-expanded={expanded}
         aria-controls={id}
-        className="min-h-11 max-w-full cursor-pointer rounded-md py-2 text-left whitespace-normal text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        variant="outline" className='h-auto min-h-7 max-w-full text-left whitespace-normal [overflow-wrap:anywhere]'
         onClick={() => setExpanded((value) => !value)}
       >
         {expanded ? collapseLabel : expandLabel}
-      </button>
+      </Button>
     </div>
   );
 }

@@ -227,7 +227,7 @@ export function BookChapterLanguageAssociation({
         <Button
           type="button"
           variant={makeDefault ? 'secondary' : 'outline'}
-          className="min-h-11 whitespace-normal"
+          className="h-auto min-h-7 whitespace-normal"
           aria-pressed={makeDefault}
           disabled={!allowed || changed || !canonicalDefault}
           onClick={() => {

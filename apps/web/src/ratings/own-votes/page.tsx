@@ -548,13 +548,13 @@ export function OwnVotesWorkspace({
         >
           <p>{message}</p>
           {visibleState === 'unavailable' ? (
-            <Button className="min-h-11" onClick={() => void onRefresh()}>
+            <Button onClick={() => void onRefresh()}>
               {m.library_my_ratings_retry_page()}
             </Button>
           ) : null}
           {visibleState === 'invalid-cursor' && firstAvailable ? (
             <Link
-              className="inline-flex min-h-11 items-center underline"
+              className="inline-flex items-center underline"
               to="/library/ratings"
               onClick={(event: MouseEvent<HTMLAnchorElement>) => navigateLink(event, { kind: 'first', cursor: null })}
             >
@@ -630,14 +630,14 @@ export function OwnVotesWorkspace({
             <p role="status">{m.library_my_ratings_cleared()}</p>
           ) : null}
           {feedback?.kind === 'rejected' ? (
-            <Button className="min-h-11" variant="outline" onClick={() => void onRefresh()}>
+            <Button variant="outline" onClick={() => void onRefresh()}>
               {m.library_my_ratings_retry_page()}
             </Button>
           ) : null}
           <nav className="flex flex-wrap items-center gap-x-5 gap-y-2" aria-label={m.library_my_ratings_heading()}>
             {cursor !== null ? (
               <Link
-                className="inline-flex min-h-11 items-center underline"
+                className="inline-flex items-center underline"
                 to="/library/ratings"
                 onClick={(event: MouseEvent<HTMLAnchorElement>) => navigateLink(event, { kind: 'first', cursor: null })}
               >
@@ -646,7 +646,7 @@ export function OwnVotesWorkspace({
             ) : null}
             {hasPrevious ? (
               <Link
-                className="inline-flex min-h-11 items-center underline"
+                className="inline-flex items-center underline"
                 to="/library/ratings"
                 search={previousCursor === null ? {} : { cursor: previousCursor }}
                 onClick={(event: MouseEvent<HTMLAnchorElement>) =>
@@ -658,7 +658,7 @@ export function OwnVotesWorkspace({
             ) : null}
             {visiblePage.next ? (
               <Link
-                className="inline-flex min-h-11 items-center underline"
+                className="inline-flex items-center underline"
                 to="/library/ratings"
                 search={{ cursor: visiblePage.next }}
                 onClick={(event: MouseEvent<HTMLAnchorElement>) =>

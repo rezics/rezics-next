@@ -58,7 +58,7 @@ export function ResultKindNavigation({
               href={discoverySearchHref(locale, { ...state, kinds: id ? [id] : undefined, cursor: undefined })}
               aria-current={current ? 'page' : undefined}
               aria-disabled={disabled || undefined}
-              className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal wrap-anywhere text-start md:min-h-9 [@media(pointer:coarse)]:min-h-11 aria-[current=page]:bg-primary aria-[current=page]:text-primary-foreground aria-[current=page]:hover:bg-primary/80 aria-disabled:opacity-50"
+              className="min-w-0 max-w-full whitespace-normal wrap-anywhere text-start aria-[current=page]:bg-primary aria-[current=page]:text-primary-foreground aria-[current=page]:hover:bg-primary/80 aria-disabled:opacity-50"
               onClick={(event) => {
                 if (
                   event.defaultPrevented ||

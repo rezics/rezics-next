@@ -75,7 +75,7 @@ export function RealmClaimStatusView({
       aria-labelledby={`${id}-heading`}
     >
       <a
-        className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+        className="inline-flex max-w-full items-center text-sm underline underline-offset-4"
         href={localizeHref(`/realms/${realmId}`)}
       >
         {m.realm_claim_status_back()}
@@ -144,7 +144,7 @@ export function RealmClaimStatusView({
         )}
         <Button
           variant="outline"
-          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+          className="h-auto min-h-7 max-w-full whitespace-normal text-start"
           disabled={!active || state.busy}
           onClick={() => void control.refresh()}
         >

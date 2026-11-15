@@ -5,6 +5,7 @@ import { useSession } from './application';
 import { sessionQueryKey } from '../session/browser-state';
 import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
 import { personalRead } from '../session/reading-policy';
+import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { LabelsPageView } from './labels-page';
 import type { LabelsPage } from './labels-read';
@@ -387,13 +388,9 @@ function LabelsRead({
       <div>
         <p role="status">{m.library_labels_unavailable()}</p>
         {hydrated && !query.isFetching ? (
-          <button
-            type="button"
-            className="inline-flex min-h-11 min-w-11 items-center rounded-sm border px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            onClick={retryCurrent}
-          >
+          <Button type="button" variant="outline" size="sm" onClick={retryCurrent}>
             {m.subject_view_retry()}
-          </button>
+          </Button>
         ) : null}
       </div>
     );

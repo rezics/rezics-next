@@ -1,7 +1,12 @@
 import { useId } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { copiesSubjectId, type CopiesAddress } from './copies-query';
+
+const controlWrap = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 /** Read-only GET navigation: correction never submits or changes a copy command. */
 export function CopiesAddressRecovery({ address, current }: { address: CopiesAddress; current: () => boolean }) {
@@ -26,7 +31,6 @@ export function CopiesAddressRecovery({ address, current }: { address: CopiesAdd
       ? (filterValue ?? '')
       : '';
   const validFilter = (value: string) => /^[a-z][a-z0-9_.-]{0,63}(?![\s\S])/.test(value);
-  const control = 'min-h-11 rounded-lg border border-border px-4 py-2';
   return (
     <div className="max-w-4xl space-y-6 text-foreground">
       <PageHeading>{m.library_copy_heading()}</PageHeading>
@@ -48,54 +52,61 @@ export function CopiesAddressRecovery({ address, current }: { address: CopiesAdd
         {!subjectIssue && address.subjectId ? <input type="hidden" name="subjectId" value={address.subjectId} /> : null}
         {!kindIssue && address.kind ? <input type="hidden" name="kind" value={address.kind} /> : null}
         {!statusIssue && address.status ? <input type="hidden" name="status" value={address.status} /> : null}
-        <label htmlFor={field}>
-          {subjectIssue
-            ? m.library_copies_address_subject_label()
-            : filterIssue
-              ? m.library_copies_address_filter_label()
-              : m.library_copies_address_cursor_label()}
-        </label>
-        <input
-          id={field}
-          name={fieldName}
-          defaultValue={fieldValue}
-          required
-          maxLength={subjectIssue ? 36 : filterIssue ? 64 : 2048}
-          pattern={
-            subjectIssue
-              ? '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}'
+        <Field className="w-full min-w-0">
+          <FieldLabel htmlFor={field}>
+            {subjectIssue
+              ? m.library_copies_address_subject_label()
               : filterIssue
-                ? '[a-z][a-z0-9_.-]{0,63}'
-                : undefined
-          }
-          autoComplete="off"
-          className={`${control} w-full`}
-          onChange={(event) => {
-            event.currentTarget.setCustomValidity(
+                ? m.library_copies_address_filter_label()
+                : m.library_copies_address_cursor_label()}
+          </FieldLabel>
+          <Input
+            id={field}
+            name={fieldName}
+            defaultValue={fieldValue}
+            required
+            maxLength={subjectIssue ? 36 : filterIssue ? 64 : 2048}
+            pattern={
               subjectIssue
-                ? !copiesSubjectId(event.currentTarget.value)
-                  ? m.library_copies_address_subject_invalid()
-                  : ''
-                : filterIssue && !validFilter(event.currentTarget.value)
-                  ? m.library_copies_address_filter_invalid()
-                  : '',
-            );
-          }}
-        />
-        <button type="submit" className={control}>
+                ? '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}'
+                : filterIssue
+                  ? '[a-z][a-z0-9_.-]{0,63}'
+                  : undefined
+            }
+            autoComplete="off"
+            onChange={(event) => {
+              event.currentTarget.setCustomValidity(
+                subjectIssue
+                  ? !copiesSubjectId(event.currentTarget.value)
+                    ? m.library_copies_address_subject_invalid()
+                    : ''
+                  : filterIssue && !validFilter(event.currentTarget.value)
+                    ? m.library_copies_address_filter_invalid()
+                    : '',
+              );
+            }}
+          />
+        </Field>
+        <Button type="submit" className={controlWrap}>
           {m.library_copies_address_correct()}
-        </button>
+        </Button>
       </form>
-      <nav aria-label={m.library_copies_address_recovery()} className="flex flex-wrap gap-3">
-        <a
-          href={firstPage}
-          className={control}
-          onClick={(event) => {
-            if (!current()) event.preventDefault();
-          }}
+      <nav aria-label={m.library_copies_address_recovery()} className="flex flex-wrap items-center gap-3">
+        <Button
+          variant="outline"
+          className={controlWrap}
+          nativeButton={false}
+          render={
+            <a
+              href={firstPage}
+              onClick={(event) => {
+                if (!current()) event.preventDefault();
+              }}
+            />
+          }
         >
           {subjectIssue ? m.library_copies_address_clear() : m.library_copies_address_restart()}
-        </a>
+        </Button>
       </nav>
     </div>
   );

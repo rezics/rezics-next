@@ -41,11 +41,11 @@ import {
 } from './story-arc-profile';
 
 const callerActionClass =
-  'inline-flex h-auto min-h-11 min-w-11 max-w-full items-center justify-center whitespace-normal break-words py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:h-8 md:pointer-fine:min-h-8 md:pointer-fine:min-w-8 md:pointer-fine:py-1';
+  'inline-flex h-auto min-h-7 max-w-full items-center justify-center whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const callerTextActionClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:min-w-8 md:pointer-fine:py-0';
+  'inline-flex max-w-full items-center whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const callerPickerClass =
-  '[&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:min-h-11 [&_[data-slot=input-group-control]]:h-auto [&_[data-slot=input-group-control]]:min-h-11 md:pointer-fine:[&_[data-slot=input-group]]:h-8 md:pointer-fine:[&_[data-slot=input-group]]:min-h-8 md:pointer-fine:[&_[data-slot=input-group-control]]:h-8 md:pointer-fine:[&_[data-slot=input-group-control]]:min-h-8';
+  '[&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:min-h-7 [&_[data-slot=input-group-control]]:h-auto [&_[data-slot=input-group-control]]:min-h-7';
 
 export type StoryArcProfileProps = StoryArcAddress & {
   locale: string;

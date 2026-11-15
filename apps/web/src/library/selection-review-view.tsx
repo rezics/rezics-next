@@ -115,7 +115,7 @@ export function SelectionReviewView({
             <SelectTrigger
               id={selectionStateSelectId}
               aria-labelledby={`${selectionStateSelectId}-label`}
-              className="min-h-11 w-full rounded-md border bg-background px-3"
+              className="w-full"
             >
               <SelectValue />
             </SelectTrigger>
@@ -135,7 +135,11 @@ export function SelectionReviewView({
         {statusAllowed && !statusBlocked && !statusChoices.length ? (
           <p role="status">{m.library_selection_no_common()}</p>
         ) : null}
-        <Button className="min-h-11 w-full sm:w-auto" disabled={!canReviewStatus} onClick={onReviewStatus}>
+        <Button
+          className="h-auto min-h-7 w-full whitespace-normal sm:w-auto"
+          disabled={!canReviewStatus}
+          onClick={onReviewStatus}
+        >
           {m.library_bulk_status_review()}
         </Button>
       </section>

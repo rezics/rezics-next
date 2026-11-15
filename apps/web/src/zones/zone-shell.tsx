@@ -105,7 +105,7 @@ export function ZoneShell({
                 key={destination}
                 href={navigationHref(zone, locale, destination)}
                 aria-current={destination === route ? 'page' : undefined}
-                className="min-h-[44px] min-w-[44px] text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
               >
                 {zoneRouteHeading(destination, locale)}
               </a>
@@ -117,7 +117,7 @@ export function ZoneShell({
         <p>
           <a
             href={returnTo.href}
-            className="inline-flex min-h-[44px] min-w-[44px] items-center text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex items-center text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
           >
             {returnTo.label}
           </a>

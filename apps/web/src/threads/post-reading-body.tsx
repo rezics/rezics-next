@@ -171,10 +171,10 @@ function ReadingVisit({
       <div
         ref={(element) => position.setControls(element)}
         data-slot="post-reading-controls"
-        className="sticky top-24 z-10 mb-3 w-fit max-w-full rounded-xl bg-background/95 p-1 shadow-sm"
+        className="sticky top-24 z-10 mb-3 w-fit max-w-full rounded-xl bg-background p-1"
         lang={locale}
       >
-        <div className="flex max-w-full flex-wrap gap-1">
+        <div className="flex max-w-full flex-wrap items-center gap-1">
           <PostReadingOutlineView outline={outline} position={position} locale={locale} />
           <PostReferenceView references={projection.references} position={position} locale={locale} />
         </div>

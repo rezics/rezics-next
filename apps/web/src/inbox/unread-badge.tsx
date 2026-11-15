@@ -104,7 +104,7 @@ export function InboxUnreadSummary() {
         <Button
           type="button"
           variant="outline"
-          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+          className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
           disabled={blocked || isFetching || !viewer.isCurrent()}
           onClick={() => {
             if (!viewer.isCurrent() || unreadCountFetchBlocked(viewer, now()) || isFetching) return;

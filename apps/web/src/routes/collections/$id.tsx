@@ -28,6 +28,7 @@ import { sessionQuery, useSession } from '../../session/query';
 import { useOperationAdmission } from '../../kernel/exposure';
 import { viewerExposureLifetime, viewerExposureQuery } from '../../kernel/viewer-exposure';
 import { CollectionAccessState } from '../../library/collection-access';
+import { Button } from '@rezics/ui/shadcn/button';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 import { getLocale } from '../../paraglide/runtime.js';
 import {
@@ -310,14 +311,15 @@ function CollectionContentLifetime({
       <div className="space-y-3">
         <CollectionAccessState state="unavailable" />
         {retryPendingMove ? (
-          <button
-            className="mx-auto inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-4 py-2 text-primary focus-visible:outline-2 focus-visible:outline-offset-2"
+          <Button
+            className="mx-auto h-auto min-h-7 max-w-full whitespace-normal"
+            variant="outline"
             type="button"
             disabled={sessionPage.isFetching}
             onClick={() => void queryClient.refetchQueries({ queryKey: privateQuery.queryKey, exact: true })}
           >
             {m.library_dynamic_retry_unavailable()}
-          </button>
+          </Button>
         ) : null}
       </div>
     );

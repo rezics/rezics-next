@@ -1,4 +1,5 @@
 import { useId, useState } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../paraglide/messages.js';
@@ -134,9 +135,13 @@ export function CopyInventoryFilters({
         selected={status}
         facet={filterOptions?.statuses}
       />
-      <button type="submit" className="min-h-11 min-w-11 rounded-lg border border-border px-4 py-2 sm:col-span-2">
+      <Button
+        type="submit"
+        variant="outline"
+        className="h-auto min-h-7 max-w-full whitespace-normal sm:col-span-2 [overflow-wrap:anywhere]"
+      >
         {m.library_copy_filter_apply()}
-      </button>
+      </Button>
     </form>
   );
 }

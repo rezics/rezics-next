@@ -1,4 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import {
@@ -107,16 +108,18 @@ export function CompositionDestinationPanel({
             currentIdentity.destinationKey === inspected.destinationKey &&
             !sameCompositionRulesIdentity(inspected, currentIdentity)
           ) ? (
-            <button
+            <Button
               ref={triggerRef}
               type="button"
+              variant="outline"
+              size="sm"
               aria-expanded={readerVisible}
               aria-controls={readerId}
-              className="inline-flex min-h-11 max-w-full items-center justify-center rounded-md border border-border px-3 text-left text-sm font-medium text-primary hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="h-auto min-h-6 max-w-full whitespace-normal"
               onClick={inspectCurrent}
             >
               {m.composition_destination_inspect_rules()}
-            </button>
+            </Button>
           ) : null}
           {readerVisible ? (
             <CompositionRulesReader

@@ -4,8 +4,12 @@ import { m } from '../paraglide/messages.js';
 import type { CopyItem } from './copies-read';
 import type { OpenCopyLoanRead } from './loans-actions';
 import type { LoansOrigin } from './loan-intent';
+import { Button } from '@rezics/ui/shadcn/button';
 import { LoanControls } from './loan-controls';
-import { LoanFacts, loanQuiet } from './loan-reading';
+import { LoanFacts } from './loan-reading';
+
+const controlWrap = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const compactWrap = 'h-auto min-h-6 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 export function CopyLoanPanel(props: { copy: CopyItem; originating: LoansOrigin; disabled: boolean }) {
   const [scope, setScope] = useState({ guard: props.originating.isCurrent, generation: 0 });
@@ -116,24 +120,31 @@ function CopyLoanVisit({
         <h3 id={`${id}-title`} className="font-medium">
           {m.library_loans_heading()}
         </h3>
-        <Link to="/library/loans" className={loanQuiet}>
+        <Button
+          variant="outline"
+          size="sm"
+          className={compactWrap}
+          nativeButton={false}
+          render={<Link to="/library/loans" />}
+        >
           {m.library_copy_loans()}
-        </Link>
+        </Button>
       </header>
       {failed || unavailable ? (
         <div className="space-y-3">
           <p role="status">
             {read?.page.inventoryState === 'forbidden' ? m.library_loans_forbidden() : m.library_loans_unavailable()}
           </p>
-          <button
+          <Button
             ref={retry}
             type="button"
-            className={loanQuiet}
+            variant="outline"
+            className={controlWrap}
             disabled={disabled}
             onClick={(event) => refresh(event.currentTarget)}
           >
             {m.library_loans_refresh()}
-          </button>
+          </Button>
         </div>
       ) : null}
       {refreshing || (!read && !failed) ? <p role="status">{m.library_sort_preparing()}</p> : null}
@@ -144,17 +155,18 @@ function CopyLoanVisit({
           ) : (
             <p className="text-sm text-muted-foreground">{m.library_loans_create_copy()}</p>
           )}
-          <button
+          <Button
             ref={trigger}
             type="button"
-            className={loanQuiet}
+            variant="outline"
+            className={controlWrap}
             aria-expanded={expanded}
             aria-controls={`${id}-controls`}
             disabled={disabled}
             onClick={inspect}
           >
             {m.library_loans_inspect()}
-          </button>
+          </Button>
           <section
             id={`${id}-controls`}
             hidden={!expanded}
@@ -170,9 +182,9 @@ function CopyLoanVisit({
               >
                 {m.library_loans_inspect()}
               </h4>
-              <button type="button" className={loanQuiet} onClick={close}>
+              <Button type="button" variant="outline" size="sm" className={compactWrap} onClick={close}>
                 {m.library_loans_close()}
-              </button>
+              </Button>
             </header>
             <LoanControls
               loan={read.item?.loan}

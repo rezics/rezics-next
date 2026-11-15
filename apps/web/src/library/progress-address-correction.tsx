@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import { Link, useRouter } from '@tanstack/react-router';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../paraglide/messages.js';
 import {
@@ -52,7 +52,7 @@ export function ProgressAddressCorrection({
       <Link
         to="/library/progress"
         search={{}}
-        className="inline-flex min-h-[44px] min-w-[44px] items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        className={buttonVariants({ variant: 'outline' })}
       >
         {m.library_progress_return_to_progress()}
       </Link>

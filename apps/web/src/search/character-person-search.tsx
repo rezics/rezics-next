@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
@@ -122,8 +123,8 @@ function CharacterPersonForm({
         if (!canApply || !reader.current()) event.preventDefault();
       }}
     >
-      <label className="grid gap-1 text-sm font-medium">
-        <span>{m.character_person_mode({}, options)}</span>
+      <label className="grid gap-1 text-sm">
+        <span className="font-medium">{m.character_person_mode({}, options)}</span>
         <Select
           name="mode"
           value={mode}
@@ -135,7 +136,7 @@ function CharacterPersonForm({
             changeSelection(next === 'works' ? { ...edited, works: [] } : edited);
           }}
         >
-          <SelectTrigger className="h-10 rounded-md border bg-background px-3">
+          <SelectTrigger className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -147,9 +148,9 @@ function CharacterPersonForm({
           </SelectContent>
         </Select>
       </label>
-      <label className="grid gap-1 text-sm font-medium">
-        <span>{m.character_person_name({}, options)}</span>
-        <input className="h-10 rounded-md border bg-background px-3" name="name" defaultValue={form.name} />
+      <label className="grid gap-1 text-sm">
+        <span className="font-medium">{m.character_person_name({}, options)}</span>
+        <Input name="name" defaultValue={form.name} />
       </label>
       <CharacterPersonSelectionFields
         key={JSON.stringify([selection, mode, languages, reader.identity, usableMetadata?.release])}
@@ -164,10 +165,9 @@ function CharacterPersonForm({
         retryMetadata={retryMetadata}
         onReady={markReady}
       />
-      <label className="grid gap-1 text-sm font-medium">
-        <span>{m.character_person_languages({}, options)}</span>
-        <input
-          className="h-10 rounded-md border bg-background px-3 font-normal"
+      <label className="grid gap-1 text-sm">
+        <span className="font-medium">{m.character_person_languages({}, options)}</span>
+        <Input
           name="language"
           value={languages}
           onChange={(event) => {
@@ -176,14 +176,14 @@ function CharacterPersonForm({
           }}
         />
       </label>
-      <label className="grid gap-1 text-sm font-medium">
-        <span>{m.character_person_threshold({}, options)}</span>
+      <label className="grid gap-1 text-sm">
+        <span className="font-medium">{m.character_person_threshold({}, options)}</span>
         <Select
           name="threshold"
           value={threshold === '' ? null : threshold}
           onValueChange={(nextSelectValue) => setThreshold(nextSelectValue ?? '')}
         >
-          <SelectTrigger className="h-10 rounded-md border bg-background px-3">
+          <SelectTrigger className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -195,10 +195,10 @@ function CharacterPersonForm({
           </SelectContent>
         </Select>
       </label>
-      <label className="grid gap-1 text-sm font-medium">
-        <span>{m.character_person_sort({}, options)}</span>
+      <label className="grid gap-1 text-sm">
+        <span className="font-medium">{m.character_person_sort({}, options)}</span>
         <Select name="sort" defaultValue={form.sort === '' ? null : form.sort}>
-          <SelectTrigger className="h-10 rounded-md border bg-background px-3">
+          <SelectTrigger className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -210,9 +210,9 @@ function CharacterPersonForm({
         </Select>
       </label>
       <div className="sm:col-span-2">
-        <button className={buttonVariants()} type="submit" disabled={!canApply || !reader.ready}>
+        <Button type="submit" disabled={!canApply || !reader.ready}>
           {m.character_person_apply({}, options)}
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -423,15 +423,15 @@ export function CharacterPersonSearchPage({
           />
         )}
         {!dirty && ['unavailable', 'not-ready', 'preparing'].includes(state.status) && (
-          <button
+          <Button
             type="button"
-            className={buttonVariants({ variant: 'outline' })}
+            variant="outline"
             onClick={() => {
               if (current()) void query.refetch({ cancelRefetch: false });
             }}
           >
             {m.character_person_retry({}, options)}
-          </button>
+          </Button>
         )}
       </section>
       {!dirty && facts.enabled && (

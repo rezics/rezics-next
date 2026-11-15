@@ -57,15 +57,15 @@ import type { StatementInput } from './statement-editor';
 
 // Match the caller-level phone targets while retaining dense fine-pointer desktop controls.
 const actionClassName =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
-const inputClassName = 'min-w-0 min-h-11 md:pointer-fine:min-h-8';
+  'h-auto min-h-7 max-w-full whitespace-normal break-words';
+const inputClassName = 'min-w-0';
 // Keep the shared Select trigger at the same phone target size as its neighboring fields.
-const selectClassName = 'min-w-0 max-w-full min-h-11 md:pointer-fine:min-h-8';
+const selectClassName = 'min-w-0 max-w-full';
 const labelClassName = 'min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 const linkClassName =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal py-2 text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'inline-flex max-w-full items-center whitespace-normal text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const summaryClassName =
-  'min-h-11 min-w-11 cursor-pointer py-3 text-sm [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'cursor-pointer text-sm [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const useFocusLayoutEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
 
 type ReadRecoveryFocus = {
@@ -915,7 +915,7 @@ function AuthoredFieldLive({
       <Body body={current.body} locale={locale} includeProvenance={false} />
       <details>
         <summary className={summaryClassName}>{m.authored_current_citations({}, o)}</summary>
-        <div className="min-w-0 py-2 [overflow-wrap:anywhere] [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:py-2 [&_a]:whitespace-normal [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring">
+        <div className="min-w-0 py-2 [overflow-wrap:anywhere] [&_a]:inline-flex [&_a]:max-w-full [&_a]:items-center [&_a]:whitespace-normal [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring">
           {current.selected.references.length ? (
             <ul className="min-w-0 space-y-2">
               {current.selected.references.map((reference, index) => (
@@ -1266,7 +1266,7 @@ function AuthoredFieldLive({
                     <Checkbox
                       id={ids.original}
                       aria-labelledby={`${ids.original}-label`}
-                      className="size-11 shrink-0 md:pointer-fine:size-4"
+                      className="shrink-0"
                       aria-invalid={errors.some((error) => errorField(error) === 'original')}
                       aria-describedby={
                         errors.some((error) => errorField(error) === 'original') ? `${ids.original}-error` : undefined
@@ -1278,7 +1278,7 @@ function AuthoredFieldLive({
                     <FieldLabel
                       id={`${ids.original}-label`}
                       htmlFor={ids.original}
-                      className="min-h-11 min-w-0 max-w-full whitespace-normal break-words md:pointer-fine:min-h-0"
+                      className="min-w-0 max-w-full whitespace-normal break-words"
                     >
                       {labels.original}
                     </FieldLabel>
@@ -1294,7 +1294,7 @@ function AuthoredFieldLive({
                     <Button
                       data-authored-step
                       type="button"
-                      className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+                      className="h-auto min-h-7 max-w-full whitespace-normal break-words"
                       disabled={locked}
                       onClick={preparePreview}
                     >

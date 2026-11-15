@@ -1,0 +1,17 @@
+/* Catalogue canvas only. Color, radius, type and control density come from the shared UI theme. */
+
+html,
+body,
+#storybook-root,
+.sb-show-main,
+.docs-story {
+  background-color: var(--background);
+  background-image: none;
+  color: var(--foreground);
+}
+
+/* Decorative page grounds are not part of the shared theme. */
+.aura-canvas,
+.aura-surface {
+  background-image: none;
+}

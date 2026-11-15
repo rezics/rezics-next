@@ -235,7 +235,7 @@ export function WorkbenchAppealStatus({
           : m.moderation_workbench_appeal_unavailable();
   return (
     <article className="space-y-5">
-      <a className="inline-flex min-h-11 items-center underline underline-offset-4" href={queueHref}>
+      <a className="inline-flex items-center underline underline-offset-4" href={queueHref}>
         {m.moderation_workbench_history_return()}
       </a>
       <ContentItemFrame as="div" role={state === 'empty' ? 'status' : 'alert'} className="space-y-3 p-4 sm:p-6">
@@ -244,7 +244,7 @@ export function WorkbenchAppealStatus({
         </ContentItemHeading>
         {state === 'stale' && onRestart ? (
           <Button
-            className="h-auto min-h-11 max-w-full whitespace-normal break-words"
+            className="h-auto min-h-7 max-w-full whitespace-normal break-words"
             variant="outline"
             onClick={onRestart}
           >
@@ -253,7 +253,7 @@ export function WorkbenchAppealStatus({
         ) : state === 'unavailable' && onRetry ? (
           <Button
             data-workbench-retry
-            className="h-auto min-h-11 max-w-full whitespace-normal break-words"
+            className="h-auto min-h-7 max-w-full whitespace-normal break-words"
             variant="outline"
             onClick={onRetry}
           >

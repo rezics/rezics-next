@@ -1,3 +1,4 @@
+import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import type { DocumentImageInspectionMode, DocumentImageInspectionVariant } from './document-image-inspection';
 
@@ -19,23 +20,25 @@ export function DocumentImageInspectionControls({
       : m.document_image_inspection_actual_state({}, options);
   return (
     <div className="min-w-0 space-y-1">
-      <div role="group" aria-label={m.document_image_inspection_title({}, options)} className="flex flex-wrap gap-2">
-        <button
+      <div role="group" aria-label={m.document_image_inspection_title({}, options)} className="flex flex-wrap items-center gap-2">
+        <Button
           type="button"
+          size="sm"
+          variant={mode === 'fit' ? 'default' : 'outline'}
           aria-pressed={mode === 'fit'}
           onClick={() => onModeChange('fit')}
-          className="min-h-11 rounded-md border px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           {m.document_image_inspection_fit({}, options)}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          size="sm"
+          variant={mode === 'actual' ? 'default' : 'outline'}
           aria-pressed={mode === 'actual'}
           onClick={() => onModeChange('actual')}
-          className="min-h-11 rounded-md border px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           {m.document_image_inspection_actual({}, options)}
-        </button>
+        </Button>
       </div>
       <p role="status" className="min-w-0 text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
         {state} · {m.document_image_inspection_size({ width: variant.width, height: variant.height }, options)}

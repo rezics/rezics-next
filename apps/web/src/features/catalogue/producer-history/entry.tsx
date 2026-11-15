@@ -1,4 +1,5 @@
 import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { subjectHref } from '../../../subject/subject-href';
 import { m } from '../../../paraglide/messages.js';
 import { catalogueEntries } from '../catalogue-entry';
@@ -25,7 +26,13 @@ export function ProducerHistoryEntry(address: {
   if (!visit) return null;
   return (
     <>
-      <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={visit.href}>
+      <a
+        className={cn(
+          buttonVariants({ variant: 'outline', size: 'sm' }),
+          'h-auto min-h-6 max-w-full justify-start whitespace-normal text-start [overflow-wrap:anywhere]',
+        )}
+        href={visit.href}
+      >
         {entry.label}
       </a>
       {visit.restarted && <p role="status">{m.producer_history_return_overview()}</p>}

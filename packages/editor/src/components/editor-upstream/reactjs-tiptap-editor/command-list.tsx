@@ -87,7 +87,7 @@ export function CommandListItems({
             key={command.id}
             value={command.id}
             data-checked={command.id === selectedBlock}
-            className="min-h-11 gap-3 whitespace-normal text-start"
+            className="whitespace-normal text-start"
             onSelect={() => onSelect(command)}
           >
             {Icon ? <Icon aria-hidden="true" /> : null}

@@ -27,7 +27,7 @@ import {
 
 // These controls grow with localized labels instead of clipping at the shared button height.
 const recoveryButtonClassName =
-  'h-auto min-h-11 min-w-11 max-w-full shrink whitespace-normal wrap-anywhere py-2 text-center';
+  'h-auto max-w-full shrink whitespace-normal wrap-anywhere text-center min-h-7';
 const statusCardClassName =
   'min-w-0 max-w-full rounded-lg border bg-muted/20 px-4 py-3 text-sm text-muted-foreground wrap-anywhere';
 
@@ -54,7 +54,7 @@ function IdentityAvatar({
 function AccountDetails({ accountId }: { accountId: string }) {
   return (
     <details className="min-w-0 max-w-full">
-      <summary className="min-h-11 cursor-pointer py-2 text-sm wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
+      <summary className="cursor-pointer py-2 text-sm wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
         {m.lifecycle_identity_details()}
       </summary>
       <dl className="min-w-0 space-y-1">
@@ -246,7 +246,7 @@ export function ManagedAccountDetailCard({
     <ContentSection className="min-w-0 max-w-full wrap-anywhere">
       <ContentSectionHeader className="min-w-0">
         <a
-          className="flex min-h-11 min-w-11 w-fit max-w-full items-center py-2 text-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+          className="flex w-fit max-w-full items-center py-2 text-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
           href={backHref}
           onClick={onBack}
         >

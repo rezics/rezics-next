@@ -68,7 +68,7 @@ function ReturnStory({
     <AuthStory>
       <div className="bg-background text-foreground">
         <AuthPage heading={m.auth_members_heading()}>
-          <a href="/security" className="inline-flex min-h-11 items-center underline">
+          <a href="/security" className="underline underline-offset-4">
             {m.auth_members_back()}
           </a>
           <OrganizationMembershipReturnView history={history} dismiss={() => setHistory([])} />

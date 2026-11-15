@@ -56,7 +56,7 @@ type Created = Extract<CreateResult, { ok: true }>;
 type Session = 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
 const factsId = 'concept-initial-facts';
 const formClass =
-  'inline-flex min-h-11 min-w-11 items-center justify-center whitespace-normal rounded-md border px-4 py-2';
+  'inline-flex items-center justify-center whitespace-normal border';
 
 function createdIdentity(result: Created, reading: ConceptCreateRead): CreatedClassificationIdentity | undefined {
   const identity = result.reader.state === 'ready' ? result.reader.identity : undefined;

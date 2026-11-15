@@ -360,13 +360,13 @@ export function DiscoveryKinds({
                 : m.discovery_count_unavailable({}, options);
             return (
               <li key={kind.id}>
-                <Label className="items-start gap-2 text-sm font-normal">
+                <Label className="items-start gap-2 text-sm">
                   <NativeCheckbox
                     aria-label={m.search_kind_choice({ value: label.text || kind.id }, options)}
                     name="kinds"
                     value={kind.id}
                     checked={chosen.has(kind.id)}
-                    className="mt-0.5 size-4 shrink-0 accent-primary"
+                    className="mt-0.5 shrink-0"
                     onChange={(event) => {
                       const { value, checked } = event.currentTarget;
                       if (onSelectionChange) {

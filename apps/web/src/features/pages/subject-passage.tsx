@@ -44,7 +44,7 @@ export function SubjectPassage({
       {...(open === undefined ? {} : { open })}
       {...(onOpenChange ? { onToggle: (event) => onOpenChange(event.currentTarget.open) } : {})}
     >
-      <summary className="min-h-11 min-w-11 cursor-pointer rounded-sm py-2 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-4">
+      <summary className="cursor-pointer focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-4">
         {excerpt.text && (
           <span
             lang={language}

@@ -62,11 +62,11 @@ export function SavedQueryDirectory({
           <p role="status" data-capability="unavailable">
             {m.library_saved_queries_unavailable()}
           </p>
-          <a href={currentHref} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
+          <a href={currentHref} className={buttonVariants({ variant: 'outline' })}>
             {m.library_collections_retry()}
           </a>
           {next ? (
-            <a href={nextPageHref(next, layout)} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
+            <a href={nextPageHref(next, layout)} className={buttonVariants({ variant: 'outline' })}>
               {m.library_collection_more()}
             </a>
           ) : null}
@@ -83,7 +83,7 @@ export function SavedQueryDirectory({
                   href={href}
                   data-saved-query-row={collection.id}
                   trailing={
-                    <a href={href} className={buttonVariants({ size: 'lg' })}>
+                    <a href={href} className={buttonVariants({ variant: 'outline' })}>
                       {m.library_collection_open()}
                     </a>
                   }
@@ -94,7 +94,7 @@ export function SavedQueryDirectory({
                         viewerId={viewerId}
                         allowed={canEditRules}
                         resultsHref={href}
-                        className={buttonVariants({ variant: 'outline', size: 'lg' })}
+                        className={buttonVariants({ variant: 'outline' })}
                       />
                     ) : null
                   }
@@ -103,7 +103,7 @@ export function SavedQueryDirectory({
             })}
           </ul>
           {next ? (
-            <a href={nextPageHref(next, layout)} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
+            <a href={nextPageHref(next, layout)} className={buttonVariants({ variant: 'outline' })}>
               {m.library_collection_more()}
             </a>
           ) : null}
@@ -112,7 +112,7 @@ export function SavedQueryDirectory({
         <div className="mt-3 space-y-2">
           <p role="status">{m.library_saved_queries_empty_page()}</p>
           {next ? (
-            <a href={nextPageHref(next, layout)} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
+            <a href={nextPageHref(next, layout)} className={buttonVariants({ variant: 'outline' })}>
               {m.library_collection_more()}
             </a>
           ) : null}

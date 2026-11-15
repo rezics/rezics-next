@@ -19,13 +19,16 @@ import {
 import { hasMeaningfulPublicationNote, usePublicationNoteDraftNavigation } from './publication-note-draft-navigation';
 import type { ProgressSessionPage } from './progress-reads';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { ContentItem } from '@rezics/ui/content-item';
 
 export { RelativeTime } from './logs-relative-time';
 
-const buttonClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal rounded-lg border border-border px-4 py-2 text-start text-primary underline-offset-4 [overflow-wrap:anywhere] hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const buttonClass = cn(
+  buttonVariants({ variant: 'outline', size: 'sm' }),
+  'h-auto min-h-6 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]',
+);
 
 // Private same-owner intent survives a retired read/operation view. This is never authority.
 const publications = new WeakMap<object, PublicationDraft>();
@@ -129,7 +132,7 @@ function PublishLog({
 
   return (
     <details className="min-w-0 space-y-3 rounded-xl border bg-card p-4 sm:p-5">
-      <summary className="min-h-11 cursor-pointer content-center rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+      <summary className="cursor-pointer content-center rounded-md">
         <h2 id="publish-log-heading" className="inline text-lg font-semibold">
           {m.library_logs_publish_heading()}
         </h2>
@@ -179,7 +182,8 @@ function PublishLog({
             <Button
               type="submit"
               disabled={!!lifetime.flight}
-              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal"
+              size="sm"
+              className="h-auto min-h-6 max-w-full whitespace-normal"
             >
               {m.library_logs_publish()}
             </Button>
@@ -205,7 +209,8 @@ function PublishedLogNote({ note }: { note: string }) {
       <Button
         type="button"
         variant="ghost"
-        className="min-h-11 max-w-full whitespace-normal text-start"
+        size="sm"
+        className="h-auto min-h-6 max-w-full whitespace-normal text-start"
         aria-expanded={expanded}
         aria-controls={noteId}
         onClick={() => setExpanded((value) => !value)}
@@ -284,7 +289,7 @@ function PublishedLogs({
                 onClick={guardNavigation}
                 onAuxClick={guardNavigation}
                 onContextMenu={guardNavigation}
-                className={`${buttonClass} min-h-11 max-w-full`}
+                className={buttonClass}
               >
                 {m.library_progress_log_reader_first_page()}
               </Link>
@@ -300,7 +305,7 @@ function PublishedLogs({
                 onClick={guardNavigation}
                 onAuxClick={guardNavigation}
                 onContextMenu={guardNavigation}
-                className={`${buttonClass} min-h-11 max-w-full`}
+                className={buttonClass}
               >
                 {m.library_logs_more()}
               </Link>

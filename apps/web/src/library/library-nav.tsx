@@ -1,6 +1,7 @@
 import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { ListRow, ListRowLink } from '@rezics/ui/list-row';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { CheckIcon, ChevronDownIcon } from 'lucide-react';
 import { useId, type ReactNode } from 'react';
 import { getLocale } from '../paraglide/runtime.js';
@@ -120,8 +121,10 @@ export function libraryNavigationEntries(
 }
 
 function DestinationLink({ entry }: { entry: LibraryNavigationEntry }) {
-  const className =
-    'inline-flex min-h-11 min-w-11 max-w-48 shrink-0 items-center rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-[current=page]:bg-muted aria-[current=page]:font-semibold aria-[current=page]:text-foreground';
+  const className = cn(
+    buttonVariants({ variant: 'ghost', size: 'sm' }),
+    'max-w-48 shrink-0 text-muted-foreground aria-[current=page]:bg-muted aria-[current=page]:font-semibold aria-[current=page]:text-foreground',
+  );
   return entry.href ? (
     <a
       href={entry.href}
@@ -161,24 +164,24 @@ function DestinationList({ entries }: { entries: readonly LibraryNavigationEntry
           key={entry.id}
           data-library-destination={entry.id}
           data-library-pin={entry.pin?.collectionId}
-          className="min-h-13 min-w-0 p-1 aria-[current=page]:bg-muted"
+          className="min-w-0 p-1 aria-[current=page]:bg-muted"
           aria-current={entry.current && !entry.href ? 'page' : undefined}
         >
           <div
             aria-hidden={entry.href ? true : undefined}
-            className={`flex min-h-11 min-w-11 items-start gap-3 rounded-lg px-3 py-3 text-sm leading-5 ${entry.current ? 'bg-muted font-semibold' : ''} ${entry.href ? '' : 'text-muted-foreground'}`}
+            className={`flex min-w-0 items-start gap-3 px-2 py-1.5 text-sm leading-5 ${entry.current ? 'bg-muted font-semibold' : ''} ${entry.href ? '' : 'text-muted-foreground'}`}
           >
             <div className="min-w-0 flex-1 space-y-1 whitespace-normal [overflow-wrap:anywhere]">
               <span>{entry.label}</span>
               {!entry.href ? <span className="block text-xs font-normal">{entry.id}</span> : null}
             </div>
-            {entry.current ? <CheckIcon aria-hidden="true" className="size-5 shrink-0" /> : null}
+            {entry.current ? <CheckIcon aria-hidden="true" className="size-4 shrink-0" /> : null}
           </div>
           {entry.href ? (
             <ListRowLink
               href={entry.href}
               aria-current={entry.current ? 'page' : undefined}
-              className="min-h-11 min-w-11"
+              className="min-w-0"
             >
               {entry.label}
             </ListRowLink>
@@ -243,7 +246,8 @@ function DestinationMenu({
           aria-label={m.library_nav_selector()}
           aria-labelledby={`${titleId} ${purposeId}`}
           variant="outline"
-          className="min-h-11 min-w-11 max-w-48 shrink-0"
+          size="sm"
+          className="max-w-48 shrink-0"
         >
           <span id={titleId} className="truncate">
             {current ?? m.library_more()}

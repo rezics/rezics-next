@@ -125,7 +125,7 @@ export function ProfileFeedback({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+                  className="h-auto max-w-full whitespace-normal break-words min-h-7"
                   disabled={!writable || busy || commandWaiting}
                   onClick={() => void editor.retry()}
                 >
@@ -135,7 +135,7 @@ export function ProfileFeedback({
               <Button
                 type="button"
                 variant="outline"
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+                className="h-auto max-w-full whitespace-normal break-words min-h-7"
                 disabled={!canRead || busy || readWaiting}
                 onClick={() => void editor.reload()}
               >
@@ -145,7 +145,7 @@ export function ProfileFeedback({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+                  className="h-auto max-w-full whitespace-normal break-words min-h-7"
                   disabled={!writable || busy || denied}
                   onClick={() => editor.review()}
                 >
@@ -160,7 +160,7 @@ export function ProfileFeedback({
         <Button
           type="button"
           variant="outline"
-          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+          className="h-auto max-w-full whitespace-normal break-words min-h-7"
           disabled={busy || readWaiting}
           onClick={() => void editor.reload()}
         >
@@ -329,7 +329,7 @@ export function ProfileCard({
                       <li key={field}>
                         <a
                           href={`#${ids}-${field}`}
-                          className="block min-h-11 content-center rounded-sm py-2 break-words underline focus-visible:outline-2 focus-visible:outline-offset-2"
+                          className="block content-center rounded-sm py-2 break-words underline focus-visible:outline-2 focus-visible:outline-offset-2"
                           onClick={(event) => {
                             event.preventDefault();
                             if (!editor.canWrite()) return;
@@ -348,7 +348,6 @@ export function ProfileCard({
               {m.settings_profile_display_name()}
               <Input
                 id={`${ids}-displayName`}
-                className="min-h-11"
                 ref={(control) => {
                   controls.current.displayName = control;
                 }}
@@ -441,7 +440,7 @@ export function ProfileCard({
             <div className="flex flex-wrap gap-3">
               <Button
                 type="submit"
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+                className="h-auto max-w-full whitespace-normal break-words min-h-7"
                 disabled={closed || busy || uploading || !!state.attempt || commandWaiting || !canSubmitPatch}
               >
                 {state.phase === 'saving' && state.scope === 'profile'
@@ -451,7 +450,7 @@ export function ProfileCard({
               <Button
                 type="button"
                 variant="outline"
-                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+                className="h-auto max-w-full whitespace-normal break-words min-h-7"
                 disabled={!canRead || busy || readWaiting}
                 onClick={() => void editor.reload()}
               >

@@ -4,11 +4,7 @@ import { m } from '../../paraglide/messages.js';
 import { localizeHref } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
 import { ArchiveRecoveryDeparture } from './departure';
-import {
-  createArchiveCollectionRecoveryJourney,
-  type ArchiveCollectionRecoveryJourney,
-  type RecoveryNotice,
-} from './controller';
+import { createArchiveCollectionRecoveryJourney, type ArchiveCollectionRecoveryJourney, type RecoveryNotice } from './controller';
 import { RECOVERY_APPLY_COMMANDS } from './contract';
 import { useArchiveCollectionRecoveryPort } from './port';
 import { ArchiveCollectionChooser, ArchiveOccurrenceChooser, ArchiveRecoveryReview } from './review';
@@ -21,6 +17,7 @@ import { useRecoveryVisit, type RecoveryVisit } from './visit';
 import type { RecoveryReader } from './window';
 import { archiveBase64FromCustody, bindArchiveCustodyOwner, completedArchiveFor } from '../private-export/custody';
 import { ArchiveRecoveryDestinations } from '../private-export/destinations';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 
 const visitIds = new WeakMap<RecoveryVisit, number>();
 let nextVisitId = 0;
@@ -102,7 +99,7 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
   const locked = snapshot.notice?.kind === 'unknown';
   const terminalStage = terminal(snapshot.stage);
   const returnLink = (
-    <a className={`${actionClass} inline-flex items-center underline`} href={localizeHref('/library')}>
+    <a className={buttonVariants({ variant: 'link', className: actionClass })} href={localizeHref('/library')}>
       {m.library_archive_recovery_return_library()}
     </a>
   );
@@ -196,43 +193,43 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
   );
   const primaryAction =
     snapshot.stage === 'occurrences' ? (
-      <button
+      <Button
         type="button"
-        className={actionClass}
+        variant="outline" className={actionClass}
         disabled={snapshot.busy || locked || !snapshot.selected.size}
         onClick={() => touch(journey.prepareReview())}
       >
         {m.library_archive_recovery_open_review()}
-      </button>
+      </Button>
     ) : snapshot.stage === 'conflict' ? (
-      <button
-        className={actionClass}
+      <Button
+        variant="outline" className={actionClass}
         type="button"
         disabled={snapshot.busy || locked}
         onClick={() => touch(journey.refreshConflict())}
       >
         {m.library_archive_recovery_refresh()}
-      </button>
+      </Button>
     ) : snapshot.stage === 'results' && snapshot.status ? (
       <>
         {snapshot.status.state === 'applying' ? (
-          <button
+          <Button
             type="button"
-            className={actionClass}
+            variant="outline" className={actionClass}
             disabled={snapshot.busy || locked}
             onClick={() => touch(journey.continueApply())}
           >
             {m.library_archive_recovery_apply_next({ commands: RECOVERY_APPLY_COMMANDS })}
-          </button>
+          </Button>
         ) : null}
-        <button
+        <Button
           type="button"
-          className={actionClass}
+          variant="outline" className={actionClass}
           disabled={snapshot.busy || locked || Boolean(snapshot.readRetry)}
           onClick={() => touch(journey.loadOutcomes())}
         >
           {m.library_archive_recovery_read_outcomes()}
-        </button>
+        </Button>
       </>
     ) : null;
 
@@ -249,14 +246,14 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
         </p>
       ) : null}
       {snapshot.readRetry ? (
-        <button
+        <Button
           type="button"
-          className={`${actionClass} rounded-md border font-medium`}
+          variant="outline"
           disabled={snapshot.busy || locked}
           onClick={() => touch(journey.retryRead())}
         >
           {m.library_archive_recovery_retry_page()}
-        </button>
+        </Button>
       ) : null}
       {snapshot.notice?.kind === 'unknown' ? (
         <ArchiveRecoveryUnknown busy={snapshot.busy} onRetry={() => touch(journey.retryUnknown())} />
@@ -329,14 +326,14 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
 
       {snapshot.stage === 'review' && snapshot.selectedCollection ? (
         <div className="grid gap-4">
-          <button
+          <Button
             type="button"
-            className={`${actionClass} justify-self-start rounded-md border`}
+            variant="outline" className="justify-self-start"
             disabled={snapshot.busy || locked}
             onClick={() => journey.editSelection()}
           >
             {m.library_archive_recovery_edit_selection()}
-          </button>
+          </Button>
           <ArchiveRecoveryReview
             collection={snapshot.selectedCollection}
             selected={snapshot.selected}
@@ -409,32 +406,32 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
             }
           />
           {snapshot.status.presentation.state === 'unsupported_or_stale' && !snapshot.status.collectionId ? (
-            <button
+            <Button
               type="button"
-              className={`${actionClass} justify-self-start rounded-md border`}
+              variant="outline" className="justify-self-start"
               disabled={snapshot.busy || locked}
               onClick={() => journey.prepareReview()}
             >
               {m.library_archive_recovery_edit_selection()}
-            </button>
+            </Button>
           ) : null}
-          <button
+          <Button
             type="button"
-            className={`${actionClass} justify-self-start rounded-md border`}
+            variant="outline" className="justify-self-start"
             disabled={snapshot.busy || locked}
             onClick={() => touch(journey.readStatus())}
           >
             {m.library_archive_recovery_read_status()}
-          </button>
+          </Button>
           {['complete', 'partial', 'cancelled'].includes(snapshot.status.state) ? (
-            <button
+            <Button
               type="button"
-              className={`${actionClass} justify-self-start rounded-md border`}
+              variant="outline" className="justify-self-start"
               disabled={snapshot.busy || locked}
               onClick={() => journey.restart()}
             >
               {m.library_archive_recovery_restart()}
-            </button>
+            </Button>
           ) : null}
         </div>
       ) : null}
@@ -449,14 +446,14 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
                 : m.library_archive_recovery_unavailable()}
           </p>
           {snapshot.stage !== 'denied' ? (
-            <button
+            <Button
               type="button"
-              className={`${actionClass} justify-self-start rounded-md border`}
+              variant="outline" className="justify-self-start"
               disabled={snapshot.busy}
               onClick={() => journey.restart()}
             >
               {m.library_archive_recovery_restart()}
-            </button>
+            </Button>
           ) : null}
           {returnLink}
         </section>

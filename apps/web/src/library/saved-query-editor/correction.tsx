@@ -2,6 +2,7 @@ import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
 import { savedQueryCreateHref, type SavedQuerySelection } from './selection';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 
 /** Invalid carried selections never reach the save form. */
 export function SavedQueryCorrection({
@@ -32,12 +33,12 @@ export function SavedQueryCorrection({
         </ul>
         <div className="flex flex-wrap gap-3">
           {safeOrigin ? (
-            <a className="inline-flex min-h-11 items-center rounded-lg border border-border px-4" href={safeOrigin}>
+            <a className={buttonVariants({ variant: 'outline' })} href={safeOrigin}>
               {m.library_saved_query_correct()}
             </a>
           ) : null}
           <a
-            className="inline-flex min-h-11 items-center rounded-lg border border-border px-4"
+           className={buttonVariants({ variant: 'outline' })}
             href={savedQueryCreateHref(locale)}
           >
             {m.library_saved_query_blank()}

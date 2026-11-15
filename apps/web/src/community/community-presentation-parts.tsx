@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@rezics/ui/shadcn/avatar';
+import { Button } from '@rezics/ui/shadcn/button';
 import { MediaImage } from '@rezics/ui/media-image';
 import { DocumentBody } from '../document-body';
 import { m } from '../paraglide/messages.js';
@@ -23,7 +24,7 @@ export function CommunityBanner({
       aria-hidden="true"
       data-slot="board-banner-fallback"
       data-image-load-state="absent"
-      className="aura-surface h-24 sm:h-36"
+      className="bg-muted h-24 sm:h-36"
     />
   );
 }
@@ -57,7 +58,7 @@ function CommunityBannerImage({ banner }: { banner: RealmPresentationImage }) {
       />
       {hasDerivative && (recovery.state === 'failed' || retrying) ? (
         <RetryImageButton
-          className="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-md bg-background/90 px-3 py-2 text-xs font-medium text-foreground shadow-sm ring-1 ring-border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
           waiting={retrying}
           onRetry={recovery.retry}
         />
@@ -114,7 +115,7 @@ function CommunityAvatarImage({
       <AvatarFallback className="text-2xl sm:text-3xl">{initials(name)}</AvatarFallback>
       {avatarVariant && (recovery.state === 'failed' || retrying) ? (
         <RetryImageButton
-          className="absolute inset-0 z-10 grid place-items-center rounded-full bg-background/90 px-2 text-center text-xs font-medium text-foreground shadow-sm ring-1 ring-border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="absolute inset-0 z-10 h-auto rounded-full whitespace-normal"
           waiting={retrying}
           onRetry={recovery.retry}
         />
@@ -133,17 +134,18 @@ function RetryImageButton({
   onRetry: () => void;
 }) {
   return (
-    <button
+    <Button
       type="button"
+      size="xs"
+      variant="secondary"
       data-slot="community-image-retry"
       aria-label={m.realm_appearance_retry_image()}
       aria-disabled={waiting}
-      tabIndex={0}
       className={className}
       onClick={onRetry}
     >
       {m.realm_appearance_retry_image()}
-    </button>
+    </Button>
   );
 }
 
@@ -200,7 +202,7 @@ export function CommunityRules({ rules }: { rules?: CommunityPresentation['rules
           <DocumentBody document={rules.value.body} locale={getLocale()} className="text-sm" />
           <a
             href={`/${getLocale()}/posts/${rules.value.postId}/revisions/${rules.value.revisionId}`}
-            className="inline-flex h-auto min-h-11 min-w-11 max-w-full items-center text-start text-sm whitespace-normal text-primary hover:underline"
+            className="inline-flex h-auto max-w-full items-center text-start text-sm whitespace-normal text-primary hover:underline"
           >
             {m.board_community_rules_revision()}
           </a>

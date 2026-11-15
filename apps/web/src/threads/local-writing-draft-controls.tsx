@@ -1,6 +1,7 @@
 import { useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { documentText, type DocumentSnapshot } from '@rezics/document';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import {
@@ -12,7 +13,7 @@ import {
 } from './local-writing-draft';
 
 const action =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal px-4 py-2 text-left leading-snug [overflow-wrap:anywhere]';
+  'h-auto min-h-7 max-w-full whitespace-normal text-left leading-snug [overflow-wrap:anywhere]';
 const date = (value: number) =>
   new Intl.DateTimeFormat(getLocale(), { dateStyle: 'medium', timeStyle: 'short' }).format(value);
 
@@ -281,10 +282,10 @@ export function LocalWritingDraftControls({
           <label className="block" htmlFor={exportId}>
             {m.thread_draft_export_hint()}
           </label>
-          <textarea
+          <Textarea
             ref={exportField}
             id={exportId}
-            className="min-h-32 w-full min-w-0 rounded border border-border bg-background p-3"
+            className="min-h-32 w-full min-w-0"
             readOnly
             value={exportText}
           />

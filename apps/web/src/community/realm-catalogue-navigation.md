@@ -17,8 +17,7 @@ the shared Search section with its actual Realm identity, released facets and a 
 Browse opens ordinary localized Search with the current Realm resource filter. Expanding the query
 entry provides a labelled query, a description of the destination, submit and clear. Empty query
 means all matching works in that same Realm. Clear returns focus to the field. Closing the query
-entry retains its draft only for this visit. The controls wrap at narrow widths and have minimum
-44px targets; supplied community names wrap without clipping. Search owns the mounted results, facets, conditions, rating controls and recovery. The page fixes membership to
+entry retains its draft only for this visit. The controls wrap at narrow widths; supplied community names wrap without clipping. Search owns the mounted results, facets, conditions, rating controls and recovery. The page fixes membership to
 its Realm; authorization still runs at the native boundary, including for verified anonymous readers.
 
 The GET form uses the canonical Search pathname and a hidden native membership filter, because a

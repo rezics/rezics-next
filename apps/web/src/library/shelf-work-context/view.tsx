@@ -1,4 +1,5 @@
 import { currentShelfWorkContext, type ShelfContextSource, type ShelfWorkContext } from './context';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 
 /** Independent links keep creator/release destinations outside the work title's stretched link. */
 export function ShelfWorkContextView({
@@ -15,7 +16,7 @@ export function ShelfWorkContextView({
   return (
     <span data-slot="shelf-work-context" className="flex min-w-0 flex-col gap-0.5 text-xs text-muted-foreground">
       {context.facts.map((fact, index) => (
-        <span key={`${fact.property}:${index}`} data-property={fact.property} className="min-w-0 break-words">
+        <span key={`${fact.property}:${index}`} data-property={fact.property} className="h-auto min-w-0 break-words">
           <span lang={fact.roleLang}>{fact.role}</span>
           {': '}
           {fact.href ? (
@@ -23,7 +24,7 @@ export function ShelfWorkContextView({
               href={fact.href}
               lang={fact.lang}
               dir="auto"
-              className="relative z-20 inline-flex min-h-6 items-center rounded-sm underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+              className={buttonVariants({ variant: 'link', className: 'relative z-20 h-auto min-h-7' })}
               onClick={(event) => {
                 event.stopPropagation();
                 if (!(isCurrent?.() ?? true)) event.preventDefault();

@@ -25,7 +25,7 @@ export function ManualModerationScope({
     directoryCursor: search.directoryCursor,
     directoryRealm: search.realm,
   };
-  const control = 'min-h-11 min-w-11 w-full max-w-full whitespace-normal break-words';
+  const control = 'h-auto min-h-7 w-full max-w-full whitespace-normal break-words';
   return (
     <section aria-labelledby={`${id}-heading`} className="min-w-0 space-y-4">
       <div className="space-y-2">
@@ -56,7 +56,7 @@ export function ManualModerationScope({
             value={board}
             onChange={(event) => setBoard(event.target.value)}
             aria-describedby={`${id}-hint`}
-            className="min-h-11 min-w-0 w-full max-w-full"
+            className="min-w-0 w-full max-w-full"
             autoCapitalize="none"
             autoComplete="off"
             spellCheck={false}
@@ -76,7 +76,7 @@ export function ManualModerationScope({
             value={queue}
             onValueChange={(value) => setQueue(value!)}
           >
-            <SelectTrigger id={`${id}-queue`} className="w-full min-w-0 min-h-11">
+            <SelectTrigger id={`${id}-queue`} className="w-full min-w-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

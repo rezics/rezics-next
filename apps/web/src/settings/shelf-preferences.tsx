@@ -1105,7 +1105,7 @@ export function ShelfPreferencesCard({
                   <SelectTrigger
                     id={layoutSelectId}
                     aria-labelledby={`${layoutSelectId}-label`}
-                    className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
+                    className="max-w-full"
                   >
                     <SelectValue />
                   </SelectTrigger>
@@ -1148,7 +1148,7 @@ export function ShelfPreferencesCard({
                   <SelectTrigger
                     id={gridSizeSelectId}
                     aria-labelledby={`${gridSizeSelectId}-label`}
-                    className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
+                    className="max-w-full"
                   >
                     <SelectValue />
                   </SelectTrigger>
@@ -1173,7 +1173,7 @@ export function ShelfPreferencesCard({
                     : m.settings_shelf_choices_unavailable_text()}
                 </p>
                 {appColumns.map((column) => (
-                  <Field key={column} orientation="horizontal" className="min-h-11">
+                  <Field key={column} orientation="horizontal">
                     <Checkbox
                       id={`${inputId}-${column}`}
                       checked={state.draft.columns.includes(column)}
@@ -1250,7 +1250,7 @@ export function ShelfPreferencesCard({
                       <SelectTrigger
                         id={`${sortSelectId}-${tab}`}
                         aria-labelledby={`${sortSelectId}-${tab}-label`}
-                        className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
+                        className="max-w-full"
                       >
                         <SelectValue />
                       </SelectTrigger>
@@ -1340,7 +1340,6 @@ export function ShelfPreferencesCard({
                 <Button
                   type="button"
                   variant="outline"
-                  className="min-h-11"
                   disabled={!controller.canRetryOriginal() || !writeCurrent() || writeRetryWaiting || waiting}
                   onClick={() => void controller.retry()}
                 >
@@ -1350,7 +1349,6 @@ export function ShelfPreferencesCard({
               <Button
                 type="button"
                 variant="outline"
-                className="min-h-11"
                 disabled={!canRead || waiting || readRetryWaiting}
                 onClick={() => void controller.reload()}
               >
@@ -1358,10 +1356,10 @@ export function ShelfPreferencesCard({
               </Button>
               {state.current && !state.pending && (state.phase === 'review' || state.comparison) ? (
                 <>
-                  <Button type="button" className="min-h-11" onClick={() => controller.keepLocal()}>
+                  <Button type="button" onClick={() => controller.keepLocal()}>
                     {m.settings_shelf_keep_local()}
                   </Button>
-                  <Button type="button" variant="ghost" className="min-h-11" onClick={() => controller.useCurrent()}>
+                  <Button type="button" variant="ghost" onClick={() => controller.useCurrent()}>
                     {m.settings_shelf_use_current()}
                   </Button>
                 </>
@@ -1374,7 +1372,7 @@ export function ShelfPreferencesCard({
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
-              className="min-h-11 max-w-full whitespace-normal"
+              className="max-w-full whitespace-normal"
               disabled={disabled || writeRetryWaiting || !!state.pending || !state.dirty.size || !canWrite}
               onClick={() => void controller.submit()}
             >
@@ -1383,7 +1381,7 @@ export function ShelfPreferencesCard({
             <Button
               type="button"
               variant="outline"
-              className="min-h-11 max-w-full whitespace-normal"
+              className="max-w-full whitespace-normal"
               disabled={disabled || writeRetryWaiting || !!state.pending || !canWrite}
               onClick={() => void controller.submit(true)}
             >

@@ -413,7 +413,7 @@ export function KnowledgeHistoryPanel({
                         <SelectTrigger
                           id={selectId}
                           aria-describedby={historyIntroId}
-                          className="h-auto min-h-11 w-full min-w-0 whitespace-normal py-2 text-start [overflow-wrap:anywhere] *:data-[slot=select-value]:line-clamp-none *:data-[slot=select-value]:whitespace-normal"
+                          className="h-auto min-h-7 w-full min-w-0 whitespace-normal text-start [overflow-wrap:anywhere] *:data-[slot=select-value]:line-clamp-none *:data-[slot=select-value]:whitespace-normal"
                           disabled={pending || !page}
                         >
                           <SelectValue placeholder={m.knowledge_private_revision({}, options)} />
@@ -428,7 +428,7 @@ export function KnowledgeHistoryPanel({
                                 <SelectItem
                                   value={value}
                                   disabled
-                                  className="min-h-11 whitespace-normal [&>:first-child]:min-w-0 [&>:first-child]:max-w-full [&>:first-child]:shrink [&>:first-child]:whitespace-normal [&>:first-child]:[overflow-wrap:anywhere]"
+                                  className="whitespace-normal [&>:first-child]:min-w-0 [&>:first-child]:max-w-full [&>:first-child]:shrink [&>:first-child]:whitespace-normal [&>:first-child]:[overflow-wrap:anywhere]"
                                 >
                                   <span className="min-w-0 whitespace-normal break-all">{value}</span>
                                 </SelectItem>
@@ -520,7 +520,7 @@ export function KnowledgeHistoryPanel({
                         {formatHistoryDate(row.createdAt)}
                       </time>
                       {leftRevisionId === row.revisionId || rightRevisionId === row.revisionId ? (
-                        <p className="flex min-h-11 flex-wrap items-center gap-x-4 text-sm font-medium">
+                        <p className="flex flex-wrap items-center gap-x-4 text-sm">
                           {leftRevisionId === row.revisionId ? m.knowledge_history_left({}, options) : null}
                           {rightRevisionId === row.revisionId ? m.knowledge_history_right({}, options) : null}
                         </p>

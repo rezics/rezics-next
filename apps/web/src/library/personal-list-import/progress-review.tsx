@@ -100,7 +100,7 @@ export function VndbProgressReview({
           <SelectTrigger
             id={`${id}-occurrence`}
             aria-labelledby={`${id}-occurrence-label`}
-            className="min-h-11 w-full rounded-md border bg-background px-3"
+            className='w-full'
           >
             <SelectValue />
           </SelectTrigger>
@@ -135,7 +135,7 @@ export function VndbProgressReview({
               <SelectTrigger
                 id={`${id}-action`}
                 aria-labelledby={`${id}-action-label`}
-                className="min-h-11 w-full rounded-md border bg-background px-3"
+                className='w-full'
               >
                 <SelectValue />
               </SelectTrigger>

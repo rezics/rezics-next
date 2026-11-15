@@ -14,7 +14,7 @@ import { StatementSummary } from './statement-summary';
 type ReviewStatement = Omit<StatementInput, 'rank'> & { rank?: StatementInput['rank'] | 'deprecated' };
 
 const wrap =
-  'relative z-10 inline-flex h-auto min-h-11 min-w-11 max-w-full items-center whitespace-normal break-words py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'relative z-10 inline-flex h-auto min-h-7 max-w-full items-center whitespace-normal break-words focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 type RecipeReviewRow = {
   id: string;

@@ -99,7 +99,7 @@ export function DecisionReadStatus({
               : m.moderation_decision_read_unavailable()}
       </p>
       {state !== 'loading' && state !== 'platform-closed' && onRetry ? (
-        <Button variant="outline" className="min-h-11" disabled={busy} onClick={onRetry}>
+        <Button variant="outline" disabled={busy} onClick={onRetry}>
           {m.moderation_decision_read_retry()}
         </Button>
       ) : null}
@@ -904,7 +904,7 @@ function DecisionVisit({
                 <p className="text-muted-foreground">{m.decision_target_available()}</p>
                 {context.kind === 'thread' ? (
                   <a
-                    className="flex min-h-11 items-center underline underline-offset-4"
+                    className="flex items-center underline underline-offset-4"
                     href={threadLocation(
                       locale,
                       { id: context.threadId, title: context.threadTitle },
@@ -916,7 +916,7 @@ function DecisionVisit({
                   </a>
                 ) : null}
                 <a
-                  className="flex min-h-11 items-center underline underline-offset-4"
+                  className="flex items-center underline underline-offset-4"
                   href={localizeHref(`/boards/${encodeURIComponent(context.boardId)}`)}
                 >
                   {context.boardTitle || m.threads_untitled()}

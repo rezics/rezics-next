@@ -1,5 +1,6 @@
 import { ListRow } from '@rezics/ui/list-row';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { m } from '../../paraglide/messages.js';
 import type { CreatorSale } from '../creator-sales';
 import type { CreatorSaleReading } from '../creator-sale-reading';
@@ -62,7 +63,7 @@ export function CreatorSalesReviewRows({ sales, locale, reading }: Props) {
               <Button
                 disabled={!reading.sourceIsCurrent()}
                 variant="outline"
-                className="min-h-11 whitespace-normal"
+                className="h-auto min-h-7 whitespace-normal"
                 id={`inspect-sale-${sale.orderId}`}
                 aria-describedby={`sale-title-${sale.orderId}`}
                 aria-expanded={reading.selectedId === sale.orderId}
@@ -71,13 +72,11 @@ export function CreatorSalesReviewRows({ sales, locale, reading }: Props) {
               >
                 {m.creator_sale_inspect()}
               </Button>
-              <label className="inline-flex min-h-11 min-w-0 cursor-pointer items-center gap-3 text-sm">
-                <input
-                  type="checkbox"
-                  className="size-5 shrink-0 accent-primary"
+              <label className="inline-flex min-w-0 cursor-pointer items-center gap-3 text-sm">
+                <Checkbox
                   checked={selected}
                   disabled={!reading.sourceIsCurrent() || (!selected && full)}
-                  onChange={() => reading.toggleComparison(sale.orderId)}
+                  onCheckedChange={() => reading.toggleComparison(sale.orderId)}
                   aria-describedby={`sale-title-${sale.orderId} creator-sales-comparison-bound`}
                 />
                 <span>{m.creator_review_select()}</span>

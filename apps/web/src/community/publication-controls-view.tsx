@@ -374,7 +374,7 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
     <div className="min-w-0 space-y-3 [overflow-wrap:anywhere]">
       <Button
         ref={opener}
-        className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+        className="h-auto min-h-7 max-w-full whitespace-normal"
         variant="outline"
         aria-expanded={open}
         onClick={() => {
@@ -448,7 +448,7 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
                 </div>
                 <ListRowControl data-content-item-slot="actions" className="min-w-0">
                   <Button
-                    className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+                    className="h-auto min-h-7 max-w-full whitespace-normal"
                     variant="ghost"
                     onClick={(event) => {
                       const scope = control.scope;
@@ -527,7 +527,7 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
                   {(['publish', 'withdraw', 'reject'] as const).map((action) => (
                     <Button
                       key={action}
-                      className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+                      className="h-auto min-h-7 max-w-full whitespace-normal"
                       disabled={
                         !selected || control.locked || !preparation || !admittedPublicationCommand(preparation, action)
                       }
@@ -624,7 +624,7 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
                   <p>{m.realm_publication_uncertain()}</p>
                   <ListRowControl data-content-item-slot="actions">
                     <Button
-                      className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+                      className="h-auto min-h-7 max-w-full whitespace-normal"
                       variant="outline"
                       onClick={(event) => {
                         onCommand?.(event);
@@ -642,7 +642,7 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
                   <div className="space-y-2">
                     <ListRowControl data-content-item-slot="actions">
                       <Button
-                        className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+                        className="h-auto min-h-7 max-w-full whitespace-normal"
                         variant="outline"
                         disabled={control.preparationState === 'loading'}
                         onClick={() => void control.review()}
@@ -652,7 +652,7 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
                     </ListRowControl>
                     <ListRowControl data-content-item-slot="actions">
                       <Button
-                        className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+                        className="h-auto min-h-7 max-w-full whitespace-normal"
                         variant="outline"
                         onClick={() => void refresh()}
                       >
@@ -669,7 +669,7 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
           control.outcome?.kind !== 'unavailable' &&
           control.outcome?.kind !== 'conflict' ? (
             <Button
-              className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+              className="h-auto min-h-7 max-w-full whitespace-normal"
               variant="outline"
               disabled={control.preparationState === 'loading'}
               onClick={() => void control.inspect()}
@@ -680,7 +680,7 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
           {open && selected && preparation ? (
             <div className="min-w-0 max-w-xl space-y-2">
               <details className="min-w-0 rounded-md border border-border px-3">
-                <summary className="flex min-h-11 cursor-pointer items-center py-2 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                <summary className="flex cursor-pointer items-center font-medium">
                   {m.realm_publication_original_subject()}
                 </summary>
                 <section className="min-w-0 space-y-2 pb-3" data-publication-presentation="original">
@@ -705,7 +705,7 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
               </details>
               {preparation.subject.currentId !== preparation.subject.originalId ? (
                 <details className="min-w-0 rounded-md border border-border px-3">
-                  <summary className="flex min-h-11 cursor-pointer items-center py-2 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                  <summary className="flex cursor-pointer items-center font-medium">
                     {m.realm_publication_terminal_subject()}
                   </summary>
                   <section
@@ -882,7 +882,7 @@ export function ShelfContinuation({
         {failure === 'stale' || failure === 'denied' ? (
           <Button
             ref={recoveryRef}
-            className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+            className="h-auto min-h-7 max-w-full whitespace-normal"
             variant="outline"
             disabled={busy}
             onClick={(event) => activate(event, (intent) => load(true, intent))}
@@ -892,7 +892,7 @@ export function ShelfContinuation({
         ) : failure === 'unavailable' ? (
           <Button
             ref={recoveryRef}
-            className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+            className="h-auto min-h-7 max-w-full whitespace-normal"
             variant="outline"
             disabled={busy}
             onClick={(event) => activate(event, retry)}
@@ -902,7 +902,7 @@ export function ShelfContinuation({
         ) : next ? (
           <Button
             ref={recoveryRef}
-            className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+            className="h-auto min-h-7 max-w-full whitespace-normal"
             variant="outline"
             disabled={busy}
             onClick={(event) => activate(event, (intent) => load(undefined, intent))}

@@ -61,7 +61,6 @@ export function VerificationLinks({
                   </FieldLabel>
                   <Input
                     id={fieldId}
-                    className="min-h-11 min-w-11"
                     inputMode={field === 'url' ? 'url' : 'text'}
                     autoCapitalize={field === 'url' ? 'none' : undefined}
                     spellCheck={field === 'url' ? false : undefined}
@@ -88,7 +87,7 @@ export function VerificationLinks({
           <Button
             type="button"
             variant="outline"
-            className="min-h-11 min-w-11 self-start"
+            className="self-start"
             onClick={() => {
               focus.current = rows[index + 1]?.key ?? rows[index - 1]?.key ?? 'add';
               onChange(rows.filter((candidate) => candidate.key !== row.key));
@@ -103,7 +102,6 @@ export function VerificationLinks({
           id={`${id}-add-link`}
           type="button"
           variant="outline"
-          className="min-h-11 min-w-11"
           aria-invalid={errors.has(`${id}-add-link`)}
           aria-describedby={`${id}-links-hint${errors.has(`${id}-add-link`) ? ` ${id}-links-error` : ''}`}
           onClick={() => {

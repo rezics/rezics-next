@@ -235,7 +235,7 @@ export function ResponsiveDialog({
         className={`max-h-[calc(100dvh-2rem)] min-w-0 overflow-y-auto sm:max-w-lg ${className ?? ''}`}
         finalFocus={finalFocusFor(false, renderedEpisode)}
       >
-        <DialogHeader className="flex-row items-center justify-between gap-4">
+        <DialogHeader className="flex-row items-center justify-between gap-2">
           <div className="min-w-0 space-y-1">
             <DialogTitle className="min-w-0 [overflow-wrap:anywhere]">{title}</DialogTitle>
             <DialogDescription className="min-w-0 [overflow-wrap:anywhere]">{description}</DialogDescription>
@@ -245,7 +245,8 @@ export function ResponsiveDialog({
               <Button
                 type="button"
                 variant="ghost"
-                className="min-h-11 shrink-0"
+                size="sm"
+                className="shrink-0"
                 data-responsive-control-id="responsive-dialog-close"
               />
             }

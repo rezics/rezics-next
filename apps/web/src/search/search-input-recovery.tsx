@@ -1,7 +1,9 @@
 import { diagnoseText } from '../../../../packages/search-text/src/index.ts';
 import { QueryTextRecovery } from './query-text-recovery';
 import { useState } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
 import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
 import { RATING_POPULATION_FIELD } from './rating-population';
@@ -128,14 +130,14 @@ export function SearchInputRecovery(props: LegacyProps | IntakeProps | OverBudge
         {overBudget ? (
           <>
             <p>{m.search_input_recovery_over_budget({}, options)}</p>
-            <button
-              className="rounded-md border px-4 py-2"
+            <Button
+              variant="outline"
               data-search-input-restart
               type="button"
               onClick={() => 'onRestart' in props && props.onRestart()}
             >
               {m.search_input_restart_request({}, options)}
-            </button>
+            </Button>
           </>
         ) : (
           <>
@@ -175,19 +177,19 @@ export function SearchInputRecovery(props: LegacyProps | IntakeProps | OverBudge
                           locale={locale}
                           onApply={(value) => apply(issue, value)}
                         />
-                        <button className="rounded-md border px-4 py-2" type="button" onClick={() => remove(issue)}>
+                        <Button variant="outline" type="button" onClick={() => remove(issue)}>
                           {removalLabel(issue, field, options)}
-                        </button>
+                        </Button>
                       </>
                     ) : issue.key === 'cursor' ? (
-                      <button
-                        className="rounded-md border px-4 py-2"
+                      <Button
+                        variant="outline"
                         data-search-input-control
                         type="button"
                         onClick={() => remove(issue)}
                       >
                         {removalLabel(issue, field, options)}
-                      </button>
+                      </Button>
                     ) : (
                       <form
                         className="w-full space-y-3"
@@ -198,11 +200,11 @@ export function SearchInputRecovery(props: LegacyProps | IntakeProps | OverBudge
                       >
                         <label className="block space-y-2 text-sm font-medium" htmlFor={`search-input-${index}`}>
                           {m.search_input_editor_label({ field }, options)}
-                          <textarea
+                          <Textarea
                             autoCapitalize="off"
                             autoComplete="off"
                             autoCorrect="off"
-                            className="min-h-32 w-full rounded-md border bg-background p-3 font-mono text-sm text-foreground"
+                            className="min-h-32 font-mono"
                             data-search-input-control
                             id={`search-input-${index}`}
                             spellCheck={false}
@@ -213,12 +215,12 @@ export function SearchInputRecovery(props: LegacyProps | IntakeProps | OverBudge
                           />
                         </label>
                         <div className="flex flex-wrap gap-3">
-                          <button className="rounded-md bg-primary px-4 py-2 text-primary-foreground" type="submit">
+                          <Button type="submit">
                             {m.search_input_recovery_apply({}, options)}
-                          </button>
-                          <button className="rounded-md border px-4 py-2" type="button" onClick={() => remove(issue)}>
+                          </Button>
+                          <Button variant="outline" type="button" onClick={() => remove(issue)}>
                             {removalLabel(issue, field, options)}
-                          </button>
+                          </Button>
                         </div>
                       </form>
                     )}

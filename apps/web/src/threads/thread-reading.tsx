@@ -572,7 +572,10 @@ export function ThreadReading({
                     undefined,
                     boardReturn,
                   )}
-                  className={buttonVariants({ variant: 'outline', size: 'lg' })}
+                  className={buttonVariants({
+                    variant: 'outline',
+                    className: 'h-auto min-h-7 max-w-full whitespace-normal',
+                  })}
                 >
                   {m.threads_next_page()}
                 </a>

@@ -7,6 +7,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { AppShell } from '../shell/shell';
 import { PageStory, PatternStory, pageReady } from './page';
+import { Button } from '@rezics/ui/shadcn/button';
 
 const meta = {
   title: 'Commerce/Creator Sales',
@@ -169,9 +170,9 @@ function ReplacementReading() {
   return (
     <PatternStory visitor="Signed In" path="/creator/sales">
       <AppShell>
-        <button className="min-h-11 rounded border px-4" onClick={() => replace(creatorSalesStoryPage('history'))}>
+        <Button type="button" variant="outline" size="sm" onClick={() => replace(creatorSalesStoryPage('history'))}>
           {m.statements_refresh()}
-        </button>
+        </Button>
         <CreatorSalesPage page={page} locale={getLocale()} />
       </AppShell>
     </PatternStory>

@@ -127,7 +127,7 @@ export function CatalogueNavigationDecision({
           <AlertDialogCancel
             ref={stayButton}
             variant="default"
-            className="h-auto min-h-11 min-w-11 w-full max-w-full whitespace-normal break-words py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:w-auto md:pointer-fine:py-1"
+            className="h-auto min-h-7 w-full max-w-full whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:w-auto"
           >
             {m.library_collection_draft_navigation_stay({}, o)}
           </AlertDialogCancel>
@@ -135,7 +135,7 @@ export function CatalogueNavigationDecision({
             type="button"
             variant="outline"
             onClick={leave}
-            className="h-auto min-h-11 min-w-11 w-full max-w-full whitespace-normal break-words py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:w-auto md:pointer-fine:py-1"
+            className="h-auto min-h-7 w-full max-w-full whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:w-auto"
           >
             {m.library_collection_draft_navigation_leave({}, o)}
           </AlertDialogAction>

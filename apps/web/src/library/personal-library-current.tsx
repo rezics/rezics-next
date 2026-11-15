@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useNavigate, useRouter } from '@tanstack/react-router';
 import { EntriesWindowNavigation, entriesWindowHref, type EntriesWindowControls } from './entries-window-navigation';
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Button } from '@rezics/ui/shadcn/button';
 import { CancelledError, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '../session';
 import { useOperation } from '../kernel/exposure';
@@ -463,14 +463,9 @@ function PersonalLibraryRead({
     void query.refetch();
   };
   const retryControl = (
-    <button
-      type="button"
-      className={`${buttonVariants({ variant: 'outline' })} min-h-11 min-w-11`}
-      disabled={query.isFetching}
-      onClick={retry}
-    >
+    <Button type="button" variant="outline" disabled={query.isFetching} onClick={retry}>
       {m.library_window_retry()}
-    </button>
+    </Button>
   );
   const prepareTitle = useCallback(
     async (key: string): Promise<ShelfTitlePreparationReceipt> => {

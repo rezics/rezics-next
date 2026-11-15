@@ -5,7 +5,7 @@ import { localizeHref } from '../../paraglide/runtime.js';
 import { moderationDirectoryPage, type ModerationDirectoryPage } from './directory';
 import { workbenchDirectorySearch, workbenchSearch, type WorkbenchSearch } from './scope';
 
-const control = 'min-h-11 min-w-11 max-w-full whitespace-normal break-words text-left';
+const control = 'h-auto min-h-7 max-w-full whitespace-normal break-words text-start';
 
 /** Only source advice creates a selection control. Exact selected reads remain independent. */
 export function ModerationDirectory({
@@ -149,7 +149,7 @@ export function ModerationDirectory({
               ) : null}
               {allowed ? (
                 <a
-                  className="inline-flex min-h-11 min-w-11 max-w-full items-center break-words rounded-md px-2 underline underline-offset-4"
+                  className="inline-flex max-w-full items-center break-words px-2 underline underline-offset-4"
                   href={localizeHref(
                     scope.kind === 'board' ? `/boards/${encodeURIComponent(scope.id)}` : '/moderation/catalogue',
                   )}

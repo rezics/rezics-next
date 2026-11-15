@@ -49,12 +49,12 @@ import type { StatementInput } from './statement-editor';
 import type { StatementFieldsRead } from './statement-editor-view';
 
 const actionClassName =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center';
 const recoveryFocusClassName = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const selectClassName = 'w-full min-w-0 max-w-full min-h-11 md:pointer-fine:min-h-8';
+const selectClassName = 'w-full min-w-0 max-w-full';
 const labelClassName = 'min-w-0 max-w-full flex-wrap [overflow-wrap:anywhere]';
 const linkClassName =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center underline [overflow-wrap:anywhere] md:pointer-fine:min-h-8';
+  'inline-flex max-w-full items-center underline [overflow-wrap:anywhere]';
 const actionLinkClassName = cn(buttonVariants(), actionClassName);
 const outlineLinkClassName = cn(buttonVariants({ variant: 'outline' }), actionClassName);
 
@@ -670,7 +670,7 @@ function PublicationEditorLive({
                       {m.publication_search({}, o)}
                     </a>
                   }
-                  className="[&_[data-content-item-slot=title]]:line-clamp-none [&_[data-content-item-slot=title]]:[overflow-wrap:anywhere] [&_[data-slot=list-row-link]]:min-h-11"
+                  className="[&_[data-content-item-slot=title]]:line-clamp-none [&_[data-content-item-slot=title]]:[overflow-wrap:anywhere]"
                 />
               </ul>
               {!profile && (
@@ -867,7 +867,7 @@ function PublicationEditorLive({
                           onCheckedChange={(value) => edit(() => setIndependent(value))}
                         />
                         <FieldLabel
-                          className={`${labelClassName} min-h-11 min-w-11 items-center md:pointer-fine:min-h-8`}
+                          className={`${labelClassName} items-center`}
                           htmlFor={`${id}-independent`}
                         >
                           {m.publication_independent({}, o)}

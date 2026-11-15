@@ -268,7 +268,7 @@ export function ReportDialog({
               <Textarea
                 aria-describedby={`${detailsHintId} ${characterCountId}`}
                 aria-required={requiresDetails}
-                className="min-h-24 resize-y"
+                className="resize-y"
                 disabled={pending}
                 id={detailsId}
                 maxLength={detailsLimit}

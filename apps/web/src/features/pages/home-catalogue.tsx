@@ -54,7 +54,7 @@ export function HomeCatalogue({ result, locale }: { result?: RoutePageLoad | und
       )}
       <a
         href={`/${locale}/search`}
-        className="inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-ring"
+        className="inline-flex max-w-full items-center whitespace-normal text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-ring"
       >
         {m.search_heading({}, o)}
       </a>

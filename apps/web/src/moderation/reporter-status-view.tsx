@@ -1,5 +1,6 @@
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { ContentItemHeading } from '@rezics/ui/content-item';
 import { ArrowLeft, Check, CircleCheck, CircleMinus, Clock3, Copy, LoaderCircle, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
@@ -20,7 +21,7 @@ import type { ReporterStatus } from './reporter-status-model';
 type RetryActivation = { keyboard: boolean; source: HTMLButtonElement };
 type Retry = (activation?: RetryActivation) => void | Promise<void>;
 
-const statusControl = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 wrap-anywhere';
+const statusControl = 'h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere';
 const statusHeading =
   'text-2xl font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:text-3xl';
 
@@ -57,7 +58,7 @@ export function ReporterStatusPage(
               event.preventDefault();
               void props.onReturn();
             }}
-            className="inline-flex min-h-11 min-w-11 max-w-full items-center gap-2 rounded-md py-2 text-sm font-medium whitespace-normal text-muted-foreground underline-offset-4 wrap-anywhere hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="inline-flex max-w-full items-center gap-2 text-sm font-medium whitespace-normal text-muted-foreground underline-offset-4 wrap-anywhere hover:text-foreground hover:underline"
           >
             <ArrowLeft className="size-4 shrink-0" aria-hidden="true" />
             {props.returnHref ? m.reporter_history_return() : m.reporter_status_back()}
@@ -330,7 +331,7 @@ export function ReporterStatusView({
           </h1>
           <Badge
             variant={report.outcome === 'actioned' ? 'default' : 'secondary'}
-            className="h-auto max-w-full gap-1.5 whitespace-normal px-3 py-1.5 text-sm wrap-anywhere"
+            className="h-auto min-h-5 max-w-full whitespace-normal wrap-anywhere"
           >
             <StatusIcon aria-hidden="true" />
             {status.label}
@@ -339,7 +340,7 @@ export function ReporterStatusView({
         </div>
         {onRefresh ? (
           <Button variant="outline" className={`${statusControl} shrink-0`} onClick={() => void onRefresh()}>
-            <RefreshCw className="size-4" aria-hidden="true" />
+            <RefreshCw aria-hidden="true" />
             {m.reporter_status_refresh()}
           </Button>
         ) : null}
@@ -399,7 +400,7 @@ export function ReporterStatusView({
           <ContentItemHeading id="reporter-status-target" level={2} className="text-lg font-semibold">
             {m.reporter_status_target()}
           </ContentItemHeading>
-          <Badge variant="outline" className="h-auto max-w-full whitespace-normal wrap-anywhere">
+          <Badge variant="outline" className="h-auto min-h-5 max-w-full whitespace-normal wrap-anywhere">
             {targetKind}
           </Badge>
         </div>
@@ -532,7 +533,7 @@ function ReportReference({ report, isCurrent = alwaysCurrent }: { report: Report
   }
   return (
     <details className="border-t pt-3">
-      <summary className="min-h-11 min-w-11 cursor-pointer rounded-md py-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+      <summary className=" cursor-pointer text-sm font-medium ">
         {m.reporter_status_reference()}
       </summary>
       <div className="space-y-4 py-3">
@@ -555,16 +556,16 @@ function ReportReference({ report, isCurrent = alwaysCurrent }: { report: Report
             )
           }
         >
-          <Copy className="size-4" aria-hidden="true" />
+          <Copy aria-hidden="true" />
           {m.reporter_status_copy()}
         </Button>
         {copyState === 'failed' && isCurrent() ? (
           <div className="space-y-3">
             <label className="block space-y-2 text-sm font-medium">
               <span>{m.reporter_status_reference()}</span>
-              <textarea
+              <Textarea
                 ref={manualReferenceRef}
-                className="min-h-24 w-full resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-sm leading-6 select-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="min-h-24 font-mono select-text"
                 readOnly
                 rows={reference.length}
                 value={referenceText}
@@ -637,7 +638,7 @@ export function ReporterStatusFailure({ onRetry }: { onRetry: Retry }) {
           })
         }
       >
-        {retrying ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : null}
+        {retrying ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : null}
         {retrying ? m.reporter_status_retrying() : m.sources_retry()}
       </Button>
     </div>

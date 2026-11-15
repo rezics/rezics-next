@@ -106,9 +106,9 @@ function PreparedSnapshotPort({ scenario }: { scenario: 'unsupported' | 'changed
             context={
               scenario === 'changed' ? (
                 <Button
-                  type="button"
-                  className="min-h-11 whitespace-normal"
-                  onClick={() => {
+ type="button"
+ className="whitespace-normal h-auto min-h-7"
+ onClick={() => {
                     revision.current++;
                     setBody(fromPlainText('Prepared newer current writing', 'blocks'));
                     inspection.changed();
@@ -209,10 +209,10 @@ function PreparedJourney({ caller, scenario }: Props) {
         </p>
         {scenario === 'account' ? (
           <Button
-            type="button"
-            variant="outline"
-            className="min-h-11 whitespace-normal"
-            onClick={() => {
+ type="button"
+ variant="outline"
+ className="whitespace-normal h-auto min-h-7"
+ onClick={() => {
               client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
               client.setQueryData(sessionQuery.queryKey, session);
             }}

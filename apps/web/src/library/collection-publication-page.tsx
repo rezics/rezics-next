@@ -1,5 +1,6 @@
+import { cn } from '@rezics/ui/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { ContentItem } from '@rezics/ui/content-item';
 import { useLayoutEffect, useState, useRef, type ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
@@ -345,10 +346,10 @@ function PublicationIntentView({
                 visual={<SubjectCover subject={member.subject} ratio={ratio} />}
                 metadata={<CollectionMemberDetails member={member} listPresentations={source.page.listPresentations} />}
                 trailing={
-                  <label className="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-lg focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring">
+                  <label className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-lg focus-within:ring-2 focus-within:ring-ring/30">
                     <input
                       type="checkbox"
-                      className="size-5 shrink-0 cursor-pointer accent-primary"
+                      className="size-4 shrink-0 cursor-pointer accent-primary"
                       checked={checked}
                       aria-label={m.library_publication_select({
                         title:
@@ -395,10 +396,10 @@ function PublicationIntentView({
       </p>
       <SavedQueryAcceptedMeaning meaning={acceptedMeaningFromPage(source.page, source.revision)} />
       {review ? <CollectionPublicationReview review={review} /> : null}
-      <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring">
+      <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 has-[:checked]:border-primary focus-within:ring-2 focus-within:ring-ring/30">
         <input
           type="checkbox"
-          className="mt-1 size-5 shrink-0 accent-primary"
+          className="mt-1 size-4 shrink-0 accent-primary"
           checked={confirmed}
           disabled={locked}
           aria-describedby="publication-count publication-bounds publication-replacement publication-privacy"
@@ -421,7 +422,7 @@ function PublicationIntentView({
       <div className="flex min-w-0 flex-wrap gap-3 border-t border-border pt-4">
         <Button
           type="button"
-          className="h-auto min-h-11 w-full max-w-full whitespace-normal px-4 py-3 text-start"
+          className="h-auto min-h-7 w-full max-w-full whitespace-normal text-start"
           aria-describedby="publication-bounds publication-replacement publication-privacy"
           disabled={!confirmed || busy || refused || (unknown ? !state.attempt || !isOwnerCurrent() : !canPublish())}
           onClick={() => void publish()}
@@ -432,7 +433,7 @@ function PublicationIntentView({
           <Button
             type="button"
             variant="outline"
-            className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+            className="h-auto min-h-7 max-w-full whitespace-normal text-start"
             onClick={reload}
           >
             {m.library_collection_reload()}
@@ -458,7 +459,7 @@ function PublicationIntentView({
       {feedback}
       <Button
         type="button"
-        className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+        className="h-auto min-h-7 max-w-full whitespace-normal text-start"
         disabled={!unknown || busy || !isOwnerCurrent()}
         onClick={() => void publish()}
       >
@@ -468,7 +469,7 @@ function PublicationIntentView({
         <Button
           type="button"
           variant="outline"
-          className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+          className="h-auto min-h-7 max-w-full whitespace-normal text-start"
           onClick={reload}
         >
           {m.library_collection_reload()}
@@ -481,7 +482,7 @@ function PublicationIntentView({
     <div className="space-y-1" data-publication-continuation>
       <p className="text-sm text-muted-foreground">{m.library_publication_more_pages()}</p>
       <a
-        className="inline-flex min-h-11 items-center text-primary underline"
+        className={cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full whitespace-normal')}
         href={`${base}/publish?${new URLSearchParams({ cursor: source.page.next })}`}
       >
         {m.library_publication_next()}
@@ -511,7 +512,7 @@ function PublicationIntentView({
               m.library_publication_complete,
             )}
           </p>
-          <a className="inline-flex min-h-11 items-center text-primary underline" href={base}>
+          <a className={cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full whitespace-normal')} href={base}>
             {m.library_publication_view()}
           </a>
           {publishedReview ? (
@@ -540,7 +541,7 @@ function PublicationIntentView({
           {unknown ? (
             <Button
               type="button"
-              className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+              className="h-auto min-h-7 max-w-full whitespace-normal text-start"
               disabled={busy || !isOwnerCurrent()}
               onClick={() => void publish()}
             >
@@ -551,7 +552,7 @@ function PublicationIntentView({
             <Button
               type="button"
               variant="outline"
-              className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+              className="h-auto min-h-7 max-w-full whitespace-normal text-start"
               onClick={reload}
             >
               {m.library_collection_reload()}
@@ -568,7 +569,7 @@ function PublicationIntentView({
       modeNavigation={modeNavigation}
       backLink={
         mode === 'selected' ? (
-          <a className="inline-flex min-h-11 items-center text-sm text-primary underline underline-offset-4" href={base}>
+          <a className={cn(buttonVariants({ variant: 'link', size: 'sm' }), 'h-auto min-h-6 max-w-full whitespace-normal')} href={base}>
             {m.library_publication_back()}
           </a>
         ) : undefined
@@ -586,7 +587,7 @@ function PublicationIntentView({
       details={
         ready ? (
           <details className="max-w-prose text-sm text-muted-foreground" data-publication-details>
-            <summary className="min-h-11 cursor-pointer py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            <summary className="cursor-pointer font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
               {m.library_publication_details()}
             </summary>
             <div className="space-y-2 pt-2">
@@ -697,14 +698,14 @@ function CurrentPublicationPage({
   const querySource = mode === 'query' && page.source.state === 'ready' ? page.source : null;
   const modeNavigation = page.source.state === 'ready' ? (
     <div
-      className="flex min-w-0 flex-wrap gap-2"
+      className="flex min-w-0 flex-wrap items-center gap-2"
       role="group"
       aria-label={m.library_publication_heading()}
       data-publication-mode-navigation
     >
       <Button
         type="button"
-        className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+        className="h-auto min-h-7 max-w-full whitespace-normal text-start"
         variant={wholeQuery ? 'default' : 'outline'}
         aria-pressed={wholeQuery}
         onClick={() => setWholeQuery(true)}
@@ -713,7 +714,7 @@ function CurrentPublicationPage({
       </Button>
       <Button
         type="button"
-        className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+        className="h-auto min-h-7 max-w-full whitespace-normal text-start"
         variant={!wholeQuery ? 'default' : 'outline'}
         aria-pressed={!wholeQuery}
         onClick={() => setWholeQuery(false)}

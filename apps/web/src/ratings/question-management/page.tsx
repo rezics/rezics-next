@@ -1,6 +1,9 @@
 import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Input } from '@rezics/ui/shadcn/input';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 import { useSession } from '../../session/query';
@@ -141,26 +144,26 @@ function WindowReturn({
   disabled?: boolean;
 }) {
   return (
-    <div className="flex flex-wrap gap-3">
+    <div className="flex flex-wrap items-center gap-2">
       {previous ? (
-        <button
+        <Button
           type="button"
-          className="rounded-md border px-4 py-2"
+          variant="outline"
           disabled={disabled}
           onClick={(event) => previous(event.detail === 0)}
         >
           {m.realm_question_window_previous()}
-        </button>
+        </Button>
       ) : null}
       {first ? (
-        <button
+        <Button
           type="button"
-          className="rounded-md border px-4 py-2"
+          variant="outline"
           disabled={disabled}
           onClick={(event) => first(event.detail === 0)}
         >
           {m.realm_question_window_first()}
-        </button>
+        </Button>
       ) : null}
     </div>
   );
@@ -301,14 +304,13 @@ export function QuestionManagementContent({
       return (
         <div className="space-y-2" role="status">
           <p>{m.realm_question_action_uncertain()}</p>
-          <button
+          <Button
             type="button"
-            className="rounded-md border px-3 py-2"
             disabled={actionBusy || requireFreshInspection}
             onClick={() => onRetryOriginal?.(action)}
           >
             {m.realm_question_retry_original()}
-          </button>
+          </Button>
         </div>
       );
     if (state === 'stale') return <p role="status">{m.realm_question_action_conflict()}</p>;
@@ -347,10 +349,10 @@ export function QuestionManagementContent({
           <ul className="grid gap-2 sm:grid-cols-2">
             {page.directory.ratingQuestions.map((question) => (
               <li key={question.id}>
-                <button
+                <Button
                   type="button"
                   aria-current={address.selectedQuestionId === question.id ? 'page' : undefined}
-                  className="w-full rounded-xl border p-4 text-start hover:bg-muted focus-visible:outline focus-visible:outline-2"
+                  variant="outline" className="h-auto w-full whitespace-normal p-4 text-start"
                   onClick={() => onSelect(question.id)}
                 >
                   <span className="block font-medium">{question.label}</span>
@@ -364,7 +366,7 @@ export function QuestionManagementContent({
                       step: String(question.scale.displayStep),
                     })}
                   </span>
-                </button>
+                </Button>
               </li>
             ))}
           </ul>
@@ -375,29 +377,29 @@ export function QuestionManagementContent({
           disabled={navigationBusy}
         />
         {page.directory.next ? (
-          <button
+          <Button
             type="button"
-            className="rounded-md border px-4 py-2"
+            variant="outline"
             disabled={navigationBusy}
             onClick={(event) => onNext(page.directory.next!, event.detail === 0)}
           >
             {m.home_questions_next()}
-          </button>
+          </Button>
         ) : null}
       </section>
 
       {page.actions.create && onCreate ? (
         <section className="space-y-4 border-t pt-6" aria-labelledby="realm-question-create-heading">
           {!createOpen ? (
-            <button
+            <Button
               ref={createButton}
               type="button"
-              className="rounded-md border px-4 py-2"
+              variant="outline"
               disabled={actionBusy || requireFreshInspection || createState === 'uncertain'}
               onClick={() => setCreateOpen(true)}
             >
               {m.realm_question_create()}
-            </button>
+            </Button>
           ) : (
             <div className="space-y-4 rounded-2xl border p-4 sm:p-6">
               <h2
@@ -443,11 +445,11 @@ export function QuestionManagementContent({
                 >
                   <label className="space-y-1 sm:col-span-2">
                     <span className="block text-sm font-medium">{m.realm_question_management_meaning()}</span>
-                    <textarea
+                    <Textarea
                       required
                       maxLength={4000}
                       rows={4}
-                      className="w-full rounded-md border bg-background p-3"
+                      className="w-full"
                       value={definition.meaning}
                       disabled={createState === 'uncertain' || requireFreshInspection}
                       onChange={(event) => {
@@ -458,10 +460,10 @@ export function QuestionManagementContent({
                   </label>
                   <label className="space-y-1">
                     <span className="block text-sm font-medium">{m.home_question_label()}</span>
-                    <input
+                    <Input
                       required
                       maxLength={400}
-                      className="w-full rounded-md border bg-background px-3 py-2"
+                      className="w-full"
                       value={definition.label}
                       disabled={createState === 'uncertain' || requireFreshInspection}
                       onChange={(event) => {
@@ -490,7 +492,7 @@ export function QuestionManagementContent({
                     >
                       <SharedSelect.SelectTrigger
                         id="question-management-grain"
-                        className="w-full rounded-md border bg-background px-3 py-2"
+                        className="w-full"
                       >
                         <SharedSelect.SelectValue />
                       </SharedSelect.SelectTrigger>
@@ -519,13 +521,13 @@ export function QuestionManagementContent({
                     ).map(([key, label]) => (
                       <label key={key} className="space-y-1">
                         <span className="block text-sm">{label}</span>
-                        <input
+                        <Input
                           type="number"
                           min={key === 'min' ? 0 : 1}
                           max={20}
                           step={1}
                           required
-                          className="w-full rounded-md border bg-background px-3 py-2"
+                          className="w-full"
                           value={definition.scale[key]}
                           disabled={createState === 'uncertain' || requireFreshInspection}
                           onChange={(event) => {
@@ -539,17 +541,17 @@ export function QuestionManagementContent({
                       </label>
                     ))}
                   </fieldset>
-                  <div className="flex flex-wrap gap-3 sm:col-span-2">
-                    <button
+                  <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
+                    <Button
                       type="submit"
-                      className="rounded-md border px-4 py-2"
+                      variant="outline"
                       disabled={actionBusy || requireFreshInspection || !createValid}
                     >
                       {m.realm_question_review_definition()}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
-                      className="rounded-md px-4 py-2"
+                      variant="ghost"
                       disabled={createState === 'uncertain'}
                       onClick={() => {
                         setCreateOpen(false);
@@ -558,33 +560,33 @@ export function QuestionManagementContent({
                       }}
                     >
                       {m.container_lifecycle_cancel()}
-                    </button>
+                    </Button>
                   </div>
                 </form>
               )}
               {notice('create', createState)}
               {createReview ? (
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-wrap items-center gap-2">
                   {createState === 'uncertain' ? null : (
-                    <button
+                    <Button
                       type="button"
-                      className="rounded-md border px-4 py-2"
+                      variant="outline"
                       disabled={actionBusy || requireFreshInspection}
                       onClick={create}
                     >
                       {m.realm_question_confirm_create()}
-                    </button>
+                    </Button>
                   )}
-                  <button
+                  <Button
                     type="button"
-                    className="rounded-md px-4 py-2"
+                    variant="ghost"
                     disabled={actionBusy || createState === 'uncertain'}
                     onClick={() => {
                       setCreateReview(false);
                     }}
                   >
                     {m.container_lifecycle_cancel()}
-                  </button>
+                  </Button>
                 </div>
               ) : null}
             </div>
@@ -641,31 +643,31 @@ export function QuestionManagementContent({
                   disabled={navigationBusy || actionBusy}
                 />
                 {history.page.next ? (
-                  <button
+                  <Button
                     type="button"
-                    className="rounded-md border px-4 py-2"
+                    variant="outline"
                     disabled={navigationBusy || actionBusy}
                     onClick={(event) => onMoreHistory?.(history.page.next!, event.detail === 0)}
                   >
                     {m.realm_question_history_more()}
-                  </button>
+                  </Button>
                 ) : null}
               </>
             ) : null}
             {history?.state === 'stale-cursor' ? (
               <div className="space-y-2" role="status">
                 <p>{m.realm_question_history_stale()}</p>
-                <button type="button" className="rounded-md border px-4 py-2" onClick={onRestartHistory}>
+                <Button type="button" variant="outline" onClick={onRestartHistory}>
                   {m.realm_question_history_restart()}
-                </button>
+                </Button>
               </div>
             ) : null}
             {history?.state === 'unavailable' ? (
               <div className="space-y-2" role="status">
                 <p>{m.realm_question_history_unavailable()}</p>
-                <button type="button" className="rounded-md border px-4 py-2" onClick={onRetryHistory}>
+                <Button type="button" variant="outline" onClick={onRetryHistory}>
                   {m.home_questions_retry()}
-                </button>
+                </Button>
               </div>
             ) : null}
           </section>
@@ -676,15 +678,15 @@ export function QuestionManagementContent({
               aria-labelledby="realm-question-caption-heading"
             >
               {!captionOpen ? (
-                <button
+                <Button
                   ref={captionButton}
                   type="button"
-                  className="rounded-md border px-4 py-2"
+                  variant="outline"
                   disabled={actionBusy || requireFreshInspection || captionState === 'uncertain'}
                   onClick={() => setCaptionOpen(true)}
                 >
                   {m.realm_question_caption_edit()}
-                </button>
+                </Button>
               ) : (
                 <div className="space-y-4">
                   <h2
@@ -705,10 +707,10 @@ export function QuestionManagementContent({
                   ) : (
                     <label className="block max-w-xl space-y-1">
                       <span className="block text-sm font-medium">{m.home_question_label()}</span>
-                      <input
+                      <Input
                         required
                         maxLength={400}
-                        className="w-full rounded-md border bg-background px-3 py-2"
+                        className="w-full"
                         value={caption}
                         disabled={captionState === 'uncertain' || requireFreshInspection}
                         onChange={(event) => setCaption(event.currentTarget.value)}
@@ -716,31 +718,31 @@ export function QuestionManagementContent({
                     </label>
                   )}
                   {notice('caption', captionState)}
-                  <div className="flex flex-wrap gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
                     {captionReview ? (
                       captionState === 'uncertain' ? null : (
-                        <button
+                        <Button
                           type="button"
-                          className="rounded-md border px-4 py-2"
+                          variant="outline"
                           disabled={actionBusy || requireFreshInspection}
                           onClick={saveCaption}
                         >
                           {m.realm_question_caption_save()}
-                        </button>
+                        </Button>
                       )
                     ) : (
-                      <button
+                      <Button
                         type="button"
-                        className="rounded-md border px-4 py-2"
+                        variant="outline"
                         disabled={actionBusy || requireFreshInspection || !captionValid}
                         onClick={() => setCaptionReview(true)}
                       >
                         {m.realm_question_review_definition()}
-                      </button>
+                      </Button>
                     )}
-                    <button
+                    <Button
                       type="button"
-                      className="rounded-md px-4 py-2"
+                      variant="ghost"
                       disabled={actionBusy || captionState === 'uncertain'}
                       onClick={() => {
                         setCaptionOpen(false);
@@ -750,7 +752,7 @@ export function QuestionManagementContent({
                       }}
                     >
                       {m.container_lifecycle_cancel()}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -774,30 +776,30 @@ export function QuestionManagementContent({
               </p>
               {notice(lifecycleAction, lifecycleState)}
               {lifecycleConfirm === null ? (
-                <button
+                <Button
                   ref={lifecycleButton}
                   type="button"
-                  className="rounded-md border px-4 py-2"
+                  variant="outline"
                   disabled={actionBusy || requireFreshInspection || lifecycleState === 'uncertain'}
                   onClick={() => setLifecycleConfirm(lifecycleAction)}
                 >
                   {lifecycleAction === 'retire' ? m.realm_question_retire() : m.realm_question_restore()}
-                </button>
+                </Button>
               ) : (
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-wrap items-center gap-2">
                   {lifecycleState === 'uncertain' ? null : (
-                    <button
+                    <Button
                       type="button"
-                      className="rounded-md border px-4 py-2"
+                      variant="outline"
                       disabled={actionBusy || requireFreshInspection}
                       onClick={() => confirmLifecycle(lifecycleConfirm)}
                     >
                       {m.container_lifecycle_confirm()}
-                    </button>
+                    </Button>
                   )}
-                  <button
+                  <Button
                     type="button"
-                    className="rounded-md px-4 py-2"
+                    variant="ghost"
                     disabled={actionBusy || lifecycleState === 'uncertain'}
                     onClick={() => {
                       focusLifecycleTriggerOnReturn.current = true;
@@ -805,7 +807,7 @@ export function QuestionManagementContent({
                     }}
                   >
                     {m.container_lifecycle_cancel()}
-                  </button>
+                  </Button>
                 </div>
               )}
             </section>
@@ -1369,19 +1371,19 @@ export function QuestionManagementPage({
               ? m.home_questions_denied()
               : m.home_questions_unavailable()}
         </p>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           {staleCursor ? (
-            <button type="button" className="rounded-md border px-4 py-2" onClick={restart}>
+            <Button type="button" variant="outline" onClick={restart}>
               {m.home_questions_restart_action()}
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
               type="button"
-              className="rounded-md border px-4 py-2"
+              variant="outline"
               onClick={() => isVisitCurrent() && setRetry((value) => value + 1)}
             >
               {m.home_questions_retry()}
-            </button>
+            </Button>
           )}
         </div>
       </section>

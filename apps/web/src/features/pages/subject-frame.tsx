@@ -167,7 +167,7 @@ export function SubjectFrame({
             >
               <Link
                 href={contextHref(withSubjectVisitReturn(base, returnTo ?? '', locale), realm)}
-                className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="inline-flex max-w-full items-center whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
                 {...(frame.title.lang ? { lang: frame.title.lang } : {})}
               >
                 {title}
@@ -303,7 +303,7 @@ export function SubjectFrame({
       {library ? (
         <div
           data-slot="subject-library"
-          className="min-w-0 [&_a]:h-auto [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:wrap-anywhere [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:wrap-anywhere"
+          className="min-w-0 [&_a]:h-auto [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:wrap-anywhere [&_button]:h-auto [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:wrap-anywhere"
         >
           {library}
         </div>
@@ -322,7 +322,7 @@ export function SubjectFrame({
       {returnTo ? (
         <a
           href={returnTo}
-          className={`${linkClass} ${linkColor} inline-flex min-h-11 min-w-11 items-center underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
+          className={`${linkClass} ${linkColor} inline-flex items-center underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
         >
           {zoneVisitReturn(returnTo, locale)
             ? m.zone_return({}, { locale: locale as never })
@@ -380,7 +380,7 @@ export function SubjectViewPage({ frame, label, actions, nextHref, ...page }: Su
       />
       {ownHeading ? (
         actions ? (
-          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 [&_a]:h-auto [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:wrap-anywhere [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:wrap-anywhere">
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 [&_a]:h-auto [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:wrap-anywhere [&_button]:h-auto [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:wrap-anywhere">
             {actions}
           </div>
         ) : null
@@ -397,7 +397,7 @@ export function SubjectViewPage({ frame, label, actions, nextHref, ...page }: Su
           rel="next"
           className={cn(
             buttonVariants({ variant: 'outline' }),
-            'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring',
+            'h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring',
           )}
         >
           {m.subject_view_continue({ label }, { locale: page.locale as never })}

@@ -11,7 +11,7 @@ import {
 } from './edit-conflict-inspection';
 
 export const conflictActionClassName =
-  'h-auto min-h-11 min-w-11 max-w-full shrink px-4 py-3 text-start leading-snug whitespace-normal [overflow-wrap:anywhere] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
+  'h-auto min-h-7 max-w-full shrink text-start leading-snug whitespace-normal [overflow-wrap:anywhere]';
 
 function kindLabel(kind: ConflictSectionKind): string {
   switch (kind) {

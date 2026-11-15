@@ -114,7 +114,7 @@ export function FeedResults<T>({
             ? 'sparse'
             : 'empty';
   const retryControl = onRetry ? (
-    <Button type="button" className="min-h-11" variant="outline" disabled={busy} onClick={onRetry}>
+    <Button type="button" variant="outline" disabled={busy} onClick={onRetry}>
       {messages.retry}
     </Button>
   ) : null;
@@ -135,7 +135,7 @@ export function FeedResults<T>({
       : (failureActions?.[result.state] ??
         (result.state === 'cursor' ? (
           onRestart ? (
-            <Button type="button" className="min-h-11" variant="outline" disabled={busy} onClick={onRestart}>
+            <Button type="button" variant="outline" disabled={busy} onClick={onRestart}>
               {messages.restart}
             </Button>
           ) : null

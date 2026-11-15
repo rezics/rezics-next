@@ -58,7 +58,7 @@ export function LabelNameReader({
             variant="link"
             aria-expanded={expanded}
             aria-controls={textId}
-            className="h-auto min-h-11 min-w-11 max-w-full justify-start whitespace-normal px-0 py-2 text-left [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="h-auto min-h-7 max-w-full justify-start whitespace-normal px-0 text-left [overflow-wrap:anywhere]"
             onClick={() => setExpanded((value) => !value)}
             onBlur={() => {
               const text = textRef.current;

@@ -1,4 +1,6 @@
 import {
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
   createContext,
   useContext,
   useLayoutEffect,
@@ -19,7 +21,7 @@ import type { ValueRead } from '../value-explanation';
 import { admitFacts, factAddress, factFieldAnchor, sameFactReading, type FactProjection } from './model';
 
 export const factControl =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center px-1 py-2 underline whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
 type Visit = { statement: PersonStatement; source: HTMLAnchorElement; field: string };
 type Facts = {
   projection: FactProjection | undefined;
@@ -158,7 +160,7 @@ function FactVisit({
             }
           }}
         >
-          <button type="button" className={factControl} onClick={close}>
+          <button type="button" className={cn(buttonVariants({ variant: 'outline' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]')} onClick={close}>
             {m.people_facts_return({}, o)}
           </button>
           <ValueExplanationSession

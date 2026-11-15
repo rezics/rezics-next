@@ -1,3 +1,4 @@
+import { Button } from '@rezics/ui/shadcn/button';
 import type { ReactNode } from 'react';
 import { PublicReactionRecovery } from './public-reaction-recovery';
 import { m } from '../../paraglide/messages.js';
@@ -9,7 +10,7 @@ import type { SubjectReactionKind, SubjectReactions } from './subject-reactions'
 import { FollowTargetControl } from '../../library/follow-target-control';
 
 const actionRowClass =
-  'flex min-w-0 w-full flex-wrap gap-2 [&_a]:h-auto [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:wrap-anywhere [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:wrap-anywhere';
+  'flex min-w-0 w-full flex-wrap gap-2 [&_a]:h-auto [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:wrap-anywhere [&_button]:h-auto [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:wrap-anywhere';
 
 /**
  * Library actions lead at the available header width; reactions, follow and overflow wrap in a separate row.
@@ -82,14 +83,16 @@ export function SubjectHeaderActions({
             <p className="text-sm text-muted-foreground" role="status">
               {reactionRecovery.pending ? m.subject_reaction_recovery_pending() : m.subject_reaction_recovery_failure()}
             </p>
-            <button
+            <Button
               type="button"
-              className="min-h-11 min-w-11 rounded-md px-2 py-1 text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              variant="link"
+              size="sm"
+              className="h-auto min-h-6 whitespace-normal"
               disabled={reactionRecovery.pending}
               onClick={reactionRecovery.retry}
             >
               {m.subject_reaction_recovery_retry()}
-            </button>
+            </Button>
           </div>
         ) : null}
         <FollowTargetControl targetId={id} />

@@ -9,7 +9,7 @@ import type { HostedReleasePreparationVisit } from './hosted-release-preparation
 import { HostedReleaseActivationEntry, type HostedReleaseActivationBinding } from './hosted-release-activation-entry';
 import { activationCopy } from './hosted-release-activation-copy';
 
-const control = 'min-h-11 max-w-full whitespace-normal text-start';
+const control = 'h-auto min-h-7 max-w-full whitespace-normal text-start';
 const valueStyle = 'min-w-0 break-all font-mono text-sm';
 
 export function HostedReleasePreparationView({
@@ -37,7 +37,7 @@ export function HostedReleasePreparationView({
         <header className="studio-header space-y-3">
           <h1>{activationCopy[locale].heading}</h1>
           <a
-            className="studio-skip inline-flex min-h-11 items-center"
+            className="studio-skip inline-flex items-center"
             href={localizeHref('/studio?books=1', { locale })}
           >
             {m.studio_root_append_return({}, { locale })}
@@ -95,7 +95,7 @@ export function HostedReleasePreparationView({
     <main className="studio-workspace mx-auto w-full max-w-4xl space-y-8 px-4 py-8 selection:bg-primary selection:text-primary-foreground">
       <header className="studio-header space-y-3">
         <h1>{copy.heading}</h1>
-        <a className="studio-skip inline-flex min-h-11 items-center" href={localizeHref('/studio?books=1', { locale })}>
+        <a className="studio-skip inline-flex items-center" href={localizeHref('/studio?books=1', { locale })}>
           {m.studio_root_append_return({}, { locale })}
         </a>
         <p className="studio-help max-w-prose text-pretty">{copy.private}</p>

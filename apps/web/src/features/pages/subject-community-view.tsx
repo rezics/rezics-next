@@ -29,7 +29,7 @@ export const SubjectCommunityVerificationContext = createContext<VerificationCon
 export const SubjectCommunityRefreshContext = createContext<(() => Promise<void>) | undefined>(undefined);
 const headingClass =
   'text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl';
-const actionClass = `${linkClass} ${linkColor} inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm text-sm font-medium whitespace-normal [overflow-wrap:anywhere] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`;
+const actionClass = `${linkClass} ${linkColor} inline-flex max-w-full items-center text-sm font-medium whitespace-normal [overflow-wrap:anywhere] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`;
 const isDomElement = (value: EventTarget | null | undefined): value is Element => {
   const ctor = globalThis.Element;
   return typeof ctor === 'function' && value instanceof ctor;
@@ -344,7 +344,7 @@ export function SubjectCommunityRegion({
                     className="min-w-0 text-[17px] leading-snug font-semibold [overflow-wrap:anywhere] sm:text-lg md:text-xl"
                   >
                     <ContentItemTitleLink
-                      className={`${linkClass} block min-h-11 content-center rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
+                      className={`${linkClass} block content-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
                       href={threadHref}
                     >
                       {thread.title || m.threads_untitled({}, options)}
@@ -352,7 +352,7 @@ export function SubjectCommunityRegion({
                   </ContentItemHeading>
                   <ListRowControl
                     data-content-item-slot="metadata"
-                    className="min-w-0 [overflow-wrap:anywhere] [&_.truncate]:overflow-visible [&_.truncate]:whitespace-normal [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:items-center [&_a]:rounded-sm [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
+                    className="min-w-0 [overflow-wrap:anywhere] [&_.truncate]:overflow-visible [&_.truncate]:whitespace-normal [&_a]:inline-flex [&_a]:items-center [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
                   >
                     {thread.nativeCard ? (
                       <CommunityNativeByline
@@ -418,7 +418,7 @@ export function SubjectCommunityRegion({
                   {!compact && (
                     <ListRowControl
                       data-content-item-slot="actions"
-                      className="flex flex-wrap gap-x-4 gap-y-2 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:items-center [&_a]:rounded-sm [&_a]:px-2 [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
+                      className="flex flex-wrap gap-x-4 gap-y-2 [&_a]:inline-flex [&_a]:items-center [&_a]:px-2 [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
                     >
                       <a className={actionClass} href={communityBoardHref(locale, thread.boardId, returnTo)}>
                         {m.subject_community_board({}, options)}

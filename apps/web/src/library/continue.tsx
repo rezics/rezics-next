@@ -2,7 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useOperation } from '../kernel/exposure';
 import { sharedRatio } from '@rezics/ui/cover';
 import { CoverCard, CoverRow, type CoverDensity } from '@rezics/ui/cover-card';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { coverSrc } from '../media/cover-src';
 import { coverOf, coverSubject } from '../media/summary';
@@ -122,7 +123,7 @@ export function ContinueRow({
             onClick={() =>
               rowHost.current?.querySelector('[data-slot="cover-row"]')?.scrollBy({ left: -240, behavior: 'smooth' })
             }
-            className="pointer-fine:flex pointer-coarse:hidden hidden size-11 min-h-11 min-w-11 shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring data-[available=false]:hidden"
+            className="pointer-fine:flex pointer-coarse:hidden hidden data-[available=false]:hidden"
           >
             <ChevronLeft aria-hidden />
           </Button>
@@ -138,7 +139,7 @@ export function ContinueRow({
             onClick={() =>
               rowHost.current?.querySelector('[data-slot="cover-row"]')?.scrollBy({ left: 240, behavior: 'smooth' })
             }
-            className="pointer-fine:flex pointer-coarse:hidden hidden size-11 min-h-11 min-w-11 shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring data-[available=false]:hidden"
+            className="pointer-fine:flex pointer-coarse:hidden hidden data-[available=false]:hidden"
           >
             <ChevronRight aria-hidden />
           </Button>
@@ -273,7 +274,10 @@ export function ContinueSection({
           </div>
           <a
             href={`/${locale}/library/continue`}
-            className="inline-flex min-h-11 min-w-0 max-w-full items-center rounded-sm px-2 py-2 text-sm whitespace-normal text-primary underline-offset-4 wrap-anywhere hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className={cn(
+              buttonVariants({ variant: 'link', size: 'sm' }),
+              'h-auto min-h-6 max-w-full whitespace-normal px-0 wrap-anywhere',
+            )}
           >
             {m.library_more({}, options)}
           </a>
@@ -299,7 +303,10 @@ export function ContinueSection({
                 if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey)
                   onNewest?.();
               }}
-              className="mt-4 inline-flex min-h-11 max-w-full items-center rounded-sm px-3 py-2 text-sm text-primary underline-offset-4 wrap-anywhere hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className={cn(
+                buttonVariants({ variant: 'link', size: 'sm' }),
+                'mt-4 h-auto min-h-6 max-w-full whitespace-normal px-0 wrap-anywhere',
+              )}
             >
               {m.library_continue_address_newest({}, options)}
             </a>
@@ -308,7 +315,8 @@ export function ContinueSection({
             <Button
               type="button"
               variant="outline"
-              className="mt-4 h-auto min-h-11 max-w-full px-3 py-2 text-start whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              size="sm"
+              className="mt-4 h-auto min-h-6 max-w-full text-start whitespace-normal wrap-anywhere"
               disabled={busy}
               onClick={onRetry}
             >
@@ -427,14 +435,17 @@ function WindowNavigation({
               keyboardIntent.current = null;
               if (busy) event.preventDefault();
             }}
-            className="inline-flex min-h-11 min-w-0 max-w-full items-center rounded-sm px-3 py-2 text-sm whitespace-normal text-primary underline-offset-4 wrap-anywhere hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-disabled:cursor-wait aria-disabled:opacity-60"
+            className={cn(
+              buttonVariants({ variant: 'outline', size: 'sm' }),
+              'h-auto min-h-6 max-w-full whitespace-normal wrap-anywhere aria-disabled:cursor-wait aria-disabled:opacity-60',
+            )}
           >
             {action.label}
           </a>
         ))}
       </nav>
       {busy ? (
-        <p role="status" className="inline-flex min-h-11 items-center text-sm text-muted-foreground">
+        <p role="status" className="text-sm text-muted-foreground">
           {m.library_continue_loading()}
         </p>
       ) : null}

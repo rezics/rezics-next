@@ -1,7 +1,8 @@
 import { useContext, useId, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { cn } from '@rezics/ui/utils';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { coverSrc } from '../../../media/cover-src';
@@ -33,7 +34,7 @@ import {
 } from './index';
 
 const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:min-w-0 md:pointer-fine:py-1';
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
 
 function hasContent(value: unknown): boolean {
   if (typeof value === 'string') return !!value.trim();
@@ -175,7 +176,7 @@ export function PeopleSelectedItems({
   const associationHidden = field.facts.some((fact) => spoilerLevel(fact.statement) > defaultReader.spoilerLevel);
   const relationAction = (
     <a
-      className={actionClass + ' inline-flex items-center underline'}
+      className={cn(buttonVariants({ variant: 'link' }), actionClass, 'underline')}
       href={peopleRelationHref(subject.id, title, locale, subject.context, returnHref)}
       onClick={(event) => preserveReturnForBack(event, returnHref)}
     >
@@ -198,12 +199,12 @@ export function PeopleSelectedItems({
       <article
         id={peopleBiographyAssertionAnchor(fact.id)}
         tabIndex={-1}
-        className="min-w-0 space-y-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        className="min-w-0 space-y-2 "
       >
         <p className="text-sm font-medium">{m.facts_selected_value({ number: index + 1 }, o)}</p>
         {fact.target ? (
           <a
-            className={actionClass + ' inline-flex items-center underline'}
+            className={cn(buttonVariants({ variant: 'link' }), actionClass, 'underline')}
             lang={fact.target.lang ?? undefined}
             href={peopleBiographyTargetHref(fact.target.id, fact.target.label, locale, subject.context, factReturn)}
           >
@@ -243,7 +244,7 @@ export function PeopleSelectedItems({
         id={peopleBiographyFieldAnchor(field.id)}
         tabIndex={-1}
         data-slot="people-selected-items"
-        className="min-w-0 space-y-3 py-3 sm:py-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        className="min-w-0 space-y-3 py-3 sm:py-4 "
       >
         <ContentItemHeading level={3} className="text-lg font-semibold" lang={label.lang ?? undefined}>
           {label.text}
@@ -258,7 +259,7 @@ export function PeopleSelectedItems({
         ) : (
           relationAction
         )}
-        <a className={actionClass + ' inline-flex items-center underline'} href={returnHref}>
+        <a className={cn(buttonVariants({ variant: 'link' }), actionClass, 'underline')} href={returnHref}>
           {m.people_biography_return({}, o)}
         </a>
       </ContentItemFrame>
@@ -275,7 +276,7 @@ export function PeopleSelectedItems({
                 value={sourceChoice === '' ? null : sourceChoice}
                 onValueChange={(nextSelectValue) => usable() && setSource(nextSelectValue ?? '')}
               >
-                <SelectTrigger id={chooser} className="w-full min-h-11 md:pointer-fine:min-h-8">
+                <SelectTrigger id={chooser} className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -393,7 +394,7 @@ export function PeopleSelectedItems({
       id={peopleBiographyFieldAnchor(field.id)}
       tabIndex={-1}
       data-slot="people-selected-items"
-      className="min-w-0 space-y-3 py-3 sm:py-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      className="min-w-0 space-y-3 py-3 sm:py-4 "
     >
       <ContentItemHeading level={3} className="text-lg font-semibold" lang={label.lang ?? undefined}>
         {label.text}
@@ -409,7 +410,7 @@ export function PeopleSelectedItems({
       ) : (
         controls
       )}
-      <a className={actionClass + ' inline-flex items-center underline'} href={returnHref}>
+      <a className={cn(buttonVariants({ variant: 'link' }), actionClass, 'underline')} href={returnHref}>
         {m.people_biography_return({}, o)}
       </a>
     </ContentItemFrame>

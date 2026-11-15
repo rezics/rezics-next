@@ -5,6 +5,7 @@ import { FeedResults } from '../features/feed/feed-results';
 import { homeFeedItemPresentation } from '../features/feed/home-feed-item';
 import { preparedFeedCardReading } from '../kernel/fake/feed-card-reading';
 import { getLocale } from '../paraglide/runtime.js';
+import { Button } from '@rezics/ui/shadcn/button';
 
 function Reading({ long = false }: { long?: boolean }) {
   const [retired, setRetired] = useState(false);
@@ -15,9 +16,9 @@ function Reading({ long = false }: { long?: boolean }) {
       <p className="my-3 text-sm text-muted-foreground">
         Prepared native-shaped examples. Not native eligibility or coverage evidence.
       </p>
-      <button type="button" className="mb-4 min-h-11 rounded border px-3" onClick={() => setRetired(!retired)}>
+      <Button type="button" className="mb-4" variant="outline" size="sm" onClick={() => setRetired(!retired)}>
         {retired ? 'Restore prepared source' : 'Retire prepared source'}
-      </button>
+      </Button>
       <FeedResults
         regionLabel="Prepared feed"
         itemHeadingLevel={2}
@@ -48,13 +49,9 @@ function Reading({ long = false }: { long?: boolean }) {
             actions: (
               <>
                 {presentation.actions}
-                <button
-                  type="button"
-                  className="min-h-11 min-w-11 rounded border px-3"
-                  aria-label={`Prepared action: ${item.id}`}
-                >
+                <Button type="button" aria-label={`Prepared action: ${item.id}`} variant="outline" size="sm">
                   Prepared action
-                </button>
+                </Button>
               </>
             ),
           };

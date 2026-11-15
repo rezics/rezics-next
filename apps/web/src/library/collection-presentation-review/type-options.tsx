@@ -32,7 +32,7 @@ export function ReleasedTypeChoices({
     <fieldset className="min-w-0 space-y-3" disabled={disabled} data-released-type-choices>
       <legend className="font-semibold">{m.collection_choice_released_options()}</legend>
       <p className="text-sm text-muted-foreground">{m.collection_choice_released_options_help()}</p>
-      <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-border p-3 has-[:checked]:border-primary has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring">
+      <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 has-[:checked]:border-primary has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring/30">
         <input
           type="radio"
           name={name}
@@ -77,7 +77,7 @@ export function ReleasedTypeChoices({
                     </div>
                   ) : null}
                   <div className="min-w-0 flex-1 space-y-2 [overflow-wrap:anywhere]">
-                    <label className="flex min-h-11 cursor-pointer items-start gap-2 rounded-sm py-1 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring">
+                    <label className="flex cursor-pointer items-start gap-2 rounded-sm py-1 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring/30">
                       <input
                         type="radio"
                         name={name}

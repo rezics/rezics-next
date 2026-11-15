@@ -99,7 +99,7 @@ export function OrdersPage({
         <p>
           <a
             href={purchaseHistoryHref(locale, 'entitlements', history)}
-            className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+            className="inline-flex items-center text-primary underline underline-offset-4"
           >
             {m.entitlements_heading()}
           </a>

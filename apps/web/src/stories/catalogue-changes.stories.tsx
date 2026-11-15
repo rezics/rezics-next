@@ -397,7 +397,7 @@ export const IndependentHistory: Story = {
     docs: {
       description: {
         story:
-          'UNRUN: two actual history readers, own h2 associations, native keyboard selection, sparse continuation, current versus historical evidence and 44px controls with fully wrapping multilingual text. Supports all launch locales; no native authority or visual result is claimed.',
+          'UNRUN: two actual history readers, own h2 associations, native keyboard selection, sparse continuation, current versus historical evidence and fully wrapping multilingual text. Supports all launch locales; no native authority or visual result is claimed.',
       },
     },
   },
@@ -461,7 +461,7 @@ export const LongRevisionCurrentAndFields: Story = {
     docs: {
       description: {
         story:
-          'UNRUN: full long revision/property evidence, all three terms fields, independent current/historical regions and 44px current links at phone390. Select desktop1280 and any launch locale for the same authored geometry assertions. These supplied snapshots perform no reads.',
+          'UNRUN: full long revision/property evidence, all three terms fields, independent current/historical regions and current links at phone390. Select desktop1280 and any launch locale for the same authored geometry assertions. These supplied snapshots perform no reads.',
       },
     },
   },

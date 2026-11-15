@@ -51,8 +51,7 @@ export function useImportPageFocus(revision: number) {
   return status;
 }
 
-const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full shrink px-3 py-2 leading-snug whitespace-normal [overflow-wrap:anywhere] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
+const actionClass = 'h-auto min-h-7 max-w-full shrink whitespace-normal [overflow-wrap:anywhere]';
 
 export function ImportPageNavigation({
   position,

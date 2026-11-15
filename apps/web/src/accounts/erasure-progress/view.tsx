@@ -1,4 +1,5 @@
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import {
   ContentSection,
   ContentSectionHeader,
@@ -99,7 +100,7 @@ export function ErasureProgressView({
         </p>
         {page.status !== 'signed-out' ? (
           <a
-            className="inline-flex min-h-11 self-start items-center py-2 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+            className="inline-flex self-start items-center py-2 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
             href={`#${progressId}`}
             aria-controls={progressId}
             aria-describedby={introId}
@@ -184,7 +185,7 @@ export function ErasureProgressView({
                 </div>
               </dl>
               <details aria-live="off" className="rounded-lg border p-4">
-                <summary className="min-h-11 cursor-pointer py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
+                <summary className="cursor-pointer py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
                   {m.erasure_details()}
                 </summary>
                 <dl className="mt-4 grid gap-2">
@@ -239,7 +240,7 @@ export function ErasureProgressView({
             {page.status === 'signed-out' ? (
               <ContentSectionBody>
                 <a
-                  className="inline-flex min-h-11 min-w-11 max-w-full items-center justify-center self-start px-3 py-2 font-medium text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                  className={cn(buttonVariants(), 'h-auto min-h-7 max-w-full self-start whitespace-normal')}
                   href={erasureSignInHref(returnTo)}
                 >
                   {m.erasure_sign_in()}
@@ -250,7 +251,7 @@ export function ErasureProgressView({
         )}
         {reload && page.status !== 'signed-out' ? (
           <Button
-            className="h-auto min-h-11 max-w-full self-start whitespace-normal py-3"
+            className="h-auto max-w-full self-start whitespace-normal min-h-7"
             variant="outline"
             disabled={page.status === 'loading'}
             aria-controls={progressId}

@@ -500,7 +500,7 @@ export function RealmRulesAuthoringPanel({
                   <SharedSelect.SelectTrigger
                     id={ids + '-board'}
                     aria-describedby={ids + '-destination-help'}
-                    className="min-h-11 w-full min-w-0 break-all rounded-md border bg-background px-3"
+                    className="w-full min-w-0 break-all"
                   >
                     <SharedSelect.SelectValue />
                   </SharedSelect.SelectTrigger>
@@ -538,7 +538,7 @@ export function RealmRulesAuthoringPanel({
                     <SharedSelect.SelectTrigger
                       id={ids + '-licence'}
                       aria-describedby={ids + '-rules-help'}
-                      className="min-h-11 w-full min-w-0 break-words rounded-md border bg-background px-3"
+                      className="w-full min-w-0 break-words"
                     >
                       <SharedSelect.SelectValue />
                     </SharedSelect.SelectTrigger>
@@ -550,10 +550,10 @@ export function RealmRulesAuthoringPanel({
                     </SharedSelect.SelectContent>
                   </SharedSelect.Select>
                 </Field>
-                <Field className="flex min-h-11 flex-row items-start gap-3">
+                <Field className="flex flex-row items-start gap-3">
                   <Checkbox
                     id={ids + '-attribution'}
-                    className="mt-1 size-5 shrink-0"
+                    className="mt-1 shrink-0"
                     aria-required="true"
                     aria-describedby={ids + '-rules-help'}
                     checked={attribution}
@@ -561,7 +561,7 @@ export function RealmRulesAuthoringPanel({
                   />
                   <FieldLabel
                     htmlFor={ids + '-attribution'}
-                    className="flex min-h-11 flex-1 items-start py-2 text-sm leading-6"
+                    className="flex flex-1 items-start text-sm leading-6"
                   >
                     {m.realm_rules_authoring_attribution()}
                   </FieldLabel>
@@ -905,7 +905,7 @@ export function RealmRulesAuthoringPanel({
 
         <aside className="min-w-0 space-y-3" data-supporting-reading>
           <details className="min-w-0 rounded-xl border p-4">
-            <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.realm_appearance_current()}</summary>
+            <summary className="cursor-pointer font-medium">{m.realm_appearance_current()}</summary>
             <CurrentRules read={prepared} reference={attachedReference} appearanceRead={state.read} />
           </details>
           {published ? (
@@ -914,7 +914,7 @@ export function RealmRulesAuthoringPanel({
               open={candidateReadingOpen}
               onToggle={(event) => setCandidateReadingOpen(event.currentTarget.open)}
             >
-              <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.realm_rules_authoring_review()}</summary>
+              <summary className="cursor-pointer font-medium">{m.realm_rules_authoring_review()}</summary>
               <div className="min-w-0 space-y-3 pt-2">
                 <h4 className="break-words font-medium">
                   {published.title ?? m.realm_rules_authoring_title_unknown()}

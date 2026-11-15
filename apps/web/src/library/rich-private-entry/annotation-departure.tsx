@@ -1,15 +1,7 @@
 import { useRef } from 'react';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@rezics/ui/shadcn/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@rezics/ui/shadcn/alert-dialog';
 import { m } from '../../paraglide/messages.js';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 
 export type AnnotationDepartureIntent = 'discard' | 'diary';
 
@@ -56,17 +48,17 @@ export function AnnotationDeparture({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel ref={stay} className="min-h-11" onClick={onStay}>
+            <AlertDialogCancel ref={stay} onClick={onStay}>
               {m.library_annotation_stay()}
             </AlertDialogCancel>
             {!locked && intent === 'discard' ? (
-              <AlertDialogAction className="min-h-11" onClick={() => onDiscard(false)}>
+              <AlertDialogAction onClick={() => onDiscard(false)}>
                 {m.library_annotation_confirm_discard()}
               </AlertDialogAction>
             ) : null}
             {!locked && intent === 'diary' ? (
               <a
-                className="inline-flex min-h-11 items-center justify-center rounded-md border px-3"
+               className={buttonVariants({ variant: 'outline' })}
                 href={diaryHref}
                 onClick={() => onDiscard(true)}
               >

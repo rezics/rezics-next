@@ -1,6 +1,7 @@
 import { m } from '../../paraglide/messages.js';
 import type { IndependentOutcome } from './contract';
 import { independentActionClass } from './recovery';
+import { Button } from '@rezics/ui/shadcn/button';
 
 export function IndependentMeasuresResult({
   outcome,
@@ -13,9 +14,9 @@ export function IndependentMeasuresResult({
 }) {
   if (!outcome)
     return onRetry ? (
-      <button type="button" className={independentActionClass} onClick={onRetry}>
+      <Button type="button" variant="outline" className={independentActionClass} onClick={onRetry}>
         {m.library_progress_measures_retry()}
-      </button>
+      </Button>
     ) : null;
   if (outcome.state === 'acknowledged') {
     return (
@@ -30,9 +31,9 @@ export function IndependentMeasuresResult({
         <p role="status">{m.library_progress_measures_partial()}</p>
         <p className="text-sm">{m.library_progress_measures_acknowledged({ revision: outcome.revision })}</p>
         {onRetry ? (
-          <button type="button" className={independentActionClass} onClick={onRetry}>
+          <Button type="button" variant="outline" className={independentActionClass} onClick={onRetry}>
             {m.library_progress_measures_retry()}
-          </button>
+          </Button>
         ) : null}
       </div>
     );
@@ -42,14 +43,14 @@ export function IndependentMeasuresResult({
       <div className="space-y-3">
         <p role="alert">{m.library_progress_conflict()}</p>
         {onRetry ? (
-          <button type="button" className={independentActionClass} onClick={onRetry}>
+          <Button type="button" variant="outline" className={independentActionClass} onClick={onRetry}>
             {m.library_progress_measures_retry()}
-          </button>
+          </Button>
         ) : null}
         {onRefresh ? (
-          <button type="button" className={independentActionClass} onClick={onRefresh}>
+          <Button type="button" variant="outline" className={independentActionClass} onClick={onRefresh}>
             {m.library_progress_measures_refresh()}
-          </button>
+          </Button>
         ) : null}
       </div>
     );
@@ -59,9 +60,9 @@ export function IndependentMeasuresResult({
       <div className="space-y-3">
         <p role="alert">{m.library_progress_measures_uncertain()}</p>
         {onRetry ? (
-          <button type="button" className={independentActionClass} onClick={onRetry}>
+          <Button type="button" variant="outline" className={independentActionClass} onClick={onRetry}>
             {m.library_progress_measures_retry()}
-          </button>
+          </Button>
         ) : null}
       </div>
     );
@@ -78,9 +79,9 @@ export function IndependentMeasuresResult({
     <div className="space-y-3">
       <p role="alert">{message}</p>
       {outcome.state === 'unavailable' && onRetry ? (
-        <button type="button" className={independentActionClass} onClick={onRetry}>
+        <Button type="button" variant="outline" className={independentActionClass} onClick={onRetry}>
           {m.library_progress_measures_retry()}
-        </button>
+        </Button>
       ) : null}
     </div>
   );

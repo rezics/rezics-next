@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { cn } from '@rezics/ui/utils';
 import type { LiteraryWindow } from './model';
 type ProfileRelationWindow = LiteraryWindow['native'];
 import { pageText } from '../../pages/shared';
@@ -60,7 +61,11 @@ export function LiteraryStreams({
                     href={hrefFor(native, current)}
                     aria-current={current ? 'page' : undefined}
                     aria-label={`${m.literary_grain_stream_read({}, o)}: ${label.text}, ${directionLabel}`}
-                    className={`${style.link} w-full flex-wrap justify-start gap-x-3 gap-y-1 rounded-md px-3 ${current ? 'bg-muted text-foreground' : ''}`}
+                    className={cn(
+                      style.link,
+                      'w-full flex-wrap gap-x-3 gap-y-1',
+                      current && 'bg-muted text-foreground',
+                    )}
                   >
                     <span lang={label.lang}>{label.text || m.subject_relations({}, o)}</span>
                     <span className="text-muted-foreground">{directionLabel}</span>

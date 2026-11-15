@@ -35,7 +35,7 @@ export function kindLabel(kind: DirectedWorkRelation['kind'], locale: string) {
 }
 
 const action =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'inline-flex max-w-full items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 /** Work assertions use ordinary cards and values, never the qualified-credit inspector. */
 export function WorkRelation({

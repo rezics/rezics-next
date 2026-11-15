@@ -1,8 +1,7 @@
 import { PasskeyRenameView, type PasskeyRenameLease } from '../passkey-rename-view';
 import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
 import { Badge } from '@rezics/ui/shadcn/badge';
-import { buttonVariants } from '@rezics/ui/shadcn/button';
-import { AuthButton as Button } from '../button';
+import { AuthButton as Button, authLinkClass } from '../button';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@rezics/ui/shadcn/item';
@@ -1554,7 +1553,7 @@ function SecurityPageView({
               <section aria-labelledby="security-organizations-heading">
                 <h2 id="security-organizations-heading">{m.auth_organization_security_heading()}</h2>
                 <nav aria-labelledby="security-organizations-heading">
-                  <a className={buttonVariants({ variant: 'outline' })} href="/organizations/new">
+                  <a className={authLinkClass('outline')} href="/organizations/new">
                     {m.auth_organization_security_create()}
                   </a>
                 </nav>
@@ -1564,11 +1563,8 @@ function SecurityPageView({
                 <h2 id="security-delete-account-heading">{m.auth_account_delete_submit()}</h2>
                 <p>{m.auth_account_delete_security_description()}</p>
                 <nav aria-labelledby="security-delete-account-heading">
-                  <a
-                    className={`${buttonVariants({ variant: 'outline' })} border-destructive/50 hover:border-destructive/70`}
-                    href="/account/delete"
-                  >
-                    <Trash2 aria-hidden="true" className="text-destructive" />
+                  <a className={authLinkClass('destructive')} href="/account/delete">
+                    <Trash2 aria-hidden="true" />
                     {m.auth_account_delete_submit()}
                   </a>
                 </nav>

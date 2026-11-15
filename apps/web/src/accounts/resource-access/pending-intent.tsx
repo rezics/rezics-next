@@ -13,7 +13,7 @@ export function PendingAccessIntent({ intent }: { intent: Change | OwnerTransfer
         <GrantContents kind={intent.kind} role={intent.role} actions={intent.actions} />
       )}
       <details className="min-w-0">
-        <summary className="min-h-11 cursor-pointer content-center py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">
+        <summary className="cursor-pointer content-center py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">
           {m.access_identity_details()}
         </summary>
         <pre

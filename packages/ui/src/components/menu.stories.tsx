@@ -2,6 +2,8 @@ import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { Button } from '../shadcn/button.tsx';
+import { NativeSelect, NativeSelectOption } from '../shadcn/native-select.tsx';
+import { Textarea } from '../shadcn/textarea.tsx';
 import { Menu, type MenuEntry } from './menu.tsx';
 import { ShelfToolbar } from './shelf-toolbar.tsx';
 
@@ -299,18 +301,17 @@ function FilterFields({
     <div className="grid min-w-0 gap-3">
       <label className="grid min-w-0 gap-1 break-words text-sm">
         <span>Filter by language and translated publication status</span>
-        <select aria-label="Filter by language and translated publication status" className="w-full min-w-0 max-w-full">
-          <option>All languages and statuses</option>
-          <option>Localized status with a very long translated name</option>
-        </select>
+        <NativeSelect
+          aria-label="Filter by language and translated publication status"
+          className="w-full min-w-0 max-w-full"
+        >
+          <NativeSelectOption>All languages and statuses</NativeSelectOption>
+          <NativeSelectOption>Localized status with a very long translated name</NativeSelectOption>
+        </NativeSelect>
       </label>
       <label className="grid min-w-0 gap-1 break-words text-sm">
         <span>Notes for this filter</span>
-        <textarea
-          aria-label="Notes for this filter"
-          rows={2}
-          className="w-full min-w-0 max-w-full rounded-md border bg-background p-2"
-        />
+        <Textarea aria-label="Notes for this filter" rows={2} className="min-w-0 max-w-full" />
       </label>
       <Button variant="outline" onClick={() => onExpandedChange(!expanded)}>
         {expanded ? 'Hide additional filter criteria' : 'Load additional filter criteria'}

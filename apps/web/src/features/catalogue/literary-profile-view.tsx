@@ -59,14 +59,13 @@ export type LiteraryTransport = Pick<CreateTransport, 'submit' | 'read'> & {
 type Ready = Extract<LiteraryRead, { ok: true }>;
 type InitialRow = { id: string; statement: StatementInput };
 const editableInitialFacts = () => true;
-const coarseTarget = 'max-md:min-h-11 max-md:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11';
-const wrappingLink = `${coarseTarget} max-w-full whitespace-normal break-words`;
+const wrappingLink = 'max-w-full whitespace-normal break-words';
 const keyboardFocus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const touchAction = `${coarseTarget} max-md:w-full pointer-coarse:w-full`;
-const disclosureSummary = `min-h-8 min-w-0 cursor-pointer break-words text-xl font-semibold max-md:min-h-11 pointer-coarse:min-h-11 ${keyboardFocus} [overflow-wrap:anywhere]`;
+const touchAction = 'max-md:w-full pointer-coarse:w-full';
+const disclosureSummary = `min-h-7 min-w-0 cursor-pointer break-words text-xl font-semibold ${keyboardFocus} [overflow-wrap:anywhere]`;
 
-const initialAction = `h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 [overflow-wrap:anywhere] ${keyboardFocus} max-md:w-full pointer-coarse:w-full`;
-const initialPropertySelect = `w-full min-w-0 max-w-full min-h-11 min-w-11 whitespace-normal [overflow-wrap:anywhere] [&:focus-visible]:outline-2 [&:focus-visible]:outline-offset-2 [&:focus-visible]:outline-ring`;
+const initialAction = `h-auto min-h-7 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] ${keyboardFocus} max-md:w-full pointer-coarse:w-full`;
+const initialPropertySelect = `w-full min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere] [&:focus-visible]:outline-2 [&:focus-visible]:outline-offset-2 [&:focus-visible]:outline-ring`;
 
 /** Resolve native ordinals once; retained feedback must never follow a removed row's neighbour. */
 function initialFactControl(pointer: string, rows: InitialRow[], read: Ready, type: string, locale: string) {
@@ -702,7 +701,6 @@ function LiteraryProfileLive({
           <Button
             ref={creationOpener}
             variant="outline"
-            className={coarseTarget}
             aria-disabled={creationPending}
             onBlur={() => {
               if (creationAttempt.current) creationAttempt.current.keyboard = false;
@@ -1003,7 +1001,7 @@ function LiteraryCorrection({
                 <a
                   lang={title.lang ?? undefined}
                   href={href}
-                  className={`inline-flex min-h-8 min-w-0 items-center underline ${wrappingLink} ${keyboardFocus} [overflow-wrap:anywhere]`}
+                  className={`inline-flex min-h-7 min-w-0 items-center underline ${wrappingLink} ${keyboardFocus} [overflow-wrap:anywhere]`}
                 >
                   {title.text || m.subject_value_unlabelled({}, o)}
                 </a>
@@ -1039,7 +1037,7 @@ function LiteraryCorrection({
               <PublicationEditorEntry work={subject.id} locale={locale} />
             </nav>
             <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3">
-              <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
+              <summary className="min-h-7 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                 {m.specialist_identity_names({}, o)}
               </summary>
               <dl className="mt-3 min-w-0 space-y-3">
@@ -1079,7 +1077,7 @@ function LiteraryCorrection({
               </dl>
             </details>
             <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3 border-t border-border pt-4">
-              <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
+              <summary className="min-h-7 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                 {m.specialist_identity_reference({}, o)}
               </summary>
               <dl className="mt-3 min-w-0 space-y-3">

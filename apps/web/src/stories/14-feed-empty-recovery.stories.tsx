@@ -8,6 +8,7 @@ import { homeFeedStoryPage } from '../kernel/fake/home-feed-stories';
 import { homeFeedRecoveryMessages } from '../features/feed/feed-empty-state';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
+import { Button } from '@rezics/ui/shadcn/button';
 
 const scenarios = [
   'discovery',
@@ -70,10 +71,10 @@ function Recovery({ initial = 'discovery', long = false }: { initial?: Scenario;
           <p>Prepared feed recovery scenarios. No native requests or native acceptance evidence.</p>
           <label className="grid gap-1 text-sm">
             Prepared state
-            <select
-              className="min-h-11 max-w-full rounded border bg-background px-2"
-              value={scenario}
-              onChange={(event) => {
+            <select 
+ className="max-w-full"
+ value={scenario}
+ onChange={(event) => {
                 setScenario(event.currentTarget.value as Scenario);
                 setPending(false);
                 setKind(true);
@@ -85,9 +86,9 @@ function Recovery({ initial = 'discovery', long = false }: { initial?: Scenario;
               ))}
             </select>
           </label>
-          <button className="min-h-11 rounded border px-3" onClick={() => setPending(!pending)}>
+          <Button type="button" variant="outline" size="sm" onClick={() => setPending(!pending)}>
             Prepared background refresh
-          </button>
+          </Button>
           <output aria-label="Prepared explicit actions">{actions}</output>
         </aside>
         {long ? <p className="break-words text-sm">{m.home_empty_partial_body().repeat(4)}</p> : null}
@@ -110,13 +111,11 @@ function Recovery({ initial = 'discovery', long = false }: { initial?: Scenario;
                     ? [
                         <span key="kind">
                           {long ? m.home_empty_filtered_body().repeat(3) : 'Prepared kind'}
-                          <button
-                            className="min-h-11 min-w-11"
-                            onClick={() => setKind(false)}
+                          <Button type="button" variant="ghost" size="icon-sm" onClick={() => setKind(false)}
                             aria-label="Remove prepared kind"
                           >
                             ×
-                          </button>
+                          </Button>
                         </span>,
                       ]
                     : []),
@@ -124,13 +123,11 @@ function Recovery({ initial = 'discovery', long = false }: { initial?: Scenario;
                     ? [
                         <span key="space">
                           Prepared Space
-                          <button
-                            className="min-h-11 min-w-11"
-                            onClick={() => setOther(false)}
+                          <Button type="button" variant="ghost" size="icon-sm" onClick={() => setOther(false)}
                             aria-label="Remove prepared Space"
                           >
                             ×
-                          </button>
+                          </Button>
                         </span>,
                       ]
                     : []),
@@ -138,14 +135,14 @@ function Recovery({ initial = 'discovery', long = false }: { initial?: Scenario;
               : []
           }
           kindControl={
-            <button className="min-h-11 rounded border px-3" onClick={() => setKind(false)}>
+            <Button type="button" variant="outline" size="sm" onClick={() => setKind(false)}>
               Prepared kind control
-            </button>
+            </Button>
           }
           spaceControl={
-            <button className="min-h-11 rounded border px-3" onClick={() => setOther(false)}>
+            <Button type="button" variant="outline" size="sm" onClick={() => setOther(false)}>
               Prepared Space control
-            </button>
+            </Button>
           }
           onSelect={(stream) => {
             setActions((value) => value + 1);

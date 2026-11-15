@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { addressLease, readLease } from '../session';
 import type { ReaderOrigin } from '../session/reader';
 import { m } from '../paraglide/messages.js';
@@ -207,10 +207,10 @@ export function ReleaseChildWindow({
           <p role="status">{m.release_search_terminal({}, options)}</p>
         )}
         {canContinue && (
-          <button
+          <Button
             ref={action}
             type="button"
-            className={buttonVariants({ variant: 'outline' })}
+            variant="outline"
             disabled={view.status === 'loading'}
             onClick={(event) => void load(event.currentTarget)}
           >
@@ -219,9 +219,9 @@ export function ReleaseChildWindow({
               : view.status !== 'idle' && view.status !== 'ready'
                 ? m.search_facet_retry({}, options)
                 : m.release_search_continue({}, options)}
-          </button>
+          </Button>
         )}
-        <a href={restartHref} className="ml-3 underline">
+        <a href={restartHref} className={buttonVariants({ variant: 'link', size: 'sm' })}>
           {m.release_search_child_first({}, options)}
         </a>
       </details>

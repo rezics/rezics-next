@@ -42,7 +42,7 @@ function SelectionSummary({
           <Button
             type="button"
             variant="outline"
-            className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+            className="h-auto min-h-7 max-w-full whitespace-normal text-start"
             aria-label={m.subject_choice_inspect_label(
               { title: offer.title, id: offer.id, revision: offer.revision },
               { locale },
@@ -56,7 +56,7 @@ function SelectionSummary({
           <Button
             type="button"
             variant="outline"
-            className="h-auto min-h-11 whitespace-normal text-start"
+            className="h-auto min-h-7 whitespace-normal text-start"
             aria-label={m.subject_choice_remove_label({ position: index + 1, title: offer.title }, { locale })}
             onClick={() => reading.remove(offer)}
           >
@@ -99,7 +99,7 @@ function ChoiceControls({
         <Button
           type="button"
           variant="outline"
-          className="h-auto min-h-11 whitespace-normal text-start"
+          className="h-auto min-h-7 whitespace-normal text-start"
           disabled={count !== 2}
           aria-expanded={reading.mode?.kind === 'compare'}
           aria-controls={reading.mode?.kind === 'compare' ? reading.id : undefined}
@@ -108,7 +108,7 @@ function ChoiceControls({
           {m.subject_choice_compare({}, { locale })}
         </Button>
         {count > 0 && (
-          <Button type="button" variant="outline" className="min-h-11" onClick={reading.clear}>
+          <Button type="button" variant="outline" onClick={reading.clear}>
             {m.subject_choice_clear({}, { locale })}
           </Button>
         )}

@@ -4,6 +4,7 @@ import { useId, useRef } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { MAL_ROWS, MAL_UPLOAD_BYTES, MAL_UPLOADS } from './contract';
 import { MalAction } from './controls';
+import { Input } from '@rezics/ui/shadcn/input';
 
 export function MalUploadForm({
   busy,
@@ -39,17 +40,17 @@ export function MalUploadForm({
         {m.library_mal_guidance({ size: MAL_UPLOAD_BYTES / (1024 * 1024), rows: MAL_ROWS, uploads: MAL_UPLOADS })}
       </p>
       <Field>
-        <FieldLabel htmlFor={inputId} className="min-h-11 items-center">
+        <FieldLabel htmlFor={inputId} className="items-center">
           {m.library_mal_file_label()}
         </FieldLabel>
-        <input
+        <Input
           ref={input}
           id={inputId}
           type="file"
           accept=".xml,text/xml,application/xml"
           aria-describedby={helpId}
           disabled={busy || disabled}
-          className="min-h-11 w-full max-w-full text-sm file:me-3 file:min-h-11 file:rounded-md file:border file:px-3"
+          className='w-full max-w-full file:me-3'
         />
       </Field>
       <MalAction type="submit" disabled={busy || disabled} aria-busy={busy}>
@@ -76,10 +77,10 @@ export function MalRetainedUpload({ busy, onOpen }: { busy: boolean; onOpen: (id
         <label className="block" htmlFor={id}>
           {m.library_mal_label_upload_id()}
         </label>
-        <input
+        <Input
           ref={input}
           id={id}
-          className="min-h-11 w-full min-w-0 border p-2"
+          className='w-full min-w-0'
           required
           pattern="[0-9a-fA-F-]{36}"
           autoComplete="off"

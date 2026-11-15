@@ -8,6 +8,7 @@ import type { RecoveryOutcomesPage, RecoveryStatus } from './contract';
 import type { ReceivingCollectionReadback } from './readback';
 import { ArchiveReceivingCollection, type ReceivingCollectionActions } from './receiving';
 import type { ReceivingReadWindow } from './receiving-window';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 
 function stateText(state: string): string {
   switch (state) {
@@ -110,7 +111,7 @@ function OutcomeRow({
           <dd>{stateText(item.orderState)}</dd>
         </div>
       </dl>
-      <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">
+      <p className="h-auto whitespace-pre-wrap [overflow-wrap:anywhere]">
         <span className="font-medium">
           {!item.notePresent
             ? m.library_archive_recovery_note_missing()
@@ -135,9 +136,9 @@ export function ArchiveRecoveryUnknown({ busy, onRetry }: { busy: boolean; onRet
   return (
     <section className="space-y-3 rounded-lg border p-4" aria-label={m.library_archive_present_unknown()}>
       <p role="status">{m.library_archive_recovery_uncertain()}</p>
-      <button type="button" className={actionClass} disabled={busy} onClick={onRetry}>
+      <Button type="button" variant="outline" className={actionClass} disabled={busy} onClick={onRetry}>
         {m.library_archive_recovery_retry_original()}
-      </button>
+      </Button>
     </section>
   );
 }
@@ -156,9 +157,9 @@ export function ArchiveRecoveryConflict({
       <h2 className="text-lg font-semibold">{m.library_archive_recovery_conflict_title()}</h2>
       <p role="status">{m.library_archive_recovery_conflict_help()}</p>
       {showRefreshAction ? (
-        <button className={actionClass} type="button" disabled={busy} onClick={onRefresh}>
+        <Button variant="outline" className={actionClass} type="button" disabled={busy} onClick={onRefresh}>
           {m.library_archive_recovery_refresh()}
-        </button>
+        </Button>
       ) : null}
     </section>
   );
@@ -267,7 +268,7 @@ export function ArchiveRecoveryResults({
         <PresentationOutcome presentation={status.presentation} />
         {collectionId ? (
           <a
-            className={`${actionClass} inline-flex w-fit items-center underline`}
+           className={buttonVariants({ variant: 'link', className: 'w-fit' })}
             href={localizeHref(`/collections/${collectionId}`)}
           >
             {m.library_archive_recovery_open_collection()}
@@ -287,29 +288,29 @@ export function ArchiveRecoveryResults({
       >
         <div className="flex flex-wrap gap-2">
           {showReadAction ? (
-            <button className={actionClass} type="button" disabled={busy} onClick={onRead}>
+            <Button variant="outline" className={actionClass} type="button" disabled={busy} onClick={onRead}>
               {m.library_archive_recovery_read_outcomes()}
-            </button>
+            </Button>
           ) : null}
           {page ? (
-            <button className={actionClass} type="button" disabled={busy} onClick={onFirst}>
+            <Button variant="outline" className={actionClass} type="button" disabled={busy} onClick={onFirst}>
               {m.library_archive_recovery_first_page()}
-            </button>
+            </Button>
           ) : null}
           {canPrevious ? (
-            <button className={actionClass} type="button" disabled={busy} onClick={onPrevious}>
+            <Button variant="outline" className={actionClass} type="button" disabled={busy} onClick={onPrevious}>
               {m.library_window_previous()}
-            </button>
+            </Button>
           ) : null}
           {page?.next ? (
-            <button
-              className={actionClass}
+            <Button
+              variant="outline" className={actionClass}
               type="button"
               disabled={busy}
               onClick={(event) => onNext(page.next!, event)}
             >
               {m.library_archive_recovery_next_results()}
-            </button>
+            </Button>
           ) : null}
         </div>
         <EvidenceDetails value={status} />

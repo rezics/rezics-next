@@ -18,7 +18,7 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <main className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}>
+      <main className="flex min-h-screen items-center justify-center bg-background p-6">
         <Story />
       </main>
     ),

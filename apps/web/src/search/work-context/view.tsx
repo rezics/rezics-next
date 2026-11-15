@@ -45,7 +45,7 @@ function WorkValueView({
       const subject = { id: value.id, label: label.text };
       return (
         <a
-          className="min-h-11 text-primary underline underline-offset-4 [overflow-wrap:anywhere]"
+          className="text-primary underline underline-offset-4 [overflow-wrap:anywhere]"
           href={hrefFor(subject, locale, subjectHrefFor)}
           lang={label.lang}
           dir="auto"

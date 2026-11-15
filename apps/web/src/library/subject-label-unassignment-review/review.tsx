@@ -1,14 +1,10 @@
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Button } from '@rezics/ui/shadcn/button';
 import { useId, type Ref } from 'react';
 import { m } from '../../paraglide/messages.js';
 import type { SlotLifetime } from '../subject-library-current-origin';
 import type { SubjectReference } from '../subject-ref';
 import type { SubjectLabel } from '../subject-labels.ts';
 import { LabelRelationship } from '../subject-label-assignment-review/relationship';
-
-const primaryClass = buttonVariants({ variant: 'default' });
-const secondaryClass = buttonVariants({ variant: 'outline' });
-const focusClass = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 export type SubjectLabelReviewBasis = {
   subjectId: string;
@@ -91,38 +87,38 @@ export function SubjectLabelUnassignmentReview({
     <section
       aria-labelledby={headingId}
       data-subject-label-review-card
-      className="min-w-0 max-w-2xl basis-full space-y-3 rounded-xl border border-border bg-muted/20 p-4 [overflow-wrap:anywhere] sm:p-5"
+      className="h-auto min-w-0 max-w-2xl basis-full space-y-3 rounded-xl border border-border bg-muted/20 p-4 [overflow-wrap:anywhere] sm:p-5"
     >
       <h3 id={headingId} className="m-0 text-sm font-semibold">
         {m.library_subject_label_unassign_review_heading()}
       </h3>
       <LabelRelationship subjectName={review.subjectLabel} labelName={review.labelName} />
-      <p className="min-w-0 break-words text-sm [overflow-wrap:anywhere]">
+      <p className="h-auto min-w-0 break-words text-sm [overflow-wrap:anywhere]">
         {m.library_subject_label_review_relationship({ name: review.labelName, subject: review.subjectLabel })}
       </p>
       <p className="text-sm text-muted-foreground">{m.library_subject_label_review_effect()}</p>
       <p className="text-sm text-muted-foreground">{m.library_labels_member_scope()}</p>
       <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
-        <button
+        <Button
           type="button"
           data-subject-label-review-confirm
           ref={actionRef}
           disabled={!canConfirm}
-          className={`${primaryClass} min-h-[44px] max-w-full whitespace-normal ${focusClass}`}
+          variant="default" className="h-auto min-h-7 max-w-full whitespace-normal"
           onClick={() => {
             if (canConfirm) onConfirm();
           }}
         >
           {m.library_subject_label_review_remove()}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           data-subject-label-review-cancel
-          className={`${secondaryClass} min-h-[44px] max-w-full whitespace-normal ${focusClass}`}
+          variant="outline" className="h-auto min-h-7 max-w-full whitespace-normal"
           onClick={onCancel}
         >
           {m.library_subject_label_review_keep()}
-        </button>
+        </Button>
       </div>
     </section>
   );

@@ -52,7 +52,7 @@ function Outcome({
   const targetId = row?.review?.target ?? row?.target;
   return (
     <li className="rounded-md border p-3" data-mal-outcome={outcome.status} data-mal-row={outcome.row}>
-      <p className="font-medium [overflow-wrap:anywhere]">{titles.get(outcome.row) ?? `#${outcome.row + 1}`}</p>
+      <p className="h-auto font-medium [overflow-wrap:anywhere]">{titles.get(outcome.row) ?? `#${outcome.row + 1}`}</p>
       <ImportTarget target={targetId} />
       <p>{m.library_mal_row_outcome({ status: malOutcomeLabel(outcome.status) })}</p>
       <p className="text-sm">
@@ -65,13 +65,13 @@ function Outcome({
       ) : null}
       {outcome.retained.length ? (
         <details>
-          <summary className="min-h-11 cursor-pointer py-2">{m.library_mal_retained_summary()}</summary>
-          <p className="text-sm [overflow-wrap:anywhere]">{outcome.retained.join(', ')}</p>
+          <summary className="cursor-pointer py-2">{m.library_mal_retained_summary()}</summary>
+          <p className="h-auto text-sm [overflow-wrap:anywhere]">{outcome.retained.join(', ')}</p>
         </details>
       ) : null}
       {outcome.reason ? <p className="text-sm text-muted-foreground">{outcome.reason}</p> : null}
       {outcome.labels ? (
-        <ul className="space-y-2 [overflow-wrap:anywhere]" aria-label={m.library_mal_label_results()}>
+        <ul className="h-auto space-y-2 [overflow-wrap:anywhere]" aria-label={m.library_mal_label_results()}>
           {outcome.labels.map((label) => (
             <li key={label.value}>
               #{label.value}: {label.status} · {label.reason}
@@ -111,7 +111,7 @@ function Outcome({
           ) : (
             <p className="text-sm">{m.library_mal_score_receipt_without_vote()}</p>
           )}
-          {score.reason ? <p className="text-sm [overflow-wrap:anywhere]">{score.reason}</p> : null}
+          {score.reason ? <p className="h-auto text-sm [overflow-wrap:anywhere]">{score.reason}</p> : null}
         </section>
       ) : (
         <p className="text-sm">{m.library_mal_score_effect_none()}</p>
@@ -203,7 +203,7 @@ export function MalResultPage({
             data-mal-outcome="unattempted"
             data-mal-row={row}
           >
-            <p className="font-medium [overflow-wrap:anywhere]">{titles.get(row) ?? `#${row + 1}`}</p>
+            <p className="h-auto font-medium [overflow-wrap:anywhere]">{titles.get(row) ?? `#${row + 1}`}</p>
             <p>{m.library_mal_result_unattempted()}</p>
           </li>
         ))}

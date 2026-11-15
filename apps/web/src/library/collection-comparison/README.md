@@ -43,7 +43,7 @@ layout, directory return and occurrence fragment; let route replacement retire d
 The existing three states cover same-cursor recovery, all four independent occurrences, identical-label references
 with distinct supplied identities, notes, unavailable definitions and replacement during a reference visit. Keep
 these assertions in their plays instead of adding another fixture-only reader test or story state. Play assertions
-also retain 44px contained openers, close focus, continuation separation and bounded width. Their illustrative
+also retain close focus, continuation separation and bounded width. Their illustrative
 native-format records establish neither live native responses nor main acceptance. The four supplied regression
 pass records, executed story results, browser accessibility/geometry review, clean six-smoke publication with served
 commit/index verification, and main/native acceptance remain separate evidence. The dev verifier executes the

@@ -112,14 +112,14 @@ export function ImportLibraryRows({
               return (
                 <Fragment key={row.key}>
                   <TableRow data-vndb-current-entry={index}>
-                    <TableCell className="min-w-48 max-w-80 whitespace-normal">
+                    <TableCell className="h-auto min-w-48 max-w-80 whitespace-normal">
                       <div className="flex min-w-0 items-center gap-3">
                         <SubjectCover subject={row.subject} ratio={ratio} size="xs" />
                         {href ? (
                           <a
                             href={href}
                             lang={row.titleLanguage}
-                            className="min-w-0 break-words text-primary underline-offset-4 hover:underline"
+                            className="h-auto min-w-0 break-words text-primary underline-offset-4 hover:underline"
                           >
                             {row.title}
                           </a>
@@ -128,23 +128,23 @@ export function ImportLibraryRows({
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="max-w-48 whitespace-normal">
+                    <TableCell className="h-auto max-w-48 whitespace-normal">
                       <State row={row} />
                     </TableCell>
-                    <TableCell className="min-w-28 whitespace-normal">
+                    <TableCell className="h-auto min-w-28 whitespace-normal">
                       {progress(row) ? <ProgressRow {...progress(row)!} /> : <span aria-hidden>—</span>}
                     </TableCell>
-                    <TableCell className="min-w-40 whitespace-normal">
+                    <TableCell className="h-auto min-w-40 whitespace-normal">
                       <ImportLibraryVote row={row} />
                     </TableCell>
-                    <TableCell className="max-w-48 whitespace-normal text-muted-foreground">
+                    <TableCell className="h-auto max-w-48 whitespace-normal text-muted-foreground">
                       <Activity row={row} locale={locale} />
                     </TableCell>
                     <TableCell>{inspect(row, index)}</TableCell>
                   </TableRow>
                   {selectedIndex === index ? (
                     <TableRow data-vndb-detail-row={index}>
-                      <TableCell colSpan={6} className="whitespace-normal">
+                      <TableCell colSpan={6} className="h-auto whitespace-normal">
                         {detail}
                       </TableCell>
                     </TableRow>

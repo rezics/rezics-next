@@ -10,7 +10,7 @@ export function CopyInventoryHistory({ copy }: { copy: CopyItem }) {
   return (
     <div className="mt-2">
       <details className="text-sm">
-        <summary className="min-h-11 cursor-pointer content-center rounded-md py-2 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        <summary className="cursor-pointer content-center rounded-md py-2 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
           {m.library_copy_history_details()}
         </summary>
         <div className="space-y-2 pt-2 text-muted-foreground">

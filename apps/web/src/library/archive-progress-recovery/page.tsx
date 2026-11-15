@@ -11,12 +11,15 @@ import { ArchiveRecoveryDestinations } from '../private-export/destinations';
 import { ProgressRecoveryJourney, type Snapshot } from './controller';
 import { browserProgressRecoveryPort } from './port';
 import { RecoveryReview, RecoveryResult, EvidenceDetails, progressModeLabel, progressStateLabel } from './review';
-import { actionClass } from '../private-export/controls';
+
 import { MappingPanel, Pager } from './mapping-panel';
 import { ProgressWorkspace } from './progress-workspace';
+import { NativeCheckbox } from '@rezics/ui/native-checkbox';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 
 export { Pager };
-export const action = `${actionClass} rounded-md border disabled:opacity-50`;
+export const action = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 type Journey = ProgressRecoveryJourney<ProgressChoices>;
 type View = Snapshot<ProgressChoices>;
 
@@ -81,15 +84,15 @@ export function RecoveryJourney({ journey, snap, owner }: { journey: Journey; sn
     <section className="min-w-0 space-y-4 rounded-lg border p-4" aria-label={m.library_archive_progress_file()}>
       {snap.refusal ? <EvidenceDetails value={{ status: snap.refusal }} /> : null}
       {retryable ? (
-        <button className={action} disabled={snap.busy} onClick={() => void journey.retry()}>
+        <Button variant="outline" className={action} disabled={snap.busy} onClick={() => void journey.retry()}>
           {m.library_archive_progress_retry()}
-        </button>
+        </Button>
       ) : null}
       <div className="space-y-3">
         <label className="block space-y-2">
           <span>{m.library_archive_progress_file()}</span>
-          <input
-            className={action}
+          <Input
+           
             type="file"
             accept="application/json,.json"
             disabled={locked}
@@ -101,23 +104,23 @@ export function RecoveryJourney({ journey, snap, owner }: { journey: Journey; sn
           />
         </label>
         {snap.hasOriginalArchive ? (
-          <button className={action} disabled={locked} onClick={() => void journey.adoptOriginal()}>
+          <Button variant="outline" className={action} disabled={locked} onClick={() => void journey.adoptOriginal()}>
             {m.library_archive_recovery_restart_original()}
-          </button>
+          </Button>
         ) : completed ? (
-          <button
-            className={action}
+          <Button
+            variant="outline" className={action}
             disabled={locked}
             onClick={() => void journey.upload(archiveFileFromCustody(completed))}
           >
             {m.library_archive_use_completed_export()}
-          </button>
+          </Button>
         ) : null}
         {completed || snap.hasOriginalArchive ? <p>{m.library_archive_completed_export_help()}</p> : null}
         {snap.cancelled || snap.notice === 'removed' ? (
-          <button className={action} disabled={locked} onClick={() => journey.restart()}>
+          <Button variant="outline" className={action} disabled={locked} onClick={() => journey.restart()}>
             {m.library_archive_progress_restart()}
-          </button>
+          </Button>
         ) : null}
       </div>
     </section>
@@ -145,9 +148,9 @@ export function RecoveryJourney({ journey, snap, owner }: { journey: Journey; sn
     <section className="min-w-0 space-y-3 rounded-lg border p-4" aria-label={m.library_archive_progress_occurrences()}>
       <h2 className="text-xl font-semibold">{m.library_archive_progress_occurrences()}</h2>
       {!snap.occurrences ? (
-        <button className={action} disabled={locked} onClick={() => void journey.inspect()}>
+        <Button variant="outline" className={action} disabled={locked} onClick={() => void journey.inspect()}>
           {m.library_archive_progress_inspect()}
-        </button>
+        </Button>
       ) : (
         <>
           {!snap.occurrences.occurrences.length ? (
@@ -167,8 +170,8 @@ export function RecoveryJourney({ journey, snap, owner }: { journey: Journey; sn
                   </p>
                   <p className="text-sm">{m.library_archive_progress_unit_help({ count: evidence.completed_unit_count })}</p>
                   <EvidenceDetails value={{ ordinal, evidence }} />
-                  <button
-                    className={action}
+                  <Button
+                    variant="outline" className={action}
                     disabled={locked || snap.cancelled}
                     aria-pressed={snap.selected?.session_id === evidence.session_id}
                     onClick={() => {
@@ -177,7 +180,7 @@ export function RecoveryJourney({ journey, snap, owner }: { journey: Journey; sn
                     }}
                   >
                     {m.library_archive_progress_select()}
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -200,18 +203,17 @@ export function RecoveryJourney({ journey, snap, owner }: { journey: Journey; sn
   ) : null;
   const applyAction = snap.review?.applicable && !snap.application && !snap.cancelled ? (
     <div className="space-y-3 rounded-lg border p-4">
-      <label className="flex min-h-11 items-center gap-3">
-        <input
-          type="checkbox"
-          className="size-5"
+      <label className="flex items-center gap-3">
+        <NativeCheckbox
+         
           checked={consent === snap.review.reviewId}
           disabled={locked}
           onChange={(event) => setConsent(event.target.checked ? snap.review!.reviewId : '')}
         />
         {m.library_archive_progress_consent()}
       </label>
-      <button
-        className={action}
+      <Button
+        variant="outline" className={action}
         disabled={locked || consent !== snap.review.reviewId}
         onClick={() => {
           setConsent('');
@@ -219,23 +221,23 @@ export function RecoveryJourney({ journey, snap, owner }: { journey: Journey; sn
         }}
       >
         {m.library_archive_progress_confirm()}
-      </button>
+      </Button>
     </div>
   ) : null;
   const operation = snap.upload && (snap.refusal || retryable || applyAction || snap.application || snap.result) ? (
     <section className="min-w-0 space-y-4" aria-label={m.library_archive_progress_result()}>
       {snap.refusal ? <EvidenceDetails value={{ status: snap.refusal }} /> : null}
       {retryable ? (
-        <button className={action} disabled={snap.busy} onClick={() => void journey.retry()}>
+        <Button variant="outline" className={action} disabled={snap.busy} onClick={() => void journey.retry()}>
           {m.library_archive_progress_retry()}
-        </button>
+        </Button>
       ) : null}
       {applyAction}
       <RecoveryResult application={snap.application} result={snap.result} pending={snap.pending} />
       {snap.application && !snap.pending ? (
-        <button className={action} disabled={locked} onClick={() => void journey.readResult()}>
+        <Button variant="outline" className={action} disabled={locked} onClick={() => void journey.readResult()}>
           {m.library_archive_progress_readback()}
-        </button>
+        </Button>
       ) : null}
     </section>
   ) : null;
@@ -244,7 +246,7 @@ export function RecoveryJourney({ journey, snap, owner }: { journey: Journey; sn
       className="min-w-0 rounded-lg border p-4"
       aria-label={m.library_archive_progress_open_session()}
     >
-      <a className={action} href={localizeHref(`/library/progress/${snap.result.progressSession.id}`)}>
+      <a className={buttonVariants({ variant: 'outline' })} href={localizeHref(`/library/progress/${snap.result.progressSession.id}`)}>
         {m.library_archive_progress_open_session()}
       </a>
     </section>
@@ -254,24 +256,24 @@ export function RecoveryJourney({ journey, snap, owner }: { journey: Journey; sn
       className="flex min-w-0 flex-wrap items-center gap-3 rounded-lg border p-4"
       aria-label={m.library_archive_progress_remove()}
     >
-      <button className={action} disabled={locked} onClick={() => void journey.remove()}>
+      <Button variant="outline" className={action} disabled={locked} onClick={() => void journey.remove()}>
         {m.library_archive_progress_remove()}
-      </button>
+      </Button>
       {snap.removed ? <p>{snap.removed}</p> : null}
       {snap.upload && !snap.cancelled ? (
-        <button className={action} onClick={() => void journey.cancel()}>
+        <Button variant="outline" className={action} onClick={() => void journey.cancel()}>
           {m.library_archive_recovery_confirm_cancel()}
-        </button>
+        </Button>
       ) : null}
       {snap.cancelled || snap.notice === 'removed' ? (
-        <button className={action} disabled={locked} onClick={() => journey.restart()}>
+        <Button variant="outline" className={action} disabled={locked} onClick={() => journey.restart()}>
           {m.library_archive_progress_restart()}
-        </button>
+        </Button>
       ) : null}
     </section>
   ) : null;
   return (
-    <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 [overflow-wrap:anywhere]">
+    <main className="h-auto mx-auto w-full max-w-7xl space-y-6 px-4 py-6 [overflow-wrap:anywhere]">
       <PageHeading>{m.library_archive_progress_title()}</PageHeading>
       <p>{m.library_archive_progress_intro()}</p>
       <ArchiveRecoveryDestinations current="progress" />

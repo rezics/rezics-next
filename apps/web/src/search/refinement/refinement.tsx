@@ -473,12 +473,12 @@ function RefinementInstance({
                 return (
                   <li key={`${property}:${value}`} className="min-w-0 max-w-full">
                     <a
-                      className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-auto min-h-10 max-w-full whitespace-normal py-2')}
+                      className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-auto min-h-6 max-w-full whitespace-normal')}
                       aria-label={m.refinement_remove({ value: chip }, options)}
                       href={href({ ...conditions, facetValues: { ...conditions.facetValues, [property]: values } })}
                     >
                       <span className="min-w-0 text-start wrap-anywhere">{chip}</span>
-                      <XIcon aria-hidden="true" className="size-3" />
+                      <XIcon aria-hidden="true" />
                     </a>
                   </li>
                 );
@@ -488,7 +488,7 @@ function RefinementInstance({
                 return (
                   <li key={property} className="min-w-0 max-w-full">
                     <a
-                      className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-auto min-h-10 max-w-full whitespace-normal py-2 wrap-anywhere')}
+                      className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-auto min-h-6 max-w-full whitespace-normal wrap-anywhere')}
                       aria-label={m.refinement_remove(
                         {
                           value: label(definition?.labels ?? {}) || m.refinement_range({}, options),
@@ -509,7 +509,7 @@ function RefinementInstance({
                           {searchQuantityUnitText(range.unit, definition.units ?? [], locale, unitMessages)}
                         </span>
                       )}
-                      <XIcon aria-hidden="true" className="size-3" />
+                      <XIcon aria-hidden="true" />
                     </a>
                   </li>
                 );
@@ -691,7 +691,7 @@ function RefinementInstance({
                     <Label
                       key={entry.value}
                       htmlFor={`${id}-${property}-${index}`}
-                      className="min-h-9 min-w-0 items-start gap-2 font-normal"
+                      className="min-w-0 items-start gap-2"
                     >
                       <NativeCheckbox
                         id={`${id}-${property}-${index}`}
@@ -1075,7 +1075,7 @@ function RangeControl({
           aria-modal="true"
           aria-labelledby={`${unitChangeId}-title`}
           aria-describedby={`${unitChangeId}-description`}
-          className="max-w-lg rounded-lg border border-border bg-background p-4 text-foreground shadow-xl backdrop:bg-black/50"
+          className="max-w-lg rounded-xl bg-popover p-4 text-popover-foreground ring-1 ring-foreground/10 backdrop:bg-black/50"
           onCancel={(event) => {
             event.preventDefault();
             resolvePendingUnitChange(false);

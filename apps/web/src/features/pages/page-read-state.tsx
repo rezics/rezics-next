@@ -1,3 +1,4 @@
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { useSearchRetryWait } from '../../search/search-recovery-retry';
 import { memberRetryAt } from './member-retry-admission';
@@ -40,8 +41,7 @@ export function nativePageMessage(failure: NativePageFailure, locale: string): s
   }
 }
 
-const actionClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm px-2 py-2 text-primary underline underline-offset-4 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const actionClass = `${buttonVariants({ variant: 'link', size: 'sm' })} h-auto min-h-6 max-w-full whitespace-normal [overflow-wrap:anywhere]`;
 
 /** Retry the original address explicitly; the native minimum delay only enables the action. */
 export function PageReadState({
@@ -69,9 +69,9 @@ export function PageReadState({
         {nativePageMessage(failure, locale)}
       </p>
       {waiting ? (
-        <button type="button" disabled aria-describedby={describedBy} className={actionClass}>
+        <Button type="button" variant="link" size="sm" disabled aria-describedby={describedBy} className={actionClass}>
           {m.subject_section_retry({}, { locale: locale as never })}
-        </button>
+        </Button>
       ) : (
         <a data-slot="retry" href={href} aria-describedby={describedBy} className={actionClass}>
           {m.subject_section_retry({}, { locale: locale as never })}

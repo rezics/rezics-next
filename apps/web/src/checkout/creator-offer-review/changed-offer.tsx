@@ -113,7 +113,7 @@ export function RetainedOfferObservation({
       <p className="text-muted-foreground">{m.creator_inspect_row_review()}</p>
       {received && (
         <details className="min-w-0">
-          <summary className="min-h-11 cursor-pointer content-center underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          <summary className="cursor-pointer content-center underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             {m.creator_inspect_row_current_summary()}
           </summary>
           <div className="min-w-0 space-y-3 py-3">
@@ -154,7 +154,7 @@ export function ChangedOfferReview({
         <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
           {m.creator_inspect_missing_command()}
         </p>
-        <a href={restartHref} className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}>
+        <a href={restartHref} className={buttonVariants({ variant: 'outline' })}>
           {m.creator_offers_restart()}
         </a>
       </section>
@@ -176,7 +176,7 @@ export function ChangedOfferReview({
         ))}
       </ul>
       <details className="min-w-0">
-        <summary className="min-h-11 cursor-pointer content-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        <summary className="cursor-pointer content-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
           {m.creator_inspect_compare_heading()}
         </summary>
         <div className="grid min-w-0 gap-6 py-4 sm:grid-cols-2">
@@ -195,7 +195,7 @@ export function ChangedOfferReview({
       <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
         {m.creator_inspect_review_command_notice()}
       </p>
-      <Button type="button" variant="outline" className="h-auto min-h-11 whitespace-normal text-start" onClick={review}>
+      <Button type="button" variant="outline" className="h-auto min-h-7 whitespace-normal text-start" onClick={review}>
         {m.creator_inspect_review_received()}
       </Button>
     </section>

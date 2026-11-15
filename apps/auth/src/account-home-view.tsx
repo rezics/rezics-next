@@ -3,7 +3,7 @@ import type { AccountIdentitySource, AccountIdentityState } from './account-iden
 import { useAccountHomeIdentity } from './account-home';
 import { AccountHomeGuide } from './account-home-guide';
 import { useInterfaceLocale } from './locale-observation';
-import { AuthButton } from './button';
+import { AuthButton, authLinkClass } from './button';
 import { AuthPage } from './frame';
 import { m } from './paraglide/messages.js';
 
@@ -85,13 +85,13 @@ export function AccountHomeView({
               <h2 id="auth-home-signed-out-heading">{m.auth_home_signed_out_heading()}</h2>
               <p>{m.auth_home_signed_out_description()}</p>
               <nav aria-label={m.auth_home_signed_out_heading()}>
-                <a className="auth-home-entry-link" href="/login">
+                <a className={authLinkClass('default', 'auth-home-entry-link justify-center')} href="/login">
                   {m.auth_home_sign_in()}
                 </a>
-                <a className="auth-home-entry-link" href="/signup">
+                <a className={authLinkClass('outline', 'auth-home-entry-link justify-center')} href="/signup">
                   {m.auth_home_sign_up()}
                 </a>
-                <a className="auth-home-entry-link" href="/recovery">
+                <a className={authLinkClass('outline', 'auth-home-entry-link justify-center')} href="/recovery">
                   {m.auth_home_recovery()}
                 </a>
               </nav>

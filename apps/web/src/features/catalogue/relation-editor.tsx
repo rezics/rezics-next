@@ -55,11 +55,10 @@ import {
 // Presentation only: each action keeps its own target and focus, with no stretched row action.
 const relationSurface = [
   'min-w-0 space-y-6 [overflow-wrap:anywhere]',
-  '[&_button]:min-h-11 [&_button]:min-w-11 [&_button]:h-auto [&_button]:whitespace-normal [&_button]:py-2',
-  '[&_input:not([type=hidden])]:min-h-11 min-h-11 min-w-11',
-  '[&_[data-slot=select-trigger]]:w-full [&_[data-slot=input-group]]:min-h-11',
-  '[&_summary]:min-h-11 [&_summary]:min-w-11 [&_summary]:cursor-pointer [&_summary]:py-2',
-  '[&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center',
+  '[&_button]:h-auto [&_button]:min-h-7 [&_button]:whitespace-normal',
+  '[&_[data-slot=select-trigger]]:w-full',
+  '[&_summary]:cursor-pointer',
+  '[&_a]:inline-flex [&_a]:max-w-full [&_a]:items-center',
   '[&_label]:whitespace-normal [&_label]:[overflow-wrap:anywhere]',
   '[&_:is(a,button,input,summary):focus-visible]:outline-2',
   '[&_:is(a,button,input,summary):focus-visible]:outline-offset-2',
@@ -1647,7 +1646,7 @@ function RelationEditorLive({
                                 <code className="break-all">{createdRelatedWork.id}</code>
                               </p>
                               <a
-                                className="inline-flex min-h-11 items-center underline"
+                                className="inline-flex items-center underline"
                                 href={
                                   subjectHref({ id: createdRelatedWork.id, label: createdRelatedWork.label }, locale)
                                     .href
@@ -1855,7 +1854,7 @@ function RelationEditorLive({
                             </p>
                             <Field orientation="horizontal">
                               <Checkbox
-                                className="size-11"
+                               
                                 id={`${formId}-own-consent`}
                                 checked={ownConsent}
                                 onCheckedChange={(checked) => editable() && setOwnConsent(checked === true)}
@@ -2116,7 +2115,7 @@ function RelationEditorLive({
                               )}
                               <div className="flex flex-wrap gap-2">
                                 <Button
-                                  className="min-h-11"
+                                 
                                   disabled={
                                     frozen ||
                                     candidate.retracted !== null ||
@@ -2134,7 +2133,7 @@ function RelationEditorLive({
                                 </Button>
                                 {candidate.decision !== 'rejected' && (
                                   <Button
-                                    className="min-h-11"
+                                   
                                     variant="outline"
                                     disabled={frozen || !allows('reject')}
                                     onClick={() => editable() && allows('reject') && setConfirmation('reject')}
@@ -2199,14 +2198,14 @@ function RelationEditorLive({
           )}
           <div className="flex flex-wrap gap-2">
             <Button
-              className="min-h-11"
+             
               disabled={busy || targetChecking || (!!failure && failure.reason !== 'unavailable')}
               onClick={confirm}
             >
               {action}
             </Button>
             <Button
-              className="min-h-11"
+             
               variant="outline"
               disabled={busy || !!request.current}
               onClick={() => lifetime.active() && !running.current && !request.current && setConfirmation(undefined)}

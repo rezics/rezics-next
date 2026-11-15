@@ -1,4 +1,5 @@
 import { Button } from '@rezics/ui/shadcn/button';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { m } from '../paraglide/messages.js';
 import { PortableWriting, portableWritingLimits, type PortableErrorCode, type WritingSource } from './portable-writing';
@@ -226,12 +227,12 @@ export function PortableWritingControls({
           <label htmlFor={`${id}-copy`} className="block text-sm">
             {m.thread_portable_copy_hint()}
           </label>
-          <textarea
+          <Textarea
             id={`${id}-copy`}
             ref={copyField}
             readOnly
             value={state.download.content}
-            className="min-h-32 w-full min-w-0 rounded-lg border bg-background p-3 font-mono text-sm"
+            className="min-h-32 w-full min-w-0 font-mono text-sm"
           />
           <Button type="button" variant="outline" className={writingActionClass} onClick={() => void transfer.copy()}>
             {m.thread_portable_copy()}

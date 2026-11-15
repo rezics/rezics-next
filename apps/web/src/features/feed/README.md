@@ -148,9 +148,9 @@ the same adapter; unavailable Realm/Space and board carriers retain their owner 
 
 Pass the admitted localized `href`, `title`, `signedIn` and, when actually supplied, `reaction` containing the native
 `target`, complete count map and current viewer slot. A count map omits zero kinds; it is not an unknown projection.
-The score is upvote minus downvote from that map. Without a supplied map the pill shows an unavailable dash and
+The score is upvote minus downvote from that map. Without a supplied map the group shows an unavailable dash and
 cannot write; it never reports zero or reads each row to manufacture a baseline. Subjects retain their installed
-non-vote reaction kinds. A `plain` reply pill omits its filled background without reducing its phone targets.
+non-vote reaction kinds. `plain` selects the installed vote presentation when a reaction is supplied.
 `reaction.reactionOrigin` and `origin` bind commands and browser feedback to the owner's current source visit.
 Every compact reaction control exposes each exact admitted operand in its accessible name, including both vote inputs
 and the signed score. When a compact count differs from its exact locale form, retain the compact label in the
@@ -191,8 +191,9 @@ and retry through the owning page request; Home never infers zero from missing c
 
 ### Producer and board handoff
 
-Decision: phone Share and vote-presentation reaction pickers use compact labeled icons; desktop Share retains its text,
-and a copied link replaces the Share glyph with a check while keeping the control's accessible name and recovery flow.
+Decision: phone Share and vote-presentation reaction pickers use official `sm` or `icon-sm` labeled icons; desktop Share
+retains its text at `sm`, and a copied link replaces the Share glyph with a check while keeping the control's
+accessible name and recovery flow. Phone and coarse pointers do not enlarge those controls. Long labels wrap.
 
 Kernel source defines optional `reactionTarget`, `reactions` and `viewerReaction` on eligible Content thread/post
 summaries and optional `reactionsAsOf` on the page. Home receiving is wired to those response fields and passes the
@@ -257,8 +258,8 @@ and 80 px on desktop. Those dimensions preserve proportional supplied images and
 `homeFeedItemPresentation` composes `card-presentation` and `card-attribution` into the existing ContentItem slots.
 Kind and source precede the title; identity, disclosed related context and time follow it; the plain-text preview
 comes last. Work covers and account avatars have independent destination links, alongside the primary row/title
-link. Author, verified identity, reviewed Subject and image-credit links remain independent keyboard stops with
-44px minimum targets. Continue keeps its progress state and its separate progress-session destination. FeedResults
+link. Author, verified identity, reviewed Subject and image-credit links remain independent keyboard stops at the
+official control size, and long labels wrap. Continue keeps its progress state and its separate progress-session destination. FeedResults
 and the reaction owner retain the actions slot; card reading adds no writes or action store.
 
 Decision: Home shows only available review citations and admitted parent data; withheld context stays generic,
@@ -324,8 +325,11 @@ an intermediate draft. Closing simply returns to the results. Search retains its
 
 Decision: use one mounted selector tree in a compact anchored desktop dialog and a bottom sheet below 640px;
 selection is immediate and clear-all retains the stream, removes the cursor and issues at most one feed read.
-The sheet contains a heading, localized close action and a persistent selected-context footer. Phone targets are
-at least 44px. Opening focuses the first selector; Tab/Shift+Tab stay inside the surface, Escape/outside dismissal
+The sheet contains a heading, localized close action and a persistent selected-context footer. Visible controls use
+official Mira sizes: default (`h-7`, 28px) for normal actions, inputs and selects, `sm` (`h-6`, 24px) or `xs`
+(`h-5`, 20px) for compact actions, and matching icon sizes (`icon` size-7, `icon-sm` size-6, `icon-xs` size-5).
+Phone and coarse pointers do not enlarge those controls. Long
+labels wrap. Opening focuses the first selector; Tab/Shift+Tab stay inside the surface, Escape/outside dismissal
 returns focus to the opener, and phone modality makes sibling content inert and locks body scrolling. Individual
 chip removal moves focus to the next surviving chip or its surface control. No second Apply step exists.
 

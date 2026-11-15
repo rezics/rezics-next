@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react';
+import { cn } from '@rezics/ui/utils';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
 
 const actionClass =
-  'inline-flex h-auto min-h-11 min-w-11 max-w-full items-center whitespace-normal break-words py-2 underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
 
 export function CatalogueFileProfileContextUnavailable({
   locale,
@@ -28,11 +29,11 @@ export function CatalogueFileProfileContextUnavailable({
       <p role="status">{m.catalogue_file_context_unsupported({}, o)}</p>
       <nav className="flex flex-wrap gap-2">
         {returnHref ? (
-          <a className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`} href={returnHref}>
+          <a className={cn(buttonVariants({ variant: 'outline' }), actionClass)} href={returnHref}>
             {m.catalogue_file_reader_return({}, o)}
           </a>
         ) : null}
-        <a className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`} href={globalHref}>
+        <a className={cn(buttonVariants({ variant: 'outline' }), actionClass)} href={globalHref}>
           {m.catalogue_file_global_correction_entry({}, o)}
         </a>
       </nav>

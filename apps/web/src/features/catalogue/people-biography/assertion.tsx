@@ -1,4 +1,6 @@
 import { useContext, useEffect, useState, type SyntheticEvent } from 'react';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { m } from '../../../paraglide/messages.js';
 import { PartValue } from '../statement-editor-view';
 import { useCurrentReadingVisible } from '../editor-lifetime';
@@ -9,7 +11,7 @@ import { peopleLabel, peopleOccupationConcept, type PeopleBiographyFact, type Pe
 import type { FactsCurrent } from '../subject-facts';
 
 const control =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center py-2 underline whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
 
 type Part = PeopleBiographyFact['statement'] | PeopleBiographyFact['statement']['qualifiers'][number];
 

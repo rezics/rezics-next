@@ -51,10 +51,10 @@ function LiteraryDescription({ identity, locale }: { identity: LiteraryWorkIdent
             <span lang={primary.language} className="block whitespace-pre-line font-normal group-open:hidden">
               {primary.text.length > 420 ? `${primary.text.slice(0, 420).trimEnd()}…` : primary.text}
             </span>
-            <span className="mt-2 inline-block text-primary underline underline-offset-4 group-open:hidden">
+            <span className="mt-2 inline-block underline underline-offset-4 group-open:hidden">
               {m.literary_reader_read_more({}, o)}
             </span>
-            <span className="hidden text-primary underline underline-offset-4 group-open:inline">
+            <span className="hidden underline underline-offset-4 group-open:inline">
               {m.literary_reader_show_less({}, o)}
             </span>
           </summary>
@@ -175,7 +175,7 @@ export function LiteraryReader({
           <>
             {!composed && viewLabel && (
               <div className="min-w-0 space-y-1">
-                <p className="text-sm font-medium text-primary [overflow-wrap:anywhere]">{viewLabel}</p>
+                <p className="text-sm font-medium [overflow-wrap:anywhere]">{viewLabel}</p>
                 {grainLabel}
               </div>
             )}

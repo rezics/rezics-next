@@ -1,3 +1,4 @@
+import { Button } from '@rezics/ui/shadcn/button';
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 
 /** Only the public count query is retried; private reaction recovery has its own owner. */
@@ -51,10 +52,12 @@ export function PublicReactionRecovery({
             {pending ? labels.pending : labels.unavailable}
           </p>
           {retry && (
-            <button
+            <Button
               ref={button}
               type="button"
-              className="min-h-11 min-w-11 rounded-md px-2 py-1 text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              variant="link"
+              size="sm"
+              className="h-auto min-h-6 whitespace-normal"
               disabled={pending}
               onClick={(event) => {
                 if (pending) return;
@@ -63,7 +66,7 @@ export function PublicReactionRecovery({
               }}
             >
               {labels.retry}
-            </button>
+            </Button>
           )}
         </div>
       )}
