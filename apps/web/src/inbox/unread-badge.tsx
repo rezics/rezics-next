@@ -31,11 +31,9 @@ export function UnreadBadgeView({ data, failed = false }: { data?: UnreadCount |
     );
   const label = unreadBadgeLabel(data);
   return label ? (
-    <span
-      aria-label={m.inbox_unread_count({ count: label })}
-      className="ms-auto inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-semibold leading-none text-primary-foreground"
-    >
-      {label}
+    <span className="ms-auto inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-semibold leading-none whitespace-nowrap text-primary-foreground">
+      <span className="sr-only">{m.inbox_unread_count({ count: label })}</span>
+      <span aria-hidden="true">{label}</span>
     </span>
   ) : null;
 }
@@ -93,15 +91,20 @@ export function InboxUnreadSummary() {
   const blocked = unreadCountFetchBlocked(viewer, now());
   const copy = unreadSummaryCopy(data, isPending, isError);
   return (
-    <section role="status" aria-label={m.inbox_unread_summary()} aria-busy={isFetching} className="mt-4 space-y-2">
-      <p className="text-sm text-muted-foreground">{copy.status}</p>
-      {copy.zero ? <p className="text-sm text-muted-foreground">{m.inbox_unread_none_not_empty()}</p> : null}
-      {blocked ? <p className="text-sm text-muted-foreground">{m.settings_retry_wait()}</p> : null}
+    <section
+      role="status"
+      aria-label={m.inbox_unread_summary()}
+      aria-busy={isFetching}
+      className="mt-4 min-w-0 space-y-2"
+    >
+      <p className="wrap-anywhere text-sm text-muted-foreground">{copy.status}</p>
+      {copy.zero ? <p className="wrap-anywhere text-sm text-muted-foreground">{m.inbox_unread_none_not_empty()}</p> : null}
+      {blocked ? <p className="wrap-anywhere text-sm text-muted-foreground">{m.settings_retry_wait()}</p> : null}
       {copy.retry ? (
         <Button
           type="button"
           variant="outline"
-          className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
           disabled={blocked || isFetching || !viewer.isCurrent()}
           onClick={() => {
             if (!viewer.isCurrent() || unreadCountFetchBlocked(viewer, now()) || isFetching) return;
