@@ -44,7 +44,7 @@ test('native cross-home copy-work witness expires on takedown and replacement me
       subject: edition,
       statement: citedCopyWork(work),
     });
-    await f.adopt(edition, COPY_WORK_PROPERTY, [proposal.candidate as string]);
+    await f.adopt(edition, COPY_WORK_PROPERTY, [proposal.candidate]);
 
     const deps = { ...(await f.deps('anonymous')), deadline: Date.now() + 180_000 };
     const observed = await readCopyWorkDisclosure(deps, { identities: [edition], languages: ['en'] });
@@ -74,13 +74,7 @@ test('native cross-home copy-work witness expires on takedown and replacement me
       subject: edition,
       statement: citedCopyWork(work),
     });
-    const expectedHead = (
-      await f.pool.query<{ revision: number }>(
-        'SELECT revision FROM semantic.revision WHERE route=$1 AND subject_id=$2 ORDER BY revision DESC LIMIT 1',
-        [routeOf(edition)!, edition],
-      )
-    ).rows[0]!.revision;
-    await f.adopt(edition, COPY_WORK_PROPERTY, [replacementProposal.candidate as string], expectedHead);
+    await f.adopt(edition, COPY_WORK_PROPERTY, [replacementProposal.candidate]);
     const replacementRead = await readCopyWorkDisclosure(deps, { identities: [edition], languages: ['en'] });
     expect(replacementRead.results.get(edition)).toEqual({
       state: 'available',
