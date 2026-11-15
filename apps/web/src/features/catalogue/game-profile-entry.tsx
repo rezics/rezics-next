@@ -1,4 +1,5 @@
 import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { gameCorrectionHref } from './game-current-visit';
 import type { GameClassificationLocator } from './game-current-visit-descriptor';
 import { catalogueEntries } from './catalogue-entry';
@@ -40,7 +41,14 @@ export function GameProfileEntry(props: GameProfileEntryProps) {
   const entry = gameProfileEntry(props);
   if (!entry) return null;
   return (
-    <a className={buttonVariants({ variant: 'outline', size: 'sm' })} data-game-correction-entry="" href={entry.href}>
+    <a
+      className={cn(
+        buttonVariants({ variant: 'outline', size: 'sm' }),
+        'h-auto min-h-11 min-w-11 max-w-full shrink whitespace-normal py-2 text-center [overflow-wrap:anywhere] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:py-1',
+      )}
+      data-game-correction-entry=""
+      href={entry.href}
+    >
       {entry.label}
     </a>
   );

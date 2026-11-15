@@ -1,4 +1,5 @@
 import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { subjectHref } from '../../subject/subject-href';
 import { m } from '../../paraglide/messages.js';
 
@@ -20,7 +21,10 @@ export function WorkPartsEntry({
   if (realm) query.set('realm', realm);
   return (
     <a
-      className={buttonVariants({ variant: 'outline', size: 'sm' })}
+      className={cn(
+        buttonVariants({ variant: 'outline', size: 'sm' }),
+        'h-auto min-h-11 min-w-11 max-w-full shrink whitespace-normal py-2 text-center [overflow-wrap:anywhere] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:py-1',
+      )}
       href={`${subjectHref({ id, label }, locale).href}/work-parts${query.size ? `?${query}` : ''}`}
     >
       {m.work_parts_title({}, { locale: locale as never })}
