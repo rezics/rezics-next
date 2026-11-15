@@ -123,7 +123,7 @@ function Example({
 }
 
 const meta = {
-  title: 'Catalogue/Character classification family',
+  title: 'Catalogue/Characters/Character Classification Family',
   id: 'pages-catalogue-character-classification-family',
   component: Example,
   parameters: {

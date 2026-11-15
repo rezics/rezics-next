@@ -134,7 +134,7 @@ function ReaderStory({ state }: { state: 'unconfigured' | 'history' | 'withheld'
 }
 
 const meta = {
-  title: 'Catalogue/Organization reader',
+  title: 'Catalogue/People and Organizations/Organization Reader',
   component: ReaderStory,
   parameters: { layout: 'fullscreen' },
   args: { state: 'history' },

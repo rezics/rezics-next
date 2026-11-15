@@ -10,7 +10,7 @@ import { pagePaths, PatternStory } from './page';
 import { selectSharedOption } from './shared-select-interaction';
 
 const meta = {
-  title: 'Catalogue/Subject Candidate Review',
+  title: 'Catalogue/Changes and Corrections/Subject Candidate Review',
   id: 'patterns-subject-candidate-review',
   component: CandidateStory,
   decorators: [

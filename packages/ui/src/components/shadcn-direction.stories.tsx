@@ -8,7 +8,7 @@ import { Slider } from '@rezics/ui/shadcn/slider';
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Direction',
+  title: 'Layout/Direction',
   component: DirectionProvider,
   tags: ['autodocs'],
   decorators: [withSurface],

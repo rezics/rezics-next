@@ -6,7 +6,7 @@ import { authLocale, button, reviewParameters, waitFor } from '../story';
 import { m } from '../../../paraglide/messages.js';
 
 export default {
-  title: 'Account/Operators/Transfer browser return',
+  title: 'Account/Managed Accounts/Operator Transfer Return',
   id: 'pages-accounts-operations-operators-transfer-browser-return',
   parameters: reviewParameters,
   decorators: [authLocale],

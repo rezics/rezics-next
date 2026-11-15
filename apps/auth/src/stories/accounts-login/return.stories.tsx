@@ -16,7 +16,7 @@ import { authLocale, reviewParameters, button, fill, waitFor } from '../accounts
 import '../../styles.css';
 
 export default {
-  title: 'Account/Sign in/Return',
+  title: 'Account/Sign In/Return',
   id: 'pages-account-sign-in-return',
   parameters: reviewParameters,
   decorators: [authLocale],

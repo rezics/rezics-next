@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { MineFollowingPageView } from '../library/mine-following-page';
 
 const meta = {
-  title: 'Library/Following kind navigation',
+  title: 'Library/Following/Following Kind Navigation',
   id: 'pages-library-following-kind-navigation',
   component: MineFollowingPageView,
   parameters: { layout: 'fullscreen' },

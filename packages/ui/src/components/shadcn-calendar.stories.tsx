@@ -8,7 +8,7 @@ import { Calendar } from '@rezics/ui/shadcn/calendar';
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Calendar',
+  title: 'Forms/Calendar',
   component: Calendar,
   tags: ['autodocs'],
   decorators: [withSurface],

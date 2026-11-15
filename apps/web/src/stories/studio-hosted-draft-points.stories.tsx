@@ -263,7 +263,7 @@ function StoryFrame({ scenario }: { scenario: Scenario }) {
 }
 
 const meta = {
-  title: 'Pages/Studio/Hosted draft points',
+  title: 'Content/Studio/Hosted Draft Points',
   component: StoryFrame,
   parameters: {
     layout: 'fullscreen',

@@ -18,7 +18,7 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { settled, withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Combobox',
+  title: 'Forms/Combobox',
   component: Combobox,
   tags: ['autodocs'],
   decorators: [withSurface],

@@ -12,7 +12,7 @@ import {
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Pagination',
+  title: 'Navigation/Pagination',
   component: Pagination,
   tags: ['autodocs'],
   decorators: [withSurface],

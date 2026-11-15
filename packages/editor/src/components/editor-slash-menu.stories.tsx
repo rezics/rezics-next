@@ -65,7 +65,7 @@ async function openMenu(canvasElement: HTMLElement, keys: string) {
 }
 
 const meta = {
-  title: 'Components/Editor Slash Menu',
+  title: 'Editor/Writing/Slash Menu',
   component: RichTextEditor,
   args: { value: fromPlainText(''), label: 'Post', onChange: () => undefined },
   parameters: { layout: 'padded' },

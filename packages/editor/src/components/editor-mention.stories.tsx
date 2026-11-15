@@ -73,7 +73,7 @@ function expectWithinViewport(element: HTMLElement) {
   expect(rect.bottom).toBeLessThanOrEqual(bottom + 1);
 }
 const meta = {
-  title: 'Components/Editor Mention',
+  title: 'Editor/Writing/Mention',
   component: RichTextEditor,
   args: { value: fromPlainText(''), label: 'Post', onChange: () => undefined },
   parameters: { layout: 'padded', a11y: { test: 'error' } },

@@ -7,7 +7,7 @@ import { m } from '../paraglide/messages.js';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Library/Continue Native Binding',
+  title: 'Library/Continue/Continue Native Binding',
   id: 'patterns-library-continue-native-binding',
   parameters: { layout: 'fullscreen', admitted: ['personal_library', 'reading_progress'] },
 } satisfies Meta;

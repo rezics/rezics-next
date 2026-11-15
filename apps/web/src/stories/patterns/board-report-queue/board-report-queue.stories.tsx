@@ -16,7 +16,7 @@ import {
 } from './fixture';
 
 const meta = {
-  title: 'Moderation/Moderation Queue',
+  title: 'Moderation/Queues/Moderation Queue',
   id: 'patterns-moderation-queue',
   component: BoardReportQueue,
   parameters: {

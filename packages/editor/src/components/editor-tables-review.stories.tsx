@@ -147,7 +147,7 @@ function TableActionsReview() {
 
 const meta = {
   id: 'editor-tables-review',
-  title: 'Editor/Tables',
+  title: 'Editor/Writing/Tables',
   parameters: { layout: 'padded' },
   decorators: [
     (Story) => (

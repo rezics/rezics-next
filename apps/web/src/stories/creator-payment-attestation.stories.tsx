@@ -22,7 +22,7 @@ import { PatternStory, pageReady } from './page';
 import { Button } from '@rezics/ui/shadcn/button';
 
 const meta = {
-  title: 'Commerce/Creator Payment Attestation',
+  title: 'Commerce/Creator Earnings/Creator Payment Attestation',
   id: 'patterns-commerce-creator-payment-attestation',
   parameters: {
     layout: 'fullscreen',

@@ -8,7 +8,7 @@ import { EditorialContextStory } from '../features/catalogue/editorial-context-s
 import { m } from '../paraglide/messages.js';
 
 const meta = {
-  title: 'Catalogue/Editorial Context',
+  title: 'Catalogue/Editorial Workspace/Editorial Context',
   id: 'pages-catalogue-editorial-context',
   component: EditorialContextStory,
   tags: ['autodocs'],

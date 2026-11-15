@@ -8,7 +8,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Library/Progress history',
+  title: 'Library/Progress/Progress History',
   id: 'patterns-library-progress-history',
   parameters: {
     layout: 'fullscreen',

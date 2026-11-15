@@ -69,7 +69,7 @@ const fakeSearch =
   };
 
 const meta = {
-  title: 'Components/Entity picker',
+  title: 'Forms/Entity Picker',
   component: EntityPicker,
   tags: ['autodocs'],
   args: { label: 'Subject', placeholder: 'Search the catalogue', src: coverSrc, search: fakeSearch(), debounce: 40 },

@@ -10,7 +10,7 @@ import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Moderation/Reporter history',
+  title: 'Moderation/Reports/Reporter History',
   id: 'pages-moderation-reporter-history',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

@@ -140,7 +140,7 @@ function DepartureExample({
 }
 
 const meta = {
-  title: 'Community/Authoring departure interface',
+  title: 'Community/Authoring/Authoring Departure Interface',
   id: 'patterns-community-authoring-departure-interface',
   component: DepartureExample,
   args: { scenario: 'unsaved', direction: 'ltr', enlargedText: false },

@@ -35,7 +35,24 @@ const config: StorybookConfig = {
     ...(testPackage !== 'ui' ? ['../../editor/src/**/*.stories.tsx'] : []),
     ...(process.env.REZICS_UI_ACCESSIBILITY_PROBE === '1' ? ['../tests/fixtures/accessibility-probe.stories.tsx'] : []),
   ],
-  storySorts: [{ order: ['Components', 'shadcn'] }],
+  storySorts: [
+    {
+      method: 'alphabetical',
+      locales: 'en',
+      order: [
+        'Actions',
+        'Forms',
+        'Navigation',
+        'Overlays',
+        'Data Display',
+        'Feedback',
+        'Media',
+        'Layout',
+        'Editor',
+        ['Overview', 'Writing', 'Reading', 'Preferences'],
+      ],
+    },
+  ],
   addons: ['@storybook/addon-vitest', '@storybook/addon-a11y', '@storybook/addon-mcp'],
   core: { disableTelemetry: true },
   async viteFinal(config) {

@@ -78,7 +78,7 @@ function EditorSettingsReview({
 }
 
 const meta = {
-  title: 'Editor/Account settings',
+  title: 'Account/Preferences/Editor Settings Review',
   id: 'pages-editor-account-settings-review',
   parameters: {
     layout: 'fullscreen',

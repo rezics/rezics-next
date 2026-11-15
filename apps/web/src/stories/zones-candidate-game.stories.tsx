@@ -3,7 +3,6 @@ import { expect, userEvent, within } from 'storybook/test';
 import { PageStory, pageReady } from './page';
 import { videoGameZoneIds, videoGameWorks } from '../zones/candidates/game';
 
-const title = 'Zones/Candidates/Video games (gated preview, deferred)';
 const previewPath = `/zones/${videoGameZoneIds.admittedPreview}`;
 
 function zonePath(id: string): string {
@@ -29,7 +28,7 @@ async function activateByKeyboard(link: HTMLElement): Promise<void> {
 }
 
 const meta = {
-  title,
+  title: 'Zones/Candidates/Video Games (gated Preview, Deferred)',
   parameters: {
     layout: 'fullscreen',
     docs: {

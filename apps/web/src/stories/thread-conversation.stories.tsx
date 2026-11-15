@@ -11,7 +11,7 @@ import { threadHref } from '../threads/thread-href';
 import { PageStory } from './page';
 
 const meta = {
-  title: 'Community/Conversation reading',
+  title: 'Community/Threads/Conversation Reading',
   id: 'pages-community-thread-conversation',
   component: PageStory,
   beforeEach: resetConversationExamples,

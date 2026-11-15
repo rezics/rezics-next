@@ -23,7 +23,7 @@ function Example({ state }: { state: DiscoveryState }) {
 }
 
 const meta = {
-  title: 'Discovery/Shared content items',
+  title: 'Discovery/Home/Shared Content Items',
   id: 'patterns-discovery-shared-content-items',
   component: Example,
   parameters: {

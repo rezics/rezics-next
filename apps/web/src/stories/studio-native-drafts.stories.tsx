@@ -266,7 +266,7 @@ function NativeDraftIllustration({ scenario }: { scenario: Scenario }) {
 }
 
 const meta = {
-  title: 'Studio/Native drafts',
+  title: 'Content/Studio/Native Drafts',
   id: 'studio-native-drafts',
   component: NativeDraftIllustration,
   args: { scenario: 'populated' },

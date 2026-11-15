@@ -243,7 +243,7 @@ function Story({ mode, locale = 'en' }: { mode: Mode; locale?: (typeof locales)[
 }
 
 const meta = {
-  title: 'Library/My ratings',
+  title: 'Library/Reading Activity/My Ratings',
   id: 'pages-library-my-ratings',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

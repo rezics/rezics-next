@@ -5,7 +5,7 @@ import type { BulkOperation } from '../library/bulk-operation-recovery-native';
 import type { LibraryBulkOutcome, LibraryBulkRecoveryRead } from '../library/bulk-operation-recovery';
 
 const meta = {
-  title: 'Library/Bulk Operation Recovery',
+  title: 'Library/Entries/Bulk Operation Recovery',
   id: 'pages-library-bulk-operation-recovery',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

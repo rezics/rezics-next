@@ -101,7 +101,7 @@ function CorrectionFamily({
   );
 }
 const meta = {
-  title: 'Catalogue/Manga correction family',
+  title: 'Catalogue/Manga/Manga Correction Family',
   id: 'pages-catalogue-manga-correction-family',
   component: CorrectionFamily,
   parameters: {

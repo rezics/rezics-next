@@ -4,7 +4,7 @@ import { AppearanceControls } from '../shell/appearance-controls';
 import { m } from '../paraglide/messages.js';
 
 const meta = {
-  title: 'Account/Appearance',
+  title: 'Account/Preferences/Appearance',
   id: 'patterns-appearance',
   component: AppearanceControls,
   beforeEach: () => {

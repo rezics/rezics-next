@@ -180,7 +180,7 @@ function ReadingStory({
 }
 
 const meta = {
-  title: 'Subjects/Music Context Reading',
+  title: 'Subjects/Music/Music Context Reading',
   id: 'pages-subjects-music-context-reading',
   component: ReadingStory,
   parameters: {

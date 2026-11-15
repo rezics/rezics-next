@@ -3,7 +3,7 @@ import { PageStory } from './page';
 import { leaveRecoveryStory } from './patterns/realm-leave-recovery/example';
 
 const meta = {
-  title: 'Community/Realm Leave Recovery Page',
+  title: 'Community/Realm Membership/Realm Leave Recovery Page',
   id: 'pages-community-realm-leave-recovery',
   parameters: { layout: 'fullscreen' },
   render: () => <PageStory visitor="Signed In" path="/spaces/atlas-member" />,

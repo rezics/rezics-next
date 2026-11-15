@@ -382,7 +382,7 @@ function WorkspaceExample({ scenario, locale }: { scenario: Scenario; locale: Lo
 }
 
 const meta = {
-  title: 'Pages/Knowledge/Workspace',
+  title: 'Content/Knowledge/Workspace',
   id: 'pages-knowledge-workspace',
   component: WorkspaceExample,
   args: { scenario: 'writing', locale: 'en' },

@@ -7,7 +7,7 @@ import { authLocale, button, reviewParameters, waitFor } from '../accounts-opera
 import '../../styles.css';
 
 export default {
-  title: 'Account/Step-up return',
+  title: 'Account/Security/Step-up Return',
   id: 'pages-account-step-up-return',
   parameters: {
     ...reviewParameters,

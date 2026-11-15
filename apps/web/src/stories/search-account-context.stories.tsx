@@ -115,7 +115,7 @@ function Example({
   );
 }
 const meta = {
-  title: 'Discovery/Account context',
+  title: 'Discovery/Home/Account Context',
   id: 'patterns-discovery-account-context',
   component: Example,
   parameters: {

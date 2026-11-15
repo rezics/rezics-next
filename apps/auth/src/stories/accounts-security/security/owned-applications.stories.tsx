@@ -7,7 +7,7 @@ import type { InventorySource } from '../../../security-inventory-view';
 import { authLocale, reviewParameters, button, waitFor } from '../../accounts-operations/story';
 
 export default {
-  title: 'Account/Owned applications',
+  title: 'Account/Connected Applications/Owned Applications',
   id: 'pages-account-owned-applications',
   parameters: reviewParameters,
   decorators: [authLocale],

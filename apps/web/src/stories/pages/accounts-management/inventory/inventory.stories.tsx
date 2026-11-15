@@ -6,7 +6,7 @@ import { getLocale } from '../../../../paraglide/runtime.js';
 import { PageStory } from '../../../page';
 import { ready, reviewParameters } from '../support';
 const meta = {
-  title: 'Account/Management/Accounts',
+  title: 'Account/Managed Accounts/Account Directory',
   id: 'pages-account-management-accounts',
   parameters: reviewParameters,
 } satisfies Meta;

@@ -5,7 +5,7 @@ import { Marker, MarkerContent, MarkerIcon } from '@rezics/ui/shadcn/marker';
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Marker',
+  title: 'Data Display/Marker',
   component: Marker,
   tags: ['autodocs'],
   decorators: [withSurface],

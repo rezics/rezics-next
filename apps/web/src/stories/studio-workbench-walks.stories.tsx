@@ -6,7 +6,7 @@ import { workbenchCopy } from '../studio/workbench-copy';
 import { StudioWorkbenchReview } from './studio-workbench-review';
 
 const meta = {
-  title: 'Walks/Studio/Workbench',
+  title: 'Content/Studio/Workbench Workflows',
   id: 'walks-studio-workbench',
   component: StudioWorkbenchReview,
   parameters: { layout: 'fullscreen' },

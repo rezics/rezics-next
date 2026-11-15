@@ -95,7 +95,7 @@ function AnimeStory({
 }
 
 const meta = {
-  title: 'Library/Anime',
+  title: 'Library/Anime/Anime Page',
   id: 'pages-library-anime',
   parameters: {
     layout: 'fullscreen',

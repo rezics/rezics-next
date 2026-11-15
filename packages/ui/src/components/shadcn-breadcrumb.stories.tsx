@@ -12,7 +12,7 @@ import {
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Breadcrumb',
+  title: 'Navigation/Breadcrumb',
   component: Breadcrumb,
   tags: ['autodocs'],
   decorators: [withSurface],

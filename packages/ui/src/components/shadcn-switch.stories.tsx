@@ -5,7 +5,7 @@ import { Switch } from '@rezics/ui/shadcn/switch';
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Switch',
+  title: 'Forms/Switch',
   component: Switch,
   tags: ['autodocs'],
   decorators: [withSurface],

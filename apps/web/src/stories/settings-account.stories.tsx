@@ -7,7 +7,7 @@ import { AccountSafetyCard } from '../settings/account-safety';
 import { settingsContent } from '../settings/adapters/presentation';
 
 const meta = {
-  title: 'Account/Account safety',
+  title: 'Account/Security/Account Safety',
   id: 'patterns-account-account-safety',
   component: AccountSafetyCard,
   parameters: { layout: 'padded' },

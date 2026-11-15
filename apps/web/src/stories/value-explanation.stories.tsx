@@ -21,7 +21,7 @@ function WhyStory({ scenario = 'selected' }: { scenario?: ValueScenario }) {
   );
 }
 const meta = {
-  title: 'Catalogue/Why this value',
+  title: 'Catalogue/Files and Evidence/Why This Value',
   id: 'pages-catalogue-why-this-value',
   component: WhyStory,
   parameters: { layout: 'fullscreen' },

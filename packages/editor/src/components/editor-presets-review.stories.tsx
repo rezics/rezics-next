@@ -165,7 +165,7 @@ function PresetReviewHost({
 
 const meta = {
   id: 'editor-presets-review',
-  title: 'Editor/Presets review',
+  title: 'Editor/Preferences/Presets Review',
   component: PresetReviewHost,
   parameters: {
     layout: 'padded',

@@ -99,7 +99,7 @@ function CatalogueFileReaderStory({
 }
 
 const meta = {
-  title: 'Subjects/Catalogue file reader',
+  title: 'Subjects/Sources/Catalogue File Reader',
   id: 'pages-subjects-catalogue-file-reader',
   component: CatalogueFileReaderStory,
   parameters: {

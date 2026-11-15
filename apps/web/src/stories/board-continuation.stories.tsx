@@ -12,7 +12,7 @@ import { BoardThreads } from '../threads/board-continuation';
 import { PageStory } from './page';
 
 const meta = {
-  title: 'Community/Board Continuation Workflow',
+  title: 'Community/Boards/Board Continuation Workflow',
   id: 'patterns-community-board-continuation',
   component: BoardThreads,
   tags: ['autodocs'],

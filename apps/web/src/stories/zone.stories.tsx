@@ -19,7 +19,7 @@ const unavailableZone = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e05';
 const withinBudgetZone = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e03';
 
 const meta = {
-  title: 'Community/Zone',
+  title: 'Community/Zones/Zone Page',
   id: 'pages-community-zone',
   parameters: {
     layout: 'fullscreen',

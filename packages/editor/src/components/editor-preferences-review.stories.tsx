@@ -75,7 +75,7 @@ function PreferencesReview({
 }
 
 const meta = {
-  title: 'Editor/Preferences',
+  title: 'Editor/Preferences/Editor Preferences',
   id: 'editor-preferences-review',
   parameters: { layout: 'padded' },
 } satisfies Meta;

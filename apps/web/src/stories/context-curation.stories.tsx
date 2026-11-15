@@ -13,7 +13,7 @@ import { pagePaths, PatternStory } from './page';
 import { selectSharedOption } from './shared-select-interaction';
 
 const meta = {
-  title: 'Catalogue/Context review',
+  title: 'Catalogue/Changes and Corrections/Context Review',
   id: 'pages-catalogue-context-review',
   component: ContextCurationStory,
   decorators: [

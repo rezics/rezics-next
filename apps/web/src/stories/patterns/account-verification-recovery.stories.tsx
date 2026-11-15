@@ -166,7 +166,7 @@ function Example({
 }
 
 const meta = {
-  title: 'Account/Verification recovery',
+  title: 'Account/Security/Verification Recovery',
   id: 'patterns-account-verification-recovery',
   component: Example,
   parameters: {

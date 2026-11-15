@@ -16,7 +16,7 @@ import {
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Attachment',
+  title: 'Media/Attachment',
   component: Attachment,
   tags: ['autodocs'],
   decorators: [withSurface],

@@ -83,7 +83,7 @@ const mixedCjkText = snapshot('text', [
 ]);
 
 const meta = {
-  title: 'Editor/Document reader',
+  title: 'Editor/Reading/Document Reader',
   id: 'editor-document-reader-review',
   component: DocumentBody,
   decorators: [withSurface],

@@ -6,7 +6,7 @@ import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from '@rezic
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Input OTP',
+  title: 'Forms/Input OTP',
   component: InputOTPGroup,
   tags: ['autodocs'],
   decorators: [withSurface],

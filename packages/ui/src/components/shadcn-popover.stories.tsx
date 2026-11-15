@@ -13,7 +13,7 @@ import { waitForFocus } from '../test/focus.ts';
 import { settled, withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Popover',
+  title: 'Overlays/Popover',
   component: Popover,
   tags: ['autodocs'],
   decorators: [withSurface],

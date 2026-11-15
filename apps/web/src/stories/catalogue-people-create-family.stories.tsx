@@ -129,7 +129,7 @@ function CreateFamilyStory({
 }
 
 const meta = {
-  title: 'Catalogue/People creation field family',
+  title: 'Catalogue/People and Organizations/People Creation Field Family',
   id: 'pages-catalogue-people-creation-field-family',
   component: CreateFamilyStory,
   tags: ['autodocs'],

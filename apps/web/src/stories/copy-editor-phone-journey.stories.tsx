@@ -11,7 +11,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 
 // Constructed editor fixtures use the real form and fake command transport, not native acceptance evidence.
 const meta = {
-  title: 'Library/Copy editor journey',
+  title: 'Library/Copies/Copy Editor Journey',
   id: 'patterns-library-copy-editor-journey',
   parameters: {
     layout: 'fullscreen',

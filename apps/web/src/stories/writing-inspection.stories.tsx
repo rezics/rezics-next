@@ -233,7 +233,7 @@ function PreparedJourney({ caller, scenario }: Props) {
 }
 
 const meta = {
-  title: 'Community/Writing Inspection',
+  title: 'Community/Authoring/Writing Inspection',
   id: 'pages-community-writing-inspection',
   component: PreparedJourney,
   args: { caller: 'reply', scenario: 'writing' },

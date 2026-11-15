@@ -12,7 +12,7 @@ import { PageStory, PatternStory, pageReady } from '../page';
 import { settingsContent } from '../../settings/adapters/presentation';
 
 const meta = {
-  title: 'Account/Settings managed account detail',
+  title: 'Account/Managed Accounts/Settings Managed Account Detail',
   id: 'pages-account-settings-managed-account-detail',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

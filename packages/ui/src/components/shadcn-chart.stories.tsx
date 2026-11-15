@@ -12,7 +12,7 @@ import {
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Chart',
+  title: 'Data Display/Chart',
   component: ChartContainer,
   tags: ['autodocs'],
   decorators: [withSurface],

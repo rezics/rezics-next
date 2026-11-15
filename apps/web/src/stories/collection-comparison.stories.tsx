@@ -195,7 +195,7 @@ function Example({
 }
 
 const meta = {
-  title: 'Library/Collection comparison',
+  title: 'Library/Collections/Collection Comparison',
   id: 'pages-library-collection-comparison',
   component: Example,
   argTypes: { layout: { control: 'inline-radio', options: ['list', 'grid'] } },

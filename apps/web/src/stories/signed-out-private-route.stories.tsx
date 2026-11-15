@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { DependencyUnavailablePage } from '../shell/dependency-recovery/page';
 
 const meta = {
-  title: 'Site Shell/Private destination',
+  title: 'Site Shell/Errors and Recovery/Private Destination',
   id: 'pages-private-destination',
   component: DependencyUnavailablePage,
   args: { locale: 'en' },

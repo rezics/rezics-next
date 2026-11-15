@@ -126,7 +126,7 @@ function PublicationExample({ scenario, locale }: { scenario: Scenario; locale: 
 }
 
 const meta = {
-  title: 'Pages/Knowledge/Publication',
+  title: 'Content/Knowledge/Publication',
   component: PublicationExample,
   args: { scenario: 'Review', locale: 'en' },
   argTypes: { scenario: { control: false }, locale: { options: locales, control: 'select' } },

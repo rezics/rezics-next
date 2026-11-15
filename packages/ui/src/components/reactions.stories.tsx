@@ -5,7 +5,7 @@ import { settled, withSurface } from '../stories/support.tsx';
 import { applyReactionChange, Reactions, type ReactionKind } from './reactions.tsx';
 
 const meta = {
-  title: 'Components/Reactions',
+  title: 'Actions/Reactions',
   component: Reactions,
   tags: ['autodocs'],
   args: {

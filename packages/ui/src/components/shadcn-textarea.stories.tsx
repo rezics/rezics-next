@@ -5,7 +5,7 @@ import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Textarea',
+  title: 'Forms/Textarea',
   component: Textarea,
   tags: ['autodocs'],
   decorators: [withSurface],

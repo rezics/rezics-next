@@ -11,7 +11,7 @@ import {
 import { settled, withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/NavigationMenu',
+  title: 'Navigation/Navigation Menu',
   component: NavigationMenu,
   tags: ['autodocs'],
   decorators: [withSurface],

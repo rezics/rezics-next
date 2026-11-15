@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { PeopleReadingPage } from './people-reading-page';
 
 const meta = {
-  title: 'Subjects/Character complete profile',
+  title: 'Subjects/Characters/Character Complete Profile',
   id: 'pages-subjects-character-profile-reading',
   component: PeopleReadingPage,
   args: { family: 'character', state: 'complete' },

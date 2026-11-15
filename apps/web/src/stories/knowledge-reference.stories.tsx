@@ -61,7 +61,7 @@ function Authoring() {
   );
 }
 const meta = {
-  title: 'Pages/Knowledge/References',
+  title: 'Content/Knowledge/References',
   component: Authoring,
   parameters: { viewport: { options: knowledgeViewports }, layout: 'padded' },
   decorators: [

@@ -3,7 +3,7 @@ import { expect, within } from 'storybook/test';
 import { LocalizedText } from './localized-text.tsx';
 
 const meta = {
-  title: 'Components/LocalizedText',
+  title: 'Data Display/Localized Text',
   component: LocalizedText,
   tags: ['autodocs'],
   decorators: [

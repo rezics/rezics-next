@@ -50,7 +50,7 @@ const longCurrentTarget: ModerationTarget = {
 };
 
 const meta = {
-  title: 'Moderation/Moderation appeals',
+  title: 'Moderation/Appeals/Moderation Appeals',
   id: 'pages-moderation-appeals',
   component: ModerationAppealsView,
   parameters: { layout: 'fullscreen', viewport: { options: queueViewports } },

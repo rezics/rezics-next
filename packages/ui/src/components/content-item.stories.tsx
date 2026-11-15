@@ -10,7 +10,7 @@ import { ShelfList, ShelfListRow } from './shelf-list.tsx';
 const title = 'A long journey through the city of stars and the people who changed its history';
 const bookTitle = 'A selected shelf entry with unknown progress';
 const meta = {
-  title: 'Components/Content Item',
+  title: 'Data Display/Content Item',
   component: ContentItem,
   parameters: {
     docs: {

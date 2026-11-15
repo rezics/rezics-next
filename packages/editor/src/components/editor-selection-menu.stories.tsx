@@ -41,7 +41,7 @@ function checked(snapshot: DocumentSnapshot) {
   return snapshot.doc.content?.[0];
 }
 const meta = {
-  title: 'Components/Editor Selection Menu',
+  title: 'Editor/Writing/Selection Menu',
   component: RichTextEditor,
   args: { value: fromPlainText('Selected words'), label: 'Post', onChange: () => undefined },
   parameters: { layout: 'padded' },

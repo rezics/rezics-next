@@ -92,7 +92,7 @@ function HistoricalReaders({ direction = 'ltr' }: { direction?: 'ltr' | 'rtl' })
 }
 
 const meta = {
-  title: 'Community/Historical reader interface',
+  title: 'Community/Publishing and Revisions/Historical Reader Interface',
   id: 'patterns-community-historical-reader-interface',
   component: HistoricalReaders,
   parameters: {

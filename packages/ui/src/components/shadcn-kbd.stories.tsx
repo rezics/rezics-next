@@ -4,7 +4,7 @@ import { Kbd, KbdGroup } from '@rezics/ui/shadcn/kbd';
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Kbd',
+  title: 'Data Display/Kbd',
   component: Kbd,
   tags: ['autodocs'],
   decorators: [withSurface],

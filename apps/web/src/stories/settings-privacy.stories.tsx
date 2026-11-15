@@ -14,7 +14,7 @@ import type { OwnedCollection } from '../settings/preferences';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Account/Collection privacy',
+  title: 'Account/Preferences/Collection Privacy',
   id: 'patterns-account-collection-privacy',
   component: CollectionPrivacyView,
   parameters: {

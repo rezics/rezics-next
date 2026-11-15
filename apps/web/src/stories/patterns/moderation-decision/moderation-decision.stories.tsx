@@ -19,7 +19,7 @@ import {
 
 const emptyCommand: DecisionAppealAction = async () => ({ state: 'failed' });
 const meta = {
-  title: 'Moderation/Decision',
+  title: 'Moderation/Decisions/Decision',
   id: 'patterns-moderation-decision',
   component: DecisionPageView,
   parameters: { layout: 'padded' },

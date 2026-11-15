@@ -19,7 +19,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 
 const meta = {
-  title: 'Site Shell/App Shell',
+  title: 'Site Shell/Layout/App Shell',
   id: 'patterns-app-shell',
   parameters: { layout: 'fullscreen' },
   render: () => <ShellPreview />,

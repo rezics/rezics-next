@@ -7,7 +7,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Library/Dynamic Collection recovery',
+  title: 'Library/Collections/Dynamic Collection Recovery',
   id: 'patterns-library-dynamic-collection-recovery',
   parameters: {
     layout: 'fullscreen',

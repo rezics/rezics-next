@@ -9,7 +9,7 @@ import { PatternStory } from './page';
 import { postReport, queueViewports, selectedQueueFixture } from './patterns/board-report-queue/fixture';
 
 const meta = {
-  title: 'Community/Moderation queue controls',
+  title: 'Community/Moderation/Moderation Queue Controls',
   id: 'pages-community-moderation-queue-controls',
   component: ModerationReportsView,
   parameters: {

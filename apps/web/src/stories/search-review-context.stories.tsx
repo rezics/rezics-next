@@ -58,7 +58,7 @@ function Example({ withheld }: { withheld: boolean }) {
   );
 }
 const meta = {
-  title: 'Discovery/Review context',
+  title: 'Discovery/Home/Review Context',
   id: 'patterns-discovery-review-context',
   component: Example,
   parameters: {

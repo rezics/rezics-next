@@ -14,7 +14,7 @@ import { setFakeVerificationState } from '../kernel/fake/verification';
 import { selectSettingsCategory } from './settings-category-navigation';
 
 const meta = {
-  title: 'Account/Settings account journey',
+  title: 'Account/Settings/Settings Account Journey',
   id: 'pages-account-settings-account-journey',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

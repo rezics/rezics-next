@@ -71,7 +71,7 @@ function RelationStory({ scenario = 'ready' }: { scenario?: RelationScenario }) 
   );
 }
 const meta = {
-  title: 'Catalogue/Relation contribution',
+  title: 'Catalogue/Contributions/Relation Contribution',
   id: 'pages-catalogue-relation-contribution',
   component: RelationStory,
   tags: ['autodocs'],

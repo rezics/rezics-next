@@ -224,7 +224,7 @@ function Example({ state = 'rest', loadRealms }: { state?: State; loadRealms?: S
   );
 }
 const meta = {
-  title: 'Site Shell/Navigation',
+  title: 'Site Shell/Navigation/Site Navigation',
   id: 'patterns-shell-navigation',
   parameters: {
     layout: 'fullscreen',

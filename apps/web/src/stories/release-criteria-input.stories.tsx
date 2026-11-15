@@ -46,7 +46,7 @@ const selections = {
 };
 
 const meta = {
-  title: 'Search/Release Criteria Input',
+  title: 'Discovery/Search/Release Criteria Input',
   id: 'patterns-search-release-criteria-input',
   parameters: {
     layout: 'fullscreen',

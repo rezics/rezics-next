@@ -5,7 +5,7 @@ import { withSurface } from '../stories/support.tsx';
 import { MediaImage } from './media-image.tsx';
 
 const meta = {
-  title: 'Components/Media image',
+  title: 'Media/Media Image',
   component: MediaImage,
   tags: ['autodocs'],
   args: {

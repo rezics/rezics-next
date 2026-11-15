@@ -24,7 +24,7 @@ function SettingsDemo() {
 }
 
 const meta = {
-  title: 'Components/EditorPreferences',
+  title: 'Editor/Preferences/Preference Controls',
   component: EditorPreferencesPanel,
   args: { value: {}, onChange: () => undefined },
   render: () => <SettingsDemo />,

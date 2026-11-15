@@ -77,7 +77,7 @@ function ArtworkStory({
   );
 }
 const meta = {
-  title: 'Catalogue/Subject artwork',
+  title: 'Catalogue/Presentation/Subject Artwork',
   id: 'pages-catalogue-subject-artwork',
   component: ArtworkStory,
   parameters: { layout: 'fullscreen' },

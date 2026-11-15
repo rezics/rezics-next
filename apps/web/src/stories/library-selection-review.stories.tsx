@@ -5,7 +5,7 @@ import { PageStory, libraryEntriesReady, pagePaths } from './page';
 import { setLibraryEntriesStoryMode } from '../kernel/fake/library-entries-story';
 
 const meta = {
-  title: 'Library/Selection review',
+  title: 'Library/Entries/Selection Review',
   id: 'pages-library-selection-review',
   parameters: { layout: 'fullscreen' },
   beforeEach: () => setLibraryEntriesStoryMode('recorded'),

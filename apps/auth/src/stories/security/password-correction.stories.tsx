@@ -13,7 +13,7 @@ import {
 } from '../accounts-operations/story';
 
 export default {
-  title: 'Account/Account security',
+  title: 'Account/Security/Password Correction',
   id: 'pages-account-account-security-password-correction',
   parameters: reviewParameters,
   decorators: [authLocale],

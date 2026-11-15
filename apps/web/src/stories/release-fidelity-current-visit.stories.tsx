@@ -73,7 +73,7 @@ function CurrentVisit({
 }
 
 const meta = {
-  title: 'Catalogue/Release current visit',
+  title: 'Catalogue/Releases/Release Current Visit',
   id: 'pages-catalogue-release-current-visit',
   component: CurrentVisit,
   parameters: { layout: 'fullscreen' },

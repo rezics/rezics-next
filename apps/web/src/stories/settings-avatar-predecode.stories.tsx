@@ -41,7 +41,7 @@ let nativeArrayBuffer: typeof Blob.prototype.arrayBuffer;
 let blobArrayBufferDescriptor: PropertyDescriptor | undefined;
 
 const meta = {
-  title: 'Account/Avatar predecode',
+  title: 'Account/Profile/Avatar Predecode',
   id: 'pages-settings-avatar-predecode',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

@@ -34,7 +34,7 @@ function AlbumContentsRecoveryStory({ scenario = 'admitted' }: { scenario?: Albu
 }
 
 const meta = {
-  title: 'Catalogue/Album contents recovery',
+  title: 'Catalogue/Albums/Album Contents Recovery',
   id: 'pages-catalogue-album-contents-recovery',
   component: AlbumContentsRecoveryStory,
   parameters: {

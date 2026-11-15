@@ -77,7 +77,7 @@ function WorkFranchiseStory() {
 }
 
 const meta = {
-  title: 'Subjects/Work franchise navigation',
+  title: 'Subjects/Relationships/Work Franchise Navigation',
   id: 'pages-subjects-work-franchise-navigation',
   component: WorkFranchiseStory,
   parameters: {

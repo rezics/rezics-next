@@ -9,7 +9,7 @@ import { ContentActions } from './content-actions.tsx';
 import type { ReportSubmission } from './report-dialog.tsx';
 
 const meta = {
-  title: 'Components/Content Actions',
+  title: 'Actions/Content Actions',
   component: ContentActions,
   tags: ['autodocs'],
   decorators: [withSurface],

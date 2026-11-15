@@ -5,7 +5,7 @@ import { PatternStory } from '../../page';
 import { LifecycleExample } from './example';
 
 const meta = {
-  title: 'Community/Container lifecycle Workflow',
+  title: 'Community/Spaces/Container Lifecycle Workflow',
   id: 'patterns-community-container-lifecycle',
   component: LifecycleExample,
   excludeStories: ['enterReason', 'removeAndRestore'],

@@ -24,7 +24,7 @@ import {
 } from './page';
 
 const meta = {
-  title: 'Commerce/Order',
+  title: 'Commerce/Orders/Order',
   id: 'pages-commerce-order',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

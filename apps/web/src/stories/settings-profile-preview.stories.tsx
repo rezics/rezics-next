@@ -64,7 +64,7 @@ function captureProfilePreviewTraffic() {
 }
 
 const meta = {
-  title: 'Account/Profile Page',
+  title: 'Account/Profile/Profile Page',
   id: 'pages-settings-profile',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

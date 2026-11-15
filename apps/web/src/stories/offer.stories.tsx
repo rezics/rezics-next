@@ -20,7 +20,7 @@ function currentMappedOffer() {
 }
 
 const meta = {
-  title: 'Commerce/Offer',
+  title: 'Commerce/Offers/Offer',
   id: 'pages-commerce-offer',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

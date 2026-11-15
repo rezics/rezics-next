@@ -155,7 +155,7 @@ function Example({
 }
 
 const meta = {
-  title: 'Account/Resource access',
+  title: 'Account/Account Access/Resource Access',
   id: 'pages-account-resource-access',
   component: Example,
   parameters: {

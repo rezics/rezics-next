@@ -29,7 +29,7 @@ const image: DocumentImagePresentation = {
 };
 
 const meta = {
-  title: 'Content/Document image attribution',
+  title: 'Content/Writing/Document Image Attribution',
   id: 'interfaces-content-document-image-attribution',
   component: NativeDocumentImage,
   args: { image, alt, locale: 'en' },

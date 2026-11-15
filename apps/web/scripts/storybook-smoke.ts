@@ -29,11 +29,11 @@ export function selectSmokeStories(
     );
   const webEntries = Object.values(webIndex.entries);
   const uiEntries = Object.values(uiIndex.entries);
-  const shell = select(webEntries, 'Account/Shell', 'Signed out, account menu open');
-  const signedInShell = select(webEntries, 'Account/Shell', 'Member, account menu open');
-  const uiCoverCard = select(uiEntries, 'Components/Cover Card');
-  const subject = select(webEntries, 'Subjects/Subject', 'Member');
-  const copiesStory = select(webEntries, 'Library/Copies', 'Owner');
+  const shell = select(webEntries, 'Account/Account Menu/Shell', 'Signed out, account menu open');
+  const signedInShell = select(webEntries, 'Account/Account Menu/Shell', 'Member, account menu open');
+  const uiCoverCard = select(uiEntries, 'Media/Cover Card', 'Grid');
+  const subject = select(webEntries, 'Subjects/Subject Page/Overview', 'Member');
+  const copiesStory = select(webEntries, 'Library/Copies/Copies', 'Owner');
   const coverMedia = copies.copies?.[1]?.subject?.cover?.media;
 
   if (typeof coverMedia !== 'string' || !coverMedia) {

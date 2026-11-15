@@ -57,7 +57,7 @@ function InspectionReader({ failure = false }: { failure?: boolean }) {
 }
 
 const meta = {
-  title: 'Community/Document image inspection',
+  title: 'Community/Authoring/Document Image Inspection',
   id: 'pages-community-document-image-inspection',
   component: InspectionReader,
   parameters: {

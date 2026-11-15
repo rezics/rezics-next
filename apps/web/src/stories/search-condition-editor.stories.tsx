@@ -24,7 +24,7 @@ const tree: FilterDocument = {
 };
 const state = searchLoaderDeps({ q: 'Mira', condition: JSON.stringify(tree), language: ['ja'], cursor: 'old+/=' });
 const meta = {
-  title: 'Discovery/Search Condition Editor',
+  title: 'Discovery/Search/Search Condition Editor',
   id: 'patterns-discovery-search-condition-editor',
   parameters: {
     layout: 'fullscreen',

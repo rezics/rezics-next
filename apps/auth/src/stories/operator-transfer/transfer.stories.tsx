@@ -7,7 +7,7 @@ import { authLocale, reviewParameters, button, waitFor } from '../accounts-opera
 import { m } from '../../paraglide/messages.js';
 
 export default {
-  title: 'Account/Operator transfer',
+  title: 'Account/Managed Accounts/Operator Transfer',
   id: 'pages-account-operator-transfer',
   parameters: {
     ...reviewParameters,

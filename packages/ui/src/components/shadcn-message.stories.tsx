@@ -13,7 +13,7 @@ import {
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Message',
+  title: 'Data Display/Message',
   component: Message,
   tags: ['autodocs'],
   decorators: [withSurface],

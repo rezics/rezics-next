@@ -45,7 +45,7 @@ function Example({ kind, locale = 'en' }: { kind: Kind; locale?: 'en' | 'ja' }) 
   );
 }
 
-const meta = { title: 'Components/Bottom sheet', component: Example } satisfies Meta<typeof Example>;
+const meta = { title: 'Overlays/Bottom Sheet', component: Example } satisfies Meta<typeof Example>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

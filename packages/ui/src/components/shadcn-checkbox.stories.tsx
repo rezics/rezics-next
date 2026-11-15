@@ -7,7 +7,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from '@rezics/ui/shad
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Checkbox',
+  title: 'Forms/Checkbox',
   component: Checkbox,
   tags: ['autodocs'],
   decorators: [withSurface],

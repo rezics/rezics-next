@@ -19,7 +19,7 @@ const ready: Extract<Page, { status: 'ready' }> = {
 const privateReason = '  Private review reason\nKeep this exact wording.  ';
 const receiptId = '01a1a000-0000-7000-8000-000000000102';
 const meta = {
-  title: 'Account/Lifecycle',
+  title: 'Account/Account Lifecycle/Lifecycle',
   id: 'pages-account-lifecycle',
   component: AccountLifecyclePage,
   parameters: {

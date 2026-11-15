@@ -99,7 +99,7 @@ function PreparedHomeWorkLibrary() {
 }
 
 const meta = {
-  title: 'Discovery/Home work Library (prepared)',
+  title: 'Discovery/Home/Home Work Library (prepared)',
   id: 'pages-discovery-home-work-library-prepared',
   component: PreparedHomeWorkLibrary,
   parameters: {

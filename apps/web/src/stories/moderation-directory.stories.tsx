@@ -117,7 +117,7 @@ function DirectoryStory({ mode = 'ready', continuation = false }: { mode?: Mode;
 }
 
 const meta = {
-  title: 'Moderation/Queue directory',
+  title: 'Moderation/Queues/Queue Directory',
   id: 'pages-moderation-queue-directory',
   component: DirectoryStory,
   parameters: {

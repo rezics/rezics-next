@@ -185,7 +185,7 @@ function StoryFrame({ scenario }: { scenario: Scenario }) {
 }
 
 const meta = {
-  title: 'Pages/Studio/Private selected Book release',
+  title: 'Content/Studio/Private Selected Book Release',
   component: StoryFrame,
   parameters: {
     layout: 'fullscreen',

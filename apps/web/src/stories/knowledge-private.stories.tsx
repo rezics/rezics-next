@@ -142,7 +142,7 @@ function KnowledgePrivateExample({ scenario, locale = getLocale() }: { scenario:
 }
 
 const meta = {
-  title: 'Knowledge/Private document',
+  title: 'Content/Knowledge/Private Document',
   id: 'pages-knowledge-private-document',
   component: KnowledgePrivateExample,
   args: { scenario: 'create' },

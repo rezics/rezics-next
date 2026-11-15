@@ -73,7 +73,7 @@ function ReleaseFidelityReadingStory({ scenario = 'admitted' }: { scenario?: Rea
 }
 
 const meta = {
-  title: 'Catalogue/Release fidelity reading',
+  title: 'Catalogue/Releases/Release Fidelity Reading',
   id: 'pages-catalogue-release-fidelity-reading',
   component: ReleaseFidelityReadingStory,
   parameters: {

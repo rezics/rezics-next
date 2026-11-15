@@ -11,7 +11,7 @@ const app = fileURLToPath(new URL('..', import.meta.url));
 const componentRefs =
   process.env.STORYBOOK_DISABLE_COMPONENT_REF === '1'
     ? {}
-    : { ui: { title: 'Components', url: process.env.STORYBOOK_UI_URL ?? 'http://localhost:6007' } };
+    : { ui: { title: 'UI Library', url: process.env.STORYBOOK_UI_URL ?? 'http://localhost:6007' } };
 
 // A fresh pass also catches deletions/renames and never trusts ignored output after a failed generation.
 const result = spawnSync('node', ['.storybook/generate-routes.ts'], { cwd: app, stdio: 'inherit' });
@@ -39,6 +39,8 @@ const config: StorybookConfig = {
   ],
   storySorts: [
     {
+      method: 'alphabetical',
+      locales: 'en',
       order: [
         'Overview',
         'Library',

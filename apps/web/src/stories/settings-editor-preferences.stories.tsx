@@ -12,7 +12,7 @@ import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Account/Settings',
+  title: 'Account/Preferences/Editor Preferences',
   id: 'pages-account-settings-editor',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

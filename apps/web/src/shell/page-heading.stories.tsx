@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { PageHeading } from './page-heading';
 
 const meta = {
-  title: 'Community/Page heading',
+  title: 'Site Shell/Layout/Page Heading',
   id: 'patterns-community-page-heading',
   component: PageHeading,
 } satisfies Meta<typeof PageHeading>;

@@ -5,7 +5,7 @@ import emptySearch from '../kernel/recorded/search-empty.json';
 import { PageStory, pagePaths, pageReady } from './page';
 
 const meta = {
-  title: 'Discovery/Header Search',
+  title: 'Discovery/Search/Header Search',
   id: 'patterns-header-search',
   parameters: { layout: 'fullscreen' },
   render: () => <PageStory visitor="Signed Out" path={pagePaths['search-typed']} />,

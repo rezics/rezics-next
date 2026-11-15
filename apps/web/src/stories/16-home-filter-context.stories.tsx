@@ -126,7 +126,7 @@ function PreparedContext({ long = false, initial = 'ready' }: { long?: boolean; 
   );
 }
 const meta = {
-  title: 'Discovery/Home filter context',
+  title: 'Discovery/Home/Home Filter Context',
   id: 'pages-discovery-home-filter-context',
   component: PreparedContext,
   parameters: {

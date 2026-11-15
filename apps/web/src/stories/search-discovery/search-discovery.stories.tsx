@@ -15,7 +15,7 @@ function Example({ state, yearProperties }: { state: DiscoveryState; yearPropert
 }
 
 const meta = {
-  title: 'Discovery/Mixed results',
+  title: 'Discovery/Search/Mixed Results',
   id: 'patterns-discovery-mixed-results',
   component: Example,
   parameters: {

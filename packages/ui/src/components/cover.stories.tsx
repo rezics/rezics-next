@@ -81,7 +81,7 @@ const classic: CoverSubject = {
 const sizes: CoverSize[] = ['xs', 'sm', 'md', 'lg', 'xl'];
 
 const meta = {
-  title: 'Components/Cover',
+  title: 'Media/Cover',
   component: Cover,
   tags: ['autodocs'],
   args: { subject: book, cover: null, size: 'md', src: artSrc },

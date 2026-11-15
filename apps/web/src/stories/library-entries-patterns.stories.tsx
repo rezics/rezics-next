@@ -24,7 +24,7 @@ const meta = {
       </Toaster>
     ),
   ],
-  title: 'Library/Entry layouts',
+  title: 'Library/Entries/Entry Layouts',
   id: 'patterns-library-entry-layouts',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

@@ -15,7 +15,7 @@ import { waitForFocus } from './test/focus.ts';
 import { settled, withSurface } from './stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Drawer',
+  title: 'Overlays/Drawer',
   component: Drawer,
   tags: ['autodocs'],
   decorators: [withSurface],

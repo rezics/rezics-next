@@ -5,7 +5,7 @@ import { Toggle } from '@rezics/ui/shadcn/toggle';
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Toggle',
+  title: 'Actions/Toggle',
   component: Toggle,
   tags: ['autodocs'],
   decorators: [withSurface],

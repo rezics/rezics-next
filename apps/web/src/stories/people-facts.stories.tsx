@@ -35,7 +35,7 @@ function Example({ character = false, oversized = false }: { character?: boolean
   );
 }
 const meta = {
-  title: 'Subjects/People fact windows',
+  title: 'Subjects/People/People Fact Windows',
   id: 'pages-subjects-people-fact-windows',
   component: Example,
   parameters: {

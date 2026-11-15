@@ -23,7 +23,7 @@ function CollectionVisit({
 }
 
 const meta = {
-  title: 'Library/Collection review',
+  title: 'Library/Collections/Collection Review',
   id: 'pages-collections-showcase',
   parameters: {
     layout: 'fullscreen',

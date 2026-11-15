@@ -376,22 +376,22 @@ it never rewrites a member's actual Type. Rows use 72/96 px portrait and square 
 configured landscape frames on phone/desktop, with a common radius and wrapping attached title. Artwork keeps
 its own dimensions and fit independently of the frame. Standalone `Cover` accepts list presentation when passed.
 
-The complete behavior folder is `Components/List Presentation`, with attached docs, keyboard focus, actual menu
+The complete behavior folder is `Data Display/List Presentation`, with attached docs, keyboard focus, actual menu
 interaction and suitability reveal. Hand off every same ID below for **both phone 390 and desktop 1280**, with
 `en`/`zh-Hans` locale globals and light/dark theme globals. Width, locale and theme are not separate behavior states.
 
 | State         | Story ID                                      |
 | ------------- | --------------------------------------------- |
-| Book          | `components-list-presentation--book`          |
-| Video         | `components-list-presentation--video`         |
-| Anime         | `components-list-presentation--anime`         |
-| Music         | `components-list-presentation--music`         |
-| Recipe        | `components-list-presentation--recipe`        |
-| Mixed         | `components-list-presentation--mixed`         |
-| Missing image | `components-list-presentation--missing-image` |
-| Withheld      | `components-list-presentation--withheld`      |
-| Key facts     | `components-list-presentation--key-facts`     |
-| Unknown Type  | `components-list-presentation--unknown-type`  |
+| Book          | `data-display-list-presentation--book`          |
+| Video         | `data-display-list-presentation--video`         |
+| Anime         | `data-display-list-presentation--anime`         |
+| Music         | `data-display-list-presentation--music`         |
+| Recipe        | `data-display-list-presentation--recipe`        |
+| Mixed         | `data-display-list-presentation--mixed`         |
+| Missing image | `data-display-list-presentation--missing-image` |
+| Withheld      | `data-display-list-presentation--withheld`      |
+| Key facts     | `data-display-list-presentation--key-facts`     |
+| Unknown Type  | `data-display-list-presentation--unknown-type`  |
 
 ## Metadata lines
 

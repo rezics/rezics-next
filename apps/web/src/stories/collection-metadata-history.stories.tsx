@@ -66,7 +66,7 @@ function Review() {
   );
 }
 const meta = {
-  title: 'Library/Collection metadata history',
+  title: 'Library/Collections/Collection Metadata History',
   id: 'interfaces-library-collection-metadata-history',
   component: Review,
   parameters: {

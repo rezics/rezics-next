@@ -5,7 +5,7 @@ import { NativeSelect, NativeSelectOptGroup, NativeSelectOption } from '@rezics/
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/NativeSelect',
+  title: 'Forms/Native Select',
   component: NativeSelect,
   tags: ['autodocs'],
   decorators: [withSurface],

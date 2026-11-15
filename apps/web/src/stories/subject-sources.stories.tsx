@@ -4,7 +4,7 @@ import { m } from '../paraglide/messages.js';
 import { pageReady, pagePaths, PageStory } from './page';
 
 const meta = {
-  title: 'Subjects/Source records',
+  title: 'Subjects/Sources/Source Records',
   id: 'pages-subject-sources',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

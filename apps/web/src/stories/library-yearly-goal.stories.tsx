@@ -9,7 +9,7 @@ import { YearlyGoalPage, type YearlyGoalSnapshot } from '../library/yearly-goal-
 import { m } from '../paraglide/messages.js';
 
 const meta = {
-  title: 'Library/Yearly completion goal',
+  title: 'Library/Progress/Yearly Completion Goal',
   id: 'pages-library-yearly-completion-goal',
   component: YearlyGoalPage,
   parameters: { layout: 'fullscreen' },

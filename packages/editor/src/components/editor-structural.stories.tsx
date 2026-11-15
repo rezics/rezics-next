@@ -150,7 +150,7 @@ const selectionPaint = demo(
     },
   }),
 );
-const meta = { title: 'Editor/Structural editing', parameters: { layout: 'padded' } } satisfies Meta;
+const meta = { title: 'Editor/Writing/Structural Editing', parameters: { layout: 'padded' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

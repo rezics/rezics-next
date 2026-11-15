@@ -130,7 +130,7 @@ function AllLocales() {
 }
 
 const meta = {
-  title: 'Catalogue/Person correction current visit',
+  title: 'Catalogue/People and Organizations/Person Correction Current Visit',
   id: 'pages-catalogue-person-correction-current-visit',
   component: PeopleCurrentVisitStory,
   tags: ['autodocs'],

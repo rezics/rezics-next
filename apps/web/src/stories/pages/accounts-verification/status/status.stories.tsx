@@ -5,7 +5,7 @@ import { PageStory } from '../../../page';
 import { accountId, selectVerificationStory, viewport } from '../fixtures';
 
 const meta = {
-  title: 'Account/Verification status',
+  title: 'Account/Security/Verification Status',
   id: 'pages-account-verification-status',
   parameters: { layout: 'fullscreen', viewport },
   beforeEach: () => selectVerificationStory('pending'),

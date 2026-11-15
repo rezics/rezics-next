@@ -84,7 +84,7 @@ function CurrentReview({
   );
 }
 const meta = {
-  title: 'Community/Realm Claim Current Review',
+  title: 'Community/Realm Claims/Realm Claim Current Review',
   id: 'pages-community-realm-claim-current-review',
   component: CurrentReview,
   parameters: {

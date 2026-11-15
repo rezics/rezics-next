@@ -59,7 +59,7 @@ function BookStory({
 }
 
 const meta = {
-  title: 'Library/Books',
+  title: 'Library/Books/Books Page',
   id: 'pages-library-books',
   parameters: {
     layout: 'fullscreen',

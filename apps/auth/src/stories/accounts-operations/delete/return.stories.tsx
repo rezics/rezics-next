@@ -6,7 +6,7 @@ import { m } from '../../../paraglide/messages.js';
 import { authLocale, reviewParameters } from '../story';
 
 export default {
-  title: 'Account/Delete account return',
+  title: 'Account/Account Lifecycle/Delete Account Return',
   id: 'pages-account-delete-account-return',
   parameters: reviewParameters,
   decorators: [authLocale],

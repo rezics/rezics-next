@@ -5,7 +5,7 @@ import { AuthorErasurePreview } from './author-erasure-preview';
 import owned from '../../../kernel/recorded/thread-owned.json';
 
 const meta = {
-  title: 'Community/Author erasure Workflow',
+  title: 'Community/Authoring/Author Erasure Workflow',
   id: 'patterns-community-author-erasure',
   component: AuthorErasurePreview,
   parameters: {

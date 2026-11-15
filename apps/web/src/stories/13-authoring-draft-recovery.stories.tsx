@@ -194,7 +194,7 @@ function Example({ scenario, long }: { scenario: Scenario; long: boolean }) {
 }
 
 const meta = {
-  title: 'Content/Browser writing recovery',
+  title: 'Content/Writing/Browser Writing Recovery',
   id: 'authoring-browser-writing-recovery',
   component: Example,
   parameters: { layout: 'fullscreen' },

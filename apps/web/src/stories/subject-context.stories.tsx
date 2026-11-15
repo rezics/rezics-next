@@ -97,7 +97,7 @@ function ContinuedGroup({ fallback = false }: { fallback?: boolean }) {
 }
 
 const meta = {
-  title: 'Subjects/Context',
+  title: 'Subjects/Subject Page/Context',
   id: 'pages-subjects-context',
   parameters: { layout: 'fullscreen' },
   decorators: [

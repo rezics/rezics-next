@@ -135,7 +135,7 @@ function Example({ scenario }: { scenario: Scenario }) {
   );
 }
 const meta = {
-  title: 'Studio/Hosted publication point',
+  title: 'Content/Studio/Hosted Publication Point',
   component: Example,
   parameters: { layout: 'fullscreen' },
   tags: ['illustrative'],

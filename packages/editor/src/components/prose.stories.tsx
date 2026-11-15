@@ -6,7 +6,7 @@ import { DocumentBody } from './document-body.tsx';
 import { Prose } from './prose.tsx';
 
 const meta = {
-  title: 'Components/Prose',
+  title: 'Editor/Reading/Prose',
   component: Prose,
   parameters: {
     layout: 'padded',

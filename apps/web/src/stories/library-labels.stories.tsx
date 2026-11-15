@@ -11,7 +11,7 @@ import { unprofiledSubjectId } from '../kernel/fake/library-unprofiled-subject';
 import { m } from '../paraglide/messages.js';
 
 const meta = {
-  title: 'Library/Labels',
+  title: 'Library/Labels/Labels',
   id: 'pages-library-labels',
   parameters: {
     layout: 'fullscreen',

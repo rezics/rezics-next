@@ -6,7 +6,7 @@ import { Label } from '@rezics/ui/shadcn/label';
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Label',
+  title: 'Forms/Label',
   component: Label,
   tags: ['autodocs'],
   decorators: [withSurface],

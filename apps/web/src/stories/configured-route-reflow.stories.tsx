@@ -233,7 +233,7 @@ async function readingJourney({ canvasElement }: { canvasElement: HTMLElement })
 }
 
 const meta = {
-  title: 'Site Shell/Configured Route Reflow',
+  title: 'Site Shell/Layout/Configured Route Reflow',
   id: 'pages-configured-route-reflow',
   component: ConfiguredReadingJourney,
   args: { surface: 'route', density: 'comfortable', largeText: false, rtl: false },

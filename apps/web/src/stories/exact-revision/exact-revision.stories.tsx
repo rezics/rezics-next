@@ -6,7 +6,7 @@ import { ExactRevisionExample } from './example';
 import { exactRevisionViewports, ready, selected } from './fixture';
 
 const meta = {
-  title: 'Community/Exact revision Workflow',
+  title: 'Community/Publishing and Revisions/Exact Revision Workflow',
   id: 'patterns-community-exact-revision',
   component: ExactRevisionExample,
   parameters: { layout: 'fullscreen', viewport: { options: exactRevisionViewports } },

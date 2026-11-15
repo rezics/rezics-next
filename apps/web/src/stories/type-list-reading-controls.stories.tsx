@@ -75,7 +75,7 @@ function ReadingJourney({ long = false, rtl = false }: { long?: boolean; rtl?: b
 }
 
 const meta = {
-  title: 'Discovery/Type list reading controls',
+  title: 'Discovery/Browse Lists/Type List Reading Controls',
   id: 'pages-discovery-type-list-reading-controls',
   component: ReadingJourney,
   parameters: {

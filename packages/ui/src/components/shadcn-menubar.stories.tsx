@@ -21,7 +21,7 @@ import {
 import { settled, withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Menubar',
+  title: 'Overlays/Menubar',
   component: Menubar,
   tags: ['autodocs'],
   decorators: [withSurface],

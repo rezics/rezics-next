@@ -12,7 +12,7 @@ import { PageStory, pagePaths, pageReady } from './page';
 
 // UNRUN: actual-route log-region composition. Native, visual and authority proof remain deferred.
 const meta = {
-  title: 'Library/Progress log reader',
+  title: 'Library/Progress/Progress Log Reader',
   id: 'pages-library-progress-log-reader',
   parameters: {
     layout: 'fullscreen',

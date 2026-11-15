@@ -124,7 +124,7 @@ function Example({ initial }: { initial: BangumiLabelPanelState }) {
 }
 
 const meta = {
-  title: 'Library/Personal Bangumi label adoption',
+  title: 'Library/Imports/Personal Bangumi Label Adoption',
   component: Example,
   parameters: { layout: 'padded' },
 } satisfies Meta<typeof Example>;

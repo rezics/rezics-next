@@ -35,7 +35,7 @@ function Example() {
     </ItemMenu>
   );
 }
-const meta = { title: 'Components/Shelf/Item menu', component: Example } satisfies Meta<typeof Example>;
+const meta = { title: 'Overlays/Shelf Item Menu', component: Example } satisfies Meta<typeof Example>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const ItemMenuStory: Story = {

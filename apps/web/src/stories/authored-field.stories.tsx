@@ -52,7 +52,7 @@ function Example({ scenario = 'ready' }: { scenario?: AuthoredScenario | 'loadin
   );
 }
 const meta = {
-  title: 'Catalogue/Authored text',
+  title: 'Catalogue/Contributions/Authored Text',
   id: 'pages-catalogue-authored-text',
   component: Example,
   tags: ['autodocs'],

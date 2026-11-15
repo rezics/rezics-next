@@ -5,7 +5,7 @@ import { Separator } from '@rezics/ui/shadcn/separator';
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/ScrollArea',
+  title: 'Layout/Scroll Area',
   component: ScrollArea,
   tags: ['autodocs'],
   decorators: [withSurface],

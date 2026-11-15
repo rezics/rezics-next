@@ -79,7 +79,7 @@ function ConnectedReportEntry() {
 }
 
 const meta = {
-  title: 'Community/Report entry',
+  title: 'Community/Moderation/Report Entry',
   id: 'pages-community-report-entry',
   component: ConnectedReportEntry,
   parameters: { layout: 'padded', viewport: {} },

@@ -105,7 +105,7 @@ function Example({
   );
 }
 const meta = {
-  title: 'Catalogue/Character creation family',
+  title: 'Catalogue/Characters/Character Creation Family',
   id: 'pages-catalogue-character-creation-family',
   component: Example,
   args: { scenario: 'ready', variant: 'released', direction: 'ltr' },

@@ -12,7 +12,7 @@ import {
   waitFor,
 } from '../story';
 
-export default { title: 'Account/Delete account', id: 'pages-account-delete-account', parameters: reviewParameters, decorators: [authLocale] };
+export default { title: 'Account/Account Lifecycle/Delete Account', id: 'pages-account-delete-account', parameters: reviewParameters, decorators: [authLocale] };
 const initial: AccountDeletionPage = {
   kind: 'review',
   accountId: storyAccount,

@@ -11,7 +11,7 @@ import {
 import { AuthStory, authLocale, reviewParameters } from '../story';
 
 export default {
-  title: 'Account/Roster navigation',
+  title: 'Account/Organizations/Roster Navigation',
   id: 'pages-account-roster-navigation',
   parameters: reviewParameters,
   decorators: [authLocale],

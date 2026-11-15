@@ -114,7 +114,7 @@ function EvidenceVisit({
     </PatternStory>
   );
 }
-const meta = { title: 'Catalogue/File evidence visit', component: EvidenceVisit } satisfies Meta<typeof EvidenceVisit>;
+const meta = { title: 'Catalogue/Files and Evidence/File Evidence Visit', component: EvidenceVisit } satisfies Meta<typeof EvidenceVisit>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const TargetAndCurrentReturn: Story = {

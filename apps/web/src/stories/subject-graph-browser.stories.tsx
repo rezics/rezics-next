@@ -206,7 +206,7 @@ function GraphBrowserFixture({ state, locale }: { state: StoryState; locale: str
 }
 
 const meta = {
-  title: 'Subjects/Graph Browser',
+  title: 'Subjects/Relationships/Graph Browser',
   id: 'pages-subjects-graph-browser',
   component: GraphBrowserStory,
   parameters: {

@@ -259,7 +259,7 @@ async function expectFamilies(canvasElement: HTMLElement) {
 }
 
 const meta = {
-  title: 'Subjects/Showcase work families',
+  title: 'Subjects/Work Profiles/Showcase Work Families',
   id: 'pages-subjects-showcase-work-families',
   component: FamiliesJourney,
   parameters: {

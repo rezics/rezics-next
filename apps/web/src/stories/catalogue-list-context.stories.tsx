@@ -78,7 +78,7 @@ function CatalogueStory({ state = 'compare' }: { state?: 'compare' | 'unavailabl
 }
 
 const meta = {
-  title: 'Catalogue/Public list comparison',
+  title: 'Catalogue/Changes and Corrections/Public List Comparison',
   id: 'pages-catalogue-public-list-comparison',
   component: CatalogueStory,
   parameters: {

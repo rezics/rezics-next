@@ -20,7 +20,7 @@ import { PageStory } from './page';
 
 const boardPath = `/boards/${conversationBoardId}?sort=hot&cursor=${encodeURIComponent(conversationBoardCursor)}`;
 const meta = {
-  title: 'Community/Conversation walks',
+  title: 'Community/Threads/Conversation Walks',
   id: 'walks-community-board-thread',
   component: PageStory,
   beforeEach: resetConversationExamples,

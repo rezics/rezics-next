@@ -64,7 +64,7 @@ const ready = {
 };
 
 const meta = {
-  title: 'Discovery/Search Recovery',
+  title: 'Discovery/Search/Search Recovery',
   id: 'pages-discovery-search-recovery',
   parameters: {
     layout: 'fullscreen',

@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@rezics/ui/shadcn/tabs
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Tabs',
+  title: 'Navigation/Tabs',
   component: Tabs,
   tags: ['autodocs'],
   decorators: [withSurface],

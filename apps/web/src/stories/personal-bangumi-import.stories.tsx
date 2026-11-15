@@ -307,7 +307,7 @@ function BangumiImportStory({ navigation, cleanup }: { navigation?: NavigationSt
   );
 }
 const meta = {
-  title: 'Library/Personal Bangumi import',
+  title: 'Library/Imports/Personal Bangumi Import',
   id: 'personal-bangumi-import',
   component: BangumiImportStory,
   parameters: { layout: 'fullscreen' },

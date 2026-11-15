@@ -61,7 +61,7 @@ function WorkPartsExample({ scenario }: { scenario: PartsScenario }) {
   );
 }
 const meta = {
-  title: 'Catalogue/Work parts',
+  title: 'Catalogue/Work Relationships/Work Parts',
   id: 'patterns-catalogue-work-parts',
   component: WorkPartsExample,
   parameters: { layout: 'fullscreen' },

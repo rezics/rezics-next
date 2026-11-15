@@ -34,7 +34,7 @@ function Example({
   );
 }
 const meta = {
-  title: 'Catalogue/Statement consent',
+  title: 'Catalogue/Statements/Statement Consent',
   id: 'pages-catalogue-statement-consent',
   component: Example,
   tags: ['autodocs'],

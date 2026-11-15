@@ -7,7 +7,7 @@ import { ButtonGroup, ButtonGroupSeparator, ButtonGroupText } from '@rezics/ui/s
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/ButtonGroup',
+  title: 'Actions/Button Group',
   component: ButtonGroup,
   tags: ['autodocs'],
   decorators: [withSurface],

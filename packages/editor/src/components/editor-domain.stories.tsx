@@ -95,7 +95,7 @@ function nodes(document: DocumentSnapshot, type: string): DocumentNode[] {
 const annotations = demo();
 const stale = demo();
 const readOnly = demo(fromMarkdown('Read >!concealed text!< and note[^Source].\n\n[^Source]: Saved source'), true);
-const meta = { title: 'Editor/Domain annotations', parameters: { layout: 'padded' } } satisfies Meta;
+const meta = { title: 'Editor/Writing/Domain Annotations', parameters: { layout: 'padded' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

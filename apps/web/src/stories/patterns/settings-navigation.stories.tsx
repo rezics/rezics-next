@@ -5,7 +5,7 @@ import { m } from '../../paraglide/messages.js';
 import { SectionsNavigation, type SettingsSection } from '../../settings/sections-navigation';
 
 const meta = {
-  title: 'Account/Settings navigation',
+  title: 'Account/Settings/Settings Navigation',
   id: 'patterns-account-settings-navigation',
   component: SectionsNavigation,
   parameters: { layout: 'padded' },

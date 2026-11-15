@@ -7,7 +7,7 @@ import { undoToast } from './undo-toast.tsx';
 import { settled, withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Toast',
+  title: 'Feedback/Toast',
   component: Toaster,
   tags: ['autodocs'],
   decorators: [withSurface],

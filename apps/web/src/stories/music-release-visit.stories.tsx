@@ -64,7 +64,7 @@ function MusicReleaseVisit({
 }
 
 const meta = {
-  title: 'Catalogue/Music release visit',
+  title: 'Catalogue/Music/Music Release Visit',
   id: 'pages-catalogue-music-release-visit',
   component: MusicReleaseVisit,
   parameters: {

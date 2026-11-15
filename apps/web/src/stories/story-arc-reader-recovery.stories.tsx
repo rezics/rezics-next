@@ -29,7 +29,7 @@ function RecoveryStory({ outcome = 'invalid' }: { outcome?: 'invalid' | 'withhel
   );
 }
 const meta = {
-  title: 'Catalogue/Story arc recovery',
+  title: 'Catalogue/Story Arcs/Story Arc Recovery',
   id: 'pages-catalogue-story-arc-recovery',
   component: RecoveryStory,
   parameters: {

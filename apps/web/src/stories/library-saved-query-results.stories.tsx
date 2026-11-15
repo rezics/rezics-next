@@ -9,7 +9,7 @@ import { setCollectionStoryMode } from '../kernel/fake/collection-page-stories';
 import { PageStory, PatternStory, pageReady } from './page';
 
 const meta = {
-  title: 'Library/Saved query results',
+  title: 'Library/Saved Queries/Saved Query Results',
   id: 'pages-library-saved-query-results',
   beforeEach: () => {
     resetSavedQueryStory();

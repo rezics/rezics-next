@@ -179,7 +179,7 @@ function ChangedInspectionExample({
 }
 
 const meta = {
-  title: 'Community/Edit Conflict Inspection',
+  title: 'Community/Publishing and Revisions/Edit Conflict Inspection',
   id: 'pages-community-edit-conflict-inspection',
   component: ConflictExample,
   parameters: { layout: 'fullscreen' },

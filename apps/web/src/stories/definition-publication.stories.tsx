@@ -28,7 +28,7 @@ function PublicationStory({ scenario = 'review' }: { scenario?: PublicationScena
 }
 
 const meta = {
-  title: 'Catalogue/Definition publication',
+  title: 'Catalogue/Vocabulary/Definition Publication',
   id: 'pages-catalogue-definition-publication',
   component: PublicationStory,
   tags: ['autodocs'],

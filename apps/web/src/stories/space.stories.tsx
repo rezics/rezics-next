@@ -7,7 +7,7 @@ import { m } from '../paraglide/messages.js';
 import { communityCurrentClaimStory } from './community-current-claim';
 
 const meta = {
-  title: 'Community/Space',
+  title: 'Community/Spaces/Space Page',
   id: 'pages-community-space',
   parameters: {
     layout: 'fullscreen',

@@ -10,7 +10,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { PageStory, pageReady, PatternStory } from './page';
 
 const meta = {
-  title: 'Library/Continue reader',
+  title: 'Library/Continue/Continue Reader',
   id: 'patterns-library-continue-reader',
   parameters: {
     layout: 'fullscreen',

@@ -4,7 +4,7 @@ import { expect, within } from 'storybook/test';
 import { m } from '../../../paraglide/messages.js';
 
 const meta = {
-  title: 'Community/Realm Leave Recovery Workflow',
+  title: 'Community/Realm Membership/Realm Leave Recovery Workflow',
   id: 'patterns-community-realm-leave-recovery',
   component: RealmLeaveExample,
   parameters: { layout: 'padded' },

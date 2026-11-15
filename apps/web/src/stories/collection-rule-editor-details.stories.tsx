@@ -6,7 +6,7 @@ import type { RuleChoices, RulePage } from '../library/collection-rule-read';
 import { m } from '../paraglide/messages.js';
 
 const meta = {
-  title: 'Library/Collection rule details',
+  title: 'Library/Collections/Collection Rule Details',
   id: 'patterns-library-collection-rule-details',
   parameters: {
     layout: 'fullscreen',

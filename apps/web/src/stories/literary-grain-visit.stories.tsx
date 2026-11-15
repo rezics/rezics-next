@@ -75,7 +75,7 @@ function LiteraryVisit({
 }
 
 const meta = {
-  title: 'Catalogue/Literary reader/Visit',
+  title: 'Catalogue/Books/Literary Reader Visit',
   id: 'pages-subjects-literary-grain-visit',
   component: LiteraryReaderEntry,
   args: grainExample(),

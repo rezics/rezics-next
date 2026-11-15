@@ -16,7 +16,7 @@ import {
 } from '../kernel/fake/collection-filters';
 
 const meta = {
-  title: 'Library/Collection filters',
+  title: 'Library/Collections/Collection Filters',
   id: 'patterns-library-collection-filters',
   parameters: {
     docs: {

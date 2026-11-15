@@ -58,7 +58,7 @@ function PaletteReview({ commands }: { commands: readonly EditorProductCommand[]
 }
 
 const meta = {
-  title: 'Editor/Command palette',
+  title: 'Editor/Writing/Command Palette',
   id: 'editor-command-palette',
   component: PaletteReview,
   parameters: { layout: 'fullscreen' },

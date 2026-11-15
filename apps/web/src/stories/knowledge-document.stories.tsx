@@ -21,7 +21,7 @@ const illustrative =
   'Constructed illustrative Knowledge reader states for phone and desktop; not native public_read evidence.';
 
 const meta = {
-  title: 'Knowledge/Document reader',
+  title: 'Content/Knowledge/Document Reader',
   id: 'pages-knowledge-document-reader',
   component: KnowledgeDocumentPage,
   parameters: {

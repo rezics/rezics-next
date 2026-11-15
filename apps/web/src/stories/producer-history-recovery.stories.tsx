@@ -95,7 +95,7 @@ function OversizedHistoryReturnStory() {
 }
 
 const meta = {
-  title: 'Catalogue/Producer history recovery',
+  title: 'Catalogue/People and Organizations/Producer History Recovery',
   id: 'pages-catalogue-producer-history-recovery',
   component: RecoveryStory,
   parameters: {

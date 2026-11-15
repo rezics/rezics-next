@@ -8,7 +8,7 @@ import { OpeningCurrentSessionView, OpeningReturnHistoryView } from '../../../op
 import { authLocale, button, reviewParameters, waitFor } from '../story';
 
 export default {
-  title: 'Account/Operators/Opening return',
+  title: 'Account/Managed Accounts/Operator Opening Return',
   id: 'pages-accounts-operations-operators-opening-return',
   parameters: reviewParameters,
   decorators: [authLocale],

@@ -99,7 +99,7 @@ function Showcase({ layout }: { layout: 'grid' | 'list' }) {
 }
 
 const meta = {
-  title: 'Library/Collections/Personal reading state',
+  title: 'Library/Collections/Personal Reading State',
   id: 'collections-personal-reading-state',
   parameters: {
     layout: 'fullscreen',

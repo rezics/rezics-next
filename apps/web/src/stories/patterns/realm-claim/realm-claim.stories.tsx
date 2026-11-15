@@ -4,7 +4,7 @@ import { RealmClaimExample } from './example';
 import { m } from '../../../paraglide/messages.js';
 
 const meta = {
-  title: 'Community/Realm Claim Workflow',
+  title: 'Community/Realm Claims/Realm Claim Workflow',
   id: 'patterns-community-realm-claim',
   component: RealmClaimExample,
   excludeStories: ['claimJourney'],

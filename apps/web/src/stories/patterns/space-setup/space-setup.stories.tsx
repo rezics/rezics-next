@@ -11,7 +11,7 @@ import { PatternStory } from '../../page';
 import type { BoardChoiceSource } from '../../../community/setup-board-picker';
 
 const meta = {
-  title: 'Community/Space Setup Workflow',
+  title: 'Community/Spaces/Space Setup Workflow',
   id: 'patterns-community-space-setup',
   component: SpaceSetupForm,
   tags: ['autodocs'],

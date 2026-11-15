@@ -10,7 +10,7 @@ import { PageStory, PatternStory, pageReady } from './page';
 import { Button } from '@rezics/ui/shadcn/button';
 
 const meta = {
-  title: 'Commerce/Creator Sales',
+  title: 'Commerce/Creator Earnings/Creator Sales',
   id: 'pages-commerce-creator-sales',
   parameters: {
     layout: 'fullscreen',

@@ -13,7 +13,7 @@ import {
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Table',
+  title: 'Data Display/Table',
   component: Table,
   tags: ['autodocs'],
   decorators: [withSurface],

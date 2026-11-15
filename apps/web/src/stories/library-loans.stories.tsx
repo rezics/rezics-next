@@ -5,7 +5,7 @@ import { setCopiesStoryMode } from '../kernel/fake/copies-page-stories';
 import { PageStory } from './page';
 
 const meta = {
-  title: 'Library/Loans',
+  title: 'Library/Copies/Loans',
   id: 'pages-library-loans',
   parameters: {
     layout: 'fullscreen',

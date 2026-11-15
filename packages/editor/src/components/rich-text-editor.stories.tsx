@@ -47,7 +47,7 @@ function checkedSnapshot(latest: { current: DocumentSnapshot | null }, fallback:
 }
 
 const meta = {
-  title: 'Components/RichTextEditor',
+  title: 'Editor/Writing/Rich Text Editor',
   component: RichTextEditor,
   args: {
     value: fromPlainText(''),

@@ -98,7 +98,7 @@ function selectText(root: HTMLElement, needle: string) {
 }
 
 const meta = {
-  title: 'Components/Editor Mixed Script',
+  title: 'Editor/Writing/Mixed Script',
   component: RichTextEditor,
   args: {
     value: fromPlainText(''),

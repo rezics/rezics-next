@@ -14,7 +14,7 @@ const unavailableZone = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e05';
 const sourceClosedZone = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e1e';
 
 const meta = {
-  title: 'Community/Zones/Configured static site',
+  title: 'Community/Zones/Configured Static Site',
   id: 'pages-community-zones-configured-static-site',
   parameters: {
     layout: 'fullscreen',

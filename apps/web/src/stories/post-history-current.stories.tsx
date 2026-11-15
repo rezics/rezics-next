@@ -77,7 +77,7 @@ function CurrentHistory({
 }
 
 const meta = {
-  title: 'Community/Current-context history',
+  title: 'Community/Publishing and Revisions/Current-context History',
   id: 'interfaces-community-current-context-history',
   component: CurrentHistory,
   parameters: {

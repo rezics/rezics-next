@@ -100,7 +100,7 @@ function CurrentCorrection() {
 }
 
 const meta = {
-  title: 'Catalogue/Album correction current visit',
+  title: 'Catalogue/Albums/Album Correction Current Visit',
   id: 'pages-catalogue-album-correction-current-visit',
   component: CurrentCorrection,
   parameters: {

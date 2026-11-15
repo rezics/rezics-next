@@ -13,7 +13,7 @@ import {
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Input group',
+  title: 'Forms/Input Group',
   component: InputGroup,
   tags: ['autodocs'],
   decorators: [withSurface],

@@ -18,7 +18,7 @@ import {
 import { settled, withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/Dropdown menu',
+  title: 'Overlays/Dropdown Menu',
   component: DropdownMenu,
   tags: ['autodocs'],
   decorators: [withSurface],

@@ -19,7 +19,7 @@ import { selectSharedOption } from './shared-select-interaction';
 // Authored UNRUN. These are actual reviewers on the existing native-shaped fixture seam.
 // Width/RTL intent and DOM assertions are not measured browser, native or growth proof.
 const meta = {
-  title: 'Catalogue/Candidate Comparison Family',
+  title: 'Catalogue/Changes and Corrections/Candidate Comparison Family',
   id: 'patterns-candidate-comparison-family',
   component: CandidateStory,
   decorators: [

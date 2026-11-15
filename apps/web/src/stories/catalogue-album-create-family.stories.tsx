@@ -141,7 +141,7 @@ function AlbumCreateFamily({
   );
 }
 const meta = {
-  title: 'Catalogue/Album creation family',
+  title: 'Catalogue/Albums/Album Creation Family',
   id: 'pages-catalogue-album-creation-family',
   component: AlbumCreateFamily,
   parameters: {

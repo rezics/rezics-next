@@ -16,7 +16,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import searchRecording from '../kernel/recorded/search.json';
 
 const meta = {
-  title: 'Community/Post Editor',
+  title: 'Community/Posts/Post Editor',
   id: 'pages-community-post-editor',
   excludeStories: ['AuthoringRecoveryExample', 'originalRequestJourney'],
   parameters: {

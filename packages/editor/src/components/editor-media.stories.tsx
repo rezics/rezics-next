@@ -151,7 +151,7 @@ function demo(readOnly = false) {
 const properties = demo();
 const retirement = demo();
 const readonly = demo(true);
-const meta = { title: 'Editor/Media and opaque content', parameters: { layout: 'padded' } } satisfies Meta;
+const meta = { title: 'Editor/Writing/Media and Opaque Content', parameters: { layout: 'padded' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

@@ -3,7 +3,7 @@ import { expect, within } from 'storybook/test';
 import { PageStory, pagePaths, pageReady } from './page';
 
 const meta = {
-  title: 'Subjects/Composed Discussion Review',
+  title: 'Subjects/Community/Composed Discussion Review',
   id: 'pages-subjects-composed-discussion-review',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

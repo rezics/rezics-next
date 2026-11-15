@@ -66,7 +66,7 @@ function ReturnStory({ state }: { state: 'changed' | 'retry' }) {
   );
 }
 const meta = {
-  title: 'Catalogue/Organization history return',
+  title: 'Catalogue/People and Organizations/Organization History Return',
   component: ReturnStory,
   parameters: { layout: 'fullscreen' },
   args: { state: 'changed' },

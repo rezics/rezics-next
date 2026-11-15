@@ -4,7 +4,7 @@ import { AspectRatio } from '@rezics/ui/shadcn/aspect-ratio';
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/AspectRatio',
+  title: 'Layout/Aspect Ratio',
   component: AspectRatio,
   tags: ['autodocs'],
   decorators: [withSurface],

@@ -24,7 +24,7 @@ const desktop = {};
 const phone = {};
 
 const meta = {
-  title: 'Zones/Owner recovery family',
+  title: 'Zones/Owner Workspace/Owner Recovery Family',
   id: 'patterns-zones-owner-recovery-family',
   component: ZoneFeedback,
   tags: ['autodocs'],

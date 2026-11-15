@@ -131,7 +131,7 @@ function OrganizationExample({ scenario, locale = 'en' }: { scenario: Scenario; 
   return <RouterProvider router={router} />;
 }
 const meta = {
-  title: 'Pages/Knowledge/Organization',
+  title: 'Content/Knowledge/Organization',
   component: OrganizationExample,
   args: { scenario: 'review', locale: 'en' },
   argTypes: { scenario: { control: false }, locale: { control: 'select', options: locales } },

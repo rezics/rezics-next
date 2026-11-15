@@ -90,7 +90,7 @@ async function expectKeyboardFocus(action: HTMLElement) {
 }
 
 const meta = {
-  title: 'Subjects/Subject Rating',
+  title: 'Subjects/Library and Rating/Subject Rating',
   id: 'patterns-subjects-subject-rating',
   component: Figures,
   parameters: { layout: 'fullscreen' },

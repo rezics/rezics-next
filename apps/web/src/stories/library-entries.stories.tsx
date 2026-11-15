@@ -19,7 +19,7 @@ import { setContinueStorySize } from '../kernel/fake/library-continue';
 import { setLibraryNavigationStoryState } from '../kernel/fake/library-pins';
 
 const meta = {
-  title: 'Library/Entries',
+  title: 'Library/Entries/Entries',
   id: 'pages-library-entries',
   parameters: { layout: 'fullscreen' },
   beforeEach: () => {

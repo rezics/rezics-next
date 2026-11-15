@@ -10,7 +10,7 @@ import { AppShell } from '../shell/shell';
 import { PageStory, PatternStory, pagePaths, pageReady } from './page';
 
 const meta = {
-  title: 'Subjects/Subject views',
+  title: 'Subjects/Subject Page/Subject Views',
   id: 'pages-subjects-subject-views',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

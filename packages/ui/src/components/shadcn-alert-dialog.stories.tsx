@@ -19,7 +19,7 @@ import { waitForFocus } from '../test/focus.ts';
 import { settled, withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'shadcn/AlertDialog',
+  title: 'Overlays/Alert Dialog',
   component: AlertDialog,
   tags: ['autodocs'],
   decorators: [withSurface],

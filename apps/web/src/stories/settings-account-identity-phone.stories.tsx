@@ -15,7 +15,7 @@ let unavailable = false;
 let releaseRead: (() => void) | undefined;
 
 const meta = {
-  title: 'Account/Settings',
+  title: 'Account/Settings/Settings',
   id: 'pages-account-settings',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

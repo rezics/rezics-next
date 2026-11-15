@@ -9,7 +9,7 @@ import knowledgeMeta, { NestedOutline } from './knowledge-workspace.stories';
 const Book = bookMeta.component;
 const Knowledge = knowledgeMeta.component;
 const meta = {
-  title: 'Walks/Navigation/Contextual selection',
+  title: 'Site Shell/Navigation/Contextual Selection',
   component: StudioWorkbenchReview,
   globals: { viewport: { value: 'phone390' }, visitor: 'Signed In' },
   parameters: { layout: 'fullscreen', viewport: knowledgeMeta.parameters.viewport },

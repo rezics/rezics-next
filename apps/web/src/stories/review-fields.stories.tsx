@@ -21,7 +21,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 // Illustrative only: existing Storybook session/request and recorded vote fixtures, never native proof.
 // All plays, physical target/focus checks and 390/1280 locale/theme observations are authored UNRUN.
 const meta = {
-  title: 'Subjects/Review Fields',
+  title: 'Subjects/Community/Review Fields',
   id: 'patterns-review-fields',
   parameters: {
     layout: 'fullscreen',

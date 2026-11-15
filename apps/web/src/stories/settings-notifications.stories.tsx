@@ -10,7 +10,7 @@ import { PageStory, pageReady } from './page';
 import { selectSettingsCategory } from './settings-category-navigation';
 
 const meta = {
-  title: 'Account/Notice preferences',
+  title: 'Account/Preferences/Notice Preferences',
   id: 'patterns-account-notice-preferences',
   component: NotificationsCard,
   parameters: {

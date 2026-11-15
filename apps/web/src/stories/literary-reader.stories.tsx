@@ -125,7 +125,7 @@ function LiteraryOverviewStory({
 }
 
 const meta = {
-  title: 'Catalogue/Literary reader/Overview',
+  title: 'Catalogue/Books/Literary Reader Overview',
   id: 'pages-subjects-literary-work',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;
