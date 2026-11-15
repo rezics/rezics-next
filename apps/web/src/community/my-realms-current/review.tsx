@@ -15,12 +15,14 @@ export function MyRealmsLeaveReview({
 }) {
   const headingId = useId();
   const promptId = useId();
+  const standingId = useId();
   const dismiss = (action: () => void) => {
     action();
     onDismiss?.();
   };
   const review = controller.review;
   if (!review) return null;
+  const showStanding = review.phase === 'pending' || review.phase === 'submitting';
 
   const status =
     review.phase === 'uncertain'
@@ -52,9 +54,9 @@ export function MyRealmsLeaveReview({
     <section
       id={id}
       aria-labelledby={headingId}
-      aria-describedby={promptId}
+      aria-describedby={showStanding ? `${promptId} ${standingId}` : promptId}
       aria-busy={review.phase === 'submitting' || review.standing === 'loading'}
-      className="min-w-0 space-y-3 ps-3 [overflow-wrap:anywhere] [&_button]:h-auto [&_button]:min-h-11 [&_button]:max-w-full [&_button]:whitespace-normal"
+      className="min-w-0 space-y-3 ps-3 [overflow-wrap:anywhere] [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:text-start [&_button]:whitespace-normal"
       data-slot="my-realms-leave-review"
       data-phase={review.phase}
       data-workflow-id={review.workflowId}
@@ -66,13 +68,13 @@ export function MyRealmsLeaveReview({
         {m.my_realms_leave_confirm({ realm: review.row.name })}
       </p>
       <p role="status">{status}</p>
-      {review.phase === 'pending' || review.phase === 'submitting' ? (
-        <p className="text-sm text-muted-foreground">
+      {showStanding ? (
+        <p id={standingId} className="text-sm text-muted-foreground">
           {m.my_realms_standing_label()}: {standing}
         </p>
       ) : null}
       {review.phase === 'review' ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex min-w-0 flex-wrap gap-2">
           <Button type="button" variant="destructive" disabled={!controller.ready} onClick={controller.confirm}>
             {m.my_realms_leave_confirm_button()}
           </Button>
@@ -82,7 +84,7 @@ export function MyRealmsLeaveReview({
         </div>
       ) : null}
       {review.phase === 'uncertain' && review.retryAllowed ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex min-w-0 flex-wrap gap-2">
           <Button type="button" disabled={!controller.ready} onClick={controller.retry}>
             {m.realm_leave_retry_same()}
           </Button>
