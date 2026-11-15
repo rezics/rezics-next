@@ -248,8 +248,7 @@ test('native consent and Collection reductions invalidate their actual home imme
         statement: { ...statement('rezics:penNameOf', agent.subject.id), references: [] },
       })
     ).candidate as string;
-    const orgFixture = { ...f, meaning: { ...f.meaning, type: 'schema:Organization' } };
-    expect((await complete(orgFixture, source, pen)).records).toEqual([]);
+    expect((await complete(f, source, pen)).records).toEqual([]);
     const { readStatementAs } = await import('../../src/semantic/statement-disclosure.ts');
     const context = readContext();
     const actor = await f.config.access.authenticate(f.real.bearer('editor'), {
@@ -257,14 +256,14 @@ test('native consent and Collection reductions invalidate their actual home imme
       deadline: context.deadline,
     });
     const publisher = await readStatementAs(f.db.pool, f.config.access, actor, context.deadline, () =>
-      complete(orgFixture, source, pen),
+      complete(f, source, pen),
     );
     expect(
       publisher.records,
       'Source stays public under the publisher private reader with the SAME bearer/Access',
     ).toEqual([]);
     await f.post(`/v1/statements/${candidate}/disclose`, {});
-    const disclosed = await complete(orgFixture, source, pen);
+    const disclosed = await complete(f, source, pen);
     expect(
       disclosed.records.some(
         (record) =>
@@ -275,7 +274,7 @@ test('native consent and Collection reductions invalidate their actual home imme
     const before = await head(source, home(pen));
     await f.post(`/v1/statements/${candidate}/retract`, {});
     expect((await head(source, home(pen))).position > before.position).toBe(true);
-    expect((await complete(orgFixture, source, pen)).records).toEqual([]);
+    expect((await complete(f, source, pen)).records).toEqual([]);
     await f.real.grant({ route: routeOf(f.accounts.editor)!, id: f.accounts.editor }, 'editor', 'collection:create');
     const collection = (await f.post('/v1/collections', { title: 'Public population', visibility: 'public' }))
       .collection;

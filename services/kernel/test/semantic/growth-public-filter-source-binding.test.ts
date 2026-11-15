@@ -51,6 +51,7 @@ test('native Source binding lookups stay bounded as unrelated subjects, history,
     const definition = structuredClone(resolved.definition);
     expect(definition.meaning.digest).toBe(releaseDigest(definition.meaning.release));
     const expectedDependencies = [
+      { kind: 'type' },
       { kind: 'property', property: 'schema:author' },
       { kind: 'property', property: 'ex:left' },
       { kind: 'order', order: 'name' },
