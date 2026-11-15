@@ -110,7 +110,18 @@ test('immediate opening and default/explicit published replies emit publication;
 test('closed visibility, stale heads and competing publication preserve a single winner', async () => {
   const thread = await f.thread();
   const draft = await f.reply(thread.id, 'draft');
-  for (const visibility of ['protected', 'taken_down', null, true]) {
+  expect((await f.revise(draft, { visibility: 'protected' })).status).toBe(400);
+  const protectedReply = await f.call('POST', `/v1/threads/${thread.id}/posts`, {
+    body: mentionDocument(f.author.actor.accountId),
+    licence: 'MIT',
+    visibility: 'protected',
+  });
+  expect(protectedReply.status).toBe(201);
+  expect(await f.state(protectedReply.value.post.id)).toMatchObject({
+    visibility: 'protected',
+    thread_visibility: 'published',
+  });
+  for (const visibility of ['taken_down', null, true]) {
     expect((await f.revise(draft, { visibility })).status).toBe(400);
     expect(
       (

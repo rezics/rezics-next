@@ -207,10 +207,13 @@ test('account standing, membership coverage and group bans remain mandatory', as
     // Reinstatement keeps the raised floor; the old token stays revoked.
     const restored = await readAccount(pool, routeOf(buyer)!, buyer);
     who = { ...who, authnEpoch: Number(restored!.minimumAuthnEpoch) };
-    await pool.query('UPDATE access.account SET fenced=true WHERE route=$1 AND account_id=$2', [routeOf(buyer), buyer]);
+    await pool.query('UPDATE access.account SET authn_fenced=true WHERE route=$1 AND account_id=$2', [
+      routeOf(buyer),
+      buyer,
+    ]);
     expect(await allowed()).toBe(false);
     await pool.query(
-      'UPDATE access.account SET fenced=false, membership_inverse_complete=false WHERE route=$1 AND account_id=$2',
+      'UPDATE access.account SET authn_fenced=false, membership_inverse_complete=false WHERE route=$1 AND account_id=$2',
       [routeOf(buyer), buyer],
     );
     expect(await allowed()).toBe(false);

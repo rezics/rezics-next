@@ -1,5 +1,8 @@
 import { checkDocument, fromPlainText, type DocumentProfile, type DocumentSnapshot } from '@rezics/document';
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import type { Editor } from '@tiptap/core';
+import { AllSelection } from '@tiptap/pm/state';
+import { undoDepth } from '@tiptap/pm/history';
 import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { waitForFocus } from '../../../ui/src/test/focus.ts';
@@ -326,14 +329,120 @@ async function caretAtEnd(canvas: ReturnType<typeof within>) {
   return textbox;
 }
 
+const inlineJourneyClock = new WeakMap<Document, number>();
+
 async function selectJourneyText(canvas: ReturnType<typeof within>) {
+  const absolute = () => {
+    const start = inlineJourneyClock.get(document);
+    return start === undefined ? null : Math.round(performance.now() - start);
+  };
+  console.info(
+    JSON.stringify({ inlineSelectionHelper: true, stage: 'entered-before-query', journeyElapsedMs: absolute() }),
+  );
   const textbox = canvas.getByRole('textbox', { name: 'Post' });
-  await userEvent.click(textbox);
+  const describe = () => {
+    const rect = textbox.getBoundingClientRect(),
+      style = getComputedStyle(textbox);
+    const x = rect.left + rect.width / 2,
+      y = rect.top + rect.height / 2;
+    const hit = textbox.ownerDocument.elementFromPoint(x, y);
+    const blocked: unknown[] = [];
+    for (let ancestor: HTMLElement | null = textbox; ancestor; ancestor = ancestor.parentElement)
+      if (
+        ancestor.inert ||
+        ancestor.hasAttribute('data-base-ui-inert') ||
+        ancestor.hidden ||
+        ancestor.getAttribute('aria-hidden') === 'true'
+      )
+        blocked.push({
+          tag: ancestor.tagName,
+          id: ancestor.id,
+          inert: ancestor.inert,
+          baseUIInert: ancestor.hasAttribute('data-base-ui-inert'),
+          hidden: ancestor.hidden,
+          ariaHidden: ancestor.getAttribute('aria-hidden'),
+        });
+    const editor = (
+      textbox as HTMLElement & {
+        editor?: {
+          isDestroyed: boolean;
+          state: { selection: { toJSON: () => unknown } };
+          view: { hasFocus: () => boolean; composing: boolean };
+        };
+      }
+    ).editor;
+    return {
+      journeyElapsedMs: absolute(),
+      driver: 'existing storybook/test userEvent helper',
+      connected: textbox.isConnected,
+      role: textbox.getAttribute('role'),
+      label: textbox.getAttribute('aria-label'),
+      ariaDisabled: textbox.getAttribute('aria-disabled'),
+      matchesDisabled: textbox.matches(':disabled'),
+      blocked,
+      rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      style: {
+        pointerEvents: style.pointerEvents,
+        display: style.display,
+        visibility: style.visibility,
+        opacity: style.opacity,
+      },
+      hit: hit
+        ? { tag: hit.tagName, id: hit.id, role: hit.getAttribute('role'), slot: hit.getAttribute('data-slot') }
+        : null,
+      hitIsTargetOrChild: !!hit && (hit === textbox || textbox.contains(hit)),
+      model:
+        editor && !editor.isDestroyed
+          ? {
+              selection: editor.state.selection.toJSON(),
+              hasFocus: editor.view.hasFocus(),
+              composing: editor.view.composing,
+            }
+          : null,
+    };
+  };
+  const pointer = (event: PointerEvent) =>
+    console.info(
+      JSON.stringify({
+        inlineSelectionHelper: true,
+        stage: 'pointerdown-observed',
+        trusted: event.isTrusted,
+        ...describe(),
+      }),
+    );
+  textbox.addEventListener('pointerdown', pointer, { capture: true, once: true });
+  console.info(JSON.stringify({ inlineSelectionHelper: true, stage: 'before-existing-click', ...describe() }));
+  try {
+    await userEvent.click(textbox);
+    console.info(JSON.stringify({ inlineSelectionHelper: true, stage: 'existing-click-completed', ...describe() }));
+  } catch (error) {
+    console.info(
+      JSON.stringify({
+        inlineSelectionHelper: true,
+        stage: 'existing-click-rejected',
+        error: String(error).slice(0, 240),
+        ...describe(),
+      }),
+    );
+    throw error;
+  } finally {
+    textbox.removeEventListener('pointerdown', pointer, true);
+  }
   const range = document.createRange();
   range.selectNodeContents(textbox);
   window.getSelection()?.removeAllRanges();
   window.getSelection()?.addRange(range);
+  console.info(
+    JSON.stringify({
+      inlineSelectionHelper: true,
+      stage: 'dom-range-installed-before-existing-selectionchange',
+      ...describe(),
+    }),
+  );
   document.dispatchEvent(new Event('selectionchange'));
+  console.info(
+    JSON.stringify({ inlineSelectionHelper: true, stage: 'existing-selectionchange-dispatched', ...describe() }),
+  );
   return textbox;
 }
 
@@ -380,6 +489,7 @@ const inlineLifetime = inlineJourney();
 export const InlineLifetimeJourney: Story = {
   render: () => <inlineLifetime.Demo />,
   async play({ canvasElement }) {
+    inlineJourneyClock.set(canvasElement.ownerDocument, performance.now());
     const { events: userEvent } = await editorBrowserInput();
     console.info('Editor inline lifetime: starting authored link journey');
     const canvas = within(canvasElement);
@@ -554,6 +664,7 @@ export const InlineLifetimeJourney: Story = {
               action,
               stage,
               elapsedMs: Math.round(performance.now() - started),
+              journeyElapsedMs: Math.round(performance.now() - inlineJourneyClock.get(canvasElement.ownerDocument)!),
               provider: diagnosticBrowser?.server.provider ?? 'storybook/test synthetic',
               providerEnabled: null,
               providerEnabledSource: 'The pinned Vitest Locator public API does not expose isEnabled',
@@ -950,5 +1061,53 @@ export const InlineLifetimeJourney: Story = {
     expect(canvas.queryByRole('listbox', { name: 'Insert block' })).toBeNull();
     expect(evidence.requests.length).toBeGreaterThan(requestCount);
     expect(checkJourneyDocument(evidence.latest)).toBe(evidence.latest);
+  },
+};
+
+const selectAllLink = demo();
+/** Native Ctrl+A keeps its structural selection while opening/cancelling the address field. */
+export const AllSelectionLink: Story = {
+  render: () => <selectAllLink.Demo />,
+  async play({ canvasElement }) {
+    const { events } = await editorBrowserInput();
+    const canvas = within(canvasElement);
+    const textbox = canvas.getByRole('textbox', { name: 'Post' });
+    const editor = (textbox as HTMLElement & { editor: Editor }).editor;
+    await events.click(textbox);
+    await events.keyboard('{Control>}a{/Control}');
+    expect(editor.state.selection).toBeInstanceOf(AllSelection);
+    const before = editor.state.doc,
+      depth = undoDepth(editor.state);
+    const open = async () => {
+      const toolbar = within(await canvas.findByRole('toolbar', { name: 'Format text' }));
+      await events.click(toolbar.getByRole('button', { name: 'Link' }));
+      return canvas.findByRole('textbox', { name: 'URL' });
+    };
+    await open();
+    expect(editor.state.doc).toBe(before);
+    expect(editor.state.selection).toBeInstanceOf(AllSelection);
+    expect(undoDepth(editor.state)).toBe(depth);
+    await events.keyboard('{Escape}');
+    await waitFor(() => expect(canvas.queryByRole('textbox', { name: 'URL' })).toBeNull());
+    await waitFor(() => expect(textbox).toHaveFocus());
+    expect(editor.state.doc).toBe(before);
+    expect(editor.state.selection).toBeInstanceOf(AllSelection);
+    expect(undoDepth(editor.state)).toBe(depth);
+    const address = await open();
+    await events.type(address, 'https://example.test/all');
+    await events.click(canvas.getByRole('button', { name: 'Apply' }));
+    await waitFor(() =>
+      expect(
+        editor.state.doc.firstChild!.firstChild!.marks.some(
+          (mark) => mark.type.name === 'link' && mark.attrs.href === 'https://example.test/all',
+        ),
+      ).toBe(true),
+    );
+    await waitFor(() => expect(textbox).toHaveFocus());
+    expect(editor.state.selection).toBeInstanceOf(AllSelection);
+    expect(undoDepth(editor.state)).toBe(depth + 1);
+    await events.keyboard('{Control>}z{/Control}');
+    await waitFor(() => expect(editor.state.doc.eq(before)).toBe(true));
+    expect(editor.state.selection).toBeInstanceOf(AllSelection);
   },
 };

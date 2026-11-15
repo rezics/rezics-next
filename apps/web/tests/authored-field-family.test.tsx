@@ -603,7 +603,10 @@ for (const action of ['reload', 'field'])
       const initial = await fixture.transport.read();
       if (!initial.ok) throw new Error('Expected authored fixture');
       const other = 'test:other-authored';
-      initial.release.properties[other] = structuredClone(initial.release.properties[authoredProperty]!);
+      initial.release.properties[other] = {
+        ...structuredClone(initial.release.properties[authoredProperty]!),
+        labels: { ...initial.release.properties[authoredProperty]!.labels, en: 'Other authored field' },
+      };
       initial.release.types[initial.public.subject.type]!.properties.push(other);
       let settle!: (value: AuthoredRead) => void;
       let defer = false;
@@ -619,9 +622,15 @@ for (const action of ['reload', 'field'])
       const show = (value = initial) =>
         render(<AuthoredField initial={value} locale="en" transport={transport} confirm={fixture.confirm} />);
       await show();
-      await act(async () => user.selectOptions(within(host).getByRole('combobox'), other));
+      const selectProperty = async (label: string) => {
+        await act(async () => user.click(within(host).getByRole('combobox', { name: m.candidate_field() })));
+        await act(async () =>
+          user.click(await within(document.body).findByRole('option', { name: label, exact: true })),
+        );
+      };
+      await selectProperty('Other authored field');
       expect(window.document.activeElement).not.toBe(within(host).getByRole('region', { name: m.authored_selected() }));
-      await act(async () => user.selectOptions(within(host).getByRole('combobox'), authoredProperty));
+      await selectProperty(initial.release.properties[authoredProperty]!.labels.en!);
       defer = true;
       await compose(host, 'Private replacement survives a denied reload.');
       const props = (element: Element) =>
@@ -653,8 +662,7 @@ for (const action of ['reload', 'field'])
       defer = false;
       await click(host, m.catalogue_retry_loading_result());
       expect(window.document.activeElement).not.toBe(within(host).getByRole('region', { name: m.authored_selected() }));
-      if (action === 'field')
-        await act(async () => user.selectOptions(within(host).getByRole('combobox'), authoredProperty));
+      if (action === 'field') await selectProperty(initial.release.properties[authoredProperty]!.labels.en!);
       const reads = read.mock.calls.length;
       await act(async () => {
         savedReload();

@@ -42,6 +42,7 @@ import {
   type EditorWorkbenchHandle,
 } from './editor-workbench.tsx';
 import { EditorFindHighlights } from './editor-find.tsx';
+import { EditorCompositionKeymap } from './editor-composition-keymap.ts';
 import { setEditorCommandPreferences } from './editor-command-preferences.ts';
 import { recordTextReplayBatch, skipProvenTextReplay } from './editor-compact-transaction.ts';
 import { editorContentRejected } from './editor-compact-commands.ts';
@@ -63,8 +64,8 @@ import { TableInsert } from './editor-upstream/reactjs-tiptap-editor/create-tabl
 import { productLabelsForLanguage } from './editor-upstream/reactjs-tiptap-editor/control-labels.ts';
 import { canInsertSizedTable, type TableInsertTarget } from './editor-table-commands.ts';
 import {
-  isLinkRangeValid,
-  exactLinkRange,
+  eligibleLinkRange,
+  captureLink,
   LinkMenu,
   linkHref,
   revalidateTextSelection,
@@ -278,12 +279,7 @@ function mapSavedLinkRange(
   transaction: Transaction,
 ): LinkVisitRange | null {
   if (!transaction.docChanged) return range;
-  const originalSelection = range.selection
-    ? {
-        from: transaction.mapping.map(range.selection.from, 1),
-        to: transaction.mapping.map(range.selection.to, range.selection.from === range.selection.to ? 1 : -1),
-      }
-    : undefined;
+  const originalSelection = range.selectionBookmark.map(transaction.mapping);
   if (range.from === range.to) {
     const before = transaction.mapping.map(range.from, -1);
     const after = transaction.mapping.map(range.to, 1);
@@ -292,15 +288,15 @@ function mapSavedLinkRange(
       ...range,
       from: before,
       to: after,
-      ...(originalSelection ? { selection: originalSelection } : {}),
+      selectionBookmark: originalSelection,
     };
-    return isLinkRangeValid(editor, mapped) ? mapped : null;
+    return eligibleLinkRange(editor, mapped, mapped.storedMarks) ? mapped : null;
   }
   const from = transaction.mapping.map(range.from, 1);
   const to = transaction.mapping.map(range.to, -1);
   if (from >= to) return null;
-  const mapped = { ...range, from, to, ...(originalSelection ? { selection: originalSelection } : {}) };
-  if (!isLinkRangeValid(editor, mapped)) return null;
+  const mapped = { ...range, from, to, selectionBookmark: originalSelection };
+  if (!eligibleLinkRange(editor, mapped, mapped.storedMarks)) return null;
   // Editing the captured content or its marks retires the URL draft; unrelated mapped edits keep it.
   return transaction.before.slice(range.from, range.to).eq(editor.state.doc.slice(from, to)) ? mapped : null;
 }
@@ -563,6 +559,7 @@ export function RichTextEditor({
   const editor = useEditor(
     {
       extensions: [
+        EditorCompositionKeymap,
         EditorHistory,
         EditorFindHighlights,
         ...withMentionView(
@@ -585,6 +582,7 @@ export function RichTextEditor({
         mentionExtension(mentionHandlers, mentionEnabled),
       ],
       content: normalizedValue.doc as JSONContent,
+      enableCoreExtensions: { keymap: false },
       coreExtensionOptions: { delete: { filterTransaction: skipProvenTextReplay } },
       injectCSS: false,
       immediatelyRender: false,
@@ -997,7 +995,8 @@ export function RichTextEditor({
       if (editor && !editor.isDestroyed) {
         revalidateTextSelection(editor);
         const range = linkRangeRef.current;
-        if (range?.visit === visitRef.current && !isLinkRangeValid(editor, range)) setOwnedLinkRange(null);
+        if (range?.visit === visitRef.current && !eligibleLinkRange(editor, range, range.storedMarks))
+          setOwnedLinkRange(null);
       }
     } else if (incomingChanged) {
       emittedKey.current = null;
@@ -1109,15 +1108,12 @@ export function RichTextEditor({
   }, [editor, isCurrent]);
   const openLink = useCallback(() => {
     if (!isCurrent() || !editor?.schema.marks.link || editor.view.composing) return;
-    const selection = editor.state.selection;
-    if (!selection.$from.parent.inlineContent || !selection.$to.parent.inlineContent) return;
-    const target = exactLinkRange(editor, selection);
+    const target = captureLink(editor, isCurrent);
+    if (!target) return;
     setOwnedImagePosition(null);
     setTableRequest(null);
     setOwnedLinkRange({
-      from: target.from,
-      to: target.to,
-      selection: { from: selection.from, to: selection.to },
+      ...target,
       id: ++nextLinkId.current,
       visit,
       url: linkHref(editor, target),
