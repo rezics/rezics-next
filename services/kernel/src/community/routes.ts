@@ -40,13 +40,14 @@ import {
 } from './schemas.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { parseItem } from 'structured-headers';
 import type { Static, TSchema } from 'typebox';
 import { Compile } from 'typebox/compile';
 import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { RealmLastOwnerError } from '../access/resource-access-errors.ts';
-import { withConnection } from '../database/pool.ts';
+import { throwAccessUnavailable } from '../access/unavailable.ts';
+import { withBoundedReadConnection, withConnection } from '../database/pool.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { PROBLEMS, ProblemError, type ProblemCode } from '../http/problem-error.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
@@ -2619,8 +2620,18 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           return await admission.run('normal', job, async () => {
             const currentRealm = await readRealm(realmDependencies(), actor, realmId, { deadline: job.deadline });
             if (!currentRealm) throw new ProblemError('not_found');
+            const mapUnavailable = (error: unknown): unknown => {
+              try {
+                throwAccessUnavailable(error, job.deadline);
+              } catch (unavailable) {
+                return unavailable;
+              }
+              return error;
+            };
+            const withPermissionRead = <T>(read: (client: PoolClient) => Promise<T>) =>
+              withBoundedReadConnection(dependencies.pool, job.deadline, read, { mapError: mapUnavailable });
             const managerCheck = await authorize({ route, id: realmId });
-            const managerAllowed = await withConnection(dependencies.pool, (client) =>
+            const managerAllowed = await withPermissionRead((client) =>
               managerCheck(deadlineClient(client, job.deadline)),
             );
             if (!managerAllowed) throw new ProblemError('forbidden');
@@ -2688,7 +2699,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
                   { route, id: realmId },
                   { pool: dependencies.pool, deadline: job.deadline },
                 );
-                return await withConnection(dependencies.pool, (client) => check(deadlineClient(client, job.deadline)));
+                return await withPermissionRead((client) => check(deadlineClient(client, job.deadline)));
               } catch {
                 return null;
               }
@@ -2750,7 +2761,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
             const finalRealm = await readRealm(realmDependencies(), actor, realmId, { deadline: job.deadline });
             if (!finalRealm) throw new ProblemError('not_found');
             const finalManagerCheck = await authorize({ route, id: realmId });
-            const finalManagerAllowed = await withConnection(dependencies.pool, (client) =>
+            const finalManagerAllowed = await withPermissionRead((client) =>
               finalManagerCheck(deadlineClient(client, job.deadline)),
             );
             if (!finalManagerAllowed) throw new ProblemError('forbidden');
