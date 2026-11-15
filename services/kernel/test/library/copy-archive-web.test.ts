@@ -190,17 +190,19 @@ beforeAll(async () => {
   const client = createKernelClient('http://kernel.test', {
     fetch: (async (url, init) => {
       const request = new Request(url, init);
-      if (new URL(request.url).pathname.endsWith('/$apply')) {
+      const applying = /^\/v1\/libraryCopyArchives\/([^/]+)\/progressReviews\/([^/:]+):apply$/.exec(
+        new URL(request.url).pathname,
+      );
+      if (applying) {
         originals.push({ key: request.headers.get('idempotency-key')!, command: request.url });
         if (interrupt) {
           interrupt = false;
-          const match = new URL(request.url).pathname.split('/'),
-            abort = new AbortController();
+          const abort = new AbortController();
           await expect(
             service.applyProgress(
               owner.actor,
-              match[3]!,
-              match[5]!,
+              applying[1]!,
+              applying[2]!,
               JSON.parse(request.headers.get('idempotency-key')!),
               abort.signal,
               () => abort.abort(),
@@ -258,23 +260,43 @@ async function independent() {
   const capture = await response('POST', '/v1/libraryExports');
   let cursor = capture.first;
   const facts: unknown[] = [];
+  const activity: { subjectId: string; activityAt: string | null; finishedAt: string | null }[] = [];
   try {
     while (cursor) {
       const page = await response(
         'GET',
         `/v1/libraryExports/${capture.exportId}/pages?cursor=${encodeURIComponent(cursor)}`,
       );
-      facts.push(
-        ...page.records.filter((row: { section: string }) =>
-          ['entries', 'holdings', 'journals', 'annotations', 'provenance'].includes(row.section),
-        ),
-      );
+      for (const row of page.records) {
+        if (!['entries', 'holdings', 'journals', 'annotations', 'provenance'].includes(row.section)) continue;
+        if (row.section === 'entries') {
+          activity.push({ subjectId: row.subject_id, activityAt: row.activity_at, finishedAt: row.finished_at });
+          const entry = { ...row };
+          delete entry.activity_at;
+          delete entry.finished_at;
+          facts.push(entry);
+        } else facts.push(row);
+      }
       cursor = page.next;
     }
   } finally {
     expect(await response('DELETE', `/v1/libraryExports/${capture.exportId}`)).toMatchObject({ state: 'cancelled' });
   }
-  return facts;
+  return { facts, activity };
+}
+function assertIndependent(
+  after: Awaited<ReturnType<typeof independent>>,
+  before: Awaited<ReturnType<typeof independent>>,
+) {
+  expect(after.facts).toEqual(before.facts);
+  expect(after.activity.map((entry) => entry.subjectId)).toEqual(before.activity.map((entry) => entry.subjectId));
+  for (let index = 0; index < after.activity.length; index++)
+    for (const field of ['activityAt', 'finishedAt'] as const) {
+      const current = after.activity[index]![field];
+      const prior = before.activity[index]![field];
+      if (current === null) expect(prior).toBeNull();
+      else expect(Date.parse(current)).toBeGreaterThanOrEqual(prior === null ? 0 : Date.parse(prior));
+    }
 }
 async function journey() {
   const value = new ProgressRecoveryJourney(port, entryKey(), () => true);
@@ -357,7 +379,7 @@ test('mounted generated journey pages a completed export and creates distinct eq
     { episodeSubjectId: memberId, completed: true },
     { episodeSubjectId: detachedId, completed: false },
   ]);
-  expect(await independent()).toEqual(before);
+  assertIndependent(await independent(), before);
   await j.remove();
   expect(j.snapshot().notice).toBe('removed');
   expect((await response('GET', `/v1/progressSessions/${ids[0]}`)).progressSession.id).toBe(ids[0]);
@@ -400,5 +422,5 @@ test('effect-before-checkpoint and response loss replay original routes/keys; ca
   expect(removed.complete).toBe(false);
   await second.remove();
   expect(second.snapshot().notice).toBe('removed');
-  expect(await independent()).toEqual(before);
+  assertIndependent(await independent(), before);
 }, 120000);
