@@ -125,11 +125,13 @@ function listed(item: { availability: string; visibility?: string }): boolean {
 async function listAuthorItems(
   dependencies: AuthorItemDependencies,
   accountId: string,
-  context: ReadContext,
-  input: AuthorPageInput,
+  request: ReadContext,
+  selection: AuthorPageInput,
   list: List,
   kind: AuthorThreadKind | null,
 ): Promise<AuthorPage<AuthorThreadEntry | AuthorPostEntry>> {
+  const context = { ...request };
+  const input = { ...selection };
   const limit = input.limit ?? PAGE_LIMIT;
   if (!Number.isInteger(limit) || limit < 1 || limit > PAGE_LIMIT) throw new RangeError('Page limit must be 1 to 20');
   const now = dependencies.cursorNow();
