@@ -14,6 +14,16 @@ import { createSourceStatisticIsolationFixture } from './source-statistic-isolat
 type IsolationActor = Awaited<ReturnType<typeof createSourceStatisticIsolationFixture>>['actors']['importer'];
 let fixture: Awaited<ReturnType<typeof createSourceStatisticIsolationFixture>>;
 let observer: ReturnType<typeof observeSql>;
+let payloadStatement: string;
+let headStatement: string;
+
+function witnessedStatement(sql: string): string {
+  const body = sql.replace(/[;\s]+$/u, '');
+  const observed = observer.records.find(({ statement }) => statement === sql ||
+    (statement.startsWith(body) && /^\s*\/\*[\s\S]*\*\/;?\s*$/u.test(statement.slice(body.length))));
+  if (!observed) throw new Error('Expected native statement was not observed');
+  return observed.statement;
+}
 beforeAll(async () => {
   fixture = await createSourceStatisticIsolationFixture({ sourceFences: true });
   fixture.database.pool.options.max = 4;
@@ -21,6 +31,13 @@ beforeAll(async () => {
   await fixture.grantImporter(fixture.actors.importer);
   await fixture.grantImporter(fixture.actors.secondImporter);
   observer = observeSql(fixture.database.pool);
+  // Learn the actual driver text once, including the producer's SQL provenance
+  // comment. Barriers still match the exact native statement, not a mock query.
+  const warmup = await fixture.createSubject();
+  await json(await write(warmup, { ...value('900001'), expectedObservation: null }));
+  await json(await inspect(warmup, '?history=true'));
+  payloadStatement = witnessedStatement(payloadQuery.sql);
+  headStatement = witnessedStatement(headQuery.sql);
 }, 180_000);
 afterAll(async () => {
   await observer?.close();
@@ -125,7 +142,7 @@ test('a concealed lookahead and raw item preserve current head and bounded conti
   expect(last.head).toEqual(first.head);
   expect(last.history!.items.map((item) => item.digest)).toEqual([old!]);
   expect(last.history!.nextCursor).toBeNull();
-  const fetched = observer.records.slice(observationStart).filter((row) => row.statement === payloadQuery.sql);
+  const fetched = observer.records.slice(observationStart).filter((row) => row.statement === payloadStatement);
   expect(fetched).toHaveLength(3);
   expect(JSON.stringify(fetched.map((row) => row.parameters))).not.toContain(middle!);
   await json(await inspect(id, `?digest=${middle}`), 404);
@@ -135,7 +152,7 @@ test('a concealed lookahead and raw item preserve current head and bounded conti
   await json(await inspect(id, `?digest=${'0'.repeat(64)}`), 404);
   await json(await fixture.request('GET', `${path(id)}/observations`, { actor: null }), 401);
   await json(await inspect(id, '', fixture.actors.author), 403);
-  const finalHead = observer.hold({ statement: payloadQuery.sql }, 'after');
+  const finalHead = observer.hold({ statement: payloadStatement }, 'after');
   const required = inspect(id, `?digest=${old}`);
   await finalHead.entered;
   try {
@@ -289,7 +306,7 @@ test('source changes and failed fills retry the same raw cursor, without publish
   const { id, digests } = await history(['201', '202', '203']);
   const first = await page(id);
   const cursor = first.history!.nextCursor!;
-  const hold = observer.hold({ statement: payloadQuery.sql }, 'after');
+  const hold = observer.hold({ statement: payloadStatement }, 'after');
   const pending = inspect(id, `?cursor=${encodeURIComponent(cursor)}`);
   await hold.entered;
   try {
@@ -303,7 +320,7 @@ test('source changes and failed fills retry the same raw cursor, without publish
   expect(retried.head.digest).toBe(digests[2]!);
   expect(retried.history!.items).toEqual([]);
   expect(retried.history!.nextCursor).toBeString();
-  const finalFill = observer.hold({ statement: headQuery.sql, occurrence: 2 }, 'after');
+  const finalFill = observer.hold({ statement: headStatement, occurrence: 2 }, 'after');
   const changingLookahead = inspect(id, `?cursor=${encodeURIComponent(cursor)}`);
   await finalFill.entered;
   try {
@@ -319,7 +336,7 @@ test('source changes and failed fills retry the same raw cursor, without publish
   expect(end.head).toEqual(stable.head);
   expect(end.history).toEqual({ items: [], nextCursor: null });
   observer.armFault({
-    match: { statement: headQuery.sql },
+    match: { statement: headStatement },
     boundary: 'before',
     error: new Error('inspection dependency failed'),
   });
@@ -331,7 +348,7 @@ test('caller revocation and Subject identity changes during hydration withhold t
   const { id, digests } = await history(['221', '222', '223']);
   const first = await page(id);
   const cursor = first.history!.nextCursor!;
-  const heldPayload = observer.hold({ statement: payloadQuery.sql }, 'after');
+  const heldPayload = observer.hold({ statement: payloadStatement }, 'after');
   const pending = inspect(id, `?cursor=${encodeURIComponent(cursor)}`);
   await heldPayload.entered;
   try {
@@ -347,7 +364,7 @@ test('caller revocation and Subject identity changes during hydration withhold t
   const identityPage = await page(identity.id);
   const identityCursor = identityPage.history!.nextCursor!;
   const survivor = await fixture.createSubject();
-  const heldIdentityPayload = observer.hold({ statement: payloadQuery.sql }, 'after');
+  const heldIdentityPayload = observer.hold({ statement: payloadStatement }, 'after');
   const pendingIdentity = inspect(identity.id, `?cursor=${encodeURIComponent(identityCursor)}`);
   await heldIdentityPayload.entered;
   try {

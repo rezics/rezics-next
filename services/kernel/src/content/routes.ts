@@ -41,6 +41,7 @@ import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { createApp } from '../http/app.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { ProblemError } from '../http/problem-error.ts';
+import { withAppliedCommandEffect } from '../http/problem.ts';
 import { problemSchema } from '../http/problem-schema.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, SESSION_HEADER } from '@rezics/operations/protocol';
@@ -474,46 +475,51 @@ async function parseContentBody(
   }
 }
 
-async function contentOperation<T>(operation: () => Promise<T>): Promise<T> {
+async function contentOperation<T>(operation: (applied: () => void) => Promise<T>): Promise<T> {
+  let applied = false;
   try {
-    return await operation();
+    return await operation(() => {
+      applied = true;
+    });
   } catch (error) {
-    if (error instanceof BoardSlowModeInputError) throw new ProblemError('invalid_request');
-    if (error instanceof BoardSlowModeError)
-      throw new ProblemError('board_slow_mode', {
-        effectStatus: 'not_applied',
-        extensions: { retryAt: error.retryAt, intervalSeconds: error.intervalSeconds },
-        headers: { 'retry-after': new Date(Math.ceil(Date.parse(error.retryAt) / 1000) * 1000).toUTCString() },
-      });
-    if (error instanceof BoardSlowAdmissionUnavailableError)
-      throw new ProblemError('dependency_unavailable', {
-        effectStatus: 'not_applied',
-        headers: { 'retry-after': String(error.retryAfterSeconds) },
-      });
-    if (error instanceof ContentUndisclosedError)
-      throw new ProblemError('not_found', { effectStatus: 'not_applicable' });
-    if (error instanceof DocumentTooLargeError) throw new ProblemError('content_too_large');
-    if (error instanceof InvalidDocumentError) throw new ProblemError('invalid_request');
-    if (error instanceof InvalidMediaClaimError) throw new ProblemError('invalid_request');
-    if (error instanceof MediaUnavailableError) throw new ProblemError('media_unavailable');
-    if (error instanceof CommandNotFoundError || error instanceof ReadNotFoundError)
-      throw new ProblemError('not_found');
-    if (error instanceof ContentForbiddenError || error instanceof GrantDeniedError)
-      throw new ProblemError('forbidden');
-    if (error instanceof InvalidSitemapCursorError) throw new ProblemError('invalid_cursor');
-    if (error instanceof InvalidGlobalBoardDirectoryCursorError) throw new ProblemError('invalid_cursor');
-    if (error instanceof BoardCreationInputError) throw new ProblemError('invalid_request');
-    if (error instanceof BoardCreationConflictError) throw new ProblemError('conflict');
-    if (error instanceof BoardPinLimitError) throw new ProblemError('conflict');
-    if (error instanceof ReviewConflictError) throw new ProblemError('conflict');
-    if (error instanceof RevisionPreconditionError) throw new ProblemError('precondition_failed');
-    if (
-      error instanceof TypeError &&
-      (error.message === 'Invalid content cursor' || error.message === 'Invalid reaction kind')
-    )
-      throw new ProblemError('invalid_request');
-    throw error;
+    if (applied) return withAppliedCommandEffect(async () => contentFailure(error));
+    return contentFailure(error);
   }
+}
+
+function contentFailure(error: unknown): never {
+  if (error instanceof BoardSlowModeInputError) throw new ProblemError('invalid_request');
+  if (error instanceof BoardSlowModeError)
+    throw new ProblemError('board_slow_mode', {
+      effectStatus: 'not_applied',
+      extensions: { retryAt: error.retryAt, intervalSeconds: error.intervalSeconds },
+      headers: { 'retry-after': new Date(Math.ceil(Date.parse(error.retryAt) / 1000) * 1000).toUTCString() },
+    });
+  if (error instanceof BoardSlowAdmissionUnavailableError)
+    throw new ProblemError('dependency_unavailable', {
+      effectStatus: 'not_applied',
+      headers: { 'retry-after': String(error.retryAfterSeconds) },
+    });
+  if (error instanceof ContentUndisclosedError) throw new ProblemError('not_found', { effectStatus: 'not_applicable' });
+  if (error instanceof DocumentTooLargeError) throw new ProblemError('content_too_large');
+  if (error instanceof InvalidDocumentError) throw new ProblemError('invalid_request');
+  if (error instanceof InvalidMediaClaimError) throw new ProblemError('invalid_request');
+  if (error instanceof MediaUnavailableError) throw new ProblemError('media_unavailable');
+  if (error instanceof CommandNotFoundError || error instanceof ReadNotFoundError) throw new ProblemError('not_found');
+  if (error instanceof ContentForbiddenError || error instanceof GrantDeniedError) throw new ProblemError('forbidden');
+  if (error instanceof InvalidSitemapCursorError) throw new ProblemError('invalid_cursor');
+  if (error instanceof InvalidGlobalBoardDirectoryCursorError) throw new ProblemError('invalid_cursor');
+  if (error instanceof BoardCreationInputError) throw new ProblemError('invalid_request');
+  if (error instanceof BoardCreationConflictError) throw new ProblemError('conflict');
+  if (error instanceof BoardPinLimitError) throw new ProblemError('conflict');
+  if (error instanceof ReviewConflictError) throw new ProblemError('conflict');
+  if (error instanceof RevisionPreconditionError) throw new ProblemError('precondition_failed');
+  if (
+    error instanceof TypeError &&
+    (error.message === 'Invalid content cursor' || error.message === 'Invalid reaction kind')
+  )
+    throw new ProblemError('invalid_request');
+  throw error;
 }
 
 function expectedRevision(header: string | null): string | null {
@@ -799,9 +805,10 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       async ({ actor, body, request, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const context = requestContext(request, job.deadline, dependencies);
-        return contentOperation(() =>
+        return contentOperation((applied) =>
           admission.run('normal', job, async () => {
             const result = await createBoard(dependencies, actor, { realmId: null, ...body }, context);
+            applied();
             const board = await readRealmBoard(dependencies, result.value.boardId, {
               actor,
               deadline: job.deadline,
@@ -843,9 +850,10 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         existingId(realmId);
         const context = requestContext(request, job.deadline, dependencies);
-        return contentOperation(() =>
+        return contentOperation((applied) =>
           admission.run('normal', job, async () => {
             const result = await createBoard(dependencies, actor, { realmId, ...body }, context);
+            applied();
             const board = await readRealmBoard(dependencies, result.value.boardId, {
               actor,
               deadline: job.deadline,
@@ -974,7 +982,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       async ({ actor, body, request, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const context = requestContext(request, job.deadline, dependencies);
-        return contentOperation(() =>
+        return contentOperation((applied) =>
           admission.run('normal', job, async () => {
             let result: Awaited<ReturnType<typeof createThread>>;
             try {
@@ -993,6 +1001,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
                 ...(row ? { extensions: { existingThreadId: row.thread_id } } : {}),
               });
             }
+            applied();
             const readContext = { actor, deadline: job.deadline };
             const thread = await readThread(dependencies, result.value.threadId, readContext);
             if (!thread.value) throw new ProblemError('not_found');
@@ -1110,9 +1119,10 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         existingId(id);
         const context = requestContext(request, job.deadline, dependencies);
-        return contentOperation(() =>
+        return contentOperation((applied) =>
           admission.run('normal', job, async () => {
             const result = await createPost(dependencies, actor, { ...body, threadId: id }, context);
+            applied();
             const post = await exactPost(
               result.value.threadId,
               result.value.itemId,
@@ -1402,7 +1412,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       async ({ params: { id }, actor, body, request, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const context = requestContext(request, job.deadline, dependencies);
-        return contentOperation(() =>
+        return contentOperation((applied) =>
           admission.run('normal', job, async () => {
             const readContext = { actor, deadline: job.deadline };
             const threadId = await containingThread(id, readContext);
@@ -1417,6 +1427,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
               },
               context,
             );
+            applied();
             const post = await exactPost(
               result.value.threadId,
               result.value.itemId,
