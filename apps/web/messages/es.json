@@ -13277,5 +13277,6 @@
   "editor_formatting_under": "Debajo",
   "editor_formatting_text_emphasis": "Marcas de énfasis",
   "editor_formatting_code_language_help": "Establecer el lenguaje de programación de este bloque, separado del idioma natural del texto.",
-  "editor_formatting_text_style_help": "Cambiar los colores del texto y del fondo del documento. La tipografía y el tamaño personales siguen en las preferencias del editor."
+  "editor_formatting_text_style_help": "Cambiar los colores del texto y del fondo del documento. La tipografía y el tamaño personales siguen en las preferencias del editor.",
+  "knowledge_media_save_first": "Guarda el documento antes de añadir imágenes. Basta con un documento privado vacío."
 }
