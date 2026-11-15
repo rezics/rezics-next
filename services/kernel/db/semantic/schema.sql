@@ -6456,6 +6456,54 @@ CREATE TABLE semantic.identity_epoch_mapping_plan (
 
 
 --
+-- Name: identity_epoch_mapping_point_custody; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_mapping_point_custody (
+    partition_no integer NOT NULL,
+    job_id uuid NOT NULL,
+    original uuid NOT NULL,
+    job_epoch bigint NOT NULL,
+    scope_digest text NOT NULL,
+    route integer NOT NULL,
+    terminal uuid NOT NULL,
+    generation uuid NOT NULL,
+    incarnation uuid NOT NULL,
+    basis_version bigint NOT NULL,
+    owner_epoch integer NOT NULL,
+    control_partition integer NOT NULL,
+    enrollment uuid NOT NULL,
+    source_revision bigint NOT NULL,
+    source_epoch integer NOT NULL,
+    export_transaction uuid CONSTRAINT identity_epoch_mapping_point_custod_export_transaction_not_null NOT NULL,
+    prepared_transaction_id uuid CONSTRAINT identity_epoch_mapping_point_c_prepared_transaction_id_not_null NOT NULL,
+    prepared_epoch integer NOT NULL,
+    prepared_position bigint NOT NULL,
+    acquired_transaction_id uuid CONSTRAINT identity_epoch_mapping_point_c_acquired_transaction_id_not_null NOT NULL,
+    acquired_epoch integer NOT NULL,
+    acquired_position bigint NOT NULL,
+    registration_transaction_id uuid CONSTRAINT identity_epoch_mapping_poin_registration_transaction_i_not_null NOT NULL,
+    registration_epoch integer CONSTRAINT identity_epoch_mapping_point_custod_registration_epoch_not_null NOT NULL,
+    registration_position bigint CONSTRAINT identity_epoch_mapping_point_cus_registration_position_not_null NOT NULL,
+    registration_xid text NOT NULL,
+    install_transaction_id uuid CONSTRAINT identity_epoch_mapping_point_cu_install_transaction_id_not_null NOT NULL,
+    transaction_id uuid NOT NULL,
+    proof_partition integer,
+    proof_transaction_id uuid,
+    proof_epoch integer,
+    proof_position bigint,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    CONSTRAINT identity_epoch_mapping_point_custody_check CHECK ((route = ((get_byte(uuid_send(original), 10) * 256) + get_byte(uuid_send(original), 11)))),
+    CONSTRAINT identity_epoch_mapping_point_custody_check1 CHECK ((((partition_no = control_partition) AND (proof_partition IS NULL) AND (proof_transaction_id IS NULL) AND (proof_epoch IS NULL) AND (proof_position IS NULL)) OR ((partition_no <> control_partition) AND (partition_no = (route / 16)) AND (proof_partition = control_partition) AND (proof_transaction_id IS NOT NULL) AND (proof_epoch IS NOT NULL) AND (proof_position IS NOT NULL)))),
+    CONSTRAINT identity_epoch_mapping_point_custody_control_partition_check CHECK (((control_partition >= 0) AND (control_partition <= 4095))),
+    CONSTRAINT identity_epoch_mapping_point_custody_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT identity_epoch_mapping_point_custody_registration_xid_check CHECK ((char_length(registration_xid) > 0)),
+    CONSTRAINT identity_epoch_mapping_point_custody_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT identity_epoch_mapping_point_custody_scope_digest_check CHECK ((char_length(scope_digest) = 64))
+);
+
+
+--
 -- Name: identity_epoch_mapping_undo; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -10239,6 +10287,14 @@ ALTER TABLE ONLY semantic.identity_epoch_mapping_plan
 
 
 --
+-- Name: identity_epoch_mapping_point_custody identity_epoch_mapping_point_custody_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_mapping_point_custody
+    ADD CONSTRAINT identity_epoch_mapping_point_custody_pkey PRIMARY KEY (partition_no, job_id, original);
+
+
+--
 -- Name: identity_epoch_mapping_undo identity_epoch_mapping_undo_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -12233,6 +12289,13 @@ CREATE UNIQUE INDEX identity_epoch_mapping_plan_erasure_key ON semantic.identity
 
 
 --
+-- Name: identity_epoch_mapping_point_custody_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX identity_epoch_mapping_point_custody_erasure_key ON semantic.identity_epoch_mapping_point_custody USING btree (partition_no, erasure_key);
+
+
+--
 -- Name: identity_epoch_mapping_undo_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -14066,6 +14129,20 @@ CREATE CONSTRAINT TRIGGER identity_epoch_mapping_plan_erasure AFTER INSERT OR UP
 --
 
 CREATE TRIGGER identity_epoch_mapping_plan_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_mapping_plan FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_epoch_mapping_point_custody identity_epoch_mapping_point_custody_erasure; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_mapping_point_custody_erasure AFTER INSERT OR UPDATE ON semantic.identity_epoch_mapping_point_custody DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_mapping_state_erasure();
+
+
+--
+-- Name: identity_epoch_mapping_point_custody identity_epoch_mapping_point_custody_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_mapping_point_custody_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_mapping_point_custody FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
 
 
 --
@@ -15994,6 +16071,14 @@ ALTER TABLE ONLY semantic.identity_epoch_mapping_payload
 
 ALTER TABLE ONLY semantic.identity_epoch_mapping_plan
     ADD CONSTRAINT identity_epoch_mapping_plan_partition_no_job_id_fkey FOREIGN KEY (partition_no, job_id) REFERENCES semantic.identity_epoch_job(partition_no, job_id);
+
+
+--
+-- Name: identity_epoch_mapping_point_custody identity_epoch_mapping_point_c_partition_no_transaction_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_mapping_point_custody
+    ADD CONSTRAINT identity_epoch_mapping_point_c_partition_no_transaction_id_fkey FOREIGN KEY (partition_no, transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id) DEFERRABLE INITIALLY DEFERRED;
 
 
 --
