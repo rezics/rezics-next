@@ -1,4 +1,8 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
+import { createPublicIdentityOutputCapture } from '../semantic/identity-public-output-capture.ts';
+import { publicOutputAdvanceWork } from '../semantic/identity-public-output-work.ts';
+import { withCollectionReadSnapshot } from './collection-read-connection.ts';
+import { requireLibraryDomain } from './domain-binding.ts';
 import {
   advanceCollectionPublicationEpisodePhase,
   readCollectionPublicationEpisode,
@@ -166,6 +170,37 @@ async function activate(context: Context, input: WorkflowInput): Promise<void> {
   await createCollectionPublicationFinalActivation({ workContext: context }).activate(locator, locator.publicationId);
 }
 
+/** This work starts only after the same native episode selects its COMPLETE output. */
+async function captureSelectedOutput(context: Context, input: WorkflowInput): Promise<'more' | 'done'> {
+  const locator = validate(input);
+  const deadline = workStepDeadline();
+  const episode = await withCollectionReadSnapshot(context.pool, deadline, (tx) =>
+    readCollectionPublicationEpisode(tx, locator),
+  );
+  if (episode?.phase !== 'complete' || episode.source.rule.kind !== 'builtin') return 'done';
+  const native = requireLibraryDomain().nativePublicOutput;
+  if (!native) throw unavailable();
+  const { access } = context.getAuthorization();
+  const producer = createPublicIdentityOutputCapture(
+    { pool: context.pool, access, routeKey: readMembershipWorkConfig(context.env).routeKey, clock: context.clock },
+    native,
+  );
+  const { transactionId, position, sourceGeneration } = episode.output.publication;
+  const result = await producer.advancePublication(
+    { ...episode.output.ref, activation: { transactionId, position, sourceGeneration } },
+    episode.source.rule.releaseDigest,
+    {
+      deadline,
+      allowance: { reservationId: episode.output.ref.generation, remaining: publicOutputAdvanceWork() },
+    },
+  );
+  if (result.status === 'more') return 'more';
+  if (result.status === 'sealed') return 'done';
+  throw new ProblemError('dependency_unavailable', {
+    detail: 'The selected Collection output is awaiting identity coverage.',
+  });
+}
+
 /** Register the locator-only continuation on the Library module's existing workflows queue. */
 export function registerCollectionPublicationWork(context: WorkContext): void {
   const prepare = DBOS.registerStep((input: WorkflowInput) => prepareCollectionPublicationSource(context, input), {
@@ -206,18 +241,53 @@ export function registerCollectionPublicationWork(context: WorkContext): void {
     maxAttempts: 3,
     intervalSeconds: 1,
   });
+  const capture = DBOS.registerStep((input: WorkflowInput) => captureSelectedOutput(context, input), {
+    name: 'library.collectionPublicationCaptureOutput',
+    retriesAllowed: true,
+    maxAttempts: 3,
+    intervalSeconds: 1,
+  });
+  const continueCapture = DBOS.registerStep(
+    async (input: WorkflowInput, segment: number) => {
+      const locator = validate(input);
+      await context.client.enqueue(
+        {
+          queueName: 'workflows',
+          workflowName: COLLECTION_PUBLICATION_WORKFLOW,
+          workflowID: `${locator.publicationId}:output:${segment}`,
+          workflowIDReusePolicy: 'return-existing',
+        },
+        input,
+        segment,
+      );
+    },
+    {
+      name: 'library.collectionPublicationContinueOutputCapture',
+      retriesAllowed: true,
+      maxAttempts: 3,
+      intervalSeconds: 1,
+    },
+  );
   DBOS.registerWorkflow(
-    async (input: WorkflowInput) => {
-      let preparation: 'more' | 'ready' | 'done' = 'more';
-      for (let n = 0; n < 100 && preparation === 'more'; n++) preparation = await prepare(input);
-      if (preparation === 'done') return;
-      if (preparation === 'more') {
-        const sequence = Number(DBOS.workflowID!.split(':prepare:')[1] ?? 0) + 1;
-        await continuePreparation(input, sequence);
-        return;
+    async (input: WorkflowInput, outputSegment?: number) => {
+      if (outputSegment === undefined) {
+        let preparation: 'more' | 'ready' | 'done' = 'more';
+        for (let n = 0; n < 100 && preparation === 'more'; n++) preparation = await prepare(input);
+        if (preparation === 'more') {
+          const sequence = Number(DBOS.workflowID!.split(':prepare:')[1] ?? 0) + 1;
+          await continuePreparation(input, sequence);
+          return;
+        }
+        if (preparation === 'ready') {
+          const result = await step(input);
+          if (result === 'more') return;
+          if (result === 'sealed') await activateStep(input);
+        }
       }
-      const result = await step(input);
-      if (result === 'sealed') await activateStep(input);
+      for (let page = 0; page < 100; page++) {
+        if ((await capture(input)) === 'done') return;
+      }
+      await continueCapture(input, (outputSegment ?? 0) + 1);
     },
     { name: COLLECTION_PUBLICATION_WORKFLOW },
   );

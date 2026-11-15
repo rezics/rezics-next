@@ -818,8 +818,10 @@ The actual native episode types live in `collection-publication-episode-contract
 role's locator and admission/getter declarations live in `collection-publication-work-admission.ts`. Their body
 validates current native episode and private Source evidence on the same Core client before returning pinned work
 data. The mounted service uses the real begin/status/initiator readers; the single existing Library WorkModule
-registers locator-only staging and final activation. This boundary does not claim successful whole-query publication,
-final activation or public Source proof.
+registers locator-only staging and final activation. After native activation, the built-in publication workflow binds the same COMPLETE output to Semantic's public
+capture and resumes its stored eight-key continuation until it can seal. The public members reader uses that
+selected seal, checks live original and terminal disclosure, and binds cursors to the generation and manifest.
+A pending capture keeps members unavailable, including when a publication declares zero members.
 `collection-publication-http.test.ts` retains the unmet real API/default-worker acceptance and focused closed
 grammar/privacy assertions. It uses the existing native fixture and actual output rows/receipt, with no replacement
 worker or domain backend. Schema availability and local typing do not establish that native acceptance.

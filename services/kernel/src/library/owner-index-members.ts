@@ -37,7 +37,6 @@ export async function readCollectionSourceMembers(
   deps: OwnerQueryDependencies & { tokens: KeyRing },
   input: {
     actor: Actor;
-    scope: 'private_builtin' | 'activated_output';
     collectionId: string;
     limit: number;
     cursor?: string | null;
@@ -51,7 +50,6 @@ export async function readCollectionSourceMembers(
     readSourceVersion: () => Promise<string>;
   },
 ): Promise<{ members: DynamicMemberView[]; next: string | null }> {
-  if (input.scope === 'activated_output' && input.query) throw new ProblemError('unsupported_query');
   const clock = deps.clock ?? systemClock;
   const binding = {
     route: 'GET /v1/collections/:collectionId/members',
@@ -60,7 +58,7 @@ export async function readCollectionSourceMembers(
       collectionId: input.collectionId,
       limit: input.limit,
       order: 'id',
-      source: input.scope,
+      source: 'private_builtin',
       ...(input.query
         ? {
             filter: createHash('sha256').update(canonicalize(input.query.filter)!).digest('hex'),
@@ -98,34 +96,20 @@ export async function readCollectionSourceMembers(
   const at = await withConnection(deps.pool, (client) => mintReadTime(client, clock));
   try {
     const context = { actor: input.actor, at, deadline: input.deadline };
-    let runtime;
-    try {
-      runtime = await openOwnerQuery(deps, {
-        actor: input.actor,
-        collectionId: input.collectionId,
-        deadline: input.deadline,
-        work: ledger,
-        logical: input.scope === 'private_builtin',
-        at,
-      });
-    } catch (error) {
-      // Without a submitted continuation, a stale derived public generation is unavailable preparation.
-      // It must not be returned as an old selection or inferred as an empty result.
-      if (
-        input.scope === 'activated_output' &&
-        input.cursor == null &&
-        error instanceof ProblemError &&
-        error.code === 'stale_cursor'
-      )
-        throw new ProblemError('dependency_unavailable');
-      throw error;
-    }
+    const runtime = await openOwnerQuery(deps, {
+      actor: input.actor,
+      collectionId: input.collectionId,
+      deadline: input.deadline,
+      work: ledger,
+      logical: true,
+      at,
+    });
     const prepared = runtime.source;
     const source = runtime.native;
     const filtered = input.query ? await runtime.filter(input.query.filter, input.query.releaseDigest) : null;
     const observed = prepared.observation;
     if (
-      observed.authority.kind !== input.scope ||
+      observed.authority.kind !== 'private_builtin' ||
       (observed.authority.kind === 'private_builtin' &&
         (input.actor.kind !== 'account' || observed.authority.curatorAccountId !== input.actor.accountId))
     )
@@ -212,7 +196,7 @@ export async function readCollectionSourceMembers(
           collectionId: input.collectionId,
           deadline: input.deadline,
           work: ledger,
-          logical: input.scope === 'private_builtin',
+          logical: true,
           at: finalAt,
         });
         const current = finalRuntime.source;
@@ -302,7 +286,7 @@ function requiredRouteKey(key: Uint8Array | undefined): Uint8Array {
 /** Existing private built-in caller, with unchanged native owner and query authority. */
 export function readOwnerMembers(
   deps: OwnerQueryDependencies & { tokens: KeyRing },
-  input: Omit<Parameters<typeof readCollectionSourceMembers>[1], 'actor' | 'scope'> & { actor: AccountActor },
+  input: Omit<Parameters<typeof readCollectionSourceMembers>[1], 'actor'> & { actor: AccountActor },
 ) {
-  return readCollectionSourceMembers(deps, { ...input, scope: 'private_builtin' });
+  return readCollectionSourceMembers(deps, input);
 }
