@@ -63,9 +63,19 @@ parent/order index. The first outline page selects the current structure revisio
 the owner, notebook, parent and selection, and returns `409 stale_cursor` after a structure change. Each outline
 request examines at most 128 indexed candidates and advances past sparse ineligible rows.
 
-A signed-in Subject visit can read the same owned-notebook directory with `subjectId`. That filter selects the
-original Subject association by an account-local index and binds the encrypted continuation to the filter. The
-private section reads only after browser session and exposure admission. The public contribution read is independent.
+A signed-in Subject visit can read the same owned-notebook directory with `subjectId`. The requested Subject and
+its current canonical Subject both require current disclosure. Semantic reads the published terminal directory in
+windows of at most sixteen originals, including the terminal in the first window, and verifies current native
+mapping and visibility. Content applies current Subject Access and seeks only the writer's indexed notebook
+ranges for the admitted originals. Within each window, rows order by descending creation time and ascending
+notebook ID. A sparse window can return a continuation even without rows. The row's Subject ID stays the stored
+attachment original.
+
+The encrypted continuation binds the authenticated viewer, owner epoch, requested Subject and canonical scope.
+Within a window it also binds that window's current mapping and admitted originals. A changed basis requires a
+restart. Pending, moved or incomplete mapping returns unavailable. Content rechecks the owner, subject authority
+and mapping in the snapshot that supplies the rows. The private section reads only after browser session and
+exposure admission. Public contributions use their independent read.
 
 Web's native outline admission, twenty-row request bound, in-place branch browsing and ephemeral document-return
 contract are owned by the [Knowledge interface](../apps/web/src/knowledge/README.md#in-place-notebook-outline).

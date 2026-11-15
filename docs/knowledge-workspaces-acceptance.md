@@ -41,6 +41,12 @@ Each scenario includes native API observations first, then the browser where use
 4. A starts a private original-character dossier before any public Subject exists. Later they explicitly create or
    choose an admitted public Subject and attach the dossier; private text and structure remain private. The action
    does not silently create duplicate public subjects or publish a new type.
+5. A attaches notebooks to two readable Subjects. After a published merge, A finds both from the survivor and
+   from the redirected Subject. Open a notebook and document and compare their original Subject, document and
+   placement IDs before and after the merge. After unmerge, each Subject shows its own attachments again. A
+   continuation issued before either transition requires a restart. A sparse window retains its continuation.
+   Withholding an original hides its rows, a moved or pending mapping is unavailable, and a second viewer cannot
+   use A's continuation or see A's rows.
 
 ### Selected publication and reuse
 

@@ -57,17 +57,22 @@ export function admitKnowledgeNavigationPage(
   request: KnowledgeNavigationRequest,
 ): KnowledgeNavigationResult {
   if (status === 401 || status === 403) return { state: 'denied' };
-  if (status === 409 || (status === 404 && request.kind === 'outline')) return { state: 'changed' };
+  if (
+    status === 409 ||
+    (status === 400 && request.kind === 'owned' && request.subjectId !== undefined && request.cursor !== undefined) ||
+    (status === 404 && request.kind === 'outline')
+  )
+    return { state: 'changed' };
   if (status !== 200 || !record(value) || !cursor(value.next)) return { state: 'unavailable' };
   if (request.kind === 'owned') {
     if (!Array.isArray(value.notebooks) || value.notebooks.length > 20) return { state: 'unavailable' };
     const notebooks: KnowledgeNotebookRow[] = [];
+    // The native filtered read admits the canonical scope. Each row keeps its stored attachment ID.
     for (const row of value.notebooks) {
       if (
         !record(row) ||
         !isKnowledgeId(row.notebookId) ||
         !isKnowledgeId(row.subjectId) ||
-        (request.subjectId !== undefined && row.subjectId !== request.subjectId) ||
         !isKnowledgeId(row.structureRevisionId) ||
         !text(row.title, 256) ||
         typeof row.createdAt !== 'string' ||

@@ -465,6 +465,50 @@ async function readIdentityMappingsWith(
   );
 }
 
+/** The caller owns one repeatable-read snapshot of the physical pool. Read the
+ * same full native keys as ordinary mapping without opening another checkout
+ * or admitting a pending job's unpublished mappings. */
+export async function readReleasedIdentityMappingsInSnapshot(
+  client: Queryable,
+  originals: readonly string[],
+) {
+  if (originals.length > 100) throw new RangeError('Identity page must contain at most 100 originals');
+  const routes = originals.map((id) => {
+    const route = routeOf(id);
+    if (route === null) throw new TypeError('Identity original must be a native routed ID');
+    return route;
+  });
+  const sourceRows = (await client.query(sources.sql, [[...originals], routes])).rows.map(selectedSourceEvidence);
+  const controlRows = sourceRows.filter((row) => row.original && row.control_partition !== null && row.control_group);
+  const sourceHomes = new Set(routes.map(partitionOf));
+  const controlHomes = new Set(controlRows.map((row) => row.control_partition!));
+  const nativeOwners = (await client.query(owners.sql, [[...new Set([...sourceHomes, ...controlHomes])]]))
+    .rows as unknown as IdentityOwnerEvidence[];
+  const locators = controlLocatorsOf(controlRows);
+  const pendingRows = locators.length
+    ? (await client.query(pending.sql, [locators.map((key) => key.partition), locators.map((key) => key.group)]))
+        .rows.map(selectedPendingEvidence)
+    : [];
+  const currentRows = controlRows.length
+    ? (await client.query(current.sql, [
+        controlRows.map((row) => row.control_partition),
+        controlRows.map((row) => row.control_group),
+        controlRows.map((row) => row.original),
+      ])).rows as unknown as IdentityControlEvidence[]
+    : [];
+  const evidence = sortedEvidence({
+    sourceOwners: nativeOwners.filter((row) => sourceHomes.has(row.partition_no)),
+    sourceRows,
+    controlOwners: nativeOwners.filter((row) => controlHomes.has(row.partition_no)),
+    pendingRows,
+    currentRows,
+  });
+  return {
+    mappings: classifyIdentityMappings(requestsFor(originals, routes), evidence),
+    evidence,
+  };
+}
+
 /** One keyed selection in the captured generation, independent of presentation visibility. */
 export async function selectIdentityEpochRemainder(
   tx: CommandTransaction,
