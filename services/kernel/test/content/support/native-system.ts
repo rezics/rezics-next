@@ -530,6 +530,7 @@ async function createNativeContentSystemWithOptions(
       'post:create',
       'post:read',
       'report:create',
+      'moderation:hide',
       'moderation:takedown',
       'moderation:read_reports',
     ];
