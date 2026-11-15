@@ -977,8 +977,8 @@ CREATE TABLE rating.source_statistic_head (
     digest text NOT NULL,
     last_order bigint DEFAULT 0 NOT NULL,
     last_seek_order bigint DEFAULT 0 NOT NULL,
-    CONSTRAINT source_statistic_head_last_seek_order_check CHECK ((last_seek_order >= 0)),
-    CONSTRAINT source_statistic_head_last_order_check CHECK ((last_order >= 0))
+    CONSTRAINT source_statistic_head_last_order_check CHECK ((last_order >= 0)),
+    CONSTRAINT source_statistic_head_last_seek_order_check CHECK ((last_seek_order >= 0))
 );
 
 
@@ -999,7 +999,6 @@ CREATE TABLE rating.source_statistic_observation (
     payload_version smallint DEFAULT 1 NOT NULL,
     local_order bigint,
     seek_order bigint NOT NULL,
-    CONSTRAINT source_statistic_observation_seek_order_check CHECK ((seek_order > 0)),
     CONSTRAINT source_observation_bytes_check CHECK ((octet_length((payload)::text) <= 32768)),
     CONSTRAINT source_statistic_observation_check CHECK (((source = 'vndb'::text) OR ((source_record_id ~ '^[1-9][0-9]{0,15}$'::text) AND
 CASE
@@ -1013,6 +1012,7 @@ END))),
     CONSTRAINT source_statistic_observation_payload_check CHECK ((jsonb_typeof(payload) = 'object'::text)),
     CONSTRAINT source_statistic_observation_payload_version_check CHECK ((payload_version > 0)),
     CONSTRAINT source_statistic_observation_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT source_statistic_observation_seek_order_check CHECK ((seek_order > 0)),
     CONSTRAINT source_statistic_observation_source_alias_check CHECK (((source_alias ~ '^[a-z][a-z0-9_-]{0,31}$'::text) AND (source_alias !~ '[^a-z0-9_-]'::text))),
     CONSTRAINT source_statistic_observation_source_check CHECK ((source = ANY (ARRAY['vndb'::text, 'bangumi'::text]))),
     CONSTRAINT source_statistic_observation_source_record_id_check CHECK (((octet_length(source_record_id) >= 1) AND (octet_length(source_record_id) <= 1024)))
@@ -1544,17 +1544,17 @@ CREATE INDEX realm_rank_scored_canonical_idx ON rating.realm_rank USING btree (p
 
 
 --
--- Name: source_statistic_observation_seek_order_idx; Type: INDEX; Schema: rating; Owner: -
---
-
-CREATE UNIQUE INDEX source_statistic_observation_seek_order_idx ON rating.source_statistic_observation USING btree (route, subject_id, source, seek_order DESC);
-
-
---
 -- Name: source_statistic_observation_local_order_idx; Type: INDEX; Schema: rating; Owner: -
 --
 
 CREATE UNIQUE INDEX source_statistic_observation_local_order_idx ON rating.source_statistic_observation USING btree (route, subject_id, source, local_order DESC) WHERE (local_order IS NOT NULL);
+
+
+--
+-- Name: source_statistic_observation_seek_order_idx; Type: INDEX; Schema: rating; Owner: -
+--
+
+CREATE UNIQUE INDEX source_statistic_observation_seek_order_idx ON rating.source_statistic_observation USING btree (route, subject_id, source, seek_order DESC);
 
 
 --
