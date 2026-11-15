@@ -18,9 +18,14 @@ import presentationRuleBodies from './community-presentation-rules.sql';
 import { readCommunityPresentations } from './community-presentation.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool } from 'pg';
-import { commandAccessContext, accountStandingCheck, createResourcePublicEligibility } from './access-port.ts';
+import {
+  commandAccessContext,
+  accountStandingCheck,
+  createResourcePublicEligibility,
+  readNativeAccessTime,
+} from './access-port.ts';
 import { spaceReadEligibility } from '../community/space.ts';
-import { authoritativeTimeValue } from '../command/command.ts';
+import { authoritativeTimeValue, releaseOperationalTime } from '../command/command.ts';
 import { realmReadEligibility } from '../community/realm.ts';
 import { createReadEligibilityWork } from './read-eligibility-access-work.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
@@ -1504,40 +1509,66 @@ async function disclose(
   const erased =
     !!initial && (initial.posts[0]?.availability === 'erased' || initial.revision?.availability === 'erased');
   const rows = initial ? [initial.thread, ...initial.posts] : [];
-  const checks: AccessCheck[] = [];
   const erasedProof = erased ? { explicit: false } : undefined;
   const withheld = threadReference && !erased && !!initial?.posts[0] && isCommittedWithheldReference(initial.posts[0]);
-  if (board?.value) {
-    for (const row of rows) {
-      const withheldReference = threadReference && isCommittedWithheldReference(row);
-      const erasureRead =
-        withheldReference ||
-        row.availability === 'erased' ||
-        (erased && (row === initial?.posts[0] || row.visibility === 'taken_down'));
-      const placeholder =
-        row.kind === 'post' &&
-        (row.availability === 'erased' || withheldReference) &&
-        !(revisionId && row === initial?.posts[0]);
-      checks.push(
-        await prepare(
-          dependencies,
-          row,
-          context,
-          { observed, board },
-          erasureRead,
-          placeholder,
-          row === initial?.posts[0] ? erasedProof : undefined,
-          withheldReference,
-          undefined,
-          bookGate,
-          row === initial?.posts[0] && initial.revision?.revision_restriction === 'public',
-          row.kind === 'post' && row.id === postId ? contentPostBenefitForPost(row.id) : undefined,
-        ),
-      );
+  // Each selected Post benefit shares an owned native T with its Access checks.
+  // Retained observations prepare a fresh round without replacing the original source baseline.
+  let ordinaryChecks: readonly AccessCheck[] | undefined;
+  const withReadChecks = async <T>(read: (checks: readonly AccessCheck[]) => Promise<T>): Promise<T> => {
+    if (ordinaryChecks) return read(ordinaryChecks);
+    const metered: RealmSubjectReadContext = context;
+    const baseContext: AccessContext = {
+      pool: dependencies.pool,
+      deadline: context.deadline,
+      ...(metered.work ? { work: metered.work } : {}),
+    };
+    const time =
+      context.actor.kind === 'account' && board?.value && rows.some((row) => row.kind === 'post' && row.id === postId)
+        ? await readNativeAccessTime(baseContext, dependencies.clock)
+        : undefined;
+    try {
+      const accessContext: AccessContext = time ? { ...baseContext, time } : baseContext;
+      const checks: AccessCheck[] = [];
+      if (board?.value) {
+        for (const row of rows) {
+          const withheldReference = threadReference && isCommittedWithheldReference(row);
+          const erasureRead =
+            withheldReference ||
+            row.availability === 'erased' ||
+            (erased && (row === initial?.posts[0] || row.visibility === 'taken_down'));
+          const placeholder =
+            row.kind === 'post' &&
+            (row.availability === 'erased' || withheldReference) &&
+            !(revisionId && row === initial?.posts[0]);
+          const check = await prepare(
+            dependencies,
+            row,
+            context,
+            { observed, board },
+            erasureRead,
+            placeholder,
+            row === initial?.posts[0] ? erasedProof : undefined,
+            withheldReference,
+            accessContext,
+            bookGate,
+            row === initial?.posts[0] && initial.revision?.revision_restriction === 'public',
+            time && row.kind === 'post' && row.id === postId ? contentPostBenefitForPost(row.id) : undefined,
+          );
+          if (time) {
+            const bounded: AccessCheck = (client) => check(client, time);
+            checks.push(check.work ? Object.assign(bounded, { work: check.work }) : bounded);
+          } else checks.push(check);
+        }
+      }
+      if (!time) ordinaryChecks = checks;
+      return await read(checks);
+    } finally {
+      if (time) releaseOperationalTime(time);
     }
-  }
+  };
   const discloseCurrent = async (
     client: AccessClient,
+    checks: readonly AccessCheck[],
   ): Promise<PostEntry | ThreadView | NativeDraftMetadata | NativePostMetadata | null> => {
     if (!initial || !board?.value || checks.length !== rows.length) return null;
     const current = await chain(client, threadId, initial.posts[0]?.id, revisionId);
@@ -1669,49 +1700,50 @@ async function disclose(
       firstPost: item,
     };
   };
-  await dependencies.disclosureBarrier?.({ threadId, ...(postId === undefined ? {} : { postId }) });
-  let disclosed = await snapshot(dependencies, threadId, context, discloseCurrent);
-  // Admission may consult independent anchors only after ordinary disclosure has
-  // succeeded and released its connections. Keep the original rows/checks as the
-  // baseline for final disclosure; a changed container must not become a new baseline.
-  if (beforeFinal && disclosed.value) {
-    if (!(await boardObservation!.recheck())) return { ...disclosed, value: null };
-    await beforeFinal();
-    const scope = currentRealmDisclosureScope();
-    if (scope) {
-      delete scope.associationCheck;
-      delete scope.accessCheck;
+  const disclosed = await withReadChecks(async (checks) => {
+    await dependencies.disclosureBarrier?.({ threadId, ...(postId === undefined ? {} : { postId }) });
+    let current = await snapshot(dependencies, threadId, context, (client) => discloseCurrent(client, checks));
+    // Admission consults independent anchors only after ordinary disclosure releases its connections.
+    if (beforeFinal && current.value) {
+      if (!(await boardObservation!.recheck())) return { ...current, value: null };
+      await beforeFinal();
+      const scope = currentRealmDisclosureScope();
+      if (scope) {
+        delete scope.associationCheck;
+        delete scope.accessCheck;
+      }
+      current = await snapshot(dependencies, threadId, context, (client) => discloseCurrent(client, checks));
     }
-    disclosed = await snapshot(dependencies, threadId, context, discloseCurrent);
-  }
-  // Release the thread connection before the independently anchored board
-  // snapshot, including when the pool has only one connection. Bytes and keys
-  // leave this function only after both authorities have passed their final check.
-  if (disclosed.value && !(await boardObservation!.recheck())) return { ...disclosed, value: null };
-  if (metadataOnly === false && disclosed.value && !('firstPostId' in disclosed.value))
-    disclosed = {
-      ...disclosed,
-      value: await readableCitation(dependencies, context, disclosed.value as PostEntry | ThreadView),
-    };
-  // History retains the same original source rows and exact Access checks for
-  // its final page observation. Each round prepares fresh Realm evidence;
-  // cached associations from initial hydration cannot survive revalidation.
+    // Bytes leave only after the original independently anchored Board remains current.
+    if (current.value && !(await boardObservation!.recheck())) return { ...current, value: null };
+    if (metadataOnly === false && current.value && !('firstPostId' in current.value))
+      current = {
+        ...current,
+        value: await readableCitation(dependencies, context, current.value as PostEntry | ThreadView),
+      };
+    return current;
+  });
+  // Retained observations keep the original source rows, renew any owned buyer
+  // read time and prepare fresh Realm evidence. Initial cached associations
+  // cannot survive final revalidation.
   retain?.((qualify) =>
-    realmDisclosure.run({}, async () => {
-      let final = await snapshot(dependencies, threadId, context, async (client) => {
-        const value = await discloseCurrent(client);
-        if (value) await qualify?.(client);
-        return value;
-      });
-      if (final.anchor.epoch !== observed.anchor.epoch) return { ...final, value: null };
-      if (final.value && !(await boardObservation!.recheck())) return { ...final, value: null };
-      if (metadataOnly === false && final.value && !('firstPostId' in final.value))
-        final = {
-          ...final,
-          value: await readableCitation(dependencies, context, final.value as PostEntry | ThreadView),
-        };
-      return final;
-    }),
+    realmDisclosure.run({}, () =>
+      withReadChecks(async (checks) => {
+        let final = await snapshot(dependencies, threadId, context, async (client) => {
+          const value = await discloseCurrent(client, checks);
+          if (value) await qualify?.(client);
+          return value;
+        });
+        if (final.anchor.epoch !== observed.anchor.epoch) return { ...final, value: null };
+        if (final.value && !(await boardObservation!.recheck())) return { ...final, value: null };
+        if (metadataOnly === false && final.value && !('firstPostId' in final.value))
+          final = {
+            ...final,
+            value: await readableCitation(dependencies, context, final.value as PostEntry | ThreadView),
+          };
+        return final;
+      }),
+    ),
   );
   if (metadataOnly === false && disclosed.value && !('firstPostId' in disclosed.value)) {
     const witness = fingerprint(initial)!;
