@@ -61,6 +61,7 @@ export type ArchivedProgressSession = {
   locator: string | null;
   position: string | null;
   completed_unit_count: number;
+  episode_completed_count?: number;
   state: string;
   revision: number;
   library_profile_pin: unknown;
@@ -70,6 +71,7 @@ export type ArchivedProgressSession = {
 };
 export type ArchivedProgressUnit = {
   section: 'units';
+  unit_kind?: 'local' | 'episode';
   session_id: string;
   unit_id: string;
   added_at: string;
@@ -235,7 +237,7 @@ function progressSession(value: Record<string, unknown>): ArchivedProgressSessio
     'completed_at',
     'last_changed_at',
   ];
-  const optional = ['version_subject_id_reference', 'additional_measures'];
+  const optional = ['version_subject_id_reference', 'additional_measures', 'episode_completed_count'];
   if (
     !required.every((key) => Object.hasOwn(value, key)) ||
     Object.keys(value).some((key) => !required.includes(key) && !optional.includes(key)) ||
@@ -269,6 +271,13 @@ function progressSession(value: Record<string, unknown>): ArchivedProgressSessio
   )
     invalid();
   if (Object.hasOwn(value, 'version_subject_id_reference') !== (value.version_subject_id !== null)) invalid();
+  if (
+    Object.hasOwn(value, 'episode_completed_count') &&
+    (!Number.isInteger(value.episode_completed_count) ||
+      Number(value.episode_completed_count) < 0 ||
+      Number(value.episode_completed_count) > 20_000)
+  )
+    invalid();
   if (Object.hasOwn(value, 'additional_measures')) {
     const measures = value.additional_measures;
     if (!Array.isArray(measures) || measures.length > 7) invalid();
@@ -293,8 +302,17 @@ function progressSession(value: Record<string, unknown>): ArchivedProgressSessio
 }
 
 function progressUnit(value: Record<string, unknown>): ArchivedProgressUnit {
-  exact(value, ['section', 'session_id', 'unit_id', 'added_at']);
-  if (!uuid(value.session_id) || !text(value.unit_id, 128) || !stamp(value.added_at)) invalid();
+  const required = ['section', 'session_id', 'unit_id', 'added_at'];
+  if (
+    !required.every((key) => Object.hasOwn(value, key)) ||
+    Object.keys(value).some((key) => !required.includes(key) && key !== 'unit_kind') ||
+    !uuid(value.session_id) ||
+    !text(value.unit_id, 128) ||
+    !stamp(value.added_at) ||
+    (value.unit_kind !== undefined && value.unit_kind !== 'local' && value.unit_kind !== 'episode') ||
+    (value.unit_kind === 'episode' && !uuid(value.unit_id))
+  )
+    invalid();
   return value as ArchivedProgressUnit;
 }
 
@@ -352,7 +370,7 @@ export function parseCopyArchive(bytes: Uint8Array): ParsedCopyArchive {
       progress.push({ ordinal, evidence, sourceSessionId: evidence.session_id, sourceUnitId: null });
     } else if (typedSection === 'units') {
       const evidence = progressUnit(record);
-      const key = `${evidence.session_id}/${evidence.unit_id}`;
+      const key = JSON.stringify([evidence.session_id, evidence.unit_kind ?? null, evidence.unit_id]);
       if (unitKeys.has(key)) invalid();
       unitKeys.add(key);
       retainedBytes += size;
