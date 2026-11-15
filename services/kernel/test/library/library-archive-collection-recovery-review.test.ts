@@ -12,6 +12,8 @@ import { createWorkClient } from '../../src/work/client.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { bindNativeLibraryFixture } from './support/native-library-fixture-binding.ts';
+let restoreLibraryBinding: (() => void) | undefined;
 
 let db: GrowthDatabase;
 let work: Awaited<ReturnType<typeof createWorkClient>>;
@@ -53,6 +55,9 @@ beforeAll(async () => {
     pool: db.pool,
     workClient: work,
     access: fixture.access,
+    onAccessReady(access) {
+      restoreLibraryBinding = bindNativeLibraryFixture({ pool: db.pool, access, routeKey });
+    },
     writeRate: fixture.writeRate,
     receiptKeys: testReceiptKeys(),
     routeKey,
@@ -133,6 +138,7 @@ beforeAll(async () => {
   };
 }, 120_000);
 afterAll(async () => {
+  restoreLibraryBinding?.();
   await work?.close();
   await db?.close();
 });
