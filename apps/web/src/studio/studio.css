@@ -376,10 +376,13 @@
   padding: 0;
   display: grid;
   gap: 0.75rem;
+  min-inline-size: 0;
 }
 .studio-draft-list li {
   display: grid;
   gap: 0.15rem;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
 }
 .studio-draft-list li + li {
   border-block-start: 1px solid var(--border);
@@ -388,6 +391,9 @@
 .studio-draft-list button {
   justify-content: start;
   text-align: start;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  white-space: normal;
 }
 .studio-draft-list .studio-help {
   padding-inline: 0.75rem;
