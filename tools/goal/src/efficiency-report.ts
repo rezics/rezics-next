@@ -1,6 +1,5 @@
 import type { Database } from 'bun:sqlite';
 import { spawnSync } from 'node:child_process';
-import { migrate } from './db.ts';
 import { completedUtcHour, parseUtcHour, previousUtcHours, type UtcHour } from './efficiency-report-time.ts';
 import {
   captureFrozenHourlyEfficiencyReport,
@@ -20,7 +19,7 @@ import {
 import { lifecycleMetrics } from './lifecycle-metrics.ts';
 import { formatLifecycleMetrics } from './report.ts';
 import { listOpenToolIncidents } from './tool-incidents.ts';
-import { WorkerStore, workerRecordEndedAtExpression, workerRecordEndedAtMigration } from './store.ts';
+import { WorkerStore, workerRecordEndedAtExpression } from './store.ts';
 import { guardEndingCounts } from './guards.ts';
 import type { AttemptRecord } from './types.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
@@ -814,7 +813,8 @@ function usageSummary(db: Database, bucket: UtcHour): string {
 
 function guardEndingLine(db: Database, bucket: UtcHour): string {
   if (!hasTable(db, 'worker_records')) return 'Guard firings in bucket: unknown (attempt history unavailable).';
-  migrate(db, [workerRecordEndedAtMigration]);
+  if (!db.query("SELECT 1 FROM sqlite_master WHERE type='index' AND name='worker_records_ended_at'").get())
+    return 'Guard firings in bucket: unknown (indexed attempt history unavailable; schema setup owns migration).';
   const records = db
     .query(
       `SELECT body FROM worker_records INDEXED BY worker_records_ended_at
@@ -1022,6 +1022,7 @@ function buildHourlyEfficiencyReport(
     ...hourlyReportStage(options.observeStage, 'native', () =>
       nativeUnitReportLines(db, bucket, isAggregateProductPath),
     ),
+    ...hourlyReportStage(options.observeStage, 'tail', () => [
     landingQueueAge(metrics, landingQueueAvailable),
     waitIdentities(metrics, waitsAvailable, policy),
     checkWaitLine,
@@ -1030,10 +1031,11 @@ function buildHourlyEfficiencyReport(
     promotionSummary(db, metrics),
     operatorAttention(metrics, policy),
     sharedIncidentSummary(incidents.incidents, incidents.available, policy),
-    guardEndingLine(db, bucket),
+    hourlyReportStage(options.observeStage, 'guards', () => guardEndingLine(db, bucket)),
     'Next actions:',
     ...nextActions(metrics, incidents.incidents, policy),
-    usageSummary(db, bucket),
+    hourlyReportStage(options.observeStage, 'usage', () => usageSummary(db, bucket)),
+    ]),
   ];
   const report = lines.join('\n');
   if (Buffer.byteLength(report) <= policy.reportBytes) return report;
@@ -1086,6 +1088,7 @@ export function captureHourlyEfficiencyObservation(db: Database, options: Report
       return observation;
     },
     (observation) => buildHourlyEfficiencyReport(db, options, bucket, observation),
+    options.observeStage,
   );
 }
 
