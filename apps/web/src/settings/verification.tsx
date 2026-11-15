@@ -92,33 +92,6 @@ function visibleFocusTarget(target: HTMLElement | null) {
   return true;
 }
 
-type VerificationPresentationFocusIntent = {
-  id: number;
-  kind: 'confirmation-open' | 'confirmation-cancel' | 'result';
-  accountId: string;
-  observation: string | null;
-  snapshot: VerificationRecoveryState;
-  ready: boolean;
-};
-
-function visibleFocusTarget(target: HTMLElement | null) {
-  if (!target?.isConnected || !target.getClientRects().length) return false;
-  for (let current: HTMLElement | null = target; current; current = current.parentElement) {
-    const style = current.ownerDocument.defaultView?.getComputedStyle(current);
-    if (
-      current.hasAttribute('hidden') ||
-      current.hasAttribute('inert') ||
-      current.getAttribute('aria-hidden') === 'true' ||
-      style?.display === 'none' ||
-      style?.visibility === 'hidden' ||
-      style?.visibility === 'collapse' ||
-      Number(style?.opacity ?? 1) === 0
-    )
-      return false;
-  }
-  return true;
-}
-
 function subjectLabel(title: string | null | undefined, subjectId: string | undefined) {
   return title?.trim() && title !== subjectId ? title : m.settings_verification_generic_subject();
 }
