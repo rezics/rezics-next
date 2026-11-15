@@ -1266,11 +1266,12 @@ test('missing personal targets stay inert and concurrent annotation or journal r
 });
 
 test('annotation application rejects a recreated Entry and expiry cleanup removes retained personal evidence', async () => {
-  const original = await f.commands.readEntry(staleIncarnation.actor, subjects[0]);
-  const { id } = await makeUpload(staleIncarnation);
-  const annotation = (await previewAll(staleIncarnation, id)).records.find((row: any) => row.section === 'annotations');
+  const owner = await f.identity(mergeScopes);
+  const original = (await f.commands.putEntry(owner.actor, subjects[0], { state: 'planned' }, entryKey())).value.entry;
+  const { id } = await makeUpload(owner);
+  const annotation = (await previewAll(owner, id)).records.find((row: any) => row.section === 'annotations');
   await json(
-    await send(staleIncarnation, 'PATCH', `${mergePath}/${id}/review`, {
+    await send(owner, 'PATCH', `${mergePath}/${id}/review`, {
       items: [
         {
           ordinal: annotation.ordinal,
@@ -1283,17 +1284,17 @@ test('annotation application rejects a recreated Entry and expiry cleanup remove
     }),
   );
   await f.commands.deleteEntry(
-    staleIncarnation.actor,
+    owner.actor,
     subjects[0],
     original.revision,
     entryKey(),
     original.incarnationId!,
   );
-  const recreated = (await f.commands.putEntry(staleIncarnation.actor, subjects[0], { state: 'completed' }, entryKey()))
+  const recreated = (await f.commands.putEntry(owner.actor, subjects[0], { state: 'completed' }, entryKey()))
     .value.entry;
   expect(recreated.incarnationId).not.toBe(original.incarnationId);
   expect(
-    (await json(await send(staleIncarnation, 'POST', `${mergePath}/${id}/apply`, selected([annotation.ordinal]))))
+    (await json(await send(owner, 'POST', `${mergePath}/${id}/apply`, selected([annotation.ordinal]))))
       .applied,
   ).toMatchObject([{ status: 'stale' }]);
 
