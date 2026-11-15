@@ -237,8 +237,8 @@ export function ResponsiveDialog({
       >
         <DialogHeader className="flex-row items-center justify-between gap-4">
           <div className="min-w-0 space-y-1">
-            <DialogTitle className="min-w-0 break-words">{title}</DialogTitle>
-            <DialogDescription>{description}</DialogDescription>
+            <DialogTitle className="min-w-0 [overflow-wrap:anywhere]">{title}</DialogTitle>
+            <DialogDescription className="min-w-0 [overflow-wrap:anywhere]">{description}</DialogDescription>
           </div>
           <DialogClose
             render={
