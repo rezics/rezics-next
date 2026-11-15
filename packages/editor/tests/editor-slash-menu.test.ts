@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { browserFailureDetails } from './helpers/browser-results.ts';
 
 const root = join(import.meta.dir, '..');
 const stories = ['src/components/editor-slash-menu.stories.tsx'];
@@ -17,7 +18,7 @@ test('the rich-text editor inserts blocks from a filtered, keyboard-driven slash
       stderr: 'pipe',
       env: { ...process.env, CI: '1' },
     });
-    const [stdout, stderr] = await Promise.all([
+    const [stdout, stderr, code] = await Promise.all([
       new Response(run.stdout).text(),
       new Response(run.stderr).text(),
       run.exited,
@@ -32,9 +33,11 @@ test('the rich-text editor inserts blocks from a filtered, keyboard-driven slash
         `${assertion.title}: ${assertion.status} ${assertion.failureMessages[0]?.split('\n')[0] ?? ''}`.trim(),
       )
       .sort();
+    expect(code, browserFailureDetails(result) || `${stdout.slice(-2000)}\n${stderr.slice(-4000)}`).toBe(0);
     expect(outcomes).toEqual([
       'Escape Keeps Text: passed',
       'Filter Commands: passed',
+      'Follows Scrolled Caret: passed',
       'Keyboard Choose: passed',
       'Literal Slash: passed',
       'Profile Commands: passed',

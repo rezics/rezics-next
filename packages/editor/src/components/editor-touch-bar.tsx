@@ -338,7 +338,7 @@ export function EditorTouchBar({
                     onFocus={() => {
                       if (isCurrent()) setTabStop('blocks');
                     }}
-                    {...focusPreservingPointer}
+                    onMouseDown={(event) => event.preventDefault()}
                   >
                     <Blocks aria-hidden="true" />
                     <span className="text-xs sm:text-sm">{labels.blocks}</span>

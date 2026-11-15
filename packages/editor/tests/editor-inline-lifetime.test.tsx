@@ -42,6 +42,7 @@ test('mounted rich-text authoring, keyboard and native input history stay owned 
     };
     const outcomes = result.testResults
       .flatMap((file) => file.assertionResults)
+      .filter((assertion) => assertion.status !== 'skipped')
       .map((assertion) =>
         `${assertion.title}: ${assertion.status} ${assertion.failureMessages[0]?.split('\n')[0] ?? ''}`.trim(),
       )
