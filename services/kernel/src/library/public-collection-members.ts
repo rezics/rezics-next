@@ -90,7 +90,8 @@ export async function readPublicCollectionMembers(
       }),
     );
     if (!authorized) throw new ProblemError('not_found');
-    if (metadata.authority !== 'activated_output' || metadata.sourceGeneration !== input.sourceGeneration)
+    // The exact selected seal is resolved independently by seek, including an account-free frozen successor.
+    if (metadata.sourceGeneration !== input.sourceGeneration)
       throw new ProblemError(position ? 'stale_cursor' : 'dependency_unavailable');
   };
   const seek = async (after: PublicOutputOriginalKey | null, limit: number) => {

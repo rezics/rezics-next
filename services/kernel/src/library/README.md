@@ -828,9 +828,12 @@ public retention. Cancellation releases the exact hold only after the persisted 
 the obsolete output in 100-key pages only after it rereads the matching committed native and Semantic cancellation,
 the newer source generation, and the absence of other retained references. The selected or frozen generation and
 the immutable disposition remain available.
-Once terminal retention selects a public built-in generation, the ordinary reader can use its still-held seal
-through the exact retained publication receipt and terminal account fence. The frozen branch supplies read
-authority only. Account-free successor custody and the remaining physical de-identification stay pending.
+Once terminal retention selects a public built-in generation, the ordinary reader uses its exact retained
+publication and still-held seal. The Source sweep transfers the hold through Semantic's original applied
+disposition, with the same generation and seal. Terminal cleanup can detach the curator and original account
+publication row only when this is the sole remaining hold. Subsequent member reads revalidate the committed
+successor, account-free retained generation and current identity scope. Other held or uncertain copies keep
+de-identification pending.
 `collection-publication-http.test.ts` retains the unmet real API/default-worker acceptance and focused closed
 grammar/privacy assertions. It uses the existing native fixture and actual output rows/receipt, with no replacement
 worker or domain backend. Schema availability and local typing do not establish that native acceptance.

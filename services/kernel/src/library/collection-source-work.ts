@@ -36,7 +36,8 @@ import publicationRecoverySQL from './collection-publication-recovery.sql';
 import publicationSupersededSQL from './collection-publication-superseded.sql';
 import { collectionPublicationOutputProducer } from './collection-publication-output.ts';
 import { reclaimSupersededCollectionOutput } from './collection-publication-reclaim.ts';
-import { publicOutputRetireWork } from '../semantic/identity-public-output-work.ts';
+import frozenCaptureSQL from './collection-publication-frozen-capture.sql';
+import { publicOutputFreezeWork, publicOutputRetireWork } from '../semantic/identity-public-output-work.ts';
 import { withCollectionReadConnection } from './collection-read-connection.ts';
 import { workStepDeadline } from './collection-command-work.ts';
 
@@ -106,6 +107,20 @@ async function advanceSourceStep(
   });
   return published.state === 'published' ? 'ready' : 'unavailable';
 }
+async function retainFrozenPublication(context: WorkContext, row: { route: number; collection: string }) {
+  const deadline = workStepDeadline();
+  const capture = await withCollectionReadConnection(context.pool, deadline, async (tx) =>
+    (
+      await tx.query<{ captureId: string; bindingDigest: string }>(frozenCaptureSQL.sql, [row.route, row.collection])
+    ).rows[0],
+  );
+  if (!capture) return;
+  await collectionPublicationOutputProducer(context).retainFrozen(
+    { kind: 'public-output', partition: partitionOf(row.route), ...capture },
+    { deadline, allowance: { reservationId: capture.captureId, remaining: publicOutputFreezeWork() } },
+  );
+}
+
 async function retireSupersededPublication(context: WorkContext, row: { route: number; collection: string }) {
   const deadline = workStepDeadline();
   const retired = await withCollectionReadConnection(context.pool, deadline, async (tx) =>
@@ -176,6 +191,7 @@ export async function registerCollectionSourceWork(context: WorkContext): Promis
       if (!row) return { ...input, partition: input.partition + 1, route: null, collection: null };
       if (row.builtin === 'everything' || row.builtin === 'state') {
         if (row.owner) await recoverCollectionPublication(context, { ...row, owner: row.owner }, input.root);
+        await retainFrozenPublication(context, row);
         await retireSupersededPublication(context, row);
       }
       if (row.owner) await page({ accounts: [row.owner], collectionId: row.collection });
