@@ -5,6 +5,8 @@ import {
 } from './collection-publication-episodes.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { createBuiltinRuntime } from './builtin-runtime.ts';
+import { prepareBuiltinMaterialization } from './builtin-materialization.ts';
+import { initializeCollectionMetadataHistory } from './collection-metadata-history.ts';
 import { enterShelfWrite } from './shelf-counter-owner.ts';
 import { createShelfCounters } from './shelf-counters.ts';
 import { createHash } from 'node:crypto';
@@ -876,7 +878,7 @@ export function createCollectionCommands(config: {
     requestKey: string,
   ): Promise<CommandOutcome<Collection>> {
     const selection = presentationSelection(patch);
-    const revision = revisionOf(patch.revision);
+    const revision = patch.revision === 0 ? 0 : revisionOf(patch.revision);
     const title = patch.title === undefined ? undefined : requiredText(patch.title, TITLE_LIMIT);
     const description =
       patch.description === undefined ? undefined : optionalText(patch.description, DESCRIPTION_LIMIT);
@@ -894,6 +896,57 @@ export function createCollectionCommands(config: {
         visibility: visibility !== undefined,
       },
     };
+    if (revision === 0 && actor.kind === 'account' && actor.scopes.includes('collection:update')) {
+      const route = routeOf(id);
+      if (route !== null && routeOf(actor.accountId) === route) {
+        const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+        const materialization = await prepareBuiltinMaterialization(
+          config,
+          actor,
+          { collectionId: id, revision },
+          deadline,
+        );
+        if (materialization) {
+          if (title === undefined && description === undefined && Object.keys(selection).length === 0) throw invalid();
+          if (visibility && visibility !== 'private') throw new ProblemError('unsupported_query');
+          const failure = await preparePresentationSelection(config, actor, selection, deadline);
+          if (failure) throw failure;
+          const identity = principalCommandIdentity(actor);
+          const kind = 'library.collection.update';
+          try {
+            return await runCommand(
+              pool,
+              {
+                ...identity,
+                partition: partitionOf(route),
+                deadline,
+                ...(clock ? { clock } : {}),
+                receipt: { kind, key: requestKey, digest: digest(identity, kind, input) },
+                authorization: materialization.authorization,
+              },
+              async (tx, command) => {
+                await materialization.materialize(tx, {
+                  ...(title === undefined ? {} : { title }),
+                  ...(description === undefined ? {} : { description }),
+                  ...selection,
+                });
+                await initializeCollectionMetadataHistory(tx, {
+                  route,
+                  collection: { id, curatorAccountId: actor.accountId },
+                  transactionId: command.transactionId,
+                  time: authoritativeTimeValue(command.time),
+                });
+                return { value: await activeCollection(tx, route, id), events: collectionEvents('updated', id, false) };
+              },
+            );
+          } catch (error) {
+            if (!(error instanceof GrantDeniedError)) throw error;
+            // A concurrent first write may have materialized this identity before authorization. The
+            // ordinary resource command reauthorizes and finds the same receipt, or rejects revision zero.
+          }
+        }
+      }
+    }
     return mutate(
       actor,
       id,

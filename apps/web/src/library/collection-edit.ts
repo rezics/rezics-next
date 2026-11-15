@@ -77,7 +77,7 @@ function validateUpdate(input: unknown) {
   const value = record(input);
   return {
     collectionId: identifier(value, 'collectionId'),
-    revision: revision(value),
+    revision: value.revision === 0 ? 0 : revision(value),
     ...selection(value),
     title: text(value, 'title'),
     description: text(value, 'description'),

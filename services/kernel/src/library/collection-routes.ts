@@ -1158,7 +1158,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         body: strict(
           t.Object(
             {
-              revision,
+              revision: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
               title: t.Optional(t.String()),
               description: t.Optional(nullableString),
               visibility: t.Optional(visibility),
