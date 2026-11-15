@@ -343,10 +343,12 @@ export function createFeedApplication(
       } else if (stream === 'home' && advice.hasTargets) await reopenSelected();
       if (advice.finish) feedItems = await advice.finish(feedItems);
       await question?.finish();
+      const viewerFollows = account ? await ports.finish.viewerFollows?.(feedItems, account, deadline) : undefined;
 
       return {
         feedItems,
         ...(viewerPersonalActions === undefined ? {} : { viewerPersonalActions }),
+        ...(viewerFollows === undefined ? {} : { viewerFollows }),
         sources,
         asOf: personal ? position.boundary : (discoveryAsOf ?? position.boundary),
         ...(reactionsAsOf === undefined ? {} : { reactionsAsOf }),

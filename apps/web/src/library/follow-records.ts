@@ -83,12 +83,14 @@ export async function writeFollowRecord(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   input: FollowWriteInput,
+  expectedReader?: string,
 ): Promise<FollowWriteResult> {
   if (!validFollowInput(input)) return { ok: false, reason: 'invalid' };
   try {
-    const stale = await prepareSession(request, sessionEnv);
+    const stale = await prepareSession(request, sessionEnv, expectedReader === undefined ? {} : { refresh: false });
     const authorization = viewerCredential(request);
-    if (stale || !authorization) return { ok: false, reason: 'unauthorized' };
+    if (stale || !authorization || (expectedReader !== undefined && sessionSubject(request) !== expectedReader))
+      return { ok: false, reason: 'unauthorized' };
     const headers = followWriteHeaders(authorization, input.idempotencyKey);
     const result = input.following
       ? await putFollow(client, input.targetId, headers)

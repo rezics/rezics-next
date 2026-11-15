@@ -18,14 +18,20 @@ import { homeFeedViewer, type FeedInput } from './home-feed-read';
 export function Home() {
   const locale = getLocale();
   const { data: loaded } = useSuspenseQuery(homePageQuery(locale));
-  const viewer = homeFeedViewer(useSession());
+  const session = useSession();
+  const viewer = homeFeedViewer(session);
   const subject = viewer?.subject;
+  const csrf = session.csrfToken;
   const read = useCallback(
     (input: FeedInput, signal: AbortSignal) =>
-      subject
-        ? readPrivateHomePage({ data: { locale, viewer: subject, ...input }, signal })
+      subject && csrf
+        ? readPrivateHomePage({
+            data: { locale, viewer: subject, ...input },
+            headers: { 'X-CSRF-Token': csrf },
+            signal,
+          })
         : readPublicHomePage({ data: { locale, ...input }, signal }),
-    [locale, subject],
+    [locale, subject, csrf],
   );
   const readKinds = useCallback(
     (cursor: string | undefined, signal: AbortSignal) =>

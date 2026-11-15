@@ -23,6 +23,7 @@ import {
   createCollectionReads,
 } from '../library/adapters/index.ts';
 import { librarySemanticObservations } from '../library/semantic-observation.ts';
+import { readFollowDiscovery } from '../library/follow-discovery.ts';
 import { createPublicSummaryAdapter } from '../semantic/adapters/public-summary.ts';
 import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
 import { admitGroup, PlatformClosedError } from '../access/gates/admission.ts';
@@ -92,6 +93,7 @@ export function composeContentFeed(): FeedProducerCapabilities {
         async checkCurrentFollowSupport(actor, query, deadline) {
           return (await followSource()).checkCurrentFollowSupport(actor, query, deadline);
         },
+        readViewerFollows: (actor, targets, deadline) => readFollowDiscovery(deps, actor, targets, deadline),
         readCollection: (actor, id, deadline) =>
           (collections ??= createCollectionReads(deps)).readCollection(actor, id, deadline),
         readPublication: (realmId, id, actor, deadline) => readPublication(deps, realmId, id, { actor, deadline }),

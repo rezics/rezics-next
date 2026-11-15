@@ -22,8 +22,7 @@ presentation and preview states; a Space shows its disclosed carrier or an unava
 Realm title remains carrier context; following is neither Realm membership nor an access grant.
 
 Decision: Home public-owner cards keep exact owner navigation usable. Collection curator, presentation, cover and
-preview come only from the installed card, and bounded private follow admission remains explicitly unavailable; no
-card is enriched.
+preview come only from the installed card.
 
 The native Collection summary carries `id`, `title`, nullable `description` and Search's complete closed `card`,
 including admitted curator, cover, presentation and preview completeness; Home shares its schema through Search's
@@ -33,14 +32,15 @@ context from dependency failure. Web does not label either an empty value or an 
 Collection card context retains its native available/unavailable curator and available/empty/withheld/unavailable
 preview states. Space context requires explicit native states before additional distinctions can render.
 
-The feed page has no native own-follow projection or directional follow actions for these owners. The producer
-handoff is a separate authenticated page/batch projection bounded to the returned 20 exact Collection/Space IDs,
-with current viewer/credential lifetime, own-edge state, independent create/remove admission and recovery
-readback. Removal admission must survive lost target disclosure without returning new target facts. Public
-feed documents stay anonymous/cache-safe. Until this producer is released in the generated client, signed-in
-cards show follow state unavailable and install no mutation callbacks. The eventual Home composition must use
-Library FollowControl and existing writers, retiring callbacks synchronously on page/selector/locale/credential
-replacement; unknown writes retain their original key and require deliberate readback/retry.
+Authenticated pages with eligible Collection or Space cards carry `viewerFollows` for at most the 20 returned
+targets. Library checks current account and directional create/remove admission and reads only the viewer's edges
+in two bounded account-home snapshots. The page carries either the complete batch or unavailable. Public pages
+omit it. A failed batch leaves card navigation and the feed frontier usable.
+
+Home binds Library's FollowControl and writers to the displayed page, selector, locale and viewer credential.
+A successful write supplies the confirmed edge. A lost reply leaves the edge unavailable and retains the original
+key for retry. Conflict review reads the same bounded page again. Removal uses the Library's stored-edge path
+and survives a change in target disclosure while the admitted card is still mounted.
 Unknown or mismatched summaries make discovery unavailable instead of becoming fallback
 Account cards.
 `feed-discovery.ts` dispatches exhaustively on Search's summary discriminator and requires the exact owner,

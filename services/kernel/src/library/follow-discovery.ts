@@ -1,4 +1,4 @@
-/** Private bounded follow preparation shared by Search and Space entry. The writer remains follows.ts. */
+/** Private bounded follow preparation for disclosed discovery and feed targets. The writer remains follows.ts. */
 import type { Pool } from 'pg';
 import { isDeepStrictEqual } from 'node:util';
 import { readAccount } from './access-port.ts';
@@ -52,21 +52,24 @@ export async function readFollowDiscovery(
     throw new RangeError('Invalid bounded follow discovery targets');
   const owned = targets.map((target) => ({ ...target }));
   if (actor.kind === 'anonymous') return { state: 'signed-out' };
-  const viewer = { ...actor, scopes: [...actor.scopes] };
-  const route = routeOf(viewer.accountId);
-  if (route === null || !Number.isSafeInteger(viewer.authnEpoch) || viewer.authnEpoch <= 0)
+  const { accountId, authnEpoch, scopes } = actor;
+  const route = routeOf(accountId);
+  if (route === null || !Number.isSafeInteger(authnEpoch) || authnEpoch <= 0)
     return { state: 'unavailable', reason: 'identity' };
+  // Production Access binds prepared checks to the verified actor object.
+  const canFollow = scopes.includes('follow:create');
+  const canUnfollow = scopes.includes('follow:delete');
   const partition = partitionOf(route);
   const snapshot = async () => {
     requireAccessDeadline(deadline);
     const context = { pool: dependencies.pool, deadline };
     // Foreign Access preparation completes before the account-home checkout.
     // The existing own follow reader requires an authenticated account, without a read scope.
-    const follow = viewer.scopes.includes('follow:create')
-      ? await accessCheck(dependencies.access, viewer, 'follow:create', { route, id: viewer.accountId }, context)
+    const follow = canFollow
+      ? await accessCheck(dependencies.access, actor, 'follow:create', { route, id: accountId }, context)
       : null;
-    const unfollow = viewer.scopes.includes('follow:delete')
-      ? await accessCheck(dependencies.access, viewer, 'follow:delete', { route, id: viewer.accountId }, context)
+    const unfollow = canUnfollow
+      ? await accessCheck(dependencies.access, actor, 'follow:delete', { route, id: accountId }, context)
       : null;
     let time: Awaited<ReturnType<typeof mintReadTime>> | undefined;
     try {
@@ -75,13 +78,13 @@ export async function readFollowDiscovery(
         const home = await readPartition(client, partition);
         if (!home || home.writeState !== 'active' || home.movedTo !== null)
           throw new CommandUnavailableError('fenced', partition);
-        const account = await readAccount(client, route, viewer.accountId);
+        const account = await readAccount(client, route, accountId);
         if (
           !account ||
           account.kind !== 'actor' ||
           account.state !== 'active' ||
           account.fenced ||
-          account.minimumAuthnEpoch > BigInt(viewer.authnEpoch)
+          account.minimumAuthnEpoch > BigInt(authnEpoch)
         ) {
           return null;
         }
@@ -93,7 +96,7 @@ export async function readFollowDiscovery(
           `SELECT f.target_id::text AS "targetId", f.target_type AS "targetType", f.state
            FROM unnest($3::uuid[]) requested(id)
            JOIN library.follow f ON f.route=$1 AND f.account_id=$2 AND f.target_id=requested.id`,
-          [route, viewer.accountId, owned.map((target) => target.targetId)],
+          [route, accountId, owned.map((target) => target.targetId)],
         );
         const rows = new Map(found.rows.map((row) => [row.targetId, row]));
         if (rows.size !== found.rows.length || rows.size > owned.length)
@@ -103,7 +106,8 @@ export async function readFollowDiscovery(
           node: home.node,
           rows: owned.map((target) => {
             const row = rows.get(target.targetId);
-            if (row && row.targetType !== target.targetType) throw new Error('Follow discovery target type changed');
+            if (row && (row.targetType !== target.targetType || !['following', 'unfollowed'].includes(row.state)))
+              throw new Error('Follow discovery row changed');
             return { ...target, following: row?.state === 'following', actions: { ...actions } };
           }),
         };
@@ -119,7 +123,7 @@ export async function readFollowDiscovery(
     if (!before || !final) return { state: 'unavailable', reason: 'identity' };
     if (!isDeepStrictEqual(before, final)) return { state: 'unavailable', reason: 'changed' };
     requireAccessDeadline(deadline);
-    const result = { state: 'current', accountId: viewer.accountId, partition, rows: final.rows } as const;
+    const result = { state: 'current', accountId, partition, rows: final.rows } as const;
     return Buffer.byteLength(JSON.stringify(result)) <= 32768 ? result : { state: 'unavailable', reason: 'native' };
   } catch (error) {
     if (classifyUnavailability(error) !== undefined) return { state: 'unavailable', reason: 'native' };

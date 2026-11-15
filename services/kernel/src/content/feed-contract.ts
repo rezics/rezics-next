@@ -20,7 +20,7 @@ import type { ReactionCountFreshness, ViewerReactionKind } from './reads.ts';
 import type { ReactionTarget } from './reactions.ts';
 import { FeedParentContextSchema, FeedReviewContextSchema } from './feed-context-schema.ts';
 import type { FeedParentContext, FeedReviewContext } from './model.ts';
-import type { FeedCollectionDiscoverySummary, FeedItem, FeedPage } from './contract/index.ts';
+import { FEED_PAGE_LIMIT, type FeedCollectionDiscoverySummary, type FeedItem, type FeedPage } from './contract/index.ts';
 
 const closed = { additionalProperties: false } as const;
 const nullable = t.Union([t.String(), t.Null()]);
@@ -469,8 +469,31 @@ export function FeedPageSchema() {
     t.Unsafe<FeedPage>(
       t.Object(
         {
-          feedItems: t.Array(FeedItemSchema(), { maxItems: 20 }),
+          feedItems: t.Array(FeedItemSchema(), { maxItems: FEED_PAGE_LIMIT }),
           viewerPersonalActions: t.Optional(FeedViewerPersonalActionsSchema()),
+          viewerFollows: t.Optional(
+            t.Union([
+              t.Object({ state: t.Literal('unavailable') }, closed),
+              t.Object(
+                {
+                  state: t.Literal('current'),
+                  rows: t.Array(
+                    t.Object(
+                      {
+                        targetId: uuid,
+                        targetType: t.Union([t.Literal('collection'), t.Literal('space')]),
+                        following: t.Boolean(),
+                        actions: t.Object({ follow: t.Boolean(), unfollow: t.Boolean() }, closed),
+                      },
+                      closed,
+                    ),
+                    { maxItems: FEED_PAGE_LIMIT },
+                  ),
+                },
+                closed,
+              ),
+            ]),
+          ),
           next: nullable,
           asOf: t.String({ format: 'date-time' }),
           reactionsAsOf: t.Optional(t.Union([reactionFreshness, t.Null()])),

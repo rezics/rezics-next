@@ -70,6 +70,7 @@ export async function readHomeFeedPage(
       page.feedItems.length > HOME_FEED_LIMIT ||
       (!authorization &&
         (page.viewerPersonalActions !== undefined ||
+          Object.hasOwn(page, 'viewerFollows') ||
           page.sources.following !== 'not_requested' ||
           page.sources.continue !== 'not_requested' ||
           page.feedItems.some((item) => {

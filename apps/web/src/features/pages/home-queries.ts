@@ -3,7 +3,7 @@ import { queryOptions } from '@tanstack/react-query';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import type { SessionEnv } from '../../session/client';
-import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
+import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } from '../../session/request';
 import { kernelClient } from '../../kernel/client';
 import { requestLanguages } from '../../kernel/languages';
 import {
@@ -109,7 +109,7 @@ export const readPrivateHomePage = createServerFn({ method: 'GET' })
       const authorization = viewerCredential(request) ?? undefined;
       if (!authorization || sessionSubject(request) !== data.viewer)
         return { state: 'auth', code: 'authentication_required' };
-      return readHomeFeedPage(
+      const result = await readHomeFeedPage(
         kernelClient(data.locale),
         {
           stream: data.stream,
@@ -121,6 +121,15 @@ export const readPrivateHomePage = createServerFn({ method: 'GET' })
         authorization,
         request.signal,
       );
+      if (
+        result.state === 'ready' &&
+        'viewerFollows' in result.page &&
+        requestCsrfToken(request) !== request.headers.get('X-CSRF-Token')
+      ) {
+        const { viewerFollows: _retired, ...page } = result.page;
+        return { state: 'ready', page };
+      }
+      return result;
     } catch {
       return { state: 'unavailable', code: 'dependency_unavailable' };
     }

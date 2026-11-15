@@ -25,6 +25,7 @@ import { projectFeedReactions } from '../feed-reactions.ts';
 import { prepareFeedReactionAdvice, type FeedReactionAdviceComposition } from '../feed-reaction-advice.ts';
 import { prepareFeedSubjectReactions } from '../feed-subject-reactions.ts';
 import { feedDiscoveryItem } from '../feed-discovery.ts';
+import { readFeedViewerFollows } from './feed-follows.ts';
 import { createFeedQuestionSession } from '../feed-question.ts';
 import { openFollowingSpace, type FollowingSpace } from '../feed-space.ts';
 import { openSpaceSubjectPopulation, type SpaceSubjectPopulation } from '../feed-subject-scope.ts';
@@ -702,6 +703,12 @@ export function createNativeFeedPorts(
         } catch (error) {
           return { items, rewind: new Set<FeedLane>(['following']), error };
         }
+      },
+      viewerFollows(items, actor, deadline) {
+        const live = asPlatformActor(actor, liveActor());
+        return live.kind === 'account'
+          ? readFeedViewerFollows(producers.readViewerFollows, live, items, deadline)
+          : Promise.resolve(undefined);
       },
       async personalActions(items, actor, languages, deadline, reopen) {
         const live = asPlatformActor(actor, liveActor());
