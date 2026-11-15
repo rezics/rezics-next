@@ -10,6 +10,7 @@ SELECT n.notebook_id, n.owner_account_id, n.subject_id, n.title, n.structure_rev
 FROM content.knowledge_notebook n
 CROSS JOIN input
 WHERE n.route=input.route AND n.owner_account_id=input.owner_account_id
+  AND NOT n.account_erased
   AND (n.created_at < input.after_created_at OR
        (n.created_at = input.after_created_at AND n.notebook_id > input.after_notebook_id))
 ORDER BY n.created_at DESC, n.notebook_id

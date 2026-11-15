@@ -1,3 +1,4 @@
+import type { KnowledgeMediaSelection } from '@rezics/definitions/knowledge-media';
 import type { KernelClient } from '@rezics/client';
 import type { DocumentSnapshot } from '@rezics/document';
 import { admitKnowledgePrivateHead } from './private-knowledge';
@@ -6,7 +7,15 @@ import { referenceBlock, type KnowledgeReferenceTarget } from './reference-model
 
 /** Ready sha256 is immutable citation source identity, not the digest of a redacted display body. */
 export type ReferenceInspection =
-  | { state: 'ready'; documentId: string; revisionId: string; sha256: string; title: string; body: DocumentSnapshot }
+  | {
+      state: 'ready';
+      documentId: string;
+      revisionId: string;
+      sha256: string;
+      title: string;
+      body: DocumentSnapshot;
+      mediaSelection?: KnowledgeMediaSelection;
+    }
   | { state: 'unavailable' | 'denied' | 'not-found' | 'retired' | 'signed-out' };
 export type ReferenceInspectionRequest = {
   target: KnowledgeReferenceTarget;
@@ -25,6 +34,7 @@ export async function inspectKnowledgeReference(
   const target = input.target;
   if (target.kind === 'subject') return { state: 'unavailable' };
   let citationDigest: string;
+  let mediaSelection: KnowledgeMediaSelection;
   let document: { documentId: string; revisionId: string; title: string; body: DocumentSnapshot };
   if (input.notebookId !== null) {
     if (!privateAccess) return { state: 'denied' };
@@ -44,6 +54,12 @@ export async function inspectKnowledgeReference(
       return { state: 'unavailable' };
     document = admitted.head;
     citationDigest = admitted.head.sha256;
+    mediaSelection = {
+      representation: 'authoring',
+      documentId: document.documentId,
+      revisionId: document.revisionId,
+      sourceSha256: citationDigest,
+    };
   } else {
     const result = await readKnowledgePublicDocument(client, {
       documentId: target.documentId,
@@ -53,6 +69,13 @@ export async function inspectKnowledgeReference(
     if (result.state !== 'ready') return { state: result.state === 'preparing' ? 'unavailable' : result.state };
     document = result.document;
     citationDigest = result.document.sourceSha256;
+    mediaSelection = {
+      representation: 'public',
+      documentId: document.documentId,
+      revisionId: document.revisionId,
+      sourceSha256: citationDigest,
+      publicationId: result.document.publicationId,
+    };
   }
   if (
     target.kind === 'revision' &&
@@ -66,6 +89,7 @@ export async function inspectKnowledgeReference(
     documentId: document.documentId,
     revisionId: document.revisionId,
     sha256: citationDigest,
+    mediaSelection,
     title: document.title,
     body: document.body,
   };

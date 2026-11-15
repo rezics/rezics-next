@@ -10,7 +10,7 @@ import type {
   SemanticTitleProvenanceOrigin,
   SemanticTitleProvenanceSupport,
 } from './contract/index.ts';
-import { SEMANTIC_TITLE_PROVENANCE_MAX_BYTES } from './contract/title-inputs-provenance.ts';
+import { SEMANTIC_TITLE_PROVENANCE_MAX_BYTES } from './contract/index.ts';
 import { GLOBAL_SUBJECT_CONTEXT } from './contract/subject-values.ts';
 import { importedTupleRouteOf } from './adapters/imported-route.ts';
 import { slotId } from './slots.ts';

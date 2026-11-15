@@ -115,7 +115,7 @@ export async function knowledgeOwner(
       `SELECT d.notebook_id,n.owner_account_id
        FROM content.knowledge_document d
        JOIN content.knowledge_notebook n ON n.route=d.route AND n.notebook_id=d.notebook_id
-       WHERE d.route=$1 AND d.document_id=$2`,
+       WHERE d.route=$1 AND d.document_id=$2 AND NOT d.account_erased AND NOT n.account_erased`,
       [route, documentId],
     );
     const row = result.rows[0];
@@ -133,7 +133,7 @@ export async function knowledgeNotebookOwner(
     const partition = await readPartition(client, partitionOf(route));
     if (!partition) return null;
     const result = await client.query<{ owner_account_id: string; subject_id: string }>(
-      `SELECT owner_account_id,subject_id FROM content.knowledge_notebook WHERE route=$1 AND notebook_id=$2`,
+      `SELECT owner_account_id,subject_id FROM content.knowledge_notebook WHERE route=$1 AND notebook_id=$2 AND NOT account_erased`,
       [route, notebookId],
     );
     const row = result.rows[0];

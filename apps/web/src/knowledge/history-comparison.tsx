@@ -1,3 +1,5 @@
+import { knowledgeAuthoringImageSelection } from './media';
+import { useKnowledgeImageRenderer } from './media-view';
 import { KnowledgeDetails } from './workspace';
 import { useId, useMemo, useState } from 'react';
 import type { DocumentSnapshot } from '@rezics/document';
@@ -90,7 +92,9 @@ function RevisionBlock({
   side,
   change,
   locale,
+  renderImage,
 }: {
+  renderImage: ReturnType<typeof useKnowledgeImageRenderer>;
   revision: KnowledgeHistoryRevision;
   block: DocumentBlock;
   side: 'left' | 'right';
@@ -113,6 +117,7 @@ function RevisionBlock({
       <DocumentBody
         document={{ ...revision.body, doc: { type: 'doc', content: [block] } }}
         locale={locale}
+        renderImage={renderImage}
         visitKey={`${revision.documentId}:${revision.revisionId}:${id}`}
       />
     </section>
@@ -132,6 +137,16 @@ export function KnowledgeHistoryComparisonView({
   const options = { locale: locale as never };
   const viewId = useId();
   const [view, setView] = useState<'both' | 'left' | 'right'>('both');
+  const leftImage = useKnowledgeImageRenderer(
+    comparison.left.body,
+    knowledgeAuthoringImageSelection(comparison.left),
+    locale,
+  );
+  const rightImage = useKnowledgeImageRenderer(
+    comparison.right.body,
+    knowledgeAuthoringImageSelection(comparison.right),
+    locale,
+  );
   // Stable document block identity supplies correspondence. No text alignment guesses or quadratic diff.
   const blockPairs = useMemo(() => {
     const leftBlocks = comparison.left.body.doc.content!;
@@ -202,11 +217,7 @@ export function KnowledgeHistoryComparisonView({
                 ? 'left'
                 : null;
           return (
-            <li
-              key={pair.id}
-              data-revision-block-id={pair.id}
-              className="min-w-0 border-t border-border pt-4"
-            >
+            <li key={pair.id} data-revision-block-id={pair.id} className="min-w-0 border-t border-border pt-4">
               {hiddenOnlySide ? (
                 <p className="mb-3 text-sm font-medium">
                   {hiddenOnlySide === 'left'
@@ -222,6 +233,7 @@ export function KnowledgeHistoryComparisonView({
                     revision={comparison.left}
                     block={pair.left}
                     side="left"
+                    renderImage={leftImage}
                     change={pair.change}
                     locale={locale}
                   />
@@ -231,6 +243,7 @@ export function KnowledgeHistoryComparisonView({
                     revision={comparison.right}
                     block={pair.right}
                     side="right"
+                    renderImage={rightImage}
                     change={pair.change}
                     locale={locale}
                   />
@@ -249,7 +262,7 @@ export function KnowledgeHistoryComparisonView({
           <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
             {m.knowledge_history_local_draft({}, options)}
           </p>
-          <DocumentBody document={draft} locale={locale} />
+          <DocumentBody document={draft} locale={locale} renderImage={rightImage} />
         </section>
       ) : null}
     </div>

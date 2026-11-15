@@ -13277,5 +13277,6 @@
   "editor_formatting_under": "En dessous",
   "editor_formatting_text_emphasis": "Marques d’emphase",
   "editor_formatting_code_language_help": "Définir le langage de programmation de ce bloc, indépendamment de la langue naturelle du texte.",
-  "editor_formatting_text_style_help": "Modifier les couleurs du texte et du fond dans le document. La police et la taille personnelles restent des préférences de l’éditeur."
+  "editor_formatting_text_style_help": "Modifier les couleurs du texte et du fond dans le document. La police et la taille personnelles restent des préférences de l’éditeur.",
+  "knowledge_media_save_first": "Enregistrez le document avant d’ajouter des images. Un document privé vide suffit."
 }

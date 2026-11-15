@@ -13284,5 +13284,6 @@
   "editor_formatting_under": "Below",
   "editor_formatting_text_emphasis": "Text emphasis",
   "editor_formatting_code_language_help": "Set the programming language for this code block. This is separate from the language of the prose.",
-  "editor_formatting_text_style_help": "Change authored text and background colors. Personal typeface and text size remain editor preferences."
+  "editor_formatting_text_style_help": "Change authored text and background colors. Personal typeface and text size remain editor preferences.",
+  "knowledge_media_save_first": "Save this document before adding images. A blank private document is enough."
 }

@@ -44,6 +44,7 @@ export function knowledgePublicDto(overrides: Record<string, unknown> = {}): { d
       language: 'en',
       canonicalBytes: knowledgeCanonicalBytes(),
       sha256: knowledgeSha256,
+      sourceSha256: 'b'.repeat(64),
       licence: knowledgeLicence,
       subjectIds: [knowledgeSubjectId],
       publicationId: knowledgePublicationId,
@@ -66,6 +67,8 @@ export function knowledgeAdmitted(overrides: Partial<KnowledgePublicDocument> = 
     licence: knowledgeLicence,
     publishedAt: knowledgePublishedAt,
     body: knowledgeBody(),
+    sha256: knowledgeSha256,
+    sourceSha256: 'b'.repeat(64),
     ...overrides,
   };
 }

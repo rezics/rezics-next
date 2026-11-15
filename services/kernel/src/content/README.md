@@ -3377,6 +3377,44 @@ source-version seeks empty, verifies remaining upload entries are retained publi
 One phase step adds constant progress reads and writes beyond the phase's own work; retaining a statement adds one
 account-partition expiry-key write.
 
+### Knowledge phase and existing development data
+
+The Content participant advances `authored → knowledge → uploads`. Knowledge runs one account-home native
+command per participant step, under the original committed Access erasure and the current phase, cursor and step.
+Each call examines at most 100 candidate keys and has a 120-second command deadline. Its native hook commits eligible selected
+publications as de-identified licensed contributions before removing private ancestry, working titles, unselected
+revisions and account links. That disposition belongs to Knowledge; the participant does not duplicate it.
+The same command marks `content_found` when the hook reports real data. The existing global progress CAS persists
+the returned cursor and pending state. A pending page stays in Knowledge, delays, then advances through a new
+participant step and receipt on every retry; pending never proves completion. Only a nonpending exhausted page
+advances to uploads. The existing final proof and single Content acknowledgement follow all these phases.
+Permanent permitted public contributions are not an expiring Access retention exception; the existing finite
+moderation-statement exception and its expiry purge remain separate.
+
+Before resuming existing development data, the deployment owner stops and drains old Content erasure workers.
+The phase migration admits the new phase without rewriting progress or acknowledgements. This requires one
+bounded catchup under the existing erasure authority, not a live compatibility adapter:
+
+1. Keyset-page at most 100 existing progress/erasure identities by `(route,account_id)`, retaining their original
+   barrier version/time, step, phase and cursor in a temporary operator journal. Rows at slow-mode or authored
+   reach Knowledge normally. Rows at uploads or later, including complete, need the one-time native hook catchup.
+2. For each such account, call the same native Knowledge hook in account-home platform command transactions,
+   proving the original Access barrier each time, with at most 100 rows and the same deadline. Record each
+   receipt, returned cursor, found and pending result in the journal. Replays reuse that attempt's receipt;
+   a new attempt has a new key. Retention/private cleanup must commit before recording page completion.
+3. Continue from the hook's validated cursor. Pending holds keep that account stopped until a later bounded
+   attempt resolves them. Exhaustion is established only by `next=null` with no pending result. Preserve this
+   catchup evidence separately; an older immutable Content acknowledgement does not certify the new cleanup.
+4. Before restarting current workers, normalize only the inventoried phase/cursor to the current native shape
+   while workers remain stopped. Valid uploads/later cursors and their steps stay unchanged after catchup;
+   a legacy or invalid cursor requires an explicit owner-reviewed conversion under the original barrier,
+   never reinterpretation as a Knowledge cursor. Completed rows remain complete and their Access acknowledgement
+   is untouched. Resume only accounts whose catchup and cursor normalization are complete.
+
+Runtime accepts only current phase/cursor shapes. It carries no legacy resume envelope, persistent catchup engine
+or automatic reopening of completed acknowledgements. The operator journal proves this one deployment repair;
+it is not an erasure acknowledgement or a new product store.
+
 ### Delivery
 
 The `delivery` participant covers media storage and the media service. Media responses are `private, no-cache` and

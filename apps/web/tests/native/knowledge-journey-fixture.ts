@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto';
+import { parseKnowledgeMediaSource } from '@rezics/definitions/knowledge-media';
 import { bundledDigest } from '@rezics/definitions/bundled';
-import { documentText, parseDocument, type DocumentSnapshot } from '@rezics/document';
+import { documentText, parseDocument, type DocumentNode, type DocumentSnapshot } from '@rezics/document';
 import type { Page } from 'playwright';
 import { expect } from 'playwright/test';
 import { m } from '../../src/paraglide/messages.js';
@@ -27,7 +29,7 @@ export const knowledgeJourneyText = {
   reuseSeedBody: 'Seed document that marks the second owned notebook before reuse.',
 } as const;
 
-export type KnowledgeJourneyStage = 'setup' | 'private-save' | 'publication' | 'public-read' | 'reuse';
+export type KnowledgeJourneyStage = 'setup' | 'private-save' | 'publication' | 'public-read' | 'reuse' | 'withdrawal';
 
 export type KnowledgeJourneyAccount = {
   accountId: string;
@@ -50,6 +52,7 @@ export type KnowledgeJourneyDocument = {
   title: string;
   body: string;
   sha256: string;
+  mediaSources: readonly string[];
 };
 
 export type KnowledgeJourneyPlacement = {
@@ -76,6 +79,8 @@ export type KnowledgeJourneyPublicDocument = {
   authorId: string | null;
   publishedAt: string;
   sha256: string;
+  sourceSha256: string;
+  mediaSources: readonly string[];
 };
 
 export type KnowledgeJourneyEvidence = {
@@ -91,6 +96,8 @@ export type KnowledgeJourneyEvidence = {
   reuseNotebookId?: string;
   reuseSeed?: KnowledgeJourneyDocument;
   copy?: KnowledgeJourneyDocument;
+  mediaId?: string;
+  withdrawnMediaUnavailable?: boolean;
 };
 
 const knowledgeIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -113,6 +120,17 @@ function decodeCanonical(canonicalBytes: unknown): { snapshot: DocumentSnapshot;
   const source = new TextDecoder().decode(Uint8Array.from(atob(canonicalBytes), (code) => code.charCodeAt(0)));
   const snapshot = parseDocument(JSON.parse(source));
   return { snapshot, source, text: documentText(snapshot) };
+}
+
+function managedImageSources(snapshot: DocumentSnapshot): readonly string[] {
+  const sources: string[] = [];
+  const visit = (node: DocumentNode) => {
+    if ((node.type === 'image' || node.type === 'media') && parseKnowledgeMediaSource(node.attrs?.src))
+      sources.push(String(node.attrs!.src));
+    for (const child of node.content ?? []) visit(child);
+  };
+  visit(snapshot.doc);
+  return sources;
 }
 
 export function knowledgeJourneyOperationError(
@@ -395,6 +413,7 @@ export async function startKnowledgeJourneyFixture(): Promise<KnowledgeJourneyFi
           title: String(member(document, 'title') ?? ''),
           body: decoded.text,
           sha256: String(member(document, 'sha256') ?? ''),
+          mediaSources: managedImageSources(decoded.snapshot),
         };
         if (
           read.notebookId !== notebookId ||
@@ -429,6 +448,8 @@ export async function startKnowledgeJourneyFixture(): Promise<KnowledgeJourneyFi
           authorId: (member(document, 'authorId') as string | null) ?? null,
           publishedAt: String(member(document, 'publishedAt') ?? ''),
           sha256: String(member(document, 'sha256') ?? ''),
+          mediaSources: managedImageSources(decoded.snapshot),
+          sourceSha256: String(member(document, 'sourceSha256') ?? ''),
         };
         if (
           read.documentId !== documentId ||
@@ -438,6 +459,8 @@ export async function startKnowledgeJourneyFixture(): Promise<KnowledgeJourneyFi
           !isKnowledgeJourneyId(read.subjectId) ||
           !read.title ||
           !/^[0-9a-f]{64}$/.test(read.sha256) ||
+          !/^[0-9a-f]{64}$/.test(read.sourceSha256) ||
+          read.sha256 !== createHash('sha256').update(decoded.source).digest('hex') ||
           (record(document) && 'notebookId' in document)
         )
           throw new Error(`${stage} GET ${path} was not an admitted public publication: ${raw}`);

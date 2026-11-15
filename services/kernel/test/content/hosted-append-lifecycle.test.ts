@@ -68,7 +68,9 @@ async function book(prefixLength = 2) {
       appended.push(input.occurrenceId);
       drafts.push(head);
     }
-    const release = (await f.retained.publication(head, [chapter, appended[0]])).revisionId as string;
+    const firstAppended = appended[0];
+    if (firstAppended === undefined) throw new Error('Lifecycle fixture requires a retained append prefix');
+    const release = (await f.retained.publication(head, [chapter, firstAppended])).revisionId as string;
     const anchor = { catalogueId: f.catalogueId, authorAccountId: f.native.author.actor.accountId };
     const route = routeOf(f.catalogueId)!;
     const rows = async (table: string) =>

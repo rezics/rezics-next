@@ -61,6 +61,27 @@ permission or absence, so it retires the transfer controls without claiming the 
 source-only export refusal may retire that source reading. Session/current-reader fences still close all old
 transfer controls and their retained bytes.
 
+## Managed image bindings
+
+Knowledge images retain `rezics-media:` locators in the canonical image/media `src`. Bare locators request an owned
+claim; explicit locators preserve their independent original authoring/public selection. Public source coordinates
+use the immutable source digest and publication identity. Rendering never replaces those attrs with a derivative
+URL or a temporary grant, and copying never turns an original source into a new ownership claim.
+
+One bounded index collects at most 32 managed sources. The existing Media presentations operation groups them by
+exact source context, at most four groups in flight, with no per-node metadata or body hydration. Only native
+returned format/width variants produce byte links, through the ordinary media route with the original Knowledge
+context. Public-context metadata is independently anonymous; authoring context requires the prepared owner.
+Unavailable groups or byte failures conceal their image/credit while the document and independent images remain
+useful. The existing MediaImage primitive owns lazy picture selection and failed-byte presentation.
+
+Uploads use the existing reservation, byte transfer, completion and recovery port with `knowledge-image` and a
+real saved document ID. An ordinary blank save establishes that container. Each editor occurrence/File retains its
+original key and CSRF/viewer binding for retry; returned bare locators remain canonical. Shared editor insertion
+already bounds images and pending attachments to 32. Pending/failed attachments hold Knowledge save/reference
+editing until the existing upload retry/dismissal flow settles. Generic image node-view resolution remains the
+shared editor owner's display-only hook; it must not alter snapshots or exported bytes.
+
 ## Revision history navigation
 
 Decision: keep one replacing metadata page, exact left/right revision IDs and a bounded window of successful

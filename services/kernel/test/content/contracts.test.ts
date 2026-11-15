@@ -155,6 +155,7 @@ function publishedSignatures(): void {
         boardId: string,
         after: board.BoardCandidateKey | null,
         limit: number,
+        deadline?: number,
       ) => Promise<board.BoardCandidatePage>
     >
   >();

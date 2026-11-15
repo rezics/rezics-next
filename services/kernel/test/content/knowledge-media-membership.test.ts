@@ -26,13 +26,17 @@ test('immutable membership contains only unique bare managed image locators with
     revisionId: newId(0),
     sourceSha256: 'a'.repeat(64),
   };
-  expect(collectKnowledgeMediaIds(body([
-    knowledgeMediaSource(mediaId),
-    knowledgeMediaSource(mediaId),
-    knowledgeMediaSource(newId(0), source),
-    'https://private.example/image?token=opaque',
-    'rezics-media:invalid',
-  ]))).toEqual([mediaId]);
+  expect(
+    collectKnowledgeMediaIds(
+      body([
+        knowledgeMediaSource(mediaId),
+        knowledgeMediaSource(mediaId),
+        knowledgeMediaSource(newId(0), source),
+        'https://private.example/image?token=opaque',
+        'rezics-media:invalid',
+      ]),
+    ),
+  ).toEqual([mediaId]);
   const maximum = Array.from({ length: 32 }, () => knowledgeMediaSource(newId(0)));
   expect(collectKnowledgeMediaIds(body(maximum))).toHaveLength(32);
   expect(() => collectKnowledgeMediaIds(body([...maximum, knowledgeMediaSource(newId(0))]))).toThrow();
