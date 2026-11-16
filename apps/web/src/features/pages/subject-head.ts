@@ -12,7 +12,7 @@ import { subjectPageJsonLd, subjectDisplayLabel } from './subject-page-summary';
 import { subjectBody } from './subject-read';
 import type { SubjectPageData } from './page-model';
 import { bestRank, pageText, spoilerLevel, type Stmt } from './shared';
-import { chosenSummary } from './overview';
+import { chosenSummary } from './subject-summary-reading/model';
 import { publicDocumentText, timePresentation } from './jsonld';
 
 type SubjectHeadContext = {

@@ -11,7 +11,7 @@ import { subjectFrame } from '../../features/pages/subject-frame-model';
 import { SubjectLink, viewTabLabels } from '../../features/pages/route-support';
 import { loadSubjectPage } from '../../features/pages/subject-page-load';
 import { subjectTabs } from '../../features/pages/views';
-import { editorialCreateHref } from '../../features/catalogue/editorial-context-route';
+import { editorialCreateHref } from '../../features/catalogue/editorial-context-location';
 import { ContextCurationSession } from '../../features/catalogue/context-curation-session';
 import type { CandidateSlot } from '../../subject/candidates';
 import { getLocale } from '../../paraglide/runtime';

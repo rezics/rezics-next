@@ -1,9 +1,11 @@
+import type { DocumentSnapshot } from '@rezics/document';
 import { pickLanguage } from '@rezics/composition';
 import { originalLanguage } from '../../../subject/language';
 import type { Subject } from '../../../subject/types';
+import { statementDocument } from '../documents';
 import { bestRank, isRecord, type Stmt } from '../shared';
-
 import { SUMMARY_PROPERTY } from './contract';
+
 export const SUMMARY_CHOICE_METADATA_BYTE_CAP = 256 * 1024;
 export const SUMMARY_CHOICE_ENTRY_CAP = 512;
 
@@ -21,6 +23,34 @@ export type SynopsisChoiceSet =
   | { kind: 'none' }
   | { kind: 'unavailable'; reason: 'too-many' | 'too-large' | 'invalid' }
   | { kind: 'ready'; choices: SynopsisChoice[]; selectedId: string };
+
+type SummaryCandidate = { statement: Stmt; document: DocumentSnapshot | undefined; language: string };
+
+/** The selected summary statement, whether its separately disclosed text was filled or not. */
+export function selectedSummary(subject: Subject, locale: string, filled?: unknown): SummaryCandidate | undefined {
+  const held = Object.hasOwn(subject.statements, SUMMARY_PROPERTY) ? subject.statements[SUMMARY_PROPERTY] : undefined;
+  const documents = bestRank((held ?? []) as unknown as Stmt[]).flatMap((statement) => {
+    const content = statement.value.type === 'value' ? statement.value.content : undefined;
+    const document = statementDocument(subject.id, statement, filled);
+    return isRecord(content) && typeof content.language === 'string'
+      ? [{ statement, document, language: content.language }]
+      : [];
+  });
+  if (documents.length === 0) return undefined;
+  const language = pickLanguage(
+    documents.map((entry) => entry.language),
+    locale,
+    originalLanguage(subject),
+  );
+  const selected = documents.find((entry) => entry.language === language) ?? documents[0]!;
+  return selected;
+}
+
+/** The summary the reader's language chain reaches first, with its disclosed document. */
+export function chosenSummary(subject: Subject, locale: string, filled?: unknown) {
+  const selected = selectedSummary(subject, locale, filled);
+  return selected?.document ? { ...selected, document: selected.document } : undefined;
+}
 
 function languageTag(value: unknown): value is string {
   if (typeof value !== 'string' || !value || value.length > 35) return false;

@@ -29,7 +29,7 @@ const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { createRootRoute, createRoute, createRouter, createMemoryHistory, RouterProvider } =
   await import('@tanstack/react-router');
-const { WorkbenchRoutePage } = await import('../src/routes/moderation/workbench');
+const { WorkbenchRoutePage } = await import('../src/moderation/workbench-queue/route-page');
 const { createWorkbenchLoader } = await import('../src/moderation/workbench-queue/route-loader');
 const { readWorkbenchPage, workbenchSearch } = await import('../src/moderation/workbench-queue/read');
 const { privateReaderFingerprint } = await import('../src/moderation/private-reader-origin');
