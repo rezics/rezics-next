@@ -455,6 +455,15 @@ test('the Importer catalogue walk only opens the gate for source statistic write
   expect(openings).toEqual(['personal_library']);
 });
 
+test('the first-public Web fixture opens only anonymous curated Collections', async () => {
+  const routes = ['selling', 'purchases', 'personal_library', 'search', 'search_advanced', 'subject_identity'].map(
+    (group) => ({ method: 'GET', hooks: { detail: { 'x-exposure': `gate:${group}`, security: [{}] } } }),
+  );
+  const openings: { group: string; key: string }[] = [];
+  await openLocalShowcase(routes, async (opening) => openings.push(opening), 'first-public-web');
+  expect(openings).toEqual([{ group: 'collections', key: 'local-public-read:collections' }]);
+});
+
 test('a failed native opening stops persona setup and names the group, cause and retry', async () => {
   const attempted: string[] = [];
   await expect(

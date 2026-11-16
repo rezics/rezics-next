@@ -3,20 +3,21 @@
  * pages and kernel readback. Paths owned by isolated native/browser host suites name their exact separate
  * entrypoints and stay FAIL-unreached here. Evidence stays under `.temp/goal/web/` and never records secrets.
  */
-import { walkAcceptanceId } from '../../../scripts/stack-run.ts';
+import { walkAcceptanceId, walkStackAdmitted } from '../../../scripts/stack-run.ts';
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
-import { startSeededFrontends } from '../../../services/auth/scripts/dev-stack.ts';
+import { firstPublicWebWalk, startSeededFrontends } from '../../../services/auth/scripts/dev-stack.ts';
+import { parseEnv } from './accounts-goal-walk.ts';
+import { readFirstPublicCatalogueReport, seedFirstPublicWeb, type WebFixture } from './first-public-scope-fixture.ts';
+import { readZonePage, type KernelOptions } from './semantic-first-public-native.ts';
 import { FIRST_PUBLIC_SCOPE_PATHS, type PathAuth, type PathId, type PathStatus } from './first-public-scope-paths.ts';
 
 export { FIRST_PUBLIC_SCOPE_PATHS, type PathAuth, type PathId, type PathStatus } from './first-public-scope-paths.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 export const evidenceDir = join(root, '.temp/goal/web');
-const seedResult = join(root, '.temp/cross-media-seed/result.json');
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const launchLocales = ['en', 'zh-Hant'] as const;
 const phone = { width: 390, height: 844 };
 const desktop = { width: 1280, height: 860 };
@@ -57,11 +58,6 @@ function stackOrigins(): Stack {
   };
 }
 
-function requireId(value: unknown, label: string): string {
-  if (typeof value !== 'string' || !uuid.test(value)) throw new Error(`${label} is not a native identity`);
-  return value;
-}
-
 function publicFields(value: unknown): unknown {
   if (Array.isArray(value)) return value.slice(0, 24).map(publicFields);
   if (!value || typeof value !== 'object') return value;
@@ -85,15 +81,6 @@ async function child(command: string[], name: string, env: NodeJS.ProcessEnv = p
   return code ?? 1;
 }
 
-async function parseEnv(path: string): Promise<Record<string, string>> {
-  const values: Record<string, string> = {};
-  for (const line of (await readFile(path, 'utf8')).split('\n')) {
-    const match = /^(?<name>[A-Z0-9_]+)=(?<value>.*)$/.exec(line);
-    if (match?.groups) values[match.groups.name!] = match.groups.value!.replace(/^'(.*)'$/, '$1');
-  }
-  return values;
-}
-
 async function sourceRevision(): Promise<string> {
   const proc = Bun.spawn(['git', 'rev-parse', 'HEAD'], { cwd: root, stdout: 'pipe', stderr: 'ignore' });
   const text = (await new Response(proc.stdout).text()).trim();
@@ -101,21 +88,19 @@ async function sourceRevision(): Promise<string> {
   return text;
 }
 
-async function kernel(
-  stack: Stack,
-  method: string,
-  path: string,
-  options: { body?: unknown; query?: Record<string, string> } = {},
-): Promise<{ status: number; value: Json; text: string }> {
+async function kernel(stack: Stack, method: string, path: string, options: KernelOptions = {}) {
   const url = new URL(path, stack.kernel);
   for (const [name, value] of Object.entries(options.query ?? {})) url.searchParams.set(name, value);
   const response = await fetch(url, {
     method,
     signal: AbortSignal.timeout(60_000),
+    redirect: 'error',
     headers: {
       'accept-language': 'en',
       ...(options.body === undefined ? {} : { 'content-type': 'application/json' }),
-      ...(method === 'GET' ? {} : { 'idempotency-key': crypto.randomUUID() }),
+      ...(method === 'GET' ? {} : { 'idempotency-key': JSON.stringify(crypto.randomUUID()) }),
+      ...(options.bearer === undefined ? {} : { authorization: `Bearer ${options.bearer}` }),
+      ...(options.ifMatch === undefined ? {} : { 'if-match': JSON.stringify(options.ifMatch) }),
     },
     ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
   });
@@ -128,7 +113,7 @@ async function kernel(
       value = { text: text.slice(0, 400) };
     }
   }
-  return { status: response.status, value, text };
+  return { status: response.status, body: value, value, headers: response.headers };
 }
 
 async function http(url: string): Promise<{ status: number; headers: Record<string, string>; text: string }> {
@@ -136,75 +121,6 @@ async function http(url: string): Promise<{ status: number; headers: Record<stri
   const headers: Record<string, string> = {};
   for (const [name, value] of response.headers.entries()) headers[name] = value;
   return { status: response.status, headers, text: await response.text() };
-}
-
-type Seed = {
-  workId?: string | undefined;
-  boardId?: string | undefined;
-  threadId?: string | undefined;
-  collectionId?: string | undefined;
-  collectionMembers: string[];
-  editionSubjectId?: string | undefined;
-  readings: { provider: string; externalId: string; subjectId: string }[];
-};
-
-function workIdentity(seed: Json, provider: string, externalId: string): string | undefined {
-  for (const entry of (seed.readings as Json[] | undefined) ?? []) {
-    if (entry?.source !== provider || entry.externalId !== externalId) continue;
-    const id = (entry.subject as Json | undefined)?.subject
-      ? ((entry.subject as Json).subject as Json).id
-      : (entry.subject as Json | undefined)?.id;
-    if (typeof id === 'string' && uuid.test(id)) return id;
-  }
-  for (const entry of (seed.workLinks as Json[] | undefined) ?? []) {
-    const source = entry?.source as Json | undefined;
-    if (source?.provider !== provider || source.externalId !== externalId) continue;
-    const id = (source.subject as Json | undefined)?.subjectId;
-    if (typeof id === 'string' && uuid.test(id)) return id;
-  }
-  return undefined;
-}
-
-async function readSeed(): Promise<Seed> {
-  if (!(await Bun.file(seedResult).exists())) throw new Error(`seed result missing: ${seedResult}`);
-  const raw = JSON.parse(await readFile(seedResult, 'utf8')) as Json;
-  const showcase = (raw.developmentShowcase as Json | undefined) ?? {};
-  const community = (showcase.community as Json | undefined) ?? {};
-  const collections = ((showcase.collections as Json[] | undefined) ?? []).filter(
-    (row) => row.status === 'current' && (row.public as Json | undefined)?.id,
-  );
-  const published = collections[0];
-  const members = ((published?.members as Json[] | undefined) ?? [])
-    .map((member) => member.subjectId)
-    .filter((id): id is string => typeof id === 'string' && uuid.test(id));
-  const edition = showcase.edition as Json | undefined;
-  const editionSubject =
-    typeof edition?.targetSubjectId === 'string' && uuid.test(edition.targetSubjectId)
-      ? edition.targetSubjectId
-      : undefined;
-  const workFromCommunity =
-    community.state === 'published' && typeof (community.source as Json | undefined)?.subjectId === 'string'
-      ? String((community.source as Json).subjectId)
-      : undefined;
-  return {
-    workId: workFromCommunity ?? workIdentity(raw, 'vndb', 'v2002') ?? workIdentity(raw, 'bangumi', '10380'),
-    boardId:
-      typeof (community.board as Json | undefined)?.id === 'string' ? String((community.board as Json).id) : undefined,
-    threadId:
-      typeof (community.thread as Json | undefined)?.threadId === 'string'
-        ? String((community.thread as Json).threadId)
-        : undefined,
-    collectionId: published ? requireId((published.public as Json).id, 'seeded Collection') : undefined,
-    collectionMembers: members,
-    editionSubjectId: editionSubject,
-    readings: [
-      ...['vndb:v2002', 'vndb:v4', 'bangumi:10380'].flatMap((pair) => {
-        const [provider, externalId] = pair.split(':') as [string, string];
-        const subjectId = workIdentity(raw, provider, externalId);
-        return subjectId ? [{ provider, externalId, subjectId }] : [];
-      }),
-    ],
-  };
 }
 
 async function hydrated(page: Page): Promise<void> {
@@ -325,15 +241,14 @@ async function probeSignIn(stack: Stack): Promise<{ ok: boolean; detail: string 
 
 type WalkContext = {
   stack: Stack;
-  seed: Seed;
+  seed: WebFixture;
   page: Page;
-  source: string;
   signIn: { ok: boolean; detail: string };
 };
 
 async function walkW01(ctx: WalkContext): Promise<unknown> {
   const visits: unknown[] = [];
-  const routes = ['/', '/search', '/collections', '/boards'];
+  const routes = ['/', '/books', '/collections', '/boards'];
   for (const viewport of [desktop, phone]) {
     await ctx.page.setViewportSize(viewport);
     for (const locale of launchLocales) {
@@ -368,33 +283,11 @@ async function walkW02(ctx: WalkContext): Promise<unknown> {
   const workRead = await pageRead(ctx.stack, ctx.seed.workId);
   if (workRead.status !== 200) throw new Error(`work pages:read HTTP ${workRead.status}`);
   const readers: unknown[] = [{ kind: 'work', url: work, native: workRead.status }];
-  const releaseId = ctx.seed.editionSubjectId ?? ctx.seed.readings.find((row) => row.externalId !== 'v2002')?.subjectId;
-  if (releaseId && releaseId !== ctx.seed.workId) {
-    const release = await openSubject(ctx.page, ctx.stack, releaseId);
-    const releaseRead = await pageRead(ctx.stack, releaseId);
-    if (releaseRead.status !== 200) throw new Error(`release pages:read HTTP ${releaseRead.status}`);
-    readers.push({ kind: 'release', url: release, native: releaseRead.status });
-  } else {
-    const editionsUrl = await openView(ctx.page, 'Editions').catch(() => undefined);
-    if (!editionsUrl) throw new Error('no distinct release Subject and Editions tab is absent');
-    const href = (await subjectHrefs(ctx.page))[0];
-    if (!href) throw new Error('Editions page has no release link');
-    await ctx.page.locator(`a[href="${href}"]`).first().click();
-    await hydrated(ctx.page);
-    readers.push({ kind: 'release', url: ctx.page.url(), via: 'editions' });
-  }
-  const handlePage = await gotoPage(ctx.page, `${ctx.stack.web}/en/@developer`);
-  if (handlePage.status === 200 && !handlePage.url.includes('/auth/sign-in')) {
-    readers.push({ kind: 'agent', url: handlePage.url, status: handlePage.status });
-  } else {
-    const credits = await openSubject(ctx.page, ctx.stack, ctx.seed.workId);
-    await openView(ctx.page, 'Credits').catch(async () => openView(ctx.page, 'Cast'));
-    const person = (await subjectHrefs(ctx.page)).find((href) => !credits.includes(href.split('?')[0] ?? href));
-    if (!person) throw new Error('no agent or credited Person reader from the seeded work');
-    await ctx.page.locator(`a[href="${person}"]`).first().click();
-    await hydrated(ctx.page);
-    readers.push({ kind: 'agent', url: ctx.page.url(), via: 'credits' });
-  }
+  const release = await openSubject(ctx.page, ctx.stack, ctx.seed.releaseId);
+  const releaseRead = await pageRead(ctx.stack, ctx.seed.releaseId);
+  if (releaseRead.status !== 200) throw new Error(`release pages:read HTTP ${releaseRead.status}`);
+  readers.push({ kind: 'release', url: release, native: releaseRead.status });
+  readers.push({ kind: 'agent', ...(await walkW10(ctx)) });
   return { readers };
 }
 
@@ -462,21 +355,24 @@ async function walkW09(ctx: WalkContext): Promise<unknown> {
   return { details, sources, historyUrl, native: native.status };
 }
 
-async function walkW10(ctx: WalkContext): Promise<unknown> {
-  const handle = await gotoPage(ctx.page, `${ctx.stack.web}/en/@developer`);
-  if (handle.status >= 400 || handle.url.includes('/auth/sign-in')) {
-    if (!ctx.seed.workId) throw new Error('no public handle and no seeded work for a credited agent');
-    await openSubject(ctx.page, ctx.stack, ctx.seed.workId);
-    await openView(ctx.page, 'Credits').catch(async () => openView(ctx.page, 'Cast'));
-    await clickFirstSubject(ctx.page, ctx.page.url());
-  }
+async function walkW10(ctx: WalkContext) {
+  const { accountId, handle, subjectId } = ctx.seed.owner;
+  const page = await gotoPage(ctx.page, `${ctx.stack.web}/en/@${handle}`);
+  if (page.status !== 200 || new URL(page.url).pathname !== `/en/@${handle}`)
+    throw new Error(`public fixture profile HTTP ${page.status} at ${page.url}`);
   const canonical = await ctx.page.locator('link[rel="canonical"]').getAttribute('href');
-  const url = ctx.page.url();
-  if (!canonical) throw new Error('canonical profile link is absent');
-  const accounts = await kernel(ctx.stack, 'GET', '/v1/accounts', {
-    query: url.includes('/@') ? { handle: new URL(url).pathname.split('/@')[1]?.split('/')[0] ?? 'developer' } : {},
+  if (!canonical || new URL(canonical, page.url).pathname !== new URL(page.url).pathname)
+    throw new Error('The exact canonical profile link is absent');
+  const accounts = await kernel(ctx.stack, 'GET', '/v1/accounts', { query: { handle } });
+  const rows = accounts.value.accounts as Json[] | undefined;
+  if (accounts.status !== 200 || rows?.length !== 1 || rows[0]?.id !== accountId)
+    throw new Error(`public handle did not read the exact fixture account (HTTP ${accounts.status})`);
+  const agent = await kernel(ctx.stack, 'POST', '/v1/pages:read', {
+    body: { target: { account: handle }, languages: ['en'] },
   });
-  return { url, canonical, accounts: accounts.status };
+  if (agent.status !== 200 || agent.value.account !== accountId || agent.value.subject !== subjectId)
+    throw new Error(`agent page did not bind the exact account and Subject (HTTP ${agent.status})`);
+  return { url: page.url, canonical, accounts: accounts.status, accountId, subjectId, nativePage: agent.status };
 }
 
 async function walkW11(ctx: WalkContext): Promise<unknown> {
@@ -508,60 +404,84 @@ async function walkW18(ctx: WalkContext): Promise<unknown> {
   const itemList = jsonLd.some((text) => text.includes('ItemList'));
   const native = await kernel(ctx.stack, 'GET', `/v1/collections/${ctx.seed.collectionId}`);
   if (!itemList) throw new Error('public Collection has no ItemList JSON-LD');
-  return { url: url.url, itemList, members: ctx.seed.collectionMembers.length, native: native.status };
+  if (native.status !== 200 || (native.value.collection as Json | undefined)?.id !== ctx.seed.collectionId)
+    throw new Error(`The exact public Collection readback was missing (HTTP ${native.status})`);
+  return { url: url.url, itemList, members: ctx.seed.collectionMembers, native: native.status };
 }
 
 async function walkW29(ctx: WalkContext): Promise<unknown> {
   if (!ctx.seed.boardId || !ctx.seed.threadId) throw new Error('seed published no board or thread');
   const board = await gotoPage(ctx.page, `${ctx.stack.web}/en/boards/${ctx.seed.boardId}`);
   if (board.status >= 400) throw new Error(`board HTTP ${board.status}`);
-  const thread = ctx.page.locator(`a[href*="${ctx.seed.threadId}"], a[href*="/threads/"]`).first();
-  if ((await thread.count()) === 0) {
-    await gotoPage(ctx.page, `${ctx.stack.web}/en/threads/${ctx.seed.threadId}`);
-  } else {
-    await thread.click();
-    await hydrated(ctx.page);
-  }
-  if (!ctx.page.url().includes('/threads/')) throw new Error(`thread did not open: ${ctx.page.url()}`);
+  const thread = ctx.page.locator(`a[href*="/threads/${ctx.seed.threadId}"]`).first();
+  await thread.click();
+  await hydrated(ctx.page);
+  if (!new URL(ctx.page.url()).pathname.split('/').includes(ctx.seed.threadId))
+    throw new Error(`the exact thread did not open: ${ctx.page.url()}`);
   const native = await kernel(ctx.stack, 'GET', `/v1/threads/${ctx.seed.threadId}`);
-  if (!ctx.signIn.ok)
-    throw Object.assign(new Error(`anonymous board/thread reached; write unreached: ${ctx.signIn.detail}`), {
+  const current = native.value.thread as Json | undefined;
+  const opening = current?.firstPost as Json | undefined;
+  if (
+    native.status !== 200 ||
+    current?.boardId !== ctx.seed.boardId ||
+    opening?.id !== ctx.seed.openingPostId ||
+    opening.revisionId !== ctx.seed.openingRevisionId ||
+    opening.authorId !== ctx.seed.owner.accountId
+  )
+    throw new Error(`The exact native conversation and opening revision were absent (HTTP ${native.status})`);
+  const history = await kernel(
+    ctx.stack,
+    'GET',
+    `/v1/posts/${ctx.seed.openingPostId}/revisions/${ctx.seed.openingRevisionId}`,
+  );
+  const revision = history.value.post as Json | undefined;
+  if (
+    history.status !== 200 ||
+    revision?.revisionId !== ctx.seed.openingRevisionId ||
+    revision.id !== ctx.seed.openingPostId ||
+    revision.authorId !== ctx.seed.owner.accountId
+  )
+    throw new Error(`The exact native opening history was absent (HTTP ${history.status})`);
+  throw Object.assign(
+    new Error(`Anonymous Board and exact Thread reached. Mounted post or reply is unreached (${ctx.signIn.detail})`),
+    {
       unreached: true,
-    });
-  return { board: board.url, thread: ctx.page.url(), native: native.status };
+      observed: { board: board.url, thread: ctx.page.url(), native: native.status, history: history.status },
+    },
+  );
 }
 
 async function walkW31(ctx: WalkContext): Promise<unknown> {
-  const realms = await gotoPage(ctx.page, `${ctx.stack.web}/en/realms`);
-  const spaces = await kernel(ctx.stack, 'GET', '/v1/spaces', { query: { limit: '5' } });
-  const realmLink = ctx.page.locator('a[href*="/realms/"], a[href*="/spaces/"]').first();
-  if ((await realmLink.count()) === 0) {
-    throw Object.assign(new Error('no public Realm or Space home on the seeded stack'), { unreached: true });
-  }
-  await realmLink.click();
-  await hydrated(ctx.page);
-  if (!ctx.signIn.ok)
-    throw Object.assign(
-      new Error(`public home reached ${ctx.page.url()}; membership unreached: ${ctx.signIn.detail}`),
-      {
-        unreached: true,
-      },
-    );
-  return { directory: realms.url, opened: ctx.page.url(), spaces: spaces.status };
+  const { realmId, spaceAddress } = ctx.seed;
+  const opened = await gotoPage(ctx.page, `${ctx.stack.web}/en/realms/${realmId}`);
+  const expected = spaceAddress ? `/en/spaces/${encodeURIComponent(spaceAddress)}` : `/en/realms/${realmId}`;
+  if (opened.status !== 200 || new URL(opened.url).pathname !== expected)
+    throw new Error(`The exact public Realm home returned HTTP ${opened.status} at ${opened.url}`);
+  await ctx.page.getByRole('heading', { name: 'First-public Web Space', exact: true }).waitFor({ state: 'visible' });
+  const current = await kernel(ctx.stack, 'GET', `/v1/realms/${ctx.seed.realmId}`);
+  const realm = current.value.realm as Json | undefined;
+  if (current.status !== 200 || realm?.realmId !== ctx.seed.realmId || realm.spaceId !== ctx.seed.spaceId)
+    throw new Error(`The exact public Realm and Space readback was missing (HTTP ${current.status})`);
+  throw Object.assign(
+    new Error(
+      `Exact public Realm reached. Mounted membership or appearance action is unreached (${ctx.signIn.detail})`,
+    ),
+    { unreached: true, observed: { opened: opened.url, realmId, spaceId: ctx.seed.spaceId, native: current.status } },
+  );
 }
 
 async function walkW34(ctx: WalkContext): Promise<unknown> {
-  const zones = await kernel(ctx.stack, 'GET', '/v1/zones', { query: { limit: '5' } });
-  const items = (zones.value.zones as Json[] | undefined) ?? (zones.value.items as Json[] | undefined) ?? [];
-  const id = items.find((row) => typeof row.id === 'string')?.id;
-  if (typeof id !== 'string')
-    throw Object.assign(new Error(`seed published no static Zone (zones HTTP ${zones.status})`), { unreached: true });
-  const page = await gotoPage(ctx.page, `${ctx.stack.web}/en/zones/${id}`);
-  if (page.status >= 400) throw new Error(`Zone HTTP ${page.status}`);
-  await shellOk(ctx.page, 'en');
-  await ctx.page.goBack({ waitUntil: 'domcontentloaded' });
-  await hydrated(ctx.page);
-  return { id, url: page.url, native: zones.status };
+  const { id, route, text } = ctx.seed.zone;
+  const home = await gotoPage(ctx.page, `${ctx.stack.web}/zh-Hant/zones/${id}`);
+  if (home.status !== 200) throw new Error(`Zone home HTTP ${home.status}`);
+  const opened = await gotoPage(ctx.page, `${ctx.stack.web}/zh-Hant/zones/${id}/${route}`);
+  if (opened.status !== 200) throw new Error(`Configured Zone page HTTP ${opened.status}`);
+  await shellOk(ctx.page, 'zh-Hant');
+  await ctx.page.getByText(text, { exact: true }).waitFor({ state: 'visible' });
+  const native = await readZonePage((method, path, options) => kernel(ctx.stack, method, path, options), id, route);
+  if (native.status !== 200) throw new Error(`Configured Zone native read HTTP ${native.status}`);
+  await returnTo(ctx.page, home.url);
+  return { id, url: opened.url, native: native.status, return: ctx.page.url() };
 }
 
 async function walkW35(ctx: WalkContext): Promise<unknown> {
@@ -634,8 +554,13 @@ function hourly(results: PathResult[]): void {
 }
 
 export async function run(): Promise<PathResult[]> {
-  if (!walkAcceptanceId(process.env))
-    throw new Error('The first-public-scope walk runs on a walk stack whose brief lists native and browser acceptance');
+  if (
+    !firstPublicWebWalk() ||
+    !walkAcceptanceId(process.env, 'native') ||
+    !walkAcceptanceId(process.env, 'browser') ||
+    !walkStackAdmitted(process.env, root)
+  )
+    throw new Error('Use dev-stack.ts walk --first-public-web with native and browser acceptance');
   await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
   await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
   const source = await sourceRevision();
@@ -661,35 +586,25 @@ export async function run(): Promise<PathResult[]> {
     }
   };
 
-  const { retireDevelopmentSeedState, retireStaleSeedJournals, kernelEnvironment } =
-    await import('../../../services/auth/scripts/dev-stack.ts');
-  await retireDevelopmentSeedState(root);
-  const kernelEnv = await kernelEnvironment();
-  if (kernelEnv.DATABASE_URL) await retireStaleSeedJournals(root, kernelEnv.DATABASE_URL);
-
-  const personaCode = await child(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'], 'persona');
-  if (personaCode !== 0) {
-    failRest(`persona exited ${personaCode}; see .temp/goal/web/persona.log`);
-    await writeEvidence(source, results, undefined, undefined);
-    hourly(results);
-    return results;
-  }
-  const seedEnv = { ...process.env, ...(await parseEnv(join(root, '.temp/local-stack/seed.env'))) };
-  const seedCode = await child(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], 'seed', seedEnv);
-  let seed: Seed;
-  try {
-    seed = await readSeed();
-  } catch (error) {
-    failRest(`seed exited ${seedCode}: ${error instanceof Error ? error.message : String(error)}`);
-    await writeEvidence(source, results, undefined, undefined);
-    hourly(results);
-    return results;
-  }
-
   const stack = stackOrigins();
-  const frontends = await startSeededFrontends();
+  let seed: WebFixture | undefined;
+  let frontends: Awaited<ReturnType<typeof startSeededFrontends>> | undefined;
   let browser: Browser | undefined;
   try {
+    const seedEnv = { ...process.env, ...(await parseEnv(join(root, '.temp/local-stack/seed.env'))) };
+    const seedCode = await child(
+      [process.execPath, 'scripts/datasets/cross-media-seed.ts', '--dev-catalogue', '--without-person-merge'],
+      'seed',
+      seedEnv,
+    );
+    if (seedCode !== 0) throw new Error(`Catalogue seed exited ${seedCode}; see .temp/goal/web/seed.log`);
+    seed = await seedFirstPublicWeb(
+      root,
+      stack,
+      (method, path, options) => kernel(stack, method, path, options),
+      await readFirstPublicCatalogueReport(root),
+    );
+    frontends = await startSeededFrontends();
     const signIn = await probeSignIn(stack);
     await writeFile(
       join(evidenceDir, 'sign-in-probe.json'),
@@ -699,7 +614,7 @@ export async function run(): Promise<PathResult[]> {
     const context: BrowserContext = await browser.newContext({ locale: 'en-US', viewport: desktop });
     const page = await context.newPage();
     page.setDefaultTimeout(60_000);
-    const ctx: WalkContext = { stack, seed, page, source, signIn };
+    const ctx: WalkContext = { stack, seed, page, signIn };
 
     for (const path of FIRST_PUBLIC_SCOPE_PATHS) {
       const started = performance.now();
@@ -766,7 +681,7 @@ export async function run(): Promise<PathResult[]> {
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const unreached = Boolean((error as { unreached?: boolean }).unreached);
+        const { unreached, observed } = error as { unreached?: boolean; observed?: unknown };
         results.push({
           id: path.id,
           job: path.job,
@@ -775,7 +690,7 @@ export async function run(): Promise<PathResult[]> {
           persona: path.auth === 'signed-in' ? 'signed-in' : 'anonymous',
           elapsedMs: Math.round(performance.now() - started),
           source,
-          evidence: { error: message, url: page.url() },
+          evidence: { error: message, url: page.url(), ...(observed && { observed }) },
           firstWrong: message,
         });
       }
@@ -785,14 +700,14 @@ export async function run(): Promise<PathResult[]> {
     failRest(error instanceof Error ? error.message : String(error));
   } finally {
     await browser?.close();
-    await frontends.stop();
+    await frontends?.stop();
   }
   await writeEvidence(source, results, stack, seed);
   hourly(results);
   return results;
 }
 
-async function writeEvidence(source: string, results: PathResult[], stack?: Stack, seed?: Seed): Promise<void> {
+async function writeEvidence(source: string, results: PathResult[], stack?: Stack, seed?: WebFixture): Promise<void> {
   const passing = results.filter((row) => row.status === 'PASS').length;
   const failing = results.filter((row) => row.status !== 'PASS');
   const slowest = failing.slice().sort((a, b) => b.elapsedMs - a.elapsedMs)[0];

@@ -157,6 +157,7 @@ type DevelopmentSeedOptions = {
   waitForKernel?: typeof waitForKernelReadiness;
   signal?: AbortSignal;
   root?: string;
+  publishReviewedPersonMerge?: boolean;
 };
 
 async function seedDevelopmentImport(
@@ -254,6 +255,7 @@ async function seedDevelopmentImport(
     ...(dumps.sourceSnapshots.vndb.timestamp === undefined
       ? {}
       : { sourceSnapshotAsOf: dumps.sourceSnapshots.vndb.timestamp.slice(0, 10) }),
+    ...(options.publishReviewedPersonMerge === false && { publishReviewedPersonMerge: false }),
     ...(composePersona && { composePersona }),
     ...(process.env.REZICS_WALK_SMOL === '1' ? { onDumpTableReleased: releaseWalkFileCache } : {}),
   });
@@ -399,8 +401,11 @@ if (import.meta.main) {
     const args = Bun.argv.slice(2);
     if (args.length === 1 && args[0] === '--dev') {
       if ((await runDevelopmentSeed()).state !== 'complete') process.exitCode = 1;
-    } else if (args.length === 1 && args[0] === '--dev-catalogue') await seedDevelopmentCatalogue();
-    else await runCrossMediaSeedCli(args);
+    } else if (args[0] === '--dev-catalogue' && args.length === 1) {
+      await seedDevelopmentCatalogue();
+    } else if (args[0] === '--dev-catalogue' && args[1] === '--without-person-merge' && args.length === 2) {
+      await seedDevelopmentCatalogue({ publishReviewedPersonMerge: false });
+    } else await runCrossMediaSeedCli(args);
   } catch (error) {
     const directory = resolve(import.meta.dir, '../../.temp/cross-media-seed');
     const reviewed = error instanceof ReviewedCatalogueCommandError ? error.remaining : undefined;

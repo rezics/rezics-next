@@ -21,7 +21,7 @@ export const DEVELOPMENT_SHOWCASE_SCOPES = [
 ] as const;
 
 export type DevelopmentSeedActor = Readonly<{ accountId: string; clientId: string }>;
-export type DevelopmentSeedCredential = Readonly<{ keyId: string }>;
+export type DevelopmentSeedCredential = Readonly<{ keyId: string } | { sessionId: string }>;
 export type DevelopmentSeedFailureState = 'missing_source' | 'refused' | 'unknown_delivery' | 'unavailable';
 export type DevelopmentSeedFailure = Readonly<{
   state: DevelopmentSeedFailureState;
@@ -109,7 +109,7 @@ function sameIntent(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-/** Authenticated native writes use the developer's separate, narrowly scoped showcase client. */
+/** Seal authenticated native writes to the caller and its current credential identity. */
 export function createDevelopmentShowcaseClient(options: RequestOptions): DevelopmentShowcaseClient {
   const fetcher = options.fetch ?? globalThis.fetch;
 

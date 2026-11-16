@@ -33,7 +33,7 @@ const CAPABILITIES = 'docs/goals/accounts.capabilities.md';
 const JOURNEY_HEADING = '## First-public journeys';
 
 // Reuse the original native persona and request path in the focused acceptance probe.
-export { GLOBAL_CONTEXT, asId, kernel, origins, parseEnv, signup, websiteToken };
+export { GLOBAL_CONTEXT, asId, kernel, origins, parseEnv, resolveFollowTarget, signup, websiteToken };
 
 export const JOURNEYS = [
   { id: 'J01', journey: 'signup → callback → authenticated Home', owner: 'Auth c883' },
@@ -1036,6 +1036,16 @@ type CaptureHandoff = {
   recoveryDirectory: string;
 };
 
+export async function readOrdinaryAuthSession(stack: Origins, person: Person, session: Session) {
+  if (!session.cookie || session.accountId !== person.accountId)
+    throw new Error('Ordinary sign-in did not establish the fixture account');
+  return requireStatus(
+    await send(`${stack.native}/sessions`, { method: 'GET', cookie: session.cookie, origin: stack.issuer }),
+    'ordinary fixture session read',
+    200,
+  );
+}
+
 async function prepareOrdinaryAuthFixture(directory: string, sourceRevision: string): Promise<CaptureHandoff> {
   const slot = process.env.REZICS_WALK_STACK_SLOT;
   if (!slot || !walkStackAdmitted(process.env, root) || !/^[a-f0-9]{40}$/.test(sourceRevision))
@@ -1049,13 +1059,7 @@ async function prepareOrdinaryAuthFixture(directory: string, sourceRevision: str
     throw new Error('Ordinary Auth fixture issuer did not match discovery');
   const person = await signup(stack, 'fixture');
   const session = await signIn(stack, person, 'login', []);
-  if (!session.cookie || session.accountId !== person.accountId)
-    throw new Error('Ordinary sign-in did not establish the fixture account');
-  requireStatus(
-    await send(`${stack.native}/sessions`, { method: 'GET', cookie: session.cookie, origin: stack.issuer }),
-    'ordinary fixture session read',
-    200,
-  );
+  await readOrdinaryAuthSession(stack, person, session);
   const seedResultPath = join(directory, 'ordinary-auth-fixture.json');
   const result = { sourceRevision, slot, origins: stack, accountId: person.accountId, currentSessionRead: 200 };
   await writeFile(seedResultPath, JSON.stringify(result) + '\n', { mode: 0o600 });
