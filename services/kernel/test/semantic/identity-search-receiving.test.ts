@@ -1,5 +1,10 @@
 import { expect, test } from 'bun:test';
 import type { Pool, QueryConfig } from 'pg';
+import { authoritativeTimeValue, noEffect, runCommand } from '../../src/command/command.ts';
+import commandTime from '../../src/command/time.sql';
+import commandFence from '../../src/command/fence.sql';
+import commandNoEffect from '../../src/command/no-effect-fence.sql';
+import { installNativeHistory } from '../../src/composition/history.ts';
 import readPartitionStatement from '../../src/partition/read.sql';
 import { readPartition } from '../../src/partition/partition.ts';
 import {
@@ -8,6 +13,7 @@ import {
   searchReceivingProductionDeclaration,
 } from '../../src/semantic/identity-search-receiving-statements.ts';
 import { searchNativeReceivingStatements } from '../../src/search/identity-receiving-native-store.ts';
+import { searchReceivingCaptureStatements } from '../../src/semantic/identity-search-receiving-capture.ts';
 import {
   prepareSearchIdentityReceivingEffect,
   readSearchIdentityReceivingSelection,
@@ -704,6 +710,57 @@ test('Search receiving dispatches only the declared partition owner lookup', asy
     });
   });
 });
+
+test.each(['event', 'no-effect'] as const)(
+  'Search receiving funds Core time and the %s command fence',
+  async (kind) => {
+    installNativeHistory();
+    const timestamp = '2026-01-01T00:00:00.000Z';
+    const timeSql = commandTime['~standard'].query.text;
+    const fence = kind === 'event' ? commandFence : commandNoEffect;
+    const fenceSql = fence['~standard'].query.text;
+    const { pool, calls } = driver(undefined, (sql, values) => {
+      if (sql === timeSql) {
+        expect(values).toEqual([timestamp]);
+        return [[timestamp]];
+      }
+      if (sql === fenceSql) return [['1', '9007199254740993']];
+      return [];
+    });
+    await funded(pool, async (context) => {
+      const declaration = receivingWorkDeclaration(searchReceivingProductionDeclaration());
+      const result = await withSearchReceivingWork(pool, context, declaration, commonSearchReceivingStatements(), () =>
+        runCommand(
+          pool,
+          { partition: 4095, deadline: context.deadline, clock: () => new Date(timestamp) },
+          async (_tx, { time }) => {
+            const value = authoritativeTimeValue(time);
+            return kind === 'no-effect'
+              ? noEffect(value)
+              : { value, events: [{ type: 'com.rezics.fixture.created.v1', data: null }] };
+          },
+        ),
+      );
+      const timeout = expect.stringMatching(/^SET LOCAL statement_timeout = '[1-9][0-9]*ms'$/);
+      expect(calls).toEqual([
+        begin,
+        searchReceivingCaptureStatements.enable,
+        "SET LOCAL lock_timeout = '200ms'",
+        timeout,
+        timeSql,
+        timeout,
+        fenceSql,
+        searchReceivingCaptureStatements.next,
+        'COMMIT',
+      ]);
+      expect(result.value).toMatchObject({ value: timestamp, position: 9007199254740993n, epoch: 1 });
+      const remaining = identitySourceConsumerNativeWork(pool, context.identityConsumerWork, context.deadline)!;
+      expect(context.allowance.bytes - remaining.bytes).toBe(result.work.used.bytes);
+      expect(context.allowance.statements - remaining.statements).toBe(result.work.used.statements + 1);
+      expect(declaration.footprint(`${timeSql.trimEnd().replace(/;$/, '')} /*unexpected*/`)).toBeUndefined();
+    });
+  },
+);
 
 test.each(['merge', 'unmerge'] as const)(
   'Search change page funds the complete %s snapshot in both ledgers',
