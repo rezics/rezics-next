@@ -567,7 +567,7 @@ export async function runResumeCli(argv: readonly string[], options: ImportCliOp
           pollAttempts: 5,
           pollDelayMs: 1000,
         });
-        importerOptions.mediaResolver = {
+        const mediaResolver = {
           async resolve(input: {
             owner: Owner;
             subject: string;
@@ -586,11 +586,17 @@ export async function runResumeCli(argv: readonly string[], options: ImportCliOp
             return { status: 'available', mediaIds: result.mediaIds };
           },
         };
-        if (config.source === 'bangumi')
-          importerOptions.identifierLookup = composeReviewedCatalogueHost({
-            transport: slot.transport,
-            vocabulary: releasedReviewedVocabulary(),
-          }).lookup(importer.session.bindings);
+        importer.bindSessionDependencies({
+          mediaResolver,
+          ...(config.source === 'bangumi'
+            ? {
+                identifierLookup: composeReviewedCatalogueHost({
+                  transport: slot.transport,
+                  vocabulary: releasedReviewedVocabulary(),
+                }).lookup(importer.session.bindings),
+              }
+            : {}),
+        });
         options.observer?.onCoordinator?.({
           importer,
           registration,

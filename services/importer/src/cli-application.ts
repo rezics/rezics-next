@@ -748,22 +748,21 @@ async function executeOrdinaryImport(
         return { status: 'available', mediaIds: result.mediaIds };
       },
     };
-    // The resolver is wired after session construction so it uses the exact
-    // production RecordBindings handle owned by this coordinator.
-    importerOptions.mediaResolver = mediaAdapter;
+    importer.bindSessionDependencies({ mediaResolver: mediaAdapter });
     if (config.source === 'bangumi') {
-      if (bangumiPersonCareerBindings)
-        importerOptions.vocabularyAdmission = createBangumiPersonCareerAdmission(
-          bangumiPersonCareerBindings,
-          liveTransport(),
-        );
       const publicTagLookup = createReviewedCatalogueLookup(importer.session.bindings, liveTransport());
-      importerOptions.identifierLookup = bangumiGameGenreBindings
-        ? composeBangumiImportIdentifierLookups(
-            publicTagLookup,
-            createShowcaseBangumiGameGenreLookup(registration.source, bangumiGameGenreBindings, liveTransport()).lookup,
-          )
-        : publicTagLookup;
+      importer.bindSessionDependencies({
+        ...(bangumiPersonCareerBindings
+          ? { vocabularyAdmission: createBangumiPersonCareerAdmission(bangumiPersonCareerBindings, liveTransport()) }
+          : {}),
+        identifierLookup: bangumiGameGenreBindings
+          ? composeBangumiImportIdentifierLookups(
+              publicTagLookup,
+              createShowcaseBangumiGameGenreLookup(registration.source, bangumiGameGenreBindings, liveTransport())
+                .lookup,
+            )
+          : publicTagLookup,
+      });
     }
 
     const decoderModule =
