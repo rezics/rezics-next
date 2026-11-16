@@ -241,7 +241,8 @@ export async function readCollectionSourceWorkGroup(
   const cost = COLLECTION_SOURCE_WORK_COST().group(limit);
   const current = frame(options.deadline);
   try {
-    if (routeOf(subjectId) !== state.metadata.route) throw new ProblemError('invalid_cursor');
+    // The Collection routes the local reference index. Subjects have their own routes.
+    if (routeOf(subjectId) === null) throw new ProblemError('invalid_cursor');
     if (
       after &&
       (after.driver === 'output' ||

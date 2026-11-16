@@ -3,8 +3,10 @@ import { NativeCollectionWork } from '../../src/library/collection-source-work.t
 import { createCollectionSource } from '../../src/library/collection-source.ts';
 import { type WorkDimensions } from '../../src/library/contract/work-dimensions.ts';
 import { runOperationalTransaction } from '../../src/command/operational.ts';
+import { newId, ROUTES } from '../../src/route/route.ts';
 import {
   COLLECTION_SOURCE_WORK_COST,
+  readCollectionSourceWorkGroup,
   readCollectionSourceWorkState,
   seekCollectionSourceWorkGroup,
 } from '../../src/library/collection-source-work-native.ts';
@@ -167,6 +169,13 @@ test('selected Collection source refuses an undeclared context before IO and see
           deadline,
         });
         const first = await seekCollectionSourceWorkGroup(work, state, null, { deadline });
+        const foreignSubject = newId((state.metadata.route + 1) % ROUTES);
+        const foreignGroup = await readCollectionSourceWorkGroup(work, state, foreignSubject, null, 1, { deadline });
+        const beforeInvalid = statements;
+        await expect(
+          readCollectionSourceWorkGroup(work, state, 'invalid-subject', null, 1, { deadline }),
+        ).rejects.toMatchObject({ code: 'invalid_cursor' });
+        expect(statements).toBe(beforeInvalid);
         const prepared = await source.prepare({ collectionId: fixture.collectionId, work, deadline, allowance });
         const result = await source.prefix({
           source: prepared.source,
@@ -176,13 +185,15 @@ test('selected Collection source refuses an undeclared context before IO and see
           afterSubjectId: null,
           candidateLimit: 2,
         });
-        return { state, first, prepared, result, statements };
+        return { state, first, foreignGroup, prepared, result, statements };
       },
     );
     expect(page.state.metadata.state).toBe('active');
     expect(page.state.work.used).toEqual(workDimensions(COLLECTION_SOURCE_WORK_COST().state));
     expect(page.first.subjectId).toBeNull();
     expect(page.first.work.used).toEqual(workDimensions(COLLECTION_SOURCE_WORK_COST().seek));
+    expect(page.foreignGroup).toMatchObject({ rows: [], exhausted: true });
+    expect(page.foreignGroup.work.used).toEqual(workDimensions(COLLECTION_SOURCE_WORK_COST().group(1)));
     expect(page.result).toMatchObject({ kind: 'canonical_subject_prefix', candidates: [], exhausted: true });
     expect(Object.values(page.prepared.work.used).every((value) => value === 0)).toBe(true);
     expect(Object.values(page.result.work.used).every((value) => value === 0)).toBe(true);
