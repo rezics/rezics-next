@@ -1124,20 +1124,51 @@ export function createSearchGenerationPublication(
     } else {
       const validationHomes = job.family === 'subjects' ? SUBJECT_VALIDATION_HOMES : PAGE;
       const end = Math.min(4096, job.home + validationHomes);
+      // An empty Subject home without writer custody can be witnessed at its current position.
+      // The completed engine pass accounted for existing keys. Occupied homes and homes that
+      // may own an engine copy still replay on any change.
       const compared = await client.query<
-        Home & { current_epoch: number | null; current_position: string | null; write_state: string | null }
+        Home & {
+          current_epoch: number | null;
+          current_position: string | null;
+          write_state: string | null;
+          refreshed: boolean;
+        }
       >(
-        `SELECT h.partition_no AS partition,h.epoch,h.position::text,h.account_revision::text,h.claim_revision::text,
-                p.epoch AS current_epoch,p.position::text AS current_position,p.write_state
-           FROM search.generation_publication_home h
-           LEFT JOIN core.partition p ON p.partition_no=h.partition_no
-          WHERE h.partition_no >= $1 AND h.partition_no < $2 AND h.job=$3 AND h.pass=$4
-          ORDER BY h.partition_no`,
-        [job.home, end, job.job, job.pass],
+        `WITH homes AS (
+           SELECT h.partition_no AS partition,h.epoch,h.position,h.account_revision,h.claim_revision,
+                  p.epoch AS current_epoch,p.position AS current_position,p.write_state
+             FROM search.generation_publication_home h
+             LEFT JOIN core.partition p ON p.partition_no=h.partition_no
+            WHERE h.partition_no >= $1 AND h.partition_no < $2 AND h.job=$3 AND h.pass=$4
+         ),
+         refreshed AS (
+           UPDATE search.generation_publication_home h
+              SET position=homes.current_position
+             FROM homes
+             LEFT JOIN semantic.partition_subjects s ON s.partition_no=homes.partition
+            WHERE $5::text IS NOT NULL AND h.job=$3 AND h.pass=$4 AND h.partition_no=homes.partition
+              AND homes.epoch=homes.current_epoch AND homes.write_state='active'
+              AND homes.position<homes.current_position AND coalesce(s.visible,0)=0
+              AND NOT EXISTS (
+                SELECT 1 FROM search.identity_writer w
+                WHERE w.physical_target=$5 AND w.partition_no=homes.partition
+              )
+           RETURNING h.partition_no
+         )
+         SELECT homes.partition,homes.epoch,
+                (CASE WHEN refreshed.partition_no IS NULL THEN homes.position ELSE homes.current_position END)::text
+                  AS position,
+                homes.account_revision::text,homes.claim_revision::text,homes.current_epoch,
+                homes.current_position::text,homes.write_state,(refreshed.partition_no IS NOT NULL) AS refreshed
+           FROM homes LEFT JOIN refreshed ON refreshed.partition_no=homes.partition
+          ORDER BY homes.partition`,
+        [job.home, end, job.job, job.pass, job.family === 'subjects' ? job.physical_target : null],
       );
       meter.inputKeys += compared.rows.length;
+      meter.frontierWrites += compared.rows.filter(({ refreshed }) => refreshed).length;
       if (compared.rows.length !== end - job.home) throw new Pending('routing_incomplete');
-      for (const { current_epoch, current_position, write_state, ...row } of compared.rows) {
+      for (const { current_epoch, current_position, write_state, refreshed: _refreshed, ...row } of compared.rows) {
         if (write_state !== 'active') throw new Pending('routing_incomplete');
         // The subject pass compares every native home in one statement snapshot. Mixed
         // publication additionally needs the Account owner's current reduction witness.
