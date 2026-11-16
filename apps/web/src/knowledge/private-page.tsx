@@ -1482,6 +1482,11 @@ function PrivateKnowledgeEditor({
 
   if (address.kind === 'create' && !(createdAddress && head && draft && readState === 'ready')) {
     const existing = placementChoice === 'existing-notebook';
+    // Admission can still replace the editor owner while the first exposure read is pending.
+    const placementLocked =
+      !binding ||
+      access.listNotebooks === 'unknown' ||
+      !!(notebookIntent || notebookReceipt || documentIntent || documentReceipt);
     const canCreateNotebook = access.createNotebook === 'available' && !!binding && !notebookReceipt && !existing;
     const canCreateDocument =
       access.createDocument === 'available' &&
@@ -1620,7 +1625,7 @@ function PrivateKnowledgeEditor({
           <KnowledgePlacementChoiceBar
             locale={locale}
             choice={placementChoice}
-            disabled={!!notebookIntent || !!notebookReceipt || !!documentIntent || !!documentReceipt}
+            disabled={placementLocked}
             onChange={choosePlacement}
           />
           {existing ? (
