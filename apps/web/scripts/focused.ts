@@ -23,7 +23,7 @@ const signals = [
   ['SIGHUP', 1],
 ] as const;
 
-/** bunfig excludes `*.host.test.ts`; named host files use the same CLI override as `test:host`. */
+/** Named host files use the same configuration as `test:host`. */
 export function admitExplicitHostTestCommand(command: string[]): string[] {
   if (command[0] !== 'bun' || command[1] !== 'test') return command;
   return admitWebHostTestCommand(command);
@@ -213,7 +213,7 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
     routedEnvironment,
   );
   if (routed !== null) return routed;
-  const admitted = admitSerialBunTestCommand(admitExplicitHostTestCommand(selection.command));
+  const admitted = admitSerialBunTestCommand(selection.command);
   const wrapShared =
     existsSync(join(appDirectory, 'vite.config.ts')) && existsSync(join(appDirectory, 'scripts/with-dev-server.ts'));
   const stateDirectory = mkdtempSync(join(tmpdir(), 'rezics-web-focused-'));
@@ -235,13 +235,15 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
   ])
     delete childEnvironment[name];
   delete childEnvironment.REZICS_WEB_TEST_SELECTION_CONTEXT;
-  const invocations = focusedTestCommands(admitted).map((command) =>
-    wrapShared && commandNeedsSharedDevServer(command)
-      ? ['bun', 'scripts/with-dev-server.ts', '--', ...command]
-      : options.privateNetwork
-        ? privateNetworkCommand(command)
-        : command,
-  );
+  const invocations = focusedTestCommands(admitted)
+    .map(admitExplicitHostTestCommand)
+    .map((command) =>
+      wrapShared && commandNeedsSharedDevServer(command)
+        ? ['bun', 'scripts/with-dev-server.ts', '--', ...command]
+        : options.privateNetwork
+          ? privateNetworkCommand(command)
+          : command,
+    );
   let child: Bun.Subprocess<'inherit', 'pipe', 'pipe'> | undefined;
   let runtimeStopped = false;
   let receivedSignal: NodeJS.Signals | undefined;

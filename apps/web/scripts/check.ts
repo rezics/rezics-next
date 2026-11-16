@@ -26,6 +26,7 @@ import {
 import { ensureLocalWorkerVars } from './dev-vars.ts';
 import { compileWebPrograms } from './typecheck.ts';
 import {
+  admitWebHostTestCommand,
   isWebHostTestFile,
   readWebTestSelectionContext,
   resolveWebTestSelection,
@@ -553,14 +554,13 @@ function selectionTestArguments(selection: WebTestSelectionContext | undefined):
   return arguments_;
 }
 
-function bunTestFilesCommand(files: string[], testArgs: string[], prefixArgs: string[] = []): string[] {
+function bunTestFilesCommand(files: string[], testArgs: string[]): string[] {
   const separator = testArgs.indexOf('--');
   const bunArgs = separator < 0 ? testArgs : testArgs.slice(0, separator);
   const programArgs = separator < 0 ? [] : testArgs.slice(separator + 1);
   return [
     'bun',
     'test',
-    ...prefixArgs,
     ...bunArgs,
     ...files.map((file) => `./${file}`),
     ...(separator < 0 ? [] : ['--', ...programArgs]),
@@ -587,7 +587,7 @@ export async function runWebHostTests(
   const runAuthBinding = runtime.runAuthBinding ?? runAuthBindingHostTest;
   const nativeExecution: WebNativeHostExecution = {
     cwd: directory,
-    command: bunTestFilesCommand(nativeFiles, testArguments, ['--path-ignore-patterns=node_modules/**']),
+    command: admitWebHostTestCommand(bunTestFilesCommand(nativeFiles, testArguments)),
     ...(selection === undefined ? {} : { selection }),
   };
   const runNative =
@@ -756,7 +756,7 @@ export async function main(args: string[], runtime: WebCheckRuntime = {}): Promi
     await runCommand(
       'personal host outcomes',
       'bun',
-      ['test', './tests/native/web-personal-driver.host.test.ts'],
+      admitWebHostTestCommand(['bun', 'test', './tests/native/web-personal-driver.host.test.ts']).slice(1),
       process.env,
     );
     return;

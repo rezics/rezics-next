@@ -97,6 +97,7 @@ test('named host files use the host-runner path-ignore override', () => {
     'bun',
     'test',
     '--path-ignore-patterns=node_modules/**',
+    '--config=./bunfig.host.toml',
     'tests/pages-workers.host.test.ts',
   ]);
   expect(admitExplicitHostTestCommand(['bun', 'test', 'tests/page-stories.test.ts'])).toEqual([
@@ -111,7 +112,13 @@ test('named host files use the host-runner path-ignore override', () => {
       '--path-ignore-patterns=custom/**',
       'tests/pages-workers.host.test.ts',
     ]),
-  ).toEqual(['bun', 'test', '--path-ignore-patterns=custom/**', 'tests/pages-workers.host.test.ts']);
+  ).toEqual([
+    'bun',
+    'test',
+    '--config=./bunfig.host.toml',
+    '--path-ignore-patterns=custom/**',
+    'tests/pages-workers.host.test.ts',
+  ]);
 });
 
 test('the focused argv boundary normalizes Bun separators and retains command bindings', () => {
@@ -195,6 +202,7 @@ test('an explicit nested host file executes when bunfig excludes host discovery'
   try {
     mkdirSync(join(project, 'tests', 'native'), { recursive: true });
     writeFileSync(join(project, 'bunfig.toml'), '[test]\npathIgnorePatterns = ["**/*.host.test.ts"]\n');
+    writeFileSync(join(project, 'bunfig.host.toml'), '[test]\n');
     writeFileSync(
       join(project, 'tests', 'ordinary.test.ts'),
       "import { expect, test } from 'bun:test';\ntest('ordinary witness', () => { console.log('ORDINARY_WITNESS_EXECUTED'); expect(1).toBe(1); });\n",
