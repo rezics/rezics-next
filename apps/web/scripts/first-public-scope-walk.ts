@@ -632,7 +632,7 @@ async function walkW31(ctx: WalkContext): Promise<unknown> {
     const unresolved = addition.getByText(
       /^(The request to add this member was rejected\.|The add result is unknown\.)/,
     );
-    await addition.getByRole('button', { name: /^Confirm\b/ }).click();
+    await addition.getByRole('button', { name: 'Add member', exact: true }).click();
     await accepted.or(unresolved).waitFor({ state: 'visible' });
     if (!(await accepted.isVisible())) throw new Error(await unresolved.innerText());
     observed.addAccepted = true;
