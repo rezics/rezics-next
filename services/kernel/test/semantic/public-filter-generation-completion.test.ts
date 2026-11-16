@@ -274,17 +274,19 @@ test('an unfenced engine page completes after exact inline replay of an advanced
         ])
       ).rows[0]!.position;
     await createSubjectIndex(search, prefix, 1);
-    for (const id of [book, person]) await writer.write(partitionOf(routeOf(id)!), [id], BigInt(await position(id)));
     const admitted = await runtime.preparePublication(1, readContext());
     if (admitted.status !== 'preparing') throw new Error(admitted.reason);
     const { job } = admitted;
+    expect(await runtime.publication.step(job, readContext())).toMatchObject({
+      status: 'unready',
+      reason: 'source_pending',
+    });
     const enrollmentStep = await runtime.publication.step(
       job,
       { deadline: Date.now() + PUBLIC_PREPARATION_BUDGET_MS },
       { enrollSource: true },
     );
-    if (enrollmentStep.status !== 'progress')
-      throw new Error(`Native enrollment step: ${JSON.stringify(enrollmentStep)}`);
+    expect(enrollmentStep).toMatchObject({ status: 'progress', sourceAdvanced: true });
     const {
       rows: [enrollment],
     } = await f.db.pool.query<{
@@ -306,6 +308,7 @@ test('an unfenced engine page completes after exact inline replay of an advanced
     expect(enrollment).toMatchObject({ state: 'capturing', opened_observation: false });
     expect(enrollment!.coverage_after).toBeGreaterThan(0);
     expect(await subjectGenerations(search, prefix)).toMatchObject({ active: null });
+    for (const id of [book, person]) await writer.write(partitionOf(routeOf(id)!), [id], BigInt(await position(id)));
     const publication = async () =>
       (
         await f.db.pool.query<{ phase: string; pit: string | null; has_cursor: boolean }>(

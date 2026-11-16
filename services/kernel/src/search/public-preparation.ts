@@ -210,6 +210,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
         { ...state, phase: reconciliation.status === 'reconciled' ? 'activate' : 'native' },
         ready ? 0 : 1000,
         ready,
+        ready && reconciliation.sourceAdvanced === true,
       );
     }
     const activated = await options.runtime.publication.activate(job, context);
