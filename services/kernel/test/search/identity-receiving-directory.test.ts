@@ -18,6 +18,7 @@ import relatedVisibility from '../../src/semantic/read-subject-related-states.sq
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import stepSql from '../../src/search/identity-epoch-participant-step.sql';
 import completeSql from '../../src/search/identity-epoch-participant-complete.sql';
+import replaySql from '../../src/search/identity-epoch-participant-replay.sql';
 import {
   dispatchSearchIdentityOriginalSql,
   readBoundedSearchIdentityActionSql,
@@ -120,7 +121,7 @@ import projectionHeads from '../../src/semantic/public-filter-projection-head-up
 import projectionHeadPage from '../../src/semantic/public-filter-projection-head-page.sql';
 import projectionCurrentHead from '../../src/semantic/public-filter-projection-head-current.sql';
 import structuralGate from '../../src/semantic/identity-epoch-store-select-home-gate.sql';
-import type { IdentityFrontier } from '../../src/semantic/identity-epoch-contract.ts';
+import type { IdentityFrontier, IdentityStepProgress, IdentityStepReceipt } from '../../src/semantic/identity-epoch-contract.ts';
 import {
   createSearchIdentityEpochParticipant,
   searchIdentityReceivingComposition,
@@ -137,6 +138,12 @@ import {
   readSearchIdentityWriterSupportSql,
 } from '../../src/search/identity-search-receiving-directory-sql.ts';
 import { installIdentityAdapterRuntime } from '../../src/semantic/identity-adapter-runtime.ts';
+import { identityEpochStore } from '../../src/semantic/identity-adapters/index.ts';
+import stepRead from '../../src/semantic/identity-epoch-store-select-step.sql';
+import ackJob from '../../src/semantic/identity-epoch-store-select-job-5.sql';
+import missingEffect from '../../src/semantic/identity-epoch-store-select-effect-receipt.sql';
+import ackReplay from '../../src/semantic/identity-epoch-store-select-ack-2.sql';
+import ackInsert from '../../src/semantic/identity-epoch-store-insert-ack.sql';
 import {
   identityChangeFirstInputsSQL,
   identityChangeTransformSQL,
@@ -169,7 +176,7 @@ beforeAll(() => {
 
 const directoryScope = 'd'.repeat(64);
 const jobHome = 0x842;
-const writerHome = 0x841;
+const firstHome = 0x841;
 const otherControlHome = 0x843;
 const prefix = 'directory-probe-';
 const index = prefix + 'subjects-g1';
@@ -195,6 +202,7 @@ test.each([
     resumed: false,
     mode: 'foreign-step-capture',
   },
+  { label: 'seals one merge after retiring both originals', intent: 'merge', resumed: false, mode: 'complete-merge' },
   {
     label: 'reindexes and retires a visible canonical unmerge original',
     intent: 'unmerge',
@@ -246,13 +254,16 @@ test.each([
   { label: 'refuses an unproved empty directory', intent: 'merge', resumed: false, mode: 'empty' },
   { label: 'refuses replacement of the checkpoint during sealing', intent: 'merge', resumed: true, mode: 'changed' },
 ])('installed Search directory $label', async ({ intent, resumed, mode }) => {
+  let writerHome = firstHome;
   const [previous, first, localTerminal] = Array.from({ length: 3 }, () => newId(writerHome << 4)).sort() as [
     string,
     string,
     string,
   ];
-  const foreignCapture = mode === 'foreign-step-capture' || mode === 'canonical-terms' || mode === 'canonical-merge';
-  const crossHome = mode === 'visible-cross-home' || mode === 'foreign-step-capture';
+  const completeMerge = mode === 'complete-merge';
+  const foreignCapture =
+    completeMerge || mode === 'foreign-step-capture' || mode === 'canonical-terms' || mode === 'canonical-merge';
+  const crossHome = completeMerge || mode === 'visible-cross-home' || mode === 'foreign-step-capture';
   const terminalHome = crossHome ? otherControlHome : writerHome;
   const second = crossHome ? newId(terminalHome << 4) : localTerminal;
   const jobId = newId(jobHome << 4);
@@ -268,7 +279,7 @@ test.each([
   let terminalBuildCurrent = true;
   const actorId = creditedCreator || nativePermission ? newId(jobHome << 4) : null;
   const adoptedRelation = mode === 'canonical-relation' || creditedCreator;
-  const canonicalTerms = mode === 'canonical-terms' || mode === 'canonical-merge' || adoptedRelation;
+  let canonicalTerms = mode === 'canonical-terms' || mode === 'canonical-merge' || adoptedRelation;
   const priorVisible = mode === 'handoff' || mode === 'canonical-terms';
   const visible = canonicalTerms || bothVisible || ['changed-proof', 'retire', 'superseded'].includes(mode);
   const languageDigest = createHash('sha256').update('en').digest('hex');
@@ -341,7 +352,7 @@ test.each([
   let lateReleaseCheck = false;
   const canonicalDocument = {
     id: second,
-    partition: writerHome,
+    partition: completeMerge ? terminalHome : writerHome,
     type: subjectType,
     security_revision: 1,
     names: ['Canonical name', 'Native alias', 'Alternate alias', ...(adoptedName ? ['Adopted public name'] : [])],
@@ -375,16 +386,16 @@ test.each([
       : [],
     ...(adoptedRelation && { relation_facet_overflow: relationRoster }),
   };
-  const oldBuild = crypto.randomUUID();
+  let oldBuild = crypto.randomUUID();
   const oldHeads = mode === 'retire' ? [0, writerHome] : [];
   let oldMeaning = bundledDigest;
   let oldGeneration = '4';
-  const newGeneration = mode === 'retire' ? '6' : '1';
-  const after = resumed ? previous : null;
+  let newGeneration = mode === 'retire' ? '6' : '1';
+  let after = resumed ? previous : null;
   const frontier = resumed ? { after: ['search-directory', previous, 9], segment: 0 } : null;
   const leftGeneration = newId(jobHome << 4);
   const rightGeneration = newId(jobHome << 4);
-  const selected = mode === 'materialized' ? first : intent === 'unmerge' || canonicalTerms ? second : first;
+  let selected = mode === 'materialized' ? first : intent === 'unmerge' || canonicalTerms ? second : first;
   const pool = new Pool();
   const routeKey = new Uint8Array(32);
   const importedName = {
@@ -461,7 +472,7 @@ test.each([
   let retainedBulk: typeof writingBulk;
   let bulkCalls = 0;
   let hold: HoldRow | undefined;
-  let commonPlan: { binding: unknown; binding_digest: string; transaction_id: string } | undefined;
+  let commonPlan: { binding: unknown; binding_digest: string; transaction_id: string; native_position: string } | undefined;
   let acceptedNativeHold: unknown;
   let acceptedRecorded = false;
   let accepting = false;
@@ -509,9 +520,24 @@ test.each([
         : '20';
   const publicationWrites: string[] = [];
 
-  type Step = { transactionId: string; frontier: IdentityFrontier; engineRequests: number };
+  type Step = {
+    transactionId: string;
+    frontier: IdentityFrontier;
+    engineRequests: number;
+    position?: string;
+    work?: IdentityStepProgress['work'];
+  };
   let writing: Step | undefined;
   const committed: Step[] = [];
+  let controlPosition = 0;
+  let scopeStart = 0;
+  const scopeSteps = () => committed.slice(scopeStart);
+  const retiredOriginals: { original: string; planId: string; application: string; release: string }[] = [];
+  const submitted: { id: string; operation: string }[] = [];
+  let firstMergeRequest: IdentityStepReceipt | undefined;
+  let writingSearchAck: unknown;
+  let searchAck: unknown;
+  let searchAckWrites = 0;
   type Capture = {
     store:
       | 'identity_epoch_step'
@@ -546,7 +572,9 @@ test.each([
             relationOwnerMoved && values[0] === String(otherControlHome) ? 'moved' : 'active',
             relationOwnerMoved && values[0] === String(otherControlHome) ? 'other' : null,
             '1',
-            (canonicalTerms || engineReads > 1) && values[0] === String(writerHome) ? nativePosition() : '0',
+            completeMerge && Number(values[0]) === jobHome
+              ? String(controlPosition)
+              : (canonicalTerms || engineReads > 1) && values[0] === String(writerHome) ? nativePosition() : '0',
           ],
         ];
       else if (sql === jobRead.sql)
@@ -570,13 +598,37 @@ test.each([
             step: 'mapping',
             progress: { state: 'complete', job: savedJob, receipt: { job: savedJob, native: { position: '1' } } },
           },
+          ...(searchAck ? [{ step: 'search-canonical-index', progress: searchAck }] : []),
         ];
-      else if (sql === readSearchIdentityDirectorySql) {
+      else if (completeMerge && (sql === stepRead.sql || sql === replaySql.sql)) {
+        const saved = committed.find((item) => item.transactionId === values[1]);
+        expect(saved?.frontier.after).toEqual(['directory', 2]);
+        expect(values.slice(0, 6)).toEqual([jobHome, saved?.transactionId, 1, saved?.position, jobId, '1']);
+        rows = [{ scope_digest: directoryScope, state: 'complete', frontier: saved!.frontier, work: saved!.work }];
+      } else if (completeMerge && sql === ackJob.sql) {
+        expect(values).toEqual([jobId, '1', jobHome]);
+        rows = [{ scope_digest: directoryScope }];
+      } else if (completeMerge && sql === missingEffect.sql) {
+        expect(values).toEqual([jobId, 'search-canonical-index', jobHome]);
+        expect(retiredOriginals.map(({ original }) => original)).toEqual([first, second]);
+        rows = [];
+      } else if (completeMerge && sql === ackReplay.sql) {
+        expect(values).toEqual([jobId, 'search-canonical-index', jobHome]);
+        rows = searchAck ? [{ progress: searchAck }] : [];
+      } else if (completeMerge && sql === ackInsert.sql) {
+        const sealed = committed.at(-1);
+        expect(values.slice(0, 4)).toEqual([jobHome, jobId, 'search-canonical-index', directoryScope]);
+        expect(values.slice(5)).toEqual([jobHome, 1, sealed?.position, sealed?.transactionId]);
+        writingSearchAck = JSON.parse(String(values[4]));
+        rows = [{}];
+      } else if (sql === readSearchIdentityDirectorySql) {
         expect(values).toEqual([jobHome, jobId, '1']);
         directoryReads++;
-        const saved = retiredScope
-          ? committed.at(-1)
-          : (dispatchRequest ?? committed.find((step) => step.frontier.after[0] === 'search-directory'));
+        const saved = completeMerge
+          ? committed.findLast((step) => step.frontier.after[0] === 'search-directory')
+          : retiredScope
+            ? committed.at(-1)
+            : (dispatchRequest ?? committed.find((step) => step.frontier.after[0] === 'search-directory'));
         rows = [
           {
             scope_digest: directoryScope,
@@ -585,7 +637,7 @@ test.each([
               saved?.transactionId ??
               (!resumed ? null : mode === 'changed' && directoryReads > 1 ? replacement : checkpoint),
             native_epoch: 1,
-            native_position: dispatchRequest ? dispatchRequestPosition : '1',
+            native_position: saved?.position ?? (dispatchRequest ? dispatchRequestPosition : '1'),
             frontier: saved?.frontier ?? frontier,
             proven: mode !== 'stale',
           },
@@ -614,7 +666,7 @@ test.each([
           mode === 'empty' ||
           mode === 'changed' ||
           (cursor !== null && original <= cursor) ||
-          ((mode === 'materialized' || canonicalTerms) && values[0] === leftGeneration)
+          ((mode === 'materialized' || (canonicalTerms && !completeMerge)) && values[0] === leftGeneration)
             ? []
             : [{ original, terminal: original }];
       } else if (sql === readSearchIdentityMaterializedOriginalSql) {
@@ -638,11 +690,11 @@ test.each([
         planReads++;
         rows = retainedPlan ? [retainedPlan] : [];
       } else if (sql === readSearchIdentityWriterAdmissionSql) {
-        expect(values).toEqual([writerHome, jobId, '1', committed[0]?.transactionId, directoryScope, selected]);
-        const step = committed.find((step) => step.frontier.after[0] === 'search-writer-admitted');
+        expect(values).toEqual([writerHome, jobId, '1', scopeSteps()[0]?.transactionId, directoryScope, selected]);
+        const step = scopeSteps().find((step) => step.frontier.after[0] === 'search-writer-admitted');
         rows = step ? [{ transaction_id: step.transactionId, frontier: step.frontier, proven: true }] : [];
       } else if (sql === recheckSearchIdentityWriterAdmissionSql) {
-        const step = committed.find((item) => item.frontier.after[0] === 'search-writer-admitted');
+        const step = scopeSteps().find((item) => item.frontier.after[0] === 'search-writer-admitted');
         expect(values).toEqual([
           writerHome,
           step?.transactionId,
@@ -653,10 +705,10 @@ test.each([
         ]);
         rows = step ? [{}] : [];
       } else if (sql === readSearchIdentityWriterSupportSql) {
-        const requestId = values[4] === 'binding' ? dispatchRequest?.transactionId : committed[0]?.transactionId;
+        const requestId = values[4] === 'binding' ? dispatchRequest?.transactionId : scopeSteps()[0]?.transactionId;
         expect(values.slice(0, 4)).toEqual([writerHome, jobId, '1', requestId]);
         const step = committed.findLast(
-          (step) => step.frontier.after[0] === 'search-writer-support' && step.frontier.after[2] === values[4],
+          (step) => step.frontier.after[0] === 'search-writer-support' && step.frontier.after[1] === requestId && step.frontier.after[2] === values[4],
         );
         const frontier = changedBindingProof && values[4] === 'binding'
           ? { ...step!.frontier, after: [...step!.frontier.after.slice(0, 4), '0'.repeat(64)] }
@@ -1011,14 +1063,15 @@ test.each([
               ]
             : [];
       } else if (visible && sql === lockProjectionBuildForRetirementSql)
-        rows = mode === 'retire' ? [{ build_id: oldBuild, generation: oldGeneration, meaning_digest: oldMeaning }] : [];
+        rows = mode === 'retire' || (completeMerge && canonicalTerms && values[1] === second && oldHeads.length)
+          ? [{ build_id: oldBuild, generation: oldGeneration, meaning_digest: oldMeaning }] : [];
       else if (visible && sql === retireProjectionHeadSql) {
         expect(values).toEqual([oldBuild]);
         const partition = oldHeads.shift();
         rows = partition === undefined ? [] : [{ partition_no: partition }];
       } else if (visible && sql === invalidateProjectionBuildSql) {
-        expect(values).toEqual([oldBuild, '4', retiredProjectionMeaning]);
-        oldGeneration = '5';
+        expect(values).toEqual([oldBuild, oldGeneration, retiredProjectionMeaning]);
+        oldGeneration = String(Number(oldGeneration) + 1);
         oldMeaning = retiredProjectionMeaning;
         rows = [{ generation: oldGeneration }];
       } else if (visible && sql === lockProjectionBuildForHeadsSql) {
@@ -1430,7 +1483,7 @@ test.each([
             owner_epoch: 1,
             native_epoch: 1,
             native_position: hold?.accepted_position,
-            plan: { partition: jobHome, transactionId: commonPlan?.transaction_id, epoch: 1, position: '22' },
+            plan: { partition: jobHome, transactionId: commonPlan?.transaction_id, epoch: 1, position: commonPlan?.native_position },
             source_hold: {
               partition: writerHome,
               transactionId: hold?.accepted_transaction_id,
@@ -1512,10 +1565,11 @@ test.each([
           binding: JSON.parse(String(values[4])),
           binding_digest: String(values[5]),
           transaction_id: String(values[6]),
+          native_position: completeMerge ? String(controlPosition + 1) : '22',
         };
         rows = [{}];
       } else if (sql === receivingPlan.sql)
-        rows = commonPlan ? [{ ...commonPlan, native_epoch: 1, native_position: '22' }] : [];
+        rows = commonPlan ? [{ ...commonPlan, native_epoch: 1 }] : [];
       else if (sql === nativeDefinition.sql) {
         expect(values).toEqual([definitionId]);
         rows = [{ release_digest: bundledDigest, route_digest: routeDigest }];
@@ -1609,6 +1663,7 @@ test.each([
           transactionId: String(values[1]),
           frontier: JSON.parse(String(values[5])),
           engineRequests: work.engineRequests,
+          ...(completeMerge && values[0] === jobHome && { position: String(controlPosition + 1), work }),
         };
         if (foreignCapture) {
           expect(captureNativeTransaction).toBe(writing.transactionId);
@@ -1682,6 +1737,11 @@ test.each([
         capturedEvents.push(...captureQueue.splice(0));
         captureRole = undefined;
         captureNativeTransaction = null;
+        if (writingSearchAck) {
+          searchAck = writingSearchAck;
+          searchAckWrites++;
+          writingSearchAck = undefined;
+        }
         if (writing) committed.push(writing);
         if (stagingPlan) retainedPlan = stagingPlan;
         if (writingOperation) committedOperation = writingOperation;
@@ -1706,13 +1766,22 @@ test.each([
         captureNativeTransaction = null;
         writing = undefined;
         writingOperation = undefined;
+        writingSearchAck = undefined;
         rows = [];
       } else if (sql === nativeCommit.sql) rows = [{}];
       else if (actorId && sql.startsWith('SELECT l.account_id::text,l.role FROM semantic.identity_epoch_job j'))
         rows = [{ account_id: actorId, role: 'actor' }];
       else if (sql === commandNoEffect['~standard'].query.text) rows = [['1', nativePosition()]];
-      else if (sql === commandFence['~standard'].query.text)
-        rows = [['1', engineReads > 1 ? String(Number(nativePosition()) + 1) : '1']];
+      else if (sql === commandFence['~standard'].query.text) {
+        const partition = Number(values[commandFence.params.indexOf('partition_no')]);
+        const position =
+          completeMerge && partition === jobHome
+            ? String(++controlPosition)
+            : engineReads > 1
+              ? String(Number(nativePosition()) + 1)
+              : '1';
+        rows = [['1', position]];
+      }
       else if (sql === time['~standard'].query.text) rows = [['2026-01-01T00:00:00.000Z']];
       else if (
         sql.startsWith('SELECT l.account_id::text,l.role FROM semantic.identity_epoch_job j') ||
@@ -1746,6 +1815,7 @@ test.each([
         captureNativeTransaction = null;
         writing = undefined;
         writingOperation = undefined;
+        writingSearchAck = undefined;
       }
     },
   };
@@ -1790,6 +1860,7 @@ test.each([
       expect(activeIdentitySourceConsumerMaintenance(pool)).toBeNull();
       expect(committedOperation?.state).toBe('dispatched');
       const op = canonicalTerms ? 'index' : 'delete';
+      submitted.push({ id: selected, operation: op });
       const target = { _index: alias, _id: selected, version: 21, version_type: 'external' };
       expect(lines).toEqual(
         canonicalTerms ? [{ index: target }, expect.objectContaining(canonicalDocument)] : [{ delete: target }],
@@ -1836,550 +1907,620 @@ test.each([
     work: searchReceivingProductionDeclaration(),
   });
   const step = createSearchIdentityEpochParticipant({ search, prefix, routeKey, receiving });
-  const result = withIdentitySourceConsumerMaintenance({ pool, env: {} }, { deadline: Date.now() + 5000 }, () =>
-    step(pool, job),
-  );
-  const requestsWriter = [
-    'input',
-    'dispatch',
-    'lost',
-    'materialized',
-    'existing',
-    'fenced',
-    'visible',
-    'visible-cross-home',
-    'foreign-step-capture',
-    'canonical-terms',
-    'canonical-merge',
-    'canonical-relation',
-    'canonical-credit',
-    'changed-proof',
-    'retire',
-    'superseded',
-    'handoff',
-    'uncertain',
-    'first',
-  ].includes(mode);
-  if (!requestsWriter) {
-    await expect(result).rejects.toThrow(
-      mode === 'stale' || mode === 'changed'
-        ? 'checkpoint changed'
-        : mode === 'empty'
-          ? 'no completed original'
-          : 'closure is not current',
+  const directoryStep = async () => {
+    const progress = await withIdentitySourceConsumerMaintenance(
+      { pool, env: {} },
+      { deadline: Date.now() + 5000 },
+      () => step(pool, job),
     );
-    expect(directoryReads).toBe(mode === 'stale' ? 1 : 2);
-    expect(originalReads).toBe(mode === 'empty' ? 2 : 0);
-    expect(planReads).toBe(0);
-    expect(committed).toEqual([]);
-  } else {
-    const progress = await result;
-    expect(progress.state).toBe('more');
-    expect(identityEpochReceiptLocator(job, 'search-canonical-index', progress).ok).toBe(true);
-    expect(progress.frontier.after.slice(3, 5)).toEqual([SEARCH_IDENTITY_WRITER_REQUEST, selected]);
-    expect(progress.work.engineRequests).toBe(0);
-    expect(committed.map((step) => step.engineRequests)).toEqual([0]);
-    expect(directoryReads).toBe(2);
-    expect(originalReads).toBe(intent === 'merge' ? 2 : 1);
-    expect(planReads).toBe(0);
-    if (foreignCapture) {
-      expect(capturedEvents).toEqual([
-        { store: 'identity_epoch_step', partition: jobHome, transactionId: admissionTransaction, armed: true },
-      ]);
-    }
-    if (!resumed) {
-      const prepare = createSearchIdentityWriterPreparation(receiving, {});
-      await expect(
-        withIdentitySourceConsumerMaintenance({ pool, env: {} }, { deadline: Date.now() + 5000 }, () =>
-          prepare(pool, progress.receipt),
-        ),
-      ).rejects.toThrow('requires the separate owner turn');
-      const replay = await withIdentitySourceConsumerMaintenance(
-        { pool, env: {} },
-        { deadline: Date.now() + 5000 },
-        () => step(pool, job),
+    if (completeMerge) expect(identityEpochReceiptLocator(job, 'search-canonical-index', progress).ok).toBe(true);
+    return progress;
+  };
+  async function driveOriginal() {
+    const captureStart = capturedEvents.length;
+    const result = directoryStep();
+    const requestsWriter = [
+      'input',
+      'dispatch',
+      'lost',
+      'materialized',
+      'existing',
+      'fenced',
+      'visible',
+      'visible-cross-home',
+      'foreign-step-capture',
+      'complete-merge',
+      'canonical-terms',
+      'canonical-merge',
+      'canonical-relation',
+      'canonical-credit',
+      'changed-proof',
+      'retire',
+      'superseded',
+      'handoff',
+      'uncertain',
+      'first',
+    ].includes(mode);
+    if (!requestsWriter) {
+      await expect(result).rejects.toThrow(
+        mode === 'stale' || mode === 'changed'
+          ? 'checkpoint changed'
+          : mode === 'empty'
+            ? 'no completed original'
+            : 'closure is not current',
       );
-      expect(replay.receipt).toEqual(progress.receipt);
-      expect(replay.frontier).toEqual(progress.frontier);
-      const stale = { ...progress.receipt, native: { ...progress.receipt.native, position: 2n } };
-      await expect(prepare(pool, stale)).rejects.toThrow('no longer the retained current step');
-      expect(engineReads).toBe(0);
-      if (mode === 'fenced') {
-        await expect(prepare(pool, progress.receipt)).rejects.toThrow('fenced for native publication');
-        expect(committed).toHaveLength(1);
-        expect(engineReads).toBe(1);
-        expect(observedLocks).toEqual([
-          structuralGate.sql,
-          lockPublicationAdmission,
-          readWriterPublicationWitness,
-          readPublicationFence,
+      expect(directoryReads).toBe(mode === 'stale' ? 1 : 2);
+      expect(originalReads).toBe(mode === 'empty' ? 2 : 0);
+      expect(planReads).toBe(0);
+      expect(committed).toEqual([]);
+    } else {
+      const progress = await result;
+      expect(progress.state).toBe('more');
+      expect(identityEpochReceiptLocator(job, 'search-canonical-index', progress).ok).toBe(true);
+      expect(progress.frontier.after.slice(3, 5)).toEqual([SEARCH_IDENTITY_WRITER_REQUEST, selected]);
+      expect(progress.work.engineRequests).toBe(0);
+      expect(scopeSteps().map((step) => step.engineRequests)).toEqual([0]);
+      expect(directoryReads).toBe(2);
+      expect(originalReads).toBe(intent === 'merge' ? 2 : 1);
+      expect(planReads).toBe(0);
+      if (foreignCapture) {
+        expect(capturedEvents.slice(captureStart)).toEqual([
+          { store: 'identity_epoch_step', partition: jobHome, transactionId: admissionTransaction, armed: true },
         ]);
-        return;
       }
-      expect(await prepare(pool, progress.receipt)).toEqual({
-        state: 'progress',
-        transactionId: committed[1]?.transactionId,
-      });
-      expect(committed[1]?.frontier.after).toEqual([
-        'search-writer-admitted',
-        progress.receipt.native.transactionId,
-        selected,
-        'allocation',
-        alias,
-        '0',
-        '0',
-        priorVisible ? previousClose : null,
-      ]);
-      expect(committed.map((step) => step.engineRequests)).toEqual([0, 1]);
-      expect(engineReads).toBe(1);
-      expect(observedLocks).toEqual(
-        mode === 'existing'
-          ? locks.filter(
-              (statement) => statement !== insertWriterPublicationWitness && statement !== writerSql.insertGate,
-            )
-          : locks,
-      );
-      expect(await prepare(pool, progress.receipt)).toEqual({
-        state: 'progress',
-        transactionId: committed[2]?.transactionId,
-      });
-      expect(committed[2]?.frontier.after).toEqual([
-        'search-writer-support',
-        progress.receipt.native.transactionId,
-        'definition',
-        definitionId,
-        bundledDigest,
-      ]);
-      expect(await prepare(pool, progress.receipt)).toEqual({
-        state: 'progress',
-        transactionId: committed[3]?.transactionId,
-      });
-      const nextSupport = async (expected: readonly unknown[]) => {
-        const position = committed.length;
+      if (!resumed) {
+        const prepare = createSearchIdentityWriterPreparation(receiving, {});
+        if (completeMerge) {
+          if (firstMergeRequest) {
+            await expect(prepare(pool, firstMergeRequest)).rejects.toThrow('no longer the retained current step');
+            expect(engineReads).toBe(0);
+          } else firstMergeRequest = progress.receipt;
+        }
+        await expect(
+          withIdentitySourceConsumerMaintenance({ pool, env: {} }, { deadline: Date.now() + 5000 }, () =>
+            prepare(pool, progress.receipt),
+          ),
+        ).rejects.toThrow('requires the separate owner turn');
+        const replay = await directoryStep();
+        expect(replay.receipt).toEqual(progress.receipt);
+        expect(replay.frontier).toEqual(progress.frontier);
+        const stale = { ...progress.receipt, native: { ...progress.receipt.native, position: 2n } };
+        await expect(prepare(pool, stale)).rejects.toThrow('no longer the retained current step');
+        expect(engineReads).toBe(0);
+        if (mode === 'fenced') {
+          await expect(prepare(pool, progress.receipt)).rejects.toThrow('fenced for native publication');
+          expect(committed).toHaveLength(1);
+          expect(engineReads).toBe(1);
+          expect(observedLocks).toEqual([
+            structuralGate.sql,
+            lockPublicationAdmission,
+            readWriterPublicationWitness,
+            readPublicationFence,
+          ]);
+          return;
+        }
         expect(await prepare(pool, progress.receipt)).toEqual({
           state: 'progress',
-          transactionId: committed[position]?.transactionId,
+          transactionId: scopeSteps()[1]?.transactionId,
         });
-        expect(committed[position]?.frontier.after.slice(2, 2 + expected.length)).toEqual(expected);
-      };
-      if (canonicalTerms) {
-        expect(committed[3]?.frontier.after.slice(2, 4)).toEqual(['original', 'progress']);
-        await nextSupport(['original', 'progress', retainedBuild, newGeneration]);
-        if (adoptedRelation) {
-          await nextSupport(['original', 'progress', retainedBuild, newGeneration]);
-          await nextSupport(['original', 'progress', retainedBuild, newGeneration]);
-        }
-        await nextSupport(['original', 'complete', retainedBuild, newGeneration]);
-        let digest = EMPTY_IDENTITY_SEARCH_TERMS_DIGEST;
-        for (const [i, slot] of termSlots.entries()) {
-          digest = createHash('sha256')
-            .update(JSON.stringify([digest, slot.slot_id, slot.kind, slot.language_digest, slot.terms]))
-            .digest('hex');
-          await nextSupport(['terms', 'progress', retainedBuild, newGeneration, slot.slot_id, digest]);
-          if (!i) {
-            const stepCount = committed.length;
-            canonicalBuildCurrent = false;
-            await expect(prepare(pool, progress.receipt)).rejects.toThrow('canonical terms lost their Source build');
-            expect(committed).toHaveLength(stepCount);
-            expect(termReads).toEqual([null]);
-            canonicalBuildCurrent = true;
-          }
-        }
-        await nextSupport(['terms', 'complete', retainedBuild, newGeneration, termSlots[1]!.slot_id, digest]);
-        expect(termReads).toEqual([null, ...termSlots.map(({ slot_id }) => slot_id)]);
+        expect(scopeSteps()[1]?.frontier.after).toEqual([
+          'search-writer-admitted',
+          progress.receipt.native.transactionId,
+          selected,
+          'allocation',
+          alias,
+          '0',
+          '0',
+          priorVisible ? previousClose : null,
+        ]);
+        expect(scopeSteps().map((step) => step.engineRequests)).toEqual([0, 1]);
         expect(engineReads).toBe(1);
-        expect(bulkCalls).toBe(0);
-        expect(retainedPlan).toBeUndefined();
-        changedTermReplay = true;
-        expect(await prepare(pool, progress.receipt)).toEqual({ state: 'pending' });
-        expect(normalizationCalls).toBe(0);
-        changedTermReplay = false;
-        selectionOverflow = true;
-        expect(await prepare(pool, progress.receipt)).toEqual({ state: 'pending' });
-        expect(normalizationCalls).toBe(0);
-        expect(retainedPlan).toBeUndefined();
-        selectionOverflow = false;
-        if (creditedCreator) {
-          creatorNamesOpen = true;
+        expect(observedLocks).toEqual(
+          mode === 'existing'
+            ? locks.filter(
+                (statement) => statement !== insertWriterPublicationWitness && statement !== writerSql.insertGate,
+              )
+            : locks,
+        );
+        expect(await prepare(pool, progress.receipt)).toEqual({
+          state: 'progress',
+          transactionId: scopeSteps()[2]?.transactionId,
+        });
+        expect(scopeSteps()[2]?.frontier.after).toEqual([
+          'search-writer-support',
+          progress.receipt.native.transactionId,
+          'definition',
+          definitionId,
+          bundledDigest,
+        ]);
+        expect(await prepare(pool, progress.receipt)).toEqual({
+          state: 'progress',
+          transactionId: scopeSteps()[3]?.transactionId,
+        });
+        const nextSupport = async (expected: readonly unknown[]) => {
+          const position = committed.length;
+          expect(await prepare(pool, progress.receipt)).toEqual({
+            state: 'progress',
+            transactionId: committed[position]?.transactionId,
+          });
+          expect(committed[position]?.frontier.after.slice(2, 2 + expected.length)).toEqual(expected);
+        };
+        if (canonicalTerms) {
+          if (completeMerge) {
+            expect(scopeSteps()[3]?.frontier.after.slice(2)).toEqual(['original', 'retiring', oldBuild, '2', terminalHome]);
+            await nextSupport(['original', 'progress']);
+            expect(retainedBuild).not.toBe(oldBuild);
+            expect(committed.at(-1)?.frontier.after.slice(4, 6)).toEqual([retainedBuild, newGeneration]);
+          } else {
+            expect(scopeSteps()[3]?.frontier.after.slice(2, 4)).toEqual(['original', 'progress']);
+          }
+          await nextSupport(['original', 'progress', retainedBuild, newGeneration]);
+          if (adoptedRelation) {
+            await nextSupport(['original', 'progress', retainedBuild, newGeneration]);
+            await nextSupport(['original', 'progress', retainedBuild, newGeneration]);
+          }
+          await nextSupport(['original', 'complete', retainedBuild, newGeneration]);
+          let digest = EMPTY_IDENTITY_SEARCH_TERMS_DIGEST;
+          for (const [i, slot] of termSlots.entries()) {
+            digest = createHash('sha256')
+              .update(JSON.stringify([digest, slot.slot_id, slot.kind, slot.language_digest, slot.terms]))
+              .digest('hex');
+            await nextSupport(['terms', 'progress', retainedBuild, newGeneration, slot.slot_id, digest]);
+            if (!i) {
+              const stepCount = committed.length;
+              canonicalBuildCurrent = false;
+              await expect(prepare(pool, progress.receipt)).rejects.toThrow('canonical terms lost their Source build');
+              expect(committed).toHaveLength(stepCount);
+              expect(termReads).toEqual([null]);
+              canonicalBuildCurrent = true;
+            }
+          }
+          await nextSupport(['terms', 'complete', retainedBuild, newGeneration, termSlots[1]!.slot_id, digest]);
+          expect(termReads).toEqual([null, ...termSlots.map(({ slot_id }) => slot_id)]);
+          expect(engineReads).toBe(1);
+          expect(bulkCalls).toBe(0);
+          expect(retainedPlan).toBeUndefined();
+          changedTermReplay = true;
+          expect(await prepare(pool, progress.receipt)).toEqual({ state: 'pending' });
+          expect(normalizationCalls).toBe(0);
+          changedTermReplay = false;
+          selectionOverflow = true;
           expect(await prepare(pool, progress.receipt)).toEqual({ state: 'pending' });
           expect(normalizationCalls).toBe(0);
           expect(retainedPlan).toBeUndefined();
-          creatorNamesOpen = false;
-        }
-      } else {
-        if (bothVisible) {
-          expect(committed[3]?.frontier.after.slice(2, 4)).toEqual(['original', 'progress']);
-          await nextSupport(['original', 'progress', retainedOriginalBuild, newGeneration]);
-          if (crossHome) await nextSupport(['original', 'progress', retainedOriginalBuild, newGeneration]);
-          await nextSupport(['original', 'complete', retainedOriginalBuild, newGeneration]);
-        }
-        if (mode === 'retire') {
-          await nextSupport(['terminal', 'retiring', oldBuild, '5', 0]);
-          await nextSupport(['terminal', 'retiring', oldBuild, '5', writerHome]);
-          expect(oldHeads).toEqual([]);
-        }
-        if (visible) {
-          await nextSupport(['terminal', 'progress']);
-          const originalCursors = bothVisible ? ['-1', String(writerHome)] : [];
-          if (crossHome) originalCursors.push(String(terminalHome));
-          expect(projectionHeadCursors).toEqual(originalCursors);
-          await nextSupport(['terminal', 'progress', retainedBuild, newGeneration]);
-          if (mode === 'superseded') {
-            await nextSupport(['terminal', 'restart']);
-            expect(engineReads).toBe(1);
-            expect(readBuilds).toBe(3);
-            return;
+          selectionOverflow = false;
+          if (creditedCreator) {
+            creatorNamesOpen = true;
+            expect(await prepare(pool, progress.receipt)).toEqual({ state: 'pending' });
+            expect(normalizationCalls).toBe(0);
+            expect(retainedPlan).toBeUndefined();
+            creatorNamesOpen = false;
           }
-          await nextSupport(['terminal', 'complete', retainedBuild, newGeneration]);
-          expect(projectionHeadCursors).toEqual([...originalCursors, '-1', String(terminalHome)]);
-        } else if (intent === 'merge') await nextSupport(['terminal', 'withheld']);
-        if (!bothVisible) expect(committed[3]?.frontier.after.slice(2)).toEqual(['original', 'withheld']);
-      }
-      if (mode === 'uncertain') {
-        await expect(prepare(pool, progress.receipt)).rejects.toThrow('requires settlement of its outstanding writer');
-        expect(retainedPlan).toBeUndefined();
-        expect(retainedAction).toBeUndefined();
+        } else {
+          if (bothVisible) {
+            expect(scopeSteps()[3]?.frontier.after.slice(2, 4)).toEqual(['original', 'progress']);
+            await nextSupport(['original', 'progress', retainedOriginalBuild, newGeneration]);
+            if (crossHome) await nextSupport(['original', 'progress', retainedOriginalBuild, newGeneration]);
+            await nextSupport(['original', 'complete', retainedOriginalBuild, newGeneration]);
+          }
+          if (mode === 'retire') {
+            await nextSupport(['terminal', 'retiring', oldBuild, '5', 0]);
+            await nextSupport(['terminal', 'retiring', oldBuild, '5', writerHome]);
+            expect(oldHeads).toEqual([]);
+          }
+          if (visible) {
+            await nextSupport(['terminal', 'progress']);
+            const originalCursors = bothVisible ? ['-1', String(writerHome)] : [];
+            if (crossHome) originalCursors.push(String(terminalHome));
+            expect(projectionHeadCursors).toEqual(originalCursors);
+            await nextSupport(['terminal', 'progress', retainedBuild, newGeneration]);
+            if (mode === 'superseded') {
+              await nextSupport(['terminal', 'restart']);
+              expect(engineReads).toBe(1);
+              expect(readBuilds).toBe(3);
+              return;
+            }
+            await nextSupport(['terminal', 'complete', retainedBuild, newGeneration]);
+            expect(projectionHeadCursors).toEqual([...originalCursors, '-1', String(terminalHome)]);
+          } else if (intent === 'merge') await nextSupport(['terminal', 'withheld']);
+          if (!bothVisible) expect(scopeSteps()[3]?.frontier.after.slice(2)).toEqual(['original', 'withheld']);
+        }
+        if (mode === 'uncertain') {
+          await expect(prepare(pool, progress.receipt)).rejects.toThrow('requires settlement of its outstanding writer');
+          expect(retainedPlan).toBeUndefined();
+          expect(retainedAction).toBeUndefined();
+          expect(engineReads).toBe(2);
+          return;
+        }
+        expect(await prepare(pool, progress.receipt)).toEqual({ state: 'prepared' });
+        expect(retainedPlan?.source).toMatchObject({
+          original: selected,
+          documentId: selected,
+          disposition: priorVisible ? 'NEW' : mode === 'first' || canonicalTerms ? 'first-apply' : 'OLD',
+          barrier: { kind: 'original', partition: writerHome },
+          originalFence: { position: '21', epoch: 1, partition: writerHome },
+        });
+        expect(retainedPlan?.references).toMatchObject({
+          definition: definitionId,
+          release: bundledDigest,
+          originalSupport:
+            canonicalTerms || bothVisible
+              ? { build: canonicalTerms ? retainedBuild : retainedOriginalBuild, generation: newGeneration }
+              : null,
+          terminalSupport: visible ? { build: retainedBuild, generation: newGeneration } : null,
+          predecessor: priorVisible ? { planId: previousPlan } : null,
+        });
+        expect(predecessorReads).toBe(priorVisible ? 1 : 0);
+        expect(publicationWrites).toEqual([lockPublicationFence, advanceWriterPublicationAdmissionSql]);
+        expect(await prepare(pool, progress.receipt)).toEqual({ state: 'prepared' });
         expect(engineReads).toBe(2);
+        expect(normalizationCalls).toBe(Number(canonicalTerms));
+        expect(scopeSteps().map((step) => step.engineRequests)).toEqual([0, 1, ...Array(scopeSteps().length - 2).fill(0)]);
+        if (canonicalTerms || bothVisible || ['dispatch', 'lost', 'handoff', 'changed-proof'].includes(mode)) {
+          accepting = true;
+          const acceptance = await directoryStep();
+          expect(identityEpochReceiptLocator(job, 'search-canonical-index', acceptance).ok).toBe(true);
+          expect(acceptance.frontier.after.slice(3)).toEqual([
+            SEARCH_IDENTITY_WRITER_ACCEPT,
+            selected,
+            second,
+            retainedPlan!.source.locator.planId,
+          ]);
+          dispatchRequest = {
+            transactionId: acceptance.receipt.native.transactionId,
+            engineRequests: 0,
+            frontier: acceptance.frontier,
+          };
+          dispatchRequestPosition = String(acceptance.receipt.native.position);
+          if (mode === 'changed-proof' || crossHome) {
+            terminalBuildCurrent = false;
+            await expect(prepare(pool, acceptance.receipt)).rejects.toThrow('Native Search resolvePlanned: changed');
+            expect(commonPlan).toBeUndefined();
+            expect(hold).toBeUndefined();
+            expect(engineReads).toBe(2);
+            expect(bulkCalls).toBe(0);
+            if (!crossHome) return;
+            terminalBuildCurrent = true;
+          }
+          const checked = await prepare(pool, acceptance.receipt);
+          expect(checked).toEqual({ state: 'progress', transactionId: committed.at(-1)?.transactionId });
+          expect(committed.at(-1)?.frontier.after.slice(2, 4)).toEqual(['binding', retainedPlan?.source.locator.planId]);
+          expect(commonPlan).toBeUndefined();
+          expect(hold).toBeUndefined();
+          if (foreignCapture) {
+            changedBindingProof = true;
+            await expect(prepare(pool, acceptance.receipt)).rejects.toMatchObject({ code: 'identity_effect_stale' });
+            changedBindingProof = false;
+            expect(commonPlan).toBeUndefined();
+            expect(hold).toBeUndefined();
+          }
+          expect(await prepare(pool, acceptance.receipt)).toEqual({
+            state: 'progress',
+            transactionId: commonPlan?.transaction_id,
+          });
+          expect(await prepare(pool, acceptance.receipt)).toEqual({ state: 'prepared' });
+          expect(engineReads).toBe(2);
+          const staged = await directoryStep();
+          expect(staged.state).toBe('more');
+          expect(identityEpochReceiptLocator(job, 'search-canonical-index', staged).ok).toBe(true);
+          const keep = progress.frontier.after;
+          expect(staged.frontier.after).toEqual([
+            'search-directory',
+            keep[1],
+            keep[2],
+            SEARCH_IDENTITY_WRITER_DISPATCH,
+            selected,
+            second,
+            retainedPlan!.source.locator.planId,
+            hold?.hold_id,
+          ]);
+          expect(hold?.accepted_epoch).toBe(1);
+          expect(acceptedRecorded).toBe(true);
+          const request = staged.receipt;
+          dispatchRequest = { transactionId: request.native.transactionId, engineRequests: 0, frontier: staged.frontier };
+          dispatchRequestPosition = String(request.native.position);
+          if (mode === 'lost') {
+            await expect(prepare(pool, request)).rejects.toThrow('Synthetic transport response lost');
+            await expect(prepare(pool, request)).rejects.toThrow('awaits the original uncertain dispatch result');
+            expect(committedOperation?.state).toBe('dispatched');
+            expect(receiptText).toBeUndefined();
+            expect(retainedBulk).toBeUndefined();
+            expect(engineReads).toBe(3);
+          } else {
+            if (canonicalTerms) {
+              canonicalBuildCurrent = false;
+              await expect(prepare(pool, request)).rejects.toThrow('Canonical Search Source changed before dispatch');
+              expect(committedOperation).toBeUndefined();
+              expect(bulkCalls).toBe(0);
+              canonicalBuildCurrent = true;
+              activeCollectionCount = '3';
+              await expect(prepare(pool, request)).rejects.toThrow('Canonical Search Source changed before dispatch');
+              expect(committedOperation).toBeUndefined();
+              expect(bulkCalls).toBe(0);
+              activeCollectionCount = '2';
+            }
+            if (adoptedName) {
+              nameDisclosed = false;
+              await expect(prepare(pool, request)).rejects.toThrow('Canonical Search Source changed before dispatch');
+              expect(committedOperation).toBeUndefined();
+              expect(bulkCalls).toBe(0);
+              nameDisclosed = true;
+              nameFenced = true;
+              await expect(prepare(pool, request)).rejects.toThrow('Canonical Search Source changed before dispatch');
+              expect(committedOperation).toBeUndefined();
+              expect(bulkCalls).toBe(0);
+              nameFenced = false;
+            }
+            if (adoptedRelation) {
+              relationHidden = true;
+              await expect(prepare(pool, request)).rejects.toThrow('Canonical Search Source changed before dispatch');
+              expect(committedOperation).toBeUndefined();
+              expect(bulkCalls).toBe(0);
+              relationHidden = false;
+              targetRedirect = relationTerminal;
+              await expect(prepare(pool, request)).rejects.toThrow('Canonical Search Source changed before dispatch');
+              expect(committedOperation).toBeUndefined();
+              expect(bulkCalls).toBe(0);
+              targetRedirect = null;
+              relationOwnerMoved = true;
+              await expect(prepare(pool, request)).rejects.toThrow(`Command unavailable for partition ${writerHome}: contention`);
+              expect(committedOperation).toBeUndefined();
+              expect(bulkCalls).toBe(0);
+              relationOwnerMoved = false;
+            }
+            if (creditedCreator) {
+              creatorRenamed = true;
+              await expect(prepare(pool, request)).rejects.toThrow('Canonical Search Source changed before dispatch');
+              expect(committedOperation).toBeUndefined();
+              expect(bulkCalls).toBe(0);
+              creatorRenamed = false;
+            }
+            const captured = await prepare(pool, request);
+            expect(captured).toEqual({ state: 'progress', transactionId: retainedBulk?.transaction });
+            expect(committedOperation?.state).toBe('dispatched');
+            expect(receiptText).toBeUndefined();
+            expect(retainedBulk?.bulk).toEqual({
+              errors: false,
+              items: [
+                expect.objectContaining({
+                  [canonicalTerms ? 'index' : 'delete']: expect.objectContaining({
+                    _index: index,
+                    _id: selected,
+                    _version: 21,
+                    _seq_no: 1,
+                    _primary_term: 1,
+                    _shards: { total: 1, successful: 1, failed: 0 },
+                  }),
+                }),
+              ],
+            });
+            const resumed = await directoryStep();
+            expect(resumed.receipt).toEqual(request);
+            expect(resumed.frontier).toEqual(staged.frontier);
+            if (mode === 'dispatch') {
+              const guard = createSearchWriterGuard({
+                ...receiving.configuration,
+                source: { read: forbidden } as never,
+                listing: { read: forbidden },
+              });
+              await expect(withCompiledCommandControls(pool, () => guard.closeGeneration(writerHome))).rejects.toThrow(
+                'Pending Search identity plans still hold the generation open',
+              );
+              expect(committedOperation?.state).toBe('dispatched');
+              corruptReceipt = true;
+              const readsBeforeCorruptReceipt = engineReads;
+              await expect(prepare(pool, request)).rejects.toThrow('One or more search index bulk items failed');
+              expect(engineReads).toBe(readsBeforeCorruptReceipt);
+              expect(committedOperation?.state).toBe('dispatched');
+              expect(bulkCalls).toBe(1);
+              corruptReceipt = false;
+            }
+            unavailableAllocation = true;
+            await expect(prepare(pool, request)).rejects.toThrow('Synthetic allocation lookup lost');
+            expect(bulkCalls).toBe(1);
+            unavailableAllocation = false;
+            expect(await prepare(pool, request)).toEqual({
+              state: 'progress',
+              transactionId: committedOperation?.visible_transaction_id,
+            });
+            expect(committedOperation?.state).toBe('visible');
+            expect(receiptText).toContain('"kind":"bulk"');
+            const expectedAllocationReads =
+              5 +
+              2 * Number(canonicalTerms) +
+              2 * Number(adoptedName) +
+              3 * Number(adoptedRelation) +
+              Number(creditedCreator) +
+              Number(mode === 'dispatch');
+            expect(engineReads).toBe(expectedAllocationReads);
+            const applicationRequest = await directoryStep();
+            expect(applicationRequest.receipt).toEqual(request);
+            expect(committedOperation?.state).toBe('visible');
+            const readsBeforeApplication = originalReads;
+            if (foreignCapture) {
+              const before = capturedEvents.length;
+              const beforeDiscard = discardedClients;
+              interruptApplicationCapture = true;
+              await expect(prepare(pool, applicationRequest.receipt)).rejects.toThrow(
+                'capture event was already armed or changed',
+              );
+              interruptApplicationCapture = false;
+              expect(committedOperation?.state).toBe('visible');
+              expect(capturedEvents).toHaveLength(before);
+              expect(discardedClients).toBe(beforeDiscard + 1);
+              expect(bulkCalls).toBe(1);
+            }
+            const applied = await prepare(pool, applicationRequest.receipt);
+            expect(applied).toEqual({ state: 'progress', transactionId: committedOperation?.applied_transaction_id });
+            expect(committed.at(-1)?.frontier.after).toEqual([selected, retainedPlan?.effect_key]);
+            expect(committedOperation?.applied_position).toBe(String(applicationPosition));
+            expect(originalReads).toBe(readsBeforeApplication);
+            expect(committedOperation?.state).toBe('applied');
+            expect(engineReads).toBe(expectedAllocationReads);
+            for (const phase of priorVisible
+              ? [null, 'original', null]
+              : canonicalTerms
+                ? ['original', null]
+                : ['original', 'terminal', null]) {
+              const next = await prepare(pool, request);
+              expect(next.state).toBe('progress');
+              expect(JSON.parse(receivingContinuation.after_key!).phase ?? null).toBe(phase);
+            }
+            expect(receivingContinuation.state).toBe('settled');
+            if (priorVisible) expect(copySettlement?.transactionId).toBe(committedOperation?.visible_transaction_id);
+            expect(await prepare(pool, request)).toEqual({
+              state: 'progress',
+              transactionId: controlCustody?.transaction_id,
+            });
+            if (mode === 'dispatch') {
+              releaseOwnerAdvanced = true;
+              await expect(prepare(pool, request)).rejects.toThrow('Native Search releaseHold: changed');
+              expect(lateReleaseCheck).toBe(true);
+              expect(hold?.released_transaction_id).toBeNull();
+              releaseOwnerAdvanced = false;
+              lateReleaseCheck = false;
+            }
+            expect(await prepare(pool, request)).toEqual({
+              state: 'progress',
+              transactionId: receivingContinuation.released_transaction_id,
+            });
+            expect(receivingContinuation.state).toBe('released');
+            expect(hold?.released_transaction_id).toBe(receivingContinuation.released_transaction_id);
+            const retired = await directoryStep();
+            expect(retired.frontier.after).toEqual(['search-directory', selected, retiredOriginals.length + 1]);
+            expect(identityEpochReceiptLocator(job, 'search-canonical-index', retired).ok).toBe(true);
+            expect(retiredScope).toBe(true);
+            retiredOriginals.push({
+              original: selected,
+              planId: retainedPlan!.source.locator.planId,
+              application: committedOperation!.applied_transaction_id!,
+              release: hold!.released_transaction_id!,
+            });
+            if (foreignCapture && intent === 'unmerge') {
+              const complete = await directoryStep();
+              expect(complete.state).toBe('complete');
+              expect(complete.frontier.after).toEqual(['directory', 1]);
+              expect(identityEpochReceiptLocator(job, 'search-canonical-index', complete).ok).toBe(true);
+            }
+            if (foreignCapture) {
+              const capturedTransactions = (store: Capture['store'], partition?: number) =>
+                capturedEvents.slice(captureStart)
+                  .filter((event) => event.store === store && (partition === undefined || event.partition === partition))
+                  .map(({ transactionId }) => transactionId);
+              const foreignSteps = scopeSteps().filter(({ frontier }) =>
+                ['search-writer-admitted', 'search-writer-support', selected].includes(String(frontier.after[0])),
+              );
+              expect(capturedTransactions('identity_epoch_step', writerHome)).toEqual(
+                foreignSteps.map(({ transactionId }) => transactionId),
+              );
+              const controlSteps = intent === 'unmerge' ? 5 : 4;
+              expect(capturedTransactions('identity_epoch_step', jobHome)).toEqual(
+                Array(controlSteps).fill(admissionTransaction),
+              );
+              expect(capturedTransactions('identity_epoch_receiving_effect')).toEqual([committedOperation?.applied_transaction_id]);
+              expect(capturedTransactions('identity_epoch_effect_receipt')).toEqual([
+                admissionTransaction,
+                admissionTransaction,
+              ]);
+              expect(capturedTransactions('identity_epoch_receiving_plan')).toEqual([commonPlan?.transaction_id]);
+              expect(capturedTransactions('identity_epoch_receiving_record')).toEqual([hold?.accepted_transaction_id]);
+              expect(capturedTransactions('identity_epoch_receiving_custody')).toEqual([controlCustody?.transaction_id]);
+            }
+            if (nativePermission) {
+              expect(permissionTimes).toBeGreaterThan(0);
+              expect(permissionFormulas).toBeGreaterThan(0);
+              if (bothVisible && !canonicalTerms) {
+                expect(permissionBatches).toBeGreaterThan(0);
+                expect(visibilityFloorReads).toBe(0);
+              }
+            }
+            expect(engineReads).toBe(expectedAllocationReads);
+          }
+          expect(bulkCalls).toBe(1);
+        }
+        if (mode === 'input') {
+          const guard = createSearchWriterGuard({
+            ...receiving.configuration,
+            source: { read: forbidden } as never,
+            listing: { read: forbidden },
+          });
+          await expect(withCompiledCommandControls(pool, () => guard.closeGeneration(writerHome))).rejects.toThrow(
+            'Pending Search identity plans still hold the generation open',
+          );
+          expect(engineReads).toBe(3);
+        }
+
         return;
       }
-      expect(await prepare(pool, progress.receipt)).toEqual({ state: 'prepared' });
-      expect(retainedPlan?.source).toMatchObject({
-        original: selected,
-        documentId: selected,
-        disposition: priorVisible ? 'NEW' : mode === 'first' || canonicalTerms ? 'first-apply' : 'OLD',
-        barrier: { kind: 'original', partition: writerHome },
-        originalFence: { position: '21', epoch: 1, partition: writerHome },
-      });
-      expect(retainedPlan?.references).toMatchObject({
-        definition: definitionId,
-        release: bundledDigest,
-        originalSupport:
-          canonicalTerms || bothVisible
-            ? { build: bothVisible ? retainedOriginalBuild : retainedBuild, generation: newGeneration }
-            : null,
-        terminalSupport: visible ? { build: retainedBuild, generation: newGeneration } : null,
-        predecessor: priorVisible ? { planId: previousPlan } : null,
-      });
-      expect(predecessorReads).toBe(priorVisible ? 1 : 0);
-      expect(publicationWrites).toEqual([lockPublicationFence, advanceWriterPublicationAdmissionSql]);
-      expect(await prepare(pool, progress.receipt)).toEqual({ state: 'prepared' });
-      expect(engineReads).toBe(2);
-      expect(normalizationCalls).toBe(Number(canonicalTerms));
-      expect(committed.map((step) => step.engineRequests)).toEqual([0, 1, ...Array(committed.length - 2).fill(0)]);
-      if (canonicalTerms || bothVisible || ['dispatch', 'lost', 'handoff', 'changed-proof'].includes(mode)) {
-        accepting = true;
-        const acceptance = await withIdentitySourceConsumerMaintenance(
-          { pool, env: {} },
-          { deadline: Date.now() + 5000 },
-          () => step(pool, job),
-        );
-        expect(identityEpochReceiptLocator(job, 'search-canonical-index', acceptance).ok).toBe(true);
-        expect(acceptance.frontier.after.slice(3)).toEqual([
-          SEARCH_IDENTITY_WRITER_ACCEPT,
-          selected,
-          second,
-          retainedPlan!.source.locator.planId,
-        ]);
-        dispatchRequest = {
-          transactionId: acceptance.receipt.native.transactionId,
-          engineRequests: 0,
-          frontier: acceptance.frontier,
-        };
-        dispatchRequestPosition = String(acceptance.receipt.native.position);
-        if (mode === 'changed-proof' || crossHome) {
-          terminalBuildCurrent = false;
-          await expect(prepare(pool, acceptance.receipt)).rejects.toThrow('Native Search resolvePlanned: changed');
-          expect(commonPlan).toBeUndefined();
-          expect(hold).toBeUndefined();
-          expect(engineReads).toBe(2);
-          expect(bulkCalls).toBe(0);
-          if (!crossHome) return;
-          terminalBuildCurrent = true;
-        }
-        const checked = await prepare(pool, acceptance.receipt);
-        expect(checked).toEqual({ state: 'progress', transactionId: committed.at(-1)?.transactionId });
-        expect(committed.at(-1)?.frontier.after.slice(2, 4)).toEqual(['binding', retainedPlan?.source.locator.planId]);
-        expect(commonPlan).toBeUndefined();
-        expect(hold).toBeUndefined();
-        if (foreignCapture) {
-          changedBindingProof = true;
-          await expect(prepare(pool, acceptance.receipt)).rejects.toMatchObject({ code: 'identity_effect_stale' });
-          changedBindingProof = false;
-          expect(commonPlan).toBeUndefined();
-          expect(hold).toBeUndefined();
-        }
-        expect(await prepare(pool, acceptance.receipt)).toEqual({
-          state: 'progress',
-          transactionId: commonPlan?.transaction_id,
-        });
-        expect(await prepare(pool, acceptance.receipt)).toEqual({ state: 'prepared' });
-        expect(engineReads).toBe(2);
-        const staged = await withIdentitySourceConsumerMaintenance(
-          { pool, env: {} },
-          { deadline: Date.now() + 5000 },
-          () => step(pool, job),
-        );
-        expect(staged.state).toBe('more');
-        expect(identityEpochReceiptLocator(job, 'search-canonical-index', staged).ok).toBe(true);
-        const keep = progress.frontier.after;
-        expect(staged.frontier.after).toEqual([
-          'search-directory',
-          keep[1],
-          keep[2],
-          SEARCH_IDENTITY_WRITER_DISPATCH,
-          selected,
-          second,
-          retainedPlan!.source.locator.planId,
-          hold?.hold_id,
-        ]);
-        expect(hold?.accepted_epoch).toBe(1);
-        expect(acceptedRecorded).toBe(true);
-        const request = staged.receipt;
-        dispatchRequest = { transactionId: request.native.transactionId, engineRequests: 0, frontier: staged.frontier };
-        dispatchRequestPosition = String(request.native.position);
-        if (mode === 'lost') {
-          await expect(prepare(pool, request)).rejects.toThrow('Synthetic transport response lost');
-          await expect(prepare(pool, request)).rejects.toThrow('awaits the original uncertain dispatch result');
-          expect(committedOperation?.state).toBe('dispatched');
-          expect(receiptText).toBeUndefined();
-          expect(retainedBulk).toBeUndefined();
-          expect(engineReads).toBe(3);
-        } else {
-          if (canonicalTerms) {
-            canonicalBuildCurrent = false;
-            await expect(prepare(pool, request)).rejects.toThrow('Canonical Search Source changed before dispatch');
-            expect(committedOperation).toBeUndefined();
-            expect(bulkCalls).toBe(0);
-            canonicalBuildCurrent = true;
-            activeCollectionCount = '3';
-            await expect(prepare(pool, request)).rejects.toThrow('Canonical Search Source changed before dispatch');
-            expect(committedOperation).toBeUndefined();
-            expect(bulkCalls).toBe(0);
-            activeCollectionCount = '2';
-          }
-          if (adoptedName) {
-            nameDisclosed = false;
-            await expect(prepare(pool, request)).rejects.toThrow('Canonical Search Source changed before dispatch');
-            expect(committedOperation).toBeUndefined();
-            expect(bulkCalls).toBe(0);
-            nameDisclosed = true;
-            nameFenced = true;
-            await expect(prepare(pool, request)).rejects.toThrow('Canonical Search Source changed before dispatch');
-            expect(committedOperation).toBeUndefined();
-            expect(bulkCalls).toBe(0);
-            nameFenced = false;
-          }
-          if (adoptedRelation) {
-            relationHidden = true;
-            await expect(prepare(pool, request)).rejects.toThrow('Canonical Search Source changed before dispatch');
-            expect(committedOperation).toBeUndefined();
-            expect(bulkCalls).toBe(0);
-            relationHidden = false;
-            targetRedirect = relationTerminal;
-            await expect(prepare(pool, request)).rejects.toThrow('Canonical Search Source changed before dispatch');
-            expect(committedOperation).toBeUndefined();
-            expect(bulkCalls).toBe(0);
-            targetRedirect = null;
-            relationOwnerMoved = true;
-            await expect(prepare(pool, request)).rejects.toThrow(`Command unavailable for partition ${writerHome}: contention`);
-            expect(committedOperation).toBeUndefined();
-            expect(bulkCalls).toBe(0);
-            relationOwnerMoved = false;
-          }
-          if (creditedCreator) {
-            creatorRenamed = true;
-            await expect(prepare(pool, request)).rejects.toThrow('Canonical Search Source changed before dispatch');
-            expect(committedOperation).toBeUndefined();
-            expect(bulkCalls).toBe(0);
-            creatorRenamed = false;
-          }
-          const captured = await prepare(pool, request);
-          expect(captured).toEqual({ state: 'progress', transactionId: retainedBulk?.transaction });
-          expect(committedOperation?.state).toBe('dispatched');
-          expect(receiptText).toBeUndefined();
-          expect(retainedBulk?.bulk).toEqual({
-            errors: false,
-            items: [
-              expect.objectContaining({
-                [canonicalTerms ? 'index' : 'delete']: expect.objectContaining({
-                  _index: index,
-                  _id: selected,
-                  _version: 21,
-                  _seq_no: 1,
-                  _primary_term: 1,
-                  _shards: { total: 1, successful: 1, failed: 0 },
-                }),
-              }),
-            ],
-          });
-          const resumed = await withIdentitySourceConsumerMaintenance(
-            { pool, env: {} },
-            { deadline: Date.now() + 5000 },
-            () => step(pool, job),
-          );
-          expect(resumed.receipt).toEqual(request);
-          expect(resumed.frontier).toEqual(staged.frontier);
-          if (mode === 'dispatch') {
-            const guard = createSearchWriterGuard({
-              ...receiving.configuration,
-              source: { read: forbidden } as never,
-              listing: { read: forbidden },
-            });
-            await expect(withCompiledCommandControls(pool, () => guard.closeGeneration(writerHome))).rejects.toThrow(
-              'Pending Search identity plans still hold the generation open',
-            );
-            expect(committedOperation?.state).toBe('dispatched');
-            corruptReceipt = true;
-            const readsBeforeCorruptReceipt = engineReads;
-            await expect(prepare(pool, request)).rejects.toThrow('One or more search index bulk items failed');
-            expect(engineReads).toBe(readsBeforeCorruptReceipt);
-            expect(committedOperation?.state).toBe('dispatched');
-            expect(bulkCalls).toBe(1);
-            corruptReceipt = false;
-          }
-          unavailableAllocation = true;
-          await expect(prepare(pool, request)).rejects.toThrow('Synthetic allocation lookup lost');
-          expect(bulkCalls).toBe(1);
-          unavailableAllocation = false;
-          expect(await prepare(pool, request)).toEqual({
-            state: 'progress',
-            transactionId: committedOperation?.visible_transaction_id,
-          });
-          expect(committedOperation?.state).toBe('visible');
-          expect(receiptText).toContain('"kind":"bulk"');
-          const expectedAllocationReads =
-            5 +
-            2 * Number(canonicalTerms) +
-            2 * Number(adoptedName) +
-            3 * Number(adoptedRelation) +
-            Number(creditedCreator) +
-            Number(mode === 'dispatch');
-          expect(engineReads).toBe(expectedAllocationReads);
-          const applicationRequest = await withIdentitySourceConsumerMaintenance(
-            { pool, env: {} },
-            { deadline: Date.now() + 5000 },
-            () => step(pool, job),
-          );
-          expect(applicationRequest.receipt).toEqual(request);
-          expect(committedOperation?.state).toBe('visible');
-          const readsBeforeApplication = originalReads;
-          if (foreignCapture) {
-            const before = capturedEvents.length;
-            const beforeDiscard = discardedClients;
-            interruptApplicationCapture = true;
-            await expect(prepare(pool, applicationRequest.receipt)).rejects.toThrow(
-              'capture event was already armed or changed',
-            );
-            interruptApplicationCapture = false;
-            expect(committedOperation?.state).toBe('visible');
-            expect(capturedEvents).toHaveLength(before);
-            expect(discardedClients).toBe(beforeDiscard + 1);
-            expect(bulkCalls).toBe(1);
-          }
-          const applied = await prepare(pool, applicationRequest.receipt);
-          expect(applied).toEqual({ state: 'progress', transactionId: committedOperation?.applied_transaction_id });
-          expect(committed.at(-1)?.frontier.after).toEqual([selected, retainedPlan?.effect_key]);
-          expect(committedOperation?.applied_position).toBe(String(applicationPosition));
-          expect(originalReads).toBe(readsBeforeApplication);
-          expect(committedOperation?.state).toBe('applied');
-          expect(engineReads).toBe(expectedAllocationReads);
-          for (const phase of priorVisible
-            ? [null, 'original', null]
-            : canonicalTerms
-              ? ['original', null]
-              : ['original', 'terminal', null]) {
-            const next = await prepare(pool, request);
-            expect(next.state).toBe('progress');
-            expect(JSON.parse(receivingContinuation.after_key!).phase ?? null).toBe(phase);
-          }
-          expect(receivingContinuation.state).toBe('settled');
-          if (priorVisible) expect(copySettlement?.transactionId).toBe(committedOperation?.visible_transaction_id);
-          expect(await prepare(pool, request)).toEqual({
-            state: 'progress',
-            transactionId: controlCustody?.transaction_id,
-          });
-          if (mode === 'dispatch') {
-            releaseOwnerAdvanced = true;
-            await expect(prepare(pool, request)).rejects.toThrow('Native Search releaseHold: changed');
-            expect(lateReleaseCheck).toBe(true);
-            expect(hold?.released_transaction_id).toBeNull();
-            releaseOwnerAdvanced = false;
-            lateReleaseCheck = false;
-          }
-          expect(await prepare(pool, request)).toEqual({
-            state: 'progress',
-            transactionId: receivingContinuation.released_transaction_id,
-          });
-          expect(receivingContinuation.state).toBe('released');
-          expect(hold?.released_transaction_id).toBe(receivingContinuation.released_transaction_id);
-          const retired = await withIdentitySourceConsumerMaintenance(
-            { pool, env: {} },
-            { deadline: Date.now() + 5000 },
-            () => step(pool, job),
-          );
-          expect(retired.frontier.after).toEqual(['search-directory', selected, 1]);
-          expect(identityEpochReceiptLocator(job, 'search-canonical-index', retired).ok).toBe(true);
-          expect(retiredScope).toBe(true);
-          if (foreignCapture && intent === 'unmerge') {
-            const complete = await withIdentitySourceConsumerMaintenance(
-              { pool, env: {} },
-              { deadline: Date.now() + 5000 },
-              () => step(pool, job),
-            );
-            expect(complete.state).toBe('complete');
-            expect(complete.frontier.after).toEqual(['directory', 1]);
-            expect(identityEpochReceiptLocator(job, 'search-canonical-index', complete).ok).toBe(true);
-          }
-          if (foreignCapture) {
-            const capturedTransactions = (store: Capture['store'], partition?: number) =>
-              capturedEvents
-                .filter((event) => event.store === store && (partition === undefined || event.partition === partition))
-                .map(({ transactionId }) => transactionId);
-            const foreignSteps = committed.filter(({ frontier }) =>
-              ['search-writer-admitted', 'search-writer-support', selected].includes(String(frontier.after[0])),
-            );
-            expect(capturedTransactions('identity_epoch_step', writerHome)).toEqual(
-              foreignSteps.map(({ transactionId }) => transactionId),
-            );
-            const controlSteps = intent === 'unmerge' ? 5 : 4;
-            expect(capturedTransactions('identity_epoch_step', jobHome)).toEqual(
-              Array(controlSteps).fill(admissionTransaction),
-            );
-            expect(capturedTransactions('identity_epoch_receiving_effect')).toEqual([committedOperation?.applied_transaction_id]);
-            expect(capturedTransactions('identity_epoch_effect_receipt')).toEqual([
-              admissionTransaction,
-              admissionTransaction,
-            ]);
-            expect(capturedTransactions('identity_epoch_receiving_plan')).toEqual([commonPlan?.transaction_id]);
-            expect(capturedTransactions('identity_epoch_receiving_record')).toEqual([hold?.accepted_transaction_id]);
-            expect(capturedTransactions('identity_epoch_receiving_custody')).toEqual([controlCustody?.transaction_id]);
-          }
-          if (nativePermission) {
-            expect(permissionTimes).toBeGreaterThan(0);
-            expect(permissionFormulas).toBeGreaterThan(0);
-            if (bothVisible) {
-              expect(permissionBatches).toBeGreaterThan(0);
-              expect(visibilityFloorReads).toBe(0);
-            }
-          }
-          expect(engineReads).toBe(expectedAllocationReads);
-        }
-        expect(bulkCalls).toBe(1);
-      }
-      if (mode === 'input') {
-        const guard = createSearchWriterGuard({
-          ...receiving.configuration,
-          source: { read: forbidden } as never,
-          listing: { read: forbidden },
-        });
-        await expect(withCompiledCommandControls(pool, () => guard.closeGeneration(writerHome))).rejects.toThrow(
-          'Pending Search identity plans still hold the generation open',
-        );
-        expect(engineReads).toBe(3);
-      }
-
-      return;
     }
+    expect(engineReads).toBe(0);
   }
-  expect(engineReads).toBe(0);
+
+  await driveOriginal();
+  if (completeMerge) {
+    const redirected = retiredOriginals[0]!;
+    expect(redirected.original).toBe(first);
+    expect(committed.at(-1)?.frontier.after).toEqual(['search-directory', first, 1]);
+
+    // The next original has its own receiving home and rows. Keep the job, pool,
+    // committed directory, retired scope, captured roles, and terminal build.
+    after = redirected.original;
+    selected = second;
+    writerHome = terminalHome;
+    canonicalTerms = true;
+    scopeStart = committed.length;
+    oldBuild = retainedBuild!;
+    oldGeneration = newGeneration;
+    oldHeads.push(...projectionDependencyHomes.get(oldBuild)!);
+    newGeneration = String(Number(oldGeneration) + 2);
+    directoryReads = 0;
+    originalReads = 0;
+    planReads = 0;
+    engineReads = 0;
+    bulkCalls = 0;
+    observedLocks.length = 0;
+    publicationWrites.length = 0;
+    accepting = false;
+    dispatchRequest = undefined;
+    dispatchRequestPosition = '1';
+    retainedPlan = undefined;
+    preparedWriter = undefined;
+    retainedAction = undefined;
+    committedOperation = undefined;
+    retainedBulk = undefined;
+    receiptText = undefined;
+    hold = undefined;
+    commonPlan = undefined;
+    acceptedNativeHold = undefined;
+    acceptedRecorded = false;
+    controlCustody = undefined;
+    controlApplied = undefined;
+    receivingContinuation = { revision: '0', after_key: null, state: 'progress', applied_transaction_id: null };
+    appliedPosition = applicationPosition;
+    retiredScope = false;
+
+    await driveOriginal();
+    const sealed = await directoryStep();
+    expect(sealed.state).toBe('complete');
+    expect(sealed.frontier.after).toEqual(['directory', 2]);
+    expect(identityEpochReceiptLocator(job, 'search-canonical-index', sealed).ok).toBe(true);
+    expect(committed.at(-1)?.transactionId).toBe(sealed.receipt.native.transactionId);
+    expect(capturedEvents.at(-1)).toEqual({
+      store: 'identity_epoch_step', partition: jobHome, transactionId: admissionTransaction, armed: true,
+    });
+    expect(retiredOriginals.map(({ original }) => original)).toEqual([first, second]);
+    expect(new Set(retiredOriginals.map(({ planId }) => planId)).size).toBe(2);
+    expect(new Set(retiredOriginals.map(({ application }) => application)).size).toBe(2);
+    expect(new Set(retiredOriginals.map(({ release }) => release)).size).toBe(2);
+    const acknowledge = () =>
+      withCompiledCommandControls(pool, () => identityEpochStore().reconcileStepReceipt(pool, sealed.receipt));
+    const acknowledged = await acknowledge();
+    expect(acknowledged.receipt).toEqual(sealed.receipt);
+    expect(await acknowledge()).toEqual(acknowledged);
+    expect(searchAckWrites).toBe(1);
+    const replay = await directoryStep();
+    expect(replay.receipt).toEqual(sealed.receipt);
+    expect(replay.frontier).toEqual(sealed.frontier);
+    expect(submitted).toEqual([{ id: first, operation: 'delete' }, { id: second, operation: 'index' }]);
+  }
 });
