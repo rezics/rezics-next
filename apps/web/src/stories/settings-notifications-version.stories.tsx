@@ -295,9 +295,13 @@ export const SharedVersionRecovery: Story = {
     await noCurrentClaim();
     await expect(notices.queryByRole('button', { name: m.settings_notifications_retry_original() })).toBeNull();
     await versionFields(receiptVersion);
+    const writesAfterReceipt = fixture.commands.length;
+    await reaffirm(digest());
     await userEvent.click(reload());
     await notices.findByText(m.settings_notifications_review_title());
+    await expect(digest()).toBeChecked();
     await userEvent.click(notices.getByRole('button', { name: m.settings_notifications_use_current() }));
+    await expect(fixture.commands).toHaveLength(writesAfterReceipt);
     await expect(digest()).not.toBeChecked();
 
     // An uncertain original survives a newer shared floor and a stale replay read byte for byte.
