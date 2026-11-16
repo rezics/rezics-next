@@ -177,6 +177,22 @@ test('repeated due discovery keeps delayed repair and population deliveries disp
   expect((await read(owner, populationId))?.locator).toMatchObject({ kind: 'population', phase: 'replay' });
 });
 
+test('due discovery recovers a ready enrollment successor after an interrupted delivery', async () => {
+  const owner = prefix();
+  const store = createPublicPreparationStore(pool, work, owner);
+  const frontier = population('enrollment');
+  const id = track(await store.retain(frontier, Date.now() + 86_400_000));
+  const original = (await read(owner, id))!;
+  const claim = (await store.claim(id, original.revision, Date.now() + 30_000))!;
+  const revision = await store.advance(claim, { ...frontier, phase: 'activate' }, 0, Date.now() + 30_000, true);
+  expect(revision).not.toBeNull();
+  expect(await workflows(id)).toEqual([identity(id, original.revision)]);
+  await store.due();
+  expect(await workflows(id)).toEqual([identity(id, original.revision), identity(id, revision!)]);
+  expect((await store.claim(id, revision!, Date.now() + 30_000))?.locator).toMatchObject({ phase: 'activate' });
+  expect(await store.claim(id, revision!, Date.now() + 30_000)).toBeNull();
+});
+
 test('expired claims recover once and a stale claimed revision cannot overwrite the newer frontier', async () => {
   const owner = prefix();
   const store = createPublicPreparationStore(pool, work, owner);
