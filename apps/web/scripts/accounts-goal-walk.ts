@@ -32,6 +32,9 @@ const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
 const CAPABILITIES = 'docs/goals/accounts.capabilities.md';
 const JOURNEY_HEADING = '## First-public journeys';
 
+// Reuse the original native persona and request path in the focused acceptance probe.
+export { GLOBAL_CONTEXT, asId, kernel, origins, parseEnv, signup, websiteToken };
+
 export const JOURNEYS = [
   { id: 'J01', journey: 'signup → callback → authenticated Home', owner: 'Auth c883' },
   { id: 'J02', journey: 'sign in → refresh/session review → sign out', owner: 'Auth c883' },
