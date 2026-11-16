@@ -755,7 +755,13 @@ export function createSearchGenerationPublication(
     meter.frontierWrites += inserted.rowCount ?? 0;
     if (inserted.rowCount !== expected) throw new Pending('source_pending');
   }
-  async function remember(job: Job, before: Home, client: PoolClient) {
+  async function remember(
+    job: Job,
+    before: Home,
+    client: PoolClient,
+    meter: Meter,
+    verifyChanged?: () => Promise<boolean>,
+  ) {
     const {
       rows: [old],
     } = await client.query<Home>(
@@ -766,20 +772,27 @@ export function createSearchGenerationPublication(
     const changed = old && !same(old, before);
     // With no cursor, the ordinary Subject scan is already about to replay this home from its first key.
     const startsSubjectHome = job.family === 'subjects' && job.phase === 'subject' && !job.after_id && !job.fenced_pass;
-    if (changed && !startsSubjectHome) {
+    const replayed =
+      changed &&
+      verifyChanged !== undefined &&
+      old.epoch === before.epoch &&
+      BigInt(old.position) < BigInt(before.position) &&
+      (await verifyChanged());
+    if (changed && !startsSubjectHome && !replayed) {
       console.warn('Search publication trace', { gate: 'remember', home: before.partition, old, before });
-      await client.query('DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2', [
-        before.partition,
-        job.job,
-      ]);
+      const deleted = await client.query(
+        'DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2',
+        [before.partition, job.job],
+      );
+      meter.frontierWrites += deleted.rowCount ?? 0;
       job.phase = 'subject';
       job.home = before.partition;
       job.after_route = null;
       job.after_id = null;
       throw new Pending('source_pending');
     }
-    if (!old || changed)
-      await client.query(
+    if (!old || changed) {
+      const stored = await client.query(
         `INSERT INTO search.generation_publication_home
       (partition_no,job,epoch,position,account_revision,claim_revision,pass) VALUES($1,$2,$3,$4,$5,$6,$7)
       ON CONFLICT(partition_no,job) DO UPDATE SET epoch=EXCLUDED.epoch,position=EXCLUDED.position,
@@ -794,6 +807,9 @@ export function createSearchGenerationPublication(
           job.pass,
         ],
       );
+      meter.frontierWrites += stored.rowCount ?? 0;
+    }
+    return replayed === true;
   }
   function cursor(job: Job): SearchPublicFilterSourceKeyCursor | null {
     return job.after_id === null ? null : { route: job.after_route!, id: job.after_id };
@@ -811,6 +827,56 @@ export function createSearchGenerationPublication(
       return kind === undefined ? [] : [registry.key({ owner: 'semantic', kind, id, route: routeOf(id)! })];
     });
   }
+  async function verifySubjectKeys(
+    job: Job,
+    partition: number,
+    ids: readonly string[],
+    position: bigint,
+    meter: Meter,
+  ): Promise<'matched' | 'writer-pending' | 'engine-mismatch'> {
+    meter.inputKeys += ids.length * 3; // Publication inputs, current Source inputs and settled native copies.
+    const actions = await readSearchWriterGenerationActions(writerGuard, partition, ids, position);
+    if (!actions) {
+      console.warn('Search publication trace', { gate: 'writer-actions', partition, count: ids.length });
+      return 'writer-pending';
+    }
+    meter.engineSearches++;
+    try {
+      meter.inputKeys += await assertNativeGenerationActionsVisible(search, job.physical_target, actions);
+      return 'matched';
+    } catch (error) {
+      if (!(error instanceof GenerationReconciliationMismatch)) throw error;
+      console.warn('Search publication trace', { gate: 'engine-actions', partition, count: ids.length });
+      return 'engine-mismatch';
+    }
+  }
+  async function verifyChangedEngineHome(
+    job: Job,
+    before: Home,
+    ids: readonly string[],
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+  ): Promise<boolean> {
+    // A complete Source page can fit in this turn only if there is room for a lookahead
+    // key, the exact writer comparison and the remaining turn's ordinary engine keys.
+    const inputLimit = ids.length + 1;
+    if (inputLimit > PAGE || meter.inputKeys + inputLimit + 4 * PAGE > 1000) return false;
+    const page = await sourceKeys.read({ partition: before.partition, after: null, inputLimit }, context);
+    add(meter, page.cost);
+    if (
+      page.status !== 'eligible' ||
+      !page.complete ||
+      page.partition !== before.partition ||
+      page.epoch !== before.epoch ||
+      page.position !== BigInt(before.position) ||
+      !same([...page.ids].sort(), [...ids].sort())
+    ) {
+      return false;
+    }
+    check(context);
+    const verified = await verifySubjectKeys(job, before.partition, ids, page.position, meter);
+    return verified === 'matched' && same(before, await head(before.partition, context));
+  }
   async function reconcile(
     job: Job,
     partition: number,
@@ -822,25 +888,14 @@ export function createSearchGenerationPublication(
   ) {
     if (!ids.length) return;
     check(context);
-    meter.inputKeys += ids.length;
     if (job.family === 'subjects') {
-      const actions = await readSearchWriterGenerationActions(writerGuard, partition, ids, position);
-      meter.inputKeys += ids.length * 2; // current Source inputs and retained native copies
-      if (!actions) console.warn('Search publication trace', { gate: 'writer-actions', partition, count: ids.length });
-      if (actions) {
-        meter.engineSearches++;
-        try {
-          meter.inputKeys += await assertNativeGenerationActionsVisible(search, job.physical_target, actions);
-          return;
-        } catch (error) {
-          if (!(error instanceof GenerationReconciliationMismatch)) throw error;
-          console.warn('Search publication trace', { gate: 'engine-actions', partition, count: ids.length });
-        }
-      }
+      const verified = await verifySubjectKeys(job, partition, ids, position, meter);
+      if (verified === 'matched') return;
       // Subject population first waits for ordinary settlement to avoid competing for its initial write.
       // A settled copy can still lag a native projection that finished preparing after that write.
       // Repair the mismatch through the ordinary writer while the generation remains open.
-      if (job.fenced_pass || (job.phase === 'subject' && !actions)) throw new Pending('source_pending');
+      if (job.fenced_pass || (job.phase === 'subject' && verified === 'writer-pending'))
+        throw new Pending('source_pending');
       // Enrollment advances the native head. Replay the home before adopting a frontier or witness.
       try {
         await writerGuard.write(partition, ids, position);
@@ -852,6 +907,7 @@ export function createSearchGenerationPublication(
       meter.resultWrites += ids.length;
       throw new Pending('source_pending');
     }
+    meter.inputKeys += ids.length;
     if (!job.fenced_pass) {
       const projection = createDiscoveryProjection({
         pool,
@@ -914,7 +970,7 @@ export function createSearchGenerationPublication(
           return;
         }
         const before = await head(job.home, context);
-        await remember(job, before, client);
+        await remember(job, before, client, meter);
         const after = cursor(job);
         let ids: readonly string[],
           next: SearchPublicFilterSourceKeyCursor | null,
@@ -1120,7 +1176,11 @@ export function createSearchGenerationPublication(
         );
         if (job.fenced_pass && (coverage.missing.length || coverage.extra.length)) throw new Pending('source_pending');
         const before = await head(group.partition, context);
-        await remember(job, before, client);
+        const verifyChanged =
+          job.family === 'subjects' && !job.fenced_pass
+            ? () => verifyChangedEngineHome(job, before, group.ids, context, meter)
+            : undefined;
+        if (await remember(job, before, client, meter, verifyChanged)) continue;
         const discoveryKeys =
           job.family === 'discovery'
             ? group.keys.filter((key): key is DiscoveryKey => key.owner === 'semantic' || key.owner === 'accounts')
