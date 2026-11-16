@@ -1773,13 +1773,15 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     publication?: PublicFilterConsumer,
   ): Promise<PublicFilterConsumerCapture> {
     if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
-    let recovery = m.take(await binding.recover({ bootstrap: work.bootstrap.id }, context));
+    // Publication resumes its exact Source cut and this registration's Search materialization.
+    // Source adopts the prepared observation after the original execution has been retained.
+    let recovery = publication ? null : m.take(await binding.recover({ bootstrap: work.bootstrap.id }, context));
     const consumer = work.bootstrap.consumer;
     const job: PublicFilterConsumerJob = {
       consumer,
       job: `${work.registration.partition}:bootstrap:${encodeURIComponent(work.bootstrap.id)}`,
     };
-    if (recovery.status === 'pending') {
+    if (recovery === null || recovery.status === 'pending') {
       const native = await advanceNativePublicFilterPreparation(
         binding,
         {
