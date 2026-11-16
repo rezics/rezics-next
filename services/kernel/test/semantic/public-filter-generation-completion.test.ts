@@ -492,7 +492,7 @@ test('native publication starts repair from the original adopted Source executio
     );
     const { repair_settlement, ...source } = terminal.rows[0] ?? {};
     const settlement = repair_settlement
-      ? decodePublicFilterNativeState<{ pages: number; closed: boolean }>(repair_settlement)
+      ? decodePublicFilterNativeState<{ pages: number; closed: boolean; fence?: unknown }>(repair_settlement)
       : undefined;
     throw new Error(
       `Original Source repair did not acknowledge a batch: ${JSON.stringify({
@@ -500,7 +500,11 @@ test('native publication starts repair from the original adopted Source executio
         acknowledged,
         last,
         source,
-        searchSettlement: settlement && { pages: settlement.pages, closed: settlement.closed },
+        searchSettlement: settlement && {
+          pages: settlement.pages,
+          closed: settlement.closed,
+          fenced: !!settlement.fence,
+        },
       })}`,
     );
   } finally {
