@@ -1188,18 +1188,20 @@ async function apply(
     );
     await claimPoint();
     const withdrawn = await withdrawMappingSourcePoint(tx, job, saved, change.original, measured);
-    const result = await query(tx, measured, sourceEffect.sql, [
+    await query(tx, measured, sourceEffect.sql, [
       sourceRoute,
       change.original,
       change.previousTerminal,
       change.terminal,
       saved.intent.release,
       transactionId,
+      job.jobId,
+      job.epoch.toString(),
+      saved.scope_digest,
+      head.unit + 1,
     ]);
     if (withdrawn) await completeIdentityMappingPointWithdrawal(tx, change.original, measured);
     if (saved.intent.kind === 'unmerge') consumeRaw(measured, 2);
-    if (result.rows[0]?.apply_identity_epoch_mapping_source === false)
-      return { ...plan, frontier: next(head, 'source') };
     return plan;
   }
   if (plan.action === 'restore') {

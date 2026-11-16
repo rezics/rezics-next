@@ -1222,10 +1222,12 @@ export async function cleanIdentityTerminalClosure(pool: Pool, terminal: string)
         return false;
       if (
         (
-          await tx.query(`SELECT 1 FROM semantic.redirect WHERE route=$1 AND subject_id=$2 LIMIT 1`, [
-            key(terminal),
-            terminal,
-          ])
+          await tx.query(
+            `SELECT 1 FROM (
+              SELECT target FROM semantic.redirect WHERE route=$1 AND subject_id=$2 ORDER BY sequence DESC LIMIT 1
+            ) head WHERE head.target IS NOT NULL`,
+            [key(terminal), terminal],
+          )
         ).rowCount
       ) {
         await tx.query(

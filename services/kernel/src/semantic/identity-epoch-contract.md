@@ -2067,6 +2067,12 @@ by a callback, refusal, replay, control statement or rollback.
 `identity-epoch-mapping.ts:stepIdentityEpochMapping(pool, job)` consumes only a saved admitted job. Its input
 keyset reads at most one raw key from each immutable input stream. Each subsequent invocation applies one
 source, link, member, membership or header unit. Sparse Context fanout is a separate raw-90 keyset phase.
+The redirect stream retains each target and the transaction that selected it. A change back to the original
+appends a null target under the same scoped mapping effect, point gate and native owner epoch as its merge
+revision. Current reads inspect the highest sequence and treat a null target as self. In particular, the
+read must take the head before testing its target. Subsequent merges append after that head, and replay of an
+effect uses its existing receipt. The redirect rows retain their native source provenance and erasure inventory.
+
 The native control head retains one original and one link intent, at most two output descriptors and an
 8-scalar/2048-byte frontier. Local effect receipts and the exact control custody row precede advancement;
 a lost local result resumes the same unit. Transient payloads are deleted only after released control custody.
