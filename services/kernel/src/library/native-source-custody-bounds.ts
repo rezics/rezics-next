@@ -336,7 +336,7 @@ function statementSpecs(): readonly StatementSpec[] {
       spec('start', startQuery, 32, 1, 0, 0, 0),
       spec('advance', advanceQuery, 32, 1, 0, 0, 0),
       spec('read', readQuery, 16, 1, 0, 0, captureProjectionBytes),
-      spec('finish', finishQuery, 80, 3, 1, 1, receiptProjectionBytes),
+      spec('finish', finishQuery, 81, 4, 1, 1, receiptProjectionBytes),
       spec('hold', holdQuery, 48, 1, 0, 0, holdProjectionBytes),
       spec('held', heldQuery, 16, 1, 0, 0, holdProjectionBytes),
       spec('retained', retainedQuery, 16, 1, 0, 0, retainedProjectionBytes),

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { Pool } from 'pg';
+import { projectBatch, type Envelope } from '../../src/events/log.ts';
 import { NativeCollectionWork, instrumentNativeCollectionWork } from '../../src/library/collection-native-work.ts';
 import { principalCommandIdentity } from '../../src/command/command.ts';
 import { resourceAuthorization } from '../../src/access/resource-authorization.ts';
@@ -276,6 +277,41 @@ test('Native source capture binds complete raw dependency coverage and read-held
       )
     ).rows[0].n,
   ).toBe(2);
+});
+
+test('completed Source capture occupies one outbox envelope and replay preserves the original', async () => {
+  const { identity } = await make();
+  const { frontier } = await scan(identity);
+  const first = await custody.finishCapture({ ...work(), identity, frontier });
+  if (first.status !== 'complete') throw new Error('Missing committed capture');
+  const replay = await custody.finishCapture({ ...work(), identity, frontier });
+  expect(replay).toMatchObject({ status: 'complete', capture: first.capture });
+
+  const later = await command(identity, async () => {});
+  const position = BigInt(first.capture.position);
+  expect(later.position).toBe(position + 1n);
+  const consumer = 'library_capture_proof';
+  const partition = partitionOf(identity.route);
+  await native.pool.query(
+    'INSERT INTO core.consumer_checkpoint(partition_no,consumer,epoch,position) VALUES($1,$2,$3,$4)',
+    [partition, consumer, identity.ownerEpoch, (position - 1n).toString()],
+  );
+  const seen: Envelope[] = [];
+  expect(
+    await projectBatch(native.pool, {
+      consumer,
+      partition,
+      apply: async (envelopes) => void seen.push(...envelopes),
+    }),
+  ).toEqual({ status: 'read', envelopes: 2, position: later.position });
+  expect(seen.map((envelope) => envelope.position)).toEqual([position, later.position]);
+  expect(seen[0]?.events).toHaveLength(1);
+  expect(seen[0]?.events[0]).toMatchObject({
+    type: 'com.rezics.library.collection.source-capture-completed.v1',
+    data: {},
+  });
+  expect(seen[0]?.events[0]).not.toHaveProperty('subject');
+  expect(seen[1]?.events[0]?.type).toBe('com.rezics.library.collection.updated.v1');
 });
 
 test('altered source incarnation generation scope owner receiving epoch and effect never manufacture held custody', async () => {
