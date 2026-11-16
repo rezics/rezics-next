@@ -354,6 +354,7 @@ export async function startAuthStack(
         method: string;
         error: string | undefined;
       }[] = [];
+      const pageErrors: string[] = [];
       const functionResponses = new Map<
         import('playwright').Request,
         {
@@ -379,6 +380,9 @@ export async function startAuthStack(
         });
         if (url.pathname === '/signin') authResponses.push(response);
         functionResponses.get(response.request())?.resolve(response);
+      });
+      page.on('pageerror', (error) => {
+        if (pageErrors.length < 12) pageErrors.push(error.message.slice(0, 512));
       });
       page.on('requestfailed', (request) =>
         pageFailures.push({
@@ -443,6 +447,8 @@ export async function startAuthStack(
           waitUntil: 'domcontentloaded',
         });
         try {
+          // The return route is public SSR. Its session query starts in the hydrated client.
+          await hydrate(page);
           await page.locator('#account-menu-button').waitFor({ state: 'visible' });
         } catch (error) {
           const cookieNames = (await browserContext.cookies()).map(({ name, domain, path }) => ({
@@ -451,7 +457,7 @@ export async function startAuthStack(
             path,
           }));
           throw new Error(
-            `Signed-in web page was not ready at ${page.url()}: ${await page.locator('body').innerText()}; sign-in status=${authResponses.at(-1)?.status() ?? 'missing'}; visited=${JSON.stringify(visitedUrls.map((value) => new URL(value).pathname))}; responses=${JSON.stringify(pageResponses)}; failed requests=${JSON.stringify(pageFailures)}; cookie names=${JSON.stringify(cookieNames)}; web output=${stack.webOutput()}`,
+            `Signed-in web page was not ready at ${page.url()}: ${await page.locator('body').innerText()}; sign-in status=${authResponses.at(-1)?.status() ?? 'missing'}; visited=${JSON.stringify(visitedUrls.map((value) => new URL(value).pathname))}; responses=${JSON.stringify(pageResponses)}; failed requests=${JSON.stringify(pageFailures)}; page errors=${JSON.stringify(pageErrors)}; cookie names=${JSON.stringify(cookieNames)}; web output=${stack.webOutput()}`,
             {
               cause: error,
             },
