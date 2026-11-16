@@ -22,8 +22,8 @@ import {
 } from './semantic-first-public-native.ts';
 
 export type WebFixture = {
-  owner: { accountId: string; handle: string; subjectId: string };
-  outsider: { accountId: string; handle: string };
+  owner: { accountId: string; handle: string; email: string; subjectId: string };
+  outsider: { accountId: string; handle: string; email: string };
   workId: string;
   releaseId: string;
   boardId: string;
@@ -298,8 +298,8 @@ export async function seedFirstPublicWeb(
   expectStatus(await readZonePage(call, zone.id, route), 200, 'read configured public Zone address');
 
   return {
-    owner: { accountId: owner.accountId, handle: owner.handle, subjectId },
-    outsider: { accountId: outsider.accountId, handle: outsider.handle },
+    owner: { ...owner, subjectId },
+    outsider,
     workId,
     releaseId,
     boardId: community.board.id,

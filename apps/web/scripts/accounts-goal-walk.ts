@@ -861,7 +861,7 @@ async function settle(page: import('playwright').Page, url: string) {
   return response;
 }
 
-async function fillPasswordSignIn(page: import('playwright').Page, email: string, secret: string) {
+export async function fillPasswordSignIn(page: import('playwright').Page, email: string, secret = password) {
   await page.getByLabel(/email/i).fill(email);
   await page.locator('input[name="password"]').fill(secret);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
