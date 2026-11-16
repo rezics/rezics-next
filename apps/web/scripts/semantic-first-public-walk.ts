@@ -1,19 +1,16 @@
 #!/usr/bin/env bun
 /**
- * First-public Semantic catalogue and Zone walk. Run under `dev-stack.ts walk`.
- * Provisions the developer persona, loads seed.env, seeds, starts Auth pages and Web, then executes
- * every row in docs/goals/semantic.capabilities.md with native writes, independent readback and mounted pages.
+ * First-public Semantic catalogue and Zone walk. Run under `dev-stack.ts walk --first-public-web`.
+ * Uses the admitted catalogue editor and authors the fixture through the native API.
+ * Every row retains native writes, independent readback and mounted pages.
  */
-import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import {
-  kernelEnvironment,
+  firstPublicWebWalk,
   semanticWalkClientRegistration,
-  retireDevelopmentSeedState,
-  retireStaleSeedJournals,
   startSeededFrontends,
 } from '../../../services/auth/scripts/dev-stack.ts';
 import { FIRST_PUBLIC_JOURNEYS, type FirstPublicJourneyId } from './semantic-first-public-inventory.ts';
@@ -45,7 +42,6 @@ import {
   subjectHref,
   takedownZone,
   walkReadinessUrls,
-  walkSeedProcessEnv,
   nativeWalkAccessToken,
   type Json,
   type KernelCall,
@@ -54,6 +50,7 @@ import {
 
 import { nativeWalkCall, type NativeObservation } from './semantic-first-public-request.ts';
 import { updateFirstPublicInventory } from './semantic-first-public-evidence.ts';
+import { walkAcceptanceId, walkStackAdmitted } from '../../../scripts/stack-run.ts';
 import { withWalkResources } from '../../../scripts/walk-stack.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -94,26 +91,6 @@ function stackOrigins(): Stack {
   };
 }
 
-async function child(
-  command: string[],
-  name: string,
-  env: NodeJS.ProcessEnv = process.env,
-  options: { allowFailure?: boolean } = {},
-): Promise<number> {
-  await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
-  const log = Bun.file(join(evidenceDir, `${name}.log`));
-  const handle = await log.writer();
-  const proc = spawn(command[0]!, command.slice(1), { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
-  proc.stdout.on('data', (chunk: Buffer) => handle.write(chunk));
-  proc.stderr.on('data', (chunk: Buffer) => handle.write(chunk));
-  const code = await new Promise<number | null>((done) => proc.on('close', done));
-  await handle.end();
-  const status = code ?? 1;
-  if (status !== 0 && !options.allowFailure)
-    throw new Error(`${name} exited ${status}; see .temp/semantic-first-public-walk/${name}.log`);
-  return status;
-}
-
 type TypedProbe = { url: string; status: number; error?: string; code?: string; digest?: string; phase: string };
 
 async function typedProbe(url: string, phase: string): Promise<TypedProbe> {
@@ -149,15 +126,6 @@ function describeProbe(probe: TypedProbe, expected: string): string {
       ? (probe.error ?? 'unreachable')
       : `HTTP ${probe.status}${probe.code ? ` ${probe.code}` : ''}${probe.digest ? ` digest=${probe.digest}` : ''}`;
   return `${probe.phase} GET ${probe.url} ${actual} (expected ${expected})`;
-}
-
-async function parseEnv(path: string): Promise<Record<string, string>> {
-  const values: Record<string, string> = {};
-  for (const line of (await readFile(path, 'utf8')).split('\n')) {
-    const match = /^(?<name>[A-Z0-9_]+)=(?<value>.*)$/.exec(line);
-    if (match?.groups) values[match.groups.name!] = match.groups.value!.replace(/^'(.*)'$/, '$1');
-  }
-  return values;
 }
 
 async function accessToken(stack: Stack, email: string, password: string): Promise<string> {
@@ -213,7 +181,7 @@ async function recordInventory(revision: string, utc: string, results: Result[])
   const path = join(root, 'docs/goals/semantic.capabilities.md');
   const document = await readFile(path, 'utf8');
   const next = updateFirstPublicInventory(document, revision, utc, results);
-  if (next !== document) await writeFile(path, next);
+  await writeFile(join(evidenceDir, 'inventory.md'), next, { mode: 0o600 });
 }
 
 type Session = {
@@ -348,16 +316,15 @@ async function createAndRead(
   return { native: { id: created.id, type, public: publicRead.status }, browser: { create: browser, reader } };
 }
 
-async function lastLogLine(name: string): Promise<string | undefined> {
-  const text = await readFile(join(evidenceDir, `${name}.log`), 'utf8').catch(() => '');
-  const lines = text
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
-  return lines.at(-1);
-}
-
 async function main() {
+  if (
+    !firstPublicWebWalk() ||
+    !walkAcceptanceId(process.env, 'native') ||
+    !walkAcceptanceId(process.env, 'browser') ||
+    !walkStackAdmitted(process.env, root)
+  )
+    throw new Error('Use dev-stack.ts walk --first-public-web with native and browser acceptance');
+
   return withWalkResources(async (own) => {
     const stack = stackOrigins();
     await mkdir(join(evidenceDir, 'screenshots'), { recursive: true, mode: 0o700 });
@@ -381,37 +348,13 @@ async function main() {
           );
     if (readiness.definitions.status === 0 && readiness.active.status === 0)
       throw new Error(kernelCause ?? describeProbe(readiness.definitions, 'HTTP 200 digest'));
-    await retireDevelopmentSeedState(root);
-    const kernelEnv = await kernelEnvironment();
-    if (kernelEnv.DATABASE_URL) await retireStaleSeedJournals(root, kernelEnv.DATABASE_URL);
-    let personaCause: string | undefined;
-    const personaCode = await child(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'], 'persona', process.env, {
-      allowFailure: true,
-    });
-    if (personaCode !== 0)
-      personaCause = `persona ${(await lastLogLine('persona')) ?? `exited ${personaCode} without a log line`}`;
-    let seedCode = 0;
-    let seedCause: string | undefined;
-    if (!kernelCause && !personaCause) {
-      const seedEnv = walkSeedProcessEnv(
-        stack,
-        await parseEnv(join(root, '.temp/local-stack/seed.env')).catch(() => ({})),
-      );
-      seedCode = await child(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], 'seed', seedEnv, {
-        allowFailure: true,
-      });
-      seedCause =
-        seedCode === 0 ? undefined : `seed ${(await lastLogLine('seed')) ?? `exited ${seedCode} without a log line`}`;
-    }
-    const setupRecord = kernelCause ?? personaCause ?? seedCause;
-    if (setupRecord)
+    if (kernelCause)
       await writeFile(
         join(evidenceDir, 'setup-failure.json'),
         `${JSON.stringify(
           {
             utc: new Date().toISOString(),
-            error: setupRecord,
-            seedExit: seedCode,
+            error: kernelCause,
             stack,
             readiness,
           },
@@ -434,6 +377,7 @@ async function main() {
       );
     }
     let keys: { password: string } | undefined;
+    let personaCause: string | undefined;
     try {
       keys = JSON.parse(await readFile(join(root, '.temp/local-stack/keys.json'), 'utf8')) as { password: string };
     } catch (error) {
@@ -520,7 +464,7 @@ async function main() {
           frontendCause = session.frontendCause;
         }
       }
-      const setupCause = editorCause ?? personaCause ?? kernelCause ?? seedCause;
+      const setupCause = editorCause ?? personaCause ?? kernelCause;
       if (setupCause && !editor) {
         for (const row of FIRST_PUBLIC_JOURNEYS) {
           if (row.id === 'released-definitions' || row.id === 'catalogue-browsing') continue;
@@ -531,13 +475,14 @@ async function main() {
       results.push(await journey(session, 'released-definitions', () => releasedDefinitions(session)));
       results.push(
         await journey(session, 'catalogue-browsing', async () => {
+          if (!editor) throw new Error(editorCause ?? 'catalogue fixture author is unavailable');
+          const fixture = await createSubject(call, editor, 'schema:Book', `Walk catalogue ${token}`);
           const searched = await searchType(call, 'schema:Book', 8);
           if (searched.status !== 200)
             throw new Error(`catalogue search HTTP ${searched.status}: ${JSON.stringify(searched.body).slice(0, 400)}`);
           const subjects = (searched.body.subjects as { id?: string; labels?: Record<string, string> }[]) ?? [];
-          if (subjects.length === 0) throw new Error('catalogue search returned no Books');
-          const first = subjects[0]!;
-          const id = requireId(first.id, 'catalogue Book');
+          const selected = subjects.find(({ id }) => id === fixture.id);
+          const id = requireId(selected?.id, 'current catalogue fixture Book');
           const publicRead = await readSubject(call, id);
           requireStatus(publicRead, 200, 'catalogue Book');
           const label = (publicRead.body.subject as { labels?: Record<string, string> }).labels?.en ?? 'book';
@@ -998,8 +943,6 @@ async function main() {
       revision,
       utc: new Date().toISOString(),
       stack,
-      seedExit: seedCode,
-      seedCause: seedCause ?? null,
       kernelCause: kernelCause ?? null,
       editorCause: editorCause ?? null,
       personaCause: personaCause ?? null,

@@ -3,8 +3,8 @@ import { FIRST_PUBLIC_JOURNEYS } from '../scripts/semantic-first-public-inventor
 import { nativeWalkCall, type NativeObservation } from '../scripts/semantic-first-public-request.ts';
 import {
   handleCall,
+  searchType,
   walkReadinessUrls,
-  walkSeedProcessEnv,
   websiteAccessToken,
   websiteCredentialHeaders,
   websiteCredentialUrls,
@@ -64,7 +64,30 @@ test('the first-public walk names each of the 31 catalogue and Zone journeys onc
   expect(new Set(FIRST_PUBLIC_JOURNEYS.map((row) => row.name)).size).toBe(31);
 });
 
-test('editor website credentials POST the issuer Origin and keep native JWKS plus seed transport', async () => {
+test('the authored catalogue fixture waits for Book Search readiness and returns a gate denial immediately', async () => {
+  const headers = new Headers();
+  let calls = 0;
+  const ready = await searchType(async (method, path, options) => {
+    expect([method, path]).toEqual(['POST', '/v1/subjects:search']);
+    expect(options?.body).toEqual({ filter: { type: { in: ['schema:Book'] } }, sort: 'id', limit: 8 });
+    calls += 1;
+    return calls === 1
+      ? { status: 503, headers, body: { code: 'index_not_ready' } }
+      : { status: 200, headers, body: { subjects: [{ id: 'fixture-book' }] } };
+  }, 'schema:Book');
+  expect(calls).toBe(2);
+  expect(ready.body).toEqual({ subjects: [{ id: 'fixture-book' }] });
+
+  calls = 0;
+  const denied = await searchType(async () => {
+    calls += 1;
+    return { status: 403, headers, body: { code: 'platform_closed' } };
+  }, 'schema:Book');
+  expect(calls).toBe(1);
+  expect(denied.body.code).toBe('platform_closed');
+});
+
+test('editor website credentials POST the issuer Origin and keep native JWKS and definition readiness', async () => {
   const seen: { url: string; origin: string; cookie?: string }[] = [];
   const token = await websiteAccessToken(
     stack.issuer,
@@ -101,11 +124,6 @@ test('editor website credentials POST the issuer Origin and keep native JWKS plu
     definitions: `${stack.kernel}/v1/definitions`,
     active: `${stack.kernel}/v1/definitions/active`,
   });
-  const seed = walkSeedProcessEnv(stack, { REZICS_DEV_PERSONA_ACCOUNT: 'persona' }, { PATH: '/bin' });
-  expect(seed.AUTH_ORIGIN).toBe(stack.native);
-  expect(seed.REZICS_LOCAL_STACK_ISSUER_ORIGIN).toBe(stack.issuer);
-  expect(seed.KERNEL_ORIGIN).toBe(stack.kernel);
-  expect(seed.REZICS_DEV_PERSONA_ACCOUNT).toBe('persona');
 });
 
 test('native handleCall forwards bearer, If-Match and JSON bodies', async () => {

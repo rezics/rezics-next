@@ -1,7 +1,7 @@
 /** Explicit loopback-only development composition. Never imported by production entrypoints. */
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { chmod, lstat, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
 import { securityScopeLimit } from '@rezics/auth-contract';
@@ -813,6 +813,8 @@ export async function assemble(options?: {
         }
         if (developmentShowcaseWalk()) {
           await service.internal.registerClient(localShowcaseClientRegistration());
+        }
+        if (developmentShowcaseWalk() || firstPublicWebWalk()) {
           await service.internal.registerClient(semanticWalkClientRegistration());
         }
       })(),
