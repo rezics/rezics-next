@@ -90,6 +90,9 @@ export const LIBRARY_EVENTS = {
     { collectionId: id, publicationId: id },
     { additionalProperties: false },
   ),
+  // Native receipt envelopes carry no Collection or curator identifiers.
+  'com.rezics.library.collection.source-capture-completed.v1': Type.Object({}, { additionalProperties: false }),
+  'com.rezics.library.collection.publication-staging-sealed.v1': Type.Object({}, { additionalProperties: false }),
   'com.rezics.library.collection.deleted.v1': Type.Object({ collectionId: id }, { additionalProperties: false }),
   'com.rezics.library.collection.output.reclaimed.v1': Type.Object(
     { collectionId: id, generation: id, removed: Type.Integer({ minimum: 1, maximum: 100 }) },

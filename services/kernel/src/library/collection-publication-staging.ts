@@ -791,14 +791,21 @@ async function sealCollectionPublicationStaging(
        WHERE route=$1 AND collection_id=$2 AND generation=$3
          AND (frontier->>'exhausted')::boolean AND frontier->'pending'='null'::jsonb
        RETURNING *
-     ) INSERT INTO library.collection_publication_staging_seal
-       (route,collection_id,generation,version,member_fence,members,evidence_count,evidence_fence,owner_epoch,position)
+     ), sealed AS (
+       INSERT INTO library.collection_publication_staging_seal
+         (route,collection_id,generation,version,member_fence,members,evidence_count,evidence_fence,owner_epoch,position)
        SELECT s.route,s.collection_id,s.generation,s.version,g.member_fence,g.written_members,
          s.evidence_count,s.evidence_fence,f.epoch,f.position
        FROM touched s JOIN library.collection_source_output g USING(route,collection_id,generation) CROSS JOIN fenced f
        WHERE g.state='building' AND g.output_mode='whole_query' AND g.expected_members IS NULL
          AND g.member_count=g.written_members
-       RETURNING generation`,
+       RETURNING route,generation,owner_epoch,position
+     ), append AS (
+       INSERT INTO core.outbox(partition_no,position,event_seq,event_count,epoch,id,type,data)
+       SELECT route >> 4,position,0,1,owner_epoch,uuidv7(),'com.rezics.library.collection.publication-staging-sealed.v1','{}'
+       FROM sealed
+     )
+     SELECT generation FROM sealed`,
     [row.route, row.collection_id, row.generation, native.sourceIdentity.ownerEpoch],
     256,
   );
