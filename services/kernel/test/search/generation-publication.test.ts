@@ -333,7 +333,7 @@ test('ordinary maintenance resumes its stored publication and advances four mete
     },
     publication: f.operations,
   } as unknown as DefaultPublicFilterRuntime;
-  const start = () =>
+  const start = (selected = runtime) =>
     createPublicPreparation({
       pool,
       work,
@@ -341,7 +341,7 @@ test('ordinary maintenance resumes its stored publication and advances four mete
       search,
       source: {} as PublicPreparationOptions['source'],
       listing: {} as PublicPreparationOptions['listing'],
-      runtime,
+      runtime: selected,
     });
   const state: PopulationFrontier = {
     kind: 'population',
@@ -395,6 +395,32 @@ test('ordinary maintenance resumes its stored publication and advances four mete
     expect(continuation.rows).toEqual([{ status: 'ENQUEUED' }]);
     expect(await readHome()).toBeGreaterThan(previousHome);
     expect((await subjectGenerations(search, f.prefix)).active).toBe(1);
+
+    await maintenance.stop();
+    const claimed = await store.claim(id, next.revision, Date.now() + 30_000);
+    if (!claimed) throw new Error('The original publication successor was not ready');
+    const activation = await store.advance(claimed, { ...next.locator, phase: 'activate' });
+    if (!activation) throw new Error('The original publication activation could not be retained');
+    const repaired: string[] = [];
+    maintenance = start({
+      ...runtime,
+      publication: {
+        ...f.operations,
+        async activate(job) {
+          repaired.push(job.job);
+          return { status: 'preparing', job, next: 'activate', advanced: true, cost: zero };
+        },
+      },
+    });
+    await maintenance.run(id, activation);
+    expect(repaired).toEqual(Array.from({ length: 4 }, () => retained));
+    const pending = await read();
+    expect(BigInt(pending.revision)).toBe(BigInt(activation) + 8n);
+    expect(pending.locator).toMatchObject({ phase: 'activate', publication: retained });
+    const ready = await pool.query('SELECT status FROM dbos.workflow_status WHERE workflow_uuid=$1', [
+      `search.publicPreparation:${id}:${pending.revision}`,
+    ]);
+    expect(ready.rows).toEqual([{ status: 'ENQUEUED' }]);
   } finally {
     await maintenance.stop();
     await pool.query('DELETE FROM search.public_preparation WHERE partition_no=0 AND id=$1', [id]);
