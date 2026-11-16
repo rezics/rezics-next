@@ -3,7 +3,7 @@ import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { readAccount } from '../access/account-data.ts';
 import { classifyUnavailability } from '../access/unavailable.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { within } from '../access/authenticate.ts';
 import { ACCESS_EVENTS } from '../access/events.ts';
 import { readPublicAccountByAgent } from '../access/public-identity.ts';
 import type { AccessFollowCountProducer } from '../access/contract/index.ts';
@@ -57,7 +57,6 @@ export function nativeFollowCountRuntime(): FollowCountRuntime {
         account: accounts.account,
         accountForAgent: accounts.accountForAgent,
         spaceExists: spaces.exists,
-        deadlineClient,
         within,
         destination,
         isUnavailable: (error) => !!classifyUnavailability(error),

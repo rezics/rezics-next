@@ -1,8 +1,9 @@
 import type { Pool } from 'pg';
 import type { AccessClient } from '../../request/access.ts';
-import { discardConnection, withConnection } from '../../database/pool.ts';
+import { AccessUnavailableError } from '../../access/contract/errors.ts';
+import { withBoundedReadLifetime } from '../../database/bounded-read-lifetime.ts';
+import { discardConnection, retireConnection, withConnection } from '../../database/pool.ts';
 import { readConsumerLag } from '../../events/consumer-lag.ts';
-import { deadlineClient, within } from '../access-port.ts';
 import { followCountHealthCurrent } from '../core/index.ts';
 import { FollowCountUnavailableError, type FollowCountHealthObservation } from '../contract/index.ts';
 export type { FollowCountHealthObservation } from '../contract/index.ts';
@@ -44,23 +45,31 @@ export async function readFollowCountHealthObservation(tx: AccessClient): Promis
 
 /** Borrowed Follow reads retain the original deadline through checkout and every query.
  * A late checkout dispatches no SQL. A rejected callback discards its borrowed socket
- * before release so an open transaction is cleaned up without queuing rollback behind
- * uncertain native IO. Caller-owned snapshots keep their existing lifetime. */
+ * before release. Expiry retires an active socket even when the read callback
+ * has yet to settle. */
 export function withFollowCountReadConnection<T>(
   pool: Pool,
   deadline: number,
   read: (client: AccessClient) => Promise<T>,
-  timing: { deadlineClient: typeof deadlineClient; within: typeof within } = { deadlineClient, within },
 ): Promise<T> {
-  return timing.within(deadline, () =>
-    withConnection(pool, async (connection) => {
-      try {
-        return await read(timing.deadlineClient(connection, deadline));
-      } catch (error) {
-        discardConnection(connection, error as Error);
-        throw error;
-      }
-    }),
+  return withBoundedReadLifetime(
+    (run) =>
+      withConnection(pool, async (connection) => {
+        try {
+          return await run(connection);
+        } catch (error) {
+          discardConnection(connection, error instanceof Error ? error : new Error('Follow count read failed'));
+          throw error;
+        }
+      }),
+    retireConnection,
+    deadline,
+    read,
+    {
+      deadlineError: () => new AccessUnavailableError('deadline'),
+      isUncertainWorkError: () => true,
+      isUncertainSettledQueryError: () => true,
+    },
   );
 }
 

@@ -81,8 +81,8 @@ export function createNativeAccessPorts(
     activeIdentitySourceConsumerMaintenance(pool) {
       return activeIdentitySourceConsumerMaintenance(asPool(pool)) !== null;
     },
-    async readPublicSubject(client, subjectId) {
-      return readPublicSubject(client as Parameters<typeof readPublicSubject>[0], subjectId);
+    async readPublicSubject(client, subjectId, unverifiedOwnerId) {
+      return readPublicSubject(client as Parameters<typeof readPublicSubject>[0], subjectId, unverifiedOwnerId);
     },
   };
   const identityStore: IdentityRecoveryStorePort = {

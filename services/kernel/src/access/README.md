@@ -2535,12 +2535,16 @@ Each form returns
 The `handle` and `agent` forms hide deleted accounts exactly like unknown handles or subjects, returning the same
 empty account list. The `ids` form retains deleted identities for attribution.
 
-The `agent` form resolves one `access.agent_page` pointer in the subject's route, then reads the named account by its
+For a verified identity, the `agent` form resolves one `access.agent_page` pointer in the subject's route, then reads the named account by its
 own `(route, account_id)` key. The account row remains authoritative: the read returns an empty account list unless
 it is present, active, marked verified and still names the requested subject. Approval writes this pointer in its own
 receipt-bound workflow step after Semantic's merge and before the account is marked verified. An exact replay confirms
 the existing pointer; a subject already pointing at another account fails with a typed workflow problem. The page table
 is backfilled from accounts already verified when the migration runs. Reversal owns pointer removal.
+
+An active, unfenced account's unverified native agent resolves by handle and by its exact Subject ID.
+The visible Subject and current native account link establish the association. A missing display label returns an empty
+label, and the native account fence suppresses the association immediately.
 
 - Returns per live visible account: `id`, `kind` (`actor` or `organization`), `handle`, `displayName`, `state`
   (`active`), `automated` and `operatorId`. An account with an operator is `automated: true` and names its operator;
