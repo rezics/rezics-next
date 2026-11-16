@@ -327,6 +327,8 @@ export interface AuthService {
     fenceKindConsentErasure(obligationId: string): Promise<void>;
     /** Auth-owned read closure; composition receives no database or credential material. */
     resolveRecoveryEstablishment(reference: unknown): Promise<RecoveryEstablishmentEvidence | null>;
+    /** Exact object presented by a live native Website invalidation callback. */
+    verifyWebsiteSessionInvalidation(input: unknown): boolean;
     /** Trusted server composition only; the exact native human proof is live only
      * during this instance's trusted authorization callbacks. Never persist it or its JWT. */
     accessTokenForProof(proof: SessionProof): Promise<string>;

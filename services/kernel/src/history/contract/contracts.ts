@@ -186,6 +186,7 @@ export const EVENT_CLASSIFICATIONS = Object.freeze({
   'com.rezics.access.authentication-established.v1': personal('subject'),
   'com.rezics.access.authentication-fenced.v1': personal('subject'),
   'com.rezics.access.authentication-floor-advanced.v1': personal('subject'),
+  'com.rezics.access.website-session-floor-advanced.v1': personal('subject'),
   'com.rezics.access.cleanup-continuation.recorded.v1': personal('subject'),
   'com.rezics.access.cleanup-continuation.renewed.v1': personal('subject'),
   'com.rezics.access.coordination-reserved.v1': personal('subject', 'operator'),

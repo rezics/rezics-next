@@ -55,7 +55,7 @@ import { createAuthHostManagement } from './auth-host-management.ts';
 export { createAuthDeletionHandleRead } from './management-source.ts';
 import { acknowledgeErasure } from './erasure.ts';
 import { createRegistrationProofBindings } from './registration-proof.ts';
-import { createAuthBarrierCapabilities } from './auth-barriers.ts';
+import { createAuthBarrierCapabilities, createWebsiteSessionInvalidation } from './auth-barriers.ts';
 import { createCredentialCapability } from './auth-credential-capability.ts';
 import { createOperatorSessionCapability } from './auth-session-capability.ts';
 import {
@@ -107,7 +107,9 @@ export type NativeAccountBindingsConfig = {
   clock?: () => Date;
   referenceKeys: KeyRing;
   /** Deferred access permits Auth to consume trustedAccess during construction. */
-  auth: () => AuthSessionPort & AuthCredentialPort & AuthRecoveryPort;
+  auth: () => AuthSessionPort &
+    AuthCredentialPort &
+    AuthRecoveryPort & { internal: { verifyWebsiteSessionInvalidation?(input: unknown): boolean } };
   proofs: NativeAccountBindingProofs;
 };
 
@@ -247,6 +249,11 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
   const delegations = createDelegationCommands({ pool, access, action: 'access:delegate' });
   const registration = createRegistrationProofBindings({ pool, access, referenceKeys });
   const barriers = createAuthBarrierCapabilities({ lifecycle: internalLifecycle, access, proofs: proofs.barriers });
+  const invalidateWebsiteSession = createWebsiteSessionInvalidation({
+    pool,
+    access,
+    verify: (input) => config.auth().internal.verifyWebsiteSessionInvalidation?.(input) === true,
+  });
   const session = createOperatorSessionCapability({
     pool,
     access,
@@ -391,6 +398,10 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
       },
     }),
     ...barriers.trustedAccess,
+    invalidateAccount: (input) =>
+      input.reason === 'consent-reduction'
+        ? barriers.trustedAccess.invalidateAccount(input)
+        : invalidateWebsiteSession(input),
     approveCredentialEffect: (input) => credentialCapability().approveCredentialEffect(input),
     revalidateCredentialEffect: (input) => credentialCapability().revalidateCredentialEffect(input),
     advanceCredentialFloor: (input) => credentialCapability().advanceCredentialFloor(input),
