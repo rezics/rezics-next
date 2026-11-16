@@ -206,7 +206,7 @@ export async function submitLabel(
     const stale = await prepareSession(request, env);
     const authorization = viewerCredential(request);
     if (stale || !authorization) return { ok: false, reason: 'unauthorized' };
-    const headers = { authorization, 'idempotency-key': input.idempotencyKey };
+    const headers = { authorization, 'idempotency-key': JSON.stringify(input.idempotencyKey) };
     const labels = client.libraryLabels;
     const result =
       input.operation === 'create'

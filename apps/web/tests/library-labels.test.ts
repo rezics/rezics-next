@@ -231,7 +231,7 @@ test("creating, renaming and deleting a label each send one request with an Idem
     expect(result.ok).toBe(true);
     const writes = fake.calls.filter((call) => call.method !== 'GET');
     expect(writes).toHaveLength(1);
-    expect(writes[0]?.key).toBe(idempotencyKey);
+    expect(writes[0]?.key).toBe(JSON.stringify(idempotencyKey));
     expect(writes[0]?.authorization).toBe('Bearer owner-token');
     if (input.operation === 'create')
       expect(writes[0]).toMatchObject({
@@ -305,8 +305,8 @@ test('no-script catalogue retries recover a lost committed response without a ne
     const recovered = await postForm(client, retry);
     expect(recovered.feedback?.ok).toBe(true);
     expect(fake.calls.filter((call) => call.method !== 'GET').map((call) => call.key)).toEqual([
-      body.get('idempotencyKey'),
-      body.get('idempotencyKey'),
+      JSON.stringify(body.get('idempotencyKey')),
+      JSON.stringify(body.get('idempotencyKey')),
     ]);
     expect(recovered.labels.filter((label) => label.name === 'Recovered name')).toHaveLength(
       operation === 'delete' ? 0 : 1,
@@ -325,7 +325,7 @@ test('after a delete the page offers Undo, which restores the label by sending t
   const restored = await postForm(client, undo);
   expect(restored.labels.map((label) => label.id)).toEqual(fake.labels.map((label) => label.id));
   expect(fake.calls.filter((call) => call.method === 'POST' && call.path.endsWith(':restore'))).toEqual([
-    expect.objectContaining({ body: { revision: 73 }, key: expect.any(String) }),
+    expect.objectContaining({ body: { revision: 73 }, key: JSON.stringify(undo.get('idempotencyKey')) }),
   ]);
   expect(restored.labels.some((label) => label.id === 'label-0')).toBe(true);
 });
