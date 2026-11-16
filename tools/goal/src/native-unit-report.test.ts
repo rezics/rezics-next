@@ -95,11 +95,14 @@ test('hourly native accounting follows verified children and deduplicates copied
       )
       .run('observed-startup-failure', 'books', '2026-11-15T00:05:00.000Z', '2026-11-15T00:06:00.000Z', 1, '{}', '[]');
     const lines = nativeUnitReportLines(f.db, bucket);
-    expect(lines[0]).toContain('3 distinct parent/subagent sessions observed; 2 measured; 0 unknown');
-    expect(lines[1]).toContain('30 input, 7 cached input, 7 output');
-    expect(lines[1]).toContain('1 managed sessions excluded; 1 copied response records deduplicated');
-    expect(lines[2]).toContain('command exit zero 0; nonzero 1');
-    expect(lines[2]).toContain('immutable capture source unknown 1');
+    const sessions = lines.find((line) => line.startsWith('Native execution units:'));
+    const usage = lines.find((line) => line.startsWith('Native unit usage in UTC bucket:'));
+    const checks = lines.find((line) => line.startsWith('Native unit checks started in UTC bucket:'));
+    expect(sessions).toContain('3 distinct parent/subagent sessions observed; 2 measured; 0 unknown');
+    expect(usage).toContain('30 input, 7 cached input, 7 output');
+    expect(usage).toContain('1 managed sessions excluded; 1 copied response records deduplicated');
+    expect(checks).toContain('command exit zero 0; nonzero 1');
+    expect(checks).toContain('immutable capture source unknown 1');
     expect(lines.join('\n')).not.toContain('99999999');
     expect(
       f.db
@@ -120,8 +123,10 @@ test('native accounting reports missing session ledger as unknown rather than ze
       { type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: { input_tokens: 5000 } } } },
     ]);
     const lines = nativeUnitReportLines(f.db, bucket);
-    expect(lines[0]).toContain('0 measured; 1 unknown');
-    expect(lines[1]).toContain('totals are partial');
+    const sessions = lines.find((line) => line.startsWith('Native execution units:'));
+    const usage = lines.find((line) => line.startsWith('Native unit usage in UTC bucket:'));
+    expect(sessions).toContain('0 measured; 1 unknown');
+    expect(usage).toContain('totals are partial');
   } finally {
     f.close();
   }

@@ -1586,9 +1586,10 @@ idempotent for the same provider and thread. To transfer the role explicitly, ru
 `bun tools/goal/src/cli.ts manager register-supermanager --replace-session <previous-thread-id>` inside the new
 resident session after stopping the previous resident and its watchdog. Replacement atomically compares the previous
 registered thread, invalidates its authority and retains the configured manager identity and inbox. A changed or
-missing previous thread refuses the transfer; ordinary registration cannot overwrite another resident. Restart the
-manager host on the updated code before using Codex registration or replacement. Resume the watchdog against the
-new provider and registered thread after the transfer. The supermanager grants with
+missing previous thread refuses the transfer; ordinary registration cannot overwrite another resident. For a
+host-backed transfer, use the updated manager host and attach the watchdog to the new registered thread. To keep
+the manager host and watchdog stopped, use the [desktop registration](#native-execution-unit-entrypoints).
+The supermanager grants with
 `bun tools/goal/src/cli.ts priority grant <task>`. The owning manager consumes the one-use grant with
 `bun tools/goal/src/cli.ts priority <task> critical`, or by retrying with a critical brief after a grant exists.
 `bun tools/goal/src/cli.ts priority revoke <task> <grant-id>` revokes an unused grant by its grantor. The owner may
@@ -3293,7 +3294,7 @@ bun tools/goal/src/cli.ts land <task>
 bun tools/goal/src/cli.ts train
 bun tools/goal/src/cli.ts verify
 bun tools/goal/src/cli.ts manager status
-bun tools/goal/src/cli.ts manager register-supermanager [--replace-session <previous-thread-id>]
+bun tools/goal/src/cli.ts manager register-supermanager [--desktop <configured-Codex-pool>] [--replace-session <previous-thread-id>]
 bun tools/goal/src/cli.ts manager stop <manager>
 bun tools/goal/src/cli.ts inbox wait <manager>
 bun tools/goal/src/cli.ts inbox read <manager> [--limit <1..100>] [--cursor <id>]
