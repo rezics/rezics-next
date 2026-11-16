@@ -4,7 +4,7 @@ import {
   parseKnowledgeMediaSource,
   type KnowledgeMediaSelection,
 } from '@rezics/definitions/knowledge-media';
-import { prepareEditionSubjectIdentities } from './edition-subject.ts';
+import { prepareKnowledgeSubjectDisclosure } from './knowledge-subject-disclosure.ts';
 import { snapshot } from './reads.ts';
 import { routeOf } from '../route/route.ts';
 import { knowledgePublicSelection } from './knowledge-store.ts';
@@ -27,8 +27,8 @@ async function referenceVisible(
 ): Promise<boolean> {
   if (target === null) return false;
   if (target.kind === 'subject') {
-    const read = await prepareEditionSubjectIdentities(deps, [target.subjectId], context);
-    return (await read()).get(target.subjectId)?.kind === 'available';
+    const visible = await prepareKnowledgeSubjectDisclosure(deps, [target.subjectId], context);
+    return visible();
   }
   const route = routeOf(target.documentId);
   if (route === null) return false;
@@ -47,17 +47,15 @@ async function referenceVisible(
   )
     return false;
   const subjects = knowledgeSubjectTargets(publication.subject_id, publication.subject_ids);
-  const read = await prepareEditionSubjectIdentities(deps, subjects, context);
-  let visible = await read();
-  if (!subjects.every((id) => visible.get(id)?.kind === 'available')) return false;
+  const visible = await prepareKnowledgeSubjectDisclosure(deps, subjects, context);
+  if (!(await visible())) return false;
   const final = await snapshot(deps, target.documentId, context, (tx) =>
     knowledgePublicSelection(tx, route, target.documentId, revisionId),
   );
-  visible = await read();
   return (
     final.value?.publication_id === publication.publication_id &&
     final.value?.lifecycle_generation === publication.lifecycle_generation &&
-    subjects.every((id) => visible.get(id)?.kind === 'available')
+    (await visible())
   );
 }
 

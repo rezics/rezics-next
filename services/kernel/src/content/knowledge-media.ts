@@ -7,7 +7,7 @@ import { GrantDeniedError } from '../access/contract/index.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { accessCheck } from './access-port.ts';
 import { mediaParentSnapshot } from './media-parent.ts';
-import { prepareEditionSubjectIdentities } from './edition-subject.ts';
+import { prepareKnowledgeSubjectDisclosure } from './knowledge-subject-disclosure.ts';
 import { readDocumentMediaPresentations } from './media-presentation.ts';
 import type { MediaDependencies } from './media.ts';
 import {
@@ -92,11 +92,11 @@ export async function prepareKnowledgeMediaRead(
       (selected.representation === 'public' && initial.publication_id !== selected.publicationId)) return null;
   const publiclyVisible = selected.representation === 'public';
   let owner: AccessCheck | null = null;
-  let subjects: Awaited<ReturnType<typeof prepareEditionSubjectIdentities>> | null = null;
+  let visibleSubjects = async () => true;
   const ids = [...new Set([...(initial.subject_id === null ? [] : [initial.subject_id]), ...initial.subject_ids])];
   if (publiclyVisible) {
     if (initial.subject_id === null || ids.length > 65) return null;
-    subjects = await prepareEditionSubjectIdentities(deps, ids, { actor: { kind: 'anonymous' }, deadline });
+    visibleSubjects = await prepareKnowledgeSubjectDisclosure(deps, ids, { actor: { kind: 'anonymous' }, deadline });
   } else {
     const ownerId = initial.owner_account_id;
     if (actor.kind !== 'account' || ownerId !== actor.accountId) return null;
@@ -106,11 +106,6 @@ export async function prepareKnowledgeMediaRead(
       pool: deps.pool, deadline,
     });
   }
-  const visibleSubjects = async () => {
-    if (!subjects) return true;
-    const current = await subjects();
-    return ids.every((id) => current.get(id)?.kind === 'available');
-  };
   const verify = async (client: AccessClient) => {
     const current = await read(client);
     if (!current || signature(current) !== signature(initial) || (owner && !(await owner(client))))

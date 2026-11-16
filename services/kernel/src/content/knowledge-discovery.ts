@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import type { Access } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { snapshot } from './reads.ts';
-import { prepareEditionSubjectIdentities } from './edition-subject.ts';
+import { prepareKnowledgeSubjectDisclosure } from './knowledge-subject-disclosure.ts';
 import { knowledgeSubjectTargets } from './knowledge-model.ts';
 import metadata from './knowledge-discovery-metadata.sql';
 
@@ -68,11 +68,11 @@ export function createKnowledgeDiscoverySource(
     candidate.publishedAt === row.published_at;
   return {
     async subject(subjectId, context) {
-      const current = await prepareEditionSubjectIdentities(deps, [subjectId], {
+      const visible = await prepareKnowledgeSubjectDisclosure(deps, [subjectId], {
         actor: { kind: 'anonymous' },
         deadline: context.deadline,
       });
-      return (await current()).get(subjectId)?.kind === 'available' ? 'available' : 'withheld';
+      return (await visible()) ? 'available' : 'withheld';
     },
     async selected(documentId, publicationId, context) {
       const row = await read(documentId, context);
@@ -82,14 +82,10 @@ export function createKnowledgeDiscoverySource(
       const initial = await read(candidate.documentId, context);
       if (!initial || !matches(candidate, initial)) return { status: 'ready', value: null };
       const subjects = knowledgeSubjectTargets(initial.subject_id, initial.subject_ids as string[]);
-      const currentSubjects = await prepareEditionSubjectIdentities(deps, subjects, {
+      const visible = await prepareKnowledgeSubjectDisclosure(deps, subjects, {
         actor: { kind: 'anonymous' },
         deadline: context.deadline,
       });
-      const visible = async () => {
-        const identities = await currentSubjects();
-        return subjects.every((id) => identities.get(id)?.kind === 'available');
-      };
       if (!(await visible())) return { status: 'ready', value: null };
       const final = await read(candidate.documentId, context);
       if (!final || !matches(candidate, final) || final.sha256 !== initial.sha256 || !(await visible()))
