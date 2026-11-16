@@ -40,11 +40,27 @@ export const SUBJECT_MERGED = 'com.rezics.subject.merged.v1' as const;
 export const SUBJECT_REVISED = 'com.rezics.subject.revised.v1' as const;
 export const CANONICAL_GENERATION_COMMITTED = 'com.rezics.semantic.canonical-generation.committed.v1' as const;
 export const CANONICAL_GENERATION_CONTINUATION = 'com.rezics.semantic.canonical-generation.continuation.v1' as const;
+export const CANONICAL_GENERATION_REBUILD_CONTINUED =
+  'com.rezics.semantic.canonical-generation.rebuild-continued.v1' as const;
 export const CANONICAL_GENERATION_DELIVERED = 'com.rezics.semantic.canonical-generation.delivered.v1' as const;
 const canonicalGeneration = Type.Object(
   {
     partition: Type.Integer({ minimum: 0, maximum: 4095 }),
     generation: Type.String({ pattern: '^[1-9][0-9]{0,18}$' }),
+  },
+  { additionalProperties: false },
+);
+const canonicalGenerationOriginal = Type.Object(
+  {
+    specversion: Type.Literal('1.0'),
+    id: UUID,
+    source: Type.String({ pattern: '^urn:rezics:log:[0-9]{1,4}\\.[1-9][0-9]{0,9}$' }),
+    type: Type.Literal(CANONICAL_GENERATION_COMMITTED),
+    subject: Type.Optional(UUID),
+    time: Type.String({ minLength: 1, maxLength: 40 }),
+    datacontenttype: Type.Literal('application/json'),
+    sequence: Type.String({ pattern: '^[0-9]{19}$' }),
+    data: canonicalGeneration,
   },
   { additionalProperties: false },
 );
@@ -115,6 +131,7 @@ const publicationComponent = Type.Object(
 export const SEMANTIC_EVENTS = {
   [CANONICAL_GENERATION_COMMITTED]: canonicalGeneration,
   [CANONICAL_GENERATION_DELIVERED]: canonicalGeneration,
+  [CANONICAL_GENERATION_REBUILD_CONTINUED]: canonicalGenerationOriginal,
   [CANONICAL_GENERATION_CONTINUATION]: Type.Object(
     {
       after: Type.Integer({ minimum: 0, maximum: 4095 }),

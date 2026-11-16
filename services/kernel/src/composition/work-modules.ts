@@ -20,6 +20,7 @@ import { libraryWorkModule } from '../library/work-module.ts';
 import { createSemanticWorkModule, type SemanticDomainComposer } from '../semantic/work-module.ts';
 import { createSearchWorkModule } from '../search/work.ts';
 import { ratingNativeWorkModule } from '../rating/module.ts';
+import { rebuildRealmRankCanonicalOrder } from '../rating/realm-rank-convergence.ts';
 import { workflowRetentionWorkModule } from '../work/retention.ts';
 import { importsWorkModule } from '../imports/erasure.ts';
 import { composeContentApplication } from './content.ts';
@@ -87,6 +88,9 @@ function contentWorkAmbient(supplied?: Partial<ContentWorkAmbient>): ContentWork
       return id();
     },
     readIdentityMappings: supplied?.readIdentityMappings ?? readRealmSubjectIdentityMappings,
+    receiveCanonicalGeneration:
+      supplied?.receiveCanonicalGeneration ??
+      ((tx, { partition }) => rebuildRealmRankCanonicalOrder(tx, { partition, limit: 200 })),
   };
 }
 

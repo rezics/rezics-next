@@ -42,6 +42,7 @@ export async function rebuildRealmRankCanonicalOrder(
   if (
     result.rows.length !== 1 || !page || typeof page.complete !== 'boolean' ||
     !Number.isInteger(page.consumed) || page.consumed < 0 || page.consumed > limit ||
+    page.complete !== (page.consumed < limit) ||
     !/^[1-9][0-9]*$/.test(page.canonicalGeneration) || !/^[1-9][0-9]*$/.test(page.revision)
   )
     throw new Error('Realm rank canonical rebuild did not return a complete page result');
