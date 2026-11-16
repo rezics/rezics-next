@@ -244,8 +244,19 @@ export function createSearchIdentityEpochParticipant(options: {
       await (
         await installed
       ).run(context, async () => {
-        const saved = await withReadTransaction(pool, (tx) => identityEpochStore().readJob(tx, ref), deadline);
-        if (!saved) throw unavailable('Search requires an exact admitted native job');
+        const { saved, directory } = await withReadTransaction(
+          pool,
+          async (tx) => {
+            const saved = await identityEpochStore().readJob(tx, ref);
+            if (!saved) throw unavailable('Search requires an exact admitted native job');
+            const pending =
+              saved.state === 'pending' &&
+              saved.mapping?.state === 'complete' &&
+              saved.participants['search-canonical-index']?.state !== 'complete';
+            return { saved, directory: pending ? await readSearchIdentityDirectory(tx, ref) : null };
+          },
+          deadline,
+        );
         const completed = saved.participants['search-canonical-index'];
         if (completed?.state === 'complete') {
           const r = completed.receipt;
@@ -291,33 +302,29 @@ export function createSearchIdentityEpochParticipant(options: {
           throw unavailable('Unfinished Search cancellation requires the original Source writer disposition');
         if (saved.mapping?.state !== 'complete')
           throw unavailable('Search requires authoritative native mapping custody');
-        const { directory, change } = await withReadTransaction(
-          pool,
-          async (tx) => {
-            const directory = await readSearchIdentityDirectory(tx, ref);
-            const change = await readSearchIdentityDirectoryOriginal(tx, ref, directory);
-            return { directory, change };
-          },
-          deadline,
-        );
-        const request = directory.writerRequest;
-        if (request && (!change || change.original !== request.original || change.terminal !== request.terminal))
-          throw unavailable('Retained Search writer request differs from the admitted original');
-        if (!change) {
-          if (directory.count < 1) throw unavailable('Search receiving has no completed original to seal');
+        if (!directory) throw unavailable('Search requires the pending directory');
+        const configuration = configured.configuration;
+        const { writerRequest: request } = directory;
+        if (!request) {
           const roles = await identityErasureRoles(pool, ref.jobId);
-          const frontier = { after: ['directory', directory.count], segment: 0 };
-          const sealed = await runCommand(
+          const staged = await runCommand(
             pool,
-            { partition: identityJobPartition(ref), deadline, clock: configured.configuration.clock },
+            { partition: identityJobPartition(ref), deadline, clock: configuration.clock },
             async (tx) => {
               await requireCurrentSearchIdentityDirectory(tx, ref, directory);
-              if (await readSearchIdentityDirectoryOriginal(tx, ref, directory))
-                throw unavailable('Search receiving directory still has an original to process');
+              const change = await readSearchIdentityDirectoryOriginal(tx, ref, directory);
+              if (!change && directory.count < 1)
+                throw unavailable('Search receiving has no completed original to seal');
+              // Select under the same control command that retains the cursor. The writer owns
+              // plan discovery, including replay of an already prepared original.
+              const frontier = change
+                ? requestSearchIdentityWriter(directory, change.original, change.terminal)
+                : { after: ['directory', directory.count], segment: 0 };
+              const state = change ? ('more' as const) : ('complete' as const);
               bindSemanticProducerRoles(tx, roles);
               recordIdentityEpochNativeCommit(tx, 'search-canonical-index');
               registerCommandCallback(tx, async (id) => {
-                const inserted = await tx.query(completeSql.sql, [
+                const inserted = await tx.query(change ? stepSql.sql : completeSql.sql, [
                   currentCommand(tx).partition,
                   id,
                   ref.jobId,
@@ -326,30 +333,35 @@ export function createSearchIdentityEpochParticipant(options: {
                   json(frontier),
                   json(searchIdentityWorkUsed(pool, context)),
                 ]);
-                if (inserted.rowCount !== 1) throw unavailable('Search completion lost its native step');
+                if (inserted.rowCount !== 1) throw unavailable('Search directory lost its native step');
               });
-              return { value: null, events: searchIdentityWriterChanged() };
+              return { value: { frontier, state }, events: searchIdentityWriterChanged() };
             },
           );
           return {
             job: ref,
-            frontier,
-            state: 'complete' as const,
+            ...staged.value,
             receipt: {
               job: ref,
-              step: 'search-canonical-index' as const,
-              version: 1 as const,
+              step: 'search-canonical-index',
+              version: 1,
               native: {
-                partition: sealed.partition,
-                transactionId: sealed.transactionId,
-                epoch: sealed.epoch,
-                position: sealed.position,
+                partition: staged.partition,
+                transactionId: staged.transactionId,
+                epoch: staged.epoch,
+                position: staged.position,
               },
             },
             work: searchIdentityWorkUsed(pool, context),
-          };
+          } satisfies IdentityStepProgress;
         }
-        const configuration = configured.configuration;
+        const change = await withReadTransaction(
+          pool,
+          (tx) => readSearchIdentityDirectoryOriginal(tx, ref, directory),
+          deadline,
+        );
+        if (!change || change.original !== request.original || change.terminal !== request.terminal)
+          throw unavailable('Retained Search writer request differs from the admitted original');
         const plan = await readSearchIdentityOriginalPlan(pool, ref, change, configuration, deadline);
         const stageWriter = async (wanted?: SearchWriterPlanRequest) => {
           if (
@@ -375,11 +387,6 @@ export function createSearchIdentityEpochParticipant(options: {
               { partition: identityJobPartition(ref), deadline, clock: configuration.clock },
               async (tx) => {
                 await requireCurrentSearchIdentityDirectory(tx, ref, directory);
-                if (!wanted) {
-                  const original = await readSearchIdentityDirectoryOriginal(tx, ref, directory);
-                  if (!original || original.original !== change.original || original.terminal !== change.terminal)
-                    throw unavailable('Search writer request changed before commit');
-                }
                 bindSemanticProducerRoles(tx, roles);
                 recordIdentityEpochNativeCommit(tx, 'search-canonical-index');
                 registerCommandCallback(tx, async (id) => {
