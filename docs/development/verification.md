@@ -200,9 +200,9 @@ Owned compiler databases are rechecked inside their exact container and at the h
 workspace. The first post-failure readiness error includes the container identity, later mapper consumers stop when it
 fails, and the compiler result remains primary.
 Keep diagnostic reruns visible. Mixed failures with load signals may be rerun. A Bun case timeout keeps its initial
-verdict when an anchored name filter runs one case in a one-file, one-lane run. Exclude cleanup failures. Preserve
-security TTLs, explicit deadlines and work budgets. A deadline multiplier cannot prove deployment. Distinguish
-product and infrastructure failures. Verify baselines before counting passes.
+verdict when an anchored name filter runs one case in a one-file run, regardless of configured concurrency. Exclude
+cleanup failures. Preserve security TTLs, explicit deadlines and work budgets. A deadline multiplier cannot prove
+deployment. Distinguish product and infrastructure failures. Verify baselines before counting passes.
 
 Infrastructure failures, including check transport, rsync exit 24, SSH drops and killed Git processes, are retried
 by the tools without consuming a worker attempt. Preserve their exact errors; do not classify them as flaky product

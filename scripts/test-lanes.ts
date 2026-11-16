@@ -928,8 +928,8 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
   const configuredConcurrency = laneConcurrency(suite.service, env);
   const inheritedSlot = env.REZICS_STACK_LEASE !== 'off' && env.REZICS_STACK_SLOT !== undefined;
   const concurrency = inheritedSlot ? 1 : configuredConcurrency;
-  const isolatedSelection =
-    concurrency === 1 && suite.files.length === 1 && hasAnchoredTestNameFilter(suite.testArguments ?? []);
+  // The scheduler starts only one lane for one file, whatever the configured concurrency.
+  const isolatedSelection = suite.files.length === 1 && hasAnchoredTestNameFilter(suite.testArguments ?? []);
   const reports = mkdtempSync(join(tmpdir(), `${suite.service}-check-`));
   const recorder = createRecorder();
   const slots = new Map<string, StackSlot>();
