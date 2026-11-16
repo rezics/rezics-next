@@ -66,6 +66,12 @@ test('a growing serial keeps exact public releases and advances preparation in b
   const originalBody = fromPlainText('Opening');
   const source = await native.thread('published', originalBody);
   const target = f.target(source);
+  // Keep source diversity fixed across the size series, with more than one authority page.
+  const sourceTargets = [target];
+  for (let index = 1; index < 21; index++) {
+    const chapter = await native.thread('published', fromPlainText(`Retained source ${index}`));
+    sourceTargets.push(f.target(chapter));
+  }
   const root = f.newOccurrenceId();
   const part = f.newOccurrenceId();
   const nested = f.newOccurrenceId();
@@ -79,7 +85,7 @@ test('a growing serial keeps exact public releases and advances preparation in b
       position: index + 1,
       title: `Chapter ${index + 2}`,
       kind: 'chapter',
-      target,
+      target: sourceTargets[index % sourceTargets.length]!,
     })),
   ];
   let head: string = (
@@ -151,7 +157,7 @@ test('a growing serial keeps exact public releases and advances preparation in b
         position: draftChapters,
         title: `Chapter ${draftChapters + 1}`,
         kind: 'chapter',
-        target,
+        target: sourceTargets[draftChapters % sourceTargets.length]!,
       });
       draftChapters++;
     }
@@ -230,16 +236,27 @@ test('a growing serial keeps exact public releases and advances preparation in b
       sealed: true,
     });
     let activation = await native.command(`${stagePath}:startActivation`, {}, 200);
-    for (let page = 0; activation.state !== 'ready'; page++) {
-      expect(page).toBeLessThan(4);
+    const authorityTargetCount = String(sourceTargets.length + 1);
+    expect(activation.totalTargetCount).toBe(authorityTargetCount);
+    let authorityPages = 0;
+    while (activation.state !== 'ready') {
+      expect(authorityPages++).toBeLessThan(4);
       activation = await native.command(`${stagePath}:advanceActivation`, {}, 200);
     }
+    expect(activation.checkedTargetCount).toBe(authorityTargetCount);
+    expect(authorityPages).toBeGreaterThan(1);
     await expectCurrent(current);
     const result = await native.command(`${stagePath}:activate`, {}, 200);
     expect(result.state).toBe('activated');
     current = result.publicationId;
     await expectCurrent(current);
-    console.info('Hosted serial preparation growth', { chapters: size, placements: size + 2, steps });
+    console.info('Hosted serial preparation growth', {
+      chapters: size,
+      placements: size + 2,
+      steps,
+      authorityTargetCount,
+      authorityPages,
+    });
     return result.publicationId as string;
   }
 
