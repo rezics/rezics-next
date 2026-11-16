@@ -4,7 +4,7 @@ import example from '../src/kernel/recorded/my-realms.json';
 import { formatMyRealmsCurrent } from '../src/community/my-realms-native';
 import { MyRealmsPageView } from '../src/community/my-realms-page';
 import { m } from '../src/paraglide/messages.js';
-import { deLocalizeUrl, localizeUrl, setLocale } from '../src/paraglide/runtime.js';
+import { deLocalizeUrl, getLocale, localizeUrl, overwriteGetLocale } from '../src/paraglide/runtime.js';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import {
@@ -138,7 +138,6 @@ async function render(
   locale: (typeof locales)[number],
   currentController?: MyRealmsCurrentController,
 ) {
-  await setLocale(locale, { reload: false });
   const response = { items, next };
   const client = createKernelClient('https://kernel.example', { fetch: async () => Response.json(response) });
   const { data } = await client.me.realms.get();
@@ -159,7 +158,13 @@ async function render(
     },
   });
   await router.load();
-  return { markup: renderToString(createElement(RouterProvider, { router })), page };
+  const previousLocale = getLocale;
+  overwriteGetLocale(() => locale);
+  try {
+    return { markup: renderToString(createElement(RouterProvider, { router })), page };
+  } finally {
+    overwriteGetLocale(previousLocale);
+  }
 }
 
 test('rendered current rows expose only admitted destinations and retain supplied media, description and sparse cursor', async () => {
@@ -174,11 +179,14 @@ test('rendered current rows expose only admitted destinations and retain supplie
         const realm = page.realms[index]!;
         expect(row).toContain(`>${realm.name}</h2>`);
         expect(row).toContain(realm.current.description);
-        expect(row).toContain('href="');
-        expect(row).toContain(m.my_realms_open({}, { locale }));
-        expect(row).toContain(m.my_realms_manage({}, { locale }));
-        expect(row).toContain('/realms/');
-        expect(row).toContain('/members');
+        const actionLinks = [...row.matchAll(/<a\b([^>]*)>([^<]*)<\/a>/gu)];
+        expect(actionLinks.map(([, , label]) => label)).toEqual([
+          m.my_realms_open({}, { locale }),
+          m.my_realms_manage({}, { locale }),
+        ]);
+        expect(actionLinks[0]![1]).toContain(`href="/${locale}/realms/${realm.realmId}"`);
+        expect(actionLinks[1]![1]).toContain(`href="/${locale}/realms/${realm.realmId}/members"`);
+        for (const [, attributes] of actionLinks) expect(attributes).not.toMatch(/\brole=/u);
         expect(row).not.toContain('<button'); // Explanatory read-only copy is not a Leave action.
         if (realm.current.avatar.state === 'none') expect(row).toContain(m.realm_appearance_no_image({}, { locale }));
         if (realm.current.avatar.state === 'unavailable')

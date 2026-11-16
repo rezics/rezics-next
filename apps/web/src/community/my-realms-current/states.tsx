@@ -1,7 +1,8 @@
 import { useId, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
 import { MediaImage } from '@rezics/ui/media-image';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { initials } from '../../threads/initials';
@@ -11,6 +12,8 @@ import type {
   MyRealmsCurrentController,
   MyRealmsCurrentRow,
 } from './contract';
+
+const entryLinkClass = 'h-auto min-h-7 max-w-full whitespace-normal';
 
 function AdviceStatus({ action, advice }: { action: MyRealmsCurrentActionName; advice: MyRealmsCurrentAdvice }) {
   if (advice.state === 'available') return null;
@@ -108,23 +111,18 @@ export function MyRealmsCurrentRowView({
             className="flex min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center"
           >
             {actions.enter.state === 'available' ? (
-              <Button
-                className="h-auto min-h-7 max-w-full whitespace-normal"
-                nativeButton={false}
-                render={<Link to="/realms/$id" params={{ id: row.realmId }} />}
-              >
+              <Link to="/realms/$id" params={{ id: row.realmId }} className={cn(buttonVariants(), entryLinkClass)}>
                 {m.my_realms_open()}
-              </Button>
+              </Link>
             ) : null}
             {actions.manage.state === 'available' ? (
-              <Button
-                variant="outline"
-                className="h-auto min-h-7 max-w-full whitespace-normal"
-                nativeButton={false}
-                render={<Link to="/realms/$id/members" params={{ id: row.realmId }} />}
+              <Link
+                to="/realms/$id/members"
+                params={{ id: row.realmId }}
+                className={cn(buttonVariants({ variant: 'outline' }), entryLinkClass)}
               >
                 {m.my_realms_manage()}
-              </Button>
+              </Link>
             ) : null}
           </nav>
         ) : null}
