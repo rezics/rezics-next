@@ -41,6 +41,16 @@ export async function postPublicationFixture() {
   );
   const pool = system.database.pool;
   let author = system.actors.author;
+  async function renewAuthorSession() {
+    const previous = author.actor;
+    const current = await system.auth.issue({
+      accountId: previous.accountId,
+      clientId: previous.clientId,
+      scopes: previous.scopes,
+    });
+    expect(current.actor).toEqual(previous);
+    author = current;
+  }
   async function rotateAuthorSessions() {
     const previous = author;
     author = await system.rotateAuthorSession(previous);
@@ -245,6 +255,7 @@ export async function postPublicationFixture() {
       get author() {
         return author;
       },
+      renewAuthorSession,
       rotateAuthorSessions,
       board,
       realm,

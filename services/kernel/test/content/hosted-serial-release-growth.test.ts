@@ -9,6 +9,7 @@ import { HOSTED_VERSION_RELEASE_CANDIDATE_PAGE_MAX } from '../../src/content/hos
 import { withBoundedReadConnection } from '../../src/database/pool.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { captureWithFoldedCost, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { TEST_REQUEST_DEADLINE_MS } from '../support/test-kernel.ts';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 
 let f: Awaited<ReturnType<typeof hostedChaptersFixture>>;
@@ -31,6 +32,17 @@ afterAll(async () => {
 
 test('a growing serial keeps exact public releases and advances preparation in bounded pages', async () => {
   const { native } = f;
+  // Keep the same ordinary author and epoch through the full request and its exact response read.
+  async function keepAuthorCurrent() {
+    const { exp } = decodeJwt(native.author.bearer);
+    if (exp === undefined) throw new Error('Ordinary Auth bearer lacks expiry');
+    if (exp * 1_000 - Date.now() <= TEST_REQUEST_DEADLINE_MS) await native.renewAuthorSession();
+  }
+  async function authorCommand(...args: Parameters<typeof native.command>) {
+    await keepAuthorCurrent();
+    return native.command(...args);
+  }
+
   const access = native.system.createFreshAccess(undefined, growth.pool);
   const kernel = native.system.createKernelForPool(growth.pool, access);
   const measuredScales = {
@@ -77,11 +89,13 @@ test('a growing serial keeps exact public releases and advances preparation in b
   }
   const path = `/v1/hostedCatalogues/${f.catalogueId}`;
   const originalBody = fromPlainText('Opening');
+  await keepAuthorCurrent();
   const source = await native.thread('published', originalBody);
   const target = f.target(source);
   // Keep source diversity fixed across the size series, with more than one authority page.
   const sourceTargets = [target];
   for (let index = 1; index < 21; index++) {
+    await keepAuthorCurrent();
     const chapter = await native.thread('published', fromPlainText(`Retained source ${index}`));
     sourceTargets.push(f.target(chapter));
   }
@@ -102,7 +116,7 @@ test('a growing serial keeps exact public releases and advances preparation in b
     })),
   ];
   let head: string = (
-    await native.command('/v1/hostedCatalogues', {
+    await authorCommand('/v1/hostedCatalogues', {
       postId: f.catalogueId,
       threadId: f.threadId,
       placements,
@@ -146,7 +160,7 @@ test('a growing serial keeps exact public releases and advances preparation in b
     while (draftChapters < size) {
       lastChapter = f.newOccurrenceId();
       head = (
-        await native.command(
+        await authorCommand(
           `${path}:appendRootChapter`,
           { expectedRevisionId: head, occurrenceId: lastChapter, title: `Chapter ${draftChapters + 1}`, target },
           200,
@@ -208,7 +222,7 @@ test('a growing serial keeps exact public releases and advances preparation in b
   async function releaseWhole(size: number) {
     const stageId = f.newOccurrenceId();
     const stagePath = `${path}/publicationPreparations/${stageId}`;
-    let progress = await native.command(
+    let progress = await authorCommand(
       `${path}:prepareRelease`,
       { stageId, expectedRevisionId: head, expectedPublicationId: current, mode: 'whole' },
       202,
@@ -221,6 +235,7 @@ test('a growing serial keeps exact public releases and advances preparation in b
       expect(++steps).toBeLessThanOrEqual(maxSteps);
       const input = steps === 1 ? firstStep : { stepId: f.newOccurrenceId() };
       const advance = `${stagePath}:advance`;
+      await keepAuthorCurrent();
       const next =
         steps === 1 || steps === laterStep
           ? (
@@ -237,31 +252,31 @@ test('a growing serial keeps exact public releases and advances preparation in b
       ).toBeLessThanOrEqual(HOSTED_VERSION_RELEASE_CANDIDATE_PAGE_MAX);
       if (steps === 1) {
         await expectCurrent(current);
-        const receipt = await native.command(`${stagePath}:advance`, firstStep, 200);
+        const receipt = await authorCommand(`${stagePath}:advance`, firstStep, 200);
         expect(receipt).toEqual(next);
       }
       progress = next;
     }
 
-    const sealed = await native.command(`${stagePath}:seal`, {}, 200);
+    const sealed = await authorCommand(`${stagePath}:seal`, {}, 200);
     expect(sealed.candidate).toMatchObject({
       chapterCount: String(size),
       placementCount: String(size + 2),
       coverageComplete: true,
       sealed: true,
     });
-    let activation = await native.command(`${stagePath}:startActivation`, {}, 200);
+    let activation = await authorCommand(`${stagePath}:startActivation`, {}, 200);
     const authorityTargetCount = String(sourceTargets.length + 1);
     expect(activation.totalTargetCount).toBe(authorityTargetCount);
     let authorityPages = 0;
     while (activation.state !== 'ready') {
       expect(authorityPages++).toBeLessThan(4);
-      activation = await native.command(`${stagePath}:advanceActivation`, {}, 200);
+      activation = await authorCommand(`${stagePath}:advanceActivation`, {}, 200);
     }
     expect(activation.checkedTargetCount).toBe(authorityTargetCount);
     expect(authorityPages).toBeGreaterThan(1);
     await expectCurrent(current);
-    const result = await native.command(`${stagePath}:activate`, {}, 200);
+    const result = await authorCommand(`${stagePath}:activate`, {}, 200);
     expect(result.state).toBe('activated');
     current = result.publicationId;
     await expectCurrent(current, size);
@@ -283,6 +298,7 @@ test('a growing serial keeps exact public releases and advances preparation in b
     await grow(size);
     await expectCurrent(previous);
     expect((await read(`/occurrences/${lastChapter}?kind=publication&revisionId=${previous}`)).status).toBe(404);
+    await keepAuthorCurrent();
     const { response, statements } = await measureHttp('point publication', size, () =>
       native.call(
         'POST',
@@ -333,6 +349,7 @@ test('a growing serial keeps exact public releases and advances preparation in b
   }
   await grow(10_002);
   const selectedBody = fromPlainText('Explicitly selected replacement');
+  await keepAuthorCurrent();
   const reviseStartedAt = Date.now();
   const revised = await native.revise(source.firstPost, { body: selectedBody });
   if (revised.status !== 200) {
@@ -369,15 +386,16 @@ test('a growing serial keeps exact public releases and advances preparation in b
   expect(revised.status).toBe(200);
   const selectedTarget = { ...target, revisionId: revised.value.post.revisionId, sha256: revised.value.post.sha256 };
   head = (
-    await native.command(
+    await authorCommand(
       `${path}:updateDraftPoint`,
       { expectedRevisionId: head, occurrenceId: nested, title: 'Nested chapter', target: selectedTarget },
       200,
     )
   ).revisionId;
+  await keepAuthorCurrent();
   const newer = await native.revise(revised.value.post, { body: fromPlainText('Unselected newer source body') });
   expect(newer.status).toBe(200);
-  const replacement = await native.command(
+  const replacement = await authorCommand(
     `${path}:replacePublishedChapter`,
     { expectedRevisionId: head, expectedPublicationId: current, occurrenceId: nested, target: selectedTarget },
     200,
@@ -392,6 +410,7 @@ test('a growing serial keeps exact public releases and advances preparation in b
   );
 
   expect((await read(`/occurrences/${lastChapter}?kind=publication&revisionId=${current}`)).status).toBe(404);
+  await keepAuthorCurrent();
   expect(
     (await native.call('GET', `${path}/occurrences/${lastChapter}?kind=structure&revisionId=${head}`)).status,
   ).toBe(200);
