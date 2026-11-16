@@ -150,6 +150,9 @@ test('installed serve composition bounds client dependency optimization without 
             ['editions/index', '/content-editions/creator-editions-route'],
             ['editions/$id', '/content-editions/edition-route'],
             ['studio', '/src/studio/index.ts'],
+            ['contexts/$id', '/features/catalogue/editorial-context-route.tsx'],
+            ['contexts/new', '/features/catalogue/editorial-context-route.tsx'],
+            ['moderation/workbench', '/moderation/workbench-queue/route-page.tsx'],
             ['zones/$id', '/zones/zone-shell.tsx'],
             ['knowledge/new', '/knowledge/private-page.tsx'],
             ['search', '/search/search.tsx'],
@@ -174,6 +177,9 @@ test('installed serve composition bounds client dependency optimization without 
               !subjectReference.code.includes('/features/catalogue/page-render-binding.tsx'),
             'route loaders do not import the Subject React binding',
           );
+          const subjectHead = await routes.environments.ssr.transformRequest('/src/features/pages/subject-head.ts');
+          assert.ok(subjectHead.code.includes('/subject-summary-reading/model.ts'), 'metadata retains localized summary selection');
+          assert.ok(!subjectHead.code.includes('/overview.tsx'), 'metadata does not load the Subject reading components');
           const rules = await routes.environments.ssr.transformRequest('/src/community/realm-rules-authoring/panel.tsx');
           assert.ok(rules.code.includes('/paraglide/messages/realm_rules_authoring_open.js'));
           assert.ok(!rules.code.includes('/paraglide/messages.js'), 'rules labels do not load the full catalogue');

@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { EditorialContextPage, editorialSubjectSearch } from '../../features/catalogue/editorial-context-route';
+import { editorialSubjectSearch } from '../../features/catalogue/editorial-context-location';
+import { EditorialContextPage } from '../../features/catalogue/editorial-context-route';
 import { m } from '../../paraglide/messages.js';
 
 export const Route = createFileRoute('/contexts/new')({

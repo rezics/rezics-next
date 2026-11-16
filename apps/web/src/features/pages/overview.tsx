@@ -9,7 +9,7 @@ import type { ScreenReadingPort } from '../catalogue/screen-reading-port';
 import { BookOverviewRating, RatingsSection } from './subject-ratings-view';
 import { SubjectCommunityRegion, useSubjectCommunity } from './subject-community-view';
 import { composedCommunityRegion } from './subject-community';
-import { pickLanguage, type PageRead } from '@rezics/composition';
+import type { PageRead } from '@rezics/composition';
 import {
   Cover as CoverFrame,
   coverIncarnation,
@@ -79,8 +79,13 @@ import { useSession } from '../../session/query';
 import { subjectHref } from '../../subject/subject-href';
 import { synopsisVisitHref } from './subject-summary-reading/visit';
 import { withSubjectVisitReturn, summaryReadingFragment, summaryReadingReturn } from './subject-visit-navigation';
-import { synopsisChoices, synopsisReturnMatches, type SynopsisChoice } from './subject-summary-reading/model';
-import { SUMMARY_PROPERTY as SUMMARY_CHOICE_PROPERTY } from './subject-summary-reading/contract';
+import {
+  selectedSummary,
+  synopsisChoices,
+  synopsisReturnMatches,
+  type SynopsisChoice,
+} from './subject-summary-reading/model';
+import { SUMMARY_PROPERTY } from './subject-summary-reading/contract';
 export type { Count } from '../count';
 
 /** What one node's read returned: its planned descriptor and body, or the fact that it did not succeed. */
@@ -187,8 +192,6 @@ export function OverviewRoot({
     </ScreenReadingBinding>
   );
 }
-
-const SUMMARY_PROPERTY = 'schema:abstract';
 
 import { headingClass, sectionClass, useOverview, Preview, Failed } from './overview-section';
 export { headingClass, sectionClass, useOverview, Preview, Failed } from './overview-section';
@@ -936,34 +939,6 @@ export function Cover(props: Record<string, unknown>) {
   );
 }
 
-type SummaryCandidate = { statement: Stmt; document: DocumentSnapshot | undefined; language: string };
-
-/** The selected summary statement, whether its separately disclosed text was filled or not. */
-function selectedSummary(subject: Subject, locale: string, filled?: unknown): SummaryCandidate | undefined {
-  const held = Object.hasOwn(subject.statements, SUMMARY_PROPERTY) ? subject.statements[SUMMARY_PROPERTY] : undefined;
-  const documents = bestRank((held ?? []) as unknown as Stmt[]).flatMap((statement) => {
-    const content = statement.value.type === 'value' ? statement.value.content : undefined;
-    const document = statementDocument(subject.id, statement, filled);
-    return isRecord(content) && typeof content.language === 'string'
-      ? [{ statement, document, language: content.language }]
-      : [];
-  });
-  if (documents.length === 0) return undefined;
-  const language = pickLanguage(
-    documents.map((entry) => entry.language),
-    locale,
-    originalLanguage(subject),
-  );
-  const selected = documents.find((entry) => entry.language === language) ?? documents[0]!;
-  return selected;
-}
-
-/** The summary the reader's language chain reaches first, with its disclosed document. */
-export function chosenSummary(subject: Subject, locale: string, filled?: unknown) {
-  const selected = selectedSummary(subject, locale, filled);
-  return selected?.document ? { ...selected, document: selected.document } : undefined;
-}
-
 /** A bounded plain excerpt has no clipped links or spoiler text. The complete rich document stays intact. */
 function summaryExcerpt(document: DocumentSnapshot): { text: string; complete: boolean } {
   const limit = 420;
@@ -1523,7 +1498,7 @@ function SummaryContent({
   const authoredHref =
     selectedChoice && readingReturn
       ? synopsisVisitHref(
-          `${subjectHref({ id: read.subject.id, label: value.subjectLabel || value.unlabelled }, value.locale).href}/authored?${new URLSearchParams({ property: SUMMARY_CHOICE_PROPERTY })}`,
+          `${subjectHref({ id: read.subject.id, label: value.subjectLabel || value.unlabelled }, value.locale).href}/authored?${new URLSearchParams({ property: SUMMARY_PROPERTY })}`,
           readingReturn,
           value.locale,
         )
