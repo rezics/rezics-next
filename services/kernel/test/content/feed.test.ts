@@ -196,6 +196,7 @@ test('Default mixed feed composes real discovery, current Following and Continue
     const anonymous = await eventually(async () => {
       const result = await page(null);
       const row = result.feedItems.find((item) => item.source === 'discovery' && item.key.id === book);
+      const projection = subjectReactions(row);
       const expectedReaction = projection?.counts.state === 'available' && projection.counts.values.love === 1;
       observe('anonymous Discovery', {
         discovery: result.sources.discovery,
