@@ -97,7 +97,7 @@ export async function openIdentityRepairNative(
     if (!original || original === root) continue;
     await historicalEdge(db as Deployment, original, root);
   }
-  if (owned) await owned.install();
+  if (owned) await owned.install({ ratingIdentityRepair: true });
   const local = originals.filter((id, index) => !foreign.has(index));
   const settled = await settle(db as Deployment, local, root);
   expect(settled.observed).toMatchObject({ state: 'mapped', original: root });
@@ -144,6 +144,15 @@ export async function openIdentityRepairNative(
         (route, voter_id, question_id, target_id, units, revision, changed_at, transaction_id)
        VALUES ($1, $2, $3, $4, $5, 1, $6, $7)`,
       [route, voter.accountId, STANDARD_QUESTION_ID, targetId, units, at, newId(route)],
+    );
+  }
+  async function seedUncountedVote(voter: AccountActor, targetId: string) {
+    await seedVote(voter, targetId);
+    // INSERT initializes the counted target to the original even when given NULL.
+    await db.admin.query(
+      `UPDATE rating.vote SET counted_target = NULL
+        WHERE route = $1 AND voter_id = $2 AND question_id = $3 AND target_id = $4`,
+      [route, voter.accountId, STANDARD_QUESTION_ID, targetId],
     );
   }
   async function seedMemberships(voter: AccountActor, count = IDENTITY_REPAIR_MEMBERSHIP_CAP) {
@@ -201,6 +210,7 @@ export async function openIdentityRepairNative(
     read,
     actor,
     seedVote,
+    seedUncountedVote,
     seedMemberships,
     admit,
     select,

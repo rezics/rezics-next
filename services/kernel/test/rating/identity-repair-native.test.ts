@@ -39,7 +39,7 @@ test('installed module application admits, pages at 64, commits an empty termina
   const voter = await host.actor();
   const beyond = host.originals[66]!;
   await host.seedMemberships(voter, IDENTITY_REPAIR_MEMBERSHIP_CAP);
-  for (const original of host.originals.slice(0, 66)) await host.seedVote(voter, original);
+  for (const original of host.originals.slice(0, 66)) await host.seedUncountedVote(voter, original);
   const started = await admitIdentityRepairGeneration(
     host.commands,
     voter,
@@ -53,7 +53,7 @@ test('installed module application admits, pages at 64, commits an empty termina
   expect(started.receipts[0]?.terminal).toBe(false);
   expect(started.receipts[1]?.terminal).toBe(false);
   expect(started.receipts[2]).toMatchObject({ terminal: true, checkpoint: started.receipts[1]?.checkpoint });
-  await host.seedVote(voter, beyond);
+  await host.seedUncountedVote(voter, beyond);
   const votes = await host.read.countedVotes(voter.accountId);
   expect(votes).toHaveLength(67);
   expect(votes.filter((vote) => vote.targetId !== beyond).every((vote) => vote.revision === 1)).toBe(true);
@@ -224,7 +224,7 @@ test('later identity change and later vote remain under durable custody and conv
     );
     expect(first.status).toBe('complete');
     if (first.status !== 'complete') throw new Error(first.reason);
-    await isolated.seedVote(voter, later);
+    await isolated.seedUncountedVote(voter, later);
     expect(
       (await isolated.read.obligations(voter.accountId)).some((row) => row.laterVote && row.state === 'bound'),
     ).toBe(true);
@@ -298,7 +298,7 @@ test('later votes beyond the captured upper key stay off the page and mark later
     await isolated.seedVote(voter, original);
     const ref = await isolated.admit(voter);
     const later = laterIdentities(last, 3);
-    for (const target of later) await isolated.seedVote(voter, target);
+    for (const target of later) await isolated.seedUncountedVote(voter, target);
     const page = await isolated.select(voter, ref);
     expect(page.votes.map((vote) => vote.targetId)).toEqual([original]);
     expect(later.some((target) => page.votes.some((vote) => vote.targetId === target))).toBe(false);
@@ -306,7 +306,7 @@ test('later votes beyond the captured upper key stay off the page and mark later
       'committed',
     );
     const extra = laterIdentities(later.at(-1)!, 1)[0]!;
-    await isolated.seedVote(voter, extra);
+    await isolated.seedUncountedVote(voter, extra);
     const votes = await isolated.read.countedVotes(voter.accountId);
     expect(votes.find((vote) => vote.targetId === original)?.countedTargetId).toBe(isolated.terminal(original));
     for (const target of [...later, extra])

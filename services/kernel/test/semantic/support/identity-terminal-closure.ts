@@ -382,7 +382,7 @@ export async function isolatedDeployment() {
   };
   return {
     ...db,
-    async install() {
+    async install({ ratingIdentityRepair = false } = {}) {
       expect((await installIdentityEpochBootstrap(db.pool)).mode).toBe('legacy');
       await db.admin.query(`CREATE ROLE ${role} NOLOGIN NOSUPERUSER NOBYPASSRLS`);
       await db.admin.query(`CREATE OR REPLACE FUNCTION semantic.terminal_test_home() RETURNS integer
@@ -411,6 +411,26 @@ export async function isolatedDeployment() {
           ORDER BY n.nspname,c.relname
         `)
       ).rows;
+      if (ratingIdentityRepair) {
+        // Semantic's hold binds the native role through the Rating writes and COMMIT.
+        await db.admin.query(`GRANT USAGE ON SCHEMA rating TO ${role}`);
+        await db.admin.query(`GRANT SELECT ON rating.voter_realm, rating.vote TO ${role}`);
+        await db.admin.query(`GRANT UPDATE (counted_target, counted_revision) ON rating.vote TO ${role}`);
+        await db.admin.query(`GRANT INSERT ON rating.identity_repair_receipt TO ${role}`);
+        await db.admin.query(
+          `GRANT SELECT, INSERT, UPDATE (generation, work_id, state, mode, cursor, through_key, selected)
+           ON rating.identity_work_frame TO ${role}`,
+        );
+        // Counted-target changes also run Library's invoker-rights score triggers.
+        await db.admin.query(
+          `GRANT INSERT (route, account_id), UPDATE (revision) ON library.shelf_score_head TO ${role}`,
+        );
+        await db.admin.query(`GRANT INSERT, UPDATE (state, type_id, units) ON library.shelf_score TO ${role}`);
+        for (const name of ['voter_realm', 'vote', 'identity_repair_receipt', 'identity_work_frame'])
+          protectedTables.push({ schema: 'rating', name, key: 'route' });
+        for (const name of ['entry', 'shelf_score_head', 'shelf_score'])
+          protectedTables.push({ schema: 'library', name, key: 'route' });
+      }
       for (const table of protectedTables) {
         const predicate = homePolicy(table.key);
         await db.admin.query(`ALTER TABLE ${table.schema}.${table.name} ENABLE ROW LEVEL SECURITY`);

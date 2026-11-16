@@ -48,6 +48,7 @@ import {
   restoreRealmRatingQuestion,
 } from './question-lifecycle.ts';
 import { PublicFigureSchema, readSubjectPublicFigure } from './public-figure-http.ts';
+import { IdentityRatingAdmissionPendingError } from './vote-admission.ts';
 import {
   createVoteCommands,
   RatingQuestionNotFoundError,
@@ -244,6 +245,8 @@ async function command<T>(run: () => Promise<T>): Promise<T> {
     return await run();
   } catch (error) {
     if (error instanceof VoteReviewStaleError) throw new ProblemError('conflict');
+    if (error instanceof IdentityRatingAdmissionPendingError)
+      throw new ProblemError('overloaded', { headers: { 'retry-after': '1' } });
     if (error instanceof VoteReviewUnavailableError) {
       if (error.reason === 'atomic_guard_unavailable') throw new ProblemError('atomic_guard_unavailable');
       throw new ProblemError('overloaded', { detail: error.reason });
