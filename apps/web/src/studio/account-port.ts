@@ -178,7 +178,7 @@ export function createStudioAccountPort(
   }
 
   async function open(postId: string, signal: AbortSignal): Promise<StudioResult<StudioSelection>> {
-    const entry = selectedEntries.get(postId) ?? visibleEntries.get(postId);
+    const entry = visibleEntries.get(postId) ?? selectedEntries.get(postId);
     if (!entry || entry.documentKind !== 'opening' || entry.kind !== 'discussion')
       return failure('withdrawn', m.studio_discussion_only({}, accountOptions(locale)));
     return openEntry(entry, signal, () => documents.open({ projectId, postId }, signal));
