@@ -214,6 +214,43 @@ test('stale sweep and ordinary client-final cleanup preserve kernel-proved live 
 });
 
 
+test('cleanup after a lost lease acknowledgement needs original lease release and positive scope state', async () => {
+  const f = await fixture();
+  try {
+    const bin = join(f.hostRoot, 'bin');
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'systemctl'), `#!/bin/sh
+case "$1" in
+  stop) exit 0 ;;
+  show)
+    [ "$SCOPE_STATE" != unknown ] || exit 1
+    printf 'LoadState=loaded\nActiveState=%s\n' "$SCOPE_STATE"
+    ;;
+esac
+`, { mode: 0o755 });
+    writeFileSync(join(bin, 'docker'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+    const script = cleanupScript(f.run, f.directory, 'a').replaceAll('/srv/rezics-check', f.hostRoot);
+    const clean = (state: string) => spawnSync('bash', ['-c', script], {
+      encoding: 'utf8', timeout: 3000,
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, SCOPE_STATE: state },
+    });
+    expect(clean('inactive').status).toBe(75);
+    writeFileSync(join(f.directory, 'finish'), '');
+    await f.owner.exited;
+    await f.holder.stdin.end();
+    expect(await f.holder.exited).toBe(0);
+    rmSync(f.directory, { recursive: true });
+    for (const state of ['active', 'unknown']) {
+      const refused = clean(state);
+      expect(refused.status).not.toBe(0);
+      expect(refused.stdout).toBe('');
+    }
+    const verified = clean('inactive');
+    expect(verified.status, verified.stderr).toBe(0);
+    expect(verified.stdout.trim()).toBe(`CLEANED ${f.run}`);
+  } finally { await f.close(); }
+});
+
 test('terminal release does not unlink a symlink installed over the original byte record while waiting', async () => {
   const f = await fixture();
   try {

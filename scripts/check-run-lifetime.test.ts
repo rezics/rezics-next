@@ -1549,7 +1549,7 @@ async function failedSnapshotFixture(
   });
   const options = { stateDirectory: state };
   const physical = { host: 'b', run: 'failed-original-run-70' };
-  const native = { exitCode, lifetimeFailure: false, receiptSha256: '6'.repeat(64) };
+  const native = { exitCode, lifetimeFailure: exitCode === 124, receiptSha256: '6'.repeat(64) };
   await markCheckRunQueued(registration.invocationId, registration.nonce, options);
   await beginCheckRunAllocation(registration.invocationId, registration.nonce, options);
   await allocateCheckRunPhysical(registration.invocationId, registration.nonce, physical.host, physical.run, options);
@@ -1700,6 +1700,36 @@ test('failed snapshot discard refuses success, active work and unknown remote, t
     expect(removals).toBe(0);
     expect(existsSync(f.snapshot.workspace)).toBe(true);
     expect((await getCheckRunStatus(f.registration.invocationId, f.options)).snapshotCustody).toBe('owned');
+  }
+});
+
+test.each([
+  ['live-same', 'verified'],
+  ['unknown', 'verified'],
+  ['gone-or-replaced', 'changed'],
+  ['gone-or-replaced', 'verified'],
+] as const)('exact cleanup with transport %s and source %s gates failed lifetime snapshot discard', async (identity, source) => {
+  const f = await failedSnapshotFixture(124, { remote: 'unknown', source });
+  const physical = f.record.physical!;
+  const receive = precommandCleanup();
+  const remote = { ...receive, ...physical, cleanup: { ...receive.cleanup, ...physical } };
+  const evidence = reconcileCheckRunPhysicalCleanup(physical, f.record, remote, identity);
+  if (evidence.disposition !== 'physical-cleanup') throw new Error('expected exact remote cleanup observation');
+  const observed = await acceptCheckRunPhysicalCleanup(f.record.invocationId, evidence.observation, f.options);
+  expect(observed.phase).toBe('unknown');
+  expect(observed.final).toEqual(f.final);
+  expect(observed.snapshotCustody).toBe('owned');
+  const discard = discardRegisteredCheckRunFailedSnapshot(f.record.invocationId, f.record.nonce, true, f.options);
+  if (identity !== 'gone-or-replaced' || source !== 'verified') {
+    await expect(discard).rejects.toThrow('cleanup is unverified');
+    expect(existsSync(f.snapshot.workspace)).toBe(true);
+  } else {
+    const discarded = await discard;
+    expect(discarded.snapshotCustody).toBe('removed');
+    expect(discarded.phase).toBe('unknown');
+    expect(discarded.final).toEqual(f.final);
+    expect(discarded.native).toEqual(observed.native);
+    expect(existsSync(f.snapshot.workspace)).toBe(false);
   }
 });
 
