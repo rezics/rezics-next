@@ -11,7 +11,11 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { startConsentServer, type ConsentServer } from '../community/membership-fixture.ts';
 import { deletePersona } from '../support/account-deletion.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
-import { createOwnedErasureFixture, readLibraryWorkerResult } from './support/erasure-worker.ts';
+import {
+  createOwnedErasureFixture,
+  readLibraryMergeDispatch,
+  readLibraryWorkerResult,
+} from './support/erasure-worker.ts';
 
 async function waitFor<T>(phase: string, read: () => Promise<T>, ready: (value: T) => boolean): Promise<T> {
   const deadline = performance.now() + 60_000;
@@ -24,7 +28,7 @@ async function waitFor<T>(phase: string, read: () => Promise<T>, ready: (value: 
   return value;
 }
 
-test('anonymous members retain the selected built-in generation after curator erasure and recheck live Subject disclosure', async () => {
+async function verifyFrozenPublication(redirect: boolean) {
   const searchUrl = process.env.OPENSEARCH_URL;
   if (!searchUrl) throw new Error('Built-in publication Staging needs the owned Search service');
   const f = await createOwnedErasureFixture();
@@ -34,11 +38,12 @@ test('anonymous members retain the selected built-in generation after curator er
     const id = builtinCollectionId(owner.accountId, { kind: 'everything' });
     const path = `/v1/collections/${id}`;
     const membersPath = `${path}/members`;
-    const [terminal, original, independent] = [await f.subject(), await f.subject(), await f.subject()].sort() as [
-      string,
-      string,
-      string,
-    ];
+    const subjects = [await f.subject(), await f.subject()];
+    if (redirect) subjects.push(await f.subject());
+    subjects.sort();
+    const terminal = subjects[0]!;
+    const original = redirect ? subjects[1]! : terminal;
+    const independent = subjects.at(-1)!;
     for (const subjectId of [original, independent])
       await f.json(owner, 'PUT', `/v1/libraryEntries/${subjectId}`, 201, { state: 'planned' });
 
@@ -59,23 +64,28 @@ test('anonymous members retain the selected built-in generation after curator er
     });
 
     const steward = f.people.staff;
-    await f.json(steward, 'POST', '/v1/platform/exposure/subject_identity:open', 200);
-    await f.json(steward, 'POST', '/v1/grants', 201, {
-      resource: { route: 0, id: GLOBAL_CONTEXT },
-      subject: { kind: 'account', id: steward.accountId },
-      actions: ['subject:merge', 'gate:subject_identity'],
-      valid: '(,)',
-    });
-    // Establish the redirect after saving the original and before the immutable output is selected.
-    const { operation } = await f.json(steward, 'POST', '/v1/subjects:merge', 202, {
-      subjects: [terminal, original],
-    });
-    const merged = await waitFor(
-      'Subject redirect did not publish',
-      async () => (await f.json(steward, 'GET', `/v1/subjectIdentityOperations/${operation.id}`, 200)).operation,
-      (value) => value.done === true,
-    );
-    expect(merged.result).toMatchObject({ survivor: terminal, redirected: original });
+    if (redirect) {
+      await f.json(steward, 'POST', '/v1/platform/exposure/subject_identity:open', 200);
+      await f.json(steward, 'POST', '/v1/grants', 201, {
+        resource: { route: 0, id: GLOBAL_CONTEXT },
+        subject: { kind: 'account', id: steward.accountId },
+        actions: ['subject:merge', 'gate:subject_identity'],
+        valid: '(,)',
+      });
+      // Establish the redirect after saving the original and before the immutable output is selected.
+      const { operation } = await f.json(steward, 'POST', '/v1/subjects:merge', 202, {
+        subjects: [terminal, original],
+      });
+      const merged = await waitFor(
+        'Subject redirect did not publish',
+        async () => (await f.json(steward, 'GET', `/v1/subjectIdentityOperations/${operation.id}`, 200)).operation,
+        (value) => value.done === true,
+      ).catch(async (cause: unknown) => {
+        const dispatch = await readLibraryMergeDispatch(f.db.pool, f.client, operation.id);
+        throw new Error(`Subject merge dispatch: ${JSON.stringify(dispatch)}`, { cause });
+      });
+      expect(merged.result).toMatchObject({ survivor: terminal, redirected: original });
+    }
 
     const admitted = await f.json(owner, 'POST', `${path}:publish`, 202, { revision: 0, visibility: 'public' });
     const completed = await waitFor(
@@ -143,7 +153,7 @@ test('anonymous members retain the selected built-in generation after curator er
     const second = await f.json(null, 'GET', `${membersPath}?limit=1&cursor=${encodeURIComponent(first.next)}`, 200);
     expect(second).toEqual({ members: members.slice(1), next: null });
 
-    for (const subjectId of [original, terminal]) {
+    for (const subjectId of new Set([original, terminal])) {
       await f.json(steward, 'POST', `/v1/subjects/${subjectId}:hide`, 200, {
         reason: 'Current disclosure of an exact frozen member',
       });
@@ -164,4 +174,16 @@ test('anonymous members retain the selected built-in generation after curator er
       await consentServer?.close();
     }
   }
-}, 360_000);
+}
+
+test(
+  'anonymous members retain the selected built-in generation after curator erasure',
+  () => verifyFrozenPublication(false),
+  360_000,
+);
+
+test(
+  'anonymous members recheck the original and terminal after curator erasure',
+  () => verifyFrozenPublication(true),
+  360_000,
+);

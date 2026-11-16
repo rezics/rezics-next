@@ -15,10 +15,8 @@ import { createSubjectIndex } from '../../src/search/indices.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identityEpochStore } from '../../src/semantic/identity-adapters/index.ts';
-import { identityEpochWorkflowId } from '../../src/semantic/core/index.ts';
-import selectIdentityJob from '../../src/semantic/identity-epoch-store-select-job-by-id.sql';
 import { createWorkClient } from '../../src/work/client.ts';
-import { readLibraryWorkerResult, startErasureWorker } from './support/erasure-worker.ts';
+import { readLibraryMergeDispatch, startErasureWorker } from './support/erasure-worker.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
 type Identity = Awaited<ReturnType<NativeProfileFixture['identity']>>;
@@ -1809,7 +1807,7 @@ test('a merged canonical target invalidates the reviewed observation identity', 
   const row = (await previewAll(identityOwner, id)).records.find(
     (item: any) => item.section === 'provenance' && item.evidence.observation.recordId === 'source-visible-row',
   )!;
-  await json(
+  const review = await json(
     await send(identityOwner, 'PATCH', `${mergePath}/${id}/review`, {
       items: [
         {
@@ -1824,6 +1822,7 @@ test('a merged canonical target invalidates the reviewed observation identity', 
       ],
     }),
   );
+  expect(review.reviewed).toEqual([{ ordinal: row.ordinal, status: 'mapped', reviewRevision: 1 }]);
   // Publishing the actual redirect needs both fixed identity participants on the default worker.
   const databaseUrl = f.pool.options.connectionString;
   const searchUrl = process.env.OPENSEARCH_URL;
@@ -1855,31 +1854,8 @@ test('a merged canonical target invalidates the reviewed observation identity', 
         mapping = await store.readMapping(f.pool, redirected);
       }
       if ((mapping.state !== 'mapped' || mapping.terminal !== survivor) && admission.operation?.id) {
-        const jobId = admission.operation.id;
-        const [row] = (
-          await f.pool.query<{ epoch: string }>(selectIdentityJob.sql, [partitionOf(routeOf(jobId)!), jobId])
-        ).rows;
-        if (!row) throw new Error('Admitted archive redirect has no persisted identity job');
-        const job = await store.readJob(f.pool, { jobId, epoch: BigInt(row.epoch) });
-        const [workflow] = await client.listWorkflows({
-          workflow_id_prefix: identityEpochWorkflowId({ jobId, epoch: row.epoch }),
-          limit: 1,
-          sortDesc: true,
-          loadInput: false,
-          loadOutput: false,
-        });
-        if (workflow?.status === 'ERROR') await readLibraryWorkerResult(client, workflow.workflowID);
-        const participants = Object.fromEntries(
-          Object.entries(job?.participants ?? {}).map(([name, evidence]) => [name, evidence?.state]),
-        );
-        throw new Error(
-          `Archive redirect did not publish: ${JSON.stringify({
-            job: job?.state ?? 'unreadable',
-            mapping: job?.mapping?.state,
-            participants,
-            workflow: workflow?.status ?? 'absent',
-          })}`,
-        );
+        const dispatch = await readLibraryMergeDispatch(f.pool, client, admission.operation.id);
+        throw new Error(`Archive redirect did not publish: ${JSON.stringify(dispatch)}`);
       }
       expect(mapping).toMatchObject({ state: 'mapped', terminal: survivor });
       expect(await store.readMapping(f.pool, survivor)).toMatchObject({ state: 'mapped', terminal: survivor });

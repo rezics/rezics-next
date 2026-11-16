@@ -1,3 +1,4 @@
+import type { Pool } from 'pg';
 import type { WorkClient } from '../../../src/work/client.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
 
@@ -11,6 +12,54 @@ export async function readLibraryWorkerResult(client: WorkClient, workflowId: st
     if (!first || typeof first.stack !== 'string') throw error;
     throw new Error(`${error.message}\n${first.stack}`, { cause: error });
   }
+}
+
+/** Read only the admitted job and its exact outbox position before the fixture tears down. */
+export async function readLibraryMergeDispatch(pool: Pool, client: WorkClient, jobId: string) {
+  const { partitionOf, routeOf } = await import('../../../src/route/route.ts');
+  const { identityEpochStore } = await import('../../../src/semantic/identity-adapters/index.ts');
+  const { identityEpochWorkflowId } = await import('../../../src/semantic/core/identity-epoch-sequence.ts');
+  const { IDENTITY_EPOCH_ADMITTED } = await import('../../../src/semantic/events.ts');
+  const home = partitionOf(routeOf(jobId)!);
+  const [admission] = (
+    await pool.query<{ epoch: string; workflowId: string | null }>(
+      `SELECT j.epoch::text,c.position::text AS "admissionPosition",e.type AS event,
+              ck.position::text AS "checkpointPosition",d.state AS delivery,d.workflow_id AS "workflowId"
+       FROM semantic.identity_epoch_job j
+       LEFT JOIN semantic.identity_epoch_native_commit c
+         ON (c.partition_no,c.transaction_id)=(j.partition_no,j.recorded_transaction_id) AND c.purpose='admission'
+       LEFT JOIN core.outbox e
+         ON (e.partition_no,e.position)=(c.partition_no,c.position) AND e.type=$3
+       LEFT JOIN core.consumer_checkpoint ck ON ck.partition_no=j.partition_no AND ck.consumer='effects'
+       LEFT JOIN core.history_event_consumer d
+         ON (d.partition_no,d.position,d.event_seq)=(e.partition_no,e.position,e.event_seq)
+         AND d.consumer='identity_epoch_admission'
+       WHERE j.partition_no=$1 AND j.job_id=$2`,
+      [home, jobId, IDENTITY_EPOCH_ADMITTED],
+    )
+  ).rows;
+  if (!admission) throw new Error('Admitted Subject merge has no persisted identity job');
+  const job = await identityEpochStore().readJob(pool, { jobId, epoch: BigInt(admission.epoch) });
+  const effect = admission.workflowId ? await client.getWorkflow(admission.workflowId) : null;
+  const [workflow] = await client.listWorkflows({
+    workflow_id_prefix: identityEpochWorkflowId({ jobId, epoch: admission.epoch }),
+    limit: 1,
+    sortDesc: true,
+    loadInput: false,
+    loadOutput: false,
+  });
+  for (const current of [effect, workflow])
+    if (current?.status === 'ERROR') await readLibraryWorkerResult(client, current.workflowID);
+  return {
+    admission,
+    job: job?.state ?? 'unreadable',
+    mapping: job?.mapping?.state,
+    participants: Object.fromEntries(
+      Object.entries(job?.participants ?? {}).map(([name, evidence]) => [name, evidence?.state]),
+    ),
+    effect: effect?.status ?? 'absent',
+    workflow: workflow?.status ?? 'absent',
+  };
 }
 
 /** The fixture owns this child and its two pipes, never the Auth executor. */
