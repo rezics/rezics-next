@@ -94,6 +94,8 @@ function groupKey(subject: string, property: string): string {
 
 type CurrentEvidenceState = 'current' | 'retired' | 'unavailable';
 
+const adoptionSubjectConcurrency = 4;
+
 function sourceIdentity(record: ShowcaseRecord): { property: string; value: string } | null {
   if (record.provider === 'vndb') return { property: 'wdt:P3180', value: record.sourceKey };
   if (record.kind === 'work' && !isBookSeriesSourceTuple(record.sourceKey, record.nativeType ?? undefined))
@@ -121,10 +123,10 @@ function sourceIdentityProperty(record: ShowcaseRecord): string | null {
   return nameIdentified(record) ? 'schema:name' : null;
 }
 
-function phase(record: ShowcaseRecord, assertion: ShowcaseAssertion): number {
+function phase(record: ShowcaseRecord, property: string): number {
   if (record.kind === 'source-vocabulary' && record.nativeType === 'skos:ConceptScheme') return 0;
   if (record.kind === 'source-vocabulary' && record.nativeType === 'skos:Concept') return 1;
-  if (assertion.property === sourceIdentityProperty(record)) return 2;
+  if (property === sourceIdentityProperty(record)) return 2;
   return 3;
 }
 
@@ -1132,7 +1134,7 @@ async function publishShowcasePhases(
       ),
     ].sort(
       (left, right) =>
-        phase(left.record, left.assertion) - phase(right.record, right.assertion) ||
+        phase(left.record, left.assertion.property) - phase(right.record, right.assertion.property) ||
         left.assertion.candidateId.localeCompare(right.assertion.candidateId),
     );
   let assertions = assertionsFor(manifest);
@@ -1523,9 +1525,9 @@ async function publishShowcasePhases(
   // Acceptance is per candidate. Retain unresolved intent for replay while allowing accepted siblings
   // to form a complete selection under the current adoption head.
   const withheldAcceptanceCandidates = new Set<string>();
-  const withholdAcceptance = (record: ShowcaseRecord, candidateId: string, code: string) => {
+  const withholdAcceptance = (record: ShowcaseRecord, candidateId: string, code: string, output = omissions) => {
     withheldAcceptanceCandidates.add(candidateId);
-    omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code });
+    output.push({ provider: record.provider, sourceKey: record.sourceKey, code });
   };
   const refreshAcceptancePrerequisites = async (
     record: ShowcaseRecord,
@@ -1713,7 +1715,8 @@ async function publishShowcasePhases(
   }
 
   progress.enter('tag-parent-publication');
-  const grouped = new Map<string, { record: ShowcaseRecord; property: string; ids: Set<string> }>();
+  type AdoptionGroup = { record: ShowcaseRecord; property: string; ids: Set<string> };
+  const grouped = new Map<string, AdoptionGroup>();
   for (const { record, assertion } of assertions) {
     const id = record.subjectId;
     if (
@@ -1746,38 +1749,39 @@ async function publishShowcasePhases(
     if (!grouped.has(key)) grouped.set(key, { record, property: 'schema:genre', ids: new Set<string>() });
   }
 
-  const publicSubjects = new Map<string, ReviewedSubjectRead | null>();
-  const publicVocabularyEvidenceCache = new Map<string, CurrentEvidenceState>();
+  const publicSubjects = new Map<string, Promise<ReviewedSubjectRead | null>>();
+  const publicVocabularyEvidenceCache = new Map<string, Promise<CurrentEvidenceState>>();
   const dependencyEvidenceByCandidate = new Map<string, CurrentEvidenceState>();
-  const publicRead = async (id: string): Promise<ReviewedSubjectRead | null> => {
-    if (publicSubjects.has(id)) return publicSubjects.get(id) ?? null;
-    try {
-      const read = await input.publicClient.readSubject(id);
-      publicSubjects.set(id, read);
-      return read;
-    } catch {
-      publicSubjects.set(id, null);
-      return null;
-    }
+  const publicRead = (id: string): Promise<ReviewedSubjectRead | null> => {
+    const cached = publicSubjects.get(id);
+    if (cached) return cached;
+    const pending = (async () => {
+      try {
+        return await input.publicClient.readSubject(id);
+      } catch {
+        return null;
+      }
+    })();
+    publicSubjects.set(id, pending);
+    return pending;
   };
-  const publicVocabularyEvidence = async (dependency: ShowcaseVocabularyRecord): Promise<CurrentEvidenceState> => {
+  const publicVocabularyEvidence = (dependency: ShowcaseVocabularyRecord): Promise<CurrentEvidenceState> => {
     const cached = publicVocabularyEvidenceCache.get(dependency.subjectId);
     if (cached) return cached;
-    const read = await publicRead(dependency.subjectId);
-    if (!read) {
-      publicVocabularyEvidenceCache.set(dependency.subjectId, 'unavailable');
-      return 'unavailable';
-    }
-    const current =
-      subjectId(read) === dependency.subjectId &&
-      subjectType(read) === dependency.nativeType &&
-      !!dependency.sourceUri &&
-      publicVocabularySourceEvidence(read, dependency) &&
-      (dependency.nativeType !== 'skos:Concept' ||
-        (!!dependency.schemeId && publicHasValue(read, 'skos:inScheme', dependency.schemeId)));
-    const state = current ? 'current' : 'retired';
-    publicVocabularyEvidenceCache.set(dependency.subjectId, state);
-    return state;
+    const pending = (async (): Promise<CurrentEvidenceState> => {
+      const read = await publicRead(dependency.subjectId);
+      if (!read) return 'unavailable';
+      const current =
+        subjectId(read) === dependency.subjectId &&
+        subjectType(read) === dependency.nativeType &&
+        !!dependency.sourceUri &&
+        publicVocabularySourceEvidence(read, dependency) &&
+        (dependency.nativeType !== 'skos:Concept' ||
+          (!!dependency.schemeId && publicHasValue(read, 'skos:inScheme', dependency.schemeId)));
+      return current ? 'current' : 'retired';
+    })();
+    publicVocabularyEvidenceCache.set(dependency.subjectId, pending);
+    return pending;
   };
 
   const parentEvidence = manifest.tagParentEvidence ?? [];
@@ -2316,8 +2320,21 @@ async function publishShowcasePhases(
   progress.enter('adoption');
   const stoppedSubjects = new Set<string>();
   const stoppedGroups = new Set<string>();
-  for (const [key, group] of grouped) {
-    const [id] = key.split('\0');
+  const assertionsByGroup = new Map<string, typeof assertions>();
+  for (const entry of assertions) {
+    if (!entry.record.subjectId) continue;
+    const key = groupKey(entry.record.subjectId, entry.assertion.property);
+    const entries = assertionsByGroup.get(key) ?? [];
+    entries.push(entry);
+    assertionsByGroup.set(key, entries);
+  }
+  type AdoptionEntry = [string, AdoptionGroup];
+  const adoptionOmissions = new Map<string, typeof omissions>();
+  const adoptGroup = async ([key, group]: AdoptionEntry) => {
+    const id = group.record.subjectId;
+    const groupAssertions = assertionsByGroup.get(key) ?? [];
+    const groupOmissions: typeof omissions = [];
+    adoptionOmissions.set(key, groupOmissions);
     const refreshWeights =
       group.record.provider === 'vndb' && manifest.tagWeightRefreshes.includes(group.record.sourceKey);
     const parentOrSourceWithdrawals = [
@@ -2334,7 +2351,7 @@ async function publishShowcasePhases(
       ((stoppedSubjects.has(id) || stoppedGroups.has(groupKey(id, group.property))) &&
         !(refreshWeights && group.ids.size === 0))
     )
-      continue;
+      return;
     const adopted = await sendDurableAdopt({
       journal: input.journal,
       review: input.review,
@@ -2351,16 +2368,11 @@ async function publishShowcasePhases(
           publicVocabularyEvidenceCache.clear();
         }
         if (group.property === 'schema:image') {
-          const assertion = assertions.find(
-            (entry) =>
-              entry.record.subjectId === id &&
-              entry.assertion.property === 'schema:image' &&
-              group.ids.has(entry.assertion.candidateId),
-          );
+          const assertion = groupAssertions.find((entry) => group.ids.has(entry.assertion.candidateId));
           const outcome = assertion && admittedCoverMedia(input.plan, mediaOutcomes, group.record, assertion.assertion);
           const state = outcome ? await currentCoverFence(input.review, outcome) : 'unavailable';
           if (state !== 'open') {
-            omissions.push({
+            groupOmissions.push({
               provider: group.record.provider,
               sourceKey: group.record.sourceKey,
               code: state === 'fenced' ? 'cover-fenced' : 'cover-fence-unavailable',
@@ -2375,7 +2387,7 @@ async function publishShowcasePhases(
             pageCache,
           );
         } catch {
-          omissions.push({
+          groupOmissions.push({
             provider: group.record.provider,
             sourceKey: group.record.sourceKey,
             code: 'adoption-current-read-unavailable',
@@ -2384,7 +2396,7 @@ async function publishShowcasePhases(
           return null;
         }
         if (!page.complete) {
-          omissions.push({
+          groupOmissions.push({
             provider: group.record.provider,
             sourceKey: group.record.sourceKey,
             code: 'adoption-selection-bounded',
@@ -2394,7 +2406,7 @@ async function publishShowcasePhases(
         }
         const previous = page.adoption;
         if (previous && !Array.isArray(previous.selection)) {
-          omissions.push({
+          groupOmissions.push({
             provider: group.record.provider,
             sourceKey: group.record.sourceKey,
             code: 'adoption-selection-unavailable',
@@ -2411,7 +2423,7 @@ async function publishShowcasePhases(
           const state = await currentFactsFence(input.review, input.aliases.vndb, group.record.sourceKey);
           if (state !== 'open') {
             blockedTagSubjects.add(id);
-            omissions.push({
+            groupOmissions.push({
               provider: 'vndb',
               sourceKey: group.record.sourceKey,
               code: state === 'fenced' ? 'tag-weight-fenced' : 'tag-weight-fence-unavailable',
@@ -2419,9 +2431,6 @@ async function publishShowcasePhases(
             return null;
           }
         }
-        const groupAssertions = assertions.filter(
-          (entry) => entry.record.subjectId === id && entry.assertion.property === group.property,
-        );
         const ownedCandidates = new Set<string>();
         for (const { record, assertion } of groupAssertions) {
           const candidate = page.candidates.find((item) => item.id === assertion.candidateId);
@@ -2434,15 +2443,15 @@ async function publishShowcasePhases(
           if (!group.ids.has(assertion.candidateId) || withheldAcceptanceCandidates.has(assertion.candidateId))
             continue;
           if (!owned) {
-            withholdAcceptance(record, assertion.candidateId, 'candidate-digest-changed');
+            withholdAcceptance(record, assertion.candidateId, 'candidate-digest-changed', groupOmissions);
             continue;
           }
           if (recheck) {
             try {
               const code = await refreshAcceptancePrerequisites(record, assertion);
-              if (code) withholdAcceptance(record, assertion.candidateId, code);
+              if (code) withholdAcceptance(record, assertion.candidateId, code, groupOmissions);
             } catch {
-              withholdAcceptance(record, assertion.candidateId, 'acceptance-current-read-unavailable');
+              withholdAcceptance(record, assertion.candidateId, 'acceptance-current-read-unavailable', groupOmissions);
             }
           }
         }
@@ -2466,7 +2475,7 @@ async function publishShowcasePhases(
           const state = await dependencyStateForAssertion(entry);
           dependencyEvidenceByCandidate.set(entry.assertion.candidateId, state);
           if (state !== 'current')
-            omissions.push({
+            groupOmissions.push({
               provider: entry.record.provider,
               sourceKey: entry.record.sourceKey,
               code: state === 'unavailable' ? 'public-view-unavailable' : 'vocabulary-binding-not-current',
@@ -2549,6 +2558,7 @@ async function publishShowcasePhases(
                 : candidate?.rank === 'deprecated'
                   ? 'candidate-not-currently-adopted'
                   : 'candidate-acceptance-not-current',
+              groupOmissions,
             );
             continue;
           }
@@ -2557,7 +2567,7 @@ async function publishShowcasePhases(
             selections.set(candidateId, selections.get(candidateId) ?? priorRanks.get(candidateId) ?? 'normal');
         }
         if (selections.size > showcaseLimits.reviewPage) {
-          omissions.push({
+          groupOmissions.push({
             provider: group.record.provider,
             sourceKey: group.record.sourceKey,
             code: 'adoption-selection-bounded',
@@ -2573,7 +2583,7 @@ async function publishShowcasePhases(
             !currentSourceRead(sourceRead, group.record) ||
             !publicHasSourceIdentity(sourceRead, group.record)
           ) {
-            omissions.push({
+            groupOmissions.push({
               provider: group.record.provider,
               sourceKey: group.record.sourceKey,
               code: 'source-uri-not-current',
@@ -2596,13 +2606,13 @@ async function publishShowcasePhases(
     });
     if (adopted.status !== 'complete') {
       adoptionSnapshots.delete(key);
-      omissions.push({
+      groupOmissions.push({
         provider: group.record.provider,
         sourceKey: group.record.sourceKey,
         code: adopted.status === 'bound' ? 'adoption-generation-bound' : adopted.code,
       });
       if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
-      continue;
+      return;
     }
     if (adopted.snapshot) {
       adoptionSnapshots.set(key, adopted.snapshot);
@@ -2610,7 +2620,49 @@ async function publishShowcasePhases(
       publicSubjects.delete(id);
       publicVocabularyEvidenceCache.delete(id);
     }
+  };
+
+  const pendingBySubject = new Map<string, AdoptionEntry[]>();
+  const settleAdoptions = async () => {
+    const subjects = [...pendingBySubject.values()];
+    pendingBySubject.clear();
+    for (let offset = 0; offset < subjects.length; offset += adoptionSubjectConcurrency) {
+      const settled = await Promise.allSettled(
+        subjects.slice(offset, offset + adoptionSubjectConcurrency).map(async (entries) => {
+          for (const entry of entries) await adoptGroup(entry);
+        }),
+      );
+      for (const result of settled) if (result.status === 'rejected') throw result.reason;
+    }
+  };
+  let adoptionPhase: number | undefined;
+  for (const entry of grouped) {
+    const [key, { record, property }] = entry;
+    const nextPhase = phase(record, property);
+    // Scheme, Concept and source-identity read dependencies cross phase boundaries.
+    // A same-phase vocabulary dependency or a managed tag refresh keeps its original order.
+    const ordered =
+      (record.provider === 'vndb' && property === 'schema:genre') ||
+      (assertionsByGroup.get(key) ?? []).some(({ record, assertion }) => {
+        if (sourceTagWeight(assertion.statement) || vndbTagMembership(record, assertion)) return true;
+        const value = assertion.statement.value;
+        const dependency =
+          value.type === 'value' && typeof value.content === 'string' ? vocabularyById.get(value.content) : undefined;
+        return dependency && nextPhase === (dependency.nativeType === 'skos:ConceptScheme' ? 0 : 1);
+      });
+    if (adoptionPhase !== nextPhase || ordered) await settleAdoptions();
+    adoptionPhase = nextPhase;
+    if (ordered) {
+      await adoptGroup(entry);
+      continue;
+    }
+    const id = record.subjectId!;
+    const entries = pendingBySubject.get(id) ?? [];
+    entries.push(entry);
+    pendingBySubject.set(id, entries);
   }
+  await settleAdoptions();
+  for (const key of grouped.keys()) omissions.push(...(adoptionOmissions.get(key) ?? []));
 
   progress.enter('public-readback');
   const published: {
