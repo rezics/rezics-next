@@ -53,6 +53,7 @@ import receivingPlan from './identity-epoch-store-receiving-plan.sql';
 import receivingLookup from './identity-epoch-store-receiving-lookup.sql';
 import receivingSelection from './identity-receiving-selection-read.sql';
 import searchProgressRead from './identity-search-receiving-progress-read.sql';
+import searchProgressObserve from './identity-search-receiving-progress-observe.sql';
 import searchProgressInsert from './identity-search-receiving-progress-insert.sql';
 import searchProgressAdvance from './identity-search-receiving-progress-advance.sql';
 import searchProgressRelease from './identity-search-receiving-progress-release.sql';
@@ -1554,9 +1555,14 @@ type SearchReceivingContinuation = Readonly<{
   state: 'progress' | 'settled' | 'released';
   applied_transaction_id: string | null;
 }>;
-async function searchContinuation(tx: CommandTransaction, record: SearchIdentityReceivingRecord) {
+async function searchContinuation(
+  tx: CommandTransaction,
+  record: SearchIdentityReceivingRecord,
+  mode: 'lock' | 'observe' = 'lock',
+) {
+  const query = mode === 'observe' ? searchProgressObserve.sql : searchProgressRead.sql;
   const row = (
-    await tx.query<SearchReceivingContinuation>(searchProgressRead.sql, [
+    await tx.query<SearchReceivingContinuation>(query, [
       record.receipt.partition,
       record.job.jobId,
       record.effectKey,
@@ -1642,7 +1648,7 @@ export async function prepareSearchIdentityReceivingReconciliation(pool: Pool, e
       const { record } = await readReceivingRecord(tx, effect);
       if (record.step !== 'search-canonical-index' || record.source.barrier.kind !== 'original' || !record.applied)
         throw stale();
-      const progress = await searchContinuation(tx, record);
+      const progress = await searchContinuation(tx, record, 'observe');
       if (progress.state !== 'settled') return { record, progress, retained: null, roles: [] };
       const retained = (await tx.query(receivingStatements.controlCustody, [home, effect.job.jobId, effect.effectKey]))
         .rows[0];
