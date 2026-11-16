@@ -333,7 +333,7 @@ export function createSearchWorkModule(
       const creditSearch = composeCreditSearch?.(context.pool, routeKey);
       const search = createOpenSearch(searchConfig.url);
       const source = createRatedSubjectSource(context.pool, routeKey, creditSearch, nativePorts).source;
-      collectionPublicationScopeRuntimes.set(context, {
+      collectionPublicationScopeRuntimes.set(context.pool, {
         pool: context.pool,
         client: search,
         prefix: searchConfig.prefix,
@@ -389,9 +389,9 @@ export function createSearchWorkModule(
           clock: context.clock,
           searchNativePorts: nativePorts,
         });
-        const published = collectionPublicationScopeRuntimes.get(context);
+        const published = collectionPublicationScopeRuntimes.get(context.pool);
         if (published)
-          collectionPublicationScopeRuntimes.set(context, { ...published, library: defaults.libraryScope });
+          collectionPublicationScopeRuntimes.set(context.pool, { ...published, library: defaults.libraryScope });
         let runtime: ReturnType<typeof createDefaultPublicFilterRuntime> | undefined;
         let discoveryProducers: DiscoveryProducerEntry | undefined;
         try {
