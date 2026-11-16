@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import type { Access, AccessCheck } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import { subjectReadEligibility } from '../semantic/eligibility.ts';
+import { relatedReadVisibility, subjectReadEligibility } from '../semantic/eligibility.ts';
 import { readReleasedIdentityMappingsInSnapshot } from '../semantic/identity-adapters/identity-epoch-read.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { accessCheck } from './access-port.ts';
@@ -34,10 +34,11 @@ export async function prepareKnowledgeSubjectDisclosure(
     if (mapping.state !== 'mapped') return async () => false;
     targets.add(mapping.terminal);
   }
+  const endpoints = [...targets];
 
   // Prepare Access outside the snapshot. Verification uses one snapshot for both the mapping and its grants.
   const checks: AccessCheck[] = [];
-  for (const id of targets) {
+  for (const id of endpoints) {
     const resource = { id, route: routeOf(id)! };
     checks.push(
       await accessCheck(
@@ -69,6 +70,14 @@ export async function prepareKnowledgeSubjectDisclosure(
           })
         )
           return false;
+        // A signed-in grant may authorize a hidden Subject outside Knowledge.
+        if (context.actor.kind !== 'anonymous') {
+          for (let start = 0; start < endpoints.length; start += 256) {
+            const page = endpoints.slice(start, start + 256);
+            const visible = await relatedReadVisibility(client, page);
+            if (!page.every((id) => visible[id])) return false;
+          }
+        }
         for (const check of checks) {
           if (!(await check(client))) return false;
         }
