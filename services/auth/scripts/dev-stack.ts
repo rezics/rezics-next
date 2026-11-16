@@ -14,7 +14,7 @@ import { DEVELOPMENT_SHOWCASE_SCOPES } from '../../../scripts/datasets/showcase-
 import { developmentCollectionScopes } from '../../../scripts/datasets/development-showcase.ts';
 import { developmentPersonalListScopes } from '../../importer/src/showcase-personal-list.ts';
 import type { StackSlot } from '../../../scripts/stack-lease.ts';
-import { walkAcceptanceId } from '../../../scripts/stack-run.ts';
+import { walkAcceptanceId, walkStackAdmitted } from '../../../scripts/stack-run.ts';
 import {
   ownerProcessIdentity,
   runDocker,
@@ -257,6 +257,14 @@ const showcaseClient = localClientIds.showcase;
 
 function importCatalogueWalk(): boolean {
   return process.env.REZICS_WALK_IMPORT_CATALOGUE === '1';
+}
+
+function ordinaryAuthWalk(): boolean {
+  return process.env.REZICS_WALK_AUTH_FIXTURE === '1';
+}
+
+function developmentShowcaseWalk(): boolean {
+  return !importCatalogueWalk() && !ordinaryAuthWalk();
 }
 
 export function localShowcaseClientRegistration() {
@@ -518,7 +526,7 @@ export async function resetWalkSeedJournals(repository: string, databaseUrl: str
 }
 
 export async function kernelEnvironment(): Promise<Record<string, string>> {
-  return Object.fromEntries(
+  const environment = Object.fromEntries(
     (await readFile(resolve(root, 'services/kernel/.env'), 'utf8'))
       .split('\n')
       .filter((line) => /^[A-Z_]+=/.test(line))
@@ -527,6 +535,12 @@ export async function kernelEnvironment(): Promise<Record<string, string>> {
         return [line.slice(0, equals), line.slice(equals + 1)];
       }),
   );
+  if (ordinaryAuthWalk()) {
+    const { readCommerceConfig } = await import('../../kernel/src/commerce/config.ts');
+    if (readCommerceConfig({ ...process.env, ...environment }))
+      throw new Error('An ordinary Auth walk requires Commerce to be unconfigured');
+  }
+  return environment;
 }
 
 /** Topology remaining for the walk seed gate. Unfinished 4096-home close cannot admit import writes. */
@@ -773,12 +787,14 @@ export async function assemble(options?: {
           postLogoutRedirectUris: [`${origins.web}/`],
           scopes: website.scopes,
         });
-        await service.internal.registerClient({
-          clientId: personaClient,
-          firstParty: true,
-          scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open', 'access:grant'])],
-        });
-        if (!importCatalogueWalk()) {
+        if (!ordinaryAuthWalk()) {
+          await service.internal.registerClient({
+            clientId: personaClient,
+            firstParty: true,
+            scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open', 'access:grant'])],
+          });
+        }
+        if (developmentShowcaseWalk()) {
           await service.internal.registerClient(localShowcaseClientRegistration());
           await service.internal.registerClient(semanticWalkClientRegistration());
         }
@@ -850,6 +866,7 @@ export async function openLocalShowcase(
 }
 
 export async function provisionPersona(composition: Awaited<ReturnType<typeof assemble>>, directory = state) {
+  if (ordinaryAuthWalk()) throw new Error('An ordinary Auth fixture does not provision the development persona');
   const { host, access, kernelPool, keys, kernel } = composition;
   const catalogueOnly = importCatalogueWalk();
   const { bootstrapGovernance, bootstrapLocalShowcaseBoardCreation, PLATFORM_RESOURCE } =
@@ -1133,6 +1150,9 @@ function loopbackServe(
 }
 
 async function serveHost() {
+  const ordinaryAuthFixture = ordinaryAuthWalk();
+  if (ordinaryAuthFixture && (!walkAcceptanceId(process.env, 'native') || !walkStackAdmitted(process.env, root)))
+    throw new Error('An ordinary Auth fixture requires an admitted native walk');
   const composition = await assemble();
   let native: ReturnType<typeof loopbackServe> | undefined;
   let kernel: ReturnType<typeof loopbackServe> | undefined;
@@ -1158,8 +1178,10 @@ async function serveHost() {
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
   try {
-    const person = await phase('auth-persona', provisionPersona(composition));
-    printPersona(composition.keys, person.accountId);
+    if (!ordinaryAuthFixture) {
+      const person = await phase('auth-persona', provisionPersona(composition));
+      printPersona(composition.keys, person.accountId);
+    }
     const mediaBindings = developmentMediaBindings(await kernelEnvironment(), composition.keys);
     const media = mediaBindings.LOCAL_MEDIA_TOKEN
       ? (await import('../../kernel/src/content/index.ts')).developmentMediaHandler(mediaBindings.LOCAL_MEDIA_TOKEN)
@@ -1650,8 +1672,10 @@ export async function runWalk(
   portsAvailable: typeof walkStackPortsAvailable = walkStackPortsAvailable,
 ): Promise<number> {
   const task = walkAcceptanceId(process.env);
-  if (!task)
-    throw new Error('walk stacks are for a worker whose brief lists acceptance.requires native or browser');
+  if (!task) throw new Error('walk stacks are for a worker whose brief lists acceptance.requires native or browser');
+  if (ordinaryAuthWalk() && !walkAcceptanceId(process.env, 'native'))
+    throw new Error('An ordinary Auth fixture requires native acceptance');
+  if (ordinaryAuthWalk() && importCatalogueWalk()) throw new Error('Select one fixture scope for the walk');
   if (command.length === 0)
     throw new Error('Usage: bun services/auth/scripts/dev-stack.ts walk [--import-catalogue] -- <command...>');
   const controller = new AbortController();
@@ -1716,7 +1740,7 @@ export async function runWalk(
       let stripe: { port: number; webhookSecret: string; stop(): void } | undefined;
       try {
         try {
-          if (!importCatalogueWalk()) {
+          if (developmentShowcaseWalk()) {
             const { startFakeStripe } = await import('../../kernel/test/commerce/support/fake-stripe.ts');
             stripe = startFakeStripe();
             Object.assign(env, walkCommerceProviderEnvironment(stripe.port, stripe.webhookSecret));

@@ -213,7 +213,7 @@ export function walkStackDirectory(_root: string, env: Environment): string {
  * A walk stack is admitted while the slot lock its launch took is held. The environment names the slot; the name
  * alone proves nothing.
  */
-function walkStackAdmitted(env: Environment, root: string): boolean {
+export function walkStackAdmitted(env: Environment, root: string): boolean {
   const slot = env.REZICS_WALK_STACK_SLOT;
   if (slot === undefined || !/^[1-9]\d*$/.test(slot) || !walkStackRequired(env)) return false;
   return busy(join(walkStackDirectory(root, env), `slot-${slot}.lock`));
