@@ -3,7 +3,7 @@ import type { Page } from 'playwright';
 import { knowledgeMediaSource, parseKnowledgeMediaSource } from '@rezics/definitions/knowledge-media';
 import { lanternFerryCoverPng } from './hosted-book-journey-fixture';
 import { expect } from 'playwright/test';
-import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
+import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest, settledWithin } from './lifecycle.ts';
 import {
   isKnowledgeJourneyId,
   knowledgeJourneyClick,
@@ -97,7 +97,39 @@ nativeTest(
     await expect(page).toHaveURL(new URL(fixture.createHref, fixture.stack.web).href);
     await expect(page.getByLabel(copy.notebookTitle, { exact: true })).toBeVisible();
     await fixture.fillTitle(page, copy.notebookTitle, text.notebook);
-    await knowledgeJourneyClick(page, copy.createNotebook);
+    try {
+      await knowledgeJourneyClick(page, copy.createNotebook);
+    } catch (error) {
+      const [form] = await Promise.all([
+        settledWithin(
+          page.getByLabel(copy.notebookTitle, { exact: true }).evaluate(
+            (element, title) => {
+              const field = element as HTMLInputElement;
+              return {
+                titleMatches: field.value === title,
+                titleDisabled: field.disabled,
+                submitDisabled: field.form?.querySelector<HTMLButtonElement>('button[type=submit]')?.disabled,
+                notices: [...document.querySelectorAll('[role=alert],[role=status]')]
+                  .slice(0, 6)
+                  .map((notice) => notice.textContent?.trim().slice(0, 180)),
+              };
+            },
+            text.notebook,
+            { timeout: 1_000 },
+          ),
+          1_200,
+        ).catch(() => undefined),
+        settledWithin(fixture.stack.refreshKernelRequests(), 1_200).catch(() => undefined),
+      ]);
+      const requests = fixture.stack.kernelRequests().flatMap((request) => {
+        const path = new URL(request.url).pathname;
+        return path.endsWith('/platform/exposure') || path.endsWith('/knowledge/notebooks')
+          ? [{ path, method: request.method, status: request.responseStatus, authenticated: !!request.authorization }]
+          : [];
+      });
+      console.info('Knowledge notebook admission', JSON.stringify({ form: form ?? null, requests: requests.slice(-8) }));
+      throw error;
+    }
     await fixture.waitStatus(page, copy.notebookAcknowledged);
     const sourceNotebookId = await fixture.labeledValue(page, copy.notebookId);
     expect(isKnowledgeJourneyId(sourceNotebookId)).toBe(true);
