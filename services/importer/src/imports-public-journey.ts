@@ -531,13 +531,34 @@ export async function retireWalkJournals(repository = root): Promise<void> {
   }
 }
 
+const SEED_PHASE_LINE =
+  /^Cross-media seed finalization state=(?:started|completed|failed) scope=(?:seed|publication|books)(?: phase=[a-z-]+)? remaining=[a-z,-]+$/;
+
+export async function captureSeedStderr(
+  stream: ReadableStream<Uint8Array>,
+  write: (line: string) => void = (line) => process.stderr.write(`${line}\n`),
+): Promise<string> {
+  let stderr = '';
+  let pending = '';
+  for await (const chunk of stream.pipeThrough(new TextDecoderStream())) {
+    stderr += chunk;
+    const lines = (pending + chunk).split('\n');
+    pending = lines.pop() ?? '';
+    for (const line of lines) {
+      if (SEED_PHASE_LINE.test(line)) write(line);
+    }
+  }
+  if (SEED_PHASE_LINE.test(pending)) write(pending);
+  return stderr;
+}
+
 async function command(name: string, args: string[], env: NodeJS.ProcessEnv = process.env) {
   await mkdir(evidenceRoot, { recursive: true, mode: 0o700 });
   // The admitted walk owns this child's process group and its existing end-to-end budget.
   const child = Bun.spawn(args, { cwd: root, env, stdout: 'pipe', stderr: 'pipe' });
   const [stdout, stderr, code] = await Promise.all([
     new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
+    captureSeedStderr(child.stderr),
     child.exited,
   ]);
   await writeFile(resolve(evidenceRoot, `${name}.log`), `${stdout}${stderr}`, { mode: 0o600 });
