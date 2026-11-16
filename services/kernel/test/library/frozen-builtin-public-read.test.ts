@@ -194,7 +194,6 @@ async function verifyFrozenPublication(redirect: boolean) {
         },
       );
     });
-    await f.client.triggerSchedule('library.canonicalSource.every-10-minutes');
     const frozen = await waitFor(
       'Selected output did not lose curator attribution',
       retained,

@@ -829,11 +829,12 @@ the obsolete output in 100-key pages only after it rereads the matching committe
 the newer source generation, and the absence of other retained references. The selected or frozen generation and
 the immutable disposition remain available.
 Once terminal retention selects a public built-in generation, the ordinary reader uses its exact retained
-publication and still-held seal. The Source sweep transfers the hold through Semantic's original applied
-disposition, with the same generation and seal. Terminal cleanup can detach the curator and original account
-publication row only when this is the sole remaining hold. The same sweep revisits the exact Collection after
-the transfer commits and resumes one terminal cleanup page at a time. A later sweep can also find that committed
-successor after interruption. Subsequent member reads revalidate the committed
+publication and still-held seal. Library account erasure advances the exact frozen output when cleanup encounters
+its hold. Semantic transfers the hold through its original applied disposition with the same generation and seal.
+Once the successor is committed, Semantic retires the exact private Collection Source registration and releases
+its hold through native custody. Each committed step returns the erasure workflow to the same Collection.
+Terminal cleanup detaches the curator and original account publication row once the required custody has cleared.
+The Source sweep can resume these steps after interruption. Subsequent member reads revalidate the committed
 successor, account-free retained generation and current identity scope. Other held or uncertain copies keep
 de-identification pending. The same sweep can capture a retained built-in output whose original capture was
 missing or unfinished at T. It reads only the immutable frozen set under its actual activation, and resumes

@@ -416,6 +416,26 @@ type Dependency = {
   directory_group: string | null;
 };
 
+type FrozenLibrarySource = {
+  route: number;
+  collectionId: string;
+  generation: string;
+  accountId: string;
+  incarnation: string;
+  ownerEpoch: number;
+  deadline: number;
+};
+
+function libraryScopeSourceKey(
+  identity: Pick<NativeSourceIdentity, 'route' | 'collectionId' | 'incarnation' | 'scope'>,
+  binding:
+    | { accountId: string }
+    | Pick<Extract<NativeSourceIdentity, { scope: 'public_output' }>, 'outputGeneration' | 'activation'>,
+): string {
+  const { route, collectionId, incarnation, scope } = identity;
+  return digest({ kind: 'library', route, collectionId, incarnation, scope, ...binding });
+}
+
 /** Incarnation identifies the Source; per-effect receiving hints never create a second Source registry. */
 export function identityScopeAddress(key: S.IdentityScopeKey): { partition: number; source: string; scope: string } {
   if (
@@ -448,14 +468,7 @@ export function identityScopeAddress(key: S.IdentityScopeKey): { partition: numb
     // CURRENT generation can change. The activation locator and resource incarnation cannot.
     return {
       partition: partitionOf(i.route),
-      source: digest({
-        kind: source.kind,
-        route: i.route,
-        collectionId: i.collectionId,
-        incarnation: i.incarnation,
-        scope: i.scope,
-        ...binding,
-      }),
+      source: libraryScopeSourceKey(i, binding),
       scope: key.scopeId,
     };
   }
@@ -1181,7 +1194,9 @@ async function releaseDirectory(
 export function createIdentityScopedObservations(
   pool: Pool,
   suppliedNativePublicOutput?: NativePublicOutputPort,
-): S.IdentityScopedObservations {
+): S.IdentityScopedObservations & {
+  advanceFrozenLibrarySourceRetirement(input: FrozenLibrarySource): Promise<boolean>;
+} {
   const nativePublicOutput = () => suppliedNativePublicOutput ?? requireLibraryDomain().nativePublicOutput!;
   async function advance(
     key: S.IdentityScopeKey,
@@ -1756,7 +1771,10 @@ export function createIdentityScopedObservations(
     return basis.status === 'current' && basis.complete;
   }
 
-  async function retireScope(input: S.IdentityScopeRetireInput): Promise<S.IdentityScopeRetireResult> {
+  async function retireScope(
+    input: S.IdentityScopeRetireInput,
+    onProgress?: () => void,
+  ): Promise<S.IdentityScopeRetireResult> {
     const measured = work();
     const budget = new NativeCollectionWork(input.allowance, input.deadline);
     const partition = identityScopeAddress(input.key).partition;
@@ -1805,11 +1823,12 @@ export function createIdentityScopedObservations(
           [...params(input.key), row.registration],
         )
       ).rows[0] as Dependency | undefined;
-      const value = { row, active, dependency };
+      const value = { row, active, dependency, changed };
       return changed ? { value, events: [retirementEvent(tx, input.key, row, 'retiring')] } : noEffect(value);
     });
     if (!snapshot.value) return fail('summary_missing', measured);
-    const { row, active, dependency } = snapshot.value;
+    const { row, active, dependency, changed } = snapshot.value;
+    if (changed) onProgress?.();
     if (row.state === 'retired') return { status: 'retired', work: measured };
     if (active) {
       const result = await finishScope({
@@ -1821,12 +1840,13 @@ export function createIdentityScopedObservations(
         deadline: input.deadline,
       });
       for (const axis of ['rows', 'points', 'statements', 'bytes'] as const) measured[axis] += result.work[axis];
+      if (result.status === 'finished') onProgress?.();
       return { status: 'pending', work: measured };
     }
     if (dependency) {
       const released = await releaseDirectory(pool, input.key, row, dependency, input.deadline, measured);
       if (!released) return { status: 'pending', work: measured };
-      await runCommand(pool, { partition, deadline: input.deadline }, async (tx) => {
+      const removedDependency = await runCommand(pool, { partition, deadline: input.deadline }, async (tx) => {
         const locked = await head(tx, input.key, measured, true);
         if (!locked || locked.registration !== row.registration || locked.state !== 'retiring') throw unavailable();
         const removed = await query(
@@ -1837,9 +1857,10 @@ export function createIdentityScopedObservations(
           [...params(input.key), row.registration, dependency.dependency],
         );
         return removed.rowCount
-          ? { value: null, events: [retirementEvent(tx, input.key, locked, 'dependency-removed')] }
-          : noEffect(null);
+          ? { value: true, events: [retirementEvent(tx, input.key, locked, 'dependency-removed')] }
+          : noEffect(false);
       });
+      if (removedDependency.value) onProgress?.();
       return { status: 'pending', work: measured };
     }
     return (
@@ -1896,6 +1917,67 @@ export function createIdentityScopedObservations(
   }
 
   return {
+    async advanceFrozenLibrarySourceRetirement(input) {
+      const { route, collectionId, generation, accountId, incarnation, ownerEpoch, deadline } = input;
+      const scopeId = 'collection-source';
+      const sourceKey = libraryScopeSourceKey(
+        { route, collectionId, incarnation, scope: 'private_builtin' },
+        { accountId },
+      );
+      const current = await withReadTransaction(
+        pool,
+        async (tx) =>
+          (
+            await tx.query<Pick<Head, 'source' | 'registration' | 'capture'>>(
+              `SELECT s.source,s.registration,s.capture
+           FROM semantic.identity_scope_summary s
+           JOIN library.collection c ON (c.route,c.collection_id,c.curator_account_id)=($4,$5,$6)
+           JOIN access.erasure e ON (e.route,e.account_id)=(c.route,c.curator_account_id)
+           JOIN library.native_source_capture n ON (n.route,n.capture_id)=($4,s.capture_id)
+            AND (n.collection_id,n.account_id,n.incarnation,n.owner_epoch)=($5,$6,$7,$8)
+            AND n.scope='private_builtin'
+           JOIN library.native_source_hold h ON (h.route,h.capture_id,h.hold_id)=(n.route,n.capture_id,s.registration)
+           WHERE (s.partition_no,s.source_key,s.scope_id)=($1,$2,$3)
+            AND s.state<>'retired' AND NOT h.released
+            AND library.may_deidentify_frozen_output($4,$5,$9)`,
+              [
+                partitionOf(route),
+                sourceKey,
+                scopeId,
+                route,
+                collectionId,
+                accountId,
+                incarnation,
+                ownerEpoch,
+                generation,
+              ],
+            )
+          ).rows[0],
+        deadline,
+      );
+      if (
+        !current ||
+        current.capture.kind !== 'library' ||
+        current.source.kind !== 'library' ||
+        current.source.identity.ownerEpoch !== ownerEpoch ||
+        identityScopeAddress({ source: current.source, scopeId }).source !== sourceKey
+      )
+        return false;
+      // Retirement resolves the same Source and registration again under its native lock.
+      let progressed = false;
+      const result = await retireScope(
+        {
+          key: { source: current.source, scopeId },
+          expectedRegistration: current.registration,
+          allowance: { ...current.capture.allowance, reservationId: randomUUID() },
+          deadline,
+        },
+        () => {
+          progressed = true;
+        },
+      );
+      return progressed || result.status === 'retired';
+    },
     async register(input) {
       const measured = work();
       if (input.capture.kind === 'public-output') {
