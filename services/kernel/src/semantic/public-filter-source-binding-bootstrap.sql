@@ -1,3 +1,4 @@
+/* semantic.native-keyed:2:2 */
 SELECT b.bootstrap::text, b.read_definition::text, b.consumer, b.snapshot_kind, b.owner_epoch,
   b.source_position::text, b.state, b.account_after, b.queried,
   b.publication_job::text, b.publication_observation, b.publication_execution,

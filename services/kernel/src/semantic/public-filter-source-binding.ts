@@ -11,7 +11,7 @@ import { runCommand, noEffect, currentCommand } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import { readRelease } from './definition-release-read.ts';
-import { nativeSourceQuery } from './native-source-query.ts';
+import { nativeSourceQuery } from '../database/native-source-query.ts';
 import { freeze } from './core/freeze.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { ProblemError } from '../http/problem-error.ts';
@@ -29,7 +29,7 @@ import { publicFilterCoverageKeys } from './public-filter-coverage-pending.ts';
 import { PUBLIC_FILTER_ACCOUNT_DOMAIN } from './public-filter-coverage-maintenance.ts';
 import {
   beginPublicFilterCoverageBaseline,
-  adoptPublicFilterCoverageBaseline,
+  adoptPublicFilterCoverageBaselinePage,
 } from './public-filter-coverage-baseline.ts';
 import {
   readPublicFilterCreationWindow,
@@ -56,6 +56,8 @@ import repairVersion from './public-filter-source-binding-repair-version.sql';
 import repairCurrent from './public-filter-source-binding-repair-current.sql';
 import type { Pool, QueryResult } from 'pg';
 import type { Access } from '../access/index.ts';
+import { planPublicFilterEnrollment } from './public-filter-preparation-budget.ts';
+import type { AccountDiscoveryEnrollment } from '../access/account-discovery-reduction.ts';
 import type { AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
 import type {
   DiscoveryConsumerCaptureInput,
@@ -597,6 +599,7 @@ export type NativePublicFilterPreparation =
   | Readonly<{
       status: 'preparing';
       bootstrap: PublicSourceBootstrap;
+      enrollmentAdvanced: boolean;
       cost: PublicFilterCost;
     }>;
 const nativePreparations = new WeakMap<
@@ -815,7 +818,7 @@ function measuredQueries<T>(cost: BindingCost, body: () => Promise<T>): Promise<
         // Authored native point queries declare their complete keyed relation
         // footprint. Reserve it before submission, including misses, CAS loss
         // and thrown attempts. A joined result is not another native row.
-        const native = /^\s*\/\* semantic\.native-keyed:(\d+):(\d+) \*\//.exec(text);
+        const native = /^\s*\/\* semantic\.native-keyed:(\d+):(\d+)(?::(\d+))? \*\//.exec(text);
         const writes = native !== null && /^\s*(?:\/\*[\s\S]*?\*\/\s*)*(?:INSERT|UPDATE|DELETE)\b/.test(text);
         cost.statements++;
         cost.inputKeys += native ? Number(native[2]) : parameters.length;
@@ -823,7 +826,7 @@ function measuredQueries<T>(cost: BindingCost, body: () => Promise<T>): Promise<
         if (native) {
           cost.rows += Number(native[1]);
           cost.dependencyPoints += Number(native[1]);
-          if (writes) cost.resultWrites++;
+          cost.resultWrites += native[3] === undefined ? Number(writes) : Number(native[3]);
         }
         const result = await dispatch();
         const { rowCount, rows } = result as QueryResult;
@@ -1005,9 +1008,7 @@ export function createNativePublicFilterSourceBinding(
     );
   }
   const repairHomeBatchLimit = 128;
-  const preparationHomeBatchLimit = 16;
   const preparationInputLimit = 1000;
-  const preparationHomeParameterEstimate = 96;
   async function scanSemanticHomes(
     state: RepairState,
     inputLimit: number,
@@ -2122,8 +2123,7 @@ export function createNativePublicFilterSourceBinding(
   async function beginRetained(
     request: Parameters<PublicFilterSourceBootstrapBinding['begin']>[0],
     context: PublicFilterConsumerContext,
-    retainedId?: string,
-    retainedDefinition?: PublicFilterSourceDefinition,
+    existing?: Awaited<ReturnType<typeof loadBootstrap>>,
     inputLimit = preparationInputLimit,
   ): Promise<NativePublicFilterPreparation> {
     const deadline = context.deadline;
@@ -2137,8 +2137,8 @@ export function createNativePublicFilterSourceBinding(
       return fail('binding_mismatch');
     }
     if (snapshot !== 'pit' && snapshot !== 'prepared') return fail('binding_mismatch');
-    const resolved = retainedDefinition
-      ? { status: 'resolved' as const, definition: retainedDefinition, cost: publicFilterBindingCost() }
+    const resolved = existing
+      ? { status: 'resolved' as const, definition: existing.definition, cost: publicFilterBindingCost() }
       : await binding.resolve({ source: request.source, meaning: request.meaning, capture }, { deadline });
     if (resolved.status !== 'resolved') return resolved;
     readers.set(resolved.definition.source.id, request.source);
@@ -2154,7 +2154,6 @@ export function createNativePublicFilterSourceBinding(
         consumer.meaningDigest !== resolved.definition.meaning.digest
       )
         throw new BindingError('binding_mismatch');
-      const existing = retainedId === undefined ? null : await loadBootstrap(retainedId, db, resolved.definition);
       if (
         existing &&
         (encode(existing.bootstrap.consumer) !== encode(consumer) ||
@@ -2175,7 +2174,8 @@ export function createNativePublicFilterSourceBinding(
             })
           )[0];
       if (!inserted) throw new BindingError('configuration_changed');
-      let cut = await loadBootstrap('0:' + inserted.bootstrap, db, resolved.definition);
+      const cut = existing ?? (await loadBootstrap('0:' + inserted.bootstrap, db, resolved.definition));
+      let keyPageAdvanced = false;
       if (cut.row.state === 'capturing') {
         const baseline = {
           bootstrap: inserted.bootstrap,
@@ -2184,63 +2184,65 @@ export function createNativePublicFilterSourceBinding(
           consumer: ports.search.encodeConsumer(consumer),
           accounts: 'representation' in capture,
         };
-        // The immutable definition and current Search registration are joined once
-        // per affordable batch. Each native owner receipt below remains its own
-        // transaction and is adopted before the Source cursor can pass that home.
         const keys = publicFilterCoverageKeys(resolved.definition.dependencyKeys);
-        // Keep enough room for Search's own capture and its independent replay
-        // reads. A broad compiler closure therefore gets a smaller home batch.
-        const homeInputEstimate = preparationHomeParameterEstimate + keys.length + Number('representation' in capture);
-        const remainingInputBudget = Math.min(preparationInputLimit, inputLimit) - cost.inputKeys;
-        const homeBatchLimit = Math.max(
-          0,
-          Math.min(preparationHomeBatchLimit, Math.floor(Math.max(0, remainingInputBudget) / homeInputEstimate)),
-        );
+        const compilerKeys = baseline.accounts ? [...keys, PUBLIC_FILTER_ACCOUNT_DOMAIN].sort() : keys;
+        if (cut.row.account_after !== cut.row.coverage_after) throw new BindingError('owner_unavailable');
         try {
-          await beginPublicFilterCoverageBaseline(db, baseline, deadline);
-          let accountAfter = cut.row.account_after;
-          let coverageAfter = cut.row.coverage_after;
-          for (let batch = 0; batch < homeBatchLimit; batch++) {
-            if (accountAfter >= 4096) break;
-            if (accountAfter !== coverageAfter) throw new BindingError('owner_unavailable');
-            // The new original enrollment retains both native heads. Their FK
-            // controls are separate from the earlier explicit owner-head reads.
-            cost.inputKeys += 2;
-            cost.dependencyPoints += 2;
-            cost.rows += 2;
-            const receipt = await ports.access.enrollAccountHome(
+          if (cut.row.coverage_generation === null) await beginPublicFilterCoverageBaseline(db, baseline, deadline);
+          const page = planPublicFilterEnrollment({
+            inputBudget: Math.min(preparationInputLimit, inputLimit) - cost.inputKeys,
+            keyCount: compilerKeys.length,
+            homesLeft: 4096 - cut.row.account_after,
+          });
+          const receipts: AccountDiscoveryEnrollment[] = [];
+          // Bound checkout concurrency within the production pool. Each Access
+          // commit still holds exactly its own native writer-home locks.
+          const enrollment = (partition: number) =>
+            ports.access.enrollAccountHome(
               db,
               {
-                partition: accountAfter,
+                partition,
                 bootstrap: inserted.bootstrap,
-                registration: registration.registration,
-                readDefinition: resolved.definition.readDefinition,
-                keys: 'representation' in capture ? [...keys, PUBLIC_FILTER_ACCOUNT_DOMAIN].sort() : keys,
-                accounts: 'representation' in capture,
+                registration: baseline.registration,
+                readDefinition: baseline.definition,
+                keys: compilerKeys,
+                accounts: baseline.accounts,
+                keyLimit: page.keyLimit,
               },
               { deadline },
             );
-            if (!receipt.complete)
-              return {
-                status: 'preparing' as const,
-                bootstrap: cut.bootstrap,
-                cost,
-              };
-            // Reserve the deferred original-baseline -> current-summary retention
-            // control before staging adoption; rollback cannot refund the attempt.
-            cost.inputKeys += 3;
-            cost.dependencyPoints++;
-            cost.rows++;
-            const adopted = await adoptPublicFilterCoverageBaseline(db, baseline, receipt, deadline);
-            const advanced = (
-              await nativeSourceQuery(db, accountPage, {
+          let failure: PromiseRejectedResult | undefined;
+          while (receipts.length < page.homes) {
+            const start = cut.row.account_after + receipts.length;
+            const count = Math.min(3, page.homes - receipts.length);
+            const batch = await Promise.allSettled(Array.from({ length: count }, (_, i) => enrollment(start + i)));
+            for (const result of batch) {
+              if (result.status === 'rejected') {
+                failure = result;
+                break;
+              }
+              if (!result.value.complete) {
+                keyPageAdvanced = true;
+                break;
+              }
+              receipts.push(result.value);
+            }
+            if (receipts.length !== start - cut.row.account_after + count) break;
+          }
+          await adoptPublicFilterCoverageBaselinePage(
+            db,
+            baseline,
+            receipts,
+            deadline,
+            async (client, adopted, receipt) => {
+              const advanced = await nativeSourceQuery(client, accountPage, {
                 bootstrap: inserted.bootstrap,
-                after_partition: accountAfter,
-                next_partition: accountAfter + 1,
+                after_partition: receipt.partition,
+                next_partition: adopted.after,
                 head_count: 1,
                 coverage_generation: String(adopted.generation),
                 coverage_root: adopted.root,
-                registration: registration.registration.id,
+                registration: baseline.registration.id,
                 heads: [
                   {
                     partition: receipt.partition,
@@ -2249,25 +2251,24 @@ export function createNativePublicFilterSourceBinding(
                     claim_revision: String(receipt.claimRevision),
                   },
                 ],
-              })
-            )[0];
-            if (!advanced) return { status: 'preparing' as const, bootstrap: cut.bootstrap, cost };
-            // Keep the two in-memory cursors paired with the committed CAS;
-            // the first cut row is intentionally not reloaded for every home.
-            accountAfter++;
-            coverageAfter++;
-          }
+              });
+              if (advanced.length !== 1)
+                throw new CommandUnavailableError('contention', baseline.registration.partition);
+            },
+          );
+          if (failure) throw failure.reason;
         } catch (error) {
-          // Access contention leaves the native enrollment transaction rolled
-          // back. The already committed prefix and exact next-home cursor remain
-          // durable, so Search can retry without substituting a new original cut.
           if (ports.access.classifyUnavailability(error) !== 'contention') throw error;
-          const retained = await loadBootstrap('0:' + inserted.bootstrap, db, resolved.definition);
-          return { status: 'preparing' as const, bootstrap: retained.bootstrap, cost };
         }
       }
       const begun = await loadBootstrap('0:' + inserted.bootstrap, db, resolved.definition);
-      if (begun.row.state === 'capturing') return { status: 'preparing' as const, bootstrap: begun.bootstrap, cost };
+      if (begun.row.state === 'capturing')
+        return {
+          status: 'preparing' as const,
+          bootstrap: begun.bootstrap,
+          enrollmentAdvanced: keyPageAdvanced || begun.row.account_after > cut.row.account_after,
+          cost,
+        };
       if (begun.row.state !== 'begun' || !begun.row.coverage_sealed || begun.row.coverage_after !== 4096)
         throw new BindingError('owner_unavailable');
       return { status: 'begun' as const, bootstrap: begun.bootstrap, cost };
@@ -3148,9 +3149,8 @@ export function createNativePublicFilterSourceBinding(
         snapshot: retained.cut.bootstrap.snapshot,
       },
       context,
-      input.bootstrap,
-      retained.cut.definition,
-      input.inputLimit,
+      retained.cut,
+      (input.inputLimit ?? preparationInputLimit) - retained.cost.inputKeys,
     );
     addCost(retained.cost, result.cost);
     if ('bootstrap' in result && result.bootstrap.id !== input.bootstrap)

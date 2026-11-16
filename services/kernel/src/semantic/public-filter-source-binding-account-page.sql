@@ -1,3 +1,4 @@
+/* semantic.native-keyed:7:7:2 */
 WITH input AS (SELECT :bootstrap::uuid AS bootstrap, :next_partition::integer AS next_partition,
   :coverage_generation::bigint AS generation, :coverage_root::text AS root,
   :registration::text AS registration),

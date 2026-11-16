@@ -14,14 +14,14 @@ const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as co
 const messagesRoot = resolve(import.meta.dir, '../../messages');
 const repositoryRoot = resolve(import.meta.dir, '../../../..');
 
-function gitHead(): string {
+// The check runner separately binds and verifies the source manifest of a Git-free transfer.
+function gitHead(): string | null {
   const result = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], {
     cwd: repositoryRoot,
     stdout: 'pipe',
     stderr: 'pipe',
   });
-  if (result.exitCode !== 0) throw new Error(result.stderr.toString());
-  return result.stdout.toString().trim();
+  return result.exitCode === 0 ? result.stdout.toString().trim() : null;
 }
 
 setDefaultTimeout(300_000);
@@ -133,7 +133,7 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
         headers: {
           authorization: alice.authorization,
           'content-type': 'application/json',
-          'idempotency-key': crypto.randomUUID(),
+          'idempotency-key': key(),
         },
         body: JSON.stringify({ title: collectionTitle, visibility: 'private' }),
       },
@@ -150,7 +150,7 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
         headers: {
           authorization: alice.authorization,
           'content-type': 'application/json',
-          'idempotency-key': crypto.randomUUID(),
+          'idempotency-key': key(),
         },
         body: JSON.stringify({ subjectId: subject.id }),
       },
@@ -167,7 +167,7 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
         headers: {
           authorization: alice.authorization,
           'content-type': 'application/json',
-          'idempotency-key': crypto.randomUUID(),
+          'idempotency-key': key(),
         },
         body: JSON.stringify({ subjectId: subject.id }),
       },
@@ -184,7 +184,7 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
         headers: {
           authorization: alice.authorization,
           'content-type': 'application/json',
-          'idempotency-key': crypto.randomUUID(),
+          'idempotency-key': key(),
         },
         body: JSON.stringify({ note: 'First archived note' }),
       },
@@ -201,7 +201,7 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
         headers: {
           authorization: alice.authorization,
           'content-type': 'application/json',
-          'idempotency-key': crypto.randomUUID(),
+          'idempotency-key': key(),
         },
         body: JSON.stringify({ note: 'Repeated occurrence' }),
       },
@@ -218,7 +218,7 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
         headers: {
           authorization: alice.authorization,
           'content-type': 'application/json',
-          'idempotency-key': crypto.randomUUID(),
+          'idempotency-key': key(),
         },
         body: JSON.stringify({ after: null }),
       },
@@ -235,7 +235,7 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
         headers: {
           authorization: alice.authorization,
           'content-type': 'application/json',
-          'idempotency-key': crypto.randomUUID(),
+          'idempotency-key': key(),
         },
         body: JSON.stringify({ name: `Archive label ${marker}` }),
       },
@@ -252,7 +252,7 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
         headers: {
           authorization: alice.authorization,
           'content-type': 'application/json',
-          'idempotency-key': crypto.randomUUID(),
+          'idempotency-key': key(),
         },
         body: JSON.stringify({ subjectId: subject.id }),
       },
@@ -269,7 +269,7 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
         headers: {
           authorization: alice.authorization,
           'content-type': 'application/json',
-          'idempotency-key': crypto.randomUUID(),
+          'idempotency-key': key(),
         },
         body: JSON.stringify({ subjectId: subject.id, mode: 'scalar_amount', unit: 'page', total: '12' }),
       },

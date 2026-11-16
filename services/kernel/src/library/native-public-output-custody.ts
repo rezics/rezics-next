@@ -398,7 +398,7 @@ async function lockNativePublicCollectionOutput(
   return frame(context, async (work) => {
     validateIdentity(identity);
     command(tx, context, partitionOf(identity.route));
-    const client = nativePublicOutputClient(tx, work, context.deadline);
+    const client = nativePublicOutputClient(tx, work, context.deadline, context.pool);
     const current = await owner(client, identity.route, identity.collectionId);
     if (!current || current.epoch !== identity.ownerEpoch || current.incarnation !== identity.incarnation)
       return refusal(work, 'changed');
@@ -436,7 +436,7 @@ async function bindAndHoldNativePublicCollectionOutput(
     )
       throw new TypeError('Invalid public output binding selection');
     const current = command(tx, context, partitionOf(ref.route));
-    const client = nativePublicOutputClient(tx, work, context.deadline);
+    const client = nativePublicOutputClient(tx, work, context.deadline, context.pool);
     if (selection.frozen && (current.basis !== null || selection.captureId !== ref.generation))
       return refusal(work);
     const frozen = selection.frozen ? await frozenOrigin(client, ref, true) : null;
@@ -577,7 +577,7 @@ async function revalidateNativePublicCollectionOutputHold(
     const selected = decodeBinding(json(binding));
     const id = selected.tuple.identity;
     command(tx, context, partitionOf(id.route));
-    const client = nativePublicOutputClient(tx, work, context.deadline);
+    const client = nativePublicOutputClient(tx, work, context.deadline, context.pool);
     const original = await owner(client, id.route, id.collectionId);
     if (!original || original.epoch !== id.ownerEpoch || original.incarnation !== id.incarnation)
       return refusal(work, 'changed');
@@ -603,7 +603,7 @@ async function lockNativeFrozenCollectionOutput(
     const id = selected.tuple.identity;
     const current = command(tx, context, partitionOf(id.route));
     if (current.basis !== null) return refusal(work);
-    const client = nativePublicOutputClient(tx, work, context.deadline);
+    const client = nativePublicOutputClient(tx, work, context.deadline, context.pool);
     const key = [current.partition, selected.captureId];
     if (hold === 'successor') {
       const stored = await load(client, selected.accepted.partition, selected.captureId, false);
@@ -682,7 +682,7 @@ async function transition(
     )
       throw new TypeError('Invalid public output disposition selection');
     const current = command(tx, context, selection.disposition.partition);
-    const client = nativePublicOutputClient(tx, work, context.deadline);
+    const client = nativePublicOutputClient(tx, work, context.deadline, context.pool);
     // Locate first, then lock the original owner BEFORE locking or consuming custody.
     const located = await load(client, current.partition, selection.captureId, false);
     if (!located) return refusal(work);

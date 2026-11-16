@@ -39,6 +39,10 @@ export type PublicPreparationOptions = {
   runtime: DefaultPublicFilterRuntime;
 };
 
+// Bound how many independently metered native enrollment turns can share one
+// maintenance delivery and its original deadline.
+const enrollmentTurnsPerDelivery = 4;
+
 const databaseLifetimeOptions = {
   deadlineError: () => new SearchUnavailableError('Public preparation database deadline expired'),
   isUncertainSettledQueryError: () => true,
@@ -128,9 +132,12 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     record: PreparationRecord,
     state: PopulationFrontier,
     context: PublicFilterConsumerContext,
-  ) {
-    const advance = (locator: PreparationLocator | null, delayMs = 0) =>
-      store.advance(record, locator, delayMs, context.deadline);
+    mayContinue: boolean,
+  ): Promise<string | undefined> {
+    const advance = async (locator: PreparationLocator | null, delayMs = 0) => {
+      await store.advance(record, locator, delayMs, context.deadline);
+      return undefined;
+    };
     const search = searchWithin(context.deadline);
     const index = subjectIndexName(options.prefix, state.generation);
     const calendarFormat = await readSubjectCalendarMappingFormat(search, options.prefix, state.generation);
@@ -209,11 +216,16 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     if (activated.status === 'unavailable') reportUnavailable('activate', state.generation, activated);
     else unavailable.delete('activate');
     if (activated.status === 'activated') return advance(null);
-    if (activated.status === 'preparing')
-      return advance(
-        { ...state, phase: activated.next === 'activate' ? 'activate' : 'native' },
-        activated.advanced ? 0 : 1000,
-      );
+    if (activated.status === 'preparing') {
+      const next = { ...state, phase: activated.next === 'activate' ? ('activate' as const) : ('native' as const) };
+      const ready =
+        mayContinue &&
+        activated.advanced === true &&
+        activated.enrollmentAdvanced === true &&
+        next.phase === 'activate';
+      const revision = await store.advance(record, next, activated.advanced ? 0 : 1000, context.deadline, ready);
+      return ready ? (revision ?? undefined) : undefined;
+    }
     // An unready activation can have durably restarted reconciliation. The subsequent step
     // will resolve its native phase, including a retained fence or ambiguous alias intent.
     return advance({ ...state, phase: 'native' }, 1000);
@@ -268,26 +280,35 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     run(id: string, revision: string, deadline = deadlineFor(30_000)): Promise<void> {
       const context = { deadline: Math.min(deadline, deadlineFor(30_000), Date.now() + 30_000) };
       return track(context.deadline, async () => {
-        if (paused || stopped) return;
-        const record = await store.claim(id, revision, context.deadline);
-        if (!record) return;
-        if (Number(record.expires_at) <= Date.now()) return store.advance(record, null, 0, context.deadline);
-        try {
-          if (record.locator.kind === 'population') await population(record, record.locator, context);
-          else {
-            const outcome = await options.runtime.repair(record.locator.job, context);
-            // 'settled' releases scheduling only. It never activates a generation or certifies output.
-            await store.advance(
-              record,
-              outcome.status === 'settled' ? null : record.locator,
-              outcome.status === 'progress' ? 0 : 1000,
-              context.deadline,
-            );
+        for (let turn = 1; turn <= enrollmentTurnsPerDelivery && !paused && !stopped; turn++) {
+          const record = await store.claim(id, revision, context.deadline);
+          if (!record) return;
+          if (Number(record.expires_at) <= Date.now()) {
+            await store.advance(record, null, 0, context.deadline);
+            return;
           }
-          failures.delete(record.locator.kind);
-        } catch (error) {
-          reportFailure(record.locator.kind, error);
-          throw error;
+          try {
+            if (record.locator.kind === 'population') {
+              const next = await population(record, record.locator, context, turn < enrollmentTurnsPerDelivery);
+              failures.delete(record.locator.kind);
+              if (next === undefined) return;
+              revision = next;
+            } else {
+              const outcome = await options.runtime.repair(record.locator.job, context);
+              // 'settled' releases scheduling only. It never activates a generation or certifies output.
+              await store.advance(
+                record,
+                outcome.status === 'settled' ? null : record.locator,
+                outcome.status === 'progress' ? 0 : 1000,
+                context.deadline,
+              );
+              failures.delete(record.locator.kind);
+              return;
+            }
+          } catch (error) {
+            reportFailure(record.locator.kind, error);
+            throw error;
+          }
         }
       });
     },

@@ -22,6 +22,7 @@ import type { Access, AccessContext, AccessClient, AccountActor } from '../../re
 import { deadlineFor } from '../../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../route/route.ts';
 import { stageHistoryWork } from '../../work/history-enqueue.ts';
+import { COLLECTION_PUBLICATION_REQUESTED } from '../events.ts';
 import { initializeCanonicalCollectionSource } from '../canonical-source-store.ts';
 import { nativeSourceFence } from '../native-source-fence.ts';
 import { prepareBuiltinMaterialization } from '../builtin-materialization.ts';
@@ -242,7 +243,7 @@ export function createNativeCollectionPublicationEpisodes(
             tx,
             partitionOf(route),
             { accountRoute: route, accountId: actor.accountId },
-            1,
+            2,
           );
           const prior = (
             await tx.query<{ sourceId: string; publicationId: string }>(
@@ -347,7 +348,7 @@ export function createNativeCollectionPublicationEpisodes(
             tx,
             COLLECTION_PUBLICATION_COMMAND,
             { accountRoute: route, accountId: actor.accountId },
-            1,
+            2,
           );
           const collection = creation ? await creation.materialize(tx) : undefined;
           if (materialization) {
@@ -525,6 +526,11 @@ export function createNativeCollectionPublicationEpisodes(
                 type: 'com.rezics.library.collection.updated.v1',
                 subject: input.collectionId,
                 data: { collectionId: input.collectionId },
+              },
+              {
+                type: COLLECTION_PUBLICATION_REQUESTED,
+                subject: input.collectionId,
+                data: { collectionId: input.collectionId, publicationId: locator.publicationId },
               },
             ],
           };

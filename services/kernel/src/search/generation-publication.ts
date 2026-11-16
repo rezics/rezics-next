@@ -92,6 +92,7 @@ export type SearchGenerationPublication = Readonly<{
         cost: SearchPublicFilterCost;
         next?: 'step' | 'activate';
         advanced?: boolean;
+        enrollmentAdvanced?: boolean;
       }
     | PublicFilterConsumerUnavailable
   >;
@@ -494,7 +495,11 @@ export function createSearchGenerationPublication(
       if (!job.observation) job.observation = completion.publication.queried.snapshot.observation;
       await save(client, job, meter);
     }
-    return { complete: completion.status === 'complete', advanced: completion.advanced === true };
+    return {
+      complete: completion.status === 'complete',
+      advanced: completion.advanced === true,
+      enrollmentAdvanced: completion.enrollmentAdvanced === true,
+    };
   }
 
   function jobPin(job: Job): GenerationPublicationPin | null {
@@ -1402,11 +1407,12 @@ export function createSearchGenerationPublication(
     activate(input, context) {
       return run(context, (meter) =>
         locked(input, context, meter, async (job, client) => {
-          const preparing = (next: 'activate' | 'step', advanced = false) => ({
+          const preparing = (next: 'activate' | 'step', advanced = false, enrollmentAdvanced = false) => ({
             status: 'preparing' as const,
             job: reference(job),
             next,
             advanced,
+            ...(enrollmentAdvanced ? { enrollmentAdvanced } : {}),
             cost: meter,
           });
           if (job.phase === 'active') {
@@ -1420,7 +1426,8 @@ export function createSearchGenerationPublication(
           guardAvailable();
           if (!job.fence) {
             const sourceCompletion = await completeSource(job, client, context, meter);
-            if (!sourceCompletion.complete) return preparing('activate', sourceCompletion.advanced);
+            if (!sourceCompletion.complete)
+              return preparing('activate', sourceCompletion.advanced, sourceCompletion.enrollmentAdvanced);
             await installFence(job, client, context, meter);
           }
           try {

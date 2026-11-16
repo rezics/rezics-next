@@ -1,32 +1,36 @@
 # Baseline enrollment receiving
 
-Baseline receiving snapshots its binding and enrollment before the first checkout; owner verification and receiver adoption use that same tuple.
-
 `beginPublicFilterCoverageBaseline` pins the original registration generation before native home enrollment.
-`adoptPublicFilterCoverageBaseline` first verifies the exact committed native enrollment and creation checkpoint,
-releases that checkout, then adopts its immutable receipt under the registration lock. The two transactions do
-not overlap. A caller changing its objects while either checkout is pending cannot change the registration,
-bootstrap, definition, native home, epoch, positions, account revisions or receipt used by the receiver.
+Each Access enrollment commits under its own writer-home locks and retains the compiler-key frontier, creation pin
+and complete original receipt. The receiver verifies the exact committed receipt, active home epoch and creation
+checkpoint for each home in a bounded page. It releases that read checkout before locking the Search registration.
+Only the verified contiguous prefix is eligible for adoption.
 
-Only fixed, own data fields on plain objects are accepted. Nested registration data is copied separately;
-accessors, proxies, coercible positions and out-of-domain scalars refuse before checkout. The snapshot does not
-enumerate extra caller keys. Readonly TypeScript annotations alone do not establish this lifetime guarantee.
-The creation-checkpoint name uses a dependency-free shared helper, retaining the Accounts export and exact
-encoding. Baseline and creation-window imports no longer initialize unrelated command or HTTP workflows.
+The registration transaction retains the original predecessor and root per home. Each receiver advance and its
+Source cursor CAS now commit together. An interrupted page can replay its committed Access receipts. A receiver that
+was one home ahead before this change reuses its original root. Neither interruption nor an empty home grants a
+repair ACK, changes the covered cut or allows the Source to seal early.
 
-The receipt digest identifies an enrollment; the existing owner row and checkpoint checks establish committed
-provenance. Enrollment still leaves coverage behind. It grants neither a repair ACK nor ready population,
-including an empty home. Existing replay checks, predecessor chaining, registration locking, epoch invalidation
-and transaction rollback retain their meaning. The immutable preparation cut is not renewed by adoption.
+Binding and receipt fields are copied before checkout. They must be own data fields on plain objects. Accessors,
+proxies, coercible positions and out-of-domain scalars are refused before native work. The database proof and receiver
+use the same snapshot.
 
-## Cost and verification
+## Preparation cost
 
-Snapshotting adds no SQL, native key, checkout, lock, root, seek or owner round. It reads seven fixed fields for
-generation pinning and seventeen for adoption, including the nested registration. Immutable strings and bigint
-scalars are retained by value; arbitrary caller objects are not retained. This bounded validation does not
-provide funding, increase an allowance or establish the complete Source phase quote. Existing database work,
-controls, failure, rollback and cleanup still belong in the original all-axis declaration.
+Each home reserves 15 Access inputs, three committed-receipt inputs, nine coverage adoption inputs and seven
+Source cursor inputs. Each compiler key adds two inputs for its enrollment edge and foreign-key check. The page
+reserves five shared inputs for the registration owner, registration and preparation rows and the final Source
+reread. Initial authorization, pinning and other fixed reads are charged before planning. Wide closures continue
+the native key frontier and admit at most 450 keys per home per turn, or fewer when the remaining budget requires it.
 
-The focused transaction-boundary tests cover mutation between owner commit and receiver checkout, mutation
-before the initial checkout, retained behind state, non-overlapping checkout disposal and rejection without
-executing caller accessors or coercions. They do not replace native population, atomicity or funding acceptance.
+With four keys, the default Subject home costs 42 inputs. With the 872-input maximum Search offer and five shared
+inputs, at most 20 homes fit, so 4,096 homes need at least 205 enrollment turns. With 64 inputs already charged,
+19 homes fit and 216 turns suffice under that fixed offer. The ordinary cold path drops from 30 SQL statements per
+home to 18 per home and 10 shared statements per page, excluding fixed turn work. At most three independent Access
+checkouts can run concurrently, each holding only its own home.
+
+A default Search preparation delivery may claim up to four exact ready revisions when Source reports durable
+enrollment progress. Every revision keeps its separate Search meter and shares the delivery's existing deadline.
+At 216 turns this allows 54 deliveries with uninterrupted inline claims. The existing due scan discovers a ready
+revision if inline continuation is interrupted, and the ordinary enqueue path owns the final revision of each
+burst. Materialization, repair and writer fencing still receive their own scheduling and evidence.

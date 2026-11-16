@@ -1,5 +1,7 @@
 import { Type } from 'typebox';
 
+export const COLLECTION_PUBLICATION_REQUESTED = 'com.rezics.library.collection.publication-requested.v1';
+
 const id = Type.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 
 /** Closed library events. Private updates identify the changed item without exposing its state. Collection events carry the collection id; a member fact also carries its member and subject ids. */
@@ -84,6 +86,10 @@ export const LIBRARY_EVENTS = {
   'com.rezics.library.published_log.purged.v1': Type.Object({ logId: id }, { additionalProperties: false }),
   'com.rezics.library.published_log.deleted.v1': Type.Object({ logId: id }, { additionalProperties: false }),
   'com.rezics.library.collection.updated.v1': Type.Object({ collectionId: id }, { additionalProperties: false }),
+  [COLLECTION_PUBLICATION_REQUESTED]: Type.Object(
+    { collectionId: id, publicationId: id },
+    { additionalProperties: false },
+  ),
   'com.rezics.library.collection.deleted.v1': Type.Object({ collectionId: id }, { additionalProperties: false }),
   'com.rezics.library.collection.output.reclaimed.v1': Type.Object(
     { collectionId: id, generation: id, removed: Type.Integer({ minimum: 1, maximum: 100 }) },
