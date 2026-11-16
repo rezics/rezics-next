@@ -182,6 +182,12 @@ test.each([
   { label: 'keeps an outstanding original writer pending', intent: 'merge', resumed: false, mode: 'uncertain' },
   { label: 'reconciles Access for both visible merge roots', intent: 'merge', resumed: false, mode: 'visible' },
   {
+    label: 'reconciles visible merge roots in separate homes',
+    intent: 'merge',
+    resumed: false,
+    mode: 'visible-cross-home',
+  },
+  {
     label: 'reindexes and retires a visible canonical unmerge original',
     intent: 'unmerge',
     resumed: false,
@@ -232,25 +238,30 @@ test.each([
   { label: 'refuses an unproved empty directory', intent: 'merge', resumed: false, mode: 'empty' },
   { label: 'refuses replacement of the checkpoint during sealing', intent: 'merge', resumed: true, mode: 'changed' },
 ])('installed Search directory $label', async ({ intent, resumed, mode }) => {
-  const [previous, first, second] = Array.from({ length: 3 }, () => newId(writerHome << 4)).sort() as [
+  const [previous, first, localTerminal] = Array.from({ length: 3 }, () => newId(writerHome << 4)).sort() as [
     string,
     string,
     string,
   ];
+  const crossHome = mode === 'visible-cross-home';
+  const terminalHome = crossHome ? otherControlHome : writerHome;
+  const second = crossHome ? newId(terminalHome << 4) : localTerminal;
   const jobId = newId(jobHome << 4);
   const job = { jobId, epoch: 1n };
   const savedJob = { jobId, epoch: '1' };
   const creditedCreator = mode === 'canonical-credit';
-  const nativePermission = mode === 'canonical-terms' || mode === 'visible';
-  const bothVisible = mode === 'visible';
+  const bothVisible = mode === 'visible' || crossHome;
+  const nativePermission = mode === 'canonical-terms' || bothVisible;
   let permissionTimes = 0;
   let permissionFormulas = 0;
   let permissionBatches = 0;
+  let visibilityFloorReads = 0;
+  let terminalBuildCurrent = true;
   const actorId = creditedCreator || nativePermission ? newId(jobHome << 4) : null;
   const adoptedRelation = mode === 'canonical-relation' || creditedCreator;
   const canonicalTerms = mode === 'canonical-terms' || mode === 'canonical-merge' || adoptedRelation;
   const priorVisible = mode === 'handoff' || mode === 'canonical-terms';
-  const visible = canonicalTerms || ['visible', 'changed-proof', 'retire', 'superseded'].includes(mode);
+  const visible = canonicalTerms || bothVisible || ['changed-proof', 'retire', 'superseded'].includes(mode);
   const languageDigest = createHash('sha256').update('en').digest('hex');
   const termSlots = [
     {
@@ -391,6 +402,7 @@ test.each([
   const projectionHeadCursors: string[] = [];
   let retainedBuild: string | undefined;
   let retainedOriginalBuild: string | undefined;
+  const projectionDependencyHomes = new Map<string, number[]>();
   let readBuilds = 0;
   const forbidden = () => {
     throw new Error('Unexpected Access or Pool call');
@@ -634,17 +646,17 @@ test.each([
         const at = new Date().toISOString();
         rows = typeof input !== 'string' && input.rowMode === 'array' ? [[at, at]] : [{ at, databaseAt: at }];
       } else if (nativePermission && sql === subjectEligibility.sql) {
-        expect(values[0]).toBe(writerHome << 4);
+        expect(values[0]).toBe((values[1] === first ? writerHome : terminalHome) << 4);
         expect([first, second]).toContain(values[1]);
         rows = [{ visibility: values[1] === second || bothVisible ? 'visible' : 'hidden', security_revision: '1' }];
       } else if (nativePermission && sql === relatedVisibility.sql) {
         expect(bothVisible).toBe(true);
-        expect(String(values[2])).toContain(first);
-        expect(String(values[2])).toContain(second);
-        rows = [
-          [first, 'visible'],
-          [second, 'visible'],
-        ];
+        visibilityFloorReads++;
+        const ids = [first, second].filter((id) => String(values[2]).includes(id));
+        const home = Number(values[0]);
+        expect(ids).toEqual([first, second].filter((id) => (id === first ? writerHome : terminalHome) === home));
+        expect(ids.length).toBeGreaterThan(0);
+        rows = ids.map((id) => [id, 'visible']);
       } else if (nativePermission && sql === permissionFormula['~standard'].query.text) {
         permissionFormulas++;
         const ids = String(values[permissionFormula.params.indexOf('resource_ids')]);
@@ -780,18 +792,20 @@ test.each([
               }));
       else if (sql === verifyCompletedPublicFilterProjectionSql) {
         const original = values[2] === first && bothVisible;
+        const home = original ? writerHome : terminalHome;
+        const build = original ? retainedOriginalBuild : retainedBuild;
         expect(values).toEqual([
-          writerHome,
-          writerHome << 4,
+          home,
+          home << 4,
           original ? first : second,
-          original ? retainedOriginalBuild : retainedBuild,
+          build,
           newGeneration,
           1,
           bundledDigest,
           second,
-          dependencyHomes.at(-1),
+          (crossHome ? projectionDependencyHomes.get(build!) : dependencyHomes)?.at(-1),
         ]);
-        rows = mode === 'changed-proof' || !canonicalBuildCurrent ? [] : [{}];
+        rows = mode === 'changed-proof' || !canonicalBuildCurrent || (!original && !terminalBuildCurrent) ? [] : [{}];
       } else if (canonicalTerms && sql === readIdentitySearchIndexTermSlotSql) {
         const prior = committed.findLast((step) => step.frontier.after[2] === 'terms')?.frontier.after[6] ?? null;
         expect(values).toEqual([writerHome << 4, second, prior]);
@@ -926,7 +940,7 @@ test.each([
           ];
         else if (bothVisible && String(values[2]).includes(first))
           rows = [[String(writerHome << 4), first, subjectType, 'visible', '1', bundledDigest, second, 't', '1']];
-        else rows = [[String(writerHome << 4), second, subjectType, 'visible', '1', bundledDigest, null, 't', '1']];
+        else rows = [[String(terminalHome << 4), second, subjectType, 'visible', '1', bundledDigest, null, 't', '1']];
       } else if (visible && sql === projectionPrivacy.sql) rows = [['0']];
       else if (visible && sql === projectionPage.sql) {
         rows =
@@ -967,27 +981,33 @@ test.each([
         rows = [{}];
       } else if (visible && sql === projectionStart.sql) {
         const build = String(values[4]);
-        if (bothVisible && values[projectionStart.params.indexOf('subject_id')] === first)
-          retainedOriginalBuild = build;
+        const original = bothVisible && values[projectionStart.params.indexOf('subject_id')] === first;
+        if (original) retainedOriginalBuild = build;
         else retainedBuild = build;
-        rows = [[build, newGeneration, String(writerHome << 4)]];
+        rows = [[build, newGeneration, String((original ? writerHome : terminalHome) << 4)]];
       } else if (visible && sql === projectionBuild.sql) {
         readBuilds++;
-        const build =
-          bothVisible && values[projectionBuild.params.indexOf('subject_id')] === first
-            ? retainedOriginalBuild
-            : retainedBuild;
+        const original = bothVisible && values[projectionBuild.params.indexOf('subject_id')] === first;
+        const build = original ? retainedOriginalBuild : retainedBuild;
+        const route = String((original ? writerHome : terminalHome) << 4);
         rows =
           mode === 'superseded' && readBuilds === 3
             ? []
-            : [[build, newGeneration, String(writerHome << 4), '1', '0', '0', second, '1', '1', bundledDigest]];
+            : [[build, newGeneration, route, '1', '0', '0', second, '1', '1', bundledDigest]];
       } else if (visible && sql === projectionHeads.sql) {
         const heads = JSON.parse(String(values[projectionHeads.params.indexOf('heads')])) as { partition_no: number }[];
+        if (crossHome) {
+          const build = String(values[projectionHeads.params.indexOf('build_id')]);
+          const saved = projectionDependencyHomes.get(build) ?? [];
+          const homes = [...saved, ...heads.map(({ partition_no }) => partition_no)];
+          projectionDependencyHomes.set(build, [...new Set(homes)].sort((a, b) => a - b));
+        }
         rows = heads.map(({ partition_no }) => [String(partition_no)]);
       } else if (visible && sql === projectionHeadPage.sql) {
         expect(values[2]).toBe('1');
         projectionHeadCursors.push(String(values[1]));
-        const next = dependencyHomes.find((home) => Number(values[1]) < home);
+        const homes = crossHome ? projectionDependencyHomes.get(String(values[0]))! : dependencyHomes;
+        const next = homes.find((home) => Number(values[1]) < home);
         rows = next ? [[String(next), '1', '0']] : [];
       } else if (visible && sql === projectionCurrentHead.sql) rows = [['0', '1', 'active']];
       else if (sql === readSearchIdentityHomePendingSql) {
@@ -1587,8 +1607,8 @@ test.each([
               _shards: { total: 1, successful: 1, failed: 0 },
               _seq_no: 1,
               _primary_term: 1,
-              status: canonicalTerms ? 201 : mode === 'visible' ? 404 : 200,
-              result: canonicalTerms ? 'created' : mode === 'visible' ? 'not_found' : 'deleted',
+              status: canonicalTerms ? 201 : bothVisible ? 404 : 200,
+              result: canonicalTerms ? 'created' : bothVisible ? 'not_found' : 'deleted',
             },
           },
         ],
@@ -1625,6 +1645,7 @@ test.each([
     'existing',
     'fenced',
     'visible',
+    'visible-cross-home',
     'canonical-terms',
     'canonical-merge',
     'canonical-relation',
@@ -1781,6 +1802,7 @@ test.each([
         if (bothVisible) {
           expect(committed[3]?.frontier.after.slice(2, 4)).toEqual(['original', 'progress']);
           await nextSupport(['original', 'progress', retainedOriginalBuild, newGeneration]);
+          if (crossHome) await nextSupport(['original', 'progress', retainedOriginalBuild, newGeneration]);
           await nextSupport(['original', 'complete', retainedOriginalBuild, newGeneration]);
         }
         if (mode === 'retire') {
@@ -1790,7 +1812,9 @@ test.each([
         }
         if (visible) {
           await nextSupport(['terminal', 'progress']);
-          expect(projectionHeadCursors).toEqual(bothVisible ? ['-1', String(writerHome)] : []);
+          const originalCursors = bothVisible ? ['-1', String(writerHome)] : [];
+          if (crossHome) originalCursors.push(String(terminalHome));
+          expect(projectionHeadCursors).toEqual(originalCursors);
           await nextSupport(['terminal', 'progress', retainedBuild, newGeneration]);
           if (mode === 'superseded') {
             await nextSupport(['terminal', 'restart']);
@@ -1799,16 +1823,14 @@ test.each([
             return;
           }
           await nextSupport(['terminal', 'complete', retainedBuild, newGeneration]);
-          expect(projectionHeadCursors).toEqual(
-            bothVisible ? ['-1', String(writerHome), '-1', String(writerHome)] : ['-1', String(writerHome)],
-          );
+          expect(projectionHeadCursors).toEqual([...originalCursors, '-1', String(terminalHome)]);
         } else if (intent === 'merge') await nextSupport(['terminal', 'withheld']);
         if (!bothVisible) expect(committed[3]?.frontier.after.slice(2)).toEqual(['original', 'withheld']);
         expect(projectedSubjects).toEqual(
           intent === 'unmerge'
             ? [second]
             : [
-                ...Array(bothVisible ? 3 : 1).fill(first),
+                ...Array(bothVisible ? 3 + Number(crossHome) : 1).fill(first),
                 ...Array(mode === 'retire' ? 5 : visible ? 3 : 1).fill(second),
               ],
         );
@@ -1844,7 +1866,7 @@ test.each([
       expect(engineReads).toBe(2);
       expect(normalizationCalls).toBe(Number(canonicalTerms));
       expect(committed.map((step) => step.engineRequests)).toEqual([0, 1, ...Array(committed.length - 2).fill(0)]);
-      if (canonicalTerms || ['dispatch', 'lost', 'handoff', 'visible', 'changed-proof'].includes(mode)) {
+      if (canonicalTerms || bothVisible || ['dispatch', 'lost', 'handoff', 'changed-proof'].includes(mode)) {
         accepting = true;
         const acceptance = await withIdentitySourceConsumerMaintenance(
           { pool, env: {} },
@@ -1863,13 +1885,15 @@ test.each([
           frontier: acceptance.frontier,
         };
         dispatchRequestPosition = String(acceptance.receipt.native.position);
-        if (mode === 'changed-proof') {
+        if (mode === 'changed-proof' || crossHome) {
+          terminalBuildCurrent = false;
           await expect(prepare(pool, acceptance.receipt)).rejects.toThrow('Native Search resolvePlanned: changed');
           expect(commonPlan).toBeUndefined();
           expect(hold).toBeUndefined();
           expect(engineReads).toBe(2);
           expect(bulkCalls).toBe(0);
-          return;
+          if (!crossHome) return;
+          terminalBuildCurrent = true;
         }
         expect(await prepare(pool, acceptance.receipt)).toEqual({
           state: 'progress',
@@ -2061,7 +2085,10 @@ test.each([
           if (nativePermission) {
             expect(permissionTimes).toBeGreaterThan(0);
             expect(permissionFormulas).toBeGreaterThan(0);
-            if (bothVisible) expect(permissionBatches).toBeGreaterThan(0);
+            if (bothVisible) {
+              expect(permissionBatches).toBeGreaterThan(0);
+              expect(visibilityFloorReads).toBe(0);
+            }
           }
           expect(engineReads).toBe(expectedAllocationReads);
         }

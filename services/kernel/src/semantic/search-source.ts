@@ -450,13 +450,39 @@ export async function prepareRetainedIdentitySourceProjections(
   return async (tx) => {
     const visibleIds: string[] = [];
     const owners = new Map<number, Partition>();
+    for (const { id, route, frontier } of checks) {
+      const partition = partitionOf(route);
+      let owner = owners.get(partition);
+      if (!owner) {
+        const current = await readPartition(tx, partition);
+        if (!current || current.writeState !== 'active') return null;
+        owner = current;
+        owners.set(partition, owner);
+      }
+      if (!frontier) continue;
+      if (
+        !(await verifyCompletedPublicFilterProjectionInSnapshot(
+          tx,
+          config.routeKey,
+          id,
+          input.terminal,
+          input.release,
+          owner.epoch,
+          frontier,
+        ))
+      )
+        return null;
+      visibleIds.push(id);
+    }
     let at: Awaited<ReturnType<typeof mintReadTime>> | undefined;
     let decisions: Awaited<ReturnType<NonNullable<typeof batch>['decide']>> | null = null;
     if (batch) {
-      const publicSubjects = new Map<string, boolean>();
-      const homes = new Set(checks.map(({ route }) => partitionOf(route)));
+      // The completed builds prove the current public visibility floor on this same snapshot.
+      const publicSubjects = new Map(visibleIds.map((id) => [id, true]));
+      const unproven = checks.filter(({ frontier }) => !frontier);
+      const homes = new Set(unproven.map(({ route }) => partitionOf(route)));
       for (const partition of homes) {
-        const members = checks.filter(({ route }) => partitionOf(route) === partition);
+        const members = unproven.filter(({ route }) => partitionOf(route) === partition);
         const states = (await nativeSourceQuery(tx, readRelatedStates, {
           partition_no: partition,
           routes: members.map(({ route }) => route),
@@ -482,14 +508,6 @@ export async function prepareRetainedIdentitySourceProjections(
       );
     }
     for (const check of checks) {
-      const partition = partitionOf(check.route);
-      let owner = owners.get(partition);
-      if (!owner) {
-        const current = await readPartition(tx, partition);
-        if (!current || current.writeState !== 'active') return null;
-        owner = current;
-        owners.set(partition, owner);
-      }
       let visible = decisions?.[check.id]?.allowed === true;
       if (check.authorize) {
         const state = await nativeSourceQuery(tx, readVisibility, { route: check.route, subject_id: check.id });
@@ -500,20 +518,6 @@ export async function prepareRetainedIdentitySourceProjections(
         }
       }
       if (visible !== Boolean(check.frontier)) return null;
-      if (!check.frontier) continue;
-      if (
-        !(await verifyCompletedPublicFilterProjectionInSnapshot(
-          tx,
-          config.routeKey,
-          check.id,
-          input.terminal,
-          input.release,
-          owner.epoch,
-          check.frontier,
-        ))
-      )
-        return null;
-      visibleIds.push(check.id);
     }
     if (visibleIds.length) {
       const mappings = await readIdentitySupportMappingsInSnapshot(tx, visibleIds, input.job);
