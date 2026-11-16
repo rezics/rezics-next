@@ -10,6 +10,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 
@@ -75,6 +76,7 @@ async function problem(response: Response, status: number) {
 beforeAll(async () => {
   database = await openGrowthDatabase();
   database.pool.options.max = 1;
+  expect((await installIdentityEpochBootstrap(database.pool)).mode).toBe('absence');
   await bootstrapRelease(database.pool, bundledRelease);
   const signing = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'rating-vote-http', alg: 'ES256' };

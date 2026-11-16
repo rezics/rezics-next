@@ -1,4 +1,5 @@
 import type { CommandEvent, CommandTransaction } from '../command/command.ts';
+import { nativeSourceQuery } from '../database/native-source-query.ts';
 import { GLOBAL_CONTEXT_RESOURCE as GLOBAL_CONTEXT } from '../semantic/contract/global-context.ts';
 import type { IdentityRepairPage } from './identity-work-frame.ts';
 import { identityRoute } from './identity-work-frame.ts';
@@ -16,7 +17,7 @@ export async function applyRatingIdentityPage(
   mappings: readonly RatingIdentityMapping[],
 ): Promise<CommandEvent[]> {
   const route = identityRoute(page.voterId);
-  const realms = await readCapped.run(tx, { route, voter_id: page.voterId });
+  const realms = await nativeSourceQuery(tx, readCapped, { route, voter_id: page.voterId });
   const events: CommandEvent[] = [];
   const destinations = new Map(mappings.map((mapping) => [mapping.originalId, mapping.terminalId]));
   const populations = (vote: { questionId: string; targetId: string }) => [
