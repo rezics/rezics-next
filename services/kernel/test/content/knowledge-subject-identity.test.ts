@@ -11,6 +11,7 @@ import { readIdentityEpochCutover } from '../../src/semantic/identity-epoch-boot
 import { identityJobPartition, type IdentityIntent } from '../../src/semantic/identity-epoch-contract.ts';
 import { identityEpochWorkflowId } from '../../src/semantic/core/identity-epoch-sequence.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { IDENTITY_EPOCH_ADMITTED } from '../../src/semantic/events.ts';
 import { createSubjectIndex } from '../../src/search/indices.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { readSearchConfig } from '../../src/search/work.ts';
@@ -198,12 +199,29 @@ test('private Knowledge attachments stay on their originals through published me
           const observed = await withBoundedReadConnection(pool, Date.now() + 3_000, (client) =>
             client.query(
               `WITH job_homes AS MATERIALIZED (
-                 SELECT resource_home,prepared_transaction_id IS NOT NULL AS prepared,
-                   acquired_transaction_id IS NOT NULL AS acquired
-                 FROM semantic.identity_epoch_admission_plan
-                 WHERE partition_no=$1 AND job_id=$2 ORDER BY resource_home LIMIT 2
+                 SELECT p.resource_home,p.prepared_transaction_id IS NOT NULL AS prepared,
+                   p.acquired_transaction_id IS NOT NULL AS acquired,
+                   r.transaction_id IS NOT NULL AS receiving_prepared
+                 FROM semantic.identity_epoch_admission_plan p
+                 LEFT JOIN semantic.identity_epoch_admission_receipt r
+                   ON (r.partition_no,r.job_id)=(p.resource_home,p.job_id)
+                   AND r.job_epoch=$5 AND r.stage='prepared'
+                 WHERE p.partition_no=$1 AND p.job_id=$2 ORDER BY p.resource_home LIMIT 2
                )
                SELECT j.state,j.prearm_phase,
+               (SELECT jsonb_build_object('epoch',c.epoch,'position',c.position::text,'event',e.type,
+                   'checkpoint_epoch',ck.epoch,'checkpoint_position',ck.position::text,
+                   'delivery',d.state,'effect',s.status)
+                FROM semantic.identity_epoch_native_commit c
+                LEFT JOIN core.outbox e ON (e.partition_no,e.epoch,e.position)=(c.partition_no,c.epoch,c.position)
+                  AND e.type=$4
+                LEFT JOIN core.consumer_checkpoint ck ON ck.partition_no=c.partition_no AND ck.consumer='effects'
+                LEFT JOIN core.history_event_consumer d
+                  ON (d.partition_no,d.position,d.event_seq)=(e.partition_no,e.position,e.event_seq)
+                  AND d.consumer='identity_epoch_admission'
+                LEFT JOIN dbos.workflow_status s ON s.workflow_uuid=d.workflow_id
+                WHERE (c.partition_no,c.transaction_id)=(j.partition_no,j.recorded_transaction_id)
+                  AND c.purpose='admission' ORDER BY e.event_seq LIMIT 1) AS admission_dispatch,
                (SELECT jsonb_agg(h ORDER BY h.resource_home) FROM job_homes h) AS homes,
                (SELECT jsonb_agg(r ORDER BY r.resource_home,r.revision,r.phase) FROM (
                  SELECT h.resource_home,p.revision::text AS revision,p.state,
@@ -259,7 +277,7 @@ test('private Knowledge attachments stay on their originals through published me
                  LEFT JOIN dbos.workflow_status s USING (workflow_uuid)
                ) w) AS coordinator
                FROM semantic.identity_epoch_job j WHERE j.partition_no=$1 AND j.job_id=$2`,
-              [identityJobPartition(job), job.jobId, workflows],
+              [identityJobPartition(job), job.jobId, workflows, IDENTITY_EPOCH_ADMITTED, locator.epoch],
             ),
           ).then(
             ({ rows }) => rows[0] ?? null,
