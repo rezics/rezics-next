@@ -43,12 +43,7 @@ export async function postPublicationFixture() {
   let author = system.actors.author;
   async function rotateAuthorSessions() {
     const previous = author;
-    await system.nativeAuth.internal.revokeSessions(previous.actor.accountId);
-    author = await system.auth.issue({
-      accountId: previous.actor.accountId,
-      clientId: system.auth.ordinaryClient.id,
-      scopes: system.auth.ordinaryScopes,
-    });
+    author = await system.rotateAuthorSession(previous);
     return { previous, current: author };
   }
   async function call(

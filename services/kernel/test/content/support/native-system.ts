@@ -34,6 +34,7 @@ type NativeCloseObserver = (phase: string, state: 'starting' | 'completed' | 'fa
 
 export type NativeContentSystem = Omit<ContentSystem, 'actors' | 'auth' | 'close'> & {
   close(observe?: NativeCloseObserver): Promise<void>;
+  rotateAuthorSession(previous: ContentCredential): Promise<ContentCredential>;
   readonly actors: Omit<ContentActors, 'worker' | 'otherWorker'>;
   readonly auth: Omit<ContentSystem['auth'], 'websiteClient'>;
   /** The full fixture registers its website client on this same real Auth service. */
@@ -122,7 +123,9 @@ async function createNativeContentSystemWithOptions(
   };
   const admin = new Pool({ connectionString: connection('postgres') });
   const authAdmin = new Pool({ connectionString: connection('postgres') });
-  const pool = new Pool({ connectionString: connection(appName) });
+  // Keep the bounded application pool under fixture shutdown custody. Idle
+  // eviction has left an ended pg client registered and prevented the drain.
+  const pool = new Pool({ connectionString: connection(appName), idleTimeoutMillis: 0 });
   configureTestReceiptKeys(pool);
   let closeAuthPool: (() => Promise<void>) | undefined;
   let appCreated = false;
@@ -416,7 +419,7 @@ async function createNativeContentSystemWithOptions(
         .setJti(randomBytes(24).toString('base64url'))
         .sign(websiteKeyPair.privateKey);
     };
-    const websiteTokenRequest = async (fields: Record<string, string>) => {
+    const websiteRequest = async (path: '/token' | '/revoke', fields: Record<string, string>) => {
       const form = new URLSearchParams({
         client_id: WEBSITE_CLIENT_ID,
         client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
@@ -424,18 +427,15 @@ async function createNativeContentSystemWithOptions(
         resource: audience,
         ...fields,
       });
-      const response = await nativeAuth.handler(
-        new Request(`${issuer}/token`, {
+      return nativeAuth.handler(
+        new Request(`${issuer}${path}`, {
           method: 'POST',
           headers: { 'content-type': 'application/x-www-form-urlencoded' },
           body: form.toString(),
         }),
       );
-      if (!response.ok)
-        throw new Error(`Website Auth token request denied (${response.status}): ${await response.text()}`);
-      return (await response.json()) as { access_token: string; refresh_token: string };
     };
-    const issueWebsite = async (input: { email: string; password: string; scopes: readonly string[] }) => {
+    const issueWebsiteTokens = async (input: { email: string; password: string; scopes: readonly string[] }) => {
       const requested = [...new Set(input.scopes)].sort();
       if (requested.some((scope) => !websiteScopes.includes(scope)))
         throw new TypeError('Website OAuth scopes must be registered protocol scopes or mounted kernel actions');
@@ -477,13 +477,14 @@ async function createNativeContentSystemWithOptions(
         throw new Error('Website Auth returned an invalid authorization redirect');
       const code = location.searchParams.get('code');
       if (!code) throw new Error('Website Auth did not return an authorization code');
-      const tokens = await websiteTokenRequest({
+      const tokens = await websiteRequest('/token', {
         grant_type: 'authorization_code',
         code,
         redirect_uri: websiteCallback,
         code_verifier: verifier,
       });
-      return credential(new Response(JSON.stringify({ access_token: tokens.access_token }), { status: 200 }));
+      if (!tokens.ok) throw new Error(`Website Auth token request denied (${tokens.status})`);
+      return (await tokens.json()) as { access_token: string; refresh_token: string };
     };
     const password = 'ordinary native registration password';
     const issue = async (input: Parameters<NativeContentSystem['auth']['issue']>[0]): Promise<ContentCredential> => {
@@ -618,11 +619,12 @@ async function createNativeContentSystemWithOptions(
           .map((value) => value.split(';')[0])
           .join('; ');
         const token = await credential(await requestAuth('/token', {}, cookie));
-        const website = await issueWebsite({
+        const tokens = await issueWebsiteTokens({
           email,
           password: personPassword,
           scopes: ['media:create', 'media:complete', 'media:read_reservation', 'media:erase', 'realm:participate'],
         });
+        const website = await credential(Response.json(tokens));
         return { accountId, bearer: token.bearer, websiteBearer: website.bearer };
       },
     };
@@ -642,6 +644,27 @@ async function createNativeContentSystemWithOptions(
         refresh: async ({ refreshToken }) => credential(await requestAuth('/token', {}, refreshToken)),
       },
       nativeAuth,
+      async rotateAuthorSession(previous) {
+        const tokens = await issueWebsiteTokens({ email: 'author@content.test', password, scopes: [] });
+        const website = await credential(Response.json(tokens));
+        if (
+          website.actor.accountId !== previous.actor.accountId ||
+          website.actor.authnEpoch !== previous.actor.authnEpoch
+        )
+          throw new Error('Website Auth did not issue a session at the current author epoch');
+        // The issuer advances the shared Access floor while keeping ordinary
+        // sign-in available. Account-wide revocation intentionally fences it.
+        const revoked = await websiteRequest('/revoke', {
+          token: tokens.refresh_token,
+          token_type_hint: 'refresh_token',
+        });
+        if (!revoked.ok) throw new Error(`Website Auth refresh revocation denied (${revoked.status})`);
+        return issue({
+          accountId: previous.actor.accountId,
+          clientId: ordinaryClient.id,
+          scopes: registeredOrdinaryScopes,
+        });
+      },
       access,
       createFreshAccess,
       createKernelForPool,
