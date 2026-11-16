@@ -840,9 +840,11 @@ statement in its own partition, and refuses every grant if either account is ban
 The Realm, carried Realm ID, boards, threads, posts and publications are hidden
 even while removal is pending or an independent read grant remains. Public reads still
 answer exactly as for an anonymous reader. A read identity denial would also veto public
-eligibility, so protected reads consult the ban record instead. Join and add-member acceptance and membership
-publication refuse a currently banned target without writing an operation, membership,
-grant or follow. After unban, join and add-member work again.
+eligibility, so protected reads consult the ban record instead. Self-join checks Realm visibility first and returns
+`404 not_found` for a concealed protected Realm. A banned self-join on a readable public Realm and an authorized
+owner's add of a banned target return `403 forbidden`. Join and add-member acceptance and membership publication
+refuse a currently banned target without writing an operation, membership, grant or follow. After unban, the Realm's
+ordinary admission rules apply.
 An existing member is removed by Accounts' native leave workflow: publish closes the
 Realm interval before release clears the account's inverse slot. The workflow is keyed
 by the ban. Its operation commits the moderator as initiator (see Durable initiators

@@ -256,7 +256,11 @@ test.serial(
       await hidden(c);
 
       const beforeJoin = await footprint();
-      expect((await call('POST', `${realmPath(c.realm)}/membership`, fixture.member)).status).toBe(403);
+      const concealedJoin = await json<{ code: string }>(
+        await call('POST', `${realmPath(c.realm)}/membership`, fixture.member),
+        404,
+      );
+      expect(concealedJoin.code).toBe('not_found');
       expect(await footprint()).toEqual(beforeJoin);
 
       const beforeAdd = await footprint();
