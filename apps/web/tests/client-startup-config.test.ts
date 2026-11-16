@@ -1,6 +1,15 @@
 import { expect, test } from 'bun:test';
 import { resolve } from 'node:path';
 
+const routeSplitOptions = {
+  routesDirectory: 'src/routes',
+  generatedRouteTree: 'src/routeTree.gen.ts',
+  target: 'react',
+  codeSplittingOptions: {
+    defaultBehavior: [['loader'], ['component'], ['pendingComponent'], ['errorComponent'], ['notFoundComponent']],
+  },
+};
+
 test('installed serve composition bounds client dependency optimization without crawling the server entry', () => {
   // Resolve under Node, like the installed Vite CLI. The unmerged app configuration cannot reveal entries added
   // by TanStack and Cloudflare's environment hooks. No network listener or native service is started here.
@@ -118,20 +127,7 @@ test('installed serve composition bounds client dependency optimization without 
           await clientServer?.close();
           await rm(cacheRoot, { recursive: true, force: true });
         }
-        const routeSplitOptions = {
-          routesDirectory: 'src/routes',
-          generatedRouteTree: 'src/routeTree.gen.ts',
-          target: 'react',
-          codeSplittingOptions: {
-            defaultBehavior: [
-              ['loader'],
-              ['component'],
-              ['pendingComponent'],
-              ['errorComponent'],
-              ['notFoundComponent'],
-            ],
-          },
-        };
+        const routeSplitOptions = ${JSON.stringify(routeSplitOptions)};
         const routes = await createServer({
           configFile: false, logLevel: 'silent',
           plugins: [
@@ -149,7 +145,7 @@ test('installed serve composition bounds client dependency optimization without 
             ['editions/new', '/content-editions/edition-create-route'],
             ['editions/index', '/content-editions/creator-editions-route'],
             ['editions/$id', '/content-editions/edition-route'],
-            ['studio', '/src/studio/index.ts'],
+            ['studio', '/routes/-studio-state.tsx'],
             ['contexts/$id', '/features/catalogue/editorial-context-route.tsx'],
             ['contexts/new', '/features/catalogue/editorial-context-route.tsx'],
             ['moderation/workbench', '/moderation/workbench-queue/route-page.tsx'],
@@ -235,3 +231,43 @@ test('installed serve composition bounds client dependency optimization without 
   });
   expect(result.exitCode, result.stdout.toString() + result.stderr.toString()).toBe(0);
 }, 60_000);
+
+test('the served Studio component defers the signed-in workspace import', () => {
+  const result = Bun.spawnSync({
+    cmd: [
+      'node',
+      '--input-type=module',
+      '-e',
+      `
+        import assert from 'node:assert/strict';
+        import { createServer } from 'vite';
+        import { tanStackRouterCodeSplitter, tanstackRouterGenerator } from '@tanstack/router-plugin/vite';
+        const routeSplitOptions = ${JSON.stringify(routeSplitOptions)};
+        const routes = await createServer({
+          configFile: false, logLevel: 'silent',
+          plugins: [
+            tanstackRouterGenerator(routeSplitOptions),
+            tanStackRouterCodeSplitter(routeSplitOptions),
+          ],
+          server: { middlewareMode: true, watch: null, hmr: false },
+          optimizeDeps: { noDiscovery: true, include: [] },
+        });
+        try {
+          const studioComponent = await routes.environments.client.transformRequest('/src/routes/studio.tsx?tsr-split=component');
+          assert.match(studioComponent.code, /import\\([^)]*-studio-visit\\.tsx/, 'Studio loads its workspace dynamically');
+          assert.ok(studioComponent.code.includes('/session/query.ts'), 'Studio retains the shared browser session');
+          assert.ok(!studioComponent.code.includes('/studio/index.ts'), 'Studio hydration stays independent of the editor');
+          const studioVisit = await routes.environments.client.transformRequest('/src/routes/-studio-visit.tsx');
+          assert.ok(studioVisit.code.includes('/studio/index.ts'), 'The signed-in workspace retains the Studio editor');
+        } finally {
+          await routes.close();
+        }
+      `,
+    ],
+    cwd: resolve(import.meta.dir, '..'),
+    stdout: 'pipe',
+    stderr: 'pipe',
+    timeout: 25_000,
+  });
+  expect(result.exitCode, result.stdout.toString() + result.stderr.toString()).toBe(0);
+}, 30_000);
