@@ -517,7 +517,10 @@ async function readIdentityMappingsInSnapshot(
         write_state: owner.writeState,
       });
   }
-  if (missing.length) nativeOwners.push(...(await client.query<IdentityOwnerEvidence>(owners.sql, [missing])).rows);
+  if (missing.length) {
+    const { rows } = await client.query(owners.sql, [missing]);
+    nativeOwners.push(...(rows as IdentityOwnerEvidence[]));
+  }
   const locators = controlLocatorsOf(controlRows);
   const pendingRows = locators.length
     ? (await client.query(pending.sql, [locators.map((key) => key.partition), locators.map((key) => key.group)]))

@@ -10,7 +10,7 @@ type RootCheck = Readonly<{
 }>;
 
 // The support bridge alone installs this scope. Its projection check runs on the native Source snapshot.
-const jobs = new AsyncLocalStorage<Readonly<{ job: IdentityJobRef; root?: RootCheck }>>();
+const jobs = new AsyncLocalStorage<Readonly<{ job: IdentityJobRef; root: RootCheck | undefined }>>();
 export function withIdentitySourceSupportJob<T>(job: IdentityJobRef, read: () => T, root?: RootCheck): T {
   return jobs.run(Object.freeze({ job: Object.freeze({ ...job }), root }), read);
 }

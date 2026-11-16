@@ -321,7 +321,7 @@ const routeOf = (id: string): number => Number.parseInt(id.slice(24, 28), 16);
  * `at` leaves `databaseAt` unset; preparation then fails closed.
  */
 async function readPermissionTime(
-  client: Parameters<typeof timeRead.run>[0],
+  client: AccessClient,
   clock?: () => Date,
   work?: AccessWorkAccounting,
 ): Promise<{ at: string; databaseAt: string | undefined; observedAt: number } | undefined> {

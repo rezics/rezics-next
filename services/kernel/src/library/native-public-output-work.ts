@@ -1,5 +1,6 @@
 import { memoizedValue } from '../memoized.ts';
 import type { Pool, PoolClient, QueryConfig, QueryResult } from 'pg';
+import type { NativeReadQueryConfig } from '../database/bounded-read-lifetime.ts';
 import type { WorkDimensions } from './contract/work-dimensions.ts';
 import { NativeCollectionWork, instrumentNativeCollectionWork } from './collection-native-work.ts';
 import {
@@ -88,7 +89,8 @@ export function nativePublicOutputClient(
         throw new TypeError('Unknown public output statement');
       }
       const query = async () => {
-        const result = await tx.query({ text: sql, values, query_timeout: Math.max(1, deadline - Date.now()) });
+        const request: NativeReadQueryConfig = { text: sql, values, query_timeout: Math.max(1, deadline - Date.now()) };
+        const result = await tx.query(request);
         admitResult(entry, result);
         return result;
       };
