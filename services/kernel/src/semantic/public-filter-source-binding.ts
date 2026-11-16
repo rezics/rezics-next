@@ -1179,30 +1179,33 @@ export function createNativePublicFilterSourceBinding(
       );
       return { ...state, epoch: window.epoch, phase: 'bridge', bridge: window };
     }
+    const window = state.bridge;
+    if (state.phase !== 'bridge' || !window || state.epoch !== window.epoch) throw new BindingError('binding_mismatch');
+    // A verified window batch retains its range start in the successor. Only
+    // the first advance may still have that cursor instead of the open home.
+    const home = window.partition;
     if (
-      state.phase !== 'bridge' ||
-      !state.bridge ||
-      state.partition !== state.bridge.partition ||
-      state.epoch !== state.bridge.epoch
+      state.partition !== home &&
+      (state.partition > home ||
+        home - state.partition >= repairHomeBatchLimit ||
+        window.position !== window.base + 1n ||
+        window.position > window.through ||
+        window.sequence !== 0)
     )
       throw new BindingError('binding_mismatch');
     // An exhausted interval still revalidates all three binding rows. A live
     // event additionally reads its exact outbox point; neither is a packed-row
     // exemption from native control/point accounting.
-    const extraRows = state.bridge.position > state.bridge.through ? 2 : 3;
+    const extraRows = window.position > window.through ? 2 : 3;
     cost.rows += extraRows;
     cost.dependencyPoints += extraRows;
     cost.inputKeys++;
-    const result = await readPublicFilterCreationEvent(
-      db,
-      { bootstrap: nativeId(bootstrap), window: state.bridge },
-      context,
-    );
+    const result = await readPublicFilterCreationEvent(db, { bootstrap: nativeId(bootstrap), window }, context);
     if (result.event === null) {
       const { bridge: _bridge, ...rest } = state;
       return {
         ...rest,
-        partition: state.partition + 1,
+        partition: home + 1,
         epoch: null,
         phase: 'window',
       };
@@ -1216,10 +1219,9 @@ export function createNativePublicFilterSourceBinding(
         'com.rezics.access.account-tombstoned.v1',
         'com.rezics.access.account-discovery-changed.v1',
       ].includes(event.type);
-    if (!subject && !account) return { ...state, bridge: result.next };
+    if (!subject && !account) return { ...state, partition: home, bridge: result.next };
     const route = event.subject === null ? null : routeOf(event.subject);
-    if (route === null || (subject && partitionOf(route) !== state.partition))
-      throw new BindingError('binding_mismatch');
+    if (route === null || (subject && partitionOf(route) !== home)) throw new BindingError('binding_mismatch');
     // The event home and the Account home may differ (claim delivery). Resolve
     // the owner on the next bounded step; no foreign home is joined here.
     const { bridge: _bridge, ...rest } = state;

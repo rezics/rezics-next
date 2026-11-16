@@ -82,7 +82,9 @@ closure. It may return preparing without advancing a home when none fits. Every 
 and cursor-advanced independently; contention resumes the original bootstrap without treating a home as empty.
 Retained preparation retries reuse the immutable definition already loaded from the retained cut and keep cursor
 reads bounded per call rather than multiplying them for every home. The first raw subject, Account or outbox event
-still becomes ordinary repair owner work, and terminal proof remains separate.
+still becomes ordinary repair owner work, and terminal proof remains separate. When a batch finds an open
+window after a closed prefix, its first event resumes at the captured window home. The retained batch start
+stays part of the verified predecessor, and the next scan starts after the drained home.
 
 Decision: native identity mapping resumes from its admitted original selector. Each accepted mapping row carries the
 transaction ID of its actual native mapping commit. Receiving keeps one persisted page cursor, and terminal custody is

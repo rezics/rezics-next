@@ -1,3 +1,4 @@
+import { runCommand } from '../../src/command/command.ts';
 import { newId } from '../../src/route/route.ts';
 import { checkGrowth, seed } from '../support/growth.ts';
 import { publicationJob } from './support/public-filter-binding.ts';
@@ -674,7 +675,7 @@ test('Native public Source repair step and complete original cut are durably rev
   }
 }, 300000);
 
-test('native Source retains and replays a durable empty repair-step locator list', async () => {
+test('native Source replays an empty repair step and drains a later home in the same window batch', async () => {
   const { createPublicFilterCustody } = await import('../../src/search/public-filter-custody.ts');
   const { createOpenSearch } = await import('../../src/search/opensearch.ts');
   const { publicFilterSource } = await nativeProducer();
@@ -788,6 +789,34 @@ test('native Source retains and replays a durable empty repair-step locator list
       step: page.frontier,
       receipts: [],
     });
+    // An ordinary command opens home six while the earlier homes remain empty.
+    const openHome = 6;
+    await runCommand(
+      f.db.pool,
+      { partition: openHome, deadline: readContext().deadline, clock: f.config.clock },
+      async () => ({ value: null, events: [{ type: 'com.rezics.fixture.created.v1', data: null }] }),
+    );
+    let frontier = page.frontier;
+    for (let turn = 0; turn < 80; turn++) {
+      const next = await recovered.repairPage({ ...request, frontier }, readContext());
+      if (next.status !== 'progress' && next.status !== 'complete')
+        throw new Error(`Original Source continuation ${turn}: ${next.reason}`);
+      const verified = await recovered.readRepairStep({ ...read, predecessor: frontier }, readContext());
+      expect(verified).toMatchObject({
+        status: 'verified',
+        frontier: next.frontier,
+        complete: next.status === 'complete',
+      });
+      frontier = next.frontier;
+      if (next.status === 'complete') break;
+    }
+    expect(frontier).toBeNull();
+    const closed = await f.db.pool.query<{ verified_home: number }>(
+      `SELECT verified_home FROM semantic.public_filter_repair_step
+       WHERE (partition_no,bootstrap,execution)=(0,$1,$2) AND verified_home=$3 AND verified_root IS NOT NULL`,
+      [request.bootstrap.slice(2), execution, openHome],
+    );
+    expect(closed.rows).toEqual([{ verified_home: openHome }]);
   } finally {
     await custody.close();
     if (created) await search.request('DELETE', `/${index}`);
