@@ -5845,31 +5845,30 @@ writeFileSync(stateFile, JSON.stringify(state));
         .trim()
         .split('\n')
         .map((line) => JSON.parse(line)),
-    execute: (script: string, env: Record<string, string> = {}, input = '') =>
-      spawnSync(
-        'sh',
-        [
-          '-c',
-          script
-            .replaceAll('/srv/rezics-check', directory)
-            .replaceAll('/sys/fs/cgroup', `${directory}/cgroup`)
-            .replaceAll(':/usr/local/bin:', ':'),
-        ],
-        {
-          cwd: repository,
-          env: {
-            ...process.env,
-            ...env,
-            SYSTEMD_MODE: systemdMode,
-            REMOTE_CHECK_PINNED_BUN_PATH: join(pinnedBunDirectory, 'bun'),
-            PATH: `${bin}:${process.env.PATH}`,
-            RUN_FIXTURE: directory,
-          },
-          input,
-          encoding: 'utf8',
-          timeout: 10_000,
+    execute: (script: string, env: Record<string, string> = {}, input = '') => {
+      const scriptPath = join(directory, 'run.sh');
+      writeFileSync(
+        scriptPath,
+        script
+          .replaceAll('/srv/rezics-check', directory)
+          .replaceAll('/sys/fs/cgroup', `${directory}/cgroup`)
+          .replaceAll(':/usr/local/bin:', ':'),
+      );
+      return spawnSync('sh', [scriptPath], {
+        cwd: repository,
+        env: {
+          ...process.env,
+          ...env,
+          SYSTEMD_MODE: systemdMode,
+          REMOTE_CHECK_PINNED_BUN_PATH: join(pinnedBunDirectory, 'bun'),
+          PATH: `${bin}:${process.env.PATH}`,
+          RUN_FIXTURE: directory,
         },
-      ),
+        input,
+        encoding: 'utf8',
+        timeout: 10_000,
+      });
+    },
   };
 }
 
@@ -6205,7 +6204,7 @@ test('a host memoryPerRunGiB override is the run MemoryMax', () => {
   expect(script).toContain('-p MemorySwapMax=0');
 });
 
-test('a run killed for memory reports the limit and the test file that was running', () => {
+test('a run killed for memory reports the configured limit and the running test file', () => {
   const fixture = runFixture();
   const script = runScript(
     'oom-run',
@@ -6220,10 +6219,21 @@ test('a run killed for memory reports the limit and the test file that was runni
     ],
     'a',
     hostRuntime(),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    [],
+    undefined,
+    undefined,
+    8,
   );
   const result = fixture.execute(script);
-  expect(result.status, result.stderr).toBe(137);
-  expect(result.stderr).toContain('check exceeded its memory limit (6 GiB)');
+  expect(result.status, result.error?.message ?? result.stderr).toBe(137);
+  expect(result.stderr).toContain('check exceeded its memory limit (8 GiB)');
   expect(result.stderr).toContain('services/kernel/test/library/continue-http.test.ts');
   expect(result.stderr).not.toContain('infrastructure failure');
 });

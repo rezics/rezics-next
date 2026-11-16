@@ -5812,6 +5812,7 @@ exec systemd-run --scope --quiet --collect $expand_environment $slice_properties
   return `# REMOTE_CHECK_RUN_LIFETIME_MS ${lifetimeMs}
 mkdir -p ${quote(wrapperDirectory)} || exit 70
 printf '%s' ${quote(Buffer.from(dependencyPreparationProgram).toString('base64'))} | base64 -d > ${quote(`${wrapperDirectory}/prepare.py`)} || exit 70
+export REZICS_CHECK_MEMORY_PER_RUN_GIB=${quote(String(memoryPerRunGiB))}
 exec python3 ${quote(`${wrapperDirectory}/prepare.py`)} lifetime ${lifetimeMs} ${quote(hostName)} ${quote(id)} ${quote(directory)} ${quote(identity)} ${preparationTimeoutMs} ${quote(priorityClass)} 3<<'${delimiter}'
 ${script}
 ${delimiter}`;
