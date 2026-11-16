@@ -311,8 +311,8 @@ async function protectedSpaceRequestCount(page: Page, realm: NativeRealmFixture,
   await stack.kernel('/v1/definitions/active');
   const first = stack.kernelRequests().length;
   expect(await open(page, `/spaces/${realm.address}`)).toBe(200);
-  await page.getByRole('heading', { level: 1, name: realm.spaceTitle }).waitFor({ state: 'visible' });
-  await page.getByRole('heading', { name: realm.realmTitle }).waitFor({ state: 'visible' });
+  await page.getByRole('heading', { level: 1, name: realm.spaceTitle, exact: true }).waitFor({ state: 'visible' });
+  await page.getByRole('heading', { name: realm.realmTitle, exact: true }).waitFor({ state: 'visible' });
   await expectAttribute(page.getByRole('region', { name: 'Membership' }), 'data-member-state', 'member');
   await stack.kernel('/v1/definitions/active');
   const pageRequests = stack
@@ -468,7 +468,7 @@ async function runNativeRealmsSpacesJourney() {
   const publicRealmMemberLink = await expectOwnRealmEntry(alice, ownRealmsAfterJoin, fixture.publicRealm);
   await publicRealmMemberLink.click();
   await alice.waitForURL((url) => url.pathname === `/en/spaces/${fixture.publicRealm.address}`);
-  await expectVisible(alice.getByRole('heading', { level: 1, name: fixture.publicRealm.spaceTitle }));
+  await expectVisible(alice.getByRole('heading', { level: 1, name: fixture.publicRealm.spaceTitle, exact: true }));
 
   const unknownRealm = '00000000-0000-4000-8000-000000000000';
   const hiddenPublicSpace = await nativePageResponse('alice', `/v1/spaces/${fixture.protectedRealm.spaceId}`, 200);
@@ -536,8 +536,8 @@ async function runNativeRealmsSpacesJourney() {
   await alice.setViewportSize({ width: 1280, height: 900 });
   await alice.reload({ waitUntil: 'domcontentloaded' });
   await hydrated(alice);
-  await expectVisible(alice.getByRole('heading', { level: 1, name: fixture.protectedRealm.spaceTitle }));
-  await expectVisible(alice.getByRole('heading', { name: fixture.protectedRealm.realmTitle }));
+  await expectVisible(alice.getByRole('heading', { level: 1, name: fixture.protectedRealm.spaceTitle, exact: true }));
+  await expectVisible(alice.getByRole('heading', { name: fixture.protectedRealm.realmTitle, exact: true }));
   await screenshot(alice, 'protected-realm-member-1280');
 
   const protectedOwn = await readOwnRealms('alice');
