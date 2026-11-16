@@ -415,8 +415,11 @@ async function readSearchFailureSnapshot(stack: NativeWebStack, expected: readon
               FROM search.identity_writer w
               WHERE w.physical_target=$2 AND w.incarnation=j.native_incarnation
                 AND w.partition_no=ANY($5) AND w.original_id=ANY($6)) AS fixture_writers,
-             delivery.status AS worker_status, delivery.queue_name AS worker_queue,
-             delivery.executor_id=$7 AS owned_executor
+             intent.status AS current_intent_status, intent.queue_name AS current_intent_queue,
+             intent.executor_id=$7 AS current_intent_owned,
+             delivery.status AS current_delivery_status, delivery.queue_name AS current_delivery_queue,
+             delivery.executor_id=$7 AS current_delivery_owned,
+             prior.status AS prior_owned_delivery_status
            FROM (SELECT $1::text AS prefix) owner
            LEFT JOIN search.public_preparation p ON p.partition_no=0 AND p.prefix=owner.prefix
              AND p.kind='population' AND p.locator->>'key'=$3
@@ -456,14 +459,20 @@ async function readSearchFailureSnapshot(stack: NativeWebStack, expected: readon
            ) repair ON true
            LEFT JOIN search.identity_writer_gate g ON g.partition_no=0 AND g.physical_target=j.physical_target
              AND g.incarnation=j.native_incarnation AND g.publication_job=j.job
+           LEFT JOIN dbos.workflow_status intent
+             ON intent.workflow_uuid='search.publicPreparation:' || p.id || ':' || p.revision
+             AND intent.name='search.publicPreparation'
+           LEFT JOIN dbos.workflow_status delivery
+             ON delivery.workflow_uuid='search.publicPreparation:' || p.id || ':' || p.revision || ':population'
+             AND delivery.name='search.publicPreparation'
            LEFT JOIN LATERAL (
-             SELECT status, queue_name, executor_id FROM dbos.workflow_status w
+             SELECT status FROM dbos.workflow_status w
              WHERE w.name='search.publicPreparation'
-               AND (w.workflow_uuid='search.publicPreparation:' || p.id || ':' || p.revision || ':population'
-                 OR (w.executor_id=$7 AND w.queue_name='workflows' AND w.status='PENDING'
-                   AND w.workflow_uuid LIKE ('search.publicPreparation:' || p.id || ':%:population')))
-             ORDER BY (w.status='PENDING') DESC, w.started_at_epoch_ms DESC NULLS LAST LIMIT 1
-           ) delivery ON true`,
+               AND w.executor_id=$7 AND w.queue_name='workflows' AND w.status='PENDING'
+               AND w.workflow_uuid LIKE ('search.publicPreparation:' || p.id || ':%:population')
+               AND w.workflow_uuid<>'search.publicPreparation:' || p.id || ':' || p.revision || ':population'
+             ORDER BY w.started_at_epoch_ms DESC NULLS LAST LIMIT 1
+           ) prior ON true`,
           [
             prefix,
             target,
