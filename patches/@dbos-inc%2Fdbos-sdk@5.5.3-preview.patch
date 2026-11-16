@@ -780,7 +780,7 @@ index 8f66187dfd..ea06b82e2f 100644
          keyedIDs?: boolean;
      }): Promise<WorkflowStatusInternal[]>;
 diff --git a/dist/src/system_database.js b/dist/src/system_database.js
-index 79ef5957a3..2c92b08a83 100644
+index 79ef5957a3..35b38a564c 100644
 --- a/dist/src/system_database.js
 +++ b/dist/src/system_database.js
 @@ -1835,6 +1835,9 @@ class SystemDatabase {
@@ -945,7 +945,51 @@ index 79ef5957a3..2c92b08a83 100644
              // Fetch the status of all original workflows inside the transaction.
              const statusParams = [];
              const { rows: statusRows } = await client.query(`SELECT ws.workflow_uuid, ws.name, ws.class_name, ws.config_name, ws.application_id,
-@@ -3672,6 +3806,12 @@ class SystemDatabase {
+@@ -3500,7 +3634,7 @@ class SystemDatabase {
+                 ? `(application_version = $${n} OR application_version IS NULL)`
+                 : `application_version = $${n}`;
+             // The partition's head: $1 queue, $2 ENQUEUED, `version` the app version, `pk` the partition key expression.
+-            const headOf = (pk, version, scope) => `SELECT workflow_uuid
++            const headOf = (pk, version, scope) => `SELECT workflow_uuid, created_at
+            FROM "${this.schemaName}".workflow_status
+            WHERE queue_name = $1 AND status = $2
+              AND queue_partition_key = ${pk}
+@@ -3518,8 +3652,8 @@ class SystemDatabase {
+          )`;
+             // This worker's own budget bounds the sweep alongside the cap.
+             const sweepLimit = Math.min(this.partitionedDequeueSweepCap, maxTasks);
+-            // When the worker's budget is the binding constraint, probe partitions in random order to prevent starvation.
+-            const sweepOrder = sweepLimit < this.partitionedDequeueSweepCap ? 'random()' : 'partitions.pk ASC';
++            // Under a worker budget, newer work in other partitions must not keep displacing an older runnable head.
++            const sweepOrder = sweepLimit < this.partitionedDequeueSweepCap ? 'head.created_at ASC, partitions.pk ASC' : 'partitions.pk ASC';
+             const candidateParams = [
+                 queue.name,
+                 workflow_1.StatusString.ENQUEUED,
+@@ -3542,19 +3676,16 @@ class SystemDatabase {
+             FROM partitions
+             WHERE partitions.pk IS NOT NULL)
+          )
+-         , chosen AS (
++         SELECT chosen.pk
++         FROM (
+            SELECT partitions.pk
+            FROM partitions
++           JOIN LATERAL (${headOf('partitions.pk', 3, candidateScope)}) head ON TRUE
+            WHERE partitions.pk IS NOT NULL
+              AND ${noPending('partitions.pk', 4, probeScope)}
+            ORDER BY ${sweepOrder}
+            LIMIT $5
+-         )
+-         SELECT chosen.pk
+-         FROM chosen
+-         -- Only partitions with a head this worker may run; LATERAL plans as a tight nested loop.
+-         JOIN LATERAL (${headOf('chosen.pk', 3, candidateScope)}) head ON TRUE
+-         -- Which partitions were chosen is settled above; order them so the claim, and the dispatch it feeds, are deterministic.
++         ) chosen
+          ORDER BY chosen.pk ASC`, candidateParams);
+             const partitionKeys = candidateResult.rows.map((row) => row.pk);
+             // Re-check queue/partition/version alongside status so a row resumeWorkflows moved to another queue mid-sweep is dropped, not hijacked.
+@@ -3672,6 +3803,12 @@ class SystemDatabase {
      }
      // ==================== Queries & Maintenance ====================
      /** With `keyedIDs`, the listed workflow IDs are addressed by their shard keys, as a batch read of known workflows. */
