@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { PoolClient } from 'pg';
-import { partitionOf, routeOf } from '../route/route.ts';
+import { routeOf } from '../route/route.ts';
 import { readReleasedIdentityMappingsInSnapshot } from './identity-adapters/identity-epoch-read.ts';
 import { comparableIdentityEvidence } from './identity-core/index.ts';
 
@@ -62,16 +62,15 @@ export async function readIdentitySubjectScope(client: Client, requested: string
   if (original?.state !== 'mapped') return { state: 'unavailable' };
 
   const terminal = original.terminal;
-  const terminalRoute = routeOf(terminal);
-  if (terminalRoute === null) return { state: 'unavailable' };
-  const home = partitionOf(terminalRoute);
+  // A split can keep a restored terminal's group in the prior group's control home.
+  const home = selected.evidence.sourceRows[0]?.control_partition;
+  if (home == null || routeOf(terminal) === null) return { state: 'unavailable' };
   const canonical = terminal === requested ? selected : await readReleasedIdentityMappingsInSnapshot(client, [terminal]);
   const target = canonical.mappings[0];
   if (
     target?.state !== 'mapped' ||
     target.terminal !== terminal ||
     target.epoch !== original.epoch ||
-    selected.evidence.sourceRows[0]?.control_partition !== home ||
     canonical.evidence.sourceRows[0]?.control_partition !== home
   )
     return { state: 'unavailable' };
