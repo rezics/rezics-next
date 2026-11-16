@@ -15,6 +15,7 @@ import { IDENTITY_EPOCH_ADMITTED } from '../../src/semantic/events.ts';
 import { createSubjectIndex } from '../../src/search/indices.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { readSearchConfig } from '../../src/search/work.ts';
+import { WORK_QUEUES } from '../../src/work/queues.ts';
 import { accountDeletionRuntime, deletePersona } from '../support/account-deletion.ts';
 import { digest, release } from '../semantic/support/identity-epoch.ts';
 import { nativeOperator } from './support/native-system.ts';
@@ -211,7 +212,20 @@ test('private Knowledge attachments stay on their originals through published me
                SELECT j.state,j.prearm_phase,
                (SELECT jsonb_build_object('epoch',c.epoch,'position',c.position::text,'event',e.type,
                    'checkpoint_epoch',ck.epoch,'checkpoint_position',ck.position::text,
-                   'delivery',d.state,'effect',s.status)
+                   'delivery',d.state,'effect',s.status,
+                   'effects_queue',CASE WHEN s.status='ENQUEUED' AND s.queue_name='effects' THEN
+                     jsonb_build_object('partition',s.queue_partition_key,'version',s.application_version,
+                       'worker_limit',$6::int - 1,'pending',(
+                         SELECT coalesce(jsonb_agg(pending ORDER BY pending.started_at,pending.workflow),'[]'::jsonb)
+                         FROM (
+                           SELECT w.workflow_uuid AS workflow,w.queue_partition_key AS partition,
+                             w.application_version AS version,w.executor_id AS executor,
+                             w.started_at_epoch_ms AS started_at
+                           FROM dbos.workflow_status w WHERE w.queue_name='effects' AND w.status='PENDING'
+                           ORDER BY w.started_at_epoch_ms,w.workflow_uuid LIMIT $6
+                         ) pending
+                       ))
+                   END)
                 FROM semantic.identity_epoch_native_commit c
                 LEFT JOIN core.outbox e ON (e.partition_no,e.epoch,e.position)=(c.partition_no,c.epoch,c.position)
                   AND e.type=$4
@@ -277,7 +291,14 @@ test('private Knowledge attachments stay on their originals through published me
                  LEFT JOIN dbos.workflow_status s USING (workflow_uuid)
                ) w) AS coordinator
                FROM semantic.identity_epoch_job j WHERE j.partition_no=$1 AND j.job_id=$2`,
-              [identityJobPartition(job), job.jobId, workflows, IDENTITY_EPOCH_ADMITTED, locator.epoch],
+              [
+                identityJobPartition(job),
+                job.jobId,
+                workflows,
+                IDENTITY_EPOCH_ADMITTED,
+                locator.epoch,
+                WORK_QUEUES.effects.workerConcurrency + 1,
+              ],
             ),
           ).then(
             ({ rows }) => rows[0] ?? null,
