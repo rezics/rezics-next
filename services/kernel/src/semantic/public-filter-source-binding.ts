@@ -2521,7 +2521,10 @@ export function createNativePublicFilterSourceBinding(
         )
           throw new BindingError('owner_unavailable');
       };
-      await verify();
+      // A fully acknowledged publication has an immutable terminal seal and
+      // no open Source window. Verify its terminal page once after Search's
+      // independent settlement, where we still recheck live Source custody.
+      if (!publicationCost || seal.after !== 4096) await verify();
       const authority = async (range: readonly PublicFilterCreationWindow[]) => {
         if (!range.length) return [];
         // Drive owner reads from the retained windows. The bounded lateral lookup
