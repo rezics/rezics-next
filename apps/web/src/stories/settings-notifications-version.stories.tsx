@@ -304,7 +304,7 @@ export const SharedVersionRecovery: Story = {
     await expect(fixture.commands).toHaveLength(writesAfterReceipt);
     await expect(digest()).not.toBeChecked();
 
-    // An uncertain original survives a newer shared floor and a stale replay read byte for byte.
+    // Retry sends the exact uncertain command. A stale read after acknowledgement can only be reloaded.
     fixture.loseNext();
     const uncertainBaseline = fixture.current().preferences.version;
     await userEvent.click(reply());
@@ -325,7 +325,8 @@ export const SharedVersionRecovery: Story = {
       releaseReplayRead();
     }
     await notices.findByText(m.settings_notifications_read_failed());
-    await notices.findByText(m.settings_notifications_uncertain_title());
+    await expect(notices.queryByText(m.settings_notifications_uncertain_title())).toBeNull();
+    await expect(notices.queryByRole('button', { name: m.settings_notifications_retry_original() })).toBeNull();
     await noCurrentClaim();
     await versionFields(uncertainBaseline);
     await expect(fixture.commands).toHaveLength(beforeRetry + 1);
@@ -334,11 +335,9 @@ export const SharedVersionRecovery: Story = {
     await expect(notices.getByRole('button', { name: m.settings_notifications_restore() })).toBeDisabled();
     await expect(reply()).toBeChecked();
     await expect(mention()).toBeChecked();
-    await userEvent.click(retry());
+    await userEvent.click(reload());
     await notices.findByText(m.settings_notifications_review_title());
-    await expect(fixture.commands).toHaveLength(beforeRetry + 2);
-    await expect(fixture.commands.at(-1)!.input).toBe(uncertain.input);
-    await expect(fixture.commands.at(-1)).toEqual(uncertain);
+    await expect(fixture.commands).toHaveLength(beforeRetry + 1);
     const finalBaseline = fixture.current().preferences.version;
     await versionFields(finalBaseline);
     await userEvent.click(save());
