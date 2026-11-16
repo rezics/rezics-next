@@ -125,7 +125,7 @@ export function createSemanticWorkModule(
       const { participants, domain } = installedDomain(composeParticipants(context, searchNativePorts));
       registerSemanticDomain(context.pool, domain);
       if (domain) bindDefaultSemanticDomain(domain);
-      registerIdentityEpochCoordinator(context, participants);
+      registerIdentityEpochCoordinator(context, participants, domain?.ports.searchCurrentness.prepareCanonicalWriter);
       await registerContextDirectoryWork(context);
       context.addEffects([
         createCanonicalGenerationWakeEffect(context.pool),

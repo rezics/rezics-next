@@ -1,6 +1,6 @@
 /** Walk every first-public Imports path on one admitted dev-stack session.
  *
- *   bun services/auth/scripts/dev-stack.ts walk -- bun services/importer/src/imports-public-journey.ts
+ *   bun services/auth/scripts/dev-stack.ts walk --import-catalogue -- bun services/importer/src/imports-public-journey.ts
  *
  * Operators import licensed fixtures through the ordinary CLI, then separately accept/adopt and independently
  * read. Catalogue rows share one fresh seed. A row failure is recorded; independent rows continue.
@@ -133,7 +133,7 @@ export type WalkInventory = {
 };
 
 const retainedCommand =
-  'bun services/auth/scripts/dev-stack.ts walk -- bun services/importer/src/imports-public-journey.ts';
+  'bun services/auth/scripts/dev-stack.ts walk --import-catalogue -- bun services/importer/src/imports-public-journey.ts';
 
 function requiredOrigin(name: string): string {
   const value = process.env[name];
@@ -1350,7 +1350,7 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
   let seedReopenEvidence: Record<string, unknown> | undefined;
   if (!seedCause) {
     try {
-      const seedArgs = ['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'];
+      const seedArgs = ['bun', 'scripts/datasets/cross-media-seed.ts', '--dev-catalogue'];
       const seedEnv = walkSeedChildEnv(origins, persona?.file ?? {});
       await command('seed', seedArgs, seedEnv);
       const first = await loadSeedReport();

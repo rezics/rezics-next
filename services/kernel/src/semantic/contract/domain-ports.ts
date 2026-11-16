@@ -1,5 +1,5 @@
 import type { IdentityEpochParticipantPorts, IdentityParticipantStepPort } from './identity-epoch-ports.ts';
-import type { IdentityJobRef, IdentityStepProgress } from './identity-values.ts';
+import type { IdentityJobRef, IdentityStepProgress, IdentityStepReceipt } from './identity-values.ts';
 import type { ItemDataType, ItemFactRow, ItemMetadata, ItemReleaseSlice, StoredItemFact } from './item-values.ts';
 
 /** Deterministic digest used by item projection; the native hasher is bound by composition. */
@@ -27,6 +27,7 @@ export type LibraryCustodyPort<Native> = Readonly<{
 /** Search canonical-index currentness for one identity job. */
 export type SearchCurrentnessPort<Native> = Readonly<{
   stepCanonicalIndex: IdentityParticipantStepPort<Native>;
+  prepareCanonicalWriter?(native: Native, request: IdentityStepReceipt): Promise<'pending' | 'prepared'>;
 }>;
 
 export type ContentImportedFieldGroup = 'facts' | 'summary' | 'cover';

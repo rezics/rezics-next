@@ -40,9 +40,9 @@ export type PublicPreparationOptions = {
   runtime: DefaultPublicFilterRuntime;
 };
 
-// Bound how many independently metered native enrollment turns can share one
+// Bound how many independently metered native publication turns can share one
 // maintenance delivery and its original deadline.
-const enrollmentTurnsPerDelivery = 4;
+const publicationTurnsPerDelivery = 4;
 
 const databaseLifetimeOptions = {
   deadlineError: () => new SearchUnavailableError('Public preparation database deadline expired'),
@@ -135,9 +135,10 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     context: PublicFilterConsumerContext,
     mayContinue: boolean,
   ): Promise<string | undefined> {
-    const advance = async (locator: PreparationLocator | null, delayMs = 0) => {
-      await store.advance(record, locator, delayMs, context.deadline);
-      return undefined;
+    const advance = async (locator: PreparationLocator | null, delayMs = 0, ready = false) => {
+      const continueInline = mayContinue && ready;
+      const revision = await store.advance(record, locator, delayMs, context.deadline, continueInline);
+      return continueInline ? (revision ?? undefined) : undefined;
     };
     const search = searchWithin(context.deadline);
     const index = subjectIndexName(options.prefix, state.generation);
@@ -207,9 +208,11 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
       const reconciliation = await options.runtime.publication.step(job, context, { enrollSource: true });
       if (reconciliation.status === 'unavailable') reportUnavailable('step', state.generation, reconciliation);
       else unavailable.delete('step');
+      const ready = reconciliation.status === 'progress' || reconciliation.status === 'reconciled';
       return advance(
         { ...state, phase: reconciliation.status === 'reconciled' ? 'activate' : 'native' },
-        reconciliation.status === 'progress' || reconciliation.status === 'reconciled' ? 0 : 1000,
+        ready ? 0 : 1000,
+        ready,
       );
     }
     if (calendarFormat === 1) await markSubjectCalendarReady(search, options.prefix, state.generation);
@@ -219,13 +222,11 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     if (activated.status === 'activated') return advance(null);
     if (activated.status === 'preparing') {
       const next = { ...state, phase: activated.next === 'activate' ? ('activate' as const) : ('native' as const) };
-      const ready =
-        mayContinue &&
-        activated.advanced === true &&
-        activated.enrollmentAdvanced === true &&
-        next.phase === 'activate';
-      const revision = await store.advance(record, next, activated.advanced ? 0 : 1000, context.deadline, ready);
-      return ready ? (revision ?? undefined) : undefined;
+      return advance(
+        next,
+        activated.advanced ? 0 : 1000,
+        activated.advanced === true && activated.enrollmentAdvanced === true && next.phase === 'activate',
+      );
     }
     // An unready activation can have durably restarted reconciliation. The subsequent step
     // will resolve its native phase, including a retained fence or ambiguous alias intent.
@@ -283,7 +284,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
         deadline: Math.min(deadline, deadlineFor(PUBLIC_PREPARATION_BUDGET_MS), Date.now() + PUBLIC_PREPARATION_BUDGET_MS),
       };
       return track(context.deadline, async () => {
-        for (let turn = 1; turn <= enrollmentTurnsPerDelivery && !paused && !stopped; turn++) {
+        for (let turn = 1; turn <= publicationTurnsPerDelivery && !paused && !stopped; turn++) {
           const record = await store.claim(id, revision, context.deadline);
           if (!record) return;
           if (Number(record.expires_at) <= Date.now()) {
@@ -292,7 +293,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
           }
           try {
             if (record.locator.kind === 'population') {
-              const next = await population(record, record.locator, context, turn < enrollmentTurnsPerDelivery);
+              const next = await population(record, record.locator, context, turn < publicationTurnsPerDelivery);
               failures.delete(record.locator.kind);
               if (next === undefined) return;
               revision = next;

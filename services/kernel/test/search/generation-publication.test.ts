@@ -297,7 +297,7 @@ test('native complete pages retain their cursor and empty filtered pages advance
   }
 });
 
-test('ordinary maintenance resumes its stored publication and advances native population without the retired scan', async () => {
+test('ordinary maintenance resumes its stored publication and advances four metered native turns', async () => {
   await bootstrapRelease(pool, bundledRelease);
   const f = await fixture(
     {
@@ -375,13 +375,25 @@ test('ordinary maintenance resumes its stored publication and advances native po
     expect(retained).toBe(original.job.job);
     await maintenance.stop();
     maintenance = start();
-    await maintenance.run(id, (await read()).revision);
+    const readHome = async () =>
+      (
+        await pool.query<{ home: number }>(
+          'SELECT home FROM search.generation_publication WHERE partition_no=0 AND job=$1',
+          [retained],
+        )
+      ).rows[0]!.home;
+    const before = await read();
+    const previousHome = await readHome();
+    await maintenance.run(id, before.revision);
     expect(prepares).toBe(0);
-    expect((await read()).locator).toMatchObject({ publication: retained, phase: 'native' });
-    expect(
-      (await pool.query('SELECT home FROM search.generation_publication WHERE partition_no=0 AND job=$1', [retained]))
-        .rows[0],
-    ).toEqual({ home: 1 });
+    const next = await read();
+    expect(next.locator).toMatchObject({ publication: retained, phase: 'native' });
+    expect(BigInt(next.revision)).toBe(BigInt(before.revision) + 8n);
+    const continuation = await pool.query('SELECT status FROM dbos.workflow_status WHERE workflow_uuid=$1', [
+      `search.publicPreparation:${id}:${next.revision}`,
+    ]);
+    expect(continuation.rows).toEqual([{ status: 'ENQUEUED' }]);
+    expect(await readHome()).toBeGreaterThan(previousHome);
     expect((await subjectGenerations(search, f.prefix)).active).toBe(1);
   } finally {
     await maintenance.stop();

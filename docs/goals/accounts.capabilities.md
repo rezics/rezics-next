@@ -20,6 +20,12 @@ runtime revision, completed seed result and matching private key, binding and lo
 Capture records the source revision, runtime revision and seed-result hash together. A failed startup or absent
 handoff establishes only an unmet prerequisite; it supplies no result for an unreached API phase.
 
+For focused credential replacement and Website revocation, use the ordinary Auth fixture on an admitted native
+walk with `REZICS_WALK_AUTH_FIXTURE=1`. The fixture verifies discovery at the slot issuer and completes public
+signup, login and a native session read for an independent human before the selected cases create their own accounts.
+The capture binds that completed fixture to the slot and observed Git revision. Commerce stays unconfigured and
+the walk does not run development showcase provisioning or catalogue imports.
+
 | Original journey                  | Required reached phases and independent readback                                                                                                                                                                                                                      |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Recovery                          | Sign up and sign in; start recovery; receive the actual private local delivery; complete recovery; try both old and new passwords; read with the original session.                                                                                                    |

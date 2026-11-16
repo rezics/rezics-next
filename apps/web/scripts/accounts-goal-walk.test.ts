@@ -52,6 +52,7 @@ test('J10 sends the exact confidential form to the discovered issuer endpoint wi
 test.each([
   [{ issuer: 'https://foreign.example.test', revocation_endpoint: `${stack.issuer}/revoke` }, 'issuer does not match'],
   [{ issuer: stack.issuer }, 'omitted revocation_endpoint'],
+  [{ issuer: stack.issuer, revocation_endpoint: 'https://foreign.example.test/revoke' }, 'endpoint does not match'],
 ] as const)('J10 refuses unusable issuer metadata before sending the refresh token: %j', async (metadata, error) => {
   request.mockResolvedValueOnce(Response.json(metadata));
   await expect(revokeWebsiteRefresh(stack, {}, {}, 'refresh')).rejects.toThrow(error);

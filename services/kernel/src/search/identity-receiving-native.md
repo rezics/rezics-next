@@ -158,6 +158,11 @@ participant's receiving configuration carries the typed factory and exact same-P
 receiving adapter constructs a fresh support reader from them. The fixed `IdentityEpochStep` still receives
 `(pool, job)`. This ordering does not create another Access instance or replace the reader with `subjectSource`.
 
+The fixed participant stages an exact writer request, and the default coordinator runs it in the separate
+Search owner turn. The writer retains the observed current allocation and original close under its structural,
+publication-admission, generation and writer locks. First-absence, action and hold authorization still require
+the per-document preparation below.
+
 The existing writer owns enrollment, dispatch, settlement and retained copies. Its `SearchWriterBarrier` reports
 `firstApply: 'unavailable'` and `prepared: 'unavailable'`; no first-apply receiving preparation/dispatch hook is
 installed. The Source writer owner must receive the following disjoint native integration before readiness:

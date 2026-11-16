@@ -28,3 +28,6 @@ export type IdentityStepReceiptLocator = Readonly<{
   version: 1;
   native: Readonly<{ partition: number; epoch: number; position: string; transactionId: string }>;
 }>;
+
+/** A committed Search directory step can ask the coordinator to run its writer owner. */
+export const SEARCH_IDENTITY_WRITER_REQUEST = 'prepare-search-writer';

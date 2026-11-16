@@ -29,6 +29,9 @@ export function createSemanticDomain<Native, Tx = unknown>(
     }),
     searchCurrentness: Object.freeze({
       stepCanonicalIndex: ports.searchCurrentness.stepCanonicalIndex,
+      ...(ports.searchCurrentness.prepareCanonicalWriter && {
+        prepareCanonicalWriter: ports.searchCurrentness.prepareCanonicalWriter,
+      }),
     }),
     ratingReview: Object.freeze({
       subjectChanged: ports.ratingReview.subjectChanged,

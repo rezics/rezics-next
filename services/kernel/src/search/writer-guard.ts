@@ -18,7 +18,7 @@ import type {
   PublicFilterConsumerUnavailable,
 } from './public-filter-consumer-contract.ts';
 import { isDeepStrictEqual } from 'node:util';
-import { currentCommand, noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
+import { currentCommand, currentCommandResources, noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
 import { classifyUnavailability } from '../access/unavailable.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -721,6 +721,12 @@ export type SearchWriterNativeCustody = SearchWriterGuard &
     /** No caller body/version or saved positive can be submitted. */
     write(partition: number, ids: readonly string[], obligation: bigint): Promise<void>;
     fenceOriginal(job: IdentityJobRef, original: string): Promise<SearchIdentityWriterFence>;
+    observeIdentityPreparation(
+      tx: CommandTransaction,
+      job: IdentityJobRef,
+      original: string,
+      allocation: Readonly<{ incarnation: string; writeAlias: string }>,
+    ): Promise<Readonly<{ enrollmentGeneration: string; fenceGeneration: string; close: string | null }>>;
     /** Closes first absence under the same native gate as enrollment; does not assert population. */
     closeGeneration(partition: number): Promise<SearchWriterBarrier>;
     /** Publication consumes retained state, never fields from a diagnostic read or caller certificate. */
@@ -856,6 +862,20 @@ export const readRetainedWriterCopySql = `SELECT g.incarnation AS gate_incarnati
  WHERE p.partition_no=$1 AND p.write_state='active' AND p.epoch=g.owner_epoch AND p.position>=g.closed_position
   AND g.closed_token=$3 AND g.consumer=$4`;
 
+const insertWriterGateSql = `INSERT INTO search.identity_writer_gate (partition_no,physical_target,consumer,incarnation,owner_epoch,write_alias)
+       VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (partition_no,physical_target) DO NOTHING
+       RETURNING enrollment_generation,fence_generation,closed_token`;
+const lockOriginalWriterSql = `SELECT incarnation,owner_epoch,closed_transaction_id::text
+ FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3 FOR UPDATE`;
+
+export function searchIdentityWriterAdmissionSql() {
+  return {
+    gate: gateSql.sql,
+    insertGate: insertWriterGateSql,
+    original: lockOriginalWriterSql,
+  };
+}
+
 /** Ordinary writer custody, independent of the fixed participant and privacy-reduction continuation.
  * A submitted request with uncertain outcome retains its enrollment indefinitely until native reconciliation.
  * Time, retries, a refreshed 409 or a later physical UUID cannot release that request.
@@ -906,10 +926,8 @@ export function createSearchWriterGuard(options: {
     const parameters = [receipt.partition, options.index, options.consumer, incarnation, receipt.epoch, writeAlias];
     const existing = await tx.query(gateSql.sql, parameters);
     if (existing.rowCount === 1) return existing.rows[0]!;
-    const inserted = await tx.query(
-      `INSERT INTO search.identity_writer_gate (partition_no,physical_target,consumer,incarnation,owner_epoch,write_alias)
-       VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (partition_no,physical_target) DO NOTHING
-       RETURNING enrollment_generation,fence_generation,closed_token`,
+    const inserted = await tx.query<Pick<GateRow, 'enrollment_generation' | 'fence_generation' | 'closed_token'>>(
+      insertWriterGateSql,
       parameters,
     );
     if (inserted.rowCount !== 1)
@@ -1436,6 +1454,29 @@ export function createSearchWriterGuard(options: {
     ...publication,
     fenceOriginal: (job, original) =>
       fenceSearchIdentityWriter(options.pool, { job, original, index: options.index, search: options.search }),
+    async observeIdentityPreparation(tx, job, original, allocation) {
+      const command = currentCommand(tx);
+      if (currentCommandResources(tx).pool !== options.pool || command.partition !== subjectPartition(original))
+        throw unavailable('Search writer preparation requires the original home and Pool');
+      await identityEpochStore().admitHomeEffect(tx, { kind: 'structural', job, original });
+      const receipt = await native(tx, command.transactionId);
+      await publicationAdmission(tx);
+      const target = await gate(tx, receipt, allocation.incarnation, allocation.writeAlias);
+      const row = (
+        await tx.query<{ incarnation: string; owner_epoch: number; closed_transaction_id: string | null }>(
+          lockOriginalWriterSql, [receipt.partition, options.index, original],
+        )
+      ).rows[0];
+      if (!/^(0|[1-9][0-9]*)$/.test(target.enrollment_generation) || !/^(0|[1-9][0-9]*)$/.test(target.fence_generation))
+        throw unavailable('Search writer preparation has invalid gate generations');
+      if (row && (row.owner_epoch !== receipt.epoch || row.incarnation !== allocation.incarnation))
+        throw unavailable('Search writer preparation requires original owner handoff');
+      return {
+        enrollmentGeneration: target.enrollment_generation,
+        fenceGeneration: target.fence_generation,
+        close: row?.closed_transaction_id ?? null,
+      };
+    },
     adoptGenerationPublicationBarrier: inspect,
     async closeGeneration(partition) {
       const { incarnation, writeAlias } = await readSearchWriterPhysicalTarget(options.search, options.index);

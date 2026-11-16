@@ -7,12 +7,11 @@ import {
   createSearchIdentityEpochParticipant,
   searchIdentityReceivingComposition,
 } from '../../../src/search/identity-epoch-participant.ts';
+import { createSearchIdentityWriterPreparation } from '../../../src/search/identity-search-writer-preparation.ts';
+import { SEARCH_IDENTITY_WRITER_REQUEST } from '../../../src/semantic/contract/identity-epoch-ports.ts';
+import { IdentityEpochStoreError } from '../../../src/semantic/contract/identity-errors.ts';
 import type { OpenSearch } from '../../../src/search/opensearch.ts';
-import type {
-  IdentityEpochStep,
-  IdentityJobRef,
-  IdentityStepProgress,
-} from '../../../src/semantic/identity-epoch-contract.ts';
+import type { IdentityJobRef, IdentityStepProgress } from '../../../src/semantic/identity-epoch-contract.ts';
 import { searchReceivingProductionDeclaration } from '../../../src/semantic/identity-search-receiving-statements.ts';
 import { withIdentitySourceConsumerMaintenance } from '../../../src/semantic/identity-source-consumer-maintenance.ts';
 import type { Pool } from 'pg';
@@ -31,32 +30,40 @@ export function createSearchIdentityReceivingStep(options: {
   prefix: string;
   routeKey: Uint8Array;
   access: Access;
-}): IdentityEpochStep {
-  return createSearchIdentityEpochParticipant({
+}) {
+  const receiving = searchIdentityReceivingComposition({
+    pool: options.pool,
     search: options.search,
     prefix: options.prefix,
     routeKey: options.routeKey,
-    receiving: searchIdentityReceivingComposition({
-      pool: options.pool,
-      search: options.search,
-      prefix: options.prefix,
-      routeKey: options.routeKey,
-      access: options.access,
-      clock: systemClock,
-      identitySourceSupportReaderFactory,
-      work: searchReceivingProductionDeclaration(),
-    }),
+    access: options.access,
+    clock: systemClock,
+    identitySourceSupportReaderFactory,
+    work: searchReceivingProductionDeclaration(),
   });
+  return {
+    step: createSearchIdentityEpochParticipant({ ...options, receiving }),
+    prepare: createSearchIdentityWriterPreparation(receiving, {}),
+  };
 }
 
 /** Run one participant step inside Semantic's funded Source maintenance frame. */
-export function runSearchIdentityReceivingStep(
+export async function runSearchIdentityReceivingStep(
   pool: Pool,
-  step: IdentityEpochStep,
+  { step, prepare }: ReturnType<typeof createSearchIdentityReceivingStep>,
   job: IdentityJobRef,
   deadlineMs = 30_000,
 ): Promise<IdentityStepProgress> {
-  return withIdentitySourceConsumerMaintenance({ pool, env: {} }, { deadline: Date.now() + deadlineMs }, () =>
-    step(pool, job),
+  const progress = await withIdentitySourceConsumerMaintenance(
+    { pool, env: {} },
+    { deadline: Date.now() + deadlineMs },
+    () => step(pool, job),
   );
+  if (
+    progress.state === 'more' &&
+    progress.frontier.after[3] === SEARCH_IDENTITY_WRITER_REQUEST &&
+    (await prepare(pool, progress.receipt)) !== 'prepared'
+  )
+    throw new IdentityEpochStoreError('identity_epoch_unavailable', 'Search still needs a committed original plan');
+  return progress;
 }

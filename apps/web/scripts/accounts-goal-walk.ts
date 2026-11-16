@@ -5,7 +5,7 @@
  * bearers use the zero-scope login client then OAuth. Auth page-operation and management
  * client identities are inlined because Web cannot depend on auth-contract.
  */
-import { walkAcceptanceId } from '../../../scripts/stack-run.ts';
+import { walkAcceptanceId, walkStackAdmitted } from '../../../scripts/stack-run.ts';
 import { createHash, randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { mkdir, open, readFile, writeFile } from 'node:fs/promises';
@@ -1036,6 +1036,41 @@ type CaptureHandoff = {
   recoveryDirectory: string;
 };
 
+async function prepareOrdinaryAuthFixture(directory: string, sourceRevision: string): Promise<CaptureHandoff> {
+  const slot = process.env.REZICS_WALK_STACK_SLOT;
+  if (!slot || !walkStackAdmitted(process.env, root) || !/^[a-f0-9]{40}$/.test(sourceRevision))
+    throw new Error('Ordinary Auth fixture needs the admitted slot and its Git checkout');
+  const stack = origins();
+  const discovery = await fetch(`${stack.issuer}/.well-known/openid-configuration`, {
+    redirect: 'error',
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!discovery.ok || (await discovery.json()).issuer !== stack.issuer)
+    throw new Error('Ordinary Auth fixture issuer did not match discovery');
+  const person = await signup(stack, 'fixture');
+  const session = await signIn(stack, person, 'login', []);
+  if (!session.cookie || session.accountId !== person.accountId)
+    throw new Error('Ordinary sign-in did not establish the fixture account');
+  requireStatus(
+    await send(`${stack.native}/sessions`, { method: 'GET', cookie: session.cookie, origin: stack.issuer }),
+    'ordinary fixture session read',
+    200,
+  );
+  const seedResultPath = join(directory, 'ordinary-auth-fixture.json');
+  const result = { sourceRevision, slot, origins: stack, accountId: person.accountId, currentSessionRead: 200 };
+  await writeFile(seedResultPath, JSON.stringify(result) + '\n', { mode: 0o600 });
+  return {
+    slot,
+    runtimeRevision: sourceRevision,
+    origins: stack,
+    seedCompleted: true,
+    seedResultPath,
+    keysPath: join(root, '.temp/local-stack/keys.json'),
+    bindingsPath: join(root, 'apps/web/.dev.vars'),
+    recoveryDirectory: join(root, '.temp/local-stack/recovery'),
+  };
+}
+
 async function captureOriginalAuthJourneys(selected: readonly CaptureId[]): Promise<number> {
   if (!walkAcceptanceId(process.env, 'native')) throw new Error('API capture requires native acceptance');
   const directory = join(root, API_CAPTURE_DIRECTORY);
@@ -1043,13 +1078,24 @@ async function captureOriginalAuthJourneys(selected: readonly CaptureId[]): Prom
   const sourceRevision = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: root }).stdout.toString().trim();
   let prerequisite =
     'manager_event_idle visual/seed owner: admitted current-revision slot/origins and completed seed result handoff';
-  let handoff: CaptureHandoff | undefined;
+  const ordinaryFixture = process.env.REZICS_WALK_AUTH_FIXTURE === '1';
   let identity: Json = { sourceRevision, observedAt: new Date().toISOString() };
   try {
-    const path = process.env.REZICS_API_CAPTURE_HANDOFF;
-    if (!path) throw new Error('handoff unavailable');
-    handoff = JSON.parse(await readFile(path, 'utf8')) as CaptureHandoff;
-    if (!handoff.slot || !/^[a-f0-9]{40}$/.test(handoff.runtimeRevision) || handoff.seedCompleted !== true)
+    let handoff: CaptureHandoff;
+    if (ordinaryFixture) {
+      prerequisite = 'admitted ordinary Auth signup and current session';
+      handoff = await prepareOrdinaryAuthFixture(directory, sourceRevision);
+    } else {
+      const path = process.env.REZICS_API_CAPTURE_HANDOFF;
+      if (!path) throw new Error('handoff unavailable');
+      handoff = JSON.parse(await readFile(path, 'utf8')) as CaptureHandoff;
+    }
+    if (
+      !handoff.slot ||
+      !/^[a-f0-9]{40}$/.test(sourceRevision) ||
+      handoff.runtimeRevision !== sourceRevision ||
+      handoff.seedCompleted !== true
+    )
       throw new Error('handoff not seed-ready');
     for (const value of Object.values(handoff.origins)) {
       const url = new URL(value);
@@ -1060,7 +1106,15 @@ async function captureOriginalAuthJourneys(selected: readonly CaptureId[]): Prom
     prerequisite = 'completed seed result';
     const seedBytes = await readFile(handoff.seedResultPath);
     const seed = JSON.parse(seedBytes.toString()) as Json;
-    if (!Array.isArray(seed.readings) || !Array.isArray(seed.workLinks))
+    if (
+      ordinaryFixture
+        ? seed.sourceRevision !== sourceRevision ||
+          seed.slot !== handoff.slot ||
+          typeof seed.accountId !== 'string' ||
+          !uuid.test(seed.accountId) ||
+          seed.currentSessionRead !== 200
+        : !Array.isArray(seed.readings) || !Array.isArray(seed.workLinks)
+    )
       throw new Error('seed result missing native identity handoff');
     identity = {
       ...identity,
@@ -1068,6 +1122,9 @@ async function captureOriginalAuthJourneys(selected: readonly CaptureId[]): Prom
       slot: handoff.slot,
       origins: handoff.origins,
       seed: {
+        ...(ordinaryFixture
+          ? { kind: 'ordinary-auth', accountId: seed.accountId, currentSessionRead: seed.currentSessionRead }
+          : {}),
         resultPath: handoff.seedResultPath,
         sha256: createHash('sha256').update(seedBytes).digest('hex'),
         completed: true,
@@ -1126,8 +1183,9 @@ async function captureOriginalAuthJourneys(selected: readonly CaptureId[]): Prom
                 'current-session read',
               ]
             : ['signup', 'website OAuth', 'admitted Kernel read', 'revoke', 'formerly admitted Kernel bearer denial'],
-      owner:
-        'existing manager_event_idle visual/seed owner via Content and supermanager; SDK startup repair retains its existing owner',
+      owner: ordinaryFixture
+        ? 'Accounts fixture on the admitted Auth walk'
+        : 'existing manager_event_idle visual/seed owner via Content and supermanager; SDK startup repair retains its existing owner',
       phases: [],
       elapsedMs: 0,
       personaRole: 'newly registered ordinary human (not provisioned)',
@@ -2236,6 +2294,8 @@ export async function revokeWebsiteRefresh(
   if (typeof metadata.revocation_endpoint !== 'string' || !metadata.revocation_endpoint)
     throw new Error('website discovery omitted revocation_endpoint');
   const endpoint = new URL(metadata.revocation_endpoint);
+  if (endpoint.origin !== new URL(stack.issuer).origin || endpoint.username || endpoint.password)
+    throw new Error('website revocation endpoint does not match the configured issuer origin');
   return send(endpoint.href, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },

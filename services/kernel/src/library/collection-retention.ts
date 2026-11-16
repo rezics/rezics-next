@@ -224,7 +224,7 @@ export async function purgeExpiredCollectionPage(
  */
 export async function purgeTerminalCollectionPage(
   tx: CommandTransaction,
-  input: { accountId: string; collectionId: string },
+  input: { accountId: string; collectionId: string; retainedGeneration?: string },
 ): Promise<CollectionCleanupPage> {
   const time = authoritativeTimeValue(currentCommand(tx).time);
   const route = requireRoute(input.accountId);
@@ -239,8 +239,20 @@ export async function purgeTerminalCollectionPage(
     purge_after: null,
     time,
   });
-  if (!parent) return { status: 'stale', removed: 0 };
+  if (!parent || (input.retainedGeneration !== undefined && parent.accountId !== input.accountId))
+    return { status: 'stale', removed: 0 };
   if (parent.accountId !== input.accountId) throw new Error('Foreign terminal Collection owner');
+  if (
+    input.retainedGeneration !== undefined &&
+    !(
+      await tx.query('SELECT 1 WHERE library.may_deidentify_frozen_output($1,$2,$3)', [
+        route,
+        input.collectionId,
+        input.retainedGeneration,
+      ])
+    ).rowCount
+  )
+    return { status: 'retained', removed: 0, custody: 'collection_source_and_destination_disposition' };
   const saved = await retentionNative().purgeSaved(tx, input);
   if (saved) return saved;
   parent = await executeCollectionRetentionQuery('lock', lock, tx, {
@@ -253,6 +265,31 @@ export async function purgeTerminalCollectionPage(
   return withCollectionRetentionDeclaration('terminalSharedCleanup', () =>
     removeLocalPage(tx, route, input.collectionId, input.accountId, parent, { kind: 'terminal' }),
   );
+}
+
+/** Reinspect the exact frozen generation after its committed successor becomes visible. */
+export async function reinspectFrozenCollection(
+  pool: Pool,
+  input: { accountId: string; collectionId: string; retainedGeneration: string },
+  deadline: number,
+) {
+  const partition = partitionOf(requireRoute(input.accountId));
+  return (
+    await runCommand(pool, { partition, deadline }, async (tx) => {
+      const page = await purgeTerminalCollectionPage(tx, input);
+      if (!page.removed) return noEffect(page);
+      return {
+        value: page,
+        events: [
+          {
+            type: 'com.rezics.library.account-graph.purged.v1',
+            subject: input.accountId,
+            data: { accountId: input.accountId, kind: 'collectionLocal', removed: page.removed },
+          },
+        ],
+      };
+    })
+  ).value;
 }
 
 /** Installs on the one default Library runtime and existing bounded maintenance queue. */
