@@ -5,7 +5,7 @@ import { workerTestEnv } from '../../support/worker-env.ts';
 export async function startErasureWorker(
   url: string,
   client: WorkClient,
-  environment: Record<string, string> = {},
+  environment: NodeJS.ProcessEnv = {},
 ) {
   let output = '';
   let ready!: () => void;

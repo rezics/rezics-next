@@ -13,6 +13,8 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identityEpochStore } from '../../src/semantic/identity-adapters/index.ts';
+import { createWorkClient } from '../../src/work/client.ts';
+import { startErasureWorker } from './support/erasure-worker.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
 type Identity = Awaited<ReturnType<NativeProfileFixture['identity']>>;
@@ -1818,15 +1820,33 @@ test('a merged canonical target invalidates the reviewed observation identity', 
       ],
     }),
   );
-  const merged = await send(identityOwner, 'POST', '/v1/subjects:merge', { subjects: [survivor, redirected] });
-  expect([200, 202]).toContain(merged.status);
-  const admission = (await merged.json()) as { operation?: { id?: string }; survivor?: string; redirected?: string };
-  if (merged.status === 202) {
-    if (typeof admission.operation?.id !== 'string') throw new Error('Native merge admission has no operation');
-    await f.drainIdentityMerge(admission.operation.id);
-  } else expect(admission).toMatchObject({ survivor, redirected });
-  expect(await identityEpochStore().readMapping(f.pool, survivor)).toMatchObject({ state: 'mapped', terminal: survivor });
-  expect(await identityEpochStore().readMapping(f.pool, redirected)).toMatchObject({ state: 'mapped', terminal: survivor });
+  // Publishing the actual redirect needs both fixed identity participants on the default worker.
+  const databaseUrl = f.pool.options.connectionString;
+  if (!databaseUrl || !process.env.OPENSEARCH_URL) throw new Error('Native identity worker needs PostgreSQL and Search');
+  const client = await createWorkClient(databaseUrl);
+  try {
+    const worker = await startErasureWorker(databaseUrl, client, f.workerEnv);
+    try {
+      const merged = await send(identityOwner, 'POST', '/v1/subjects:merge', { subjects: [survivor, redirected] });
+      expect([200, 202]).toContain(merged.status);
+      const admission = (await merged.json()) as { operation?: { id?: string }; survivor?: string; redirected?: string };
+      if (merged.status === 202) expect(admission.operation?.id).toBeString();
+      else expect(admission).toMatchObject({ survivor, redirected });
+      const store = identityEpochStore();
+      const deadline = performance.now() + 90_000;
+      let mapping = await store.readMapping(f.pool, redirected);
+      while (mapping.state !== 'mapped' && performance.now() < deadline) {
+        await Bun.sleep(100);
+        mapping = await store.readMapping(f.pool, redirected);
+      }
+      expect(mapping).toMatchObject({ state: 'mapped', terminal: survivor });
+      expect(await store.readMapping(f.pool, survivor)).toMatchObject({ state: 'mapped', terminal: survivor });
+    } finally {
+      await worker.close();
+    }
+  } finally {
+    await client.close();
+  }
   const applied = await json(await send(identityOwner, 'POST', `${mergePath}/${id}/apply`, selected([row.ordinal])));
   expect(applied.applied).toMatchObject([{ status: 'stale' }]);
   const personal = createEntryPersonalCommands({ pool: f.pool, access: f.access });
@@ -1843,7 +1863,7 @@ test('a merged canonical target invalidates the reviewed observation identity', 
       )
     ).rows,
   ).toEqual([]);
-});
+}, 180_000);
 
 test('unsupported archived observation tokens stay private evidence with a field reason', async () => {
   const records = artifact.records.map((row) => {
