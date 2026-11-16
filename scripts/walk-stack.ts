@@ -59,6 +59,10 @@ export function walkStackNames(task: string, index: number): WalkNames {
   return { prefix, database: `${prefix}-database`, search: `${prefix}-search` };
 }
 
+export function walkStackLogPath(root: string, id: string): string {
+  return join(root, '.temp', 'walk', id, 'stack.log');
+}
+
 export function walkStackPorts(index: number): WalkPorts {
   const base = PORT_BASE + PORTS_PER_SLOT * index;
   return { web: base, issuer: base + 1, native: base + 2, kernel: base + 3, database: base + 4, search: base + 5 };

@@ -2512,11 +2512,17 @@ paused historical data.
 
 #### Native execution-unit entrypoints
 
-Create the native Codex Goal and its termspaces viewer in the unit's assigned worktree, then register the actual
-thread and pane. Registration verifies existing native Goal/thread state and the termspaces-owned `codex resume`
-viewer; it creates no worktree, Goal, thread or turn.
+Create the native Codex Goal in the assigned worktree. For a desktop unit, the registered resident passes
+`--desktop` and the actual thread ID. Registration verifies the active desktop Goal and the exact linked worktree
+recorded by Codex. A termspaces unit passes `--pane` and verifies the live termspaces-owned `codex resume` viewer.
+
+For an operator-authorized desktop resident handoff, run the following from the new resident desktop chat with an
+active Goal in the main checkout. Omit `--replace-session` for the first registration. The desktop form records the
+resident in the existing registry directly, so the legacy host and watchers can stay stopped.
 
 ```sh
+bun tools/goal/src/cli.ts manager register-supermanager --desktop <configured-Codex-pool> --replace-session <previous-thread-id>
+bun tools/goal/src/cli.ts unit register <unit> --thread <native-thread> --desktop --worktree <path> --brief <Goal-file> --pool <configured-Codex-pool>
 bun tools/goal/src/cli.ts unit register <unit> --thread <native-thread> --pane <%id> --worktree <path> --brief <Goal-file> --pool <configured-Codex-pool>
 bun tools/goal/src/cli.ts unit status [unit]
 bun tools/goal/src/cli.ts unit prompt <unit>

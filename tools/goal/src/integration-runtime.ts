@@ -50,6 +50,7 @@ export type IntegrationRuntime = {
   worktreeRoot: string;
   managerSocket: string;
   supermanager?: string;
+  pools?: Settings['pools'];
   fence: AttemptFence;
   sink: GateOutcomeSink;
   landing(task: string): LandingRequest;

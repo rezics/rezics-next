@@ -13,17 +13,19 @@ import {
   registerNativeUnit,
   type NativeUnit,
 } from './native-units.ts';
-import { nativeUnitContext, NATIVE_UNIT_RUN_VARIABLE } from './native-unit-context.ts';
+import { desktopCodexCaller, nativeUnitContext, NATIVE_UNIT_RUN_VARIABLE } from './native-unit-context.ts';
 import { renderGoalAuthorOpening, renderSupermanagerOpening, renderUnitOpening } from './prompts.ts';
 import { databaseStage, openReadOnlyDb } from './db.ts';
 
-function unitCaller(db: Database, settings: Settings, unit?: NativeUnit): void {
+function unitCaller(db: Database, settings: Settings, unit?: NativeUnit, desktop = unit?.pane === null): void {
+  const env = process.env;
+  const thread = desktop ? desktopCodexCaller(env) : (env.CODEX_THREAD_ID ?? env.CODEX_SESSION_ID);
   const actor = authenticatedManager(db, {
-    ...process.env,
-    CODEX_THREAD_ID: process.env.CODEX_THREAD_ID ?? process.env.CODEX_SESSION_ID,
+    ...env,
+    CODEX_THREAD_ID: thread,
   });
   if (actor?.id === settings.integration.supermanager) return;
-  let current = process.env.CODEX_THREAD_ID ?? process.env.CODEX_SESSION_ID;
+  let current = thread;
   if (unit && current) {
     const native = openReadOnlyDb(join(unit.codexHome, 'state_5.sqlite'), settings.policy?.storage);
     try {
@@ -31,7 +33,9 @@ function unitCaller(db: Database, settings: Settings, unit?: NativeUnit): void {
       while (current && seen.size < 16 && !seen.has(current)) {
         if (current === unit.threadId) return;
         seen.add(current);
-        const thread = databaseStage(native, 'unit caller ancestry lookup', () => native.query('SELECT source FROM threads WHERE id=?').get(current)) as { source: string } | null;
+        const thread = databaseStage(native, 'unit caller ancestry lookup', () =>
+          native.query('SELECT source FROM threads WHERE id=?').get(current),
+        ) as { source: string } | null;
         try {
           current = JSON.parse(thread?.source ?? 'null')?.subagent?.thread_spawn?.parent_thread_id;
         } catch {
@@ -47,6 +51,21 @@ function unitCaller(db: Database, settings: Settings, unit?: NativeUnit): void {
       ? 'Native unit context belongs to its root manager, thread or subagents'
       : 'Only the registered root manager may register native units',
   );
+}
+
+function termspacesInventory(settings: Settings): unknown {
+  const observed = spawnSync(
+    settings.integration.termspacesCommand,
+    ['--socket-path', settings.integration.tmuxSocket, '--json', 'status'],
+    { encoding: 'utf8' },
+  );
+  if (observed.status !== 0)
+    throw new Error(`termspaces inventory unavailable: ${observed.error?.message ?? observed.stderr.trim()}`);
+  try {
+    return JSON.parse(observed.stdout);
+  } catch {
+    throw new Error('termspaces inventory is not JSON');
+  }
 }
 
 export async function runNativeUnitCommand(
@@ -81,7 +100,7 @@ export async function runNativeUnitCommand(
     const unit = registeredNativeUnits(db).find((candidate) => candidate.id === id);
     if (!unit) throw new Error(`Native unit is not registered: ${id}`);
     unitCaller(db, settings, unit);
-    const { goal } = readNativeGoal(unit.codexHome, unit.threadId);
+    const { goal } = readNativeGoal(unit.codexHome, unit.threadId, unit.pane === null);
     console.log(
       renderUnitOpening({ goal: goal.objective, brief: readFileSync(unit.briefPath, 'utf8'), cwd: unit.worktree })
         .prompt,
@@ -97,45 +116,42 @@ export async function runNativeUnitCommand(
   if (command === 'register') {
     if (!id)
       throw new Error(
-        'usage: unit register <unit> --thread <thread> --pane <%id> --worktree <path> --brief <path> --pool <pool>',
+        'usage: unit register <unit> --thread <thread> (--desktop | --pane <%id>) --worktree <path> --brief <path> --pool <pool>',
       );
-    unitCaller(db, settings);
     const { values } = parseArgs({
       args: rest,
       options: {
         thread: { type: 'string' },
         pane: { type: 'string' },
+        desktop: { type: 'boolean' },
         worktree: { type: 'string' },
         brief: { type: 'string' },
         pool: { type: 'string' },
       },
     });
-    if (!values.thread || !values.pane || !values.worktree || !values.brief || !values.pool)
-      throw new Error('Native unit registration needs thread, pane, worktree, brief and pool');
+    if (
+      !values.thread ||
+      !values.worktree ||
+      !values.brief ||
+      !values.pool ||
+      Boolean(values.desktop) === Boolean(values.pane)
+    )
+      throw new Error('Native unit registration needs thread, worktree, brief, pool and either --desktop or --pane');
     const pool = settings.pools.find((candidate) => candidate.name === values.pool && candidate.cli === 'codex');
     if (!pool) throw new Error('Native units use an existing configured Codex pool');
-    const observed = spawnSync(
-      settings.integration.termspacesCommand,
-      ['--socket-path', settings.integration.tmuxSocket, '--json', 'status'],
-      { encoding: 'utf8' },
-    );
-    if (observed.status !== 0) throw new Error(`termspaces inventory unavailable: ${observed.stderr.trim()}`);
-    let termspacesStatus: unknown;
-    try {
-      termspacesStatus = JSON.parse(observed.stdout);
-    } catch {
-      throw new Error('termspaces inventory is not JSON');
-    }
+    unitCaller(db, settings, undefined, values.desktop);
+    const viewer = values.desktop
+      ? { pane: null }
+      : { pane: values.pane!, termspacesStatus: termspacesInventory(settings) };
     const unit = registerNativeUnit(db, {
       id,
       threadId: values.thread,
-      pane: values.pane,
+      ...viewer,
       worktree: values.worktree,
       briefPath: values.brief,
       codexHome: pool.configDirectory,
       pool: pool.name,
       mainCheckout: settings.mainCheckout,
-      termspacesStatus,
       stateDirectory: settings.stateDirectory,
     });
     console.log(JSON.stringify(unit));

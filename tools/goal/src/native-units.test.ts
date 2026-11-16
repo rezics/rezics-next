@@ -1,17 +1,22 @@
 import { afterEach, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
+import { randomUUID } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { openDb } from './db.ts';
+import { migrate, openDb } from './db.ts';
 import { nativeUnitContext } from './native-unit-context.ts';
 import {
   nativeUnitEnvironment,
+  nativeUnitMigrations,
   observeNativeUnitContext,
   registerNativeUnit,
   registeredNativeUnits,
 } from './native-units.ts';
-import { isWorker, walkStackRequired } from '../../../scripts/stack-run.ts';
+import { isWorker, walkAcceptanceId, walkStackRequired } from '../../../scripts/stack-run.ts';
+import { walkStackLogPath } from '../../../scripts/walk-stack.ts';
+import { runIntegration, type IntegrationRuntime } from './integration-cli.ts';
+import { registerResidentSupermanager } from './managers.ts';
 import { runNativeUnitCommand } from './native-unit-command.ts';
 import type { Settings } from './types.ts';
 
@@ -58,10 +63,12 @@ function fixture() {
     .run(threadId, goalId, 'Publish a book and read it', 'active', 1);
   goals.close();
   const threads = new Database(join(codexHome, 'state_5.sqlite'));
-  threads.exec('CREATE TABLE threads(id TEXT PRIMARY KEY, cwd TEXT, rollout_path TEXT, source TEXT)');
+  threads.exec(
+    'CREATE TABLE threads(id TEXT PRIMARY KEY, cwd TEXT, source TEXT, originator TEXT, archived INTEGER, rollout_path TEXT)',
+  );
   threads
-    .query('INSERT INTO threads VALUES (?, ?, ?, ?)')
-    .run(threadId, worktree, join(path, 'rollout.jsonl'), 'vscode');
+    .query('INSERT INTO threads VALUES (?, ?, ?, ?, 0, ?)')
+    .run(threadId, worktree, 'vscode', 'Codex Desktop', join(path, 'rollout.jsonl'));
   threads.close();
   const briefPath = join(path, 'goal.md');
   writeFileSync(
@@ -154,6 +161,121 @@ test('native registration verifies its termspaces viewer and keeps one worktree 
     );
     expect(() => nativeUnitEnvironment(registeredNativeUnits(f.db)[0]!)).toThrow('brief changed');
   } finally {
+    f.db.close();
+  }
+});
+
+test('walks require a scoped identity and exact acceptance tokens from managed callers', () => {
+  const env = { GOAL_TASK_ID: 'managed-task', GOAL_ACCEPTANCE_REQUIRES: 'root,browser' };
+  expect(walkAcceptanceId(env)).toBe('managed-task');
+  expect(walkAcceptanceId(env, 'native')).toBeUndefined();
+  expect(walkAcceptanceId({ ...env, GOAL_TASK_ID: '../wrong' })).toBeUndefined();
+  expect(walkAcceptanceId({ GOAL_ACCEPTANCE_REQUIRES: 'native' })).toBeUndefined();
+  expect(walkAcceptanceId({ ...env, GOAL_ACCEPTANCE_REQUIRES: 'native-approximation' })).toBeUndefined();
+  expect(() => walkAcceptanceId({ ...env, REZICS_NATIVE_UNIT_CONTEXT: '{}' })).toThrow('Invalid native unit');
+});
+
+test('an active desktop resident hands off authority and launches only the assigned registered unit', async () => {
+  const f = fixture();
+  const { worktree: mainCheckout, codexHome, stateDirectory, threadId, briefPath, id } = f.input;
+  const worktree = join(f.path, 'desktop-worktree');
+  const manager = randomUUID();
+  const former = randomUUID();
+  const supermanager = 'supermanager';
+  const pools = [{ name: 'codex', cli: 'codex', configDirectory: codexHome }] as Settings['pools'];
+  const runtime = {
+    db: f.db,
+    mainCheckout,
+    supermanager,
+    pools,
+    managerServices: {},
+    integration: { supermanager },
+    stateDirectory,
+  };
+  const settings = runtime as Settings;
+  const replace = (previous: string) =>
+    runIntegration(
+      ['manager', 'register-supermanager', '--desktop', 'codex', '--replace-session', previous],
+      runtime as IntegrationRuntime,
+    );
+  const register = (thread: string) =>
+    runNativeUnitCommand(
+      [
+        'register',
+        id,
+        '--desktop',
+        '--thread',
+        thread,
+        '--worktree',
+        worktree,
+        '--brief',
+        briefPath,
+        '--pool',
+        'codex',
+      ],
+      { db: f.db, settings },
+    );
+  const prior = { CODEX_THREAD_ID: process.env.CODEX_THREAD_ID, CODEX_SESSION_ID: process.env.CODEX_SESSION_ID };
+  const setCaller = (thread: string) =>
+    Object.assign(process.env, { CODEX_THREAD_ID: thread, CODEX_SESSION_ID: thread });
+  const native = new Database(join(codexHome, 'state_5.sqlite'));
+  const goals = new Database(f.goals);
+  try {
+    expect(
+      spawnSync('git', ['-C', mainCheckout, 'worktree', 'add', '--detach', worktree], { stdio: 'ignore' }).status,
+    ).toBe(0);
+    native
+      .query('INSERT INTO threads VALUES (?, ?, ?, ?, 0, ?)')
+      .run(manager, mainCheckout, 'vscode', 'Codex Desktop', join(f.path, 'manager.jsonl'));
+    goals
+      .query('INSERT INTO thread_goals VALUES (?, ?, ?, ?, ?)')
+      .run(manager, randomUUID(), 'Manage units', 'active', 1);
+    migrate(f.db, nativeUnitMigrations.slice(0, 1));
+    registerResidentSupermanager(f.db, supermanager, former, { provider: 'codex' });
+    setCaller(manager);
+    await expect(register(threadId)).rejects.toThrow('Only the registered root manager');
+    await expect(replace(randomUUID())).rejects.toThrow('replacement mismatch');
+    expect(await replace(former)).toBe(0);
+    await expect(register(randomUUID())).rejects.toThrow('existing Codex thread and native Goal');
+    await expect(register(threadId)).rejects.toThrow('thread must be in its assigned worktree');
+    native.query('UPDATE threads SET cwd = ?, archived = 1 WHERE id = ?').run(worktree, threadId);
+    await expect(register(threadId)).rejects.toThrow('unarchived Codex Desktop thread');
+    native.query('UPDATE threads SET archived = 0 WHERE id = ?').run(threadId);
+    expect(await register(threadId)).toBe(0);
+    const unit = registeredNativeUnits(f.db)[0]!;
+    expect(unit.pane).toBeNull();
+    const env = nativeUnitEnvironment(unit);
+    expect(walkAcceptanceId(env, 'native', worktree)).toBe(id);
+    expect(walkStackLogPath(worktree, id)).toBe(join(worktree, '.temp/walk/book-unit/stack.log'));
+    expect(() => walkAcceptanceId(env, 'native', mainCheckout)).toThrow('check must start in its assigned worktree');
+    expect(() => walkAcceptanceId({ ...env, GOAL_TASK_ID: 'managed-task' }, 'native', worktree)).toThrow(
+      'cannot also claim',
+    );
+    setCaller(former);
+    const run = () =>
+      runNativeUnitCommand(
+        [
+          'run',
+          id,
+          '--',
+          process.execPath,
+          '-e',
+          `if (process.cwd() !== ${JSON.stringify(worktree)} || process.env.GOAL_TASK_ID || !process.env.REZICS_NATIVE_UNIT_RUN_ID) process.exit(1)`,
+        ],
+        { db: f.db, settings },
+      );
+    await expect(run()).rejects.toThrow('belongs to its root manager');
+    setCaller(threadId);
+    expect(await run()).toBe(0);
+    goals.query("UPDATE thread_goals SET status = 'paused' WHERE thread_id = ?").run(threadId);
+    await expect(run()).rejects.toThrow('Goal must be active');
+  } finally {
+    for (const [key, value] of Object.entries(prior)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    goals.close();
+    native.close();
     f.db.close();
   }
 });
