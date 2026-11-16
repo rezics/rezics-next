@@ -126,7 +126,10 @@ export interface PreparedCollectionSource {
 
 export const nativeEvidence: unique symbol = Symbol('native Collection evidence');
 /** Owner evidence reference; no public DTO/debug serialization. Not a fake Search Hit. */
-export type CollectionSourceEvidence = { readonly [nativeEvidence]: true };
+export type CollectionSourceEvidence = {
+  readonly [nativeEvidence]: true;
+  readonly originalSubjectId?: string;
+};
 
 export interface CanonicalCollectionCandidate {
   readonly subjectId: string;

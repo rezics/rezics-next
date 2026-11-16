@@ -475,7 +475,7 @@ function createCollectionSourceRuntime(
         ? {
             result: true,
             subjectId: input.subjectId,
-            positiveEvidence: { [nativeEvidence]: true },
+            positiveEvidence: { [nativeEvidence]: true, originalSubjectId: state.originalSubjectId },
             observation: obs,
             work: l.receipt(),
           }
@@ -506,7 +506,7 @@ function createCollectionSourceRuntime(
           return {
             result: true,
             subjectId: input.subjectId,
-            positiveEvidence: { [nativeEvidence]: true },
+            positiveEvidence: { [nativeEvidence]: true, originalSubjectId: probe.key.storedSubjectId },
             observation: obs,
             work: l.receipt(),
           };
@@ -534,7 +534,7 @@ function createCollectionSourceRuntime(
           return {
             result: true,
             subjectId: input.subjectId,
-            positiveEvidence: { [nativeEvidence]: true },
+            positiveEvidence: { [nativeEvidence]: true, originalSubjectId: probe.key.storedSubjectId },
             observation: obs,
             work: l.receipt(),
           };
