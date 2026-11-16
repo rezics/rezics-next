@@ -6,7 +6,14 @@ import { RatingControlView, RatingRecoveryView, type RatingAnswerRecovery } from
 import type { QuestionBoundRatingInput } from '../../features/pages/rating-actions';
 import { RatingsView } from '../../features/pages/subject-ratings-view';
 import { GLOBAL, type PublicFigure, type Ratings } from '../../features/pages/subject-ratings';
-import { independentSourceStatistics, ratingsFixtures, standardRatingQuestion } from '../../kernel/fake/ratings';
+import {
+  IMPORTED_VN_SUBJECT_ID,
+  independentSourceStatistics,
+  ratingsFixtures,
+  standardRatingQuestion,
+} from '../../kernel/fake/ratings';
+import { subjectHref } from '../../subject/subject-href';
+import { storySubjects } from '../../kernel/story-subjects';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 
@@ -136,7 +143,7 @@ export const SaveClearZero: Story = {
     await expectComfortableAction(clear);
     await expect(save).toBeDisabled();
     await expect(clear).toBeDisabled();
-    const slider = view.getByRole('slider', { name: standardRatingQuestion.label });
+    const slider = await view.findByRole('slider', { name: standardRatingQuestion.label });
     await userEvent.tab();
     await expect(slider).toHaveFocus();
     await userEvent.keyboard('{Home}');
@@ -512,11 +519,15 @@ export const IndependentSources: Story = {
   },
 };
 
-// The Reviews route retains the detailed public rating sources.
-const detailedRatingsPath = `${pagePaths.subject}/reviews`;
+function detailedRatingsPath() {
+  const work = storySubjects.find(({ id }) => id === IMPORTED_VN_SUBJECT_ID)!;
+  const locale = getLocale();
+  const label = (work.labels as Record<string, string>)[locale] ?? work.labels.en;
+  return subjectHref({ id: work.id, label }, locale).href;
+}
 
 export const RichRatings: Story = {
-  render: () => <PageStory visitor="Signed In" path={detailedRatingsPath} ratingsFixture="subject-ratings-rich" />,
+  render: () => <PageStory visitor="Signed In" path={detailedRatingsPath()} ratingsFixture="subject-ratings-rich" />,
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);

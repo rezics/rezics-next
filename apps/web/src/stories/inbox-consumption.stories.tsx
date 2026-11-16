@@ -140,6 +140,7 @@ export const KeyboardReturn: Story = {
     const watchLink = { name: /^A new post on a thread you watch\./ };
     const { id, title, firstPost } = recordedThread.thread;
     const href = inboxContent.threadHref(getLocale(), { id, title, postId: firstPost.id });
+    await userEvent.click(await view.findByRole('button', { name: m.inbox_triage_filter_unread() }));
     const list = await view.findByRole('list', { name: m.inbox_heading() });
     const destination = within(list).getByRole('link', watchLink);
     destination.focus();
@@ -153,6 +154,10 @@ export const KeyboardReturn: Story = {
     await view.findByText(m.inbox_return_notice_restored());
     const returnedList = await view.findByRole('list', { name: m.inbox_heading() });
     const row = within(returnedList).getByRole('listitem');
+    await expect(view.getByRole('button', { name: m.inbox_triage_filter_unread() })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     await expect(within(row).getByRole('link', watchLink)).toHaveAttribute('href', href);
     await expect(within(row).getByRole('button', { name: m.inbox_notice_mark_seen() })).toHaveFocus();
   },

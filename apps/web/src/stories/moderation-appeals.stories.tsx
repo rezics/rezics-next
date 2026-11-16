@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { ModerationAppealsView } from '../moderation/appeals-tab';
 import type { Appeal } from '../moderation/appeals-read';
 import type { ModerationTarget } from '../moderation/reports-page';
@@ -106,6 +106,7 @@ export const Pending: Story = {
     await expect(view.getByRole('heading', { level: 3, name: m.moderation_current_target_label() })).toBeVisible();
     await expect(article.querySelector('time')).toHaveAttribute('dateTime', pendingAppeal.createdAt);
 
+    await waitFor(() => expect(statement).toBeEnabled());
     // The shell's skip target anchors keyboard progression inside the appeals page.
     main.focus();
     await expect(main).toHaveFocus();

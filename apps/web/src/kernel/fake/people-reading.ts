@@ -645,7 +645,7 @@ export const routes: FakeRoute[] = [
       if (!match![2]) return { status: 200, thread };
       return {
         status: 200,
-        ...authoredReadingPage(
+        __responseBody: authoredReadingPage(
           thread,
           [],
           [

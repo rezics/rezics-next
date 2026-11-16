@@ -4,6 +4,7 @@ import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { notificationName } from '../settings/notifications';
 import { settingsPreferencePage } from '../kernel/fake/settings-notifications';
+import { readingAdviceFor } from '../settings/reading-preferences';
 import type {
   NotificationChange,
   NotificationPreferences,
@@ -54,7 +55,7 @@ function controlledPreferences() {
     signedIn: true as const,
     accountId: 'story-viewer',
     securityHref: null,
-    preferences: { ...preferences },
+    preferences: { ...preferences, advice: readingAdviceFor(preferences) },
     notifications: { ...notifications },
     page: settingsPreferencePage(notifications, preferences.version),
   });
@@ -76,7 +77,7 @@ function controlledPreferences() {
         suitability: input.suitability ?? preferences.suitability,
         version: preferences.version + 1,
       };
-      return { ok: true, preferences: { ...preferences } };
+      return { ok: true, preferences: { ...preferences, advice: readingAdviceFor(preferences) } };
     },
     saveNotifications: async (input, token) => {
       const { idempotencyKey, ...body } = input;

@@ -1264,13 +1264,10 @@ function RealmBansVisit({
             </section>
           </details>
           <details className="min-w-0 rounded-xl border px-4 py-3">
-            <summary
-              id={`${id}-inspection-context`}
-              className="cursor-pointer content-center whitespace-normal wrap-anywhere font-semibold"
-            >
+            <summary className="cursor-pointer content-center whitespace-normal wrap-anywhere font-semibold">
               {m.realm_bans_inspect_heading()}
             </summary>
-            <section aria-labelledby={`${id}-inspection-context`} className="min-w-0 pt-3">
+            <div className="min-w-0 pt-3">
               <RealmBanCurrentControl
                 key={renderGeneration}
                 realmId={realmId}
@@ -1302,7 +1299,7 @@ function RealmBansVisit({
                   );
                 }}
               />
-            </section>
+            </div>
           </details>
           {selectedMember && selectedMember.realmId === realmId ? (
             <section
