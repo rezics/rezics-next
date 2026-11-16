@@ -200,6 +200,33 @@ async function observeDraftReadiness(authorId: string, postId: string, revisionI
   );
 }
 
+async function observeBookDiscovery(
+  book: Pick<HostedReaderControl, 'subjectId' | 'catalogueId'>,
+  publicationId: string,
+): Promise<string> {
+  const subjectRoute = routeOf(book.subjectId);
+  const catalogueRoute = routeOf(book.catalogueId);
+  if (subjectRoute === null || catalogueRoute === null) return 'unavailable';
+  return observeContentFailure(
+    `SELECT (c.route=$1 AND $2::uuid=ANY(r.subject_ids)) AS same_route_reference,
+       st.source_epoch AS subject_thread_epoch,st.source_position::text AS subject_thread_position,
+       c.publication_id=$5 AS exact_current_release,
+       p.availability,p.visibility,p.author_erased,s.placement_count::text AS publication_placements
+     FROM content.hosted_catalogue c
+     LEFT JOIN content.post p ON (p.route,p.thread_id,p.post_id)=(c.route,c.thread_id,c.catalogue_id)
+     LEFT JOIN content.revision r ON (r.route,r.thread_id,r.post_id,r.revision_id)=
+       (p.route,p.thread_id,p.post_id,p.head_revision_id)
+     LEFT JOIN content.subject_thread st ON (st.route,st.subject_id,st.thread_id)=($1,$2,c.thread_id)
+       AND st.thread_route=c.route
+     LEFT JOIN content.hosted_version_revision v ON (v.route,v.catalogue_id,v.revision_id)=
+       (c.route,c.catalogue_id,c.publication_id) AND v.revision_kind='publication' AND v.generation_kind='candidate'
+     LEFT JOIN content.hosted_tree_snapshot_version s ON (s.route,s.catalogue_id,s.generation_id,s.sequence)=
+       (v.route,v.catalogue_id,v.generation_id,v.sequence)
+     WHERE (c.route,c.catalogue_id)=($3,$4) LIMIT 1`,
+    [subjectRoute, book.subjectId, catalogueRoute, book.catalogueId, publicationId],
+  );
+}
+
 async function hydrate(page: Page) {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
   await page.getByRole('main').waitFor({ state: 'attached' });
@@ -1747,7 +1774,13 @@ nativeTest(
         exactReaderHref = memberPage.url();
         return { value: exactReaderHref, observation: `discovery-index=${index + 1} exact-url=${exactReaderHref}` };
       },
-      () => pageObservation(memberPage),
+      async () => {
+        const [browser, native] = await Promise.all([
+          pageObservation(memberPage),
+          observeBookDiscovery(control!, currentReleaseRevisionId ?? control!.publicationRevisionId),
+        ]);
+        return `${browser}; exact discovery readiness=${native}`;
+      },
     );
 
     if (discovery && occurrence) {
