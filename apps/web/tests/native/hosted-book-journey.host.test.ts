@@ -124,6 +124,10 @@ function pageFrom(journey: { context: { pages(): Page[] } }): Page {
   return page;
 }
 
+function chapterStudioPath(draft: JourneyPost) {
+  return `/en/studio?postId=${encodeURIComponent(draft.postId)}`;
+}
+
 async function saveChapterDraft(
   page: Page,
   author: KernelClient,
@@ -131,9 +135,8 @@ async function saveChapterDraft(
   bodyText: string,
   includeCover: boolean,
 ) {
-  await page.goto(`${stack.web}/en/studio?postId=${encodeURIComponent(draft.postId)}`, {
-    waitUntil: 'domcontentloaded',
-  });
+  const href = new URL(chapterStudioPath(draft), stack.web).href;
+  if (page.url() !== href) await page.goto(href, { waitUntil: 'domcontentloaded' });
   await hydrate(page);
   const editor = page.locator('.ProseMirror[contenteditable="true"]').last();
   await editor.waitFor({ state: 'visible' });
@@ -434,10 +437,6 @@ nativeTest(
     let preparationOperands: string | undefined;
     let activationOperands: PrivateActivationOperands | undefined;
     let candidateSealed = false;
-    const ownerJourney = await auth.signIn('alice');
-    const page = pageFrom(ownerJourney);
-    await page.setViewportSize({ width: 1440, height: 1000 });
-
     seed = await journal.run('generated private manuscript setup', async () => {
       const value = await createHostedBookJourneySeed(stack, 'Private draft journey');
       return {
@@ -457,6 +456,12 @@ nativeTest(
           value.chapterTwo.postId,
       };
     });
+
+    const ownerJourney = await auth.signIn('alice', {
+      returnTo: seed ? chapterStudioPath(seed.chapterOne) : '/en/studio',
+    });
+    const page = pageFrom(ownerJourney);
+    await page.setViewportSize({ width: 1440, height: 1000 });
 
     const frenchText =
       'Mara comptait les lanternes depuis le pont du bac et dessinait le port silencieux sur sa carte.';
@@ -1361,7 +1366,7 @@ nativeTest(
       };
     });
 
-    const ownerJourney = await auth.signIn('alice');
+    const ownerJourney = await auth.signIn('alice', { returnTo: chapterStudioPath(control!.chapter) });
     const ownerPage = pageFrom(ownerJourney);
     await ownerPage.setViewportSize({ width: 1440, height: 1000 });
     let pointRevision: Awaited<ReturnType<typeof readNativePost>> | undefined;
@@ -1555,7 +1560,8 @@ nativeTest(
       );
     }
 
-    const memberJourney = await auth.signIn('bob');
+    const discoveryPath = `/en/books/${encodeURIComponent(control!.subjectId)}/read?view=catalogues`;
+    const memberJourney = await auth.signIn('bob', { returnTo: discoveryPath });
     const memberPage = pageFrom(memberJourney);
     await memberPage.setViewportSize({ width: 1280, height: 900 });
     const discovery = await journal.run(
@@ -1571,9 +1577,8 @@ nativeTest(
           (item) => item.catalogueId === control!.catalogueId && item.revisionId === currentReleaseRevisionId,
         );
         if (index < 0) throw new Error('Generated Book subject discovery omitted the separate control');
-        await memberPage.goto(`${stack.web}/en/books/${encodeURIComponent(control!.subjectId)}/read?view=catalogues`, {
-          waitUntil: 'domcontentloaded',
-        });
+        const discoveryHref = new URL(discoveryPath, stack.web).href;
+        if (memberPage.url() !== discoveryHref) await memberPage.goto(discoveryHref, { waitUntil: 'domcontentloaded' });
         await hydrate(memberPage);
         const catalogueTitle = body.items[index]!.title?.trim() || 'Published book ' + (index + 1);
         await memberPage.getByRole('link', { name: catalogueTitle, exact: true }).click();

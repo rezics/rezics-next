@@ -30,8 +30,14 @@ afterAll(async () => {
 nativeAfterAll(lifecycle, 240_000);
 
 async function authorPage(): Promise<Page> {
-  const journey = await fixture.auth.signIn('alice');
-  const page = await journey.context.newPage();
+  const journey = await fixture.auth.signIn('alice', { returnTo: fixture.createHref });
+  const page = signedInPage(journey.context.pages());
+  return page;
+}
+
+function signedInPage(pages: Page[]): Page {
+  const page = pages.at(-1);
+  if (!page) throw new Error('Native sign-in did not retain its browser page');
   page.setDefaultTimeout(60_000);
   return page;
 }
@@ -88,7 +94,7 @@ nativeTest(
     expect(isKnowledgeJourneyId(subjectId)).toBe(true);
 
     fixture.evidence.stage = 'private-save';
-    await fixture.open(page, fixture.createHref);
+    await expect(page).toHaveURL(new URL(fixture.createHref, fixture.stack.web).href);
     await expect(page.getByLabel(copy.notebookTitle, { exact: true })).toBeVisible();
     await fixture.fillTitle(page, copy.notebookTitle, text.notebook);
     await knowledgeJourneyClick(page, copy.createNotebook);
@@ -331,9 +337,8 @@ nativeTest(
       parent.documentId,
       [404],
     );
-    const bobJourney = await fixture.auth.signIn('bob');
-    const bobPage = await bobJourney.context.newPage();
-    bobPage.setDefaultTimeout(60_000);
+    const bobJourney = await fixture.auth.signIn('bob', { returnTo: fixture.liveHref(firstHead.documentId) });
+    const bobPage = signedInPage(bobJourney.context.pages());
     await fixture.open(bobPage, fixture.privateHref(sourceNotebookId, firstHead.documentId));
     await expect(bobPage.getByText(copy.privateDenied).or(bobPage.getByText(copy.privateNotFound))).toBeVisible();
     await expectPrivateTextsAbsent(bobPage, [text.selectedBody, text.selectedTitle]);

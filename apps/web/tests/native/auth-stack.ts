@@ -441,7 +441,8 @@ export async function startAuthStack(
         // before returning a usable served web page. Its account control proves
         // that the web app has read the real session through its server function.
         assertActive('finish native Auth callback');
-        await callbackResponse;
+        const callback = await callbackResponse;
+        console.info(`Native Auth callback for ${persona}: HTTP ${callback?.status() ?? 'missing'}`);
         await page.waitForURL((url) => url.origin === webOrigin && !url.pathname.startsWith('/auth/'), {
           timeout: 30_000,
           waitUntil: 'domcontentloaded',
