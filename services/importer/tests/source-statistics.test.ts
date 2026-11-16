@@ -10,6 +10,7 @@ import type { Run } from '../src/run-store.ts';
 import type { ImportTransport } from '../src/import-contract.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 import { createImportTransport } from './transport-driver.ts';
+import { formatSeedError, seedImportRunFailure, seedTransportError } from '../src/seed-cli.ts';
 
 const subjectId = '00000000-0000-4000-8000-000000000101';
 
@@ -401,7 +402,19 @@ for (const failure of ['denied', 'lost'] as const) {
     const f = await statisticRefreshFixture();
     try {
       f.fail(failure);
-      expect((await f.run(735)).status).toBe('bulk-failed');
+      const run = await f.run(735);
+      expect(run.status).toBe('bulk-failed');
+      if (failure === 'denied') {
+        const error = seedImportRunFailure('vndb', run);
+        expect(seedTransportError(error)).toMatchObject({
+          method: 'PUT',
+          path: `/v1/subjects/${subjectId}/source-statistics/vndb`,
+          status: 403,
+          code: 'forbidden',
+        });
+        expect(formatSeedError(error)).toContain('status=403');
+        expect(formatSeedError(error)).not.toContain('local-protocol-token');
+      }
       const baseline = f.importer.session.store.source('vndb');
       const uncertainRun = f.importer.session.store.activeRun('vndb')!;
       expect(uncertainRun).not.toBeNull();

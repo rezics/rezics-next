@@ -1,7 +1,7 @@
 import { CredentialDeniedError, CredentialServiceError } from './credentials.ts';
 import { formatImportTransportError, ImportTransportError } from './import-client.ts';
 import { importRequestFailure, type ImportRequestDiagnostics } from './import-fetch.ts';
-import type { ImportRunResult } from './importer.ts';
+import { importRunTransportFailure, type ImportRunResult } from './importer.ts';
 import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
@@ -53,7 +53,9 @@ const importRunFailures = new WeakMap<object, { provider: 'bangumi' | 'vndb'; ki
 
 /** Register only the local run classification; its diagnostic may contain private source or response text. */
 export function seedImportRunFailure(provider: 'bangumi' | 'vndb', result: ImportRunResult): Error {
-  const error = new TypeError(`Cross-media ${provider} import failed: ${result.status} (${result.diagnostic})`);
+  const error = new TypeError(`Cross-media ${provider} import failed: ${result.status} (${result.diagnostic})`, {
+    cause: importRunTransportFailure(result),
+  });
   importRunFailures.set(error, { provider, kind: result.status });
   return error;
 }
@@ -213,7 +215,13 @@ function formatSeedCause(error: unknown): string {
     return `Cross-media seed publication incomplete result-write=completed artifact=${JSON.stringify(error.resultPath)} bounded-omissions=${error.omissions}`;
   if (typeof error === 'object' && error !== null) {
     const run = importRunFailures.get(error);
-    if (run) return `Cross-media seed import failed provider=${run.provider} kind=${run.kind}`;
+    if (run) {
+      const failure = seedTransportError(error);
+      return (
+        `Cross-media seed import failed provider=${run.provider} kind=${run.kind}` +
+        (failure ? ` ${formatImportTransportError(failure)}` : '')
+      );
+    }
   }
   const transport = seedTransportError(error);
   if (transport) {

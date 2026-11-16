@@ -139,6 +139,13 @@ export type ImportRunResult = {
   committedPrefix?: number;
   checkpointed?: boolean;
 };
+const runTransportFailures = new WeakMap<ImportRunResult, ImportTransportError>();
+
+/** The first typed terminal request is diagnostic context, outside the public run report. */
+export function importRunTransportFailure(result: ImportRunResult): ImportTransportError | undefined {
+  return runTransportFailures.get(result);
+}
+
 export type ImportRunOptions = {
   /** Complete source snapshots are the default; partial observations must opt into selected mode. */
   acquisitionMode?: AcquisitionMode;
@@ -1099,7 +1106,12 @@ export class Importer {
     return result.results.every(success);
   }
 
-  private async drain(run: Run, signal: AbortSignal, phase: Phase): Promise<boolean> {
+  private async drain(
+    run: Run,
+    signal: AbortSignal,
+    phase: Phase,
+    retainFailure: (error: unknown) => void,
+  ): Promise<boolean> {
     let after: string | undefined;
     let complete = true;
     for (;;) {
@@ -1118,6 +1130,7 @@ export class Importer {
             return await this.dispatch(run, pending, signal, write);
           } catch (error) {
             if (error instanceof Interrupted) throw error;
+            retainFailure(error);
             return false;
           }
         },
@@ -2387,6 +2400,7 @@ export class Importer {
     run: Run,
     signal: AbortSignal,
     deadline: number,
+    retainFailure: (error: unknown) => void,
   ): Promise<boolean> {
     for (;;) {
       let after: string | undefined;
@@ -2415,6 +2429,7 @@ export class Importer {
               const overload =
                 error instanceof ImportTransportError &&
                 (error.status === 429 || (error.status === 503 && error.retryable));
+              if (overload) retainFailure(error);
               return { outcome: overload ? ('stopped' as const) : ('failed' as const), kind: entry.kind };
             }
           },
@@ -2493,6 +2508,15 @@ export class Importer {
   ): Promise<ImportRunResult> {
     const store = this.session.store;
     const { observe, finish, signal, mediaDeadline } = work;
+    let firstTransportFailure: ImportTransportError | undefined;
+    const retainFailure = (error: unknown) => {
+      if (error instanceof ImportTransportError) firstTransportFailure ??= error;
+    };
+    const finishBulkFailure = () => {
+      const result = finish('bulk-failed', 'Durable operations remain unresolved');
+      if (firstTransportFailure) runTransportFailures.set(result, firstTransportFailure);
+      return result;
+    };
     if (work.finalizeOnly) {
       const finalizing = this.progress(signal)?.onPhase?.('finalizing');
       if (finalizing !== undefined) await finalizing;
@@ -2507,8 +2531,7 @@ export class Importer {
     }
     const reconciling = this.progress(signal)?.onPhase?.('reconciling');
     if (reconciling !== undefined) await reconciling;
-    if (work.resumed && !(await this.drain(run, signal, 'resumed')))
-      return finish('bulk-failed', 'Durable operations remain unresolved');
+    if (work.resumed && !(await this.drain(run, signal, 'resumed', retainFailure))) return finishBulkFailure();
     let failed = false;
     let observationConflict = false;
     let after: string | undefined;
@@ -2551,6 +2574,7 @@ export class Importer {
               error instanceof ClassificationRefusedError
             )
               return { kind: 'unchanged' as const, deferredCover: false, observationConflict: true };
+            retainFailure(error);
             return 'failed';
           }
         },
@@ -2607,6 +2631,7 @@ export class Importer {
               error instanceof ClassificationRefusedError
             )
               return { kind: 'unchanged' as const, deferredCover: false, observationConflict: true };
+            retainFailure(error);
             return 'failed';
           }
         },
@@ -2624,14 +2649,13 @@ export class Importer {
     store.pagePending(run, { limit: 100 });
     const deferredMedia = this.progress(signal)?.onPhase?.('deferred-media');
     if (deferredMedia !== undefined) await deferredMedia;
-    if (!(await this.resolveCovers(registration, run, signal, mediaDeadline))) failed = true;
+    if (!(await this.resolveCovers(registration, run, signal, mediaDeadline, retainFailure))) failed = true;
     if (observationConflict || store.hasObservationConflicts(run)) {
       const conflict = this.progress(signal)?.onPhase?.('observation-conflict');
       if (conflict !== undefined) await conflict;
       return finish('observation-conflict', 'Source observation requires explicit operator resolution');
     }
-    if (failed || store.hasUnresolvedAggregates(run))
-      return finish('bulk-failed', 'Durable operations remain unresolved');
+    if (failed || store.hasUnresolvedAggregates(run)) return finishBulkFailure();
     const finalizing = this.progress(signal)?.onPhase?.('finalizing');
     if (finalizing !== undefined) await finalizing;
     let final = store.finalize(run, 100);
