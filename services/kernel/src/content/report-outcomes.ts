@@ -18,6 +18,7 @@ import { readPartition } from '../partition/partition.ts';
 import type { AccessClient, Actor } from '../request/access.ts';
 import { derivedId, newId, partitionOf, routeOf } from '../route/route.ts';
 import { globalContextAnchor } from '../semantic/context.ts';
+import { admitWorkEventEnvelope } from './core/index.ts';
 import { CONTENT_EVENTS } from './events.ts';
 import { withWritableNoticeRoute, writeNotices } from './notices.ts';
 import type { ReportDependencies, ReportTarget } from './reports.ts';
@@ -242,14 +243,15 @@ export async function reportOutcomePage(
 
 async function verifiedSource(pool: Pool, event: CloudEvent, id: string) {
   const route = routeOf(id);
-  const match = /^urn:rezics:log:(\d+)\.([1-9][0-9]*)$/.exec(event.source);
-  if (route === null || !match || Number(match[1]) !== partitionOf(route) || !/^\d{19}$/.test(event.sequence))
+  const source = admitWorkEventEnvelope(event);
+  if (route === null || !source || source.partition !== partitionOf(route))
     throw new TypeError('Invalid report outcome source');
+  const { partition, epoch, position } = source;
   return atPartition(pool, route, false, async (client) => {
     const rows = await sourceEvent.run(client, {
-      partition_no: partitionOf(route),
-      epoch: Number(match[2]),
-      position: event.sequence,
+      partition_no: partition,
+      epoch,
+      position,
       id: event.id,
       type: event.type,
       subject: event.subject ?? null,
@@ -260,7 +262,7 @@ async function verifiedSource(pool: Pool, event: CloudEvent, id: string) {
       const time = await client.query<{ recorded_at: string }>(
         `SELECT to_char(recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS recorded_at
          FROM core.outbox WHERE partition_no=$1 AND epoch=$2 AND position=$3 AND event_seq=$4`,
-        [partitionOf(route), Number(match[2]), event.sequence, rows[0]!.event_seq],
+        [partition, epoch, position, rows[0]!.event_seq],
       );
       if (!time.rows[0]) throw new TypeError('Report outcome source time missing');
       return time.rows[0].recorded_at;
@@ -315,6 +317,13 @@ export function createReportOutcomeEffect(pool: Pool): Effect {
         targetId: string;
         securityRevision?: string;
       };
+      if (event.type === projected && event.subject !== data.targetId) {
+        // A thread or post also produces a board queue projection on the board's partition.
+        if (event.subject === undefined || (data.targetKind !== 'thread' && data.targetKind !== 'post'))
+          throw new TypeError('Invalid report outcome source');
+        await verifiedSource(pool, event, event.subject);
+        return;
+      }
       await verifiedSource(pool, event, event.type === resolved ? data.reportId : data.targetId);
       if (event.type === resolved) return notify(pool, data.reportId);
       const target: ReportTarget = { kind: data.targetKind, id: data.targetId };

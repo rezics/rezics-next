@@ -3,16 +3,18 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { normalizeDocument } from '@rezics/document';
 import { randomUUID } from 'node:crypto';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
+import { threadTarget } from '../../src/content/commands.ts';
+import { createReportOutcomeEffect } from '../../src/content/report-outcomes.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import resourceRoles from '../../src/access/resource-roles.json';
 import { resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import { contentEffects } from '../../src/content/relays.ts';
 import type { WorkClient } from '../../src/work/client.ts';
-import type { CloudEvent } from '../../src/events/log.ts';
+import { readBatch, type CloudEvent } from '../../src/events/log.ts';
 
 import { seedReportGrowth, type ReportGrowthRow } from './support/report-growth.ts';
 
@@ -119,15 +121,20 @@ describe('report outcomes through HTTP and committed effects', () => {
     );
     return { response, body: await response.json() };
   }
-  async function create(text = 'Authored erasure sentinel', targetBoard = boardId) {
-    const result = await call('POST', '/v1/threads', {
-      title: 'Erasure title sentinel',
-      body: snapshot(text),
-      licence: 'MIT',
-      subjectIds: [],
-      boardId: targetBoard,
-      visibility: 'published',
-    });
+  async function create(text = 'Authored erasure sentinel', targetBoard = boardId, key?: string) {
+    const result = await call(
+      'POST',
+      '/v1/threads',
+      {
+        title: 'Erasure title sentinel',
+        body: snapshot(text),
+        licence: 'MIT',
+        subjectIds: [],
+        boardId: targetBoard,
+        visibility: 'published',
+      },
+      key,
+    );
     expect(result.response.status).toBe(201);
     return result.body.thread;
   }
@@ -165,7 +172,10 @@ describe('report outcomes through HTTP and committed effects', () => {
     }
   }
   test('a takedown marks every open report of its target actioned in bounded pages and sends each signed-in reporter the outcome once', async () => {
-    const thread = await create();
+    const boardPartition = partitionOf(routeOf(boardId)!);
+    let key = randomUUID();
+    while (partitionOf(threadTarget(routeKey, fixture.actor, key).route) === boardPartition) key = randomUUID();
+    const thread = await create(undefined, boardId, key);
     const target = { kind: 'thread' as const, id: thread.id };
     await fixture.grant(fixture.principal, 'moderation:takedown', { route: routeOf(thread.id)!, id: thread.id });
     await fixture.grant(fixture.principal, 'moderation:read_reports', { route: routeOf(thread.id)!, id: thread.id });
@@ -174,10 +184,45 @@ describe('report outcomes through HTTP and committed effects', () => {
     expect(open.body.report).toMatchObject({ outcome: null, resolvedAt: null });
     const taken = await call('POST', `/v1/threads/${thread.id}:takeDown`, reason, undefined, fixture.principal);
     expect(taken.response.status).toBe(200);
-    await deliver('content_report_outcome', thread.id);
+
+    const readProjection = async (partition: number, subject: string) => {
+      const events: CloudEvent[] = [];
+      const result = await readBatch(db.pool, {
+        partition,
+        consumer: 'test_report_outcome_projection',
+        async apply(envelopes) {
+          for (const { events: batch } of envelopes)
+            events.push(
+              ...batch.filter(
+                (event) =>
+                  event.type === 'com.rezics.content.report-target.projected.v1' &&
+                  event.subject === subject &&
+                  (event.data as { reportId: string }).reportId === id,
+              ),
+            );
+        },
+      });
+      expect(result.status).toBe('read');
+      expect(events).toHaveLength(1);
+      return events[0]!;
+    };
+    const boardProjection = await readProjection(boardPartition, boardId);
+    const targetPartition = partitionOf(routeOf(thread.id)!);
+    expect(targetPartition).not.toBe(boardPartition);
+    const targetProjection = await readProjection(targetPartition, thread.id);
+    const outcome = createReportOutcomeEffect(db.pool);
+    await outcome.run(boardProjection);
+    expect(
+      (await call('GET', `/v1/reports/${id}`, undefined, undefined, fixture.principal)).body.report.outcome,
+    ).toBeNull();
+    await expect(outcome.run({ ...boardProjection, id: randomUUID() })).rejects.toThrow(
+      'Report outcome source missing',
+    );
+    await outcome.run(targetProjection);
     const resolved = await call('GET', `/v1/reports/${id}`, undefined, undefined, fixture.principal);
     expect(resolved.body.report.outcome).toBe('actioned');
     expect(Number.isFinite(Date.parse(resolved.body.report.resolvedAt))).toBe(true);
+    await deliver('content_report_outcome', thread.id);
     const { rows } = await db.admin.query('SELECT * FROM content.notice WHERE report_id=$1', [id]);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ recipient_id: fixture.actor, kind: 'moderation_decision', source_id: id });
