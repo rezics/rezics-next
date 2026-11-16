@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import type { Pool, PoolClient } from 'pg';
@@ -149,13 +150,14 @@ function controlHostedReadingPort() {
       active += 1;
       maximumActive = Math.max(maximumActive, active);
       let settled = false;
+      const inRead = AsyncLocalStorage.snapshot();
       calls.push({
         address: args[1],
         async finish(beforeResolve?: () => Promise<void>) {
           if (settled) return;
           settled = true;
           try {
-            const metadata = await originalMetadata(...args);
+            const metadata = await inRead(() => originalMetadata(...args));
             await beforeResolve?.();
             resolve(metadata);
           } catch (error) {
