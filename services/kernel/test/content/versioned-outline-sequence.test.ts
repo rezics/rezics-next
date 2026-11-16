@@ -506,8 +506,51 @@ test('cross-root splice writes range boundaries only and membership follows each
   expect(await rankVersionedOutlineSequenceNode(workspace(selected), spliced.rootId, target.ids[3]!)).toBeNull();
   expect(await rankVersionedOutlineSequenceNode(workspace(original), source.rootId, source.ids[15]!)).toBe(15n);
   expect(await rankVersionedOutlineSequenceNode(workspace(original), target.rootId, target.ids[3]!)).toBe(3n);
-  expect(access.work().writtenNodeCount).toBeLessThan(20);
+  const writtenRangeNodes = source.ids.slice(10, 30).filter((id) => access.nodeWrites.has(id));
+  expect(writtenRangeNodes.length).toBeLessThan(10);
   expect(access.work().distinctVisitedNodeCount).toBeLessThan(64);
+});
+
+test('cross-root splice keeps work bounded when each cut encloses thousands of entries', async () => {
+  const source = seedBalanced(65_536, 'source-');
+  const target = seedBalanced(12_288, 'target-');
+  const sourceStart = 10_240;
+  const sourceSize = 20_480;
+  const targetStart = 3_072;
+  const replacedSize = 2_048;
+  const original = new Map([...source.nodes, ...target.nodes]);
+  const access = workspace(original);
+
+  const before = await splitVersionedOutlineSequence(access, source.rootId, BigInt(sourceStart));
+  const range = await splitVersionedOutlineSequence(access, before.rightRootId, BigInt(sourceSize));
+  const sourceRootId = await joinVersionedOutlineSequences(access, before.leftRootId, range.rightRootId);
+  const { rootId, removedRootId } = await spliceVersionedOutlineSequence(
+    access,
+    target.rootId,
+    BigInt(targetStart),
+    BigInt(replacedSize),
+    range.leftRootId,
+  );
+  const { writtenNodeCount, distinctVisitedNodeCount } = access.work();
+  expect(writtenNodeCount).toBeLessThan(128);
+  expect(distinctVisitedNodeCount).toBeLessThan(192);
+
+  const selected = workspace(commit(original, access));
+  expect((await selectVersionedOutlineSequenceNode(selected, sourceRootId, BigInt(sourceStart)))?.id).toBe(
+    source.ids[sourceStart + sourceSize],
+  );
+  expect((await selectVersionedOutlineSequenceNode(selected, rootId, BigInt(targetStart)))?.id).toBe(
+    source.ids[sourceStart],
+  );
+  expect((await selectVersionedOutlineSequenceNode(selected, rootId, BigInt(targetStart + sourceSize - 1)))?.id).toBe(
+    source.ids[sourceStart + sourceSize - 1],
+  );
+  expect((await selectVersionedOutlineSequenceNode(selected, rootId, BigInt(targetStart + sourceSize)))?.id).toBe(
+    target.ids[targetStart + replacedSize],
+  );
+  expect((await selectVersionedOutlineSequenceNode(selected, removedRootId, BigInt(replacedSize - 1)))?.id).toBe(
+    target.ids[targetStart + replacedSize - 1],
+  );
 });
 
 test('a 50,000-node range move in a 100,000-node root does not write moved entries', async () => {
