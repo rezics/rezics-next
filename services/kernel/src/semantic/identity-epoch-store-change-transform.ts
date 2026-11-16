@@ -6,3 +6,12 @@ export const identityChangeTransformSQL = `SELECT substring(intent->>'kind' FROM
        remainder_terminal
 FROM semantic.identity_epoch_job
 WHERE partition_no=$1 AND job_id=$2 AND epoch=$3 AND state IN ('pending','published');`;
+
+/** The one-key cursor validates the retained input's own control epoch before treating a keyset as empty. */
+export const identityChangeFirstInputsSQL = `SELECT i.generation,i.terminal,i.control_partition,
+  (p.partition_no IS NOT NULL) AS owner_current
+ FROM semantic.identity_epoch_input i
+ LEFT JOIN core.partition p ON p.partition_no=i.control_partition
+   AND p.epoch=i.owner_epoch AND p.write_state='active'
+ WHERE (i.partition_no,i.job_id)=($1,$2)
+ ORDER BY i.terminal LIMIT 2`;
