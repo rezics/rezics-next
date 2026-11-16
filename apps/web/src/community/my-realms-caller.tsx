@@ -56,16 +56,17 @@ export function MyRealmsCallerHost({
     credentialMode: 'session' as const,
   };
   const matchingAddress = caller.isCurrentAddress(address);
+  const ready = hydrated && caller.isCurrent();
   const currentOwner = useMemo<MyRealmsViewOwner>(
     () => ({
       visit: initial.visit,
-      ready: hydrated && caller.isCurrent(),
+      ready,
       subscribe: caller.subscribe,
       getRevision: caller.getRevision,
       isCurrent: () => caller.isCurrent(),
       acceptsPage: (page) => caller.acceptsLoaderData(initial.visit, page) || caller.acceptsQueryData(page),
     }),
-    [caller, hydrated, initial.visit],
+    [caller, initial.visit, ready],
   );
   const focusContinuation = caller.hasContinuationFocus() ? () => caller.claimContinuationFocus() : undefined;
   const onMove = (kind: MyRealmsMovement, cursor: string | null, trigger?: HTMLElement) =>
@@ -100,7 +101,7 @@ export function MyRealmsCallerHost({
   if (hydrated && caller.adoptionPending()) return null;
   if (hydrated && session.state !== 'signed-in') throw new Error('Realm list is unavailable');
   // A signed-in route match may briefly outlive its visit while the router admits the next one.
-  if (hydrated && !caller.isCurrent()) return null;
+  if (hydrated && !ready) return null;
   return (
     <MyRealmsAdmittedPage
       caller={caller}

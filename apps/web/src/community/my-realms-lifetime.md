@@ -18,6 +18,9 @@ or verification from a retired visit cannot publish or clear a newer query. Stri
 reconnects the current caller; an asynchronous hydration verification is scoped to its own connection attempt, and an
 older completion cannot unlock the replayed connection.
 
+Hydration verification and retirement advance the view snapshot used by React. The session source revision remains
+bound to cache observations so verification can publish readiness without invalidating the admitted visit.
+
 The current route still returns its accepted loader page for server rendering and adopts it in the browser. The existing
 `acceptsHydrationSeed` branch can render private data before post-mount verification; that branch is an explicit
 reserved contract and is not proven safe by this lifetime or by matching receipt fields. This work does not change
