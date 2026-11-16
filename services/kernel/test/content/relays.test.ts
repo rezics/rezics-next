@@ -374,7 +374,7 @@ test(
         const image = effects.find((effect) => effect.types.includes('com.rezics.content.media.uploaded.v1'))!;
         const runImage = image.run;
         image.run = async (event) => {
-          const queue = (await context.client.retrieveQueue('effects'))!;
+          const queue = (await context.client.retrieveQueue(CONTENT_QUEUES.image))!;
           await queue.setWorkerConcurrency(0);
           // Native queue discovery refreshes database configuration once a second.
           await Bun.sleep(1200);
@@ -478,6 +478,7 @@ test(
       const id = contentWorkWorkflowId(envelope, 0, 'image');
       expect(await row(id, dbAdmin)).toMatchObject({
         status: 'ENQUEUED',
+        queue_name: 'media',
         queue_partition_key: String(partition),
         inputs: JSON.stringify([
           { mediaId: (event.data as { mediaId: string }).mediaId, source: contentWorkSource(envelope, 0) },
@@ -507,7 +508,8 @@ test(
       ).toEqual([]);
       expect(await workClient.getWorkflow(effectId)).toMatchObject({
         status: 'SUCCESS',
-        queuePartitionKey: String(partition),
+        queueName: 'media',
+        queuePartitionKey: `content_media_image:${partition}`,
       });
     } finally {
       register.mockRestore();

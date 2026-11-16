@@ -3,11 +3,13 @@
 export const WORK_APPLICATION = 'rezics-kernel';
 export const DBOS_SCHEMA = 'dbos';
 export const LOCATOR_EFFECTS_QUEUE = 'locator-effects';
+export const MEDIA_QUEUE = 'media';
 
 export const WORK_QUEUE_NAMES = [
   'governance',
   'effects',
   'locator-effects',
+  MEDIA_QUEUE,
   'workflows',
   'delivery',
   'import',
@@ -165,6 +167,7 @@ export type WorkEffect = Readonly<{
   name: string;
   types: string[];
   delivery?: 'native';
+  queue?: typeof MEDIA_QUEUE;
   run?: (event: unknown) => Promise<void>;
   admit?: (client: WorkQueryClient, event: unknown) => Promise<void>;
 }>;

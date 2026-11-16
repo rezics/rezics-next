@@ -32,6 +32,7 @@ test('createCommerceWork returns the commerce module and keeps exactly the ADR-0
     'governance',
     'effects',
     'locator-effects',
+    'media',
     'workflows',
     'delivery',
     'import',

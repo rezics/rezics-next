@@ -123,6 +123,7 @@ function enqueueEffect(pool: Pool, client: WorkClient, name: string, types: stri
   return {
     name,
     types,
+    ...(kind === 'image' ? { queue: CONTENT_QUEUES.image } : {}),
     async run(event) {
       if (!types.includes(event.type) || !Object.hasOwn(CONTENT_EVENTS(), event.type))
         throw new TypeError('Unsupported content work event');
@@ -150,9 +151,7 @@ function enqueueEffect(pool: Pool, client: WorkClient, name: string, types: stri
           queueName: CONTENT_QUEUES[kind],
           workflowID,
           workflowIDReusePolicy: 'return-existing',
-          ...(CONTENT_QUEUES[kind] === 'effects' || CONTENT_QUEUES[kind] === 'import'
-            ? contentWorkQueueOptions(source)
-            : {}),
+          ...(kind === 'image' || kind === 'importFromUrl' ? contentWorkQueueOptions(source) : {}),
         },
         {
           ...(kind === 'authorErase' ? { operationId: objectId } : { mediaId: objectId }),

@@ -37,7 +37,6 @@ the fresh Auth journey still owns the same 300-second budget, browser assertions
 The independent idempotent-stop fixture and direct-entrypoint host start together inside their existing 30-second
 lifecycle test deadline; both must settle, and the direct host must report every completed shutdown phase.
 
-
 Decision: direct WorkContext hosts supply the real pool, queue catalogue, client, clock and effect collector before
 registration, start every owned service, and drain them before closing the client. Search derives worker Access from
 the complete native action catalogue instead of compiling an unused HTTP host.
@@ -52,9 +51,10 @@ Contract leaves are literal-only so core and facades may read those values at lo
 # Installed queue controls and cleanup replay
 
 `WorkIntent` forwards `queuePartitionKey`, `deduplicationID`, `priority` and `delaySeconds` to the installed
-`DBOSClient.enqueueInTransaction` on the source transaction. The existing effects, locator-effects and import queues
-already set `partitionConcurrency: 1`; the installed SDK treats those as partitioned queues. Their worker-wide
-limits remain eight, eight and two respectively. Producers identify the source partition with `queuePartitionKey`.
+`DBOSClient.enqueueInTransaction` on the source transaction. The effects, locator-effects, media and import queues
+set `partitionConcurrency: 1`. Their worker-wide limits are eight, eight, two and two respectively. Producers identify
+the source partition with `queuePartitionKey`. The media queue runs both the upload event effect and its image job
+so unrelated effects cannot consume image processing capacity.
 Priority and delay use the SDK's normal admission, execution-owner and recovery paths.
 
 Decision: keep installed queue-wide deduplication with rejection on collision; partition keys do not scope a

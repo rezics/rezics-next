@@ -447,7 +447,7 @@ test('the production API admits trusted content and leaves effects to the native
       'SELECT name, queue_name FROM dbos.workflow_status WHERE workflow_uuid=$1',
       [workflowId],
     );
-    expect(durableWork.rows[0]).toMatchObject({ name: 'content.image', queue_name: 'effects' });
+    expect(durableWork.rows[0]).toMatchObject({ name: 'content.image', queue_name: 'media' });
     const stoppedWorker = worker;
     await stoppedWorker.stop();
     worker = undefined;

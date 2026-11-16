@@ -3,7 +3,7 @@ import pg, { type Pool, type PoolClient } from 'pg';
 import { DBOS_SCHEMA, WORK_APPLICATION } from '../work/client.ts';
 import { createWorkClient } from '../work/client.ts';
 import { ERASURE_LOCATOR_EFFECTS } from '../access/erasure.ts';
-import { LOCATOR_EFFECTS_QUEUE, WORK_QUEUES } from '../work/queues.ts';
+import { LOCATOR_EFFECTS_QUEUE, MEDIA_QUEUE, WORK_QUEUES } from '../work/queues.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import type { Relay } from './relays.ts';
 import { lookupEventType } from './catalogue.ts';
@@ -22,6 +22,7 @@ export type Effect = {
   name: string;
   types: string[];
   delivery?: undefined;
+  queue?: typeof MEDIA_QUEUE;
   run(event: CloudEvent): Promise<void>;
   admit?: (client: PoolClient, event: CloudEvent) => Promise<void>;
 };
@@ -173,7 +174,7 @@ export function registerEffects(effects: RegisteredEffect[], pool?: Pool): Regis
       await prepareIdentityOriginals(envelopes);
       const partitions = new Map<
         number,
-        Array<{ envelope: Envelope; eventSeq: number; event: CloudEvent; effect: RegisteredEffect }>
+        Array<{ envelope: Envelope; eventSeq: number; event: CloudEvent; effect: Effect }>
       >();
       for (const envelope of envelopes) {
         for (const [eventSeq, event] of envelope.events.entries()) {
@@ -214,12 +215,13 @@ export function registerEffects(effects: RegisteredEffect[], pool?: Pool): Regis
                 : 1,
           );
           for (const { envelope, eventSeq, event, effect } of jobs) {
-            if (isIdentityOriginalEffect(effect, event))
-              requireIdentityFxOriginalDispatch(effect as Effect, locatorPool());
+            if (isIdentityOriginalEffect(effect, event)) requireIdentityFxOriginalDispatch(effect, locatorPool());
             await DBOS.startWorkflow(workflow, {
               workflowID: effectWorkflowId(envelope, eventSeq, effect.name),
               workflowIDReusePolicy: 'return-existing',
-              queueName: ERASURE_LOCATOR_EFFECTS.has(effect.name) ? LOCATOR_EFFECTS_QUEUE : EFFECTS_QUEUE,
+              queueName: ERASURE_LOCATOR_EFFECTS.has(effect.name)
+                ? LOCATOR_EFFECTS_QUEUE
+                : (effect.queue ?? EFFECTS_QUEUE),
               enqueueOptions: { queuePartitionKey: `${effect.name}:${partition}` },
             })(effect.name, event);
           }

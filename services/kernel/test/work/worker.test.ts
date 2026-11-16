@@ -34,6 +34,7 @@ test('worker configuration names invalid variables without revealing values', ()
     'governance',
     'effects',
     'locator-effects',
+    'media',
     'workflows',
     'delivery',
     'import',

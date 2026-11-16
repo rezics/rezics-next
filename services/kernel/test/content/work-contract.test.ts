@@ -25,7 +25,7 @@ test('content media work names and queues match the DBOS application contract', 
     subjectReactionMerge: 'content.subjectReactionMerge',
   });
   expect(CONTENT_QUEUES).toEqual({
-    image: 'effects',
+    image: 'media',
     purge: 'governance',
     collect: 'maintenance',
     authorErase: 'governance',

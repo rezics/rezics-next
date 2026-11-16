@@ -6,17 +6,19 @@ import { fixture } from './support/process.ts';
 // then a separate 30 s budget for each of its two queued workflows and for draining the runtime.
 const registryTimeout = 60_000 + 2 * 30_000 + 30_000;
 
-test('the queue set is exactly ADR-0033, with reserved governance concurrency and source partitions', () => {
+test('the queue catalogue reserves governance and media capacity and partitions source work', () => {
   expect(Object.keys(WORK_QUEUES)).toEqual([
     'governance',
     'effects',
     'locator-effects',
+    'media',
     'workflows',
     'delivery',
     'import',
     'maintenance',
   ]);
   expect(WORK_QUEUES.governance.workerConcurrency).toBeGreaterThan(0);
+  expect(WORK_QUEUES.media).toEqual({ workerConcurrency: 2, partitionConcurrency: 1 });
   expect(WORK_QUEUES.import.partitionConcurrency).toBeGreaterThan(0);
 });
 

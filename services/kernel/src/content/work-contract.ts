@@ -1,4 +1,5 @@
 import { effectWorkflowId } from '../events/effects.ts';
+import { MEDIA_QUEUE } from '../work/queues.ts';
 import type { Envelope } from '../events/log.ts';
 
 /** Native DBOS workflow names owned by the content worker. */
@@ -13,7 +14,7 @@ export const CONTENT_WORKFLOWS = {
 
 /** DBOS queues are provisioned by the corresponding kernel/content runtime. */
 export const CONTENT_QUEUES = {
-  image: 'effects',
+  image: MEDIA_QUEUE,
   purge: 'governance',
   collect: 'maintenance',
   authorErase: 'governance',
@@ -74,7 +75,7 @@ export function contentWorkSource(
   };
 }
 
-/** Immutable options for enqueueing source-partitioned image work on the effects queue. */
+/** Immutable options for enqueueing source-partitioned image and import work. */
 export function contentWorkQueueOptions(
   envelope: Pick<Envelope, 'partition'>,
 ): Readonly<{ queuePartitionKey: string }> {
