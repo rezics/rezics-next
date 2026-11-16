@@ -6,7 +6,15 @@ import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { accessCommandAuthorization } from '../../src/request/access.ts';
-import { createKernelCreditSearchSource } from '../../src/composition/runtime-defaults.ts';
+import { subjectListingSource } from '../../src/library/listing-counts.ts';
+import { createOpenSearch } from '../../src/search/opensearch.ts';
+import { createSubjectIndex, subjectIndexName } from '../../src/search/indices.ts';
+import { subjectConsumer } from '../../src/search/consumer-name.ts';
+import { createRatedSubjectSource } from '../../src/search/rated-source.ts';
+import { subjectPartition } from '../../src/search/source.ts';
+import { assertNativeGenerationActionsVisible } from '../../src/search/generations.ts';
+import { createSearchWriterGuard, readSearchWriterGenerationActions } from '../../src/search/writer-guard.ts';
+import { createKernelCreditSearchSource, createKernelRuntimeDefaults } from '../../src/composition/runtime-defaults.ts';
 import { CREDIT_SEARCH_LIMITS } from '../../src/search/credit-search.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import {
@@ -556,4 +564,82 @@ test('qualifier and release changes after a page read invalidate the selected wi
   expect(await adapter.current({ ...revised, qualifiers: matched.qualifiers }, fresh.observation)).toBe(false);
   expect(await adapter.current({ ...revised, release: matched.release }, fresh.observation)).toBe(false);
   expect(await adapter.current(revised, fresh.observation)).toBe(true);
+});
+
+test('settled credit document agrees with publication when another Subject is written during an empty credit read', async () => {
+  createKernelRuntimeDefaults({ env: {}, tokens, receiptKeys: testReceiptKeys() });
+  const search = createOpenSearch(process.env.OPENSEARCH_URL!);
+  const prefix = `book-credit-${randomUUID().slice(0, 8)}-`;
+  const index = subjectIndexName(prefix, 1);
+  await createSubjectIndex(search, prefix, 1);
+  try {
+    const series = (await ok('/v1/subjects', { type: 'schema:BookSeries', labels: { en: 'Greywater' } }, 201)).subject
+      .id as string;
+    const book = (
+      await ok(
+        '/v1/subjects',
+        {
+          type: 'schema:Book',
+          labels: { en: 'The Last Ferry' },
+          statements: { 'wdt:P179': [statement('wdt:P179', series)] },
+        },
+        201,
+      )
+    ).subject.id as string;
+    const partition = subjectPartition(book);
+    const credit = createKernelCreditSearchSource(pool, routeKey);
+    const input = {
+      pool,
+      search,
+      index,
+      consumer: subjectConsumer(prefix, 1),
+      listing: subjectListingSource(pool),
+    };
+    const writer = createSearchWriterGuard({
+      ...input,
+      source: createRatedSubjectSource(pool, routeKey, {
+        ...credit,
+        async page(request) {
+          const page = await credit.page(request);
+          expect(page).toMatchObject({ state: 'current', entries: [], next: null });
+          await ok(
+            '/v1/subjects',
+            {
+              type: 'bf:Instance',
+              labels: { en: 'First edition' },
+              statements: { 'schema:exampleOfWork': [statement('schema:exampleOfWork', book)] },
+            },
+            201,
+          );
+          return page;
+        },
+      }).source,
+    });
+    await writer.write(partition, [book], 0n);
+    const publication = createSearchWriterGuard({
+      ...input,
+      source: createRatedSubjectSource(pool, routeKey, credit).source,
+    });
+    const [expected] = (await readSearchWriterGenerationActions(publication, partition, [book], 0n))!;
+    if (expected?.op !== 'index') throw new Error('Expected a settled Book document');
+    const engine = (
+      await search.request<{
+        _version: number;
+        _source: { credit_search_complete: boolean; credited_names: unknown[] };
+      }>('GET', `/${index}/_doc/${book}`)
+    ).body;
+    console.info('Settled credit comparison', {
+      expected: expected.document.credit_search_complete,
+      visible: engine._source.credit_search_complete,
+      version: engine._version,
+    });
+    expect(String(engine._version)).toBe(expected.version.toString());
+    expect(engine._source.credited_names).toEqual([]);
+    expect(expected.document.credited_names).toEqual([]);
+    expect(expected.document.credit_search_complete).toBe(true);
+    expect(engine._source.credit_search_complete).toBe(true);
+    expect(await assertNativeGenerationActionsVisible(search, index, [expected])).toBe(1);
+  } finally {
+    await search.request('DELETE', `/${index}`);
+  }
 });

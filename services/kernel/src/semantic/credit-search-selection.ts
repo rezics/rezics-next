@@ -9,6 +9,7 @@ import { semanticCopyWorkApplication } from './copy-work-application.ts';
 import { indexedStatement } from './scope-leaf-selection.ts';
 import {
   ZERO_UUID,
+  emptyCreditObservationOf,
   installedLimits,
   isRecord,
   observationOf,
@@ -71,39 +72,49 @@ export async function loadReleases(client: PoolClient, digests: readonly string[
   return releases;
 }
 
+async function readWorkCut(
+  client: PoolClient,
+  workId: string,
+  route: number,
+): Promise<WorkCut | 'unavailable' | 'moved'> {
+  const partition = partitionOf(route);
+  const home = await readPartition(client, partition);
+  if (!home) return 'unavailable';
+  if (home.writeState === 'moved') return 'moved';
+  const generation = await readSearchCanonicalGeneration(client);
+  const rows = (await readSubjects.run(client, {
+    partition_no: partition,
+    routes: [route],
+    subject_ids: [workId],
+  })) as WorkHeader[];
+  const work = rows[0];
+  if (!work) return 'unavailable';
+  return { work, generation, epoch: home.epoch, ready: work.selection_ready && work.current_revision !== null };
+}
+
 export async function workCut(pool: Pool, workId: string): Promise<WorkCut | 'unavailable' | 'moved'> {
   const route = routeOf(workId);
   if (route === null) return 'unavailable';
-  const partition = partitionOf(route);
-  return inSearchSnapshot(pool, async (client) => {
-    const home = await readPartition(client, partition);
-    if (!home) return 'unavailable';
-    if (home.writeState === 'moved') return 'moved';
-    const generation = await readSearchCanonicalGeneration(client);
-    const rows = (await readSubjects.run(client, {
-      partition_no: partition,
-      routes: [route],
-      subject_ids: [workId],
-    })) as WorkHeader[];
-    const work = rows[0];
-    if (!work) return 'unavailable';
-    return { work, generation, ready: work.selection_ready && work.current_revision !== null };
-  });
+  return inSearchSnapshot(pool, (client) => readWorkCut(client, workId, route));
 }
 
 export async function resumeSelection(pool: Pool, work: WorkHeader): Promise<void> {
   await rebuildSelection.run(pool, { route: work.route, subject_id: work.id });
 }
 
-export async function creditPlan(pool: Pool, work: WorkHeader): Promise<CreditPlan | 'unsupported'> {
+async function readCreditPlan(client: PoolClient, work: WorkHeader): Promise<CreditPlan | 'unsupported'> {
   const digest = work.currentRelease;
   if (!digest) return 'unsupported';
-  const releases = await inSearchSnapshot(pool, async (client) => loadReleases(client, [digest]));
+  const releases = await loadReleases(client, [digest]);
   const release = releases.get(digest);
   if (!release) return 'unsupported';
   const properties = creditSearchProperties(release, work.type);
   if (!properties.length) return 'unsupported';
   return { properties, releases };
+}
+
+export async function creditPlan(pool: Pool, work: WorkHeader): Promise<CreditPlan | 'unsupported'> {
+  return inSearchSnapshot(pool, (client) => readCreditPlan(client, work));
 }
 
 export function creditSearchProperties(release: Release, type: string): readonly string[] {
@@ -115,6 +126,26 @@ export function creditSearchProperties(release: Release, type: string): readonly
   );
 }
 
+async function readSelectedCredits(
+  client: PoolClient,
+  work: WorkHeader,
+  properties: readonly string[],
+  after: CreditCursor | null,
+  limit: number,
+): Promise<SelectedCredit[]> {
+  return (await readCreditPage.run(client, {
+    partition_no: partitionOf(work.route),
+    route: work.route,
+    subject_id: work.id,
+    properties: [...properties],
+    has_after: after !== null,
+    after_property: after?.property ?? '',
+    after_slot: after?.slot ?? ZERO_UUID,
+    after_candidate: after?.candidate ?? ZERO_UUID,
+    page_limit: limit,
+  })) as SelectedCredit[];
+}
+
 export async function selectedCredits(
   pool: Pool,
   work: WorkHeader,
@@ -123,21 +154,24 @@ export async function selectedCredits(
   limit: number,
 ): Promise<SelectedCredit[]> {
   if (!properties.length || limit < 1) return [];
-  const partition = partitionOf(work.route);
   return inSearchSnapshot(pool, async (client) => {
-    const home = await readPartition(client, partition);
+    const home = await readPartition(client, partitionOf(work.route));
     if (!home || home.writeState === 'moved') return [];
-    return (await readCreditPage.run(client, {
-      partition_no: partition,
-      route: work.route,
-      subject_id: work.id,
-      properties: [...properties],
-      has_after: after !== null,
-      after_property: after?.property ?? '',
-      after_slot: after?.slot ?? ZERO_UUID,
-      after_candidate: after?.candidate ?? ZERO_UUID,
-      page_limit: limit,
-    })) as SelectedCredit[];
+    return readSelectedCredits(client, work, properties, after, limit);
+  });
+}
+
+/** Recheck a genuinely empty selection with the public work and its release in one native snapshot. */
+export async function unchangedEmptyCreditSelection(pool: Pool, workId: string, observation: string): Promise<boolean> {
+  const route = routeOf(workId);
+  if (route === null) return false;
+  return inSearchSnapshot(pool, async (client) => {
+    const cut = await readWorkCut(client, workId, route);
+    if (typeof cut === 'string' || !publicWorkCut(cut) || emptyCreditObservationOf(cut) !== observation) return false;
+    const plan = await readCreditPlan(client, cut.work);
+    return (
+      plan !== 'unsupported' && (await readSelectedCredits(client, cut.work, plan.properties, null, 1)).length === 0
+    );
   });
 }
 
