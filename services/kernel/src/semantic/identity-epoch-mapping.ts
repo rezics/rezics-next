@@ -101,6 +101,19 @@ type Plan = {
   outputs: Output[];
 };
 type Work = { -readonly [K in keyof NativeStepWork]: NativeStepWork[K] };
+type MappingPoint = { original: string; destination: string; previous: string; withdrawingSource: boolean };
+type RetainedPoint = {
+  kind: 'fence' | 'gate';
+  job_id: string;
+  job_epoch: string;
+  transaction_id: string;
+  creator_xid: string;
+  native_epoch: number;
+  native_position: string;
+  unit: number;
+  scope_digest: string;
+};
+type PublishedPoints = Partial<Record<RetainedPoint['kind'], RetainedPoint>>;
 type MappingSourceFrame = { targets: Set<string>; unit: number; planDigest: string };
 const mappingSourceFrames = new WeakMap<CommandTransaction, MappingSourceFrame>();
 const unavailable = (detail = 'Native mapping source, admission or receipt custody is unavailable') =>
@@ -187,7 +200,15 @@ async function load(pool: Pool, job: IdentityJobRef, measured: Work): Promise<Sa
   measured.bytes += Buffer.byteLength(json(roles));
   return { ...saved, roles };
 }
-async function receipt(pool: Pool, job: IdentityJobRef, home: number, unit: number, digest: string, measured: Work) {
+async function readUnit(
+  pool: Pool,
+  job: IdentityJobRef,
+  home: number,
+  unit: number,
+  digest: string,
+  measured: Work,
+  point: MappingPoint | null = null,
+) {
   return withReadTransaction(pool, async (tx) => {
     const owner = await readPartition(tx, home);
     if (!owner || owner.writeState !== 'active') throw unavailable();
@@ -201,7 +222,8 @@ async function receipt(pool: Pool, job: IdentityJobRef, home: number, unit: numb
         [home, job.jobId, unit, job.epoch.toString(), digest, owner.epoch, owner.position.toString()],
       )
     ).rows[0];
-    return row ?? null;
+    const retained = !row && point ? await retainedMappingPoints(tx, job, point, measured) : [];
+    return { effect: row ?? null, retained };
   });
 }
 async function completed(pool: Pool, job: IdentityJobRef, head: Head, measured: Work): Promise<IdentityStepProgress> {
@@ -386,6 +408,112 @@ async function plan(pool: Pool, job: IdentityJobRef, saved: Saved, head: Head, m
   throw stale();
 }
 
+function mappingPoint(head: Head, action: Phase): MappingPoint | null {
+  const change = head.change;
+  if (!change) return null;
+  const { original, previousTerminal, terminal } = change;
+  let destination: string;
+  switch (action) {
+    case 'input':
+    case 'headers':
+    case 'output':
+    case 'complete':
+      return null;
+    case 'link-remove':
+    case 'old-contexts':
+    case 'member-remove':
+      destination = previousTerminal;
+      break;
+    case 'link-add':
+    case 'link-contexts':
+    case 'member-add':
+      destination = terminal;
+      break;
+    case 'outbound-remove':
+    case 'target-contexts':
+    case 'restore-target':
+    case 'restore-target-contexts':
+      destination = String(head.payload!.target);
+      break;
+    default:
+      return { original, destination: original, previous: previousTerminal, withdrawingSource: action === 'source' };
+  }
+  return { original, destination, previous: destination, withdrawingSource: false };
+}
+
+async function retainedMappingPoints(tx: CommandTransaction, job: IdentityJobRef, point: MappingPoint, measured: Work) {
+  const route = routed(point.destination);
+  const home = partitionOf(route);
+  const retained = (
+    await query(
+      tx,
+      measured,
+      `WITH points AS (
+          SELECT 'fence' kind,f.job_id,f.job_epoch,f.transaction_id,f.xmin
+          FROM semantic.identity_epoch_mapping_fence f WHERE (f.route,f.destination)=($1,$2)
+          UNION ALL
+          SELECT 'gate',g.pending_job,g.pending_epoch,g.recorded_transaction_id,g.xmin
+          FROM semantic.identity_epoch_home_gate g WHERE (g.route,g.destination,g.original)=($1,$2,$3)
+        )
+        SELECT a.kind,a.job_id,a.job_epoch,a.transaction_id,a.xmin::text creator_xid,
+          e.unit,e.scope_digest,n.epoch native_epoch,n.position native_position
+        FROM points a JOIN semantic.identity_epoch_mapping_effect e
+          ON e.partition_no=$4 AND e.transaction_id=a.transaction_id
+          AND e.job_id=a.job_id AND e.job_epoch=a.job_epoch AND e.xmin=a.xmin
+        JOIN semantic.identity_epoch_native_commit n
+          ON (n.partition_no,n.transaction_id)=(e.partition_no,e.transaction_id)
+          AND n.xmin=e.xmin AND n.purpose='mapping'
+        JOIN core.partition p ON p.partition_no=n.partition_no AND p.epoch=n.epoch
+          AND p.write_state='active' AND p.position>=n.position
+        WHERE (a.job_id,a.job_epoch)<>($5,$6)
+        LIMIT 3`,
+      [route, point.destination, point.original, home, job.jobId, job.epoch.toString()],
+    )
+  ).rows as RetainedPoint[];
+  if (new Set(retained.map((row) => row.kind)).size !== retained.length) throw stale();
+  return retained;
+}
+
+async function publishedMappingPoints(
+  pool: Pool,
+  home: number,
+  retained: RetainedPoint[],
+  measured: Work,
+): Promise<PublishedPoints> {
+  const published: PublishedPoints = {};
+  for (const row of retained) {
+    const control = identityJobPartition({ jobId: row.job_id, epoch: BigInt(row.job_epoch) });
+    const released = await withReadTransaction(pool, async (tx) =>
+      query(
+        tx,
+        measured,
+        `SELECT 1 FROM semantic.identity_epoch_job j
+        JOIN semantic.identity_epoch_native_commit a
+          ON (a.partition_no,a.transaction_id)=(j.partition_no,j.recorded_transaction_id) AND a.purpose='admission'
+        JOIN core.partition p ON p.partition_no=a.partition_no AND p.epoch=a.epoch
+          AND p.write_state='active' AND p.position>=a.position
+        JOIN semantic.identity_epoch_effect_receipt r
+          ON (r.partition_no,r.job_id,r.step,r.effect_key)=(j.partition_no,j.job_id,'mapping',$5)
+        WHERE j.partition_no=$1 AND j.job_id=$2 AND j.epoch=$3 AND j.scope_digest=$4 AND j.state='published'
+          AND (r.native_partition,r.native_epoch,r.native_position,r.native_transaction_id)=($6,$7,$8,$9)`,
+        [
+          control,
+          row.job_id,
+          row.job_epoch,
+          row.scope_digest,
+          String(row.unit),
+          home,
+          row.native_epoch,
+          row.native_position,
+          row.transaction_id,
+        ],
+      ),
+    );
+    if (released.rowCount === 1) published[row.kind] = row;
+  }
+  return published;
+}
+
 /** Only an actual released native record can advance the control frontier. */
 export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => {
   const measured: Work = { rows: 0, points: 0, statements: 0, bytes: 0, engineRequests: 0 };
@@ -548,7 +676,10 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
     if (!latest.head) throw unavailable();
     return completed(pool, job, latest.head, measured);
   }
-  let local = await receipt(pool, job, proposed.home, head.unit + 1, digest, measured);
+  const point = mappingPoint(head, proposed.action);
+  if (point && homeOf(point.destination) !== proposed.home) throw stale();
+  const previous = await readUnit(pool, job, proposed.home, head.unit + 1, digest, measured, point);
+  let local = previous.effect;
   if (!local && (proposed.action === 'source' || proposed.action === 'mapping')) {
     if (!head.change) throw stale();
     await bindForeignMappingPointCustody(
@@ -571,6 +702,7 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
     );
   }
   if (!local) {
+    const published = await publishedMappingPoints(pool, proposed.home, previous.retained, measured);
     await runCommand(pool, { partition: proposed.home, deadline: Date.now() + 5000 }, async (tx, { transactionId }) => {
       const existing = (
         await query(
@@ -595,7 +727,7 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
       mappingSourceFrames.set(tx, { targets: sources, unit: head.unit + 1, planDigest: digest });
       let result: Plan;
       try {
-        result = await apply(tx, job, saved, head, proposed, measured, transactionId);
+        result = await apply(tx, job, saved, head, proposed, point, published, measured, transactionId);
       } finally {
         mappingSourceFrames.delete(tx);
       }
@@ -634,7 +766,7 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
       }
       return { value: null, events: [wake(job, proposed.home)] };
     });
-    local = await receipt(pool, job, proposed.home, head.unit + 1, digest, measured);
+    local = (await readUnit(pool, job, proposed.home, head.unit + 1, digest, measured)).effect;
   }
   if (!local || local.scope_digest !== saved.scope_digest) throw unavailable();
   const payload = await withReadTransaction(
@@ -823,20 +955,22 @@ async function reserveGeneration(
 async function effectGate(
   tx: CommandTransaction,
   job: IdentityJobRef,
-  saved: Saved,
-  original: string,
-  destination: string,
-  previous: string,
+  point: MappingPoint | null,
+  published: PublishedPoints,
   measured: Work,
   transactionId: string,
-  withdrawingSource = false,
 ) {
   const frame = mappingSourceFrames.get(tx);
-  if (!frame || (frame.targets.size > 0 && !frame.targets.has(destination)))
+  if (!point || !frame || (frame.targets.size > 0 && !frame.targets.has(point.destination)))
     throw unavailable('A local mapping plan requires exactly one native Source destination');
-  await gate(tx, job, destination, original, previous, saved.scope_digest, measured, transactionId, withdrawingSource);
-  await identityEpochStore().admitHomeEffect(tx, { kind: 'structural', original, destination, job });
-  frame.targets.add(destination);
+  await gate(tx, job, point, published, measured, transactionId);
+  await identityEpochStore().admitHomeEffect(tx, {
+    kind: 'structural',
+    original: point.original,
+    destination: point.destination,
+    job,
+  });
+  frame.targets.add(point.destination);
 }
 async function withdrawMappingSourcePoint(
   tx: CommandTransaction,
@@ -873,6 +1007,8 @@ async function apply(
   saved: Saved,
   head: Head,
   plan: Plan,
+  point: MappingPoint | null,
+  published: PublishedPoints,
   measured: Work,
   transactionId: string,
 ): Promise<Plan> {
@@ -979,6 +1115,10 @@ async function apply(
   }
   if (!change) throw stale();
   const sourceRoute = routed(change.original);
+  const claimPoint = () => {
+    if (!saved.scope_digest) throw stale();
+    return effectGate(tx, job, point, published, measured, transactionId);
+  };
   if (plan.action === 'source') {
     const owner = await readPartition(tx, plan.home);
     const source = (
@@ -1053,17 +1193,7 @@ async function apply(
       `UPDATE semantic.identity_epoch_admission_source_hold SET closed=true WHERE partition_no=$1 AND job_id=$2 AND job_epoch=$3 AND original=$4 AND scope_digest=$5`,
       [plan.home, job.jobId, job.epoch.toString(), change.original, saved.scope_digest],
     );
-    await effectGate(
-      tx,
-      job,
-      saved,
-      change.original,
-      change.original,
-      change.previousTerminal,
-      measured,
-      transactionId,
-      true,
-    );
+    await claimPoint();
     const withdrawn = await withdrawMappingSourcePoint(tx, job, saved, change.original, measured);
     const result = await query(tx, measured, sourceEffect.sql, [
       sourceRoute,
@@ -1081,16 +1211,7 @@ async function apply(
   }
   if (plan.action === 'restore') {
     if (saved.intent.kind !== 'unmerge' || change.original !== saved.intent.original) throw stale();
-    await effectGate(
-      tx,
-      job,
-      saved,
-      change.original,
-      change.original,
-      change.previousTerminal,
-      measured,
-      transactionId,
-    );
+    await claimPoint();
     const owner = await readPartition(tx, plan.home);
     if (!owner || owner.writeState !== 'active') throw unavailable();
     const inventory = (
@@ -1170,16 +1291,7 @@ async function apply(
   if (plan.action === 'restore-target' || plan.action === 'restore-outbound') {
     const outbound = plan.action === 'restore-outbound';
     const destination = outbound ? change.original : String(head.payload!.target);
-    await effectGate(
-      tx,
-      job,
-      saved,
-      change.original,
-      destination,
-      outbound ? change.previousTerminal : destination,
-      measured,
-      transactionId,
-    );
+    await claimPoint();
     let row = { ...head.payload! };
     if (!outbound) {
       const target = (
@@ -1223,16 +1335,7 @@ async function apply(
   }
   if (plan.action === 'links' || plan.action === 'outbound') {
     const outbound = plan.action === 'outbound';
-    await effectGate(
-      tx,
-      job,
-      saved,
-      change.original,
-      change.original,
-      change.previousTerminal,
-      measured,
-      transactionId,
-    );
+    await claimPoint();
     const column = outbound ? 'target_subject_id' : 'source_subject_id';
     const row = (
       await query(
@@ -1362,16 +1465,7 @@ async function apply(
   }
   if (plan.action === 'link-remove') {
     const row = head.payload!;
-    await effectGate(
-      tx,
-      job,
-      saved,
-      change.original,
-      change.previousTerminal,
-      change.previousTerminal,
-      measured,
-      transactionId,
-    );
+    await claimPoint();
     const result = await query(tx, measured, removeInboundEffect.sql, [
       routed(change.previousTerminal),
       change.previousTerminal,
@@ -1402,7 +1496,7 @@ async function apply(
             present: false,
             order_key: head.payload!.source_order_key,
           };
-    await effectGate(tx, job, saved, change.original, destination, destination, measured, transactionId);
+    await claimPoint();
     const delta = await linkEffect(tx, 'inbound', routed(destination), transactionId, row, measured);
     return {
       ...plan,
@@ -1438,16 +1532,7 @@ async function apply(
         : plan.action === 'link-contexts'
           ? change.terminal
           : String(head.payload!.target);
-    await effectGate(
-      tx,
-      job,
-      saved,
-      change.original,
-      destination,
-      outbound ? change.previousTerminal : destination,
-      measured,
-      transactionId,
-    );
+    await claimPoint();
     const row = head.payload!;
     const column = outbound ? 'target_subject_id' : 'source_subject_id';
     const other = outbound
@@ -1512,16 +1597,7 @@ async function apply(
     };
   }
   if (plan.action === 'member-remove') {
-    await effectGate(
-      tx,
-      job,
-      saved,
-      change.original,
-      change.previousTerminal,
-      change.previousTerminal,
-      measured,
-      transactionId,
-    );
+    await claimPoint();
     await query(tx, measured, `DELETE FROM semantic.merge_member WHERE route=$1 AND subject_id=$2 AND member_id=$3`, [
       routed(change.previousTerminal),
       change.previousTerminal,
@@ -1536,7 +1612,7 @@ async function apply(
     return plan;
   }
   if (plan.action === 'member-add') {
-    await effectGate(tx, job, saved, change.original, change.terminal, change.terminal, measured, transactionId);
+    await claimPoint();
     if (change.original !== change.terminal)
       await query(
         tx,
@@ -1577,16 +1653,7 @@ async function apply(
   }
   if (plan.action === 'mapping') {
     const output = head.outputs.find((o) => o.terminal === change.terminal)!;
-    await effectGate(
-      tx,
-      job,
-      saved,
-      change.original,
-      change.original,
-      change.previousTerminal,
-      measured,
-      transactionId,
-    );
+    await claimPoint();
     const owner = await readPartition(tx, plan.home);
     if (!owner || owner.writeState !== 'active') throw unavailable();
     const withdrawn = await withdrawMappingSourcePoint(tx, job, saved, change.original, measured);
@@ -1664,13 +1731,10 @@ async function copiedRoles(
 async function gate(
   tx: CommandTransaction,
   job: IdentityJobRef,
-  destination: string,
-  original: string,
-  previous: string,
-  scope: string,
+  { destination, original, previous, withdrawingSource }: MappingPoint,
+  published: PublishedPoints,
   measured: Work,
   transactionId: string,
-  withdrawingSource: boolean,
 ) {
   const route = routed(destination);
   if (currentCommand(tx).partition !== partitionOf(route)) throw stale();
@@ -1678,13 +1742,28 @@ async function gate(
     route,
     destination,
   ]);
+  const { fence, gate } = published;
+  // Reuse only the exact released frames still present under the destination lock.
   const fenced = await query(
     tx,
     measured,
-    `INSERT INTO semantic.identity_epoch_mapping_fence(route,destination,job_id,job_epoch,transaction_id)
-    VALUES($1,$2,$3,$4,$5) ON CONFLICT(route,destination) DO UPDATE SET transaction_id=$5
-    WHERE semantic.identity_epoch_mapping_fence.job_id=$3 AND semantic.identity_epoch_mapping_fence.job_epoch=$4 RETURNING destination`,
-    [route, destination, job.jobId, job.epoch.toString(), transactionId],
+    `INSERT INTO semantic.identity_epoch_mapping_fence AS f(route,destination,job_id,job_epoch,transaction_id)
+    VALUES($1,$2,$3,$4,$5) ON CONFLICT(route,destination) DO UPDATE SET
+      job_id=excluded.job_id,job_epoch=excluded.job_epoch,transaction_id=excluded.transaction_id
+    WHERE (f.job_id,f.job_epoch)=($3,$4) OR (
+      (f.transaction_id,f.xmin::text)=($6,$7)
+      AND EXISTS (SELECT 1 FROM core.partition p WHERE p.partition_no=$1/16 AND p.epoch=$8 AND p.write_state='active')
+    ) RETURNING destination`,
+    [
+      route,
+      destination,
+      job.jobId,
+      job.epoch.toString(),
+      transactionId,
+      fence?.transaction_id ?? null,
+      fence?.creator_xid ?? null,
+      fence?.native_epoch ?? null,
+    ],
   );
   if (fenced.rowCount !== 1) throw unavailable('Another native mapping attempt fences this destination');
   // A foreign installation leaves the source's unclaimed birth gate. Only the Source arm can
@@ -1694,7 +1773,7 @@ async function gate(
       tx,
       measured,
       `WITH source AS MATERIALIZED (
-       SELECT m.terminal,m.epoch,m.closure_state,m.control_partition,m.control_group
+       SELECT m.terminal,m.epoch,m.origin,m.owner_epoch,m.closure_state,m.control_partition,m.control_group
        FROM semantic.identity_epoch_mapping m
        JOIN core.partition p ON p.partition_no=$1/16 AND p.epoch=m.owner_epoch AND p.write_state='active'
        WHERE m.route=$1 AND m.original=$2
@@ -1703,13 +1782,12 @@ async function gate(
        (route,destination,original,terminal,epoch,pending_job,pending_epoch,recorded_transaction_id)
      SELECT $1,$2,$3,source.terminal,source.epoch,$5,$6,$7 FROM source
      ON CONFLICT(route,destination,original) DO UPDATE SET
-       terminal=CASE WHEN g.pending_job IS NULL AND g.terminal<>$4 THEN excluded.terminal ELSE g.terminal END,
-       epoch=CASE WHEN g.pending_job IS NULL AND g.terminal<>$4 THEN excluded.epoch ELSE g.epoch END,
+       terminal=CASE WHEN g.pending_job IS DISTINCT FROM $5 AND g.terminal<>$4 THEN excluded.terminal ELSE g.terminal END,
+       epoch=CASE WHEN g.pending_job IS DISTINCT FROM $5 AND g.terminal<>$4 THEN excluded.epoch ELSE g.epoch END,
        pending_job=$5,pending_epoch=$6,recorded_transaction_id=$7
-     WHERE (g.pending_job IS NULL OR (g.pending_job=$5 AND g.pending_epoch=$6)) AND (
-       g.terminal=$4 OR g.pending_job=$5 OR (
-        $8::boolean AND g.pending_job IS NULL AND g.pending_epoch IS NULL
-        AND g.destination=g.original AND g.terminal=g.original
+     WHERE (g.pending_job,g.pending_epoch)=($5,$6)
+       OR (g.pending_job IS NULL AND (g.terminal=$4 OR (
+        $8::boolean AND g.destination=g.original AND g.terminal=g.original
         AND EXISTS (
          SELECT 1 FROM source
          JOIN semantic.revision r ON (r.route,r.subject_id,r.revision)=(g.route,g.original,1)
@@ -1717,12 +1795,29 @@ async function gate(
          WHERE source.closure_state='active' AND source.control_partition<>$1/16
           AND source.control_group=$4 AND source.terminal=$4
         )
+       ))) OR (
+        (g.recorded_transaction_id,g.xmin::text)=($9,$10)
+        AND EXISTS (SELECT 1 FROM source WHERE owner_epoch=$11 AND (
+          g.terminal=$4 OR (g.destination=g.original AND source.origin='published' AND source.terminal=$4)
+        ))
        )
-     ) RETURNING original`,
-      [route, destination, original, previous, job.jobId, job.epoch.toString(), transactionId, withdrawingSource],
+     RETURNING original`,
+      [
+        route,
+        destination,
+        original,
+        previous,
+        job.jobId,
+        job.epoch.toString(),
+        transactionId,
+        withdrawingSource,
+        gate?.transaction_id ?? null,
+        gate?.creator_xid ?? null,
+        gate?.native_epoch ?? null,
+      ],
     )
   ).rows[0];
-  if (!row || !scope) throw stale();
+  if (!row) throw stale();
 }
 
 async function admitGroupEffect(

@@ -1,8 +1,12 @@
 import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { stepLibraryIdentityEpoch } from '../../src/library/identity-epoch-participant.ts';
-import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { identityEpochStore } from '../../src/semantic/identity-epoch-store.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
+import { createSubject } from '../../src/semantic/subject.ts';
 import { createIdentityMappingFixture } from './support/identity-epoch-mapping.ts';
+import { digest, release } from './support/identity-epoch.ts';
 
 test('native mapping drains actual admitted cross-home effects with real receipt custody but cannot publish missing participants', async () => {
   const f = await createIdentityMappingFixture({ poolMax: 1 });
@@ -35,6 +39,77 @@ test('native mapping drains actual admitted cross-home effects with real receipt
     await expect(f.publish(input.job)).rejects.toMatchObject({ code: 'identity_participants_incomplete' });
     expect((await f.readJob(input.job))!.state).not.toBe('published');
     expect(f.operationBackendIds().size).toBeLessThanOrEqual(1);
+  } finally {
+    await f.close();
+  }
+}, 180_000);
+
+test('another admitted mapping cannot take a live fence at a shared link destination', async () => {
+  const f = await createIdentityMappingFixture({ poolMax: 1 });
+  try {
+    const targetRoute = 0x7350;
+    const target = (await f.create('Shared link destination', targetRoute)).subject.id;
+    const actor = await f.actor();
+    const createBook = async (route: number, linked: boolean) => {
+      const key = randomUUID();
+      const { subject } = await createSubject(f.pool, {
+        actor,
+        target: { route, id: newId(route) },
+        item: {
+          type: 'schema:Book',
+          labels: { en: 'Mapping book' },
+          ...(linked
+            ? {
+                statements: {
+                  'schema:author': [{ property: { id: 'schema:author' }, value: { type: 'value', content: target } }],
+                },
+              }
+            : {}),
+        },
+        idempotencyKey: key,
+        digest: digest(key),
+        release,
+        authorization: await f.authorization('subject:create'),
+      });
+      return subject.id;
+    };
+    const originalRoutes = [0x7310, 0x7330];
+    const intents = [];
+    for (const route of originalRoutes) {
+      const redirected = await createBook(route, true);
+      const survivor = await createBook(route + 16, false);
+      intents.push({ kind: 'merge' as const, redirected, survivor, release: release.digest });
+    }
+    const relay = linkProjection(f.pool);
+    const projected = async () =>
+      (
+        await f.admin.query(
+          'SELECT source_subject_id FROM semantic.inbound_link WHERE route=$1 AND subject_id=$2 AND present',
+          [targetRoute, target],
+        )
+      ).rows.length;
+    for (let page = 0; page < 64 && (await projected()) < 2; page++) {
+      for (const route of [...originalRoutes, targetRoute]) await relay.run(partitionOf(route));
+    }
+    expect(await projected()).toBe(2);
+
+    const first = await f.admit(intents[0]!);
+    await f.drainMapping(first, 512);
+    expect((await f.readJob(first))?.state).toBe('pending');
+    const fence = async () =>
+      (
+        await f.admin.query(
+          'SELECT job_id,job_epoch,transaction_id FROM semantic.identity_epoch_mapping_fence WHERE route=$1 AND destination=$2',
+          [targetRoute, target],
+        )
+      ).rows[0];
+    const held = await fence();
+    expect(held).toMatchObject({ job_id: first.jobId, job_epoch: first.epoch.toString() });
+    const second = await f.admit(intents[1]!);
+    await expect(f.drainMapping(second, 512)).rejects.toThrow('Another native mapping attempt fences this destination');
+    expect(await fence()).toEqual(held);
+    const { effects } = await f.nativeRows(second);
+    expect(effects.some((effect) => effect.partition_no === partitionOf(targetRoute))).toBe(false);
   } finally {
     await f.close();
   }
