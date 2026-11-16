@@ -788,6 +788,46 @@ test('a file whose only failures are timeouts or deadline errors is rerun once a
   });
 });
 
+test('a single named case that times out in an isolated lane keeps its original failure', async () => {
+  await withDirectory(async (directory) => {
+    const module = resolve(directory, 'module');
+    const file = 'test/diagnostic.test.ts';
+    writeTestFiles(module, {
+      [file]: [
+        "import { test } from 'bun:test';",
+        "test('selected case', async () => { await Bun.sleep(100); }, 20);",
+        "test('another case', () => {});",
+      ].join('\n'),
+    });
+    const env = laneEnvironment(directory, 1);
+    const created: string[] = [];
+    const dropped: string[] = [];
+    let failure: string | undefined;
+    const result = await runLaneSuite({
+      service: 'fixture',
+      directory: module,
+      files: [file],
+      testArguments: ['-t', '^selected case$'],
+      partial: true,
+      createDatabase: async (database) => {
+        created.push(database);
+      },
+      dropDatabase: async (database) => {
+        dropped.push(database);
+      },
+      environment: () => env,
+      onFileComplete: (outcome) => {
+        failure = outcome.error?.message;
+      },
+      env,
+    });
+    expect(result).toEqual({ failed: [file], concurrency: 1 });
+    expect(failure).toContain('this test timed out after 20ms');
+    expect(created).toEqual(['fixture_test_1']);
+    expect(dropped).toEqual(created);
+  });
+});
+
 test('a load-induced failure that fails again alone fails the run', async () => {
   await withDirectory(async (directory) => {
     const module = resolve(directory, 'module');

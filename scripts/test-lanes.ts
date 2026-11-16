@@ -884,6 +884,17 @@ export function testCommand(file: string, junitFile: string, preload?: string, t
   ];
 }
 
+function hasAnchoredTestNameFilter(args: readonly string[]): boolean {
+  for (const [index, argument] of args.entries()) {
+    if (argument === '--') break;
+    const option = argument.match(/^(?:-t|--test-name-pattern)(?:=(.*))?$/s);
+    if (!option) continue;
+    const pattern = option[1] ?? args[index + 1];
+    return pattern !== undefined && pattern.startsWith('^') && pattern.endsWith('$');
+  }
+  return false;
+}
+
 export function fileBounds(record?: FileTiming): { silence: number; wall: number } {
   if (!record) return { silence: 1800, wall: 7200 };
   const longest = Math.max(record.outsideTests ?? 0, ...record.tests.map((test) => test.time));
@@ -917,6 +928,8 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
   const configuredConcurrency = laneConcurrency(suite.service, env);
   const inheritedSlot = env.REZICS_STACK_LEASE !== 'off' && env.REZICS_STACK_SLOT !== undefined;
   const concurrency = inheritedSlot ? 1 : configuredConcurrency;
+  const isolatedSelection =
+    concurrency === 1 && suite.files.length === 1 && hasAnchoredTestNameFilter(suite.testArguments ?? []);
   const reports = mkdtempSync(join(tmpdir(), `${suite.service}-check-`));
   const recorder = createRecorder();
   const slots = new Map<string, StackSlot>();
@@ -1028,7 +1041,18 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
       (outcome) => {
         const report = reportsByFile.get(outcome.file);
         const growthFailures = classifyGrowthFailures(outcome, report);
-        return growthFailures ?? classifyLoadInducedFailures(outcome, report);
+        if (growthFailures) return growthFailures;
+        const loadFailures = classifyLoadInducedFailures(outcome, report);
+        if (isolatedSelection && loadFailures?.length === 1) {
+          const output = outcome.error?.message.replace(/\u001b\[[0-9;]*m/g, '') ?? '';
+          if (
+            /^Ran 1 test across 1 file\./m.test(output) &&
+            /^[ \t]+\^ this test timed out after \d+ms\./m.test(output)
+          ) {
+            return null;
+          }
+        }
+        return loadFailures;
       },
     );
     const timings = retainStoppedTimings(recorder.timings(), latest, stoppedAtBound);
