@@ -839,46 +839,6 @@ async function fillPasswordSignIn(page: import('playwright').Page, email: string
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 }
 
-async function startFrontend(action: 'pages' | 'web', stack: Origins) {
-  const child = Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', action], {
-    cwd: root,
-    env: process.env,
-    stdin: 'ignore',
-    stdout: 'inherit',
-    stderr: 'inherit',
-  });
-  const url = action === 'pages' ? `${stack.issuer}/` : `${stack.web}/`;
-  const label = action === 'pages' ? 'Auth pages' : 'Web';
-  const deadline = Date.now() + 600_000;
-  try {
-    while (Date.now() < deadline) {
-      if (child.exitCode !== null) throw new Error(`${label} exited ${child.exitCode} before becoming ready`);
-      const ok = await fetch(url, { signal: AbortSignal.timeout(2_000) }).then(
-        (response) => response.status < 500,
-        () => false,
-      );
-      if (ok) break;
-      await Bun.sleep(500);
-    }
-    if (child.exitCode !== null) throw new Error(`${label} exited ${child.exitCode} before becoming ready`);
-    const ok = await fetch(url, { signal: AbortSignal.timeout(2_000) }).then(
-      (response) => response.status < 500,
-      () => false,
-    );
-    if (!ok) throw new Error(`${label} was not ready after ten minutes`);
-  } catch (error) {
-    child.kill('SIGTERM');
-    await child.exited;
-    throw error;
-  }
-  return {
-    stop: async () => {
-      child.kill('SIGTERM');
-      await child.exited;
-    },
-  };
-}
-
 /** API-only evidence never updates the complete census or the visual owner's output. */
 export const API_CAPTURE_JOURNEYS = ['J03', 'J04', 'J10'] as const;
 export const API_CAPTURE_DIRECTORY = '.temp/goal/accounts/post-seed-api-capture';
@@ -1031,8 +991,7 @@ type CaptureHandoff = {
 };
 
 async function captureOriginalAuthJourneys(): Promise<number> {
-  if (!walkAcceptanceId(process.env, 'native'))
-    throw new Error('API capture requires native acceptance');
+  if (!walkAcceptanceId(process.env, 'native')) throw new Error('API capture requires native acceptance');
   const directory = join(root, API_CAPTURE_DIRECTORY);
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const sourceRevision = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: root }).stdout.toString().trim();
@@ -1918,13 +1877,13 @@ if (import.meta.main && !process.argv.includes('--api-capture') && !process.argv
       return `open access HTTP ${actual.status}; closed HTTP ${afterActual.status}`;
     });
 
-    const frontends: Array<{ stop: () => Promise<void> }> = [];
+    let frontends: { stop(): Promise<void> } | undefined;
     let browser: import('playwright').Browser | undefined;
     try {
       if (process.env.REZICS_WALK_STACK_SLOT) {
-        frontends.push(await startFrontend('pages', stack));
+        const { startSeededFrontends } = await import('../../../services/auth/scripts/dev-stack.ts');
+        frontends = await startSeededFrontends();
         note('auth-pages-ready');
-        frontends.push(await startFrontend('web', stack));
         note('web-ready');
       }
       const browserTemp = join(evidenceDir, 'browser');
@@ -2045,7 +2004,7 @@ if (import.meta.main && !process.argv.includes('--api-capture') && !process.argv
       note(`browser ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       await browser?.close();
-      for (const frontend of [...frontends].reverse()) await frontend.stop();
+      await frontends?.stop();
       await persist();
     }
   } catch (error) {
