@@ -14,7 +14,7 @@ import type { KeyRing } from '../../src/tokens/seal.ts';
 async function currentPage(
   driver: SearchDriver,
   body: Record<string, unknown>,
-  waitMs = 60_000,
+  { waitMs = 60_000, retryMs = 100 } = {},
 ): Promise<HttpResponse> {
   const deadline = Date.now() + waitMs;
   do {
@@ -23,7 +23,7 @@ async function currentPage(
     expect(response.status).toBe(503);
     expect(response.body.code).toMatch(/^(index_not_ready|semantic_not_ready)$/);
     expect(response.headers.get('retry-after')).toBeTruthy();
-    await Bun.sleep(100);
+    await Bun.sleep(retryMs);
   } while (Date.now() < deadline);
   throw new Error(
     `The default public Search journey did not finish finite preparation within ${waitMs / 1000} seconds`,
@@ -106,21 +106,23 @@ test('default Subject Search activates and returns an authored Book', async () =
     );
     expect(created.status).toBe(201);
     const { id } = created.body.subject as { id: string };
-    const page = await currentPage(driver, { text: label, languages: ['en'] }, 115_000);
+    // This starts at cold worker admission, before the fixture's source writes have drained.
+    const page = await currentPage(driver, { text: label, languages: ['en'] }, { waitMs: 240_000, retryMs: 500 });
     expect(subjects(page)).toContainEqual(expect.objectContaining({ id, type: 'schema:Book', labels: { en: label } }));
     expect((await client.inspect({ preparation: true })).workerStats?.preparation?.generations).toMatchObject({
       active: 1,
     });
   } catch (error) {
-    const output = await client.inspect().then(
-      (state) => state.workerOutput.slice(-4000),
+    const output = await client.inspect({ preparation: true }).then(
+      ({ workerStats, workerOutput }) =>
+        `${JSON.stringify(workerStats?.preparation?.publication)}\n${workerOutput.slice(-4000)}`,
       (failure) => String(failure).slice(0, 500),
     );
     throw new Error(`Native Book Search failed. Worker output:\n${output}`, { cause: error });
   } finally {
     await driver.close();
   }
-}, 400_000);
+}, 600_000);
 
 test('the default real Search journey provides useful current-authorized filled or exhausted pages with finite actual preparation and recovery', async () => {
   const client = createDriverClient(undefined, { advancedSearch: true });
