@@ -394,7 +394,7 @@ async function runNativeRealmsSpacesJourney() {
   await expectAttribute(alice.getByRole('region', { name: 'Membership' }), 'data-member-state', 'member');
   await screenshot(alice, 'open-realm-member-390');
 
-  await alice.getByRole('button', { name: 'Account' }).focus();
+  await alice.getByRole('button', { name: 'You', exact: true }).focus();
   await alice.keyboard.press('Enter');
   const myRealmsMenuLink = alice.getByRole('link', { name: 'Your Realms', exact: true });
   await expectVisible(myRealmsMenuLink);
