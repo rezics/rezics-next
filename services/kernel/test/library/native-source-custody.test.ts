@@ -1,4 +1,7 @@
 import { createHash } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { Pool } from 'pg';
+import { NativeCollectionWork, instrumentNativeCollectionWork } from '../../src/library/collection-native-work.ts';
 import { principalCommandIdentity } from '../../src/command/command.ts';
 import { resourceAuthorization } from '../../src/access/resource-authorization.ts';
 import {
@@ -64,6 +67,58 @@ const work = () => ({
     remaining: custodyAllowance,
   },
 });
+test('a queued checkout stays with its requesting native work', async () => {
+  const pool = new Pool({ connectionString: native.pool.options.connectionString, max: 1 });
+  const start = work();
+  const releasing = new NativeCollectionWork(start.allowance, start.deadline);
+  const requesting = new NativeCollectionWork({ ...start.allowance, reservationId: entryKey() }, start.deadline);
+  const sql = 'SELECT 1 AS value';
+  const price = {
+    nativeRows: 1,
+    nativePoints: 1,
+    candidateKeys: 0,
+    identityMetadataRows: 0,
+    witnessKeys: 0,
+    emptySeeks: 1,
+    statements: 1,
+    bytes: Buffer.byteLength(sql),
+  };
+  const footprint = (statement: string) => (statement === sql ? price : undefined);
+  const outsideWork = AsyncLocalStorage.snapshot();
+  try {
+    await instrumentNativeCollectionWork(pool, releasing, footprint, async () => {
+      const holder = await pool.connect();
+      const queued = outsideWork(() => pool.query(sql));
+      try {
+        expect(pool.waitingCount).toBe(1);
+      } finally {
+        holder.release();
+      }
+      expect((await queued).rows).toEqual([{ value: 1 }]);
+    });
+    expect(releasing.receipt().used).toMatchObject({ nativePoints: 1, statements: 0 });
+
+    const holder = await pool.connect();
+    const queued = instrumentNativeCollectionWork(pool, requesting, footprint, async () => {
+      const client = await pool.connect();
+      try {
+        return (await client.query(sql)).rows;
+      } finally {
+        client.release();
+      }
+    });
+    try {
+      expect(pool.waitingCount).toBe(1);
+    } finally {
+      holder.release();
+    }
+    expect(await queued).toEqual([{ value: 1 }]);
+    expect(requesting.receipt().used).toMatchObject({ nativePoints: 2, statements: 1 });
+  } finally {
+    await pool.end();
+  }
+});
+
 async function make() {
   const owner = await native.identity(['subject:read', 'collection:create', 'collection:read', 'collection:update']);
   const response = await native.send(owner.bearer, 'POST', '/v1/collections', {
