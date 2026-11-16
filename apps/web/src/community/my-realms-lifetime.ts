@@ -163,7 +163,8 @@ function sameRealmCacheRevision(left: RealmCacheRevision | undefined, right: Rea
 class MyRealmsSessionSource {
   private snapshot: SessionSnapshot | null;
   private cacheRevision: SessionCacheRevision;
-  private revision = 0;
+  private sessionRevision = 0;
+  private viewRevision = 0;
   private readonly listeners = new Set<() => void>();
   private readonly visits = new Map<string, MyRealmsCaller>();
   private active: MyRealmsCaller | null = null;
@@ -189,10 +190,10 @@ class MyRealmsSessionSource {
       const nextRevision = sessionCacheRevision(client);
       this.snapshot = nextSession;
       this.cacheRevision = nextRevision;
-      this.revision++;
+      this.sessionRevision++;
       this.clearNavigation();
-      this.active?.retire();
-      this.notify();
+      if (this.active) this.active.retire();
+      else this.publish();
     });
   }
 
@@ -201,17 +202,22 @@ class MyRealmsSessionSource {
     return () => this.listeners.delete(listener);
   };
 
-  getRevision = () => this.revision;
+  getSessionRevision() {
+    return this.sessionRevision;
+  }
+
+  getViewRevision = () => this.viewRevision;
 
   publish() {
-    this.notify();
+    this.viewRevision++;
+    for (const listener of this.listeners) listener();
   }
 
   read() {
     return {
       session: this.snapshot,
       cacheRevision: this.cacheRevision,
-      sourceRevision: this.revision,
+      sourceRevision: this.sessionRevision,
     };
   }
 
@@ -355,7 +361,7 @@ class MyRealmsSessionSource {
       this.active === caller &&
       caller.isActive() &&
       this.ownsVisitGeneration(caller) &&
-      this.revision === caller.localRevision() &&
+      this.sessionRevision === caller.localRevision() &&
       sameSession(this.snapshot, captured) &&
       this.cacheRevision.dataUpdateCount === caller.localCacheRevision().dataUpdateCount &&
       this.cacheRevision.dataUpdatedAt === caller.localCacheRevision().dataUpdatedAt
@@ -404,10 +410,6 @@ class MyRealmsSessionSource {
       : { queryKey: key, exact: true };
     void this.client.cancelQueries(filters as never, { silent: true });
     this.client.removeQueries(filters as never);
-  }
-
-  private notify() {
-    for (const listener of this.listeners) listener();
   }
 }
 
@@ -461,7 +463,7 @@ export class MyRealmsCaller {
     this.session = session;
     this.localSessionCacheRevision = options.localSessionCacheRevision;
     this.subscribe = source.subscribe;
-    this.getRevision = source.getRevision;
+    this.getRevision = source.getViewRevision;
     this.adopted = options.adopted ?? false;
     this.hydrationVerified = !this.adopted;
     this.hydrationPending = this.adopted;
@@ -543,7 +545,7 @@ export class MyRealmsCaller {
     const visitGeneration = source.beginVisit();
     const caller = new MyRealmsCaller(source, visit, sessionFrom(client), {
       adopted: true,
-      localSourceRevision: source.getRevision(),
+      localSourceRevision: source.getSessionRevision(),
       localSessionCacheRevision: sessionCacheRevision(client),
       localVisitGeneration: visitGeneration,
     });
@@ -564,7 +566,7 @@ export class MyRealmsCaller {
     const source = sourceFor(client);
     const caller = new MyRealmsCaller(source, visit, sessionFrom(client), {
       adopted: true,
-      localSourceRevision: source.getRevision(),
+      localSourceRevision: source.getSessionRevision(),
       localSessionCacheRevision: sessionCacheRevision(client),
       localVisitGeneration: source.currentVisitGeneration(),
     });
@@ -925,15 +927,10 @@ export class MyRealmsCaller {
       }
       this.hydrationVerified = true;
       this.hydrationPending = false;
-      this.notifyHydration();
+      this.source.publish();
     } catch {
       if (isCurrentAttempt()) this.retire();
     }
-  }
-
-  private notifyHydration() {
-    // Query cache notifications are not a caller notification, so use the source's external-store listeners.
-    this.source.publish();
   }
 
   private queryOwnerCurrent() {

@@ -7,6 +7,7 @@ import type { Root } from 'react-dom/client';
 import type { QueryClient } from '@tanstack/react-query';
 import type { MembershipResult, MyRealmsPage } from '../src/community/space';
 import type { MyRealmsNativeItem } from '../src/community/my-realms-current/contract';
+import type { MyRealmsVisit } from '../src/community/my-realms-lifetime';
 import { formatMyRealmsCurrent } from '../src/community/my-realms-native';
 import recording from '../src/kernel/recorded/my-realms.json';
 import * as start from '../.storybook/react-start';
@@ -142,13 +143,19 @@ mock.module('../src/community/realm-membership-actions', () => ({
   },
 }));
 
-const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+const {
+  QueryClient,
+  QueryClientProvider,
+  dehydrate,
+  hydrate: hydrateQueryClient,
+} = await import('@tanstack/react-query');
 const { createMemoryHistory, createRootRouteWithContext, createRouter, Outlet, RouterProvider } =
   await import('@tanstack/react-router');
 const { createRoot, hydrateRoot } = await import('react-dom/client');
 const { deLocalizeUrl, localizeUrl, setLocale } = await import('../src/paraglide/runtime.js');
 const { sessionQuery } = await import('../src/session/query');
 const { m } = await import('../src/paraglide/messages.js');
+const { myRealmsCallerForVisit } = await import('../src/community/my-realms-lifetime');
 const { Route: MyRealmsRoute } = await import('../src/routes/realms/index');
 
 function signedIn(subject = 'realm-owner', csrfToken: string | null = 'csrf-original') {
@@ -348,6 +355,55 @@ test('the actual signed-in route hydrates its one read through the current query
     await surface.dispose();
   }
 });
+
+test.each(['empty', 'sparse', 'member'] as const)(
+  'the signed-in %s inventory becomes usable after the browser adopts a server visit',
+  async (state) => {
+    const next = state === 'sparse' ? 'opaque-next-cursor' : null;
+    const expected =
+      state === 'empty'
+        ? 'You have not joined any Realms yet.'
+        : state === 'sparse'
+          ? m.realm_list_details_sparse_page_empty()
+          : 'Current account realm';
+    resetReader(async () => {
+      const current = page('Current account realm', next, true);
+      return state === 'member' ? current : { ...current, realms: [] };
+    });
+    const server = await createSurface();
+    const browser = await createSurface();
+    try {
+      await server.load();
+      const markup = renderToString(server.tree());
+      expect(markup).toContain(expected);
+      const matches = server.router.stores.matches.get();
+      expect(matches.at(-1)?.meta).toContainEqual({ name: 'robots', content: 'noindex, nofollow' });
+
+      browser.client.clear();
+      hydrateQueryClient(browser.client, structuredClone(dehydrate(server.client)));
+      browser.router.stores.setMatches(
+        matches.map((match) => ({ ...match, loaderData: structuredClone(match.loaderData) })),
+      );
+      browser.router.stores.resolvedLocation.set(browser.router.stores.location.get());
+      browser.host.innerHTML = markup;
+      await browser.hydrate(true);
+      const { visit } = browser.router.stores.matches.get().at(-1)!.loaderData as { visit: MyRealmsVisit };
+      const caller = myRealmsCallerForVisit(browser.client, visit);
+      await until(() => caller.isCurrent(), 'browser caller verification');
+      expect(hydrationErrors).toEqual([]);
+      expect(readCalls).toEqual([{}]);
+      await until(() => visiblePrivateNames(browser).includes(expected), `hydrated ${state} inventory`);
+      expect(browser.host.querySelector('a[href*="cursor="]')?.textContent).toBe(next ? m.realms_more() : undefined);
+      if (state === 'member') {
+        await clickButton(browser, m.realm_leave());
+        expect(visiblePrivateNames(browser)).toContain(m.my_realms_leave_review());
+      }
+    } finally {
+      await browser.dispose();
+      await server.dispose();
+    }
+  },
+);
 
 test('one selected leave requires review, cancels cleanly, and retries an uncertain write with its exact identity', async () => {
   resetReader(async () => page('Selected current member', null, true));
