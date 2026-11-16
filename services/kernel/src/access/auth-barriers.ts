@@ -235,7 +235,7 @@ export function createWebsiteSessionInvalidation(config: {
         },
       },
       async (tx, command) => {
-        const [advanced] = await websiteAdvance.run(tx, {
+        const advanced = await websiteAdvance.run(tx, {
           route,
           account_id: accountId,
           previous_floor: previousEpoch,
