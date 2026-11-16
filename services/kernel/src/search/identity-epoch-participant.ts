@@ -3,13 +3,11 @@ import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
 import { currentCommand, noEffect, registerCommandCallback, runCommand } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
-import { deadlineFor } from '../request/deadline.ts';
 import type { Access } from '../request/access.ts';
 import type { IdentitySourceSupportReaderFactory } from '../semantic/index.ts';
 import type {
   IdentityEpochStep,
   IdentityStepProgress,
-  NativeStepWork,
   IdentityFrontier,
   IdentityNativeReceipt,
 } from '../semantic/identity-epoch-contract.ts';
@@ -19,12 +17,6 @@ import { identityJobPartition } from '../semantic/identity-adapters/identity-epo
 import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts';
 import { recordIdentityEpochNativeCommit } from '../semantic/identity-adapters/identity-epoch-binding.ts';
 import { serializeIdentityValue as json } from '../semantic/identity-core/encoding.ts';
-import {
-  activeIdentitySourceConsumerMaintenance,
-  currentIdentitySourceConsumerMaintenance,
-  identitySourceConsumerLibraryWork,
-  identitySourceConsumerNativeWork,
-} from '../semantic/identity-source-consumer-maintenance.ts';
 import {
   installSearchIdentityReceivingNative,
   lookupIdentityReceivingEffect,
@@ -47,16 +39,21 @@ import {
   type SearchIdentityReceivingBinding,
   validSearchIdentityReceivingFrontier,
 } from './identity-receiving-native-contract.ts';
-import { readRetainedWriterCopySql } from './writer-guard.ts';
+import { readRetainedWriterCopySql, searchIdentityWriterAdmissionSql } from './writer-guard.ts';
 import {
-  commitSearchIdentityReceivingPlan,
-  readSearchIdentityOriginalPlan,
-} from './identity-search-receiving-source.ts';
+  insertWriterPublicationWitness,
+  lockPublicationAdmission,
+  readPublicationFence,
+  readWriterPublicationWitness,
+} from './publication-admission.ts';
+import { readSearchIdentityOriginalPlan } from './identity-search-receiving-source.ts';
+import { searchIdentityWorkContext, searchIdentityWorkUsed } from './identity-search-receiving-work.ts';
 import {
   advanceSearchIdentityDirectory,
   readSearchIdentityDirectory,
   readSearchIdentityDirectoryOriginal,
   requireCurrentSearchIdentityDirectory,
+  requestSearchIdentityWriter,
 } from './identity-search-receiving-directory.ts';
 import {
   advanceSearchIdentityOriginalSql,
@@ -64,6 +61,7 @@ import {
   readSearchIdentityDirectorySql,
   readSearchIdentityMaterializedOriginalSql,
   readSearchIdentityOriginalPlanSql,
+  readSearchIdentityWriterAdmissionSql,
 } from './identity-search-receiving-directory-sql.ts';
 
 export type { SearchReceivingConfiguration };
@@ -87,6 +85,7 @@ const participantStatementWork = (
   });
 
 function searchIdentityParticipantStatementCosts(): SearchReceivingWorkDeclaration['statements'] {
+  const writer = searchIdentityWriterAdmissionSql();
   return Object.freeze([
     Object.freeze({ sql: completeSql.sql, work: participantStatementWork(6, 6, 6, 4096, 0) }),
     Object.freeze({ sql: readSearchIdentityDirectorySql, work: participantStatementWork(4, 4, 1, 4096, 1) }),
@@ -95,6 +94,23 @@ function searchIdentityParticipantStatementCosts(): SearchReceivingWorkDeclarati
     Object.freeze({ sql: readSearchIdentityCommonPlanSql, work: participantStatementWork(4, 4, 1, 16384, 1) }),
     Object.freeze({ sql: advanceSearchIdentityOriginalSql, work: participantStatementWork(9, 9, 1, 16384, 1) }),
     Object.freeze({ sql: readRetainedWriterCopySql, work: participantStatementWork(3, 3, 1, 1024, 1) }),
+    ...(
+      [
+        [readSearchIdentityWriterAdmissionSql, 3, 3, 4096],
+        [lockPublicationAdmission, 1, 1, 512],
+        [readWriterPublicationWitness, 1, 1, 512],
+        [insertWriterPublicationWitness, 1, 1, 512],
+        [readPublicationFence, 1, 1, 512],
+        [writer.gate, 1, 1, 1024],
+        [writer.insertGate, 1, 1, 1024],
+        [writer.original, 1, 1, 1024],
+      ] as const
+    ).map(([sql, rows, points, bytes]) =>
+      Object.freeze({
+        sql,
+        work: participantStatementWork(rows, points, 1, bytes, 1),
+      }),
+    ),
   ]);
 }
 
@@ -177,28 +193,12 @@ export function createSearchIdentityEpochParticipant(options: {
       throw unavailable(
         'Source has not installed the same-Pool receiving Access, clock, physical owner and transitive work declaration',
       );
-    const funded = activeIdentitySourceConsumerMaintenance(pool);
-    const deadline = funded?.deadline ?? deadlineFor(1000);
-    const token = currentIdentitySourceConsumerMaintenance(pool, deadline);
-    const parent = identitySourceConsumerLibraryWork(pool, token ?? undefined, deadline);
-    const allowance = identitySourceConsumerNativeWork(pool, token ?? undefined, deadline);
-    if (!token || !parent || !allowance)
-      throw unavailable('Search requires the original live Source maintenance frame');
-    const axes = [
-      'candidateKeys',
-      'identityMetadataRows',
-      'nativeRows',
-      'nativePoints',
-      'witnessKeys',
-      'statements',
-      'bytes',
-      'emptySeeks',
-    ] as const;
-    const ceiling = Object.fromEntries(axes.map((axis) => [axis, parent.available(axis)])) as unknown as WorkDimensions;
+    const context = searchIdentityWorkContext(pool);
+    const { deadline } = context;
     return (
       await (
         await installed
-      ).run({ deadline, identityConsumerWork: token, ceiling, allowance }, async () => {
+      ).run(context, async () => {
         const saved = await withReadTransaction(pool, (tx) => identityEpochStore().readJob(tx, ref), deadline);
         if (!saved) throw unavailable('Search requires an exact admitted native job');
         const completed = saved.participants['search-canonical-index'];
@@ -239,7 +239,7 @@ export function createSearchIdentityEpochParticipant(options: {
           return {
             ...completed,
             frontier: retained.frontier,
-            work: used(allowance, identitySourceConsumerNativeWork(pool, token, deadline)),
+            work: searchIdentityWorkUsed(pool, context),
           };
         }
         if (saved.state !== 'pending')
@@ -255,6 +255,9 @@ export function createSearchIdentityEpochParticipant(options: {
           },
           deadline,
         );
+        const request = directory.writerRequest;
+        if (request && (!change || change.original !== request.original || change.terminal !== request.terminal))
+          throw unavailable('Retained Search writer request differs from the admitted original');
         if (!change) {
           if (directory.count < 1) throw unavailable('Search receiving has no completed original to seal');
           const roles = await identityErasureRoles(pool, ref.jobId);
@@ -276,7 +279,7 @@ export function createSearchIdentityEpochParticipant(options: {
                   String(ref.epoch),
                   directory.scope,
                   json(frontier),
-                  json(used(allowance, identitySourceConsumerNativeWork(pool, token, deadline))),
+                  json(searchIdentityWorkUsed(pool, context)),
                 ]);
                 if (inserted.rowCount !== 1) throw unavailable('Search completion lost its native step');
               });
@@ -298,21 +301,57 @@ export function createSearchIdentityEpochParticipant(options: {
                 position: sealed.position,
               },
             },
-            work: used(allowance, identitySourceConsumerNativeWork(pool, token, deadline)),
+            work: searchIdentityWorkUsed(pool, context),
           };
         }
         const configuration = configured.configuration;
-        const selection =
-          (await readSearchIdentityOriginalPlan(pool, ref, change, configuration, deadline)) ??
-          (await commitSearchIdentityReceivingPlan(
-            pool,
-            ref,
-            change,
-            directory.scope,
-            saved.intent.release,
-            configuration,
-            { deadline, allowance },
-          ));
+        const selection = await readSearchIdentityOriginalPlan(pool, ref, change, configuration, deadline);
+        if (!selection) {
+          const frontier =
+            request?.frontier ?? requestSearchIdentityWriter(directory, change.original, change.terminal);
+          let native = request?.native;
+          if (!native) {
+            const roles = await identityErasureRoles(pool, ref.jobId);
+            const staged = await runCommand(
+              pool,
+              { partition: identityJobPartition(ref), deadline, clock: configuration.clock },
+              async (tx) => {
+                await requireCurrentSearchIdentityDirectory(tx, ref, directory);
+                const original = await readSearchIdentityDirectoryOriginal(tx, ref, directory);
+                if (!original || original.original !== change.original || original.terminal !== change.terminal)
+                  throw unavailable('Search writer request changed before commit');
+                bindSemanticProducerRoles(tx, roles);
+                recordIdentityEpochNativeCommit(tx, 'search-canonical-index');
+                registerCommandCallback(tx, async (id) => {
+                  const inserted = await tx.query(stepSql.sql, [
+                    currentCommand(tx).partition,
+                    id,
+                    ref.jobId,
+                    String(ref.epoch),
+                    directory.scope,
+                    json(frontier),
+                    json(searchIdentityWorkUsed(pool, context)),
+                  ]);
+                  if (inserted.rowCount !== 1) throw unavailable('Search writer request lost its native step');
+                });
+                return { value: null, events: searchIdentityWriterChanged() };
+              },
+            );
+            native = {
+              partition: staged.partition,
+              transactionId: staged.transactionId,
+              epoch: staged.epoch,
+              position: staged.position,
+            };
+          }
+          return {
+            job: ref,
+            frontier,
+            state: 'more',
+            receipt: { job: ref, step: 'search-canonical-index', version: 1, native },
+            work: searchIdentityWorkUsed(pool, context),
+          } satisfies IdentityStepProgress;
+        }
         const effect = await prepareSearchIdentityReceivingEffect(pool, selection);
         const row = await withReadTransaction(
           pool,
@@ -358,7 +397,7 @@ export function createSearchIdentityEpochParticipant(options: {
             // until that original operation is visibly settled; it never issues a second engine write.
             await recordIdentityReceivingEffect(tx, effect, { frontier });
             registerCommandCallback(tx, async (id) => {
-              const work = used(allowance, identitySourceConsumerNativeWork(pool, token, deadline));
+              const work = searchIdentityWorkUsed(pool, context);
               const inserted = await tx.query(stepSql.sql, [
                 currentCommand(tx).partition,
                 id,
@@ -406,7 +445,7 @@ export function createSearchIdentityEpochParticipant(options: {
                 String(ref.epoch),
                 row.scope_digest,
                 json(frontier),
-                json(used(allowance, identitySourceConsumerNativeWork(pool, token, deadline))),
+                json(searchIdentityWorkUsed(pool, context)),
               ]);
               if (inserted.rowCount !== 1)
                 throw unavailable('Search scope progress and its native step must commit together');
@@ -429,20 +468,9 @@ export function createSearchIdentityEpochParticipant(options: {
               position: progress.position,
             },
           },
-          work: used(allowance, identitySourceConsumerNativeWork(pool, token, deadline)),
+          work: searchIdentityWorkUsed(pool, context),
         } satisfies IdentityStepProgress;
       })
     ).value;
-  };
-}
-
-function used(before: NativeStepWork, after: NativeStepWork | null): NativeStepWork {
-  if (!after) throw unavailable('The original native work frame ended before Search settlement');
-  return {
-    rows: before.rows - after.rows,
-    points: before.points - after.points,
-    statements: before.statements - after.statements,
-    bytes: before.bytes - after.bytes,
-    engineRequests: before.engineRequests - after.engineRequests,
   };
 }

@@ -1,4 +1,5 @@
 import { identityChangePageCosts } from './identity-change-page-work.ts';
+import structuralHomeGate from './identity-epoch-store-select-home-gate.sql';
 import { memoizedValue } from '../memoized.ts';
 import { receivingSqlKey } from './identity-search-receiving-work.ts';
 import receivingJob from './identity-epoch-store-receiving-job.sql';
@@ -324,6 +325,8 @@ export function searchReceivingCapturedStatementCosts(): SearchReceivingWorkDecl
     [searchUnreleased.sql, [1, 1, 1, 256, 1]],
     [nativeCommit.sql, [2, 2, 1, 128, 0]],
     [partitionRead.sql, [1, 1, 1, 512, 1]],
+    [structuralHomeGate.sql, [1, 1, 1, 1024, 1]],
+    ["SELECT set_config('semantic.identity_prearm_effect_job',$1,true)", [1, 0, 1, 512, 0]],
     ...commandStatementCosts(),
     [participantStep.sql, [6, 6, 6, 4096, 0]],
     [participantReplay.sql, [5, 5, 1, 4096, 1]],
