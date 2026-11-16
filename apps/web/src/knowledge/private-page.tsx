@@ -1696,7 +1696,7 @@ function PrivateKnowledgeEditor({
                     value={notebookTitle}
                     maxLength={256}
                     autoComplete="off"
-                    disabled={!!notebookIntent || !!notebookReceipt || !binding}
+                    disabled={!canCreateNotebook || !!notebookIntent}
                     onChange={(event) => setNotebookTitle(event.currentTarget.value)}
                   />
                 </Field>

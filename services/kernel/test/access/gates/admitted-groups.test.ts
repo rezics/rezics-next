@@ -24,7 +24,7 @@ const groups = {
   future: 'admitted_future',
   past: 'admitted_past',
 };
-const publicJourneys = ['provider_review.list', 'realm.create', 'subject.create'];
+const publicJourneys = ['knowledge_document.public_export', 'provider_review.list', 'realm.create', 'subject.create'];
 const opened = [groups.a, groups.z, ...publicJourneys].sort();
 const issuer = 'https://admitted.auth.test';
 const audience = 'https://admitted.api.test';
@@ -79,7 +79,7 @@ function mountedGroups(): string[] {
   ].sort();
 }
 
-async function read(token?: string): Promise<string[]> {
+async function read(token?: string, knowledgeOperations: readonly string[] = []): Promise<string[]> {
   const response = await kernel.handle(
     new Request('http://kernel.test/v1/platform/exposure', {
       ...(token ? { headers: { authorization: `Bearer ${token}` } } : {}),
@@ -108,7 +108,7 @@ async function read(token?: string): Promise<string[]> {
   const journeys = visible.flatMap(({ operationId }) =>
     ['commerce_sale.list', ...publicJourneys].includes(operationId) ? [operationId] : [],
   );
-  expect(body.admitted).toEqual([...new Set([...visibleGroups, ...journeys])].sort());
+  expect(body.admitted).toEqual([...new Set([...visibleGroups, ...journeys, ...knowledgeOperations])].sort());
   for (const group of mountedGroups().filter((group) => !body.admitted.includes(group))) {
     expect(text).not.toContain(group);
   }
@@ -236,6 +236,31 @@ test('a closed group nobody admits this caller to is absent and its name never a
 
 test('the answer agrees with visibleOperations for the same viewer and clock', async () => {
   for (const token of [undefined, await bearer(ordinaryId), await bearer(fixture.principalId)]) await read(token);
+});
+
+test('Knowledge controls receive only the mounted operations for the current Account scopes', async () => {
+  const readOnly = await bearer(ordinaryId, undefined, ['exposure:read', 'account:read']);
+  const writeOnly = await bearer(ordinaryId, undefined, ['exposure:read', 'account:update']);
+  await read(readOnly, [
+    'knowledge_document.compare',
+    'knowledge_document.history',
+    'knowledge_document.lifecycle',
+    'knowledge_document.own_export',
+    'knowledge_document.private_read',
+    'knowledge_notebook.outline',
+    'knowledge_notebook.owned_list',
+    'knowledge_notebook.structure_history',
+  ]);
+  await read(writeOnly, [
+    'knowledge_document.copy',
+    'knowledge_document.create',
+    'knowledge_document.restore',
+    'knowledge_document.revise',
+    'knowledge_document.select_publication',
+    'knowledge_document.trash',
+    'knowledge_notebook.create',
+    'knowledge_notebook.move_placement',
+  ]);
 });
 
 test('the response is no-store and declares public optional authentication with a read action', async () => {
