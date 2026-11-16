@@ -191,9 +191,11 @@ the ordinary document serializer and installed name normalizer. An indexed seek 
 selection. The writer uses ordinary statement disclosure, imported-source fences and release normalization for
 descriptive fields. For outgoing relation facets, it also checks Global acceptance and the current public
 original and terminal identities using the ordinary relation projection. Foreign owner state is checked in the
-same native snapshot. The plan retains the exact input count, release and digest. Dispatch checks that digest
-against a fresh read and checks the Source build, Rating, Library and relation roster. Larger selections and
-credited creator inputs still require staged assembly.
+same native snapshot. Credited names reuse those observations and verify the creator's released mapping and
+complete current term window. The credit producer validates witness identity, names, qualifiers and body limits
+before serialization. An open term window leaves preparation pending. The plan retains the exact input count,
+release and digest, including credited-name witnesses. Dispatch checks the digest against a fresh read and checks
+the Source build, Rating, Library and relation roster. Larger inputs still require staged assembly.
 
 For indexing and removal, the dispatch turn commits the original validated bulk item while the writer retains the
 dispatch token. The retained item carries the fields required to validate the target, external version and shard

@@ -23,6 +23,9 @@ export async function recordSemanticProducerRole(
 
 export type SemanticCopyRole = { account_id: string; role: string };
 
+export const bindSemanticProducerRolesSql = `INSERT INTO semantic.erasure_source_role(partition_no,transaction_id,account_id,role)
+      SELECT $1,$2,account_id,role FROM unnest($3::uuid[],$4::text[]) AS input(account_id,role) ON CONFLICT DO NOTHING`;
+
 /** Exact source/provenance join before opening the receiving home. */
 export async function semanticCopyRoles(
   pool: import('pg').Pool,
@@ -63,11 +66,12 @@ export function bindSemanticProducerRoles(tx: CommandTransaction, roles: readonl
   if (roles.length > 8) throw new TypeError('Identity producer role bound exceeded');
   registerCommandCallback(tx, async (transactionId) => {
     await tx.query("SELECT set_config('semantic.erasure_native_transaction',$1,true)", [transactionId]);
-    await tx.query(
-      `INSERT INTO semantic.erasure_source_role(partition_no,transaction_id,account_id,role)
-      SELECT $1,$2,account_id,role FROM unnest($3::uuid[],$4::text[]) AS input(account_id,role) ON CONFLICT DO NOTHING`,
-      [partition, transactionId, roles.map((r) => r.account_id), roles.map((r) => r.role)],
-    );
+    await tx.query(bindSemanticProducerRolesSql, [
+      partition,
+      transactionId,
+      roles.map((r) => r.account_id),
+      roles.map((r) => r.role),
+    ]);
   });
 }
 

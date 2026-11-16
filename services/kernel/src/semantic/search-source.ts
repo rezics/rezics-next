@@ -35,7 +35,7 @@ import { accessCheck } from '../request/access.ts';
 import { commandTime, DEFAULT_REQUEST_DEADLINE_MS, mintReadTime, type CommandTransaction } from '../command/command.ts';
 import { nativeSourceQuery } from '../database/native-source-query.ts';
 import { withBoundedReadConnection } from '../database/pool.ts';
-import { readPartition } from '../partition/partition.ts';
+import { readPartition, type Partition } from '../partition/partition.ts';
 import { subjectReadEligibility } from './eligibility.ts';
 import { withPublicStatementReader } from './statement-disclosure.ts';
 import { withIdentitySourceSupportJob } from './identity-source-support-scope.ts';
@@ -409,7 +409,7 @@ export async function prepareRetainedIdentitySourceProjections(
     deadline: number;
     phase?: 'original' | 'terminal';
   }>,
-): Promise<((tx: CommandTransaction) => Promise<boolean>) | null> {
+): Promise<((tx: CommandTransaction) => Promise<ReadonlyMap<number, Partition> | null>) | null> {
   if (input.original === input.terminal && !isDeepStrictEqual(input.originalSupport, input.terminalSupport))
     return null;
   const requested =
@@ -439,25 +439,25 @@ export async function prepareRetainedIdentitySourceProjections(
   }
   return async (tx) => {
     const visibleIds: string[] = [];
-    const epochs = new Map<number, number>();
+    const owners = new Map<number, Partition>();
     let at: Awaited<ReturnType<typeof mintReadTime>> | undefined;
     for (const check of checks) {
       const partition = partitionOf(check.route);
-      let epoch = epochs.get(partition);
-      if (epoch === undefined) {
-        const owner = await readPartition(tx, partition);
-        if (!owner || owner.writeState !== 'active') return false;
-        epoch = owner.epoch;
-        epochs.set(partition, epoch);
+      let owner = owners.get(partition);
+      if (!owner) {
+        const current = await readPartition(tx, partition);
+        if (!current || current.writeState !== 'active') return null;
+        owner = current;
+        owners.set(partition, owner);
       }
       const state = await nativeSourceQuery(tx, readVisibility, { route: check.route, subject_id: check.id });
-      if (!state) return false;
+      if (!state) return null;
       let visible = false;
       if (state.visibility === 'visible') {
         at ??= commandTime(tx) ?? (await mintReadTime(tx, config.clock, config.pool));
         visible = await check.authorize(tx, at);
       }
-      if (visible !== Boolean(check.frontier)) return false;
+      if (visible !== Boolean(check.frontier)) return null;
       if (!check.frontier) continue;
       if (
         !(await verifyCompletedPublicFilterProjectionInSnapshot(
@@ -466,11 +466,11 @@ export async function prepareRetainedIdentitySourceProjections(
           check.id,
           input.terminal,
           input.release,
-          epoch,
+          owner.epoch,
           check.frontier,
         ))
       )
-        return false;
+        return null;
       visibleIds.push(check.id);
     }
     if (visibleIds.length) {
@@ -481,10 +481,10 @@ export async function prepareRetainedIdentitySourceProjections(
             mapping.state !== 'mapped' || mapping.terminal !== input.terminal || mapping.epoch !== input.job.epoch,
         )
       )
-        return false;
+        return null;
     }
     requireAccessDeadline(input.deadline);
-    return true;
+    return owners;
   };
 }
 

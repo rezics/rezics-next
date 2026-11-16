@@ -89,6 +89,7 @@ import {
 } from '../../src/semantic/identity-search-index-statements.ts';
 import candidateProvenance from '../../src/semantic/scope-leaf-selection-provenance.sql';
 import sourceFences from '../../src/content/read-source-fences.sql';
+import { readCreatorTermBudgetSql } from '../../src/semantic/credit-search-creators.ts';
 import activeDefinition from '../../src/semantic/definitions-active.sql';
 import publicFigures from '../../src/rating/public-figures-read.sql';
 import { STANDARD_QUESTION_ID } from '../../src/rating/standard-question.ts';
@@ -125,6 +126,7 @@ import {
   readSearchIdentityOriginalPlanSql,
   searchIdentityOriginalPlanPresentSql,
   readSearchIdentityWriterAdmissionSql,
+  recheckSearchIdentityWriterAdmissionSql,
   readSearchIdentityWriterSupportSql,
 } from '../../src/search/identity-search-receiving-directory-sql.ts';
 import { installIdentityAdapterRuntime } from '../../src/semantic/identity-adapter-runtime.ts';
@@ -193,6 +195,12 @@ test.each([
     mode: 'canonical-relation',
   },
   {
+    label: 'indexes a visible canonical original with a credited creator',
+    intent: 'merge',
+    resumed: false,
+    mode: 'canonical-credit',
+  },
+  {
     label: 'refuses a changed completed build before acceptance',
     intent: 'merge',
     resumed: false,
@@ -227,7 +235,9 @@ test.each([
   const jobId = newId(jobHome << 4);
   const job = { jobId, epoch: 1n };
   const savedJob = { jobId, epoch: '1' };
-  const adoptedRelation = mode === 'canonical-relation';
+  const creditedCreator = mode === 'canonical-credit';
+  const actorId = creditedCreator ? newId(jobHome << 4) : null;
+  const adoptedRelation = mode === 'canonical-relation' || creditedCreator;
   const canonicalTerms = mode === 'canonical-terms' || mode === 'canonical-merge' || adoptedRelation;
   const priorVisible = mode === 'handoff' || mode === 'canonical-terms';
   const visible = canonicalTerms || ['visible', 'changed-proof', 'retire', 'superseded'].includes(mode);
@@ -250,14 +260,39 @@ test.each([
   let nameFenced = false;
   let relationHidden = false;
   let relationOwnerMoved = false;
+  let creatorRenamed = false;
+  let creatorNamesOpen = false;
   const nameSlot = crypto.randomUUID();
   const nameCandidate = crypto.randomUUID();
   const relationTarget = newId(otherControlHome << 4);
   const relationTerminal = newId(jobHome << 4);
+  const creatorNameSlot = crypto.randomUUID();
   let targetRedirect: string | null = null;
-  const subjectType = adoptedRelation ? 'schema:Recipe' : 'schema:Person';
-  const selectedProperty = adoptedRelation ? 'schema:suitableForDiet' : 'schema:name';
-  const relationRoster = ['schema:author', 'schema:keywords', 'schema:suitableForDiet'];
+  const subjectType = creditedCreator ? 'schema:Movie' : adoptedRelation ? 'schema:Recipe' : 'schema:Person';
+  const selectedProperty = creditedCreator
+    ? 'schema:director'
+    : adoptedRelation
+      ? 'schema:suitableForDiet'
+      : 'schema:name';
+  const relationRoster = creditedCreator
+    ? [
+        'wdt:P7937',
+        'schema:genre',
+        'schema:keywords',
+        'schema:author',
+        'schema:illustrator',
+        'schema:director',
+        'schema:musicBy',
+        'schema:producer',
+        'schema:productionCompany',
+        'wdt:P58',
+        'wdt:P178',
+        'wdt:P725',
+        'schema:contributor',
+        'schema:character',
+        'wdt:P179',
+      ]
+    : ['schema:author', 'schema:keywords', 'schema:suitableForDiet'];
   const dependencyHomes = adoptedRelation ? [writerHome, otherControlHome] : [writerHome];
   const selectedBody = {
     value: {
@@ -289,8 +324,23 @@ test.each([
     public_collection_count: 2,
     rating_score: 0.7,
     rating_prior_epoch: 3,
-    credit_search_complete: false,
-    credited_names: [],
+    credit_search_complete: creditedCreator,
+    credited_names: creditedCreator
+      ? [
+          expect.objectContaining({
+            workId: second,
+            statementId: nameCandidate,
+            revision: 1,
+            release: bundledDigest,
+            property: selectedProperty,
+            targetId: relationTarget,
+            direction: 'outgoing',
+            nameRevision: expect.stringMatching(/^[a-f0-9]{64}$/),
+            qualifiers: [],
+            name: { language: 'en', value: 'Public credited director' },
+          }),
+        ]
+      : [],
     ...(adoptedRelation && { relation_facet_overflow: relationRoster }),
   };
   const oldBuild = crypto.randomUUID();
@@ -531,6 +581,17 @@ test.each([
         expect(values).toEqual([writerHome, jobId, '1', committed[0]?.transactionId, directoryScope, selected]);
         const step = committed.find((step) => step.frontier.after[0] === 'search-writer-admitted');
         rows = step ? [{ transaction_id: step.transactionId, frontier: step.frontier, proven: true }] : [];
+      } else if (sql === recheckSearchIdentityWriterAdmissionSql) {
+        const step = committed.find((item) => item.frontier.after[0] === 'search-writer-admitted');
+        expect(values).toEqual([
+          writerHome,
+          step?.transactionId,
+          jobId,
+          '1',
+          directoryScope,
+          JSON.stringify(step?.frontier.after),
+        ]);
+        rows = step ? [{}] : [];
       } else if (sql === readSearchIdentityWriterSupportSql) {
         expect(values.slice(0, 4)).toEqual([writerHome, jobId, '1', committed[0]?.transactionId]);
         const step = committed.findLast(
@@ -566,14 +627,16 @@ test.each([
           write_state: 'active',
         }));
       else if (visible && sql === mappingSources.sql) {
-        expect(values[0]).toEqual([second]);
+        const creator = creditedCreator && (values[0] as string[])[0] === relationTarget;
+        const id = creator ? relationTarget : second;
+        expect(values[0]).toEqual([id]);
         rows = [
           {
-            subject_id: second,
-            original: second,
-            control_partition: jobHome,
-            control_group: second,
-            terminal: second,
+            subject_id: id,
+            original: id,
+            control_partition: creator ? otherControlHome : jobHome,
+            control_group: id,
+            terminal: id,
             current_target: null,
             epoch: '1',
             owner_epoch: 1,
@@ -583,18 +646,34 @@ test.each([
           },
         ];
       } else if (visible && sql === mappingPending.sql)
-        rows = [{ partition_no: jobHome, terminal: second, pending_job: jobId, pending_epoch: '1' }];
+        rows =
+          creditedCreator && (values[1] as string[])[0] === relationTarget
+            ? []
+            : [{ partition_no: jobHome, terminal: second, pending_job: jobId, pending_epoch: '1' }];
       else if (visible && sql === mappingCurrent.sql)
-        rows = [
-          {
-            partition_no: jobHome,
-            terminal: second,
-            requested_original: second,
-            owner_epoch: 1,
-            closure_state: 'open',
-            redirected: false,
-          },
-        ];
+        rows =
+          creditedCreator && (values[1] as string[])[0] === relationTarget
+            ? [
+                {
+                  partition_no: otherControlHome,
+                  terminal: relationTarget,
+                  requested_original: relationTarget,
+                  owner_epoch: 1,
+                  closure_state: 'open',
+                  redirected: false,
+                  published_epoch: '1',
+                },
+              ]
+            : [
+                {
+                  partition_no: jobHome,
+                  terminal: second,
+                  requested_original: second,
+                  owner_epoch: 1,
+                  closure_state: 'open',
+                  redirected: false,
+                },
+              ];
       else if (sql === verifyCompletedPublicFilterProjectionSql) {
         expect(values).toEqual([
           writerHome,
@@ -615,16 +694,33 @@ test.each([
         const next = termSlots[termReads.length - 1];
         rows = [{ prior_current: true, slot_id: null, ...next, fact_count: next?.terms.length ?? 0 }];
       } else if (canonicalTerms && sql === readIdentitySearchIndexTermsSql) {
-        expect(values).toEqual([writerHome << 4, second, 8]);
-        rows = [
-          ...termSlots.map((slot) => ({
-            ...slot,
-            ...(changedTermReplay && slot.kind === 'label' && { terms: ['Changed canonical name'] }),
-            language: 'en',
-            state: 'progress',
-          })),
-          { state: 'complete', remaining: 0 },
-        ];
+        const creator = creditedCreator && values[1] === relationTarget;
+        expect(values).toEqual(creator ? [otherControlHome << 4, relationTarget, 4] : [writerHome << 4, second, 8]);
+        rows = creator
+          ? creatorNamesOpen
+            ? [{ state: 'pending', remaining: 0 }]
+            : [
+                {
+                  kind: 'label',
+                  slot_id: creatorNameSlot,
+                  language: 'en',
+                  state: 'progress',
+                  terms: [creatorRenamed ? 'Renamed director' : 'Public credited director'],
+                },
+                { state: 'complete', remaining: 0 },
+              ]
+          : [
+              ...termSlots.map((slot) => ({
+                ...slot,
+                ...(changedTermReplay && slot.kind === 'label' && { terms: ['Changed canonical name'] }),
+                language: 'en',
+                state: 'progress',
+              })),
+              { state: 'complete', remaining: 0 },
+            ];
+      } else if (creditedCreator && sql === readCreatorTermBudgetSql) {
+        expect(values).toEqual([otherControlHome << 4, relationTarget]);
+        rows = [{ current_facts: 1 }];
       } else if (canonicalTerms && sql === readCanonicalStatementPresenceSql) {
         expect(values).toEqual([writerHome << 4, second]);
         rows = adoptedName || adoptedRelation || selectionOverflow ? [{}] : [];
@@ -644,6 +740,8 @@ test.each([
             property: selectedProperty,
             rank: 'preferred',
             ordinal: 1,
+            revision: 1,
+            compact: true,
             release: bundledDigest,
             relation: adoptedRelation,
             eligible: adoptedRelation,
@@ -653,7 +751,7 @@ test.each([
             body: nameDisclosed ? selectedBody : null,
           },
         ];
-      } else if (adoptedName && sql === candidateProvenance.sql) {
+      } else if ((adoptedName || creditedCreator) && sql === candidateProvenance.sql) {
         const args = {
           routes: [writerHome << 4],
           subjects: [second],
@@ -666,8 +764,8 @@ test.each([
           {
             subject_id: second,
             id: nameCandidate,
-            source: importedName,
-            source_bytes: Buffer.byteLength(JSON.stringify(importedName)),
+            source: creditedCreator ? null : importedName,
+            source_bytes: creditedCreator ? 0 : Buffer.byteLength(JSON.stringify(importedName)),
           },
         ];
       } else if (adoptedName && sql === sourceFences.sql) {
@@ -708,9 +806,9 @@ test.each([
             [
               String(otherControlHome << 4),
               relationTarget,
-              'skos:Concept',
+              creditedCreator ? 'schema:Person' : 'skos:Concept',
               relationHidden ? 'hidden' : 'visible',
-              '1',
+              creatorRenamed ? '2' : '1',
               bundledDigest,
               targetRedirect,
               't',
@@ -1284,6 +1382,8 @@ test.each([
         writing = undefined;
         rows = [];
       } else if (sql === nativeCommit.sql) rows = [{}];
+      else if (actorId && sql.startsWith('SELECT l.account_id::text,l.role FROM semantic.identity_epoch_job j'))
+        rows = [{ account_id: actorId, role: 'actor' }];
       else if (sql === commandNoEffect['~standard'].query.text) rows = [['1', nativePosition()]];
       else if (sql === commandFence['~standard'].query.text)
         rows = [['1', engineReads > 1 ? String(Number(nativePosition()) + 1) : '1']];
@@ -1405,6 +1505,7 @@ test.each([
     'canonical-terms',
     'canonical-merge',
     'canonical-relation',
+    'canonical-credit',
     'changed-proof',
     'retire',
     'superseded',
@@ -1546,6 +1647,13 @@ test.each([
         expect(normalizationCalls).toBe(0);
         expect(retainedPlan).toBeUndefined();
         selectionOverflow = false;
+        if (creditedCreator) {
+          creatorNamesOpen = true;
+          expect(await prepare(pool, progress.receipt)).toEqual({ state: 'pending' });
+          expect(normalizationCalls).toBe(0);
+          expect(retainedPlan).toBeUndefined();
+          creatorNamesOpen = false;
+        }
       } else {
         if (mode === 'retire') {
           await nextSupport(['terminal', 'retiring', oldBuild, '5', 0]);
@@ -1702,6 +1810,13 @@ test.each([
             expect(bulkCalls).toBe(0);
             relationOwnerMoved = false;
           }
+          if (creditedCreator) {
+            creatorRenamed = true;
+            await expect(prepare(pool, request)).rejects.toThrow('Canonical Search Source changed before dispatch');
+            expect(committedOperation).toBeUndefined();
+            expect(bulkCalls).toBe(0);
+            creatorRenamed = false;
+          }
           const captured = await prepare(pool, request);
           expect(captured).toEqual({ state: 'progress', transactionId: retainedBulk?.transaction });
           expect(committedOperation?.state).toBe('dispatched');
@@ -1759,6 +1874,7 @@ test.each([
             2 * Number(canonicalTerms) +
             2 * Number(adoptedName) +
             3 * Number(adoptedRelation) +
+            Number(creditedCreator) +
             Number(mode === 'dispatch');
           expect(engineReads).toBe(expectedAllocationReads);
           const applied = await withIdentitySourceConsumerMaintenance(

@@ -102,6 +102,11 @@ export const readSearchIdentityWriterAdmissionSql = `SELECT s.transaction_id::te
    AND s.step='search-canonical-index' AND s.state='more'
    AND s.frontier->'after'->>0='search-writer-admitted' AND s.frontier->'after'->>1=$4`;
 
+/** On the canonical close, recheck the exact previously proved native admission. */
+export const recheckSearchIdentityWriterAdmissionSql = `SELECT 1 FROM semantic.identity_epoch_step
+ WHERE (partition_no,transaction_id,job_id,job_epoch,scope_digest)=($1,$2,$3,$4,$5)
+   AND step='search-canonical-index' AND state='more' AND frontier->'after'=$6::jsonb`;
+
 /** Read the latest committed Source support cursor for one phase of this exact writer request. */
 export const readSearchIdentityWriterSupportSql = `WITH latest AS MATERIALIZED (
  SELECT partition_no,transaction_id,native_epoch,native_position,scope_digest,frontier,xmin

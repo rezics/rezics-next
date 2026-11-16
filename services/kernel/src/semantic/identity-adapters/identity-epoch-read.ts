@@ -26,6 +26,7 @@ import { partitionOf, routeOf } from '../../route/route.ts';
 import { CommandUnavailableError, requireAccessDeadline, throwAccessUnavailable } from '../../access/unavailable.ts';
 import { withRequestDeadline } from '../../request/deadline.ts';
 import type { CommandTransaction } from '../../command/command.ts';
+import type { Partition } from '../../partition/partition.ts';
 import { nativeIdentityCapabilities } from '../identity-adapter-bind.ts';
 import type { IdentityNativeReaders, NativeIdentityCapabilities } from '../identity-adapter-port.ts';
 import type { IdentityIntent, IdentityJobRef, IdentityMapping } from './identity-epoch-contract.ts';
@@ -467,9 +468,14 @@ async function readIdentityMappingsWith(
 
 /** The caller owns one repeatable-read snapshot of the physical pool. Read the
  * same full native keys as ordinary mapping without opening another checkout
- * or admitting a pending job's unpublished mappings. */
-export async function readReleasedIdentityMappingsInSnapshot(client: Queryable, originals: readonly string[]) {
-  return readIdentityMappingsInSnapshot(client, originals);
+ * or admitting a pending job's unpublished mappings. Observed owners must have
+ * been read in this same snapshot. */
+export async function readReleasedIdentityMappingsInSnapshot(
+  client: Queryable,
+  originals: readonly string[],
+  observedOwners?: ReadonlyMap<number, Partition>,
+) {
+  return readIdentityMappingsInSnapshot(client, originals, undefined, observedOwners);
 }
 
 /** Recheck the exact admitted job on the caller's same-Pool support snapshot. */
@@ -481,7 +487,12 @@ export async function readIdentitySupportMappingsInSnapshot(
   return (await readIdentityMappingsInSnapshot(client, originals, job)).mappings;
 }
 
-async function readIdentityMappingsInSnapshot(client: Queryable, originals: readonly string[], job?: IdentityJobRef) {
+async function readIdentityMappingsInSnapshot(
+  client: Queryable,
+  originals: readonly string[],
+  job?: IdentityJobRef,
+  observedOwners?: ReadonlyMap<number, Partition>,
+) {
   if (originals.length > 100) throw new RangeError('Identity page must contain at most 100 originals');
   const routes = originals.map((id) => {
     const route = routeOf(id);
@@ -492,8 +503,20 @@ async function readIdentityMappingsInSnapshot(client: Queryable, originals: read
   const controlRows = sourceRows.filter((row) => row.original && row.control_partition !== null && row.control_group);
   const sourceHomes = new Set(routes.map(partitionOf));
   const controlHomes = new Set(controlRows.map((row) => row.control_partition!));
-  const nativeOwners = (await client.query(owners.sql, [[...new Set([...sourceHomes, ...controlHomes])]]))
-    .rows as unknown as IdentityOwnerEvidence[];
+  const nativeOwners: IdentityOwnerEvidence[] = [];
+  const missing: number[] = [];
+  for (const partition of new Set([...sourceHomes, ...controlHomes])) {
+    const owner = observedOwners?.get(partition);
+    if (owner?.partitionNo !== partition) missing.push(partition);
+    else
+      nativeOwners.push({
+        partition_no: partition,
+        epoch: owner.epoch,
+        position: owner.position.toString(),
+        write_state: owner.writeState,
+      });
+  }
+  if (missing.length) nativeOwners.push(...(await client.query<IdentityOwnerEvidence>(owners.sql, [missing])).rows);
   const locators = controlLocatorsOf(controlRows);
   const pendingRows = locators.length
     ? (await client.query(pending.sql, [locators.map((key) => key.partition), locators.map((key) => key.group)]))

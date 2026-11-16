@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { CommandTransaction } from '../command/command.ts';
+import { readPartition, type Partition } from '../partition/partition.ts';
 import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts';
 import { readRelease } from '../semantic/definitions.ts';
 import type { IdentityChange, IdentityFrontier, IdentityJobRef } from '../semantic/identity-epoch-contract.ts';
@@ -21,6 +22,11 @@ import { readSearchIdentityWriterSupportSql } from './identity-search-receiving-
 import { subjectPartition } from './source.ts';
 
 const unavailable = (message: string) => new IdentityEpochStoreError('identity_epoch_unavailable', message);
+
+type CanonicalTermInput = (tx: CommandTransaction) => Promise<{
+  home: Partition;
+  terms: NonNullable<Awaited<ReturnType<typeof readIdentitySearchIndexTerms>>>;
+} | null>;
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const releaseDigest = /^sha256:[a-f0-9]{64}$/;
 const marker = 'search-writer-support';
@@ -140,7 +146,7 @@ export function createSearchIdentityWriterSupport(configuration: SearchReceiving
         release: string;
         originalSupport: PublicFilterProjectionFrontier | null;
         terminalSupport: PublicFilterProjectionFrontier | null;
-        canonical: null | ((tx: CommandTransaction) => ReturnType<typeof readIdentitySearchIndexTerms>);
+        canonical: CanonicalTermInput | null;
         compare(tx: CommandTransaction): Promise<void>;
       }>
   > => {
@@ -156,7 +162,9 @@ export function createSearchIdentityWriterSupport(configuration: SearchReceiving
         const terminal = sameDocument ? original : decodeProjection(await retained(tx, basis, 'terminal'));
         if (!closed(terminal)) return { definition: savedDefinition, phase: 'terminal' as const, projection: terminal };
         const terms = sameDocument && original.frontier ? await retained(tx, basis, 'terms') : null;
-        return { phase: 'ready' as const, definition: savedDefinition, original, terminal, sameDocument, terms };
+        const home =
+          terms?.after[3] === 'complete' ? await readPartition(tx, subjectPartition(basis.change.original)) : null;
+        return { phase: 'ready' as const, definition: savedDefinition, original, terminal, sameDocument, terms, home };
       },
       deadline,
     );
@@ -174,7 +182,7 @@ export function createSearchIdentityWriterSupport(configuration: SearchReceiving
           throw unavailable('Search writer Source support changed before preparation');
       }
       const support = original.frontier;
-      let canonical: null | ((tx: CommandTransaction) => ReturnType<typeof readIdentitySearchIndexTerms>) = null;
+      let canonical: CanonicalTermInput | null = null;
       if (sameDocument && support) {
         const cursor = termCursor(terms, support);
         const verify = await prepareRetainedIdentitySourceProjections(configuration, {
@@ -219,8 +227,18 @@ export function createSearchIdentityWriterSupport(configuration: SearchReceiving
           };
         }
         canonical = async (tx) => {
-          if (!(await verify(tx))) throw unavailable('Search writer canonical terms lost their Source build');
-          return readIdentitySearchIndexTerms(tx, basis.change.original, cursor);
+          const home = (await verify(tx))?.get(subjectPartition(basis.change.original));
+          if (!home) throw unavailable('Search writer canonical terms lost their Source build');
+          // The retained step IDs and the completed term cursor came from an earlier
+          // snapshot of this actual home. The unchanged position joins both observations.
+          if (
+            saved.home?.writeState !== 'active' ||
+            saved.home.epoch !== home.epoch ||
+            saved.home.position !== home.position
+          )
+            return null;
+          const terms = await readIdentitySearchIndexTerms(tx, basis.change.original, cursor);
+          return terms ? { home, terms } : null;
         };
       }
       return {

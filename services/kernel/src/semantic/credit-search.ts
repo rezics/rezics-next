@@ -1,17 +1,20 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
+import type { Release } from '@rezics/definitions';
 import { routeOf } from '../route/route.ts';
 import {
   CREDIT_SEARCH_LIMITS,
+  creditSearchFromSnapshot,
   currentCreditSearchMatch,
   projectCreditSearch,
   type CreditSearchEntry,
+  type CreditSearchIndexProjection,
   type CreditSearchPage,
   type CreditSearchProjection,
   type CreditSearchSource,
   type CreditSearchWitness,
 } from '../search/credit-search.ts';
-import { canonicalCreators, type PublicCreator } from './credit-search-creators.ts';
+import { canonicalCreators, type CreditCreatorSnapshot, type PublicCreator } from './credit-search-creators.ts';
 import {
   digestOf,
   installedLimits,
@@ -19,6 +22,7 @@ import {
   selectedCursorOf,
   sortQualifiers,
   utf8Bytes,
+  type WorkHeader,
 } from './credit-search-cut.ts';
 import {
   creditPlan,
@@ -26,12 +30,14 @@ import {
   discloseCredits,
   exactCredit,
   observationOf,
+  parseCredit,
   parsePage,
   publicWorkCut,
   resumeSelection,
   selectedCredits,
   workCut,
   type ParsedCredit,
+  type SelectedCredit,
 } from './credit-search-selection.ts';
 
 export type CreditSearchReceipt =
@@ -91,13 +97,19 @@ function entriesOf(
 }
 
 /** One dependency meaning for pages, exact witnesses and the whole currentness window. */
-async function expandCredits(pool: Pool, parsed: readonly ParsedCredit[], limits: ReturnType<typeof installedLimits>) {
+async function expandCredits(
+  pool: Pool,
+  parsed: readonly ParsedCredit[],
+  limits: ReturnType<typeof installedLimits>,
+  snapshot?: CreditCreatorSnapshot,
+) {
   const complete = parsed.filter((credit) => !credit.overflowQualifiers);
   const resolved = await canonicalCreators(
     pool,
     complete.map((credit) => credit.targetId),
     limits,
     complete.flatMap((credit) => credit.itemQualifierIds),
+    snapshot,
   );
   if (resolved.state !== 'current') return resolved;
   return {
@@ -109,6 +121,27 @@ async function expandCredits(pool: Pool, parsed: readonly ParsedCredit[], limits
         (resolved.creators.has(credit.targetId) && credit.itemQualifierIds.every((id) => resolved.publicIds.has(id))),
     ),
   };
+}
+
+/** The identity writer supplies the entire bounded visible credit selection from this snapshot. */
+export async function projectSelectedCreditsInSnapshot(
+  pool: Pool,
+  snapshot: CreditCreatorSnapshot,
+  work: WorkHeader,
+  rows: readonly SelectedCredit[],
+  releases: ReadonlyMap<string, Release>,
+): Promise<CreditSearchIndexProjection> {
+  const limits = installedLimits(CREDIT_SEARCH_LIMITS);
+  const parsed: ParsedCredit[] = [];
+  for (const row of rows) {
+    const release = releases.get(row.release);
+    if (!release) return { state: 'unavailable' };
+    const credit = parseCredit(row, release, limits.qualifiersPerCredit);
+    if (credit) parsed.push(credit);
+  }
+  const resolved = await expandCredits(pool, parsed, limits, snapshot);
+  if (resolved.state !== 'current') return { state: resolved.state };
+  return creditSearchFromSnapshot(work.id, entriesOf(resolved.credits, resolved.creators, work.id));
 }
 
 /** Native CreditSearchSource. Pages admit selected outgoing credits before nested creator expansion. */

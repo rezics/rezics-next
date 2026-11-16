@@ -1,4 +1,4 @@
-import type { CreditSearchProjection, CreditSearchWitness } from './credit-search.ts';
+import type { CreditSearchIndexProjection, CreditSearchWitness } from './credit-search.ts';
 
 /** One nested document per (statement, creator name). Shape matches `credit-search-mapping.ts`. */
 export type CreditedNameDocument = {
@@ -40,7 +40,7 @@ function creditedNameDocument(witness: CreditSearchWitness): CreditedNameDocumen
  * the previous names with an explicit incomplete cut, so a stale creator name cannot survive.
  * The projection is already validated by `projectCreditSearch`; its witnesses are published unchanged.
  */
-export function creditSearchFields(projection: CreditSearchProjection | undefined): CreditSearchFields {
+export function creditSearchFields(projection: CreditSearchIndexProjection | undefined): CreditSearchFields {
   if (projection === undefined || projection.state !== 'complete')
     return { credit_search_complete: false, credited_names: [] };
   return {
