@@ -9,7 +9,11 @@ import { bundledRelease, bundledDigest } from '@rezics/definitions/bundled';
 import { migrate } from './database.ts';
 import { mountedWebsiteConfiguration } from './website-composition.ts';
 import { websiteWorkerScopes } from '../../../apps/web/scripts/website-configuration.ts';
-import { createAccountTokenProvider, SHOWCASE_IMPORTER_SCOPES } from '../../importer/src/credentials.ts';
+import {
+  CATALOGUE_IMPORTER_SCOPES,
+  createAccountTokenProvider,
+  SHOWCASE_IMPORTER_SCOPES,
+} from '../../importer/src/credentials.ts';
 import { DEVELOPMENT_SHOWCASE_SCOPES } from '../../../scripts/datasets/showcase-community.ts';
 import { developmentCollectionScopes } from '../../../scripts/datasets/development-showcase.ts';
 import { developmentPersonalListScopes } from '../../importer/src/showcase-personal-list.ts';
@@ -263,8 +267,21 @@ function ordinaryAuthWalk(): boolean {
   return process.env.REZICS_WALK_AUTH_FIXTURE === '1';
 }
 
+export function firstPublicWebWalk(env = process.env): boolean {
+  return env.REZICS_WALK_FIRST_PUBLIC_WEB === '1';
+}
+
 function developmentShowcaseWalk(): boolean {
-  return !importCatalogueWalk() && !ordinaryAuthWalk();
+  return !importCatalogueWalk() && !ordinaryAuthWalk() && !firstPublicWebWalk();
+}
+
+export const firstPublicWebOwnerActions = ['board:create', 'space:create', 'realm:create', 'zone:create'] as const;
+
+function personaScopes() {
+  const importer = firstPublicWebWalk()
+    ? [...CATALOGUE_IMPORTER_SCOPES, ...firstPublicWebOwnerActions]
+    : importerScopes;
+  return [...new Set([...importer, 'account:manage', 'exposure:open', 'access:grant'])];
 }
 
 export function localShowcaseClientRegistration() {
@@ -535,10 +552,10 @@ export async function kernelEnvironment(): Promise<Record<string, string>> {
         return [line.slice(0, equals), line.slice(equals + 1)];
       }),
   );
-  if (ordinaryAuthWalk()) {
+  if (ordinaryAuthWalk() || firstPublicWebWalk()) {
     const { readCommerceConfig } = await import('../../kernel/src/commerce/config.ts');
     if (readCommerceConfig({ ...process.env, ...environment }))
-      throw new Error('An ordinary Auth walk requires Commerce to be unconfigured');
+      throw new Error('This first-public fixture requires Commerce to be unconfigured');
   }
   return environment;
 }
@@ -791,7 +808,7 @@ export async function assemble(options?: {
           await service.internal.registerClient({
             clientId: personaClient,
             firstParty: true,
-            scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open', 'access:grant'])],
+            scopes: personaScopes(),
           });
         }
         if (developmentShowcaseWalk()) {
@@ -838,11 +855,14 @@ const showcaseOpenings = [
 export async function openLocalShowcase(
   routes: Iterable<{ method: string; hooks?: { detail?: unknown } }>,
   open: (input: { group: string; key: string }) => Promise<unknown>,
-  catalogueOnly = false,
+  scope: boolean | 'first-public-web' = false,
 ): Promise<void> {
-  // Source statistic writes share the released personal Library gate.
-  const groups = new Set<string>(catalogueOnly ? ['personal_library'] : showcaseOpenings);
-  for (const route of catalogueOnly ? [] : routes) {
+  // Importer keeps its development opening. Web uses the catalogue operator for source statistics
+  // and exposes only Collections, since personal_library also admits deferred personal-list imports.
+  const groups = new Set<string>(
+    scope === 'first-public-web' ? ['collections'] : scope ? ['personal_library'] : showcaseOpenings,
+  );
+  for (const route of scope ? [] : routes) {
     const detail = route.hooks?.detail as { 'x-exposure'?: string; security?: Record<string, unknown>[] } | undefined;
     if (
       route.method === 'GET' &&
@@ -869,6 +889,7 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
   if (ordinaryAuthWalk()) throw new Error('An ordinary Auth fixture does not provision the development persona');
   const { host, access, kernelPool, keys, kernel } = composition;
   const catalogueOnly = importCatalogueWalk();
+  const firstPublicWeb = firstPublicWebWalk();
   const { bootstrapGovernance, bootstrapLocalShowcaseBoardCreation, PLATFORM_RESOURCE } =
     await import('../../kernel/src/access/bootstrap-governance.ts');
   const { accessCommandAuthorization } = await import('../../kernel/src/request/access.ts');
@@ -906,7 +927,7 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
       client: personaClient,
       authOrigin: origins.issuer,
       issuerOrigin: origins.issuer,
-      scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open', 'access:grant'])],
+      scopes: personaScopes(),
       fetch: Object.assign(
         (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
           host.handler(new Request(input, init)),
@@ -935,7 +956,7 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
             email: 'developer@rezics.test',
             password: keys.password,
             client_id: personaClient,
-            scope: [...new Set([...importerScopes, 'account:manage', 'exposure:open', 'access:grant'])],
+            scope: personaScopes(),
           }),
         }),
       );
@@ -1012,7 +1033,7 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
       );
       await exposure.open({ ...context, actor }, { ...input, authorization });
     },
-    catalogueOnly,
+    firstPublicWeb ? 'first-public-web' : catalogueOnly,
   );
   await privateFile(
     resolve(directory, 'seed.env'),
@@ -1020,7 +1041,7 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
       REZICS_DEV_PERSONA_ACCOUNT_KEY: resolve(directory, 'importer.jwk'),
       REZICS_DEV_PERSONA_ACCOUNT: person.accountId,
       REZICS_DEV_PERSONA_CLIENT: personaClient,
-      ...(!catalogueOnly && {
+      ...(developmentShowcaseWalk() && {
         REZICS_DEV_SHOWCASE_ACCOUNT_KEY: resolve(directory, 'importer.jwk'),
         REZICS_DEV_SHOWCASE_CLIENT: showcaseClient,
       }),
@@ -1151,8 +1172,11 @@ function loopbackServe(
 
 async function serveHost() {
   const ordinaryAuthFixture = ordinaryAuthWalk();
-  if (ordinaryAuthFixture && (!walkAcceptanceId(process.env, 'native') || !walkStackAdmitted(process.env, root)))
-    throw new Error('An ordinary Auth fixture requires an admitted native walk');
+  if (
+    (ordinaryAuthFixture || firstPublicWebWalk()) &&
+    (!walkAcceptanceId(process.env, 'native') || !walkStackAdmitted(process.env, root))
+  )
+    throw new Error('This first-public fixture requires an admitted native walk');
   const composition = await assemble();
   let native: ReturnType<typeof loopbackServe> | undefined;
   let kernel: ReturnType<typeof loopbackServe> | undefined;
@@ -1180,7 +1204,7 @@ async function serveHost() {
   try {
     if (!ordinaryAuthFixture) {
       const person = await phase('auth-persona', provisionPersona(composition));
-      printPersona(composition.keys, person.accountId);
+      if (!firstPublicWebWalk()) printPersona(composition.keys, person.accountId);
     }
     const mediaBindings = developmentMediaBindings(await kernelEnvironment(), composition.keys);
     const media = mediaBindings.LOCAL_MEDIA_TOKEN
@@ -1675,9 +1699,14 @@ export async function runWalk(
   if (!task) throw new Error('walk stacks are for a worker whose brief lists acceptance.requires native or browser');
   if (ordinaryAuthWalk() && !walkAcceptanceId(process.env, 'native'))
     throw new Error('An ordinary Auth fixture requires native acceptance');
-  if (ordinaryAuthWalk() && importCatalogueWalk()) throw new Error('Select one fixture scope for the walk');
+  if (firstPublicWebWalk() && (!walkAcceptanceId(process.env, 'native') || !walkAcceptanceId(process.env, 'browser')))
+    throw new Error('The first-public Web fixture requires native and browser acceptance');
+  if ([ordinaryAuthWalk(), importCatalogueWalk(), firstPublicWebWalk()].filter(Boolean).length > 1)
+    throw new Error('Select one fixture scope for the walk');
   if (command.length === 0)
-    throw new Error('Usage: bun services/auth/scripts/dev-stack.ts walk [--import-catalogue] -- <command...>');
+    throw new Error(
+      'Usage: bun services/auth/scripts/dev-stack.ts walk [--import-catalogue|--first-public-web] -- <command...>',
+    );
   const controller = new AbortController();
   let current: ReturnType<typeof Bun.spawn> | undefined;
   let interrupted: keyof typeof SIGNAL_NUMBERS | undefined;
@@ -1733,6 +1762,8 @@ export async function runWalk(
       slot = await admitWalkStack(task, process.env, root, controller.signal, blocked, portsAvailable);
       const names = walkStackNames(task, slot.index!);
       const env = walkProcessEnvironment(task, slot.index!);
+      // Book discovery needs the standard Search-backed Kernel. Web still starts after the fixture.
+      if (firstPublicWebWalk()) env.REZICS_WALK_DEFER_FRONTENDS = '0';
       const ports = walkStackPorts(slot.index!);
       let starting: ReturnType<typeof Bun.spawn> | undefined;
       let walkFailure: unknown;
@@ -1868,6 +1899,9 @@ if (import.meta.main) {
       const rest = process.argv.slice(3);
       if (rest[0] === '--import-catalogue') {
         process.env.REZICS_WALK_IMPORT_CATALOGUE = '1';
+        rest.shift();
+      } else if (rest[0] === '--first-public-web') {
+        process.env.REZICS_WALK_FIRST_PUBLIC_WEB = '1';
         rest.shift();
       }
       // The walk has settled its resources before returning the child status.

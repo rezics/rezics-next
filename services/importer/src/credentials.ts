@@ -25,13 +25,14 @@ export const IMPORTER_SCOPES = [
 
 export const VNDB_IMPORTER_SCOPES = [...IMPORTER_SCOPES, 'source_statistic:write'] as const;
 
-export const SHOWCASE_IMPORTER_SCOPES = [
+export const CATALOGUE_IMPORTER_SCOPES = [
   ...VNDB_IMPORTER_SCOPES,
   'subject:read',
   'context:accept',
   'context:adopt',
-  'subject:merge',
 ] as const;
+
+export const SHOWCASE_IMPORTER_SCOPES = [...CATALOGUE_IMPORTER_SCOPES, 'subject:merge'] as const;
 
 export type CredentialsObserver = {
   onAccountKey?(

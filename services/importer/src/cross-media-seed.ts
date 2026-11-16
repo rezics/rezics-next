@@ -45,7 +45,12 @@ import {
   type PersonReviewPair,
   type ReviewedPersonPublication,
 } from './showcase-person-identity.ts';
-import { createAccountTokenProvider, SHOWCASE_IMPORTER_SCOPES, VNDB_IMPORTER_SCOPES } from './credentials.ts';
+import {
+  CATALOGUE_IMPORTER_SCOPES,
+  createAccountTokenProvider,
+  SHOWCASE_IMPORTER_SCOPES,
+  VNDB_IMPORTER_SCOPES,
+} from './credentials.ts';
 import { createSeedDenialDiagnostics } from './showcase-denial-diagnostics.ts';
 import {
   CrossMediaGraph,
@@ -3443,6 +3448,7 @@ export type CrossMediaSeedCliOptions = {
   selection?: CrossMediaSelection;
   /** Calendar date from the selected VNDB dump's verified snapshot provenance. */
   sourceSnapshotAsOf?: string;
+  publishReviewedPersonMerge?: boolean;
   composePersona?: (context: DevelopmentShowcaseContext) => Promise<DevelopmentShowcaseResult>;
   /** Walk seeds drop each scanned dump table from the 6 GiB file cache. */
   onDumpTableReleased?: (file: string) => void;
@@ -3531,12 +3537,14 @@ export async function runCrossMediaSeedCli(
   } = await import('./showcase-vndb-releases.ts');
   const { releasedReviewedVocabulary } = await import('./reviewed-vocabulary-port.ts');
   const reviewedVocabulary = releasedReviewedVocabulary();
+  const showcaseScopes =
+    options.publishReviewedPersonMerge === false ? CATALOGUE_IMPORTER_SCOPES : SHOWCASE_IMPORTER_SCOPES;
   const tokenProvider = await createAccountTokenProvider({
     accountKeyPath: values.get('--account-key')!,
     account: values.get('--account')!,
     client: values.get('--client')!,
     authOrigin: auth,
-    scopes: showcasePath ? [...SHOWCASE_IMPORTER_SCOPES] : [...VNDB_IMPORTER_SCOPES, 'subject:read'],
+    scopes: showcasePath ? [...showcaseScopes] : [...VNDB_IMPORTER_SCOPES, 'subject:read'],
   });
   const resultPath = resolve(values.get('--result')!);
   const statePath = resolve(values.get('--state')!);
@@ -4491,7 +4499,10 @@ export async function runCrossMediaSeedCli(
     // The reviewed endpoints exist only after the preceding showcase adoption has committed.
     finalization.enter('person-merge');
     const personMerge =
-      journal && publicClient && combinedResult.personReview?.pair.state === 'selected'
+      options.publishReviewedPersonMerge !== false &&
+      journal &&
+      publicClient &&
+      combinedResult.personReview?.pair.state === 'selected'
         ? await publishReviewedPersonMerge({
             pair: combinedResult.personReview.pair.sources,
             transport: importPort,
