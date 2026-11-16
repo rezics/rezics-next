@@ -63,7 +63,31 @@ export declare function createCommunityDeclaration(ambient: CommunityAmbient): R
                 operationId: string;
                 outcome: 'published';
             };
-        }>>;
+        }> | {
+            banFollowRemoval: {
+                spaceId: string;
+                publicationTransactionId: string;
+            };
+            value: {
+                realmId: string;
+                accountId: string;
+                reservationId: string;
+                role: "member" | null;
+                at: string;
+                transactionId: string;
+                publicationTransactionId?: string;
+                transition?: {
+                    generationId: string;
+                    operationId: string;
+                    outcome: 'published';
+                };
+            };
+            partition: number;
+            epoch: number;
+            position: bigint;
+            transactionId: string;
+            replayed: boolean;
+        }>;
         terminalize: (reservation: import("../access/membership-inverse.ts").MembershipReservation, key: string) => Promise<import("../command/command.ts").CommandOutcome<{
             realmId: string;
             accountId: string;

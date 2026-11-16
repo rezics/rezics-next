@@ -1,5 +1,6 @@
 import { type CommittedSessionRevocationWorkflow } from './session-revocation-work.ts';
 import type { MembershipWorkInput, MembershipWorkResult, MembershipWorkflowPorts } from '@rezics/auth-contract';
+import type { CommandEvent, CommandTransaction } from '../command/command.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
 import { type RealmMembershipAuthority, type MembershipReservation } from './membership-inverse.ts';
@@ -36,6 +37,7 @@ type Options = {
     authorize?: MembershipAuthorization;
     access?: Access;
     realm?: RealmMembershipCommands;
+    removeMembershipFollow?: (tx: CommandTransaction, accountId: string, spaceId: string) => Promise<CommandEvent | null>;
     sessionRevocation?: CommittedSessionRevocationWorkflow;
 };
 /** Native Access-only ports. Direct component construction defers approval

@@ -63,7 +63,7 @@ export declare function readPublicFigures(client: Queryable, input: {
     questionId: string;
     populationId: string;
     subjectIds: readonly string[];
-}): Promise<PublicFigure[]>;
+}, mode?: 'native'): Promise<PublicFigure[]>;
 /** Page published figures for one question and population in anchor-subject order with one statement. */
 export declare function pagePublicFigures(client: Queryable, input: {
     partition: number;

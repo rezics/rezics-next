@@ -29,3 +29,7 @@ export type IdentityStepReceiptLocator = Readonly<{
         transactionId: string;
     }>;
 }>;
+/** A committed Search directory step can ask the coordinator to run its writer owner. */
+export declare const SEARCH_IDENTITY_WRITER_REQUEST = "prepare-search-writer";
+export declare const SEARCH_IDENTITY_WRITER_DISPATCH = "dispatch-search-writer";
+export declare const SEARCH_IDENTITY_WRITER_ACCEPT = "accept-search-writer";

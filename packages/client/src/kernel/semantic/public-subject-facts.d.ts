@@ -21,7 +21,7 @@ export type SubjectPageState = {
 /** Current native identity and revision fences for one display-home batch. */
 export declare function readSubjectPageStates(client: Queryable, home: number, ids: readonly string[]): Promise<SubjectPageState[]>;
 export declare function readLabels(pool: Queryable, ids: readonly string[]): Promise<Map<string, Record<string, string>>>;
-export declare function readPublicSubject(client: Queryable, subjectId: string): Promise<{
+export declare function readPublicSubject(client: Queryable, subjectId: string, unverifiedOwnerId?: string): Promise<{
     id: string;
     label: string;
     type: string;

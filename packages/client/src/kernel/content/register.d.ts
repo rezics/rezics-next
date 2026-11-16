@@ -36,9 +36,10 @@ export type ContentWorkAmbient = Readonly<{
     now?: () => number;
     id?: () => string;
     readIdentityMappings: (pool: Pool, originals: readonly string[]) => Promise<readonly RealmSubjectIdentityMapping[]>;
+    receiveCanonicalGeneration?: Parameters<typeof contentEffects>[3];
 }>;
 /** Content's declared effects. The worker register consumes this; tests may install the same list. */
-export declare function contentDeclaredEffects(pool: ContentPool, client: Parameters<typeof contentEffects>[1], access: Parameters<typeof contentNoticeEffects>[1], readIdentityMappings: ContentWorkAmbient['readIdentityMappings']): readonly {
+export declare function contentDeclaredEffects(pool: ContentPool, client: Parameters<typeof contentEffects>[1], access: Parameters<typeof contentNoticeEffects>[1], readIdentityMappings: ContentWorkAmbient['readIdentityMappings'], receiveCanonicalGeneration?: ContentWorkAmbient['receiveCanonicalGeneration']): readonly {
     name: string;
     types: string[];
     run(event: {

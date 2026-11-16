@@ -1,8 +1,9 @@
 import { identityRatingReviewEvidence, type IdentityMappingEvidence, type IdentityOwnerEvidence, type IdentitySourceEvidence, type IdentityPendingEvidence, type IdentityControlEvidence, type IdentityMappingRequest, type IdentityRatingControlLocator, type IdentityRatingNativeEvidence, type IdentityRatingReviewOperand, type IdentityRatingReviewResult, type IdentityRatingReviewUnavailableReason } from '../identity-core/index.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { CommandTransaction } from '../../command/command.ts';
+import type { Partition } from '../../partition/partition.ts';
 import type { IdentityNativeReaders, NativeIdentityCapabilities } from '../identity-adapter-port.ts';
-import type { IdentityIntent, IdentityMapping } from './identity-epoch-contract.ts';
+import type { IdentityIntent, IdentityJobRef, IdentityMapping } from './identity-epoch-contract.ts';
 export type { IdentityRatingControlLocator, IdentityRatingReviewOperand, IdentityRatingReviewResult, IdentityRatingReviewUnavailableReason, IdentityRatingNativeEvidence, };
 type Queryable = Readonly<{
     query: (text: string, values?: unknown[]) => Promise<{
@@ -44,8 +45,9 @@ export declare function readIdentityRepairEvidenceInTransaction(client: Queryabl
 export declare function classifyIdentityRatingReviewEvidence(requestedOriginalId: string, canonicalTerminalId: string, sourceIdentities: readonly string[], sourceHomes: readonly number[], evidence: IdentityRatingNativeEvidence): IdentityRatingReviewResult;
 /** The caller owns one repeatable-read snapshot of the physical pool. Read the
  * same full native keys as ordinary mapping without opening another checkout
- * or admitting a pending job's unpublished mappings. */
-export declare function readReleasedIdentityMappingsInSnapshot(client: Queryable, originals: readonly string[]): Promise<{
+ * or admitting a pending job's unpublished mappings. Observed owners must have
+ * been read in this same snapshot. */
+export declare function readReleasedIdentityMappingsInSnapshot(client: Queryable, originals: readonly string[], observedOwners?: ReadonlyMap<number, Partition>): Promise<{
     mappings: IdentityMapping[];
     evidence: Readonly<{
         sourceOwners: readonly IdentityOwnerEvidence[];
@@ -55,6 +57,8 @@ export declare function readReleasedIdentityMappingsInSnapshot(client: Queryable
         currentRows: readonly IdentityControlEvidence[];
     }>;
 }>;
+/** Recheck the exact admitted job on the caller's same-Pool support snapshot. */
+export declare function readIdentitySupportMappingsInSnapshot(client: Queryable, originals: readonly string[], job: IdentityJobRef, observedOwners?: ReadonlyMap<number, Partition>): Promise<IdentityMapping[]>;
 /** One keyed selection in the captured generation, independent of presentation visibility. */
 export declare function selectIdentityEpochRemainder(tx: CommandTransaction, intent: IdentityIntent, input: {
     partition_no: number;

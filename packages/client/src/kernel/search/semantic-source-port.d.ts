@@ -1,7 +1,7 @@
 import type { PublicFilterConsumerContext } from './public-filter-consumer-contract.ts';
 type SemanticSourceApi = Pick<typeof import('../semantic/index.ts'), 'createIdentityScopedObservations' | 'createIdentitySourceSupportReader' | 'createPublicFilterSourceBinding' | 'createPublicIdentitySourceCapture' | 'createSubjectSourceKeyPages' | 'publicFilterSource' | 'readNativePublicFilterPublicationCompletion' | 'readPublicFilterSourceDefinition'>;
 type SemanticIdentityReadApi = Pick<typeof import('../semantic/identity-adapters/read.ts'), 'readIdentityMappings'>;
-type SemanticSearchSourceApi = Pick<typeof import('../semantic/search-source.ts'), 'readIdentitySourceProjection' | 'subjectSource'>;
+type SemanticSearchSourceApi = Pick<typeof import('../semantic/search-source.ts'), 'readIdentitySourceProjection' | 'prepareRetainedIdentitySourceProjections' | 'subjectSource'>;
 type SemanticDefinitionReadApi = Pick<typeof import('../semantic/definitions.ts'), 'activeRelease' | 'readRelease'>;
 type SemanticPublicFilterBindingApi = Pick<typeof import('../semantic/public-filter-source-binding.ts'), 'PublicFilterSourceDefinitionError' | 'advanceNativePublicFilterPreparation' | 'joinNativePublicFilterRepair' | 'readNativePublicFilterAccountRepair' | 'readNativePublicFilterRepairStart'>;
 type SemanticPublicFilterOriginApi = Pick<typeof import('../semantic/public-filter-source.ts'), 'publicFilterSourceOrigin'>;

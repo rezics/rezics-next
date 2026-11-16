@@ -6,7 +6,7 @@ import { type CommandTransaction } from '../command/command.ts';
 export declare function readRelease(pool: Pool | CommandTransaction, digest: string, options?: {
     composed?: boolean;
 }): Promise<Release | null>;
-export declare function activeRelease(pool: Pool | CommandTransaction): Promise<{
+export declare function activeRelease(pool: Pool | CommandTransaction, mode?: 'native'): Promise<{
     digest: string;
     head: number;
     release: Release;

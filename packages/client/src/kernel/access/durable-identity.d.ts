@@ -1,7 +1,7 @@
 import type { Access, AccessContext, AccountActor } from '../request/access.ts';
 import { type AuthoritativeTime } from '../command/command.ts';
 import { type Account } from './account-data.ts';
-import type { InitiatorRestoreInput, InitiatorRestorerConfig } from './durable-initiator.ts';
+import type { InitiatorRestoreInput, InitiatorRestoreStage, InitiatorRestorerConfig } from './durable-initiator.ts';
 declare const durableIdentity: unique symbol;
 export type DurableIdentity = {
     readonly [durableIdentity]: true;
@@ -30,5 +30,5 @@ export declare function discardDurableIdentity(access: Access, actor: AccountAct
  * Auth-owned current consent and independently anchored native account evidence.
  * The module reader's provenance obligations are exported in durable-initiator.
  */
-export declare function restoreOperationIdentity(config: InitiatorRestorerConfig, input: InitiatorRestoreInput, time: AuthoritativeTime): Promise<AccountActor>;
+export declare function restoreOperationIdentity(config: InitiatorRestorerConfig, input: InitiatorRestoreInput, time: AuthoritativeTime, enter?: (stage: InitiatorRestoreStage, deadline: number) => void): Promise<AccountActor>;
 export {};

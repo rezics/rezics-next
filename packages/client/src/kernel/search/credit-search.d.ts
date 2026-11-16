@@ -68,6 +68,14 @@ export type CreditSearchProjection = Readonly<{
     observation: string;
     names: readonly CreditSearchWitness[];
 }>;
+export type CreditSearchIndexProjection = Exclude<CreditSearchProjection, {
+    state: 'complete';
+}> | Readonly<{
+    state: 'complete';
+    names: readonly CreditSearchWitness[];
+}>;
+/** Project an already complete native selection and its creators from one owner snapshot. */
+export declare function creditSearchFromSnapshot(workId: string, entries: readonly CreditSearchEntry[]): CreditSearchIndexProjection;
 /** All-or-readiness: a prefix never becomes a definitive negative for a credited-name query. */
 export declare function projectCreditSearch(source: CreditSearchSource | undefined, workId: string): Promise<CreditSearchProjection>;
 /** The evidence must be one ACTUAL engine match, never the first displayed creator.

@@ -8,6 +8,7 @@ export declare const SUBJECT_MERGED: 'com.rezics.subject.merged.v1';
 export declare const SUBJECT_REVISED: 'com.rezics.subject.revised.v1';
 export declare const CANONICAL_GENERATION_COMMITTED: 'com.rezics.semantic.canonical-generation.committed.v1';
 export declare const CANONICAL_GENERATION_CONTINUATION: 'com.rezics.semantic.canonical-generation.continuation.v1';
+export declare const CANONICAL_GENERATION_REBUILD_CONTINUED: 'com.rezics.semantic.canonical-generation.rebuild-continued.v1';
 export declare const CANONICAL_GENERATION_DELIVERED: 'com.rezics.semantic.canonical-generation.delivered.v1';
 export declare const LINKS_MOVING: 'com.rezics.semantic.links.moving.v1';
 export declare const LINKS_CHANGED: 'com.rezics.semantic.links.changed.v1';
@@ -38,6 +39,20 @@ export declare const SEMANTIC_EVENTS: {
     readonly "com.rezics.semantic.canonical-generation.delivered.v1": Type.TObject<{
         partition: Type.TInteger;
         generation: Type.TString;
+    }>;
+    readonly "com.rezics.semantic.canonical-generation.rebuild-continued.v1": Type.TObject<{
+        specversion: Type.TLiteral<"1.0">;
+        id: Type.TString;
+        source: Type.TString;
+        type: Type.TLiteral<"com.rezics.semantic.canonical-generation.committed.v1">;
+        subject: Type.TOptional<Type.TString>;
+        time: Type.TString;
+        datacontenttype: Type.TLiteral<"application/json">;
+        sequence: Type.TString;
+        data: Type.TObject<{
+            partition: Type.TInteger;
+            generation: Type.TString;
+        }>;
     }>;
     readonly "com.rezics.semantic.canonical-generation.continuation.v1": Type.TObject<{
         after: Type.TInteger;

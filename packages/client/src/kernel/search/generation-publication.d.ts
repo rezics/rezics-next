@@ -16,7 +16,9 @@ export type SearchGenerationPublication = Readonly<{
         job: GenerationPublicationJob;
         cost: SearchPublicFilterCost;
     } | PublicFilterConsumerUnavailable>;
-    step(job: GenerationPublicationJob, context: PublicFilterConsumerContext): Promise<{
+    step(job: GenerationPublicationJob, context: PublicFilterConsumerContext, options?: Readonly<{
+        enrollSource: boolean;
+    }>): Promise<{
         status: 'progress' | 'reconciled';
         job: GenerationPublicationJob;
         cost: SearchPublicFilterCost;
@@ -26,11 +28,16 @@ export type SearchGenerationPublication = Readonly<{
         consumer: PublicFilterConsumer;
         cost: SearchPublicFilterCost;
     } | {
+        status: 'superseded';
+        consumer: PublicFilterConsumer;
+        cost: SearchPublicFilterCost;
+    } | {
         status: 'preparing';
         job: GenerationPublicationJob;
         cost: SearchPublicFilterCost;
         next?: 'step' | 'activate';
         advanced?: boolean;
+        enrollmentAdvanced?: boolean;
     } | PublicFilterConsumerUnavailable>;
     close(): Promise<void>;
 }>;

@@ -158,8 +158,9 @@ export type IdentityEpochStore = Readonly<{
     /** Immutable complete input-generation refs + constant transform, atomically retained at admission.
      * <=100 RAW inputs including overlap/lookahead/retry; same DTO and unique originals.
      * Terminal/self destinations included; next generation is flat before later admission.
+     * A limit of one reads at most the first key of each admitted input generation.
      */
-    pageChanges(client: CommandTransaction, job: IdentityJobRef, after: string | null): Promise<Readonly<{
+    pageChanges(client: CommandTransaction, job: IdentityJobRef, after: string | null, first?: 1): Promise<Readonly<{
         changes: readonly IdentityChange[];
         next: string | null;
     }>>;

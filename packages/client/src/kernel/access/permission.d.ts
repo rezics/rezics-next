@@ -6,7 +6,10 @@ import { type AuthoritativeTime } from '../command/command.ts';
 import { type ResourcePage, type AccessRealmRoleReader, type ReadDecisions, type Access, type AccessClient, type AccessContext, type AccessCheck, type AccountActor, type ActionCatalogue, type Actor, type Resource } from './check.ts';
 import { type ResourceRoleCatalogue } from './resource-roles.ts';
 import { type KindOriginalProducer } from './kind-audience-original.ts';
-/** Exact literals for callers that include Access checks in an outer SQL work envelope.
+/** The enclosing native ledger funds these exact checks. Keep the compiled wire
+ * text and codecs, and leave schema freshness verification to the compiler. */
+export declare function withCompiledPermissionChecks<T>(body: () => T): T;
+/** Exact compiled dispatch literals for callers that include Access checks in an outer SQL work envelope.
  * Lazy properties retain the public object seam without evaluating SQL imports during module loading.
  * This exposes no prepared evidence, evaluator or authorization result.
  */
@@ -14,6 +17,17 @@ export declare const permissionCheckStatements: Readonly<{
     readonly time: string;
     readonly formula: string;
 }>;
+export declare function usesPermissionFormulaBatch(values: readonly unknown[]): boolean;
+/** These compiled Subject checks cannot visit grants or assignments without a
+ * subject key or delegation. All other argument shapes keep their general quote. */
+export declare function anonymousSubjectFormulaBound(values: readonly unknown[]): {
+    bytes: number;
+    keys: number;
+    points: number;
+    witnesses: number;
+    rows: number;
+    emptySeeks: number;
+} | null;
 /** Kernel-owned request evidence, populated by the one authoritative actor point read.
  * Identity and this record must come from verified Auth/Access, never request JSON.
  */

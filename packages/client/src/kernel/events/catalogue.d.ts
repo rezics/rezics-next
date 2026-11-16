@@ -370,6 +370,9 @@ export declare function EVENT_TYPES(): Readonly<{
         kind: Type.TLiteral<"fence" | "tombstone">;
         priorOperatorAccountId: Type.TNull | Type.TUnion<[Type.TString, Type.TNull]>;
     }>;
+    readonly 'com.rezics.access.website-session-floor-advanced.v1': Type.TObject<{
+        accountId: Type.TString;
+    }>;
     readonly 'com.rezics.access.authentication-fenced.v1': Type.TObject<{
         receiptId: Type.TString;
         accountId: Type.TString;
@@ -1423,6 +1426,12 @@ export declare function EVENT_TYPES(): Readonly<{
     readonly 'com.rezics.library.collection.updated.v1': Type.TObject<{
         collectionId: Type.TString;
     }>;
+    readonly "com.rezics.library.collection.publication-requested.v1": Type.TObject<{
+        collectionId: Type.TString;
+        publicationId: Type.TString;
+    }>;
+    readonly 'com.rezics.library.collection.source-capture-completed.v1': Type.TObject<{}>;
+    readonly 'com.rezics.library.collection.publication-staging-sealed.v1': Type.TObject<{}>;
     readonly 'com.rezics.library.collection.deleted.v1': Type.TObject<{
         collectionId: Type.TString;
     }>;
@@ -1635,6 +1644,20 @@ export declare function EVENT_TYPES(): Readonly<{
     readonly "com.rezics.semantic.canonical-generation.delivered.v1": Type.TObject<{
         partition: Type.TInteger;
         generation: Type.TString;
+    }>;
+    readonly "com.rezics.semantic.canonical-generation.rebuild-continued.v1": Type.TObject<{
+        specversion: Type.TLiteral<"1.0">;
+        id: Type.TString;
+        source: Type.TString;
+        type: Type.TLiteral<"com.rezics.semantic.canonical-generation.committed.v1">;
+        subject: Type.TOptional<Type.TString>;
+        time: Type.TString;
+        datacontenttype: Type.TLiteral<"application/json">;
+        sequence: Type.TString;
+        data: Type.TObject<{
+            partition: Type.TInteger;
+            generation: Type.TString;
+        }>;
     }>;
     readonly "com.rezics.semantic.canonical-generation.continuation.v1": Type.TObject<{
         after: Type.TInteger;
