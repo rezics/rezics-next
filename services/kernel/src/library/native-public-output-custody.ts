@@ -58,6 +58,7 @@ import retainedSQL from './native-public-output-retained.sql';
 import frozenOriginSQL from './native-public-output-frozen-origin.sql';
 import frozenOwnerLockSQL from './native-public-output-frozen-owner-lock.sql';
 import frozenSuccessorSQL from './native-public-output-frozen-successor.sql';
+import frozenSuccessorReadSQL from './native-public-output-frozen-successor-read.sql';
 
 type Client = Pick<PoolClient, 'query'>;
 type OutputContext = PublicOutputCommandContext<Pool, AuthoritativeTime>;
@@ -606,9 +607,8 @@ async function lockNativeFrozenCollectionOutput(
     const client = nativePublicOutputClient(tx, work, context.deadline, context.pool);
     const key = [current.partition, selected.captureId];
     if (hold === 'successor') {
-      const stored = await load(client, selected.accepted.partition, selected.captureId, false);
-      if (!stored || !isDeepStrictEqual(stored.binding, selected) || !(await committed(client, stored)))
-        return refusal(work);
+      const stored = await committedSuccessorBinding(client, selected);
+      if (!stored) return refusal(work);
       if (!(await client.query(frozenSuccessorSQL.sql, key)).rows.length) return refusal(work, 'changed');
       return { status: 'locked' as const, binding: stored.binding, work: work.receipt() };
     }
@@ -619,6 +619,25 @@ async function lockNativeFrozenCollectionOutput(
       return refusal(work);
     if (!(await currentFrozenTuple(client, stored))) return refusal(work, 'changed');
     return { status: 'locked' as const, binding: stored.binding, work: work.receipt() };
+  });
+}
+
+async function committedSuccessorBinding(client: Client, selected: NativePublicOutputBinding) {
+  const stored = await load(client, selected.accepted.partition, selected.captureId, false);
+  return stored && isDeepStrictEqual(stored.binding, selected) && (await committed(client, stored)) ? stored : null;
+}
+
+async function readNativeFrozenCollectionOutputSuccessor(
+  snapshot: Client,
+  binding: NativePublicOutputBinding,
+  context: PublicOutputWork & { pool: Pool },
+) {
+  return frame(context, async (work) => {
+    const selected = decodeBinding(json(binding));
+    const client = nativePublicOutputClient(snapshot, work, context.deadline, context.pool);
+    if (!(await committedSuccessorBinding(client, selected))) return refusal(work);
+    const { rows } = await client.query(frozenSuccessorReadSQL.sql, [selected.accepted.partition, selected.captureId]);
+    return rows.length === 1 ? { status: 'current' as const, work: work.receipt() } : refusal(work, 'changed');
   });
 }
 
@@ -832,6 +851,7 @@ export function createNativePublicOutputCustody(
     revalidateNativePublicCollectionOutputHold: (tx, binding, context) =>
       revalidateNativePublicCollectionOutputHold(tx, binding, context, capabilities.observe),
     lockNativeFrozenCollectionOutput,
+    readNativeFrozenCollectionOutputSuccessor,
     transferNativePublicCollectionOutputHold: (tx, selection, context) =>
       transferNativePublicCollectionOutputHold(tx, selection, context, capabilities.lockDisposition),
     releaseNativePublicCollectionOutputHold: (tx, selection, context) =>

@@ -56,6 +56,7 @@ import originalsSQL from './identity-public-output-original.sql';
 import advanceSQL from './identity-public-output-advance.sql';
 import scopeStartSQL from './identity-public-output-scope-start.sql';
 import scopeSQL from './identity-public-output-scope.sql';
+import scopeReadSQL from './identity-public-output-scope-read.sql';
 import scopeSealSQL from './identity-public-output-scope-seal.sql';
 import sealSQL from './identity-public-output-seal.sql';
 import sealInsertSQL from './identity-public-output-seal-insert.sql';
@@ -281,20 +282,11 @@ async function load(tx: CommandTransaction, l: T.PublicIdentityOutputCapture): P
     return refuse('binding');
   return a;
 }
-async function eligible(
-  tx: CommandTransaction,
-  a: Accepted,
-  work: NativeCollectionWork,
-  deadline: number,
-  nativeOutput: NativePublicOutputPort,
-  mode: 'live' | 'frozen-read' | 'frozen-transfer' = 'live',
-): Promise<void> {
-  const l = locator(a),
-    pool = currentCommandResources(tx).pool;
-  if (currentCommand(tx).partition !== l.partition) return refuse('provenance');
+async function requireEligibleScope(tx: CommandTransaction, a: Accepted, query: { sql: string }) {
+  const l = locator(a);
   const s = await one<{ revision: string; active: number; state: string; registration: string; capture_id: string }>(
     tx,
-    scopeSQL,
+    query,
     [l.partition, a.scope_key, l.captureId],
   );
   if (
@@ -306,6 +298,19 @@ async function eligible(
     s.capture_id !== l.captureId
   )
     return refuse('closure', 'changed');
+}
+async function eligible(
+  tx: CommandTransaction,
+  a: Accepted,
+  work: NativeCollectionWork,
+  deadline: number,
+  nativeOutput: NativePublicOutputPort,
+  mode: 'live' | 'frozen-read' | 'frozen-transfer' = 'live',
+): Promise<void> {
+  const l = locator(a),
+    pool = currentCommandResources(tx).pool;
+  if (currentCommand(tx).partition !== l.partition) return refuse('provenance');
+  await requireEligibleScope(tx, a, scopeSQL);
   const lockFrozen = async (role: 'predecessor' | 'successor') => {
     const lock = nativeOutput.lockNativeFrozenCollectionOutput;
     if (!lock) return false;
@@ -1549,14 +1554,20 @@ export async function readPublicIdentityOutputCaptureCurrent(
 
 export type PublicOutputOriginalKey = Readonly<{ terminal: string; original: string }>;
 
-/** One selected COMPLETE output and its committed canonical seal, current under the native hold through commit. */
+/** One selected COMPLETE output and its committed canonical seal. */
 export async function readSelectedPublicIdentityOutput(
   pool: Pool,
-  selection: { collectionId: string; sourceGeneration: string; after: PublicOutputOriginalKey | null; limit: number },
+  selection: {
+    collectionId: string;
+    sourceGeneration: string;
+    after: PublicOutputOriginalKey | null;
+    limit: number;
+    accountFree: boolean;
+  },
   options: T.PublicIdentityOutputWork,
   nativeOutput: NativePublicOutputPort,
 ) {
-  const { collectionId, sourceGeneration, after, limit } = selection;
+  const { collectionId, sourceGeneration, after, limit, accountFree } = selection;
   const route = routeOf(collectionId);
   if (
     route === null ||
@@ -1572,55 +1583,74 @@ export async function readSelectedPublicIdentityOutput(
   }
   const home = partitionOf(route);
   const work = new NativeCollectionWork(options.allowance, options.deadline);
+  const readPage = async (tx: CommandTransaction) => {
+    const locators = (
+      await tx.query<{ captureId: string; bindingDigest: string }>(selectedCaptureSQL.sql, [
+        route,
+        collectionId,
+        sourceGeneration,
+      ])
+    ).rows;
+    if (locators.length !== 1) return refuse('binding');
+    const a = await load(tx, { kind: 'public-output', partition: home, ...locators[0]! });
+    const identity = a.binding.tuple.identity;
+    if (identity.collectionId !== collectionId || identity.generation !== sourceGeneration)
+      return refuse('binding', 'changed');
+    if (accountFree) {
+      await requireEligibleScope(tx, a, scopeReadSQL);
+      const fence = await one<{ kind: string }>(tx, fenceSQL, [home, a.capture_id]);
+      if (fence?.kind !== 'applied') return refuse('fenced', 'changed');
+      const successor = await work.compose((allowance) =>
+        nativeOutput.readNativeFrozenCollectionOutputSuccessor(tx, a.binding, { ...options, pool, allowance }),
+      );
+      if (successor.status !== 'current') return refuse('current', 'changed');
+    } else {
+      await eligible(tx, a, work, options.deadline, nativeOutput, 'frozen-read');
+    }
+    const seal = await one<Seal>(tx, sealSQL, [home, a.capture_id]);
+    if (!seal || seal.raw_count !== a.binding.tuple.publication.members) return refuse('closure');
+
+    const zero = '00000000-0000-0000-0000-000000000000';
+    const rows =
+      limit === 0
+        ? []
+        : (
+            await tx.query<PublicOutputOriginalKey>(readableOriginalsSQL.sql, [
+              home,
+              a.capture_id,
+              after?.terminal ?? zero,
+              after?.original ?? zero,
+              limit + 1,
+            ])
+          ).rows;
+    return {
+      status: 'ready' as const,
+      generation: identity.outputGeneration,
+      epoch: identity.ownerEpoch,
+      digest: seal.manifest_digest,
+      rows: rows.slice(0, limit),
+      more: rows.length > limit,
+    };
+  };
   try {
     const result = await instrumentNativeCollectionWork(
       pool,
       work,
       (sql, values) => outputCaptureFootprint(work, sql, values),
-      () =>
-        withSingleCommandAttempt(() =>
-          runCommand(pool, { partition: home, deadline: options.deadline }, async (tx) => {
-            const locators = (
-              await tx.query<{ captureId: string; bindingDigest: string }>(selectedCaptureSQL.sql, [
-                route,
-                collectionId,
-                sourceGeneration,
-              ])
-            ).rows;
-            if (locators.length !== 1) return refuse('binding');
-            const a = await load(tx, { kind: 'public-output', partition: home, ...locators[0]! });
-            const identity = a.binding.tuple.identity;
-            if (identity.collectionId !== collectionId || identity.generation !== sourceGeneration)
-              return refuse('binding', 'changed');
-            await eligible(tx, a, work, options.deadline, nativeOutput, 'frozen-read');
-            const seal = await one<Seal>(tx, sealSQL, [home, a.capture_id]);
-            if (!seal || seal.raw_count !== a.binding.tuple.publication.members) return refuse('closure');
-
-            const zero = '00000000-0000-0000-0000-000000000000';
-            const rows =
-              limit === 0
-                ? []
-                : (
-                    await tx.query<PublicOutputOriginalKey>(readableOriginalsSQL.sql, [
-                      home,
-                      a.capture_id,
-                      after?.terminal ?? zero,
-                      after?.original ?? zero,
-                      limit + 1,
-                    ])
-                  ).rows;
-            return noEffect({
-              status: 'ready' as const,
-              generation: identity.outputGeneration,
-              epoch: identity.ownerEpoch,
-              digest: seal.manifest_digest,
-              rows: rows.slice(0, limit),
-              more: rows.length > limit,
-            });
-          }),
-        ),
+      // The account-free successor is already committed. A repeatable-read page
+      // proves it and its rows together while erasure can still advance the home position.
+      async () =>
+        accountFree
+          ? withReadTransaction(pool, readPage, options.deadline)
+          : (
+              await withSingleCommandAttempt(() =>
+                runCommand(pool, { partition: home, deadline: options.deadline }, async (tx) =>
+                  noEffect(await readPage(tx)),
+                ),
+              )
+            ).value,
     );
-    return { ...result.value, work: work.receipt() };
+    return { ...result, work: work.receipt() };
   } catch (error) {
     if (error instanceof Refusal)
       return { status: error.status, reason: error.reason, work: work.receipt() };
