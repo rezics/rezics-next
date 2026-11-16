@@ -167,7 +167,7 @@ function documentHas(value: unknown, needle: string): boolean {
 
 beforeAll(async () => {
   originalImage = await readFile(resolve(import.meta.dir, '../../public/cards/default.png'));
-  stack = await startNativeWebStack();
+  stack = await startNativeWebStack({ localShowcaseBoardCreation: true });
   auth = await startAuthStack(stack);
   board = await createPublishAttachmentWorkBoard(stack);
 }, 900_000);

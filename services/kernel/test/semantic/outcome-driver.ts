@@ -17,6 +17,7 @@ import type { HttpResponse, Persona, Release, SemanticDriver } from '../../../..
 import { accessClock, accessActionCatalogue, createAccess } from '../../src/access/index.ts';
 import {
   bootstrapGovernance,
+  bootstrapLocalShowcaseBoardCreation,
   PLATFORM_GOVERNANCE_ROLE,
   PLATFORM_RESOURCE,
 } from '../../src/access/bootstrap-governance.ts';
@@ -240,7 +241,7 @@ export type SemanticOutcomeDriver = SemanticDriver & {
       authAudience: string;
       authJwksUrl: string;
     };
-    /** Mounted platform.governance actions plus access:grant and gate:any. */
+    /** Mounted governance scopes and the explicitly requested local showcase action. */
     governorScopes: readonly string[];
     /** Join the owned identity worker and its output before another scenario starts. */
     stopIdentityWorker(): Promise<void>;
@@ -266,6 +267,8 @@ export type SemanticOutcomeOptions = {
   clock?: KernelClock;
   /** Named development gate grants for the original fourteen semantic capability scenarios only. */
   originalCapabilities?: boolean;
+  /** Use the local showcase bootstrap for an isolated Global Board fixture. */
+  localShowcaseBoardCreation?: boolean;
   /** Actual HTTP/relay runtime pool; fixture seeding and inspection keep their own pool. */
   kernelPool?: (url: string) => Pool | Promise<Pool>;
   /** Keep Auth's process-global SDK out of an in-process default kernel worker. */
@@ -453,7 +456,14 @@ async function startDriver(
       );
     // A full-catalogue governor JWT can drop later delegated actions while still
     // authenticating exposure:open. Carry the compiled platform.governance set.
-    const governanceScopes = [...new Set(['access:grant', 'gate:any', ...compiledGovernance])];
+    const governanceScopes = [
+      ...new Set([
+        'access:grant',
+        'gate:any',
+        ...compiledGovernance,
+        ...(options.localShowcaseBoardCreation ? ['board:create'] : []),
+      ]),
+    ];
     const knownScopes = new Set([...scopes, ...governanceScopes]);
     let createAutomated:
       | ((name: string, operator: Account, email: string) => Promise<{ accountId: string }>)
@@ -711,6 +721,7 @@ async function startDriver(
     await setupContent(kernelPool);
     await setupPresentation(kernelPool);
     await bootstrapGovernance(kernelPool, governor.accountId);
+    if (options.localShowcaseBoardCreation) await bootstrapLocalShowcaseBoardCreation(kernelPool, governor.accountId);
 
     const sessions = new Map<Exclude<Persona, 'anonymous'>, string>();
     async function send(

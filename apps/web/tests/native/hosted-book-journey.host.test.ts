@@ -22,7 +22,7 @@ let stack: NativeWebStack;
 let auth: NativeAuthStack;
 
 nativeBeforeAll(lifecycle, 600_000, async () => {
-  stack = await startNativeWebStack();
+  stack = await startNativeWebStack({ localShowcaseBoardCreation: true });
   auth = await startAuthStack(stack);
 });
 
