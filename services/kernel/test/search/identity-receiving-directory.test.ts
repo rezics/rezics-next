@@ -275,6 +275,9 @@ test.each([
   let releasePosition: string | undefined;
   let appliedPosition = 33;
   let retiredScope = false;
+  let copyLocator: unknown;
+  let copySettlement: { partition: number; transactionId: string; epoch: number; position: string } | undefined;
+  let reconciledCopy: string | undefined;
   const nativePosition = () =>
     dispatchRequest?.frontier.after[3] === SEARCH_IDENTITY_WRITER_DISPATCH
       ? committedOperation?.state === 'applied'
@@ -704,8 +707,33 @@ test.each([
       )
         rows = [];
       else if (sql === receivingProgressRead.sql) rows = [{ ...receivingContinuation }];
-      else if (sql === planSql.copies.sql || sql === planSql.pending.sql) rows = [];
-      else if (sql === receivingProgressAdvance.sql) {
+      else if (sql === planSql.copies.sql || sql === planSql.copy.sql) {
+        const selected = sql === planSql.copy.sql ? values[2] === 0 : Number(values[2]) < 0;
+        rows =
+          copyLocator && selected
+            ? [
+                {
+                  copy_no: 0,
+                  locator: copyLocator,
+                  reconciled_transaction_id: reconciledCopy ?? null,
+                  settlement: copySettlement ?? null,
+                  proven: true,
+                },
+              ]
+            : [];
+      } else if (sql === planSql.pending.sql) rows = copyLocator && !reconciledCopy ? [{ copy_no: 0 }] : [];
+      else if (sql === planSql.reconcile.sql) {
+        expect(values[2]).toBe(0);
+        copySettlement = JSON.parse(String(values[4]));
+        expect(copySettlement).toEqual({
+          partition: writerHome,
+          epoch: 1,
+          position: '32',
+          transactionId: committedOperation?.visible_transaction_id,
+        });
+        reconciledCopy = String(values[3]);
+        rows = [{ copy_no: 0 }];
+      } else if (sql === receivingProgressAdvance.sql) {
         expect(String(values[5])).toBe(receivingContinuation.revision);
         writingContinuation = {
           ...receivingContinuation,
@@ -868,6 +896,7 @@ test.each([
       } else if (sql === planSql.document.sql) rows = [];
       else if (sql === planSql.insertCopies.sql) {
         const copies = JSON.parse(String(values[2]));
+        copyLocator = copies[0];
         expect(copies).toEqual(
           mode === 'handoff'
             ? [
@@ -1184,7 +1213,7 @@ test.each([
       expect(await prepare(pool, progress.receipt)).toEqual({ state: 'prepared' });
       expect(engineReads).toBe(2);
       expect(committed.map((step) => step.engineRequests)).toEqual([0, 1, ...Array(committed.length - 2).fill(0)]);
-      if (mode === 'dispatch' || mode === 'lost') {
+      if (mode === 'dispatch' || mode === 'lost' || mode === 'handoff') {
         accepting = true;
         const acceptance = await withIdentitySourceConsumerMaintenance(
           { pool, env: {} },
@@ -1253,12 +1282,14 @@ test.each([
           expect(applied.receipt.native.position).toBe(33n);
           expect(committedOperation?.state).toBe('applied');
           expect(engineReads).toBe(4);
-          for (const phase of ['original', 'terminal', null]) {
+          for (const phase of mode === 'handoff' ? [null, 'original', null] : ['original', 'terminal', null]) {
             const next = await prepare(pool, request);
             expect(next.state).toBe('progress');
             expect(JSON.parse(receivingContinuation.after_key!).phase ?? null).toBe(phase);
           }
           expect(receivingContinuation.state).toBe('settled');
+          if (mode === 'handoff')
+            expect(copySettlement?.transactionId).toBe(committedOperation?.visible_transaction_id);
           expect(await prepare(pool, request)).toEqual({
             state: 'progress',
             transactionId: controlCustody?.transaction_id,

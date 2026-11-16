@@ -548,6 +548,11 @@ export function createSearchIdentityReceivingNative(
           );
           last = item.copyNo;
         }
+        if (originalBarrier && page.length)
+          return {
+            after: JSON.stringify({ version: 1, identity, copy: last, terminal: false } satisfies Cursor),
+            state: 'progress' as const,
+          };
         const current = await call((c) => store.readOriginalState(locator, c));
         if (
           hash({
