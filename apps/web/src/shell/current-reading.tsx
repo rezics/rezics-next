@@ -32,6 +32,16 @@ export function publicReadingWithdrawn(route: ReadingRoute): boolean {
   );
 }
 
+function readingPending({ isLoading, matches }: Pick<ReadingRoute, 'isLoading' | 'matches'>): boolean {
+  if (isLoading) return true;
+  for (const match of matches) {
+    // Hydration can retain pending descendants below a settled route boundary.
+    if (match._notFound || match.status === 'notFound' || match.status === 'error') return false;
+    if (match.status === 'pending' || match.isFetching) return true;
+  }
+  return false;
+}
+
 function useWithdrawnPublicReading() {
   return useRouterState({
     select: (state) =>
@@ -46,10 +56,7 @@ function useWithdrawnPublicReading() {
 /** Unmount old reader-owned controls and their pending work while the original loader rereads. */
 export function CurrentReadingOutlet({ children }: { children?: ReactNode }) {
   const withdrawn = useWithdrawnPublicReading();
-  const pending = useRouterState({
-    select: (state) =>
-      state.isLoading || state.matches.some((match) => match.status === 'pending' || !!match.isFetching),
-  });
+  const pending = useRouterState({ select: readingPending });
   // Error/not-found matches still mount their native boundary and recovery actions.
   if (withdrawn && pending) return <PendingPage />;
   return children ?? <Outlet />;
@@ -75,9 +82,7 @@ export function CurrentReadingHead() {
   const tags = useTags();
   const router = useRouter();
   const withdrawn = useWithdrawnPublicReading();
-  const pending = useRouterState({
-    select: (state) => state.isLoading || state.matches.some((match) => !!match.isFetching),
-  });
+  const pending = useRouterState({ select: readingPending });
   const missing = useRouterState({
     select: (state) => state.matches.some((match) => match.status === 'notFound' || match._notFound),
   });
