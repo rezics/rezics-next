@@ -28,7 +28,7 @@ import {
 import { captureShowcaseCommands, ShowcaseJournal } from '../src/showcase-publication.ts';
 import { ImportTransportError } from '../src/import-client.ts';
 import { planVndbReleasePlatforms } from '../src/vndb-release-platforms.ts';
-import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { sourceObservationFixture, sourceRecordMetadataFixture } from './transport-driver.ts';
 import { seedShowcaseVndbReleases } from '../src/selected-import.ts';
 
 type Row = Record<string, unknown>;
@@ -311,6 +311,57 @@ function dateContent(command: BatchCommand) {
     ? command.statement.value.content
     : undefined;
 }
+
+test('selected VNDB seed rereads the canonical statistic and leaves an unchanged reseed effect-free', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'showcase-vndb-statistic-'));
+  try {
+    const tables = family({
+      vn: [
+        { id: 'v1', olang: 'ja', alias: null, c_votecount: '20', c_average: '735' },
+        { id: 'v2', olang: 'ja', alias: null },
+        { id: 'v3', olang: 'ja', alias: null },
+      ],
+    });
+    const created = new Map<string, string>();
+    const observations = sourceObservationFixture();
+    const effects: { action: 'read' | 'write'; subjectId: string }[] = [];
+    const statisticPort: CrossMediaPort = {
+      ...port([], true, created),
+      async readSourceObservationHead({ subjectId }) {
+        effects.push({ action: 'read', subjectId });
+        return observations.read(subjectId);
+      },
+      async writeSourceStatistic({ subjectId, value }) {
+        effects.push({ action: 'write', subjectId });
+        observations.observe(subjectId, value);
+      },
+    };
+    const seed = () =>
+      seedShowcaseVndbReleases({
+        tables,
+        path: join(directory, 'state.sqlite'),
+        port: statisticPort,
+        extras: { ...extras(), sourceSnapshotAsOf: '2026-10-25' },
+      });
+    await seed();
+    const subjectId = created.get('source:v1')!;
+    expect(effects).toEqual([
+      { action: 'read', subjectId },
+      { action: 'write', subjectId },
+      { action: 'read', subjectId },
+    ]);
+    expect(observations.read(subjectId)).toMatchObject({
+      state: 'published',
+      observation: {
+        payload: { sourceAlias: 'vndb_cross_media', sourceRecordId: 'v1', asOf: '2026-10-25', count: 20, mean: 7.35 },
+      },
+    });
+    await seed();
+    expect(effects.filter(({ action }) => action === 'write')).toEqual([{ action: 'write', subjectId }]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 30_000);
 
 test('default seed without binding files rereads catalogue state and exposes selected dates', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'showcase-vndb-releases-'));

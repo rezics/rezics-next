@@ -168,6 +168,7 @@ import {
   collectSelectedDumpRows,
   isCrossMediaTableScanLimitError,
   showcaseLimits,
+  type CrossMediaPort,
   type CrossMediaTableScanLimits,
   type CrossMediaTables,
   type ShowcaseAcknowledgement,
@@ -180,7 +181,7 @@ export {
   collectSelectedDumpRows,
   isCrossMediaTableScanLimitError,
 };
-export type { CrossMediaTableScanLimits, CrossMediaTables };
+export type { CrossMediaPort, CrossMediaTableScanLimits, CrossMediaTables };
 
 type Provider = 'bangumi' | 'vndb';
 type Row = Record<string, unknown>;
@@ -2155,16 +2156,6 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
   }
 }
 
-export type CrossMediaPort = Pick<
-  ReturnType<typeof createImportTransport>,
-  | 'batch'
-  | 'setSourceRecordMetadata'
-  | 'fence'
-  | 'writeSourceStatistic'
-  | 'clearSourceStatistic'
-  | 'readReviewedSubject'
-> &
-  Partial<Pick<ReturnType<typeof createImportTransport>, 'requestMedia' | 'mediaStatus'>>;
 export type CrossMediaReading = {
   /** Original claim target; independent reads may return its canonical Person. */
   boundSubjectId?: string;
@@ -2537,6 +2528,9 @@ export async function seedCrossMedia(
         port.fence({ source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group }),
       writeSourceStatistic: (request, signal) => port.writeSourceStatistic(request, signal),
       clearSourceStatistic: (request, signal) => port.clearSourceStatistic(request, signal),
+      ...(port.readSourceObservationHead
+        ? { readSourceObservationHead: port.readSourceObservationHead.bind(port) }
+        : {}),
     },
   };
   importer = createImporter(importerOptions);

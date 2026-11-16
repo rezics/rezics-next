@@ -5,6 +5,7 @@ import { basename, dirname, relative, resolve, sep } from 'node:path';
 import { type Browser, type BrowserContext, type Page, type Response as PlaywrightResponse } from 'playwright';
 import type { NativeWebStack } from './stack.ts';
 import { launchPrivateBrowser, type PrivateBrowser } from './private-browser.ts';
+import { traceWebModuleFailure } from './web-module-failure.ts';
 import {
   currentNativeLifecycle,
   settledWithin,
@@ -233,7 +234,11 @@ export async function startAuthStack(
       throw new Error(`Native Auth app reported an invalid Worker persistence path: ${effectivePersistence}`);
     lifecycle.assertOpen('route Auth pages');
     origin = await routePages(true);
-    privateBrowser = await launchPrivateBrowser([stack.web, origin, turnstile.url.origin]);
+    const moduleFailureTrace =
+      process.env.WEB_TEST_MODULE_FAILURE_TRACE === '1'
+        ? traceWebModuleFailure(stack.web, stack.memoryObservation?.())
+        : undefined;
+    privateBrowser = await launchPrivateBrowser([stack.web, origin, turnstile.url.origin], moduleFailureTrace);
     lifecycle.assertOpen('finish private Auth browser startup');
     browser = privateBrowser.browser;
     const cdp = await browser.newBrowserCDPSession();

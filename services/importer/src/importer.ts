@@ -303,6 +303,13 @@ export class Importer {
       });
   }
 
+  /** The CLI binds session-dependent ports on the constructed importer, including through a decorated factory. */
+  bindSessionDependencies(
+    dependencies: Pick<ImporterOptions, 'mediaResolver' | 'identifierLookup' | 'vocabularyAdmission'>,
+  ): void {
+    Object.assign(this.options, dependencies);
+  }
+
   private takeOwnership(source: string, recordFirstUse = true): ImportOwnership | 'busy' {
     const existing = this.session.heldOwnership(source);
     if (existing) {
