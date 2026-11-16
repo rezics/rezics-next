@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { readFileSync } from 'node:fs';
 import { spawnSync, type ChildProcess } from 'node:child_process';
 import { afterAll as bunAfterAll, beforeAll as bunBeforeAll, test as bunTest } from 'bun:test';
+import { processIdentity, reapExitedProcessGroupMembers } from '../support/server-custody.ts';
 
 type NativeResource = {
   label: string;
@@ -127,10 +128,10 @@ export class NativeTestLifecycle {
     let released = false;
     const same = (candidate: NativeProcessIdentity): boolean =>
       sameProcess(readProcessIdentity(candidate.pid), candidate);
-    const refresh = (): NativeProcessIdentity[] => {
+    const refresh = (observed?: ProcessGroupObservation): NativeProcessIdentity[] => {
       const knownMemberAlive = [...members.values()].some(same);
       if (!same(identity) && !knownMemberAlive) return [];
-      const observation = processGroupIdentities(identity);
+      const observation = observed ?? processGroupIdentities(identity);
       if (observation.status === 'unavailable') return [...members.values()].filter(same);
       const current = observation.identities;
       if (!current.length && same(identity)) return [...members.values()].filter(same);
@@ -166,7 +167,20 @@ export class NativeTestLifecycle {
       const deadline = Date.now() + timeoutMs;
       while (true) {
         if (!processGroupExists(identity.pgid)) return true;
-        refresh();
+        const observation = processGroupIdentities(identity);
+        if (
+          observation.status === 'observed' &&
+          observation.identities.length > 0 &&
+          observation.identities.every((member) => {
+            const current = processIdentity(member.pid);
+            return current?.startTicks === member.startTime && current.pgrp === member.pgid && current.state === 'Z';
+          })
+        ) {
+          // Zombies answer signal zero. Reap adopted descendants and leave children of other parents to their waiters.
+          reapExitedProcessGroupMembers(identity.pgid);
+          return true;
+        }
+        refresh(observation);
         if (Date.now() >= deadline) return false;
         await Bun.sleep(25);
       }
