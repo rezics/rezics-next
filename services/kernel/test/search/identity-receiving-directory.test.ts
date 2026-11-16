@@ -188,6 +188,12 @@ test.each([
     mode: 'visible-cross-home',
   },
   {
+    label: 'captures the actual foreign writer step and its bound actor',
+    intent: 'merge',
+    resumed: false,
+    mode: 'foreign-step-capture',
+  },
+  {
     label: 'reindexes and retires a visible canonical unmerge original',
     intent: 'unmerge',
     resumed: false,
@@ -243,7 +249,8 @@ test.each([
     string,
     string,
   ];
-  const crossHome = mode === 'visible-cross-home';
+  const foreignCapture = mode === 'foreign-step-capture';
+  const crossHome = mode === 'visible-cross-home' || foreignCapture;
   const terminalHome = crossHome ? otherControlHome : writerHome;
   const second = crossHome ? newId(terminalHome << 4) : localTerminal;
   const jobId = newId(jobHome << 4);
@@ -502,6 +509,10 @@ test.each([
   type Step = { transactionId: string; frontier: IdentityFrontier; engineRequests: number };
   let writing: Step | undefined;
   const committed: Step[] = [];
+  let captureStep: { transactionId: string; armed: boolean } | undefined;
+  let captureRole: { account_id: string; role: string } | undefined;
+  let captureNativeTransaction: string | null = null;
+  const capturedSteps: string[] = [];
   const client = {
     async query(input: string | QueryConfig, positional: unknown[] = []) {
       const sql = typeof input === 'string' ? input : input.text;
@@ -1499,8 +1510,60 @@ test.each([
           frontier: JSON.parse(String(values[5])),
           engineRequests: work.engineRequests,
         };
+        if (foreignCapture && values[0] === writerHome) {
+          expect(captureNativeTransaction).toBe(writing.transactionId);
+          captureStep = { transactionId: writing.transactionId, armed: false };
+        }
         rows = [{ transaction_id: writing.transactionId }];
+      } else if (foreignCapture && sql.startsWith("SELECT set_config('semantic.erasure_native_transaction'")) {
+        captureNativeTransaction = String(values[0]);
+        rows = [];
+      } else if (foreignCapture && sql.startsWith('INSERT INTO semantic.erasure_source_role')) {
+        if (values[0] === writerHome) {
+          expect(values.slice(1)).toEqual([captureNativeTransaction, [actorId], ['actor']]);
+          captureRole = { account_id: actorId!, role: 'actor' };
+        }
+        rows = [];
+      } else if (captureStep && sql === searchReceivingCaptureStatements.next) {
+        // The immediate trigger queues the writer row's local native transaction as its source.
+        rows = values[0] === '0'
+          ? [{
+              ordinal: '1',
+              partition_no: writerHome,
+              store: 'identity_epoch_step',
+              record_key: '1',
+              source_transaction_id: captureStep.transactionId,
+              native_transaction_id: captureNativeTransaction,
+            }]
+          : [];
+      } else if (captureStep && sql === searchReceivingCaptureStatements.copyFirst) {
+        expect(values).toEqual([writerHome, 'identity_epoch_step', '1', captureStep.transactionId]);
+        rows = [];
+      } else if (captureStep && sql === searchReceivingCaptureStatements.sourceFirst) {
+        expect(values).toEqual([writerHome, captureStep.transactionId]);
+        rows = captureRole ? [captureRole] : [];
+      } else if (captureStep && sql === searchReceivingCaptureStatements.sourceNext) {
+        expect(values).toEqual([writerHome, captureStep.transactionId, actorId, 'actor']);
+        rows = [];
+      } else if (captureStep && sql === searchReceivingCaptureStatements.basis) {
+        expect(values).toEqual([writerHome, captureStep.transactionId]);
+        rows = [];
+      } else if (captureStep && sql === searchReceivingCaptureStatements.arm) {
+        expect(values.slice(0, 9)).toEqual(['1', captureStep.transactionId, captureStep.transactionId, 0, 1, null, null, null, null]);
+        const digest = createHash('sha256')
+          .update(`${'0'.repeat(64)}|source|${captureStep.transactionId}|${actorId}|actor`)
+          .digest('hex');
+        expect(values.slice(9)).toEqual(['0'.repeat(64), digest]);
+        captureStep.armed = true;
+        rows = [{ ordinal: '1' }];
       } else if (sql === 'COMMIT') {
+        if (captureStep) {
+          expect(captureStep.armed).toBe(true);
+          capturedSteps.push(captureStep.transactionId);
+          captureStep = undefined;
+          captureRole = undefined;
+        }
+        captureNativeTransaction = null;
         if (writing) committed.push(writing);
         if (stagingPlan) retainedPlan = stagingPlan;
         if (writingOperation) committedOperation = writingOperation;
@@ -1517,6 +1580,12 @@ test.each([
         writingHoldRelease = undefined;
         writingOperation = undefined;
         stagingPlan = undefined;
+        writing = undefined;
+        rows = [];
+      } else if (sql === 'ROLLBACK' && foreignCapture) {
+        captureStep = undefined;
+        captureRole = undefined;
+        captureNativeTransaction = null;
         writing = undefined;
         rows = [];
       } else if (sql === nativeCommit.sql) rows = [{}];
@@ -1646,6 +1715,7 @@ test.each([
     'fenced',
     'visible',
     'visible-cross-home',
+    'foreign-step-capture',
     'canonical-terms',
     'canonical-merge',
     'canonical-relation',
@@ -1742,6 +1812,12 @@ test.each([
         definitionId,
         bundledDigest,
       ]);
+      if (foreignCapture) {
+        expect(capturedSteps).toEqual([committed[1]?.transactionId, committed[2]?.transactionId]);
+        expect(retainedPlan).toBeUndefined();
+        expect(bulkCalls).toBe(0);
+        return;
+      }
       expect(await prepare(pool, progress.receipt)).toEqual({
         state: 'progress',
         transactionId: committed[3]?.transactionId,

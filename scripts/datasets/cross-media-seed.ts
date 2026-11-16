@@ -9,6 +9,7 @@ import {
   mergeRemainingRequest,
   remainingRequestFromPreparedJournal,
   remainingRequestFromTransport,
+  seedBatchRemainingRequest,
   writeSeedRemainingRequest,
 } from '../../services/importer/src/seed-remaining-request.ts';
 import { createImportFetch } from '../../services/importer/src/import-fetch.ts';
@@ -408,12 +409,14 @@ if (import.meta.main) {
     } else await runCrossMediaSeedCli(args);
   } catch (error) {
     const directory = resolve(import.meta.dir, '../../.temp/cross-media-seed');
-    const reviewed = error instanceof ReviewedCatalogueCommandError ? error.remaining : undefined;
-    const journal = remainingRequestFromPreparedJournal(join(directory, 'showcase.sqlite'));
+    const observedBatch = seedBatchRemainingRequest(error);
+    const prepared =
+      observedBatch ??
+      (error instanceof ReviewedCatalogueCommandError ? error.remaining : undefined) ??
+      remainingRequestFromPreparedJournal(join(directory, 'showcase.sqlite'));
     const requestFailure = seedTransportError(error);
     const transport = requestFailure ? remainingRequestFromTransport(requestFailure) : undefined;
-    const remaining =
-      reviewed || journal || transport ? mergeRemainingRequest(reviewed ?? journal, transport) : undefined;
+    const remaining = observedBatch ?? (prepared || transport ? mergeRemainingRequest(prepared, transport) : undefined);
     if (remaining) await writeSeedRemainingRequest(directory, remaining);
     const handoff = formatSeedArtifactHandoff(error);
     if (handoff) process.stderr.write(`${handoff}\n`);

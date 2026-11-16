@@ -183,7 +183,12 @@ test('batch response validation requires a retryability classification for every
       })) as unknown as typeof fetch,
   });
 
-  await expect(transport.batch({ commands: [commands[0]!] })).rejects.toThrow();
+  await expect(transport.batch({ commands: [commands[0]!] })).rejects.toMatchObject({
+    code: 'invalid_batch_receipt',
+    failurePhase: 'integrity',
+    method: 'POST',
+    path: '/v1/subjects:batchWrite',
+  });
 });
 
 test('candidate listing keeps the kernel status when the Treaty reply has no Response', async () => {
