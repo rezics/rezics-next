@@ -1634,8 +1634,30 @@ function validateFreshReconciliationCandidate(
     observed.returns.declarationsSha256 !== jsonSha256(record.returns)
   )
     return 'reconciliation return declarations differ from the registered invocation';
-  if (observed.cleanup.disposition !== 'settled') return 'original physical run cleanup remains unverified';
-  return '';
+  if (observed.cleanup.disposition === 'settled') return '';
+
+  // A failed command can finish before producing every declared output. Pin the native result
+  // with an unknown final disposition when missing returns are the only outstanding evidence.
+  const { native, cleanup, returns, failures } = observed;
+  if (
+    native &&
+    native.exitCode !== 0 &&
+    record.transportChild &&
+    record.snapshot &&
+    cleanup.remote === 'verified' &&
+    cleanup.transportChild === 'reaped' &&
+    cleanup.source === 'verified' &&
+    cleanup.localWorktree === 'retained' &&
+    cleanup.failures.length === 0 &&
+    returns.status === 'missing' &&
+    returns.missing.length > 0 &&
+    returns.missing.every((path) => record.returns.includes(path)) &&
+    returns.failures.length === 0 &&
+    failures.primary.length === 0 &&
+    failures.cleanup.length === 0
+  )
+    return '';
+  return 'reconciliation cannot accept the final with unresolved cleanup or returns';
 }
 
 function validatePhysicalCleanup(value: unknown): CheckRunPhysicalCleanup {
@@ -2903,24 +2925,17 @@ export async function reconcileCheckRunInvocation(
       );
     }
     const message = validateCheckRunFinalSettlement(observed.final);
-    const mismatch = validateFreshReconciliationCandidate(before, message, observed.transportIdentity ?? null);
-    if (mismatch) throw new Error(mismatch);
-    return mutateRecord(invocationId, options, async (directory, record) => {
+    return await mutateRecord(invocationId, options, async (directory, record) => {
       if (record.final) return record;
-      if (!record.native && message.native) {
-        const recordedNative = validateNative(message.native)!;
-        await updateRecord(directory, record, { native: recordedNative, phase: 'native-terminal' });
-        record = readRecord(directory, invocationId);
-      } else if (record.native && record.phase !== 'native-terminal') {
-        if (
-          record.native.exitCode !== message.native?.exitCode ||
-          record.native.lifetimeFailure !== message.native?.lifetimeFailure ||
-          record.native.receiptSha256 !== message.native?.receiptSha256
-        )
-          throw new Error('reconciliation native result differs from the retained terminal event');
-        await updateRecord(directory, record, { phase: 'native-terminal' });
-        record = readRecord(directory, invocationId);
-      }
+      if (JSON.stringify(record.transportChild) !== JSON.stringify(before.transportChild))
+        throw new Error('original local transport child changed during reconciliation');
+      const mismatch = validateFreshReconciliationCandidate(record, message, observed.transportIdentity ?? null);
+      if (mismatch) throw new Error(mismatch);
+      if (!record.native || record.phase !== 'native-terminal')
+        record = await updateRecord(directory, record, {
+          native: record.native ?? message.native,
+          phase: 'native-terminal',
+        });
       const encoded = encodeCheckRunFinalSettlement(message);
       return acceptFinalUnderLock(directory, record, encoded, 'reconciled', options);
     });

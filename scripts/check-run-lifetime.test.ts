@@ -24,6 +24,7 @@ import {
   createCheckRunFinalSettlement,
   discardCheckRunFailedSnapshot,
   checkRunBindingHash,
+  checkRunNativeReceiptDigest,
   checkRunSnapshotReleaseKind,
   discardCheckRunPreparationIntent,
   encodeCheckRunFinalSettlement,
@@ -42,8 +43,9 @@ import {
   type CheckRunInvocationBinding,
   type CheckRunRegistration,
   type CheckRunTransportChildIdentity,
+  type CheckRunTransportIdentityState,
 } from './check-run-settlement.ts';
-import type { RemoteCheckSettlement } from './remote-check.ts';
+import { parseRemotePhysicalRunReceipt, type RemoteCheckSettlement } from './remote-check.ts';
 
 const fixtures: string[] = [];
 const settlementCli = resolve(import.meta.dir, 'check-run-settlement.ts');
@@ -90,11 +92,13 @@ type InvocationFixture = {
   workspace: string;
   registration: CheckRunRegistration;
   transportChild: CheckRunTransportChildIdentity;
+  returns: string[];
 };
 
 async function preparedInvocation(
   persist = true,
   bindingOverrides: Partial<CheckRunInvocationBinding> = {},
+  returns: string[] = [],
 ): Promise<InvocationFixture> {
   const root = fixtureRoot();
   const candidate = privateDirectory(root, 'candidate');
@@ -117,13 +121,13 @@ async function preparedInvocation(
   };
   const preparationIntent = writeCheckRunPreparationIntent(checkRunPreparationIntentFile(descriptor), intent);
   const registration = await registerCheckRunInvocation(
-    { ...binding(), ...bindingOverrides },
+    { ...binding(), returnsSha256: digest(JSON.stringify(returns)), ...bindingOverrides },
     {
       stateDirectory: state,
       invocationId,
       candidateWorkspace: candidate,
       snapshot,
-      returns: [],
+      returns,
       preparationIntent,
       descriptorFile: descriptor,
     },
@@ -133,7 +137,7 @@ async function preparedInvocation(
       stateDirectory: state,
       candidateWorkspace: candidate,
       snapshot,
-      returns: [],
+      returns,
       descriptorFile: descriptor,
       execution: { schema: 1, originalEnvironment: { SECRET_FIXTURE: 'never-in-status' } },
     });
@@ -149,6 +153,7 @@ async function preparedInvocation(
     workspace,
     registration,
     transportChild: { pid: 4242, bootId: randomUUID(), start: '987654' },
+    returns,
   };
 }
 
@@ -158,7 +163,7 @@ async function queueAndStart(fixture: InvocationFixture, native = true, transpor
   await markCheckRunQueued(registration.invocationId, registration.nonce, {
     stateDirectory: state,
     candidateWorkspace: candidate,
-    returns: [],
+    returns: fixture.returns,
     snapshot: { workspace, scratch, sourceSha256: registration.binding.sourceSha256, inputFiles: [] },
   });
   await beginCheckRunAllocation(registration.invocationId, registration.nonce, { stateDirectory: state });
@@ -1364,6 +1369,130 @@ function cleanupOnlyHosts() {
     ],
   });
 }
+
+async function incompleteLifetimeReconciliation() {
+  const declarations = ['.temp/diagnostic.log', '.temp/report.json'];
+  const fixture = await preparedInvocation(true, {}, declarations);
+  await queueAndStart(fixture, false);
+  mkdirSync(fixture.workspace, { recursive: true });
+  const diagnostic = 'first stage expired before the report';
+  writeFileSync(join(privateDirectory(fixture.workspace, '.temp'), 'diagnostic.log'), diagnostic);
+  const base = finalFor(fixture, 'unknown');
+  const receipt = parseRemotePhysicalRunReceipt({
+    schema: 1,
+    ...base.physical,
+    exitCode: 124,
+    lifetimeFailure: {
+      schema: 1,
+      ...base.physical,
+      status: 'infrastructure-failure',
+      phase: 'run-lifetime',
+      limitMs: 7200000,
+      elapsedMs: 7200252,
+      command: 'bun test [2 arguments]',
+    },
+    resources: null,
+  });
+  if (!receipt) throw new Error('invalid fixture native receipt');
+  const final = createCheckRunFinalSettlement({
+    ...base,
+    native: { exitCode: receipt.exitCode, lifetimeFailure: true, receiptSha256: checkRunNativeReceiptDigest(receipt) },
+    returns: {
+      ...base.returns,
+      status: 'missing',
+      entries: [{ path: declarations[0]!, size: Buffer.byteLength(diagnostic), sha256: digest(diagnostic) }],
+      missing: declarations.slice(1),
+    },
+    cleanup: { ...base.cleanup, remote: 'verified', transportChild: 'reaped', source: 'verified', failures: [] },
+    failures: { primary: [], cleanup: [] },
+  });
+  return { fixture, final, diagnostic };
+}
+
+test.each([null, 'original transport failed before delivering a result'])(
+  'fresh reconciliation retains exact native exit 124 with incomplete declared returns (prior failure: %s)',
+  async (priorFailure) => {
+    const { fixture, final, diagnostic } = await incompleteLifetimeReconciliation();
+    const options = { stateDirectory: fixture.state, force: true };
+    const { invocationId, nonce } = fixture.registration;
+    if (priorFailure) await setCheckRunUnknown(invocationId, nonce, priorFailure, options);
+    const recovered = await reconcileCheckRunInvocation(invocationId, {
+      ...options,
+      reconcilePhysical: async () => ({ disposition: 'settled', final, transportIdentity: 'gone-or-replaced' }),
+    });
+    expect(recovered.failure).toBe(priorFailure);
+    expect(recovered.native).toEqual(final.native);
+    expect(recovered.final).toEqual(final);
+    expect(recovered.finalCustody?.aggregate).toBe('unknown');
+    expect(recovered.phase).toBe('unknown');
+    expect(recovered.snapshotCustody).toBe('owned');
+    expect(checkRunSnapshotReleaseKind(recovered)).toBeNull();
+    expect(readFileSync(join(fixture.workspace, '.temp/diagnostic.log'), 'utf8')).toBe(diagnostic);
+    const contradictory = { ...final, native: { ...final.native!, receiptSha256: '0'.repeat(64) } };
+    const repeated = await reconcileCheckRunInvocation(invocationId, {
+      ...options,
+      reconcilePhysical: async () => ({
+        disposition: 'settled',
+        final: contradictory,
+        transportIdentity: 'gone-or-replaced',
+      }),
+    });
+    expect(repeated.native).toEqual(recovered.native);
+    expect(repeated.final).toEqual(recovered.final);
+    expect(repeated.finalCustody?.originalFinalSha256).toBe(recovered.finalCustody?.originalFinalSha256);
+    expect(repeated.finalCustody?.observations.at(-1)?.disposition).toBe('rejected');
+    await expect(acceptFinal(fixture, final)).rejects.toThrow(/duplicate|replay/i);
+  },
+);
+
+test('fresh reconciliation refuses incomplete success, mismatched evidence and unrelated host failures', async () => {
+  const { fixture, final } = await incompleteLifetimeReconciliation();
+  const options = { stateDirectory: fixture.state, force: true };
+  const { invocationId, nonce } = fixture.registration;
+  const raced = await reconcileCheckRunInvocation(invocationId, {
+    ...options,
+    reconcilePhysical: async ({ host, run }) => {
+      const replacement = { ...fixture.transportChild, start: '987655' };
+      await withCheckRunSpawnPermit(
+        invocationId,
+        nonce,
+        host,
+        run,
+        () => ({ pid: replacement.pid }),
+        options,
+        () => replacement,
+      );
+      return { disposition: 'settled', final, transportIdentity: 'gone-or-replaced' };
+    },
+  });
+  expect(raced.failure).toContain('original local transport child changed during reconciliation');
+  expect(raced.native).toBeNull();
+  expect(raced.final).toBeNull();
+  const candidates: [Partial<CheckRunFinalSettlement>, CheckRunTransportIdentityState?][] = [
+    [{ native: { ...final.native!, exitCode: 0, lifetimeFailure: false } }],
+    [{ physical: { ...final.physical, run: 'other-run' } }],
+    [{ binding: { ...final.binding, producerClosureSha256: '0'.repeat(64) } }],
+    [{ preparedInputs: { ...final.preparedInputs, sourceSha256: '0'.repeat(64) } }],
+    [{ returns: { ...final.returns, declarationsSha256: '0'.repeat(64) } }],
+    [{ returns: { ...final.returns, missing: ['undeclared.json'] } }],
+    [{ cleanup: { ...final.cleanup, remote: 'unknown' } }],
+    [{ cleanup: { ...final.cleanup, transportChild: 'unknown' } }],
+    [{}, 'unknown'],
+    [{ cleanup: { ...final.cleanup, localWorktree: 'removed' } }],
+    [{ returns: { ...final.returns, failures: ['returns transport failed'] } }],
+    [{ failures: { primary: ['host observation failed'], cleanup: [] } }],
+  ];
+  for (const [changes, transportIdentity = 'gone-or-replaced'] of candidates) {
+    const rejected = await reconcileCheckRunInvocation(invocationId, {
+      ...options,
+      reconcilePhysical: async () => ({ disposition: 'settled', final: { ...final, ...changes }, transportIdentity }),
+    });
+    expect(rejected.native).toBeNull();
+    expect(rejected.final).toBeNull();
+    expect(rejected.phase).toBe('unknown');
+    expect(rejected.snapshotCustody).toBe('owned');
+  }
+});
 
 test('cleanup-only reconciliation survives a removed candidate and changed producer without executing or restoring returns', async () => {
   const configuration = cleanupOnlyHosts();
