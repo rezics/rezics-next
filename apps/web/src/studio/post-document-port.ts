@@ -22,7 +22,7 @@ import {
   type StudioRevision,
   type StudioSelection,
 } from './contract';
-import { readPostDocumentHead } from './post-document-read';
+import { readPostDocumentHead, type PostDocumentHead } from './post-document-read';
 import { readPostRevisionHeaders } from './post-revision-headers-read';
 
 /** Compose exact Post reads and conditional revisions; account inventory and private creation have their own owner. */
@@ -104,6 +104,29 @@ async function projectRevision(post: NativeDocument, title: string): Promise<Stu
   };
 }
 
+export async function projectPostDocumentHead(
+  { post, title, viewerId }: PostDocumentHead,
+  canWrite: boolean,
+): Promise<StudioSelection | null> {
+  const revision = await projectRevision(post, title);
+  if (!revision) return null;
+  return {
+    revision,
+    permissions: {
+      edit: post.visibility === 'draft' && post.authorId === viewerId && canWrite,
+      // The document port has no authority to publish.
+      publish: false,
+    },
+    visibility: post.visibility,
+    native: {
+      threadId: post.threadId,
+      boardId: post.boardId,
+      licence: post.licence,
+      subjectIds: [...post.subjectIds],
+    },
+  };
+}
+
 /**
  * One private mounted visit, with fresh native reads and no persistent document cache.
  * Exact reads serve the shared comparison and copy-into-working-draft UI. Saving that copy uses
@@ -115,7 +138,7 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
   let retired = false;
   let reads = 0;
   // Retain one command admission so an uncertain retry can reach native idempotency even after its head advanced.
-  let attempt: { key: string; intent: string; title: string } | null = null;
+  let attempt: { key: string; intent: string; title: string; threadId: string } | null = null;
   function isCurrent() {
     const now = visit.source.read();
     if (
@@ -154,29 +177,11 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
       });
       if (!admitted(input.projectId, input.postId, signal)) return unavailable(visit.locale);
       if (!result.ok) return result;
-      const { post, title, viewerId } = result.value;
+      const { post, viewerId } = result.value;
       if (post.id !== input.postId || viewerId !== visit.accountId) return unavailable(visit.locale);
-      const revision = await projectRevision(post, title);
-      if (!revision || !admitted(input.projectId, input.postId, signal)) return unavailable(visit.locale);
-      return {
-        ok: true,
-        value: {
-          revision,
-          permissions: {
-            edit:
-              post.visibility === 'draft' && post.authorId === visit.accountId && origin.csrfReady && !!visit.csrfToken,
-            // Content's draft-to-published command does not implement Studio's reviewed publication contract.
-            publish: false,
-          },
-          visibility: post.visibility,
-          native: {
-            threadId: post.threadId,
-            boardId: post.boardId,
-            licence: post.licence,
-            subjectIds: [...post.subjectIds],
-          },
-        },
-      };
+      const selection = await projectPostDocumentHead(result.value, origin.csrfReady && !!visit.csrfToken);
+      if (!selection || !admitted(input.projectId, input.postId, signal)) return unavailable(visit.locale);
+      return { ok: true, value: selection };
     } catch {
       return unavailable(visit.locale);
     }
@@ -217,9 +222,14 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
         const current = await open(input, signal);
         if (!current.ok) return current;
         if (current.value.revision.exact.revisionId !== input.expectedRevisionId) return stale(visit.locale);
-        if (!current.value.permissions.edit)
+        if (!current.value.permissions.edit || !current.value.native)
           return failure('unavailable', m.studio_private_only({}, options));
-        attempt = { key: input.idempotencyKey, intent, title: current.value.revision.title };
+        attempt = {
+          key: input.idempotencyKey,
+          intent,
+          title: current.value.revision.title,
+          threadId: current.value.native.threadId,
+        };
       }
       if (!admitted(input.projectId, input.postId, signal)) return unavailable(visit.locale);
       const command = attempt;
@@ -255,6 +265,7 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
         const post = result.post;
         if (
           post.id !== input.postId ||
+          post.threadId !== command.threadId ||
           post.availability !== 'available' ||
           post.visibility !== 'draft' ||
           post.authorId !== visit.accountId
@@ -263,7 +274,13 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
         const currentHead = await open(input, signal);
         if (
           !currentHead.ok ||
-          currentHead.value.revision.exact.revisionId !== post.revisionId ||
+          !currentHead.value.permissions.edit ||
+          currentHead.value.native?.threadId !== command.threadId ||
+          !sameExact(currentHead.value.revision.exact, {
+            postId: post.id,
+            revisionId: post.revisionId,
+            sha256: post.sha256,
+          }) ||
           currentHead.value.revision.title !== input.title ||
           serializeDocument(currentHead.value.revision.body) !== serializeDocument(input.body) ||
           currentHead.value.revision.mediaIds.length !== input.mediaIds.length ||
@@ -301,7 +318,8 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
           },
           signal,
         });
-        if (!admitted(input.projectId, input.postId, signal) || !accepts(request, response)) return unavailable(visit.locale);
+        if (!admitted(input.projectId, input.postId, signal) || !accepts(request, response))
+          return unavailable(visit.locale);
         return response.data;
       } catch {
         return unavailable(visit.locale);
@@ -328,7 +346,8 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
           },
           signal,
         });
-        if (!admitted(input.projectId, exact.postId, signal) || !accepts(request, response)) return unavailable(visit.locale);
+        if (!admitted(input.projectId, exact.postId, signal) || !accepts(request, response))
+          return unavailable(visit.locale);
         const page = response.data;
         if (page.state !== 'ready' || page.thread.title === null) return unavailable(visit.locale);
         const revision = await projectRevision(page.revision, page.thread.title);

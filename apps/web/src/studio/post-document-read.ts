@@ -16,15 +16,21 @@ const accountId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[
 
 /** Current Content disclosure only. Project membership remains the mounted consumer's native admission. */
 export const readPostDocumentHead = createServerFn({ method: 'GET' })
-  .validator((input: { postId: string; accountId: string; locale?: Locale }) => {
+  .validator((input: { postId: string; accountId: string; locale?: Locale; ownDiscussionOpening?: true }) => {
     if (
       !input ||
       !contentId.test(input.postId) ||
       !accountId.test(input.accountId) ||
-      (input.locale !== undefined && !isLocale(input.locale))
+      (input.locale !== undefined && !isLocale(input.locale)) ||
+      (input.ownDiscussionOpening !== undefined && input.ownDiscussionOpening !== true)
     )
       throw new Error('Invalid Studio document address');
-    return { postId: input.postId, accountId: input.accountId, locale: input.locale };
+    return {
+      postId: input.postId,
+      accountId: input.accountId,
+      locale: input.locale,
+      ownDiscussionOpening: input.ownDiscussionOpening,
+    };
   })
   .handler(async ({ data }): Promise<StudioResult<PostDocumentHead>> => {
     setResponseHeader('cache-control', 'private, no-store');
@@ -46,12 +52,19 @@ export const readPostDocumentHead = createServerFn({ method: 'GET' })
       if (result.error || !result.data) return unavailable();
       const post = result.data.post;
       if (post.id !== data.postId || post.availability !== 'available') return unavailable();
+      if (
+        data.ownDiscussionOpening &&
+        (post.authorId !== viewerId || post.visibility !== 'draft' || post.parentId !== null)
+      )
+        return unavailable();
       // A head must carry the strong native revision used by the existing If-Match writer.
       if (new Headers(result.headers).get('etag') !== JSON.stringify(post.revisionId)) return unavailable();
       const context = await client.threads({ id: post.threadId }).get(options);
       if (context.error || !context.data) return unavailable();
       const thread = context.data.thread;
       if (thread.id !== post.threadId || thread.firstPost.availability !== 'available' || thread.title === null)
+        return unavailable();
+      if (data.ownDiscussionOpening && (thread.kind !== 'discussion' || thread.firstPost.id !== post.id))
         return unavailable();
       // Post revisions have no title field. This is the current conversation label, never a saved title.
       return { ok: true, value: { post, title: thread.title, viewerId } };

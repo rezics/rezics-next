@@ -264,6 +264,27 @@ test('existing catalogue conflict reopens through exact owner read; failed confi
   }
 });
 
+test('a rejected browser command settles Book start and retries the original exact operation', async () => {
+  const f = fixture();
+  const create = f.native.create;
+  f.native.create = async (...args) => {
+    const result = await create(...args);
+    if (f.creates.length === 1) throw new Error('Browser command rejected');
+    return result;
+  };
+  try {
+    await f.starter.start();
+    expect(f.starter.snapshot()).toMatchObject({ kind: 'failed', retryable: true });
+    expect(f.reads).toHaveLength(0);
+    await f.starter.retry();
+    expect(f.creates).toHaveLength(2);
+    expect(f.creates[1]).toEqual(f.creates[0]);
+    expect(f.hrefs).toHaveLength(1);
+  } finally {
+    f.disconnect();
+  }
+});
+
 test('different viewer, authn epoch, Post or thread in the owner response never becomes a destination', async () => {
   for (const changed of [
     { ...owner, viewer: { ...owner.viewer, accountId: id(99) } },

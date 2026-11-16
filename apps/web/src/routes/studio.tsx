@@ -297,13 +297,9 @@ function StudioAccountVisit({
       let initialSelection: StudioSelection | undefined;
       let resumeIssue: string | null = null;
       if (resumePostId) {
-        if (!page.drafts.some((entry) => entry.id === resumePostId)) {
-          resumeIssue = m.own_drafts_stale_selection({}, { locale });
-        } else {
-          const opened = await port.open({ projectId: accountId, postId: resumePostId }, controller.signal);
-          if (opened.ok) initialSelection = opened.value;
-          else resumeIssue = opened.error.message;
-        }
+        const opened = await port.resume(resumePostId, controller.signal);
+        if (opened.ok) initialSelection = opened.value;
+        else resumeIssue = opened.error.message;
       }
       if (!isCurrent()) return;
       const input: StudioInput = {
