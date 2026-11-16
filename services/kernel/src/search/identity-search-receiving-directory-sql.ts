@@ -46,17 +46,13 @@ export const searchIdentityOriginalPlanPresentSql = `SELECT 1 FROM unnest($4::te
   WHERE (partition_no,job_id,job_epoch,effect_key)=($1,$2,$3,k.effect_key) LIMIT 1) n ON true
  WHERE n.original_id=$5 AND n.physical_target=$6 LIMIT 1`;
 
-/** Common plans survive retirement of the pending key. This read also supports exact old-scope replay. */
-export const readSearchIdentityCommonPlanSql = `SELECT p.binding,p.binding_digest,p.transaction_id AS plan_transaction_id,j.scope_digest
- FROM semantic.identity_epoch_receiving_plan p
- JOIN semantic.identity_epoch_native_commit c ON (c.partition_no,c.transaction_id)=(p.partition_no,p.transaction_id)
-   AND c.purpose='identity-receiving-plan' AND c.xmin=p.xmin
-   AND c.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid
- JOIN semantic.identity_epoch_job j ON (j.partition_no,j.job_id,j.epoch)=(p.partition_no,p.job_id,p.job_epoch)
- JOIN core.partition o ON o.partition_no=c.partition_no AND o.epoch=c.epoch
-   AND o.write_state='active' AND o.position>=c.position
- WHERE (p.partition_no,p.job_id,p.job_epoch,p.effect_key)=($1,$2,$3,$4) AND j.state='pending'
-   AND p.binding->>'step'='search-canonical-index'`;
+/** Locate the native plan for a committed request. The writer must still prove its custody. */
+export const locateSearchIdentityOriginalPlanSql = `SELECT n.plan_id::text,
+ (n.source->'barrier'->>'kind'='original') IS TRUE AS original_barrier
+ FROM unnest($4::text[]) k(effect_key)
+ JOIN LATERAL (SELECT plan_id,original_id,physical_target,source FROM search.identity_receiving_native_plan
+  WHERE (partition_no,job_id,job_epoch,effect_key)=($1,$2,$3,k.effect_key) LIMIT 1) n ON true
+ WHERE n.original_id=$5 AND n.physical_target=$6 LIMIT 2`;
 
 /** A settled old scope can replay after its queue key was retired. Require its exact custody on either path. */
 export const advanceSearchIdentityOriginalSql = `WITH settled AS MATERIALIZED (
@@ -64,19 +60,25 @@ export const advanceSearchIdentityOriginalSql = `WITH settled AS MATERIALIZED (
  FROM semantic.identity_epoch_receiving_plan p
  JOIN semantic.identity_epoch_effect_receipt e USING (partition_no,job_id,effect_key)
  JOIN semantic.identity_epoch_receiving_custody a USING (partition_no,job_id,effect_key)
+ JOIN semantic.identity_epoch_native_commit planned
+   ON (planned.partition_no,planned.transaction_id)=(p.partition_no,p.transaction_id)
+   AND planned.purpose='identity-receiving-plan' AND planned.xmin=p.xmin
+   AND planned.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid
  JOIN semantic.identity_epoch_native_commit c ON (c.partition_no,c.transaction_id)=(a.partition_no,a.transaction_id)
    AND c.purpose='identity-receiving-custody' AND c.xmin=a.xmin
    AND c.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid
  JOIN semantic.identity_epoch_job j ON (j.partition_no,j.job_id,j.epoch)=(p.partition_no,p.job_id,p.job_epoch)
  JOIN core.partition o ON o.partition_no=p.partition_no AND o.epoch=c.epoch
-   AND o.write_state='active' AND o.position>=c.position
- WHERE (p.partition_no,p.job_id,p.job_epoch,p.effect_key,p.transaction_id)=($1,$2,$3,$4,$5)
-   AND p.binding_digest=$6 AND p.binding->>'step'='search-canonical-index'
-   AND j.state='pending' AND j.scope_digest=$11
+   AND o.write_state='active' AND o.position>=c.position AND o.epoch=planned.epoch AND o.position>=planned.position
+ WHERE (p.partition_no,p.job_id,p.job_epoch,p.effect_key)=($1,$2,$3,$4)
+   AND p.binding->>'step'='search-canonical-index' AND p.binding->>'original'=$5
+   AND p.binding->>'effectKey'=$4 AND p.binding->'source'->>'consumer'=$6
+   AND p.binding->'source'->>'physicalTarget'=$7 AND p.binding#>>'{source,locator,planId}'=$8
+   AND p.binding->>'scopeDigest'=$13 AND j.state='pending' AND j.scope_digest=$13
    AND e.step='search-canonical-index' AND e.kind=CASE p.binding->'source'->>'disposition'
     WHEN 'OLD' THEN 'remove' WHEN 'handoff' THEN 'pending-fence'
     WHEN 'NEW' THEN 'add' WHEN 'first-apply' THEN 'add' END
-   AND (e.native_partition,e.native_epoch,e.native_position,e.native_transaction_id)=($7,$8,$9,$10)
+   AND (e.native_partition,e.native_epoch,e.native_position,e.native_transaction_id)=($9,$10,$11,$12)
    AND NOT EXISTS (SELECT 1 FROM search.identity_receiving_native_scope_pending q
      WHERE (q.partition_no,q.job_id,q.job_epoch,q.effect_key)=(p.partition_no,p.job_id,p.job_epoch,p.effect_key)
        AND q.plan_transaction_id<>p.transaction_id)

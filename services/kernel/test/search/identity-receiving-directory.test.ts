@@ -17,6 +17,7 @@ import subjectEligibility from '../../src/semantic/scope-leaf-evidence-eligibili
 import relatedVisibility from '../../src/semantic/read-subject-related-states.sql';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import stepSql from '../../src/search/identity-epoch-participant-step.sql';
+import completeSql from '../../src/search/identity-epoch-participant-complete.sql';
 import {
   dispatchSearchIdentityOriginalSql,
   readBoundedSearchIdentityActionSql,
@@ -83,6 +84,7 @@ import mappingCurrent from '../../src/semantic/identity-terminal-closure-current
 import {
   EMPTY_IDENTITY_SEARCH_TERMS_DIGEST,
   readIdentitySearchIndexTermSlotSql,
+  readIdentitySearchIndexTermSlotShapeSql,
   readIdentitySearchIndexTermsSql,
 } from '../../src/semantic/identity-search-index-terms.ts';
 import {
@@ -125,10 +127,10 @@ import {
 } from '../../src/search/identity-epoch-participant.ts';
 import {
   readSearchIdentityDirectorySql,
-  readSearchIdentityCommonPlanSql,
   advanceSearchIdentityOriginalSql,
   readSearchIdentityMaterializedOriginalSql,
   readSearchIdentityOriginalPlanSql,
+  locateSearchIdentityOriginalPlanSql,
   searchIdentityOriginalPlanPresentSql,
   readSearchIdentityWriterAdmissionSql,
   recheckSearchIdentityWriterAdmissionSql,
@@ -249,8 +251,8 @@ test.each([
     string,
     string,
   ];
-  const foreignCapture = mode === 'foreign-step-capture';
-  const crossHome = mode === 'visible-cross-home' || foreignCapture;
+  const foreignCapture = mode === 'foreign-step-capture' || mode === 'canonical-terms';
+  const crossHome = mode === 'visible-cross-home' || mode === 'foreign-step-capture';
   const terminalHome = crossHome ? otherControlHome : writerHome;
   const second = crossHome ? newId(terminalHome << 4) : localTerminal;
   const jobId = newId(jobHome << 4);
@@ -606,18 +608,22 @@ test.each([
         originalReads++;
         const original = values[0] === leftGeneration && mode !== 'materialized' ? first : second;
         const isLeft = values[0] === leftGeneration;
-        expect(values).toEqual([values[0], after, 1, isLeft ? first : second, isLeft ? otherControlHome : jobHome]);
+        const cursor = retiredScope ? selected : after;
+        expect(values).toEqual([values[0], cursor, 1, isLeft ? first : second, isLeft ? otherControlHome : jobHome]);
         rows =
           mode === 'empty' ||
           mode === 'changed' ||
+          (cursor !== null && original <= cursor) ||
           ((mode === 'materialized' || canonicalTerms) && values[0] === leftGeneration)
             ? []
             : [{ original, terminal: original }];
       } else if (sql === readSearchIdentityMaterializedOriginalSql) {
-        expect(values).toEqual([jobHome, jobId, after]);
+        expect(values).toEqual([jobHome, jobId, retiredScope ? selected : after]);
         rows = mode === 'materialized' ? [{ original: first, previous_terminal: first, terminal: second }] : [];
       } else if (sql === searchIdentityOriginalPlanPresentSql) {
         rows = retainedPlan ? [{}] : [];
+      } else if (sql === locateSearchIdentityOriginalPlanSql) {
+        rows = retainedPlan ? [{ plan_id: retainedPlan.source.locator.planId, original_barrier: true }] : [];
       } else if (sql === readSearchIdentityOriginalPlanSql) {
         expect(values).toEqual([
           writerHome,
@@ -838,11 +844,15 @@ test.each([
           (crossHome ? projectionDependencyHomes.get(build!) : dependencyHomes)?.at(-1),
         ]);
         rows = mode === 'changed-proof' || !canonicalBuildCurrent || (!original && !terminalBuildCurrent) ? [] : [{}];
-      } else if (canonicalTerms && sql === readIdentitySearchIndexTermSlotSql) {
+      } else if (canonicalTerms && sql === readIdentitySearchIndexTermSlotShapeSql) {
         const prior = committed.findLast((step) => step.frontier.after[2] === 'terms')?.frontier.after[6] ?? null;
         expect(values).toEqual([writerHome << 4, second, prior]);
         termReads.push(prior);
         const next = termSlots[termReads.length - 1];
+        rows = [{ prior_current: true, slot_id: next?.slot_id ?? null, fact_limit: next?.terms.length ?? 0 }];
+      } else if (canonicalTerms && sql === readIdentitySearchIndexTermSlotSql) {
+        const next = termSlots[termReads.length - 1];
+        expect(values).toEqual([writerHome << 4, second, termReads.at(-1), next?.terms.length]);
         rows = [{ prior_current: true, slot_id: null, ...next, fact_count: next?.terms.length ?? 0 }];
       } else if (canonicalTerms && sql === readIdentitySearchIndexTermsSql) {
         const creator = creditedCreator && values[1] === relationTarget;
@@ -1155,6 +1165,8 @@ test.each([
                   accepted_epoch: hold!.accepted_epoch,
                   accepted_position: hold!.accepted_position,
                   accepted_transaction_id: hold!.accepted_transaction_id,
+                  applied_transaction_id: committedOperation?.applied_transaction_id ?? null,
+                  applied_position: committedOperation?.applied_position ?? null,
                   state: committedOperation?.state ?? null,
                   visible: committedOperation?.state === 'visible' || committedOperation?.state === 'applied',
                   released: receivingContinuation.state === 'released',
@@ -1395,7 +1407,13 @@ test.each([
         rows = [{ revision: writingContinuation.revision }];
       } else if (sql === advanceSearchIdentityOriginalSql) {
         expect(receivingContinuation.state).toBe('released');
-        expect(values.slice(6, 10)).toEqual([
+        expect(values.slice(4, 8)).toEqual([
+          selected,
+          'search_directory_probe_subjects_g1',
+          index,
+          retainedPlan?.source.locator.planId,
+        ]);
+        expect(values.slice(8, 12)).toEqual([
           writerHome,
           1,
           String(applicationPosition),
@@ -1498,8 +1516,6 @@ test.each([
         rows = [{}];
       } else if (sql === receivingPlan.sql)
         rows = commonPlan ? [{ ...commonPlan, native_epoch: 1, native_position: '22' }] : [];
-      else if (sql === readSearchIdentityCommonPlanSql)
-        rows = [{ ...commonPlan, plan_transaction_id: commonPlan?.transaction_id, scope_digest: directoryScope }];
       else if (sql === nativeDefinition.sql) {
         expect(values).toEqual([definitionId]);
         rows = [{ release_digest: bundledDigest, route_digest: routeDigest }];
@@ -1586,20 +1602,20 @@ test.each([
         else if (sql === writerSql.original && priorVisible) {
           rows = [{ incarnation: 'allocation', owner_epoch: 1, closed_transaction_id: previousClose }];
         } else rows = [];
-      } else if (sql === stepSql.sql) {
+      } else if (sql === stepSql.sql || sql === completeSql.sql) {
+        if (sql === completeSql.sql) expect(retiredScope).toBe(true);
         const work = JSON.parse(String(values[6]));
         writing = {
           transactionId: String(values[1]),
           frontier: JSON.parse(String(values[5])),
           engineRequests: work.engineRequests,
         };
-        const initialRequest = writing.frontier.after[3] === SEARCH_IDENTITY_WRITER_REQUEST;
-        if (foreignCapture && (values[0] === writerHome || initialRequest)) {
+        if (foreignCapture) {
           expect(captureNativeTransaction).toBe(writing.transactionId);
           captureQueue.push({
             store: 'identity_epoch_step',
             partition: Number(values[0]),
-            transactionId: initialRequest ? admissionTransaction : writing.transactionId,
+            transactionId: values[0] === jobHome ? admissionTransaction : writing.transactionId,
             armed: false,
           });
         }
@@ -2057,6 +2073,7 @@ test.each([
           { deadline: Date.now() + 5000 },
           () => step(pool, job),
         );
+        expect(identityEpochReceiptLocator(job, 'search-canonical-index', acceptance).ok).toBe(true);
         expect(acceptance.frontier.after.slice(3)).toEqual([
           SEARCH_IDENTITY_WRITER_ACCEPT,
           selected,
@@ -2103,6 +2120,7 @@ test.each([
           () => step(pool, job),
         );
         expect(staged.state).toBe('more');
+        expect(identityEpochReceiptLocator(job, 'search-canonical-index', staged).ok).toBe(true);
         const keep = progress.frontier.after;
         expect(staged.frontier.after).toEqual([
           'search-directory',
@@ -2300,7 +2318,18 @@ test.each([
             () => step(pool, job),
           );
           expect(retired.frontier.after).toEqual(['search-directory', selected, 1]);
+          expect(identityEpochReceiptLocator(job, 'search-canonical-index', retired).ok).toBe(true);
           expect(retiredScope).toBe(true);
+          if (foreignCapture && intent === 'unmerge') {
+            const complete = await withIdentitySourceConsumerMaintenance(
+              { pool, env: {} },
+              { deadline: Date.now() + 5000 },
+              () => step(pool, job),
+            );
+            expect(complete.state).toBe('complete');
+            expect(complete.frontier.after).toEqual(['directory', 1]);
+            expect(identityEpochReceiptLocator(job, 'search-canonical-index', complete).ok).toBe(true);
+          }
           if (foreignCapture) {
             const capturedTransactions = (store: Capture['store'], partition?: number) =>
               capturedEvents
@@ -2311,6 +2340,10 @@ test.each([
             );
             expect(capturedTransactions('identity_epoch_step', writerHome)).toEqual(
               foreignSteps.map(({ transactionId }) => transactionId),
+            );
+            const controlSteps = intent === 'unmerge' ? 5 : 4;
+            expect(capturedTransactions('identity_epoch_step', jobHome)).toEqual(
+              Array(controlSteps).fill(admissionTransaction),
             );
             expect(capturedTransactions('identity_epoch_receiving_effect')).toEqual([committedOperation?.applied_transaction_id]);
             expect(capturedTransactions('identity_epoch_effect_receipt')).toEqual([
