@@ -2255,6 +2255,10 @@ Cost: pages admit 50 native inputs, preserve the lower owner 100/256-key limits 
 native generation preparation/repair shares one maintenance meter whose point and row multipliers apply to
 examined input keys, as in Source's maintenance-step bound, rather than serving candidates. Serving retains
 its candidate-based bound. Both retain the 1000-input and 4 MiB ceilings without resetting between owners.
+Bound Subject publication admits up to 128 homes per native Source scan or creation-window page. The original
+projection limit and retained page sizes still govern projection and replay. A publication turn can receive up
+to four pages with the same meter and deadline, saving each verified successor before asking for another.
+The next turn verifies the closed Search settlement before Source can acknowledge coverage.
 Steps retain a scalar frontier. Subject reconciliation validates up to 256 saved native home heads in one
 statement snapshot per step. After engine traversal, Search can refresh that pass's position witness for an
 empty home with the same active epoch and no retained writer row for this physical target. Each refresh uses

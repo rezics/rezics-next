@@ -486,6 +486,8 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding &
         execution: string;
         frontier: string | null;
         inputLimit: number;
+        /** Separate home-scan allowance for the original Subject publication. */
+        homeLimit?: number;
       }>,
       context: PublicFilterConsumerContext,
     ): Promise<PublicSourceRepairPage>;
@@ -1595,7 +1597,7 @@ export function createNativePublicFilterSourceBinding(
   async function repairNative(
     bootstrap: PublicSourceBootstrap,
     joined: Joined,
-    request: { execution: string; frontier: string | null; inputLimit: number },
+    request: { execution: string; frontier: string | null; inputLimit: number; homeLimit?: number },
     db: Pool,
     cost: BindingCost,
     context: PublicFilterConsumerContext,
@@ -1629,8 +1631,7 @@ export function createNativePublicFilterSourceBinding(
       execution: request.execution,
       predecessor: request.frontier ?? '',
     });
-    if (old && (old.receipt_protocol !== 1 || old.input_limit !== request.inputLimit))
-      throw new BindingError('owner_unavailable');
+    if (old && (old.receipt_protocol !== 1 || old.input_limit === null)) throw new BindingError('owner_unavailable');
     const retainedLocatorDigests = old
       ? unpackRepairLocatorDigests(old.repair_locator_digests, old.input_limit!)
       : null;
@@ -1658,6 +1659,15 @@ export function createNativePublicFilterSourceBinding(
         projection: null,
         claimInputs: true,
       };
+    const scansHomes =
+      state.partition < 4096 &&
+      state.owner !== 'accounts' &&
+      ((state.phase === 'scan' && (!replay || replay.scan)) ||
+        (state.phase === 'window' && (!replay || replay.windowBatch)));
+    const offeredLimit = (scansHomes ? request.homeLimit : undefined) ?? request.inputLimit;
+    // A lost reply or upgrade replays the exact original range and digest.
+    const inputLimit = old?.input_limit ?? offeredLimit;
+    if (inputLimit !== offeredLimit && inputLimit !== request.inputLimit) throw new BindingError('owner_unavailable');
     let next = structuredClone(state);
     let repairs: PublicSourceRepair[] = [],
       output: RepairRecord['output'] = null,
@@ -1699,7 +1709,7 @@ export function createNativePublicFilterSourceBinding(
         };
       }
     } else if (state.phase === 'window' && (!replay || replay.windowBatch)) {
-      const scanned = await scanCreationWindows(bootstrap.id, state, request.inputLimit, db, cost);
+      const scanned = await scanCreationWindows(bootstrap.id, state, inputLimit, db, cost);
       next = scanned.next;
       windowBatch = scanned.batch;
     } else if (state.phase === 'window' || state.phase === 'bridge') {
@@ -1714,11 +1724,11 @@ export function createNativePublicFilterSourceBinding(
       );
     } else if (state.phase === 'scan' && (!replay || replay.scan)) {
       if (state.owner === 'accounts') {
-        const scanned = await scanAccountHomes(state, request.inputLimit, db, cost);
+        const scanned = await scanAccountHomes(state, inputLimit, db, cost);
         next = scanned.next;
         scan = scanned.receipt;
       } else {
-        const scanned = await scanSemanticHomes(state, request.inputLimit, db, cost, replay?.next.advance);
+        const scanned = await scanSemanticHomes(state, inputLimit, db, cost, replay?.next.advance);
         next = scanned.next;
         scan = scanned.receipt;
       }
@@ -1838,7 +1848,7 @@ export function createNativePublicFilterSourceBinding(
         if (
           replay?.output &&
           (!replay.output.request ||
-            replay.output.request.inputLimit !== request.inputLimit ||
+            replay.output.request.inputLimit !== inputLimit ||
             encode(replay.output.request.frontier) !== encode(state.projection))
         )
           throw new BindingError('binding_mismatch');
@@ -1847,7 +1857,7 @@ export function createNativePublicFilterSourceBinding(
           {
             subject: state.subject!,
             meaning: bootstrap.definition.meaning,
-            inputLimit: request.inputLimit,
+            inputLimit,
             frontier: state.projection,
             context,
           },
@@ -1893,7 +1903,7 @@ export function createNativePublicFilterSourceBinding(
           source: page.source,
           frontier: page.frontier,
           request: {
-            inputLimit: request.inputLimit,
+            inputLimit,
             frontier: state.projection,
           },
         };
@@ -1948,10 +1958,10 @@ export function createNativePublicFilterSourceBinding(
         predecessor: request.frontier ?? '',
         state: encode(record),
         complete,
-        input_limit: request.inputLimit,
+        input_limit: inputLimit,
         repair_locator_digests: packRepairLocatorDigests(
           repairs.map((repair) => repair.locator),
-          request.inputLimit,
+          inputLimit,
         ),
       });
       // A concurrent successor cannot discard an independently produced Source page. Retry its retained predecessor.
@@ -3080,9 +3090,18 @@ export function createNativePublicFilterSourceBinding(
           encode(joined.covered) !== encode(cut.bootstrap.covered)
         )
           throw new BindingError('binding_mismatch');
-        return repairNative(cut.bootstrap, joined, input, db, cost, {
-          deadline,
-        });
+        if (
+          input.homeLimit !== undefined &&
+          (!Number.isInteger(input.homeLimit) ||
+            input.homeLimit < input.inputLimit ||
+            input.homeLimit > repairHomeBatchLimit ||
+            'representation' in cut.definition.capture ||
+            cut.row.publication_job !== input.execution ||
+            cut.row.publication_execution !== input.execution ||
+            cut.row.publication_observation !== input.queried.snapshot.observation)
+        )
+          throw new BindingError('binding_mismatch');
+        return repairNative(cut.bootstrap, joined, input, db, cost, { deadline });
       });
     },
     settle: settleNative,

@@ -2,7 +2,10 @@ import { hasExactPublicFilterMeaning } from './public-filter-meaning.ts';
 import { publicFilterCaptureDependencies } from './public-filter-capture-dependencies.ts';
 import { publicFilterCatalogue } from './discovery-catalogue.ts';
 import { verifyPublicFilterRepairSourcePage, PublicFilterRepairSourceError } from './public-filter-custody-source.ts';
-import type { NativePublicFilterPublicationCompletion } from '../semantic/public-filter-source-binding.ts';
+import type {
+  NativePublicFilterPublication,
+  NativePublicFilterPublicationCompletion,
+} from '../semantic/public-filter-source-binding.ts';
 import {
   joinNativePublicFilterRepair,
   readNativePublicFilterPublicationCompletion,
@@ -63,6 +66,8 @@ function record(value: unknown): value is Record<string, unknown> {
 // with enough remaining input allowance for producer and independent replay reads.
 const PUBLIC_FILTER_REPAIR_INPUT_LIMIT = 64;
 const PUBLIC_FILTER_REPAIR_INPUT_RESERVE = 768;
+const SUBJECT_PUBLICATION_REPAIR_HOME_LIMIT = 128;
+const SUBJECT_PUBLICATION_REPAIR_PAGES_PER_TURN = 4;
 export const PUBLIC_FILTER_PREPARATION_INPUT_LIMIT = 1000;
 export const PUBLIC_FILTER_PREPARATION_INPUT_RESERVE = 128;
 
@@ -2517,7 +2522,12 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     m.cost.frontierWrites++;
     return next;
   }
-  async function repairStep(input: PublicFilterConsumerJob, context: PublicFilterConsumerContext, m = meter(context)) {
+  async function repairStep(
+    input: PublicFilterConsumerJob,
+    context: PublicFilterConsumerContext,
+    m = meter(context),
+    publication?: NativePublicFilterPublication,
+  ) {
     const job = structuredClone(input);
     let use: CustodyUse | undefined;
     const run = async () => {
@@ -2538,7 +2548,14 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             : result;
       }
       if (!work.queried) return m.unavailable('observation_lost');
-      let q = work.queried;
+      const q = work.queried;
+      if (
+        publication &&
+        (work.bootstrap.id !== publication.bootstrap ||
+          work.execution !== publication.execution ||
+          !isDeepStrictEqual(q, publication.queried))
+      )
+        return m.unavailable('observation_lost');
       const acquired = m.take(await custody.acquire(q, context));
       if (acquired.status !== 'acquired') return m.unavailable('observation_lost');
       use = acquired.use;
@@ -2606,7 +2623,18 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         encoded = await saveRepair(work, encoded, state, null, m);
         previous = encodeNative(state);
       }
-      if (!state.closed) {
+      const subjectPublication = publication !== undefined && !('representation' in retained.definition.capture);
+      const progress = () => ({ status: 'progress' as const, job, cost: m.cost });
+      let advanced = 0;
+      while (!state.closed) {
+        // Reserve the next producer and verifier together under this turn's meter.
+        // Each saved page is independently replayable from the same observation.
+        if (
+          advanced > 0 &&
+          (advanced >= SUBJECT_PUBLICATION_REPAIR_PAGES_PER_TURN ||
+            m.inputLimit - m.cost.inputKeys < PUBLIC_FILTER_REPAIR_INPUT_RESERVE)
+        )
+          return progress();
         const keys = {
           partition_no: work.registration.partition,
           observation: q.snapshot.observation,
@@ -2631,6 +2659,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
                 execution: work.execution,
                 frontier: state.frontier,
                 inputLimit: PUBLIC_FILTER_REPAIR_INPUT_LIMIT,
+                ...(subjectPublication && { homeLimit: SUBJECT_PUBLICATION_REPAIR_HOME_LIMIT }),
               },
               context,
             ),
@@ -2752,8 +2781,13 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           closed: complete,
         };
         encoded = await saveRepair(work, encoded, state, previous, m);
-        if (!complete) return { status: 'progress' as const, job, cost: m.cost };
+        if (!subjectPublication && !complete) return progress();
+        previous = encodeNative(state);
+        advanced++;
       }
+      // Publication's completion path owns the terminal Search verification and Source ACK.
+      // Once Search has closed its retained page chain, retry that path on a fresh turn.
+      if (subjectPublication) return advanced > 0 ? progress() : m.unavailable('source_pending');
       // The canonical reader is the native guard. FAA's separate settle joins its own Source verifier.
       const spent = () => ({
         ...m.cost,
@@ -3023,6 +3057,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
               { consumer: input.consumer, job: original.publication.queried.snapshot.observation },
               context,
               m,
+              original.publication,
             );
             return { ...original, advanced: repair.status === 'progress' || repair.status === 'settled', cost: m.cost };
           } else if (original.publication.queried.snapshot.kind === 'prepared') {
@@ -3130,7 +3165,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           m.check();
           return { ...completion, cost: m.cost };
         }
-        const repair = await repairStep(job, context, m);
+        const repair = await repairStep(job, context, m, completion.publication);
         return { ...completion, advanced: repair.status === 'progress' || repair.status === 'settled', cost: m.cost };
       }
       if (completion.status === 'complete' && !(await finishPreparationBuild(work, q, m, context)))
