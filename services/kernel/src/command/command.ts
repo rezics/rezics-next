@@ -49,6 +49,14 @@ const singleAttempt = new AsyncLocalStorage<boolean>();
 export function withSingleCommandAttempt<T>(body: () => Promise<T>): Promise<T> {
   return singleAttempt.run(true, body);
 }
+
+/** A caller accounting for exact SQL can select the compiled controls for receipt-free
+ * maintenance on its own Pool. The executor still owns the transaction and its fences. */
+const compiledControls = new AsyncLocalStorage<Pool>();
+export function withCompiledCommandControls<T>(pool: Pool, body: () => Promise<T>): Promise<T> {
+  return compiledControls.run(pool, body);
+}
+
 export type CommandCallback = (transactionId: string) => void | Promise<void>;
 export type CommandResult<T> = Readonly<{ value: T; events: readonly CommandEvent[] }>;
 const noEffectResults = new WeakSet<object>();
@@ -371,12 +379,16 @@ async function mintTime(
   client: CommandTransaction,
   clock?: () => Date,
   dispatch?: CommandDispatchLifetime,
+  compiled = false,
 ): Promise<AuthoritativeTime> {
   const configured = clock?.();
   if (configured && !Number.isFinite(configured.getTime())) throw new TypeError('Invalid command clock');
+  const parameters = { at: configured?.toISOString() ?? '' };
   const row = dispatch
     ? (await dispatch.control('time', () => client.query<{ at: string }>(COMMAND_DISPATCH_TIME_SQL))).rows[0]
-    : await readTime.run(client, { at: configured?.toISOString() ?? '' });
+    : compiled
+      ? await runCompiledCommandControl(client, readTime, parameters)
+      : await readTime.run(client, parameters);
   if (!row) throw new TypeError('No authoritative database time');
   const time = Object.freeze({}) as AuthoritativeTime;
   times.set(time, row.at);
@@ -435,9 +447,9 @@ function remaining(deadline: number): number {
 function pause(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
-/** Selected controls execute one compiled statement; Reylo retains its wire codec and cardinality. */
-async function runCompiledFence<Input, Output>(
-  client: PoolClient,
+/** The typed wire codec dispatches one statement with the installed source tag. */
+async function runCompiledCommandControl<Input, Output>(
+  client: CommandTransaction,
   query: StandardQueryV1<Input, Output, 'postgres'> & { readonly sql: string },
   input: Input,
 ): Promise<Output> {
@@ -679,6 +691,13 @@ async function executeCommand<T>(
   const receiptDigest = options.receipt ? Buffer.from(options.receipt.digest) : null;
   const basis = options.basis ? Object.freeze({ ...options.basis }) : null;
   const authorization = options.authorization;
+  const compiled =
+    compiledControls.getStore() === pool &&
+    !publisher &&
+    !basis &&
+    !authorization &&
+    !options.principal &&
+    !options.receipt;
   const commandWork = currentCommandWorkAssociation();
   const declaredDeadline = commandWork
     ? Math.min(options.deadline ?? commandWork.deadline, commandWork.deadline)
@@ -795,7 +814,7 @@ async function executeCommand<T>(
               client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`),
             );
           else await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
-          time ??= await measureCommandPhase('time_mint', () => mintTime(client, options.clock, dispatch));
+          time ??= await measureCommandPhase('time_mint', () => mintTime(client, options.clock, dispatch, compiled));
           attempt ??= Object.freeze({ partition, basis, time, ...(commandWork ? { commandWork } : {}) });
           attemptDeadlines.set(attempt, deadline);
           attempts.set(tx, attempt);
@@ -952,8 +971,8 @@ async function executeCommand<T>(
               transaction_id: transactionId,
               receipt: jsonParameter(receipt),
             };
-            return dispatch
-              ? runCompiledFence(client, noEffectFenceStatement, parameters)
+            return dispatch || compiled
+              ? runCompiledCommandControl(client, noEffectFenceStatement, parameters)
               : noEffectFenceStatement.run(client, parameters);
           };
           const eventFence = () => {
@@ -966,8 +985,8 @@ async function executeCommand<T>(
                 : null,
               receipt: jsonParameter(receipt),
             };
-            return dispatch
-              ? runCompiledFence(client, fenceStatement, parameters)
+            return dispatch || compiled
+              ? runCompiledCommandControl(client, fenceStatement, parameters)
               : fenceStatement.run(client, parameters);
           };
           const row = noEffect
