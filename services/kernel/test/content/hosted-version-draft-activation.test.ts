@@ -309,9 +309,13 @@ test('keeps subtree counts, withholds a private target and its title, and insert
       committed.snapshot,
       childA,
     );
-    expect(hidden?.value.title).toBeNull();
-    expect(JSON.stringify(hidden?.value)).not.toContain(secret);
-    expect(hidden?.value.target).toBeNull();
+    expect(hidden?.value).toEqual({
+      kind: 'chapter',
+      title: null,
+      subtreeHeight: 0,
+      chapterCount: 1n,
+      target: null,
+    });
 
     const nested = await insertHostedDraftPoint(
       dependencies(fixture),
