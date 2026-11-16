@@ -4,7 +4,7 @@ import { facetProperties } from '@rezics/filter';
 import type { Source } from '@rezics/definitions/bulk';
 import type { Pool, PoolClient } from 'pg';
 import type { AccessCheck } from '../access/index.ts';
-import { mintReadTime, type AuthoritativeTime } from '../command/command.ts';
+import { mintReadTime, type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
 import {
   discardConnection,
   withBoundedReadConnection,
@@ -24,7 +24,7 @@ import { readFences, type SourceFenceTuple } from '../content/index.ts';
 import { sourceTuple } from './fences.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { factDataTypes, resolveItem, type FactRow, type Statement } from './item.ts';
-import { indexedStatement } from './search-source.ts';
+import { indexedStatement } from './scope-leaf-selection.ts';
 import { readRelease } from './definition-release-read.ts';
 import { nativeSourceQuery } from '../database/native-source-query.ts';
 import { hasPublicFilterMeaningShape } from './public-filter-source-contract.ts';
@@ -59,6 +59,7 @@ import {
   lockProjectionBuildForRetirementSql,
   retiredProjectionMeaning,
   retireProjectionHeadSql,
+  verifyCompletedPublicFilterProjectionSql,
 } from './public-filter-projection-build-control.ts';
 import readOriginalPage from './public-filter-projection-replay-read.sql';
 import readReplayHead from './public-filter-projection-replay-head.sql';
@@ -702,6 +703,36 @@ function observationMatches(build: BuildRow, source: SubjectRow, ownerEpoch: num
     build.subject_revision === source.current_revision &&
     build.security_revision === source.securityRevision &&
     build.current_release === source.currentRelease
+  );
+}
+
+/** Check a completed build at the current Source revision without reopening its selection. */
+export async function verifyCompletedPublicFilterProjectionInSnapshot(
+  tx: CommandTransaction,
+  routeKey: Uint8Array,
+  subjectId: string,
+  terminal: string,
+  release: string,
+  epoch: number,
+  frontier: PublicFilterProjectionFrontier,
+): Promise<boolean> {
+  const home = routePartition(subjectId);
+  const cursor = readCursor(routeKey, frontier);
+  if (!home || !cursor || cursor.phase !== 'dependencies') return false;
+  return (
+    (
+      await tx.query(verifyCompletedPublicFilterProjectionSql, [
+        home.partition,
+        home.route,
+        subjectId,
+        frontier.build,
+        String(frontier.generation),
+        epoch,
+        release,
+        terminal,
+        cursor.partition,
+      ])
+    ).rowCount === 1
   );
 }
 

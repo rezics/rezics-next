@@ -13,6 +13,10 @@ import {
   searchNativeReceivingSqlCost,
 } from '../search/identity-receiving-native-work.ts';
 import projectionHeads from './public-filter-projection-head-page.sql';
+import mappingOwners from './identity-epoch-read-owners.sql';
+import mappingSources from './identity-epoch-read-sources.sql';
+import mappingPending from './identity-epoch-read-pending.sql';
+import mappingCurrent from './identity-terminal-closure-current.sql';
 import projectionSubjects from './search-source-subjects.sql';
 
 import {
@@ -75,6 +79,51 @@ export function identitySearchSourcePageCosts(): readonly PageCost[] {
       return Object.freeze({ sql, work, footprint });
     };
     return Object.freeze([
+      ...(
+        [
+          [mappingOwners.sql, [partition], 4096, 1, 512, [maxHome]],
+          [
+            mappingSources.sql,
+            [
+              uuid,
+              (value: unknown) => typeof value === 'number' && value >= 0 && value <= 65535 && Number.isInteger(value),
+            ],
+            100,
+            4,
+            4096,
+            [maxId, 65535],
+          ],
+          [mappingPending.sql, [partition, uuid], 100, 1, 1024, [maxHome, maxId]],
+          [mappingCurrent.sql, [partition, uuid, uuid], 100, 4, 4096, [maxHome, maxId, maxId]],
+        ] as const
+      ).map(([sql, validators, maximum, points, bytes, example]) =>
+        declare(
+          sql,
+          example.map((value) => Array(maximum).fill(value)),
+          (values) => {
+            const count = Array.isArray(values[0]) ? values[0].length : 0;
+            if (
+              values.length !== validators.length ||
+              count < 1 ||
+              count > maximum ||
+              !values.every(
+                (value, index) => Array.isArray(value) && value.length === count && value.every(validators[index]!),
+              )
+            )
+              return undefined;
+            return Object.freeze({
+              candidateKeys: 0,
+              identityMetadataRows: 0,
+              nativeRows: points * count,
+              nativePoints: points * count,
+              witnessKeys: 0,
+              statements: 1,
+              bytes: bytes * count,
+              emptySeeks: 1,
+            });
+          },
+        ),
+      ),
       declare(sizedSearchIdentityPlanSql(), [maxHome, maxId, 16384], (values) => {
         const [home, plan, size] = values;
         const bytes = searchIdentityPlanBodyWorkBytes(size);

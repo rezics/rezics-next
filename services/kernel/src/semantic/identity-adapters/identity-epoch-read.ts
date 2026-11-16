@@ -28,7 +28,7 @@ import { withRequestDeadline } from '../../request/deadline.ts';
 import type { CommandTransaction } from '../../command/command.ts';
 import { nativeIdentityCapabilities } from '../identity-adapter-bind.ts';
 import type { IdentityNativeReaders, NativeIdentityCapabilities } from '../identity-adapter-port.ts';
-import type { IdentityIntent, IdentityMapping } from './identity-epoch-contract.ts';
+import type { IdentityIntent, IdentityJobRef, IdentityMapping } from './identity-epoch-contract.ts';
 import selectRemainder from '../identity-epoch-mapping-remainder.sql';
 import owners from '../identity-epoch-read-owners.sql';
 import sources from '../identity-epoch-read-sources.sql';
@@ -468,10 +468,20 @@ async function readIdentityMappingsWith(
 /** The caller owns one repeatable-read snapshot of the physical pool. Read the
  * same full native keys as ordinary mapping without opening another checkout
  * or admitting a pending job's unpublished mappings. */
-export async function readReleasedIdentityMappingsInSnapshot(
+export async function readReleasedIdentityMappingsInSnapshot(client: Queryable, originals: readonly string[]) {
+  return readIdentityMappingsInSnapshot(client, originals);
+}
+
+/** Recheck the exact admitted job on the caller's same-Pool support snapshot. */
+export async function readIdentitySupportMappingsInSnapshot(
   client: Queryable,
   originals: readonly string[],
+  job: IdentityJobRef,
 ) {
+  return (await readIdentityMappingsInSnapshot(client, originals, job)).mappings;
+}
+
+async function readIdentityMappingsInSnapshot(client: Queryable, originals: readonly string[], job?: IdentityJobRef) {
   if (originals.length > 100) throw new RangeError('Identity page must contain at most 100 originals');
   const routes = originals.map((id) => {
     const route = routeOf(id);
@@ -504,7 +514,7 @@ export async function readReleasedIdentityMappingsInSnapshot(
     currentRows,
   });
   return {
-    mappings: classifyIdentityMappings(requestsFor(originals, routes), evidence),
+    mappings: classifyIdentityMappings(requestsFor(originals, routes), evidence, job),
     evidence,
   };
 }
