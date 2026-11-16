@@ -119,7 +119,9 @@ async function createNativeContentSystemWithOptions(
   };
   const admin = new Pool({ connectionString: connection('postgres') });
   const authAdmin = new Pool({ connectionString: connection('postgres') });
-  const pool = new Pool({ connectionString: connection(appName) });
+  // Keep the bounded application pool under fixture shutdown custody. Idle
+  // eviction has left an ended pg client registered and prevented the drain.
+  const pool = new Pool({ connectionString: connection(appName), idleTimeoutMillis: 0 });
   configureTestReceiptKeys(pool);
   let closeAuthPool: (() => Promise<void>) | undefined;
   let appCreated = false;
