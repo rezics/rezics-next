@@ -2,10 +2,12 @@ import { expect, test } from 'bun:test';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { converter_revision as bangumiConverterRevision } from '@rezics/conversion/bangumi';
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import { runImportCli } from '../src/cli.ts';
 import { ImportSession } from '../src/import-session.ts';
+import { createImporter } from '../src/importer.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 
 // A local wire proof only. Native authority, stored pixels and disclosure are proved by the kernel journey.
@@ -82,7 +84,7 @@ test('Bangumi CLI sends separately licensed summary and cover through its ordina
           source: 'bangumi',
           external_id: String(raw.id),
           field_group: 'cover',
-          converter_revision: 'bangumi@15',
+          converter_revision: bangumiConverterRevision,
           record_revision: 'unversioned',
         });
         const key = request.headers.get('idempotency-key')!;
@@ -144,6 +146,7 @@ test('Bangumi CLI sends separately licensed summary and cover through its ordina
           yield new TextEncoder().encode(JSON.stringify(payload) + '\n');
         })(),
         fetch: fetchBoundary,
+        createImporter: (options) => createImporter({ ...options }),
         observer: {
           onCoordinator({ importer }) {
             const seal = importer.session.store.seal.bind(importer.session.store);
