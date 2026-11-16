@@ -12,7 +12,7 @@ import {
 } from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const viteDepCacheReadyName = '_ready';
@@ -204,7 +204,7 @@ export function elysiaTypeboxLiveModuleCode(id: string): string | undefined {
   return `export * from ${JSON.stringify(live)};\n`;
 }
 
-/** Full-route optimizer identity used to prebuild the shared test cache before private-network checks. */
+/** Full-route dependency scan defaults for builds. */
 export const webViteClientOptimizeDeps = {
   noDiscovery: false,
   entries: ['src/routes/**/*.tsx', 'src/server.ts', 'src/session/routes.ts'],
@@ -217,6 +217,24 @@ export const webViteClientOptimizeDeps = {
 export const webViteClientShimAliases = [
   { find: /^use-sync-external-store\/shim(?:\/index\.js)?$/, replacement: 'react' },
 ] as const;
+
+const clientTypeboxIncludes = [
+  'typebox',
+  'typebox/compile',
+  'typebox/schema',
+  'typebox/system',
+  'typebox/type',
+  'typebox/value',
+];
+
+/** The scan cannot see TypeBox imports introduced by Elysia's live-module transform. */
+export const webViteTestClientOptimizeDeps = {
+  noDiscovery: false,
+  entries: ['src/server.ts', 'src/session/routes.ts'],
+  holdUntilCrawlEnd: false,
+  include: clientTypeboxIncludes,
+  exclude: [...webViteCalendarOptimizeDeps],
+} as const;
 
 /**
  * Interactive servers keep dependency optimization explicit. Vite's cold scan follows the generated route tree's
@@ -242,12 +260,7 @@ export const webViteWalkClientOptimizeDeps = {
     'react-dom/client',
     'react/jsx-dev-runtime',
     'react/jsx-runtime',
-    'typebox',
-    'typebox/compile',
-    'typebox/schema',
-    'typebox/system',
-    'typebox/type',
-    'typebox/value',
+    ...clientTypeboxIncludes,
     'valibot',
   ],
   exclude: [...webViteCalendarOptimizeDeps],
@@ -325,7 +338,7 @@ export const webViteWorkerSsrEnvironment = {
 
 /** Optimizer inputs that decide what is pre-bundled. Worktree paths and serve plugin lists are restamped later. */
 export const webViteOptimizerIdentity = {
-  client: webViteClientOptimizeDeps,
+  client: webViteTestClientOptimizeDeps,
   walkClient: webViteWalkClientOptimizeDeps,
   clientResolveAliases: webViteClientShimAliases.map(({ find, replacement }) => ({
     find: find.source,
@@ -341,6 +354,7 @@ export const webViteOptimizerIdentity = {
 } as const;
 
 export type ViteDepCacheReady = {
+  workspaceRoot: string;
   lockHash: string;
   builtAt: string;
 };
@@ -361,6 +375,7 @@ export type PrepareViteDepCacheOptions = {
 
 export type ViteDepCache = {
   directory: string;
+  workspaceRoot: string;
   lockHash: string;
   reused: boolean;
 };
@@ -648,9 +663,32 @@ export function bindViteDepCacheAlign(
 }
 
 /** Copy published dependency output into a run-private directory the Vite process may restamp. */
-export function materializeViteDepCache(published: ViteDepCache, runDirectory: string): string {
+export function materializeViteDepCache(published: ViteDepCache, runDirectory: string, workspaceRoot: string): string {
   rmSync(runDirectory, { recursive: true, force: true });
   mkdirSync(dirname(runDirectory), { recursive: true, mode: 0o700 });
   cpSync(published.directory, runDirectory, { recursive: true });
+  const runWorkspaceRoot = realpathSync(workspaceRoot);
+  for (const metadataFile of viteDepCacheMetadataFiles) {
+    const runMetadata = join(runDirectory, metadataFile);
+    if (!existsSync(runMetadata)) continue;
+    const publishedDeps = dirname(join(published.directory, metadataFile));
+    const runDeps = dirname(runMetadata);
+    const metadata = JSON.parse(readFileSync(runMetadata, 'utf8')) as {
+      optimized?: Record<string, { src?: string }>;
+    };
+    // Vite stores src and file relative to the metadata directory. The emitted files move with the cache,
+    // while sources live in the consuming checkout or in an external dependency store.
+    for (const dependency of Object.values(metadata.optimized ?? {})) {
+      if (!dependency.src) continue;
+      const buildSource = resolve(publishedDeps, dependency.src);
+      const workspacePath = relative(published.workspaceRoot, buildSource);
+      const source =
+        workspacePath === '..' || workspacePath.startsWith(`..${sep}`) || isAbsolute(workspacePath)
+          ? buildSource
+          : resolve(runWorkspaceRoot, workspacePath);
+      dependency.src = relative(runDeps, source).replaceAll(sep, '/');
+    }
+    writeFileSync(runMetadata, `${JSON.stringify(metadata, null, 2)}\n`);
+  }
   return runDirectory;
 }

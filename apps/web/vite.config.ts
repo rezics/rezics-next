@@ -22,6 +22,7 @@ import {
   elysiaTypeboxLiveModuleCode,
   webViteClientShimAliases,
   webViteClientOptimizeDepsFor,
+  webViteTestClientOptimizeDeps,
   webViteTypeboxWorkerGraph,
   webViteWarmSsrEnvName,
   webViteWorkerSsrEnvironment,
@@ -388,7 +389,9 @@ export default defineConfig((context) => {
     ? resolve(workspaceRoot, '.temp/web-vite', process.env.REZICS_WALK_STACK_SLOT)
     : undefined;
   const selectedCacheDir = viteCacheDir ?? walkCacheDir;
-  const clientOptimizeDeps = webViteClientOptimizeDepsFor(process.env, context.command);
+  const clientOptimizeDeps = testRuntime
+    ? webViteTestClientOptimizeDeps
+    : webViteClientOptimizeDepsFor(process.env, context.command);
   const optimizer = testRuntime ? 'test-bounded' : clientOptimizeDeps.entries.length > 0 ? 'route-scan' : 'on-demand';
   webStartupLog('config-selected', {
     command: context.command,
@@ -397,7 +400,7 @@ export default defineConfig((context) => {
     executable: basename(process.execPath),
     vite: viteIdentity,
     optimizer,
-    clientHold: testRuntime ? 'disabled' : clientOptimizeDeps.holdUntilCrawlEnd ? 'enabled' : 'disabled',
+    clientHold: clientOptimizeDeps.holdUntilCrawlEnd ? 'enabled' : 'disabled',
     workerOptimizer: 'pinned-include-no-discovery',
     paraglide: testRuntime ? 'prepared-only' : 'live',
     cloudflareLocal: process.env.CLOUDFLARE_VITE_FORCE_LOCAL === 'true' ? 'enabled' : 'unset',
@@ -422,10 +425,9 @@ export default defineConfig((context) => {
       // Keep client optimization bounded: Vite's cold scanner follows generated route chunks and walks every reader,
       // swapping dependency hashes while the first page is loading. Known optimizer dependencies are explicit;
       // unoptimized ESM modules remain available when a later route is visited.
-      noDiscovery: testRuntime ? false : clientOptimizeDeps.noDiscovery,
-      entries: testRuntime ? ['src/server.ts', 'src/session/routes.ts'] : [...clientOptimizeDeps.entries],
-      holdUntilCrawlEnd: testRuntime ? false : clientOptimizeDeps.holdUntilCrawlEnd,
-      include: testRuntime ? [] : [...clientOptimizeDeps.include],
+      ...clientOptimizeDeps,
+      entries: [...clientOptimizeDeps.entries],
+      include: [...clientOptimizeDeps.include],
       exclude: [...clientOptimizeDeps.exclude],
     },
     ssr: {
