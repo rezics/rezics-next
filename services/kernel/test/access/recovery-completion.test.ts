@@ -224,6 +224,20 @@ if (crashProcess) {
     async () => {
       const human = await person('native_recovery');
       const other = await person('unrelated_recovery');
+      const unfenced = await snapshot(other.accountId);
+      await startRecovery(other.accountId, other.email);
+      expect(
+        (
+          await request('/recovery/complete', {
+            account_id: other.accountId,
+            token: delivery,
+            new_password: nextPassword,
+          })
+        ).status,
+      ).toBe(401);
+      const refused = await snapshot(other.accountId);
+      expect(refused.fence).toEqual(unfenced.fence);
+      expect(refused.credential).toEqual(unfenced.credential);
       await fixturePhase('initialFence', () =>
         bindings.internalLifecycle.raiseFence({ accountId: human.accountId, key: `${human.accountId}:initial` }),
       );

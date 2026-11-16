@@ -16,6 +16,7 @@ import websiteAdvance from './auth-barriers-website-advance.sql';
 import type { BarrierProofPort, TrustedAccessPorts } from '@rezics/auth-contract';
 import type { AuthBindingCapabilities } from './auth-bindings.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';
+import { LifecycleDeniedError } from './contract/errors.ts';
 import type { createLifecycleInternals, LifecycleFenceReceipt } from './lifecycle.ts';
 import { openingManagement } from './operator.ts';
 
@@ -160,7 +161,15 @@ export function createAuthBarrierCapabilities({
   // is authorized by the native command receipt, including the original floor.
   const trustedAccess: Ports = {
     invalidateAccount: async (input) => translate(await capabilities.invalidateAccount(input)),
-    authorizeRecovery: async (input) => translate(await capabilities.authorizeRecovery(input)),
+    async authorizeRecovery(input) {
+      try {
+        return translate(await capabilities.authorizeRecovery(input));
+      } catch (error) {
+        if (error instanceof LifecycleDeniedError || error instanceof AuthBindingDeniedError)
+          throw Object.assign(new Error('Recovery barrier denied', { cause: error }), { status: 401 });
+        throw error;
+      }
+    },
     async confirmBarrier(input) {
       return await lifecycle.confirmBarrier({ ...input });
     },
