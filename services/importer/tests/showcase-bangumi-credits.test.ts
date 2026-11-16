@@ -4,7 +4,6 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand, BatchStatement, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
-import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { createImportTransport, type ReviewedSubjectRead } from '../src/import-client.ts';
 import {
   crossMediaAliases,
@@ -101,38 +100,9 @@ test('selected anime staff and cast use the default acknowledged role adapter an
   const read = (id: string): ReviewedSubjectRead => {
     const subject = subjects.get(id);
     if (!subject) throw new Error('Missing fixture subject');
-    const identity = /^(?:(person|character):)?([0-9]+)$/u.exec(subject.sourceExternalId);
-    const property =
-      identity?.[1] === 'person'
-        ? 'wdt:P6298'
-        : identity?.[1] === 'character'
-          ? 'wdt:P6296'
-          : identity
-            ? 'wdt:P5732'
-            : undefined;
-    const statements = property
-      ? {
-          ...subject.statements,
-          [property]: [
-            {
-              property: { id: property },
-              value: { type: 'value', content: identity![2] },
-              rank: 'normal',
-              references: [
-                {
-                  parts: [
-                    {
-                      property: { id: 'schema:url' },
-                      value: { type: 'value', content: bangumiRecordUrl(subject.sourceExternalId) },
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        }
-      : subject.statements;
-    return { subject: { ...subject, statements } } as unknown as ReviewedSubjectRead;
+    return {
+      subject: { ...subject, statements: structuredClone(subject.statements) },
+    } as unknown as ReviewedSubjectRead;
   };
   const basePort = {
     setSourceRecordMetadata: metadata.setSourceRecordMetadata,
@@ -246,6 +216,14 @@ test('selected anime staff and cast use the default acknowledged role adapter an
         providers: ['bangumi'],
         readPublicSubject: (id) => publicClient.readSubject(id),
         prepareBangumiCreatorCreditBindings: async ({ result: baseResult, drafts }) => {
+          expect(baseResult.readings.some((reading) => reading.externalId === '101')).toBe(false);
+          expect(baseResult.gaps).toContainEqual(
+            expect.objectContaining({
+              record: { external_id: '101' },
+              property: 'wdt:P5732',
+              reason: 'Current source identity association is unknown',
+            }),
+          );
           resolution = await prepareBangumiCreatorCreditBindings({
             plan,
             result: baseResult,
@@ -280,20 +258,21 @@ test('selected anime staff and cast use the default acknowledged role adapter an
       publicClient,
       vocabularyRequirements: result.creditVocabularyRequirements,
     });
-    const workId = result.readings.find((reading) => reading.externalId === '101')!.subject.subject!.id!;
+    function publishedBangumiId(key: string): string {
+      const record = publication.published.find((row) => row.provider === 'bangumi' && row.sourceKey === key);
+      if (!record) throw new Error(`Missing published Bangumi Subject for ${key}`);
+      return record.subjectId;
+    }
+    const workId = publishedBangumiId('101');
+    const directorId = publishedBangumiId('person:11');
+    const performerId = publishedBangumiId('person:12');
+    const characterId = publishedBangumiId('character:21');
     const work = (await publicClient.readSubject(workId)).subject as {
       statements: Record<string, readonly BatchStatement[]>;
     };
-    const staff = work.statements['schema:director']?.find(
-      (statement) =>
-        valueContent(statement) ===
-        result.readings.find((reading) => reading.externalId === 'person:11')!.subject.subject!.id,
-    );
-    const voice = work.statements['wdt:P725']?.find(
-      (statement) =>
-        valueContent(statement) ===
-        result.readings.find((reading) => reading.externalId === 'person:12')!.subject.subject!.id,
-    );
+    expect(valueContent(work.statements['wdt:P5732']?.[0])).toBe('101');
+    const staff = work.statements['schema:director']?.find((statement) => valueContent(statement) === directorId);
+    const voice = work.statements['wdt:P725']?.find((statement) => valueContent(statement) === performerId);
     expect(publication.status).toBe('incomplete');
     expect(accepted.size).toBeGreaterThan(0);
     expect(result.creditRoles?.map((item) => item.code)).toEqual(['2', '41']);
@@ -321,10 +300,7 @@ test('selected anime staff and cast use the default acknowledged role adapter an
     ).toBe(true);
     expect(
       voice?.qualifiers?.some(
-        (qualifier) =>
-          qualifier.property.id === 'wdt:P453' &&
-          valueContent(qualifier) ===
-            result.readings.find((reading) => reading.externalId === 'character:21')!.subject.subject!.id,
+        (qualifier) => qualifier.property.id === 'wdt:P453' && valueContent(qualifier) === characterId,
       ),
     ).toBe(true);
     expect(JSON.stringify(voice)).not.toContain('Association commentary');
