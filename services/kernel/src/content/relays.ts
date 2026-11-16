@@ -11,7 +11,16 @@ import { WORK_APPLICATION, type WorkClient } from '../work/client.ts';
 import { createBoardEffect } from './board-projection.ts';
 import { bindAuthorErasureWorkflow } from './erasure-workflow-identity.ts';
 import { CONTENT_EVENTS } from './events.ts';
-import { SEMANTIC_EVENTS, SUBJECT_MERGED } from '../semantic/events.ts';
+import {
+  CANONICAL_GENERATION_COMMITTED,
+  CANONICAL_GENERATION_REBUILD_CONTINUED,
+  SEMANTIC_EVENTS,
+  SUBJECT_MERGED,
+} from '../semantic/events.ts';
+import {
+  deliverCanonicalGenerationEvent,
+  type CanonicalGenerationReceiver,
+} from '../semantic/canonical-generation-delivery.ts';
 import type { RealmSubjectIdentityMapping } from './contract/index.ts';
 import { createModerationDecisionEffect } from './moderation-decisions.ts';
 import { createReportOutcomeEffect } from './report-outcomes.ts';
@@ -186,12 +195,21 @@ function enqueueSubjectReactionMergeEffect(pool: Pool, client: WorkClient): Effe
   };
 }
 
+function createCanonicalWorkEffect(pool: Pool, receive: CanonicalGenerationReceiver): Effect {
+  return {
+    name: 'content_canonical_work',
+    types: [CANONICAL_GENERATION_COMMITTED, CANONICAL_GENERATION_REBUILD_CONTINUED],
+    run: (event) => deliverCanonicalGenerationEvent(pool, event, receive),
+  };
+}
+
 /** Add once through WorkContext.addEffects before the sole worker is launched.
  * This static list owns no runner, workflow registration or checkpoint. */
 export function contentEffects(
   pool: Pool,
   client: WorkClient,
   readIdentityMappings: (pool: Pool, originals: readonly string[]) => Promise<readonly RealmSubjectIdentityMapping[]>,
+  receiveCanonicalGeneration?: CanonicalGenerationReceiver,
 ): Effect[] {
   const realmSubject = createRealmSubjectLifecycle({
     pool,
@@ -220,6 +238,7 @@ export function contentEffects(
     enqueueEffect(pool, client, 'content_url_import', [importRequested], 'importFromUrl'),
     enqueueSubjectReactionMergeEffect(pool, client),
     realmSubject.effect,
+    ...(receiveCanonicalGeneration ? [createCanonicalWorkEffect(pool, receiveCanonicalGeneration)] : []),
   ];
 }
 

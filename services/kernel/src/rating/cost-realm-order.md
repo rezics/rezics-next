@@ -130,15 +130,12 @@ memory is O(R); indexed update work is O(R log N). Ordinary figure upsert adds a
 (BEFORE INSERT and conflict UPDATE), each with two point reads; deletes add none. Index construction is migration
 DDL work over retained rank rows, not request work. There is no migration data backfill or request-time repair.
 
-Required owner binding: Rating's native startup/resume path must durably page this command for retained homes;
-Semantic's committed Subject-generation delivery must arrange the same Rating work for every changed home.
-The first writable receiving paths are Rating's `public-figure.ts` (`resumeRealmRankPublication`) and
-`work-module.ts` composition, plus Semantic's Subject change delivery; those are outside this change's write
-boundary. Enqueue by home, retain
-the native command receipt, and acknowledge only after `complete` for the current generation, rescheduling if
-another change arrives. Until that binding completes, missing/stale coverage returns `index_not_ready`; installing
-the migration alone does not claim a usable Search journey. The read, storage, score-update hook and paged rebuild
-producer are delivered together; no consumer wiring or native acceptance is inferred.
+The default worker binds this Rating command to Content's canonical-work effect. Semantic's startup inventory
+and mutation wakes notify outstanding homes, including retained empty homes. Each receiving command commits one
+page. A full page emits a durable continuation with the original notification. A terminal page verifies coverage
+for the locked current generation and advances Semantic's delivery watermark for the original generation in the
+same transaction. A later notification can acknowledge a newer generation; missing or stale coverage continues
+to return `index_not_ready`.
 
 For a complete Search page, preserve the existing collector's useful size U (1–100), at most three rounds,
 `B <= min(200, 2 * remainingUseful + 1, remainingCandidateAllowance)`, and at most
