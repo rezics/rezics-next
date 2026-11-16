@@ -8547,7 +8547,7 @@ async function uploadRun(
         '--stats',
         '--info=progress2',
         '--rsync-path=flock -s /srv/rezics-check/bases/.lock rsync',
-        ...(fetchedGit ? ['--ignore-times'] : base.base ? ['--checksum', `--copy-dest=${ROOT}/bases/current`] : []),
+        ...(fetchedGit ? ['--checksum'] : base.base ? ['--checksum', `--copy-dest=${ROOT}/bases/current`] : []),
         '--mkpath',
         '--from0',
         '--files-from=-',

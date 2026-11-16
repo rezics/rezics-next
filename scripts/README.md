@@ -830,7 +830,8 @@ remain separate questions for the existing compiler/health chain; this cohort su
    After a successful Git fetch, the overlay includes working edits and untracked inputs plus frozen regular files whose
    permission mode differs from the frozen index tree's checkout mode (`100644` restores as `0644`, `100755` as
    `0755`). The bounded candidate selection keeps Git-clean permission-only changes in the same rsync transfer, which
-   preserves their mode. Exact remote source verification still checks file modes, content digests, execute bits and
+   applies their mode in place when the file checksum matches. Changed contents transfer even when length and
+   timestamps match. Exact remote source verification still checks file modes, content digests, execute bits and
    links; the overlay does not broaden to every tracked file.
    Decision: fetched Git overlays include only frozen regular candidates whose permissions differ from the frozen index
    tree's checkout mode; exact source verification remains authoritative.

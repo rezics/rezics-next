@@ -4054,7 +4054,9 @@ test.each([
       const files = upload.files as string[];
       if (gitFetchExit === 0) {
         expect(files).toEqual(['src/untracked.ts']);
-        expect(upload.args as string[]).not.toContain('--checksum');
+        expect(upload.args as string[]).toContain('--checksum');
+        expect(upload.args as string[]).not.toContain('--ignore-times');
+        expect(upload.args as string[]).not.toContain('--copy-dest=/srv/rezics-check/bases/current');
       } else expect(files.some((file) => file.endsWith('/snapshot.pack'))).toBe(true);
     }
     expect(result.stderr.match(/check-git: Writing objects: 100%/g)).toHaveLength(1);
