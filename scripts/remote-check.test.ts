@@ -2132,7 +2132,7 @@ function workspace(tmpfs = false): string {
 }
 
 test('cleanup-only reconciliation removes one exact run without a native receipt or output probe', async () => {
-  const fixture = scenario({ a: {} });
+  const fixture = scenario({ other: {}, a: {} });
   const previous = {
     PATH: process.env.PATH,
     FAKE_DIR: process.env.FAKE_DIR,
@@ -2174,6 +2174,8 @@ test('cleanup-only reconciliation removes one exact run without a native receipt
     });
     const events = fixture.events();
     expect(events.some((event) => event.kind === 'cleanup')).toBe(true);
+    expect(new Set(events.map((event) => event.address))).toEqual(new Set(['ops@a.test']));
+    expect(events.some((event) => event.kind === 'rsync' || event.kind === 'run')).toBe(false);
     expect(events.some((event) => event.kind === 'status')).toBe(false);
     expect(events.some((event) => event.kind === 'returns')).toBe(false);
   } finally {
@@ -4073,6 +4075,51 @@ test.each([
     if (rejectDelete) expect(result.stderr).toContain('cleanup refused');
   },
 );
+
+test.each(['push', 'fetch'])('a disposable worktree remains removable after Git %s fallback', async (failure) => {
+  const fixture = scenario({ a: { available: 8e9, gitFetchExit: 1 } });
+  const candidate = workspace();
+  const frozen = join(candidate, '.temp/frozen');
+  const origin = join(candidate, '.temp/origin.git');
+  const git = (...args: string[]) => {
+    const result = spawnSync('git', args, { cwd: candidate, encoding: 'utf8' });
+    expect(result.status, result.stderr).toBe(0);
+  };
+  git('init', '--bare', '-q', origin);
+  git('remote', 'add', 'origin', origin);
+  if (failure === 'push')
+    writeFileSync(join(origin, 'hooks/pre-receive'), '#!/bin/sh\nexit 1\n', { mode: 0o700 });
+  git('worktree', 'add', '--detach', frozen, 'HEAD');
+  writeFileSync(join(frozen, '.gitignore'), '/.temp/\n');
+  const cache = join(frozen, '.temp/remote-check-git-cache/rezics-native-git-snapshot-v1');
+  try {
+    const script = `
+      import { remoteCheck, readHosts } from ${JSON.stringify(remoteCheck)};
+      process.exitCode = await remoteCheck({
+        hosts: readHosts(process.env.KERNEL_CHECK_REMOTE),
+        workspace: ${JSON.stringify(frozen)},
+        runtimeProducer: ${JSON.stringify(candidate)},
+        reuseGitSnapshotCache: false,
+        command: ['bun', 'test'],
+      }, new AbortController().signal);
+    `;
+    const { status, stderr } = spawnSync(process.execPath, ['--eval', script], {
+      env: fixture.env,
+      encoding: 'utf8',
+      timeout: 10_000,
+    });
+    expect(status, stderr).toBe(0);
+    expect(stderr).toContain(`GitHub ${failure === 'push' ? 'publication' : 'fetch'} unavailable`);
+    const upload = fixture.events().find((event) => event.kind === 'rsync');
+    expect((upload?.files as string[]).filter((file) => file.endsWith('/snapshot.pack'))).toHaveLength(1);
+    git('worktree', 'remove', '--force', frozen);
+    expect(existsSync(frozen)).toBe(false);
+  } finally {
+    if (existsSync(cache)) {
+      for (const entry of readdirSync(cache)) chmodSync(join(cache, entry), 0o755);
+    }
+  }
+});
 
 test('a duplicate remote Git identity fails without fallback upload or run cleanup', async () => {
   const fixture = scenario({ a: { available: 8e9, gitFetchExit: 73 } });

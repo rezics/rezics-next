@@ -606,6 +606,7 @@ test('frozen check-run candidates bind the original candidate runtime and keep s
     transport: async (options) => {
       transports += 1;
       expect(options.runtimeProducer).toBe(fixture.root);
+      expect(options.reuseGitSnapshotCache).toBe(false);
       expect(existsSync(join(options.workspace, 'node_modules'))).toBe(false);
       const runtime = repositoryBun(options.workspace, options.runtimeProducer ?? options.workspace);
       expect(options.runtime).toEqual(runtime);
@@ -1121,6 +1122,7 @@ test('final settlement follows verified local cleanup and terminal replay never 
     transport: async (options: RemoteCheck) => {
       const native = receipt('a', 0);
       physicalWorkspace = options.workspace;
+      expect(options.reuseGitSnapshotCache).toBe(false);
       await options.allocated?.({ host: 'a', run: native.run });
       options.completed?.(native);
       options.settled?.(remoteSettlement(options, native));

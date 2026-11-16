@@ -777,6 +777,7 @@ export async function stageCheckGit(
   workspace: string,
   artifactDirectory: string,
   publication?: PublicationOptions,
+  { reuseCache = true }: { reuseCache?: boolean } = {},
 ): Promise<string> {
   const now = publication?.now ?? Date.now;
   const deadlineMs = publication?.deadlineMs ?? now() + 900_000;
@@ -932,7 +933,7 @@ export async function stageCheckGit(
         if (intentRecorded) void releaseCheckGit(source, recordPath);
       }
     }
-    const cacheRoot = reusableCacheRoot(source);
+    const cacheRoot = reuseCache ? reusableCacheRoot(source) : undefined;
     if (cacheRoot !== undefined) {
       mkdirSync(cacheRoot, { recursive: true, mode: 0o700 });
       if (!isDirectory(cacheRoot)) throw new Error('check-git: native Git snapshot cache directory is unsafe');

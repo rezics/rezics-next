@@ -333,6 +333,8 @@ export type RemoteCheck = {
   /** Hosts skipped for this invocation; they remain in the configured pool for other callers. */
   excludedHosts?: string[];
   workspace: string;
+  /** Disable reusable immutable Git packs in a disposable workspace owned by the caller. */
+  reuseGitSnapshotCache?: boolean;
   cwd?: string;
   command: string[];
   /** Repository-declared workspace preparation, run after frozen install and before the command. */
@@ -8425,6 +8427,7 @@ async function uploadRun(
     }
     if (commandUsesBun(options.command)) {
       const localTemp = join(resolve(options.workspace), '.temp');
+      const staging = { reuseCache: options.reuseGitSnapshotCache !== false };
       mkdirSync(localTemp, { recursive: true, mode: 0o700 });
       if (!lstatSync(localTemp).isDirectory())
         throw new Error('remote-check: local Git staging directory is unavailable');
@@ -8438,7 +8441,7 @@ async function uploadRun(
       if (!transfer.stage) {
         const directory = mkdtempSync(join(localTemp, `remote-check-git-${id}-`));
         try {
-          const manifest = await stageCheckGit(options.workspace, directory, {
+          const publication = {
             ref: `refs/checks/${randomUUID()}`,
             retain: options.expectedSourceManifest !== undefined,
             deadlineMs:
@@ -8448,7 +8451,8 @@ async function uploadRun(
                 'REMOTE_CHECK_PREPARATION_TIMEOUT_MS',
                 DEFAULT_PREPARATION_TIMEOUT_MS,
               ),
-          });
+          };
+          const manifest = await stageCheckGit(options.workspace, directory, publication, staging);
           transfer.stage = { directory, manifest };
         } catch (error) {
           rmSync(directory, { recursive: true, force: true });
@@ -8524,7 +8528,7 @@ async function uploadRun(
       if (!fetchedGit) {
         if (publication.remote) {
           localGitStage = mkdtempSync(join(localTemp, `remote-check-git-${id}-fallback-`));
-          manifestPath = await stageCheckGit(options.workspace, localGitStage);
+          manifestPath = await stageCheckGit(options.workspace, localGitStage, undefined, staging);
         } else localGitStage = undefined;
         const artifactDirectory = dirname(manifestPath);
         const packPath = join(artifactDirectory, 'snapshot.pack');
