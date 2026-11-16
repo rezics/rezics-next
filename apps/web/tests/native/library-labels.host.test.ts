@@ -1,17 +1,18 @@
-import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
-import { chromium, type BrowserContext, type Page } from 'playwright';
+import { expect } from 'bun:test';
+import { chromium, type Locator, type Page } from 'playwright';
 import { startAuthStack, type NativeAuthStack } from './auth-stack';
 import { createLibraryLabelsSubject } from './library-labels-fixture';
+import { currentNativeLifecycle, NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle';
 import { startNativeWebStack, type NativeWebStack } from './stack';
 
-setDefaultTimeout(300_000);
+const lifecycle = new NativeTestLifecycle('native Library label journeys');
 let stack: NativeWebStack;
 let auth: NativeAuthStack;
 let subject: Awaited<ReturnType<typeof createLibraryLabelsSubject>>;
 
-beforeAll(async () => {
+nativeBeforeAll(lifecycle, 300_000, async () => {
   stack = await startNativeWebStack();
-  await expect(await stack.kernel('/v1/definitions/active')).toBeInstanceOf(Response);
+  expect(await stack.kernel('/v1/definitions/active')).toBeInstanceOf(Response);
   const opened = await stack.kernel(
     '/v1/platform/exposure/personal_library:open',
     { method: 'POST', headers: { 'idempotency-key': `"${crypto.randomUUID()}"` } },
@@ -32,153 +33,200 @@ beforeAll(async () => {
     const response = await stack.kernel(path, {}, 'alice');
     if (!response.ok)
       throw new Error(
-        `Commerce label producer response: GET ${path} returned ${response.status} ${await response.text()}`,
+        `Native Library label response: GET ${path} returned ${response.status} ${await response.text()}`,
       );
   }
   auth = await startAuthStack(stack);
-}, 300_000);
+});
+nativeAfterAll(lifecycle, 180_000);
 
-afterAll(async () => {
-  await auth?.stop();
-  await stack?.stop();
-}, 180_000);
-
-async function subjectPage(context: BrowserContext): Promise<Page> {
-  const page = context.pages().at(-1) ?? (await context.newPage());
+async function openSubject(page: Page): Promise<void> {
   const response = await page.goto(`${stack.web}/en/subjects/${subject.id}`, { waitUntil: 'domcontentloaded' });
   expect(response?.status()).toBe(200);
   expect(response?.headers()['cache-control']).toMatch(/private|no-store/i);
   await page.locator('#account-menu-button').waitFor({ state: 'visible' });
-  return page;
 }
 
-function missingLabelProducer(): never | void {
+async function labelRequestOffset(): Promise<number> {
+  await stack.refreshKernelRequests();
+  return stack.kernelRequests().length;
+}
+
+async function checkLabelProducer(since: number) {
+  await stack.refreshKernelRequests();
   const request = stack
     .kernelRequests()
+    .slice(since)
     .find(
       ({ url, failure }) =>
         Boolean(failure) && (url.startsWith('/v1/libraryLabelAssignments') || url.startsWith('/v1/libraryLabels')),
     );
   if (request?.failure) {
     throw new Error(
-      `Commerce label producer response: ${request.method} ${request.url} returned ${request.failure.status} ${request.failure.body}`,
+      `Native Library label response: ${request.method} ${request.url} returned ${request.failure.status} ${request.failure.body}`,
     );
   }
 }
 
-async function waitForLabelOutcome(page: Page, expected: string): Promise<void> {
-  const target = page.locator(expected).first();
-  await Promise.race([
-    target.waitFor({ state: 'visible' }),
-    page.getByRole('alert').first().waitFor({ state: 'visible' }),
-  ]);
-  missingLabelProducer();
-  await target.waitFor({ state: 'visible' });
+async function waitForLabelOutcome(page: Page, target: Locator, since: number): Promise<void> {
+  try {
+    await Promise.race([
+      target.waitFor({ state: 'visible' }),
+      page.getByRole('alert').first().waitFor({ state: 'visible' }),
+    ]);
+    await target.waitFor({ state: 'visible' });
+  } finally {
+    await checkLabelProducer(since);
+  }
 }
 
-test('the native served subject page keeps labels private between two Auth-signed-in owners', async () => {
-  const alice = await auth.signIn('alice');
-  const beforeAlice = stack.kernelRequests().length;
-  const alicePage = await subjectPage(alice.context);
-  missingLabelProducer();
-  await alicePage.getByRole('button', { name: /add.*label/i }).click();
-  const picker = alicePage.locator('[data-subject-label-picker]');
-  await picker.getByRole('textbox').fill('Alice private label');
-  await alicePage.getByRole('button', { name: /create.*Alice private label/i }).click();
-  await waitForLabelOutcome(alicePage, '[data-subject-label-chip]:has-text("Alice private label")');
-  const labelLink = alicePage.locator('[data-subject-label-chip] a').filter({ hasText: 'Alice private label' });
-  const shelfHref = await labelLink.getAttribute('href');
-  expect(shelfHref).toMatch(/^\/en\/library\?label=[0-9a-f-]+$/i);
-  const foreignLabelId = new URL(shelfHref!, 'https://rezics.example.test').searchParams.get('label');
-  const beforeShelf = stack.kernelRequests().length;
-  await labelLink.click();
-  await alicePage.getByRole('heading', { level: 1, name: 'Alice private label' }).waitFor();
-  await expect(alicePage.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/);
-  const shelfReads = stack
-    .kernelRequests()
-    .slice(beforeShelf)
-    .filter(({ url }) => url.startsWith('/v1/libraryLabelAssignments'));
-  expect(shelfReads).toHaveLength(1);
-  const shelfQuery = new URL(shelfReads[0]!.url, stack.kernelOrigin).searchParams;
-  expect(shelfQuery.get('view')).toBe('FULL');
-  expect(shelfQuery.get('labelId')).toBe(foreignLabelId);
-  await subjectPage(alice.context);
-
-  const anonymousContext = await chromium.launch();
-  try {
-    const anonymousPage = await anonymousContext.newPage();
-    const beforeAnonymous = stack.kernelRequests().length;
-    const response = await anonymousPage.goto(`${stack.web}/en/subjects/${subject.id}`, {
-      waitUntil: 'domcontentloaded',
-    });
-    expect(response?.status()).toBe(200);
-    expect(await anonymousPage.locator('[data-subject-label-chip]').count()).toBe(0);
-    expect(await anonymousPage.locator('body').innerText()).not.toContain('Alice private label');
-    expect(
-      stack
+nativeTest(
+  'the native served subject page keeps labels private between two Auth-signed-in owners',
+  300_000,
+  async () => {
+    const alice = (await auth.signIn('alice')).continueOnPage();
+    const beforeAlice = await labelRequestOffset();
+    let labelId: string;
+    try {
+      await openSubject(alice);
+      await checkLabelProducer(beforeAlice);
+      await alice.getByRole('button', { name: 'Add a label', exact: true }).click();
+      const picker = alice.locator('[data-subject-label-picker]');
+      await picker.getByRole('textbox').fill('Alice private label');
+      await picker.getByRole('button', { name: 'Create “Alice private label”', exact: true }).click();
+      await alice.getByRole('heading', { name: 'Review label assignment', exact: true }).waitFor({ state: 'visible' });
+      const beforeApply = await labelRequestOffset();
+      await alice.getByRole('button', { name: 'Apply assignment', exact: true }).click();
+      const labelLink = alice.locator('[data-subject-label-chip]').getByRole('link', {
+        name: 'Alice private label',
+        exact: true,
+      });
+      await waitForLabelOutcome(alice, labelLink, beforeApply);
+      const shelfHref = await labelLink.getAttribute('href');
+      expect(shelfHref).toMatch(/^\/en\/library\?label=[0-9a-f-]+$/i);
+      const selectedId = new URL(shelfHref!, stack.web).searchParams.get('label');
+      if (!selectedId) throw new Error('The exact private label shelf has no label identity');
+      labelId = selectedId;
+      const beforeShelf = await labelRequestOffset();
+      await labelLink.click();
+      await alice.getByRole('heading', { level: 1, name: 'Alice private label', exact: true }).waitFor();
+      expect(await alice.locator('meta[name="robots"]').getAttribute('content')).toMatch(/noindex/);
+      await checkLabelProducer(beforeShelf);
+      const shelfReads = stack
         .kernelRequests()
-        .slice(beforeAnonymous)
-        .some(({ url }) => url.startsWith('/v1/libraryLabelAssignments')),
-    ).toBe(false);
-  } finally {
-    await anonymousContext.close();
-  }
+        .slice(beforeShelf)
+        .filter(({ url }) => url.startsWith('/v1/libraryLabelAssignments'));
+      expect(shelfReads).toHaveLength(1);
+      const shelfQuery = new URL(shelfReads[0]!.url, stack.kernelOrigin).searchParams;
+      expect(shelfQuery.get('view')).toBe('FULL');
+      expect(shelfQuery.get('labelId')).toBe(labelId);
+    } finally {
+      await alice.close();
+    }
+    const anonymous = await (await auth.context('anonymous')).newPage();
+    try {
+      const beforeAnonymous = await labelRequestOffset();
+      const response = await anonymous.goto(`${stack.web}/en/subjects/${subject.id}`, {
+        waitUntil: 'domcontentloaded',
+      });
+      expect(response?.status()).toBe(200);
+      await anonymous.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+      expect(await anonymous.locator('[data-subject-label-chip]').count()).toBe(0);
+      expect(await anonymous.locator('body').innerText()).not.toContain('Alice private label');
+      await stack.refreshKernelRequests();
+      expect(
+        stack
+          .kernelRequests()
+          .slice(beforeAnonymous)
+          .some(({ url }) => url.startsWith('/v1/libraryLabelAssignments')),
+      ).toBe(false);
+    } finally {
+      await anonymous.close();
+    }
+    const bob = (await auth.signIn('bob')).continueOnPage();
+    try {
+      const beforeBob = await labelRequestOffset();
+      await openSubject(bob);
+      expect(await bob.locator('[data-subject-label-chip]').count()).toBe(0);
+      expect(await bob.locator('body').innerText()).not.toContain('Alice private label');
+      await checkLabelProducer(beforeBob);
+      const aliceRead = stack
+        .kernelRequests()
+        .slice(beforeAlice, beforeBob)
+        .find(({ url }) => url.startsWith('/v1/libraryLabelAssignments'));
+      const bobRead = stack
+        .kernelRequests()
+        .slice(beforeBob)
+        .find(({ url }) => url.startsWith('/v1/libraryLabelAssignments'));
+      expect(aliceRead?.authorization?.startsWith('Bearer ')).toBe(true);
+      expect(bobRead?.authorization?.startsWith('Bearer ')).toBe(true);
+      expect(bobRead?.authorization !== aliceRead?.authorization).toBe(true);
+      const foreignShelf = await bob.goto(`${stack.web}/en/library?label=${encodeURIComponent(labelId)}`);
+      expect(foreignShelf?.status()).toBe(404);
+      await bob.getByRole('heading', { level: 1, name: /not found/i }).waitFor({ state: 'visible' });
+      expect(await bob.locator('meta[name="robots"]').getAttribute('content')).toMatch(/noindex/);
+    } finally {
+      await bob.close();
+    }
+  },
+  lifecycle,
+);
 
-  const bob = await auth.signIn('bob');
-  const beforeBob = stack.kernelRequests().length;
-  const bobPage = await subjectPage(bob.context);
-  expect(await bobPage.locator('[data-subject-label-chip]').count()).toBe(0);
-  expect(await bobPage.locator('body').innerText()).not.toContain('Alice private label');
-  const foreignShelf = await bobPage.goto(`${stack.web}/en/library?label=${encodeURIComponent(foreignLabelId ?? '')}`);
-  expect(foreignShelf?.status()).toBe(404);
-  await expect(bobPage.getByRole('heading', { name: /not found/i })).toBeVisible();
-  await expect(bobPage.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/);
-  const aliceRead = stack
-    .kernelRequests()
-    .slice(beforeAlice)
-    .find(({ url }) => url.startsWith('/v1/libraryLabelAssignments'));
-  const bobRead = stack
-    .kernelRequests()
-    .slice(beforeBob)
-    .find(({ url }) => url.startsWith('/v1/libraryLabelAssignments'));
-  expect(aliceRead?.authorization).toMatch(/^Bearer /);
-  expect(bobRead?.authorization).toMatch(/^Bearer /);
-  expect(bobRead?.authorization).not.toBe(aliceRead?.authorization);
-  expect(alicePage.locator('[data-subject-label-chip]').first()).toBeDefined();
-});
-
-test('the native served subject slot adds, removes and restores a label with JavaScript disabled', async () => {
-  const signedIn = await auth.signIn('alice');
-  const browser = await chromium.launch();
-  const context = await browser.newContext({
-    storageState: await signedIn.context.storageState(),
-    viewport: { width: 1280, height: 860 },
-    reducedMotion: 'reduce',
-    locale: 'en',
-    javaScriptEnabled: false,
-  });
-  try {
-    const noScriptPage = await context.newPage();
-    noScriptPage.setDefaultTimeout(30_000);
-    const response = await noScriptPage.goto(`${stack.web}/en/subjects/${subject.id}`, {
-      waitUntil: 'domcontentloaded',
+nativeTest(
+  'the native served subject slot adds, removes and restores a label with JavaScript disabled',
+  300_000,
+  async () => {
+    const signedIn = await auth.signIn('alice');
+    const storageState = await signedIn.context.storageState();
+    await signedIn.continueOnPage().close();
+    const owner = currentNativeLifecycle();
+    if (!owner) throw new Error('The script-free browser requires an active native test lifecycle');
+    const browser = await chromium.launch();
+    const closeBrowser = () => browser.close();
+    const releaseBrowser = owner.register({
+      label: 'script-free Library label browser',
+      close: closeBrowser,
+      force: closeBrowser,
     });
-    expect(response?.status()).toBe(200);
-    await noScriptPage.locator('[data-subject-label-picker-details] > summary').click();
-    await noScriptPage.locator('[data-subject-label-picker]').getByRole('textbox').fill('No JavaScript label');
-    await noScriptPage
-      .locator('[data-subject-label-picker]')
-      .getByRole('button', { name: /add.*label/i })
-      .click();
-    await waitForLabelOutcome(noScriptPage, '[data-subject-label-chip]:has-text("No JavaScript label")');
-    const chip = noScriptPage.locator('[data-subject-label-chip]').filter({ hasText: 'No JavaScript label' });
-    await chip.getByRole('button', { name: /remove label/i }).click();
-    await waitForLabelOutcome(noScriptPage, '[data-label-undo]');
-    const undo = noScriptPage.locator('[data-label-undo]');
-    await undo.getByRole('button', { name: /undo/i }).click();
-    await waitForLabelOutcome(noScriptPage, '[data-subject-label-chip]:has-text("No JavaScript label")');
-  } finally {
-    await context.close();
-    await browser.close();
-  }
-});
+    try {
+      const context = await browser.newContext({
+        storageState,
+        viewport: { width: 1280, height: 860 },
+        reducedMotion: 'reduce',
+        locale: 'en',
+        javaScriptEnabled: false,
+      });
+      const page = await context.newPage();
+      page.setDefaultTimeout(30_000);
+      const response = await page.goto(`${stack.web}/en/subjects/${subject.id}`, {
+        waitUntil: 'domcontentloaded',
+      });
+      expect(response?.status()).toBe(200);
+      await page.locator('[data-subject-label-picker-details] > summary').click();
+      const picker = page.locator('[data-subject-label-picker]');
+      await picker.getByRole('textbox').fill('No JavaScript label');
+      const beforeAdd = await labelRequestOffset();
+      await picker.getByRole('button', { name: 'Add a label', exact: true }).click();
+      await page.getByText('The label is ready to create. Assignment is a separate step.', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Continue', exact: true }).click();
+      await page.getByText('Label created. It has not yet been assigned to this subject.', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Continue', exact: true }).click();
+      const chip = page.locator('[data-subject-label-chip]').filter({ hasText: 'No JavaScript label' });
+      await waitForLabelOutcome(page, chip, beforeAdd);
+
+      const beforeRemove = await labelRequestOffset();
+      await chip.getByRole('button', { name: 'Remove label No JavaScript label', exact: true }).click();
+      const undo = page.locator('[data-label-undo]');
+      await waitForLabelOutcome(page, undo, beforeRemove);
+      expect(await chip.count()).toBe(0);
+
+      const beforeRestore = await labelRequestOffset();
+      await undo.getByRole('button', { name: /undo/i }).click();
+      await waitForLabelOutcome(page, chip, beforeRestore);
+    } finally {
+      await closeBrowser();
+      releaseBrowser();
+    }
+  },
+  lifecycle,
+);
