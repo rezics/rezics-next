@@ -63,6 +63,11 @@ export async function advanceCollectionSourceWork(
   context: WorkContext,
   input: SourceLocator,
 ): Promise<'ready' | 'more' | 'unavailable'> {
+  const result = await advanceCollectionSourceTurn(context, input);
+  return result === 'registration_pending' ? 'more' : result;
+}
+type SourceTurn = 'ready' | 'more' | 'unavailable' | 'registration_pending';
+async function advanceCollectionSourceTurn(context: WorkContext, input: SourceLocator): Promise<SourceTurn> {
   const active = activeIdentitySourceConsumerMaintenance(context.pool);
   const deadline = Math.min(Date.now() + 30000, active?.deadline ?? Infinity);
   const run = () => advanceSourceStep(context, input, deadline);
@@ -70,11 +75,7 @@ export async function advanceCollectionSourceWork(
     ? run()
     : withIdentitySourceConsumerMaintenance({ pool: context.pool, env: context.env }, { deadline }, run);
 }
-async function advanceSourceStep(
-  context: WorkContext,
-  input: SourceLocator,
-  deadline: number,
-): Promise<'ready' | 'more' | 'unavailable'> {
+async function advanceSourceStep(context: WorkContext, input: SourceLocator, deadline: number): Promise<SourceTurn> {
   const route = routeOf(input.collectionId);
   if (
     route === null ||
@@ -94,6 +95,7 @@ async function advanceSourceStep(
   };
   const observed = await advanceCanonicalSourceCapture(context.pool, call);
   if (observed.state !== 'admitted') {
+    if (observed.reason === 'registration_pending') return 'registration_pending';
     return observed.reason === 'incomplete' ? 'more' : 'unavailable';
   }
   const ready = await readCanonicalSourceState(context.pool, call);
@@ -242,8 +244,22 @@ async function recoverCollectionPublication(
 export async function registerCollectionSourceWork(context: WorkContext): Promise<void> {
   bindCanonicalSourceWork(context);
   const page = (input: SourceLocator) => advanceCollectionSourceWork(context, input);
-  const step = DBOS.registerStep(page, { name: 'library.canonicalSourcePage', ...COMMAND_STEP_RETRIES });
-  DBOS.registerWorkflow((input: SourceLocator) => step(input), { name: CANONICAL_SOURCE_WORKFLOW });
+  const step = DBOS.registerStep((input: SourceLocator) => advanceCollectionSourceTurn(context, input), {
+    name: 'library.canonicalSourcePage',
+    ...COMMAND_STEP_RETRIES,
+  });
+  DBOS.registerWorkflow(
+    async (input: SourceLocator) => {
+      // Capture and mapping commit their own successor intents. Semantic registration advances in
+      // separate transactions and has no such Library intent. Give it bounded turns in this workflow.
+      for (let turn = 0; turn < 16; turn++) {
+        const result = await step(input);
+        if (result !== 'registration_pending') return result;
+      }
+      return 'more';
+    },
+    { name: CANONICAL_SOURCE_WORKFLOW },
+  );
   const sweepPage = DBOS.registerStep(
     async (input: SourceSweep): Promise<SourceSweep> => {
       // Without a row cursor, seek past the greatest key of the preceding route.

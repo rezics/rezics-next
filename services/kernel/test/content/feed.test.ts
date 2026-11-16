@@ -9,6 +9,7 @@ import { readConfig, startServer } from '../../src/server.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { builtinCollectionId } from '../../src/library/builtin-identity.ts';
 import { CANONICAL_SOURCE_WORKFLOW } from '../../src/library/canonical-source-store.ts';
+import { OWNER_INDEX_WORKFLOW } from '../../src/library/owner-index-work.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import type { FeedItem, FeedPage } from '../../src/content/feed-contract.ts';
 import { createSemanticDriver } from '../semantic/outcome-driver.ts';
@@ -78,6 +79,15 @@ test('Default mixed feed composes real discovery, current Following and Continue
     )!.id;
     const entry = await driver.fixtures.send(viewer, 'PUT', `/v1/libraryEntries/${book}`, { state: active }, key());
     expect(entry.status, JSON.stringify(entry.body)).toBe(201);
+    const everything = builtinCollectionId(viewer.accountId, { kind: 'everything' });
+    const savedEverything = await driver.fixtures.send(
+      viewer,
+      'PATCH',
+      `/v1/collections/${everything}`,
+      { revision: 0, title: 'Everything I read' },
+      key(),
+    );
+    expect(savedEverything.status, JSON.stringify(savedEverything.body)).toBe(200);
     // A Realm adoption publishes the Book itself to followers of the native Space.
     await driver.grant('editor', ['space:create', 'realm:create']);
     const space = await driver.request('editor', 'POST', '/v1/spaces', { title: 'Native mixed feed Space' }, key());
@@ -141,20 +151,26 @@ test('Default mixed feed composes real discovery, current Following and Continue
     }
     const followedSpace = await driver.fixtures.send(viewer, 'PUT', `/v1/follows/${spaceId}`, undefined, key());
     expect(followedSpace.status, JSON.stringify(followedSpace.body)).toBe(200);
-    // Use the registered canonical owner's actual work, never an alternate Continue provider.
+    // Start the existing canonical and owner index workflows before the read-only feed calls.
     work = await createWorkClient(runtime.databaseUrl);
-    const canonical = await work.enqueue(
+    await work.enqueue(
       {
         workflowName: CANONICAL_SOURCE_WORKFLOW,
         queueName: 'maintenance',
         workflowID: `feed-native-source:${randomUUID()}`,
       },
-      {
-        accounts: [viewer.accountId],
-        collectionId: builtinCollectionId(viewer.accountId, { kind: 'everything' }),
-      },
+      { accounts: [viewer.accountId], collectionId: everything },
     );
-    await canonical.getResult();
+    for (const metadata of [false, true]) {
+      await work.enqueue(
+        {
+          workflowName: OWNER_INDEX_WORKFLOW,
+          queueName: 'maintenance',
+          workflowID: `feed-native-owner-index:${randomUUID()}`,
+        },
+        { accounts: [viewer.accountId], frontier: null, metadata },
+      );
+    }
     server = await startServer(config); // Its createKernel consumes the ordinary Search producer.
     async function page(account: typeof viewer | null, stream = 'home', cursor?: string) {
       const query = new URLSearchParams({ stream, limit: '20' });
