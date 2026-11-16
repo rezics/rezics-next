@@ -121,24 +121,31 @@ nativeTest(
     fixture.evidence.parent = parent;
 
     await fixture.open(page, fixture.createHref);
-    await knowledgeJourneyClick(page, copy.existingNotebook);
+    const existingNotebook = page.getByRole('button', { name: copy.existingNotebook, exact: true });
+    await existingNotebook.click();
+    await expect(existingNotebook).toHaveAttribute('aria-pressed', 'true');
     await knowledgeJourneyClick(page, copy.openNotebooks);
-    await expect(page.getByText(text.notebook)).toBeVisible();
-    await expect(page.getByText(sourceNotebookId)).toBeVisible();
-    await page
-      .locator('li')
-      .filter({ hasText: text.notebook })
-      .getByRole('button', { name: copy.useNotebook, exact: true })
+    const notebookPicker = page.getByRole('region', { name: copy.chooseNotebook, exact: true });
+    const notebookRow = notebookPicker
+      .getByRole('listitem')
+      .filter({ has: page.getByText(sourceNotebookId, { exact: true }) });
+    await expect(notebookRow.getByText(text.notebook, { exact: true })).toBeVisible();
+    await notebookRow
+      .locator('summary')
+      .and(page.getByText(copy.notebookDetails, { exact: true }))
       .click();
+    await expect(notebookRow.getByText(sourceNotebookId, { exact: true })).toBeVisible();
+    await notebookRow.getByRole('button', { name: copy.useNotebook, exact: true }).click();
     await knowledgeJourneyClick(page, copy.openOutline);
-    await expect(page.getByText(text.parentTitle)).toBeVisible();
-    await page
-      .locator('li')
-      .filter({ hasText: text.parentTitle })
-      .getByRole('button', { name: copy.openParent, exact: true })
-      .click();
+    const outline = page.getByRole('region', { name: copy.outlineDestination, exact: true });
+    const parentPlacement = outline
+      .getByRole('listitem')
+      .filter({ has: page.getByText(text.parentTitle, { exact: true }) });
+    await parentPlacement.getByRole('button', { name: copy.openParent, exact: true }).click();
     await knowledgeJourneyClick(page, copy.placeHere);
-    await expect(page.getByText(text.parentTitle)).toBeVisible();
+    const review = page.getByRole('region', { name: copy.reviewPlacement, exact: true });
+    await expect(review.getByText(text.parentTitle, { exact: true })).toBeVisible();
+    await expect(review.getByText(sourceNotebookId, { exact: true })).toBeVisible();
     await fixture.fillTitle(page, copy.documentTitle, text.firstTitle);
     await fixture.fillBody(page, text.firstBody);
     await fixture.waitEnabled(page, copy.createDocument);
