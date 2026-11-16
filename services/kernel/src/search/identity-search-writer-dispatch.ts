@@ -66,6 +66,8 @@ export async function readSearchIdentityDispatchBasis(
           accepted_epoch: number;
           accepted_position: string;
           accepted_transaction_id: string;
+          applied_transaction_id: string | null;
+          applied_position: string | null;
           state: 'dispatched' | 'visible' | 'applied' | null;
           visible: boolean;
           released: boolean;
@@ -102,7 +104,23 @@ export async function readSearchIdentityDispatchBasis(
     !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(row.accepted_transaction_id)
   )
     throw unavailable('Search writer requires the exact original plan, action and accepted hold');
-  return row;
+  let applied: IdentityNativeReceipt | null = null;
+  if (row.released) {
+    if (
+      !row.applied_transaction_id ||
+      !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(row.applied_transaction_id) ||
+      !row.applied_position ||
+      !/^[1-9][0-9]*$/.test(row.applied_position)
+    )
+      throw unavailable('Released Search hold lost its exact application receipt');
+    applied = {
+      partition: row.source.receivingHome,
+      epoch: row.source.receivingEpoch,
+      transactionId: row.applied_transaction_id,
+      position: BigInt(row.applied_position),
+    };
+  }
+  return { ...row, applied };
 }
 
 export function searchIdentityDispatchEffect(

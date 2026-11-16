@@ -199,6 +199,14 @@ The job-home command selects the next original and commits its initial writer re
 capture. The writer discovers or replays the native plan after that request commits. If the directory has no further
 original, the same control command verifies exhaustion and seals completion.
 
+Subsequent directory requests use the committed original and terminal. Acceptance locates the native plan and
+leaves custody checks to the writer. Dispatch uses the plan ID to read the exact accepted hold. Retirement takes
+the applied receipt from the released hold and matches its control plan, application and custody in the retirement
+statement. The role read checks up to two entries first and uses the full bounded lookup when that prefix is full.
+
+Canonical term support checks the selected slot's sequence range before reading the bodies. The body query reserves
+that range and one extra row, and rejects a changed slot or a result larger than the range.
+
 Before acceptance, the writer records the checked binding digest against the exact retained request and native plan.
 The next turn uses that proof to fund both control captures and returns the commit receipt directly. It observes the
 pending job without a row lock and locks the job when writing the control plan. The receiving hold still verifies its

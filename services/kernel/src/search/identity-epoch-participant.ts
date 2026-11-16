@@ -1,7 +1,7 @@
 import { ConfigError } from '../commerce/config.ts';
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
-import { currentCommand, noEffect, registerCommandCallback, runCommand } from '../command/command.ts';
+import { currentCommand, registerCommandCallback, runCommand } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import type { Access } from '../request/access.ts';
 import type { IdentitySourceSupportReaderFactory } from '../semantic/index.ts';
@@ -18,7 +18,6 @@ import { recordIdentityEpochNativeCommit } from '../semantic/identity-adapters/i
 import { serializeIdentityValue as json } from '../semantic/identity-core/encoding.ts';
 import {
   installSearchIdentityReceivingNative,
-  lookupIdentityReceivingEffect,
   prepareSearchIdentityReceivingEffect,
   reconcileIdentityReceivingEffect,
   type SearchReceivingWorkDeclaration,
@@ -34,7 +33,6 @@ import stepSql from './identity-epoch-participant-step.sql';
 import replaySql from './identity-epoch-participant-replay.sql';
 import completeSql from './identity-epoch-participant-complete.sql';
 import {
-  type SearchIdentityReceivingBinding,
   validSearchIdentityReceivingFrontier,
 } from './identity-receiving-native-contract.ts';
 import {
@@ -50,7 +48,12 @@ import {
   readPublicationFence,
   readWriterPublicationWitness,
 } from './publication-admission.ts';
-import { readSearchIdentityOriginalPlan } from './identity-search-receiving-source.ts';
+import {
+  locateSearchIdentityOriginalPlan,
+  readSearchIdentityOriginalPlan,
+  searchIdentityWriterEffectKey,
+} from './identity-search-receiving-source.ts';
+import { subjectPartition } from './source.ts';
 import { searchIdentityWorkContext, searchIdentityWorkUsed } from './identity-search-receiving-work.ts';
 import {
   advanceSearchIdentityDirectory,
@@ -62,7 +65,7 @@ import {
 } from './identity-search-receiving-directory.ts';
 import {
   advanceSearchIdentityOriginalSql,
-  readSearchIdentityCommonPlanSql,
+  locateSearchIdentityOriginalPlanSql,
   readSearchIdentityDirectorySql,
   readSearchIdentityMaterializedOriginalSql,
   readSearchIdentityOriginalPlanSql,
@@ -89,7 +92,6 @@ import {
 import {
   applySearchIdentityWriterStep,
   readSearchIdentityDispatchBasis,
-  searchIdentityDispatchEffect,
 } from './identity-search-writer-dispatch.ts';
 import { searchNativeOriginalOperationSql, searchNativeReleaseAppliedSql } from './identity-receiving-native-work.ts';
 export type { SearchReceivingConfiguration };
@@ -118,10 +120,10 @@ function searchIdentityParticipantStatementCosts(): SearchReceivingWorkDeclarati
     Object.freeze({ sql: completeSql.sql, work: participantStatementWork(6, 6, 6, 4096, 0) }),
     Object.freeze({ sql: readSearchIdentityDirectorySql, work: participantStatementWork(4, 4, 1, 4096, 1) }),
     Object.freeze({ sql: readSearchIdentityMaterializedOriginalSql, work: participantStatementWork(1, 1, 1, 1024, 1) }),
+    Object.freeze({ sql: locateSearchIdentityOriginalPlanSql, work: participantStatementWork(4, 4, 1, 1024, 4) }),
     Object.freeze({ sql: readSearchIdentityOriginalPlanSql, work: participantStatementWork(16, 12, 1, 20480, 1) }),
     Object.freeze({ sql: searchIdentityOriginalPlanPresentSql, work: participantStatementWork(4, 4, 1, 1024, 4) }),
-    Object.freeze({ sql: readSearchIdentityCommonPlanSql, work: participantStatementWork(4, 4, 1, 16384, 1) }),
-    Object.freeze({ sql: advanceSearchIdentityOriginalSql, work: participantStatementWork(9, 9, 1, 16384, 1) }),
+    Object.freeze({ sql: advanceSearchIdentityOriginalSql, work: participantStatementWork(10, 10, 1, 16384, 1) }),
     Object.freeze({ sql: readRetainedWriterCopySql, work: participantStatementWork(3, 3, 1, 1024, 1) }),
     ...(
       [
@@ -355,14 +357,7 @@ export function createSearchIdentityEpochParticipant(options: {
             work: searchIdentityWorkUsed(pool, context),
           } satisfies IdentityStepProgress;
         }
-        const change = await withReadTransaction(
-          pool,
-          (tx) => readSearchIdentityDirectoryOriginal(tx, ref, directory),
-          deadline,
-        );
-        if (!change || change.original !== request.original || change.terminal !== request.terminal)
-          throw unavailable('Retained Search writer request differs from the admitted original');
-        const plan = await readSearchIdentityOriginalPlan(pool, ref, change, configuration, deadline);
+        const change = { original: request.original, terminal: request.terminal };
         const stageWriter = async (wanted?: SearchWriterPlanRequest) => {
           if (
             request?.plan &&
@@ -419,39 +414,52 @@ export function createSearchIdentityEpochParticipant(options: {
             work: searchIdentityWorkUsed(pool, context),
           } satisfies IdentityStepProgress;
         };
-        if (!plan) return stageWriter();
-        const { selection } = plan;
-        const dispatch = plan.originalBarrier
-          ? await readSearchIdentityDispatchBasis(pool, ref, selection, directory.scope, configuration.index, deadline)
-          : null;
-        if (plan.originalBarrier) {
-          if (!dispatch) return stageWriter({ planId: selection.native.planId });
-          if (dispatch.effect_key !== selection.effectKey || dispatch.source.consumer !== configuration.consumer)
-            throw unavailable('Retained dispatch differs from the selected original plan');
-          if (!dispatch.released)
-            return stageWriter({ planId: selection.native.planId, holdId: dispatch.hold_id });
+        if (!request.plan) {
+          const located = await locateSearchIdentityOriginalPlan(pool, ref, change.original, configuration, deadline);
+          if (!located) return stageWriter();
+          if (located.original_barrier) return stageWriter({ planId: located.plan_id });
         }
-        const effect = dispatch
-          ? searchIdentityDispatchEffect(ref, selection, dispatch)
-          : await prepareSearchIdentityReceivingEffect(pool, selection);
-        const roles = await identityErasureRoles(pool, ref.jobId);
+        const dispatch = request.plan
+          ? await readSearchIdentityDispatchBasis(
+              pool,
+              ref,
+              { ...change, native: { partition: subjectPartition(change.original), planId: request.plan.planId } },
+              directory.scope,
+              configuration.index,
+              deadline,
+            )
+          : null;
+        if (request.plan && !dispatch) return stageWriter({ planId: request.plan.planId });
+        if (dispatch) {
+          const effectKey = searchIdentityWriterEffectKey(configuration.consumer, change.original, dispatch.source.disposition);
+          if (
+            dispatch.source.consumer !== configuration.consumer ||
+            dispatch.effect_key !== effectKey ||
+            (request.plan?.holdId && request.plan.holdId !== dispatch.hold_id)
+          )
+            throw unavailable('Retained dispatch differs from the selected original plan');
+          if (!dispatch.released) return stageWriter({ planId: dispatch.source.locator.planId, holdId: dispatch.hold_id });
+        }
+        const selection = dispatch
+          ? {
+              job: ref,
+              original: dispatch.source.original,
+              effectKey: dispatch.effect_key,
+              owner: dispatch.source.owner,
+              sourceId: dispatch.source.sourceId,
+              scope: dispatch.source.scope,
+              disposition: dispatch.source.disposition,
+              native: dispatch.source.locator,
+            }
+          : (await readSearchIdentityOriginalPlan(pool, ref, change, configuration, deadline))?.selection;
+        if (!selection) throw unavailable('Retained Search plan disappeared');
+        const roles = await identityErasureRoles(pool, ref.jobId, { preferSingleRole: true });
         let applied: IdentityNativeReceipt;
         if (dispatch) {
-          const observed = await runCommand(
-            pool,
-            { partition: effect.receipt.partition, deadline, clock: configuration.clock },
-            async (tx) => {
-              const record = await lookupIdentityReceivingEffect(tx, effect, 'search-canonical-index');
-              if (
-                !record?.applied || record.scopeDigest !== directory.scope ||
-                record.source.locator.planId !== selection.native.planId
-              )
-                throw unavailable('Released scope lost its applied receipt');
-              return noEffect(record.applied.receipt);
-            },
-          );
-          applied = observed.value;
+          if (!dispatch.applied) throw unavailable('Released scope lost its applied receipt');
+          applied = dispatch.applied;
         } else {
+          const effect = await prepareSearchIdentityReceivingEffect(pool, selection);
           await applySearchIdentityWriterStep(
             configuration,
             effect,
@@ -462,36 +470,6 @@ export function createSearchIdentityEpochParticipant(options: {
           );
           applied = await reconcileIdentityReceivingEffect(pool, effect);
         }
-        const row = await withReadTransaction(
-          pool,
-          async (tx) =>
-            (
-              await tx.query<{
-                binding: SearchIdentityReceivingBinding;
-                binding_digest: string;
-                plan_transaction_id: string;
-                scope_digest: string;
-              }>(readSearchIdentityCommonPlanSql, [
-                identityJobPartition(ref),
-                ref.jobId,
-                String(ref.epoch),
-                selection.effectKey,
-              ])
-            ).rows[0],
-          deadline,
-        );
-        const binding = row?.binding;
-        if (
-          !row ||
-          binding?.step !== 'search-canonical-index' ||
-          binding.original !== change.original ||
-          binding.effectKey !== selection.effectKey ||
-          binding.scopeDigest !== directory.scope ||
-          row.scope_digest !== directory.scope ||
-          binding.source.consumer !== configuration.consumer ||
-          binding.source.physicalTarget !== configuration.index
-        )
-          throw unavailable('Prepared scope differs from its configured native Search owner');
         const frontier = advanceSearchIdentityDirectory(directory, change.original);
         // Releasing custody and retiring its pending key comes before moving past this original.
         // A lost response reuses the still-selected original or reads the committed checkpoint.
@@ -505,13 +483,15 @@ export function createSearchIdentityEpochParticipant(options: {
               ref.jobId,
               String(ref.epoch),
               selection.effectKey,
-              row.plan_transaction_id,
-              row.binding_digest,
+              change.original,
+              configuration.consumer,
+              configuration.index,
+              selection.native.planId,
               applied.partition,
               applied.epoch,
               String(applied.position),
               applied.transactionId,
-              row.scope_digest,
+              directory.scope,
             ]);
             if (retired.rowCount !== 1) throw unavailable('Search scope progress lost exact committed control custody');
             bindSemanticProducerRoles(tx, roles);
@@ -522,7 +502,7 @@ export function createSearchIdentityEpochParticipant(options: {
                 id,
                 ref.jobId,
                 String(ref.epoch),
-                row.scope_digest,
+                directory.scope,
                 json(frontier),
                 json(searchIdentityWorkUsed(pool, context)),
               ]);

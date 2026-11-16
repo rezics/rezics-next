@@ -5,7 +5,7 @@ import { IdentityEpochStoreError } from './contract/identity-errors.ts';
 
 // The previous slot's first fact recovers the language key without retaining language or term text.
 // The active-head index serves one head. The fact PK and log_seq constraint bound its complete slot.
-export const readIdentitySearchIndexTermSlotSql = `WITH prior AS MATERIALIZED (
+const identitySearchTermHeadSql = `WITH prior AS MATERIALIZED (
  SELECT p.kind,p.language,p.slot_id
  FROM LATERAL (
    SELECT kind,language,slot_id FROM semantic.fact
@@ -20,6 +20,21 @@ export const readIdentitySearchIndexTermSlotSql = `WITH prior AS MATERIALIZED (
   AND (kind,language)>(coalesce((SELECT kind FROM prior),''),coalesce((SELECT language FROM prior),''))
  ORDER BY kind,language LIMIT 1
 )
+`;
+
+/** The first and last sequence bound the current fact window, including any holes. */
+export const readIdentitySearchIndexTermSlotShapeSql = `${identitySearchTermHeadSql}
+SELECT ($3::uuid IS NULL OR EXISTS(SELECT 1 FROM prior)) AS prior_current,h.slot_id::text,
+ greatest(0,coalesce(tail.log_seq-h.first_seq+1,0))::integer AS fact_limit
+FROM (VALUES (1)) seed(n)
+LEFT JOIN head h ON true
+LEFT JOIN LATERAL (
+ SELECT log_seq FROM semantic.fact
+ WHERE (route,subject_id,slot_id)=($1,$2,h.slot_id) AND log_seq BETWEEN h.first_seq AND 32
+ ORDER BY log_seq DESC LIMIT 1
+) tail ON true`;
+
+export const readIdentitySearchIndexTermSlotSql = `${identitySearchTermHeadSql}
 SELECT ($3::uuid IS NULL OR EXISTS(SELECT 1 FROM prior)) AS prior_current,
  h.slot_id::text,h.kind,encode(sha256(convert_to(h.language,'UTF8')),'hex') AS language_digest,f.terms,f.fact_count
 FROM (VALUES (1)) seed(n)
@@ -30,7 +45,7 @@ LEFT JOIN LATERAL (
  FROM (
    SELECT log_seq,operation,body FROM semantic.fact
    WHERE (route,subject_id,slot_id)=($1,$2,h.slot_id) AND log_seq BETWEEN h.first_seq AND 32
-   ORDER BY log_seq LIMIT 32
+   ORDER BY log_seq LIMIT ($4::integer+1)
  ) points
 ) f ON true`;
 
@@ -117,15 +132,26 @@ export async function readIdentitySearchIndexTermSlot(
   after: string | null,
   digest: string,
 ) {
-  const { rows } = await tx.query<TermRow>(readIdentitySearchIndexTermSlotSql, [routeOf(subject), subject, after]);
-  const first = rows[0];
-  if (!first?.prior_current)
+  const key = [routeOf(subject), subject, after];
+  const shape = (
+    await tx.query<{ prior_current: boolean; slot_id: string | null; fact_limit: number }>(
+      readIdentitySearchIndexTermSlotShapeSql,
+      key,
+    )
+  ).rows[0];
+  if (!shape?.prior_current)
     throw new IdentityEpochStoreError('identity_epoch_unavailable', 'Search writer term cursor changed');
-  if (first.slot_id === null) return { state: 'complete' as const, after, digest, points: 1 };
+  if (shape.slot_id === null) return { state: 'complete' as const, after, digest, points: 1 };
+  const limit = shape.fact_limit;
+  if (!Number.isInteger(limit) || limit < 0 || limit > 32)
+    throw new IdentityEpochStoreError('identity_epoch_unavailable', 'Search writer term count is unavailable');
+  const first = (await tx.query<TermRow>(readIdentitySearchIndexTermSlotSql, [...key, limit])).rows[0];
+  if (!first?.prior_current || first.slot_id !== shape.slot_id)
+    throw new IdentityEpochStoreError('identity_epoch_unavailable', 'Search writer term cursor changed');
   if (first.kind === null || first.language_digest === null)
     throw new IdentityEpochStoreError('identity_epoch_unavailable', 'Search writer term key is unavailable');
   const terms = indexTermTexts(first.terms);
-  if (!Number.isInteger(first.fact_count) || first.fact_count < terms.length || first.fact_count > 32)
+  if (!Number.isInteger(first.fact_count) || first.fact_count < terms.length || first.fact_count > limit)
     throw new IdentityEpochStoreError('identity_epoch_unavailable', 'Search writer term count is unavailable');
   return {
     state: 'progress' as const,
