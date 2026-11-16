@@ -11,6 +11,7 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
+import { walkStackAdmitted } from '../../../scripts/stack-run.ts';
 import { createAccountTokenProvider, IMPORTER_SCOPES, VNDB_IMPORTER_SCOPES } from './credentials.ts';
 import { runImportCli, type ImportCliOptions } from './cli.ts';
 import { createImporter } from './importer.ts';
@@ -602,18 +603,19 @@ type SeedEnv = {
   file: Record<string, string>;
 };
 
-async function loadPersona(): Promise<SeedEnv> {
-  await command('persona', ['bun', 'services/auth/scripts/dev-stack.ts', 'persona']);
-  return readPersona();
-}
-
 async function readPersona(): Promise<SeedEnv> {
   const origins = stackOrigins();
   const seedEnv = await parseEnv(resolve(root, '.temp/local-stack/seed.env'));
+  const {
+    REZICS_DEV_PERSONA_ACCOUNT: account,
+    REZICS_DEV_PERSONA_ACCOUNT_KEY: accountKeyPath,
+    REZICS_DEV_PERSONA_CLIENT: client,
+  } = seedEnv;
+  if (!account || !accountKeyPath || !client) throw new Error('The admitted catalogue persona is incomplete');
   return {
-    account: seedEnv.REZICS_DEV_PERSONA_ACCOUNT!,
-    accountKeyPath: seedEnv.REZICS_DEV_PERSONA_ACCOUNT_KEY!,
-    client: seedEnv.REZICS_DEV_PERSONA_CLIENT!,
+    account,
+    accountKeyPath,
+    client,
     auth: origins.native,
     issuer: origins.issuer,
     kernel: origins.kernel,
@@ -1372,6 +1374,9 @@ async function walkRow(
 }
 
 export async function runImportsPublicJourney(): Promise<WalkInventory> {
+  if (process.env.REZICS_WALK_IMPORT_CATALOGUE !== '1' || !walkStackAdmitted(process.env, root))
+    throw new Error('Use the admitted dev-stack.ts walk --import-catalogue fixture');
+
   const startedAt = new Date().toISOString();
   const revision = (await Bun.$`git rev-parse HEAD`.cwd(root).text()).trim();
   await retireWalkJournals();
@@ -1399,7 +1404,8 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
   let browserStageFailure: string | undefined;
   await recordStage('setup');
   try {
-    persona = await loadPersona();
+    // The admitted host provisions its persona before answering native readiness.
+    persona = await readPersona();
     await grantOwner(persona);
   } catch (error) {
     sharedStartup = walkFailureCause(error);
