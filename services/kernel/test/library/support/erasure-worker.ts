@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 import type { WorkClient } from '../../../src/work/client.ts';
+import { WORK_QUEUES } from '../../../src/work/queues.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
 
 /** DBOS reports retried failures as a list. Surface the original native step stack when present. */
@@ -12,6 +13,44 @@ export async function readLibraryWorkerResult(client: WorkClient, workflowId: st
     if (!first || typeof first.stack !== 'string') throw error;
     throw new Error(`${error.message}\n${first.stack}`, { cause: error });
   }
+}
+
+async function readEnqueuedEffect(
+  client: WorkClient,
+  effect: NonNullable<Awaited<ReturnType<WorkClient['getWorkflow']>>>,
+) {
+  const queueName = effect.queueName;
+  if (effect.status !== 'ENQUEUED' || !queueName) return undefined;
+  const observed = { queueName, loadInput: false, loadOutput: false, sortDesc: true };
+  const [queues, pending, [lastCompleted]] = await Promise.all([
+    client.listQueues(),
+    client.listWorkflows({ ...observed, status: 'PENDING', limit: WORK_QUEUES.effects.workerConcurrency + 1 }),
+    client.listWorkflows({ ...observed, status: 'SUCCESS', limit: 1 }),
+  ]);
+  const queue = queues.find(({ name }) => name === queueName);
+  return {
+    queue: {
+      name: queueName,
+      application: queue?.applicationName,
+      workerConcurrency: queue?.workerConcurrency,
+      partitionConcurrency: queue?.partitionConcurrency,
+    },
+    application: effect.applicationName,
+    version: effect.applicationVersion,
+    partition: effect.queuePartitionKey,
+    dequeuedAt: effect.dequeuedAt,
+    pending: pending.map((item) => ({
+      workflow: item.workflowID,
+      partition: item.queuePartitionKey,
+      executor: item.executorId,
+      version: item.applicationVersion,
+    })),
+    lastCompleted: lastCompleted && {
+      executor: lastCompleted.executorId,
+      version: lastCompleted.applicationVersion,
+      dequeuedAt: lastCompleted.dequeuedAt,
+    },
+  };
 }
 
 /** Read only the admitted job and its exact outbox position before the fixture tears down. */
@@ -58,6 +97,7 @@ export async function readLibraryMergeDispatch(pool: Pool, client: WorkClient, j
       Object.entries(job?.participants ?? {}).map(([name, evidence]) => [name, evidence?.state]),
     ),
     effect: effect?.status ?? 'absent',
+    enqueuedEffect: effect ? await readEnqueuedEffect(client, effect) : undefined,
     workflow: workflow?.status ?? 'absent',
   };
 }
