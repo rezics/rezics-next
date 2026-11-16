@@ -12,7 +12,7 @@ export type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/work
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { randomUUID } from 'node:crypto';
 import { withConnection } from '../database/pool.ts';
-import { partitionOf, routeOf } from '../route/route.ts';
+import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import {
@@ -222,17 +222,19 @@ export async function registerCollectionSourceWork(context: WorkContext): Promis
   DBOS.registerWorkflow((input: SourceLocator) => step(input), { name: CANONICAL_SOURCE_WORKFLOW });
   const sweepPage = DBOS.registerStep(
     async (input: SourceSweep): Promise<SourceSweep> => {
+      // A checkpoint with no row cursor starts at the beginning of its saved partition.
+      const afterRoute = input.route ?? input.partition * 16 - 1;
       const { rows } = await withConnection(context.pool, (client) =>
         client.query<{ route: number; collection: string; owner: string | null; builtin: string | null }>(
           `SELECT route,collection_id::text AS collection,curator_account_id::text AS owner,builtin_kind AS builtin
        FROM library.collection
-       WHERE route BETWEEN $1 AND $2 AND ($3::integer IS NULL OR (route,collection_id)>($3,$4::uuid))
+       WHERE (route,collection_id)>($1,COALESCE($2::uuid,'00000000-0000-0000-0000-000000000000'::uuid))
        ORDER BY route,collection_id LIMIT 1`,
-          [input.partition * 16, input.partition * 16 + 15, input.route, input.collection],
+          [afterRoute, input.collection],
         ),
       );
       const row = rows[0];
-      if (!row) return { ...input, partition: input.partition + 1, route: null, collection: null };
+      if (!row) return { ...input, partition: PARTITIONS, route: null, collection: null };
       if (row.builtin === 'everything' || row.builtin === 'state') {
         if (row.owner) await recoverCollectionPublication(context, { ...row, owner: row.owner }, input.root);
         // Revisit after capture, transfer or terminal cleanup progresses.
@@ -240,7 +242,7 @@ export async function registerCollectionSourceWork(context: WorkContext): Promis
         await retireSupersededPublication(context, row);
       }
       if (row.owner) await page({ accounts: [row.owner], collectionId: row.collection });
-      return { ...input, route: row.route, collection: row.collection };
+      return { ...input, partition: partitionOf(row.route), route: row.route, collection: row.collection };
     },
     { name: 'library.canonicalSourceSweepPage', ...COMMAND_STEP_RETRIES },
   );
@@ -260,8 +262,8 @@ export async function registerCollectionSourceWork(context: WorkContext): Promis
   );
   async function segment(input: SourceSweep) {
     let next = input;
-    for (let n = 0; n < 100 && next.partition < 4096; n++) next = await sweepPage(next);
-    if (next.partition < 4096) await continuation({ ...next, sequence: next.sequence + 1 });
+    for (let n = 0; n < 100 && next.partition < PARTITIONS; n++) next = await sweepPage(next);
+    if (next.partition < PARTITIONS) await continuation({ ...next, sequence: next.sequence + 1 });
   }
   DBOS.registerWorkflow(segment, { name: 'library.canonicalSourceSweepSegment' });
   DBOS.registerWorkflow(
