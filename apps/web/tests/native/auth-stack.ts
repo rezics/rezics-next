@@ -351,10 +351,11 @@ export async function startAuthStack(
         force: () => page.close().catch(() => {}),
       });
       page.setDefaultTimeout(15_000);
+      const webOrigin = new URL(stack.web).origin;
       const authResponses: PlaywrightResponse[] = [];
       const visitedUrls: string[] = [];
       const pageRequests: import('playwright').Request[] = [];
-      const pageResponses: { path: string; method: string; status: number }[] = [];
+      const webFunctions = { requests: 0, responses: 0, failures: 0 };
       const pageFailures: {
         path: string;
         method: string;
@@ -370,7 +371,9 @@ export async function startAuthStack(
       page.on('request', (request) => {
         pageRequests.push(request);
         if (request.isNavigationRequest() && request.frame() === page.mainFrame()) visitedUrls.push(request.url());
-        if (new URL(request.url()).pathname.startsWith('/_serverFn/')) {
+        const { origin, pathname } = new URL(request.url());
+        if (pathname.startsWith('/_serverFn/')) {
+          if (origin === webOrigin) webFunctions.requests += 1;
           let resolve!: (response: PlaywrightResponse) => void;
           const promise = new Promise<PlaywrightResponse>((done) => (resolve = done));
           functionResponses.set(request, { resolve, promise });
@@ -378,21 +381,19 @@ export async function startAuthStack(
       });
       page.on('response', (response) => {
         const url = new URL(response.url());
-        pageResponses.push({
-          path: url.pathname,
-          method: response.request().method(),
-          status: response.status(),
-        });
+        if (url.origin === webOrigin && url.pathname.startsWith('/_serverFn/')) {
+          webFunctions.responses += 1;
+          if (!response.ok()) webFunctions.failures += 1;
+        }
         if (url.pathname === '/signin') authResponses.push(response);
         functionResponses.get(response.request())?.resolve(response);
       });
-      page.on('requestfailed', (request) =>
-        pageFailures.push({
-          path: new URL(request.url()).pathname,
-          method: request.method(),
-          error: request.failure()?.errorText,
-        }),
-      );
+      page.on('requestfailed', (request) => {
+        if (pageFailures.length >= 8) return;
+        const url = new URL(request.url());
+        if (url.origin !== webOrigin) return;
+        pageFailures.push({ path: url.pathname, method: request.method(), error: request.failure()?.errorText });
+      });
       assertActive('read native Auth account for browser sign-in');
       const email = signup ? `${crypto.randomUUID()}@example.test` : (await stack.authPersona(persona)).email;
       const formPassword = signup ? `newcomer-${crypto.randomUUID()}` : password;
@@ -401,7 +402,6 @@ export async function startAuthStack(
       assertActive('open native Auth sign-in page');
       await page.goto(signInUrl.href, { waitUntil: 'domcontentloaded' });
       await hydrate(page);
-      const webOrigin = new URL(stack.web).origin;
       let callbackResponse: Promise<PlaywrightResponse> | undefined;
       if (signup) {
         assertActive('open native Auth sign-up page');
@@ -439,28 +439,28 @@ export async function startAuthStack(
         ]);
       }
       if (persona !== 'suspended') {
-        // The callback is also on the web origin. Finish its document redirect
-        // before returning a usable served web page. Its account control proves
-        // that the web app has read the real session through its server function.
         assertActive('finish native Auth callback');
-        await callbackResponse;
-        await page.waitForURL((url) => url.origin === webOrigin && !url.pathname.startsWith('/auth/'), {
-          timeout: 30_000,
-          waitUntil: 'domcontentloaded',
-        });
+        const callback = await callbackResponse;
+        let stage = 'Web hydration';
         try {
+          // Public SSR can reach DOMContentLoaded before the client mounts its session observer.
+          // Use the return navigation budget for hydration and reserve the account wait for the mounted shell.
+          await page.waitForFunction(
+            (origin) =>
+              location.origin === origin &&
+              !location.pathname.startsWith('/auth/') &&
+              document.querySelector('html[data-hydrated]') !== null,
+            webOrigin,
+            { timeout: 30_000 },
+          );
+          stage = 'Web account menu';
           await page.locator('#account-menu-button').waitFor({ state: 'visible' });
-        } catch (error) {
-          const cookieNames = (await browserContext.cookies()).map(({ name, domain, path }) => ({
-            name,
-            domain,
-            path,
-          }));
+        } catch (cause) {
+          const path = new URL(page.url()).pathname;
+          const navigation = visitedUrls.slice(-12).map((value) => new URL(value).pathname);
           throw new Error(
-            `Signed-in web page was not ready at ${page.url()}: ${await page.locator('body').innerText()}; sign-in status=${authResponses.at(-1)?.status() ?? 'missing'}; visited=${JSON.stringify(visitedUrls.map((value) => new URL(value).pathname))}; responses=${JSON.stringify(pageResponses)}; failed requests=${JSON.stringify(pageFailures)}; cookie names=${JSON.stringify(cookieNames)}; web output=${stack.webOutput()}`,
-            {
-              cause: error,
-            },
+            `Signed-in web page was not ready at ${path} (${stage}); sign-in status=${authResponses.at(-1)?.status() ?? 'missing'}; callback status=${callback?.status() ?? 'missing'}; visited=${JSON.stringify(navigation)}; Web server functions=${JSON.stringify(webFunctions)}; failed Web requests=${JSON.stringify(pageFailures)}`,
+            { cause },
           );
         }
       }
