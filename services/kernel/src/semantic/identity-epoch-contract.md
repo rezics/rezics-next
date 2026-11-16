@@ -687,8 +687,10 @@ Required `semantic/identity-epoch-coordinator.ts` exports `resumeIdentityEpochJo
 `waitIdentityEpochPublished: WaitIdentityEpochPublished`. The final binding serially drains mapping, invokes the fixed
 participants, reconciles their committed ACKs and publishes once. It registers through existing `WorkModule.register`
 and `WorkContext.addEffects`, `DBOS.registerStep/registerWorkflow`, `WorkClient.enqueue` with stable job workflow ID
-and `return-existing`. `composeWork` owns the single DBOS launch; `KERNEL_WORK_MODULES` owns default binding and
-`startWorker` owns lifecycle. No scheduler/process/second launch or independently invented maintenance engine.
+and `return-existing`. New segments use the existing governance queue so routine maintenance cannot occupy their
+capacity. Account verification and reversal wait for publication from the separate workflows queue. Existing
+segments keep their stored queue and subsequent segments use the governance queue.
+`composeWork` launches DBOS once. `KERNEL_WORK_MODULES` owns default binding and `startWorker` owns lifecycle. No scheduler/process/second launch or independently invented maintenance engine.
 STORE and mapping import only native dependencies and these types; participant producers import STORE/types;
 the composition root binds concrete participants and Search receiving; the coordinator receives them as ports.
 Neither participant waits for or imports the coordinator.
