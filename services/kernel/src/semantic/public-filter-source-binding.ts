@@ -3273,10 +3273,12 @@ export function createNativePublicFilterSourceBinding(
         queried: native.queried,
         execution: retained.execution,
       };
-      const adopted = await bootstrapBinding.adopt({ bootstrap, queried: native.queried }, { deadline });
-      addCost(cost, adopted.cost);
-      if (adopted.status !== 'adopted')
-        return { status: 'pending' as const, publication, reason: adopted.reason, cost };
+      if (cut.row.state !== 'adopted' || cut.row.queried !== publication.queried.snapshot.observation) {
+        const adopted = await bootstrapBinding.adopt({ bootstrap, queried: publication.queried }, { deadline });
+        addCost(cost, adopted.cost);
+        if (adopted.status !== 'adopted')
+          return { status: 'pending' as const, publication, reason: adopted.reason, cost };
+      }
       const settled = await settleNative(publication, { deadline }, cost);
       addCost(cost, settled.cost);
       if (settled.status !== 'joined') return { status: 'pending' as const, publication, reason: settled.reason, cost };
