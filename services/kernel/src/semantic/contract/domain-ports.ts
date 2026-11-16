@@ -24,10 +24,14 @@ export type LibraryCustodyPort<Native> = Readonly<{
   ): Promise<IdentityStepProgress | { state: 'unavailable'; reason: 'missing-job' | 'unready' }>;
 }>;
 
+export type SearchWriterPreparation =
+  | Readonly<{ state: 'progress'; transactionId: string }>
+  | Readonly<{ state: 'pending' | 'prepared' }>;
+
 /** Search canonical-index currentness for one identity job. */
 export type SearchCurrentnessPort<Native> = Readonly<{
   stepCanonicalIndex: IdentityParticipantStepPort<Native>;
-  prepareCanonicalWriter?(native: Native, request: IdentityStepReceipt): Promise<'pending' | 'prepared'>;
+  prepareCanonicalWriter?(native: Native, request: IdentityStepReceipt): Promise<SearchWriterPreparation>;
 }>;
 
 export type ContentImportedFieldGroup = 'facts' | 'summary' | 'cover';

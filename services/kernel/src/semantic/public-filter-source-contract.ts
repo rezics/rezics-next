@@ -98,8 +98,11 @@ export type PublicFilterProjectionRequest = Readonly<{
   context: PublicFilterReadContext;
 }>;
 
+export type PublicFilterProjectionRetirement = Readonly<{ build: string; generation: string; partition: number }>;
+
 type Unready = Readonly<{
   status: 'unready';
+  retirement?: PublicFilterProjectionRetirement;
   reason: 'owner_pending' | 'identity_pending' | 'dependency_pending' | 'metadata_missing';
   cost: PublicFilterCost;
 }>;

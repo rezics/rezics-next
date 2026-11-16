@@ -236,6 +236,7 @@ export function registerIdentityEpochCoordinator(
   DBOS.registerWorkflow(
     async (job: JobLocator, segment: number = 0) => {
       let previous: ReceiptLocator | null = null;
+      let previousWriter: string | null = null;
       for (let page = 0; page < IDENTITY_EPOCH_SEGMENT_PAGES; page++) {
         const next = await read(job);
         if (next === 'cancelled') return { nextSegment: null };
@@ -250,10 +251,19 @@ export function registerIdentityEpochCoordinator(
           await publish(job);
         } else {
           const result = await produce(job, next);
+          if (result.writerRequested) {
+            const writer = await prepareSearchWriter(result.receipt);
+            if (writer.state !== 'prepared' && writer.state !== 'progress')
+              throw unavailable('Canonical Search writer preparation has no committed plan for the requested original');
+            if (writer.state === 'progress') {
+              if (writer.transactionId === previousWriter) throw noProgress();
+              previousWriter = writer.transactionId;
+              continue;
+            }
+          }
           if (previous && JSON.stringify(previous) === JSON.stringify(result.receipt)) throw noProgress();
           previous = result.receipt;
-          if (result.writerRequested && (await prepareSearchWriter(result.receipt)) !== 'prepared')
-            throw unavailable('Canonical Search writer preparation has no committed plan for the requested original');
+          previousWriter = null;
           if (result.state === 'complete') await reconcile(result.receipt);
         }
       }

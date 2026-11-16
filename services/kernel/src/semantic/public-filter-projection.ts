@@ -38,6 +38,7 @@ import type {
   PublicFilterProjectionPage,
   PublicFilterProjectionRecord,
   PublicFilterProjectionRequest,
+  PublicFilterProjectionRetirement,
   PublicFilterSourceFactory,
 } from './public-filter-source-contract.ts';
 import type { PublicFilterAccessBindingPort } from './source-binding-port.ts';
@@ -51,6 +52,14 @@ import readPage from './public-filter-projection-page.sql';
 import readRetainedHeadPage from './public-filter-projection-head-page.sql';
 import readCurrentRetainedHead from './public-filter-projection-head-current.sql';
 import upsertRetainedHeads from './public-filter-projection-head-upsert.sql';
+import { identitySourceSupportJob } from './identity-source-support-scope.ts';
+import {
+  invalidateProjectionBuildSql,
+  lockProjectionBuildForHeadsSql,
+  lockProjectionBuildForRetirementSql,
+  retiredProjectionMeaning,
+  retireProjectionHeadSql,
+} from './public-filter-projection-build-control.ts';
 import readOriginalPage from './public-filter-projection-replay-read.sql';
 import readReplayHead from './public-filter-projection-replay-head.sql';
 import writeOriginalPage from './public-filter-projection-replay-write.sql';
@@ -698,13 +707,18 @@ function observationMatches(build: BuildRow, source: SubjectRow, ownerEpoch: num
 
 async function ensureBuildHeads(
   client: PoolClient,
-  build: string,
+  build: Pick<BuildRow, 'build_id' | 'generation'>,
   heads: ReadonlyMap<number, PrivacyReductionHead>,
 ): Promise<boolean> {
+  if (
+    !(await client.query(lockProjectionBuildForHeadsSql, [build.build_id, build.generation, retiredProjectionMeaning]))
+      .rowCount
+  )
+    return false;
   if (heads.size === 0) return true;
   const retained = rows(
     await nativeSourceQuery(client, upsertRetainedHeads, {
-      build_id: build,
+      build_id: build.build_id,
       heads: [...heads.values()].map((head) => ({
         partition_no: head.partition,
         owner_epoch: head.epoch,
@@ -713,6 +727,68 @@ async function ensureBuildHeads(
     }),
   );
   return retained.length === heads.size;
+}
+
+async function readProjectionDependencyHeads(
+  pool: Pool,
+  build: string,
+  after: number,
+  limit: number,
+  deadline: number,
+  cost: MutableCost,
+) {
+  const retained = rows(
+    await inSnapshot(pool, deadline, (client) =>
+      nativeSourceQuery(client, readRetainedHeadPage, { build_id: build, after_partition: after, input_limit: limit }),
+    ),
+  ) as StoredHead[];
+  cost.inputKeys = Math.max(cost.inputKeys, retained.length || 1);
+  cost.dependencyPoints += retained.length;
+  const heads: PrivacyReductionHead[] = [];
+  for (const expected of retained) {
+    const current = await inSnapshot(pool, deadline, (client) =>
+      nativeSourceQuery(client, readCurrentRetainedHead, { partition_no: expected.partition_no }),
+    );
+    if (
+      !current ||
+      current.write_state !== 'active' ||
+      current.epoch !== expected.owner_epoch ||
+      BigInt(current.position) !== BigInt(expected.position)
+    )
+      return null;
+    heads.push({ partition: expected.partition_no, epoch: current.epoch, position: BigInt(current.position) });
+  }
+  return { heads, after: retained.at(-1)?.partition_no ?? after, complete: retained.length < limit };
+}
+
+/** Invalidate the old generation under the build lock and reclaim one exact dependency head. */
+async function retireIdentityProjectionHead(
+  client: PoolClient,
+  partition: number,
+  subject: string,
+): Promise<PublicFilterProjectionRetirement | null> {
+  const prior = (
+    await client.query<{ build_id: string; generation: string; meaning_digest: string }>(
+      lockProjectionBuildForRetirementSql,
+      [partition, subject],
+    )
+  ).rows[0];
+  if (!prior) return null;
+  const removed = (await client.query<{ partition_no: number }>(retireProjectionHeadSql, [prior.build_id])).rows[0];
+  if (!removed) return null;
+  let generation = prior.generation;
+  if (prior.meaning_digest !== retiredProjectionMeaning) {
+    const marked = (
+      await client.query<{ generation: string }>(invalidateProjectionBuildSql, [
+        prior.build_id,
+        prior.generation,
+        retiredProjectionMeaning,
+      ])
+    ).rows[0];
+    if (!marked) throw new Error('Projection retirement lost the original build');
+    generation = marked.generation;
+  }
+  return { build: prior.build_id, generation, partition: removed.partition_no };
 }
 
 async function saveBuild(
@@ -724,7 +800,7 @@ async function saveBuild(
   build: string,
   heads: ReadonlyMap<number, PrivacyReductionHead>,
   deadline: number,
-): Promise<BuildRow | null> {
+): Promise<BuildRow | { retirement: PublicFilterProjectionRetirement } | null> {
   const route = routeOf(subject)!;
   return withConnection(config.pool, async (client) => {
     requireAccessDeadline(deadline);
@@ -756,7 +832,16 @@ async function saveBuild(
         await client.query('ROLLBACK');
         return null;
       }
-      await nativeSourceQuery(client, retireBuildHeads, { partition_no: observation.partition, subject_id: subject });
+      if (identitySourceSupportJob()) {
+        const retirement = await retireIdentityProjectionHead(client, observation.partition, subject);
+        if (retirement) {
+          await client.query('COMMIT');
+          return { retirement };
+        }
+      } else {
+        await client.query(lockProjectionBuildForRetirementSql, [observation.partition, subject]);
+        await nativeSourceQuery(client, retireBuildHeads, { partition_no: observation.partition, subject_id: subject });
+      }
       const created = rows(
         await nativeSourceQuery(client, startBuild, {
           partition_no: observation.partition,
@@ -774,7 +859,7 @@ async function saveBuild(
         }),
       )[0] as BuildRow | undefined;
       if (!created) throw new Error('Native projection build was not retained');
-      if (!(await ensureBuildHeads(client, created.build_id, heads))) {
+      if (!(await ensureBuildHeads(client, created, heads))) {
         await client.query('ROLLBACK');
         return null;
       }
@@ -870,7 +955,9 @@ export async function readPublicFilterProjectionPage(
   };
 
   try {
-    const pinnedRelease = await storedMeaningRelease(config.pool, request.meaning.digest, deadline);
+    const pinnedRelease = identitySourceSupportJob()
+      ? await readRelease(config.pool, request.meaning.digest)
+      : await storedMeaningRelease(config.pool, request.meaning.digest, deadline);
     if (!pinnedRelease) return unready('metadata_missing', cost);
     const meaning = { ...request.meaning, release: pinnedRelease };
     const snapshot = await inSnapshot(
@@ -891,7 +978,7 @@ export async function readPublicFilterProjectionPage(
         if (!subject.current_revision || !subject.currentRelease) return unready('metadata_missing', cost);
         const privacy = await nativeSourceQuery(client, readPrivacyHead, { partition_no: partition });
         if (!privacy) return unready('metadata_missing', cost);
-        const time = await mintReadTime(client, config.clock);
+        const time = await mintReadTime(client, config.clock, config.pool);
         const buildRows = request.frontier
           ? rows(
               await nativeSourceQuery(client, readBuild, {
@@ -939,6 +1026,59 @@ export async function readPublicFilterProjectionPage(
       },
     );
     if ('status' in snapshot) return snapshot;
+
+    // A native identity cursor entering dependencies has already retained the selection.
+    // Each next turn rechecks the build's current source and reads one bounded head page.
+    if (identitySourceSupportJob() && cursor?.phase === 'dependencies' && snapshot.build) {
+      const build = snapshot.build;
+      const page = await readProjectionDependencyHeads(
+        config.pool,
+        build.build_id,
+        cursor.partition,
+        request.inputLimit,
+        deadline,
+        cost,
+      );
+      if (!page) return { status: 'changed', frontier: request.frontier!, cost };
+      if (page.complete) {
+        const current = await inSnapshot(config.pool, deadline, async (client) => {
+          const owner = await readPartition(client, partition);
+          if (!owner || owner.writeState !== 'active' || owner.epoch !== build.owner_epoch) return false;
+          const latest = (
+            rows(
+              await nativeSourceQuery(client, readBuild, {
+                partition_no: partition,
+                route,
+                subject_id: request.subject,
+                meaning_digest: meaning.digest,
+              }),
+            ) as BuildRow[]
+          )[0];
+          return latest?.build_id === build.build_id && latest.generation === build.generation;
+        });
+        if (!current) return { status: 'changed', frontier: request.frontier!, cost };
+      }
+      const generation = BigInt(build.generation);
+      const frontier = {
+        build: build.build_id,
+        generation,
+        continuation: cursorToken(config.routeKey, build.build_id, generation, {
+          phase: 'dependencies',
+          partition: page.after,
+        }),
+      };
+      const source = sourceObservation(
+        partition,
+        build.owner_epoch,
+        BigInt(build.source_position),
+        snapshot.subject,
+        build.terminal_id,
+      );
+      const common = { source, frontier, records: [], repairLocators: [], cost };
+      return page.complete
+        ? { ...common, status: 'complete', requiredHeads: page.heads }
+        : { ...common, status: 'progress' };
+    }
 
     let nextCursor: PageCursor =
       cursor?.phase === 'dependencies'
@@ -1230,7 +1370,7 @@ export async function readPublicFilterProjectionPage(
         snapshot.subject,
         sourceIdentity.terminal,
       );
-      retained = await saveBuild(
+      const stored = await saveBuild(
         config,
         request.subject,
         meaning,
@@ -1240,15 +1380,18 @@ export async function readPublicFilterProjectionPage(
         heads,
         deadline,
       );
-      if (!retained) return unready('dependency_pending', cost);
+      if (!stored) return unready('dependency_pending', cost);
       cost.frontierWrites++;
+      if ('retirement' in stored)
+        return { status: 'unready', reason: 'dependency_pending', cost, retirement: stored.retirement };
+      retained = stored;
     } else if (retained) {
       const retainedHeads = await withConnection(config.pool, async (client) => {
         requireAccessDeadline(deadline);
         await client.query('BEGIN');
         try {
           await client.query(`SET LOCAL statement_timeout = '${Math.max(1, Math.floor(deadline - Date.now()))}ms'`);
-          const matches = await ensureBuildHeads(client, retained!.build_id, heads);
+          const matches = await ensureBuildHeads(client, retained!, heads);
           await client.query(matches ? 'COMMIT' : 'ROLLBACK');
           return matches;
         } catch (error) {
@@ -1277,48 +1420,28 @@ export async function readPublicFilterProjectionPage(
       retained.terminal_id,
     );
     const stepHeads = new Map(heads);
-    let complete = false;
-    if (nextCursor.phase === 'selection') {
+    if (nextCursor.phase === 'selection' || identitySourceSupportJob()) {
       return { status: 'progress', source: observation, records, repairLocators, frontier, cost };
     }
-    const dependencyCursor = nextCursor;
-    const retainedHeads = rows(
-      await inSnapshot(config.pool, deadline, (client) =>
-        nativeSourceQuery(client, readRetainedHeadPage, {
-          build_id: retained.build_id,
-          after_partition: dependencyCursor.partition,
-          input_limit: request.inputLimit,
-        }),
-      ),
-    ) as StoredHead[];
-    cost.inputKeys = Math.max(cost.inputKeys, retainedHeads.length || 1);
-    cost.dependencyPoints += retainedHeads.length;
-    for (const expected of retainedHeads) {
-      const current = await inSnapshot(config.pool, deadline, (client) =>
-        nativeSourceQuery(client, readCurrentRetainedHead, { partition_no: expected.partition_no }),
-      );
-      if (
-        !current ||
-        current.write_state !== 'active' ||
-        current.epoch !== expected.owner_epoch ||
-        BigInt(current.position) !== BigInt(expected.position)
-      )
-        return request.frontier
-          ? { status: 'changed', frontier: request.frontier, cost }
-          : unready('dependency_pending', cost);
-      stepHeads.set(expected.partition_no, {
-        partition: expected.partition_no,
-        epoch: current.epoch,
-        position: BigInt(current.position),
-      });
-    }
-    complete = retainedHeads.length < request.inputLimit;
-    if (retainedHeads.length > 0) nextCursor = { phase: 'dependencies', partition: retainedHeads.at(-1)!.partition_no };
+    const page = await readProjectionDependencyHeads(
+      config.pool,
+      retained.build_id,
+      nextCursor.partition,
+      request.inputLimit,
+      deadline,
+      cost,
+    );
+    if (!page)
+      return request.frontier
+        ? { status: 'changed', frontier: request.frontier, cost }
+        : unready('dependency_pending', cost);
+    for (const head of page.heads) stepHeads.set(head.partition, head);
+    nextCursor = { phase: 'dependencies', partition: page.after };
     const finalFrontier: PublicFilterProjectionFrontier = {
       ...frontier,
       continuation: cursorToken(config.routeKey, retained.build_id, BigInt(retained.generation), nextCursor),
     };
-    if (!complete)
+    if (!page.complete)
       return { status: 'progress', source: observation, records, repairLocators, frontier: finalFrontier, cost };
     const requiredHeads = [...stepHeads.values()].sort((left, right) => left.partition - right.partition);
     return {

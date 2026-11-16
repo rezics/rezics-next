@@ -17,7 +17,7 @@ function effectKey(consumer: string, original: string, disposition: SearchIdenti
 export async function readSearchIdentityOriginalPlan(
   pool: Pool,
   job: IdentityJobRef,
-  change: IdentityChange,
+  change: Pick<IdentityChange, 'original' | 'terminal'>,
   configuration: SearchReceivingConfiguration,
   deadline: number,
 ): Promise<SearchIdentityReceivingSelection | null> {

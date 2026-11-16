@@ -396,8 +396,8 @@ async function mintTime(
 }
 
 /** Mints an authoritative time for a read outside a command, with no command context. */
-export function mintReadTime(client: CommandTransaction, clock?: () => Date): Promise<AuthoritativeTime> {
-  return mintTime(client, clock);
+export function mintReadTime(client: CommandTransaction, clock?: () => Date, pool?: Pool): Promise<AuthoritativeTime> {
+  return mintTime(client, clock, undefined, pool !== undefined && compiledControls.getStore() === pool);
 }
 
 export class IdempotencyConflictError extends Error {
