@@ -5,6 +5,9 @@ import { resolve } from 'node:path';
 import { createCurrentConsentReader } from '@rezics/auth/current-consent';
 import { builtinCollectionId } from '../../src/library/builtin-identity.ts';
 import { routeOf } from '../../src/route/route.ts';
+import { createSubjectIndex } from '../../src/search/indices.ts';
+import { createOpenSearch } from '../../src/search/opensearch.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { startConsentServer, type ConsentServer } from '../community/membership-fixture.ts';
 import { deletePersona } from '../support/account-deletion.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
@@ -31,8 +34,12 @@ test('anonymous members retain the selected built-in generation after curator er
     const id = builtinCollectionId(owner.accountId, { kind: 'everything' });
     const path = `/v1/collections/${id}`;
     const membersPath = `${path}/members`;
-    const selected = [await f.subject(), await f.subject()].sort();
-    for (const subjectId of selected)
+    const [terminal, original, independent] = [await f.subject(), await f.subject(), await f.subject()].sort() as [
+      string,
+      string,
+      string,
+    ];
+    for (const subjectId of [original, independent])
       await f.json(owner, 'PUT', `/v1/libraryEntries/${subjectId}`, 201, { state: 'planned' });
 
     const temporaryRoot = resolve(import.meta.dir, '../../../../.temp');
@@ -42,12 +49,34 @@ test('anonymous members retain the selected built-in generation after curator er
       async (input) => (await consent.readCurrentConsent(input))?.scopes ?? null,
       temporaryRoot,
     );
+    const searchPrefix = `library-publish-${randomUUID().replaceAll('-', '')}`;
+    await createSubjectIndex(createOpenSearch(searchUrl), searchPrefix, 1);
     await f.start({
       ...consentServer.env,
       KERNEL_ROUTE_KEY: Buffer.from(testRouteKey()).toString('base64url'),
       OPENSEARCH_URL: searchUrl,
-      KERNEL_SEARCH_PREFIX: `library-publish-${randomUUID().replaceAll('-', '')}`,
+      KERNEL_SEARCH_PREFIX: searchPrefix,
     });
+
+    const steward = f.people.staff;
+    await f.json(steward, 'POST', '/v1/platform/exposure/subject_identity:open', 200);
+    await f.json(steward, 'POST', '/v1/grants', 201, {
+      resource: { route: 0, id: GLOBAL_CONTEXT },
+      subject: { kind: 'account', id: steward.accountId },
+      actions: ['subject:merge', 'gate:subject_identity'],
+      valid: '(,)',
+    });
+    // Establish the redirect after saving the original and before the immutable output is selected.
+    const { operation } = await f.json(steward, 'POST', '/v1/subjects:merge', 202, {
+      subjects: [terminal, original],
+    });
+    const merged = await waitFor(
+      'Subject redirect did not publish',
+      async () => (await f.json(steward, 'GET', `/v1/subjectIdentityOperations/${operation.id}`, 200)).operation,
+      (value) => value.done === true,
+    );
+    expect(merged.result).toMatchObject({ survivor: terminal, redirected: original });
+
     const admitted = await f.json(owner, 'POST', `${path}:publish`, 202, { revision: 0, visibility: 'public' });
     const completed = await waitFor(
       'Built-in publication did not complete',
@@ -66,7 +95,7 @@ test('anonymous members retain the selected built-in generation after curator er
       throw new Error(`Publication workflow status: ${workflow?.status ?? 'absent'}`, { cause: error });
     });
     const generation: string = completed.publication.generation;
-    const members = selected.map((subjectId) => ({ kind: 'dynamic', subjectId }));
+    const members = [terminal, independent].map((subjectId) => ({ kind: 'dynamic', subjectId }));
     const live = await waitFor(
       'Selected output did not become readable',
       async () => {
@@ -114,13 +143,20 @@ test('anonymous members retain the selected built-in generation after curator er
     const second = await f.json(null, 'GET', `${membersPath}?limit=1&cursor=${encodeURIComponent(first.next)}`, 200);
     expect(second).toEqual({ members: members.slice(1), next: null });
 
-    await f.json(f.people.staff, 'POST', `/v1/subjects/${selected[0]}:hide`, 200, {
-      reason: 'Current disclosure of an exact frozen member',
-    });
-    expect(await f.json(null, 'GET', `${membersPath}?limit=1`, 200)).toEqual({
-      members: members.slice(1),
-      next: null,
-    });
+    for (const subjectId of [original, terminal]) {
+      await f.json(steward, 'POST', `/v1/subjects/${subjectId}:hide`, 200, {
+        reason: 'Current disclosure of an exact frozen member',
+      });
+      expect(await f.json(null, 'GET', `${membersPath}?limit=1`, 200)).toEqual({
+        members: members.slice(1),
+        next: null,
+      });
+      await f.json(steward, 'POST', `/v1/subjects/${subjectId}:restore`, 200, {
+        reason: 'Restore disclosure of the exact frozen member',
+      });
+      expect(await f.json(null, 'GET', membersPath, 200)).toEqual({ members, next: null });
+    }
+    expect(await retained()).toEqual(frozen);
   } finally {
     try {
       await f.close();
