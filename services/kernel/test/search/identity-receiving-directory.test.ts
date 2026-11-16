@@ -251,7 +251,7 @@ test.each([
     string,
     string,
   ];
-  const foreignCapture = mode === 'foreign-step-capture' || mode === 'canonical-terms';
+  const foreignCapture = mode === 'foreign-step-capture' || mode === 'canonical-terms' || mode === 'canonical-merge';
   const crossHome = mode === 'visible-cross-home' || mode === 'foreign-step-capture';
   const terminalHome = crossHome ? otherControlHome : writerHome;
   const second = crossHome ? newId(terminalHome << 4) : localTerminal;
@@ -260,7 +260,7 @@ test.each([
   const savedJob = { jobId, epoch: '1' };
   const creditedCreator = mode === 'canonical-credit';
   const bothVisible = mode === 'visible' || crossHome;
-  const nativePermission = mode === 'canonical-terms' || bothVisible;
+  const nativePermission = mode === 'canonical-terms' || mode === 'canonical-merge' || bothVisible;
   let permissionTimes = 0;
   let permissionFormulas = 0;
   let permissionBatches = 0;
