@@ -106,14 +106,15 @@ export function testKeepsFiles(args: string[]): boolean {
 
 const SHARED_HOSTS = join('.temp', 'goal', 'remote-check-hosts.json');
 
-/** A worker carries a task id. An unset or empty id is a person, who may still opt out of a remote run. */
+/** Managed workers carry a task id and native units carry their registered context. */
 export function isWorker(env: Environment): boolean {
-  return Boolean(env.GOAL_TASK_ID || nativeCheckContext(env));
+  return Boolean(nativeCheckContext(env) || env.GOAL_TASK_ID);
 }
 
 /** The approved check transport retains the original unit context; local starts re-observe registration. */
-export function nativeCheckContext(env: Environment) {
-  return isCheckHostRun(process.cwd()) ? nativeUnitContext(env) : observeNativeUnitContext(env);
+export function nativeCheckContext(env: Environment, cwd = process.cwd()) {
+  if (env[NATIVE_UNIT_CONTEXT_VARIABLE] === undefined) return undefined;
+  return isCheckHostRun(cwd) ? nativeUnitContext(env) : observeNativeUnitContext(env, cwd);
 }
 
 /** The working directory is inside a check host's run directory. Environment variables do not count. */
@@ -164,9 +165,21 @@ export const LOCAL_CONTAINER_REFUSAL =
 
 /** Whether this worker's brief lists a native or browser acceptance check, so it may run one walk stack. */
 export function walkStackRequired(env: Environment): boolean {
-  if (!isWorker(env)) return false;
-  const requires = nativeCheckContext(env)?.requires ?? (env.GOAL_ACCEPTANCE_REQUIRES ?? '').split(',');
-  return requires.some((item) => item === 'native' || item === 'browser');
+  return walkAcceptanceId(env) !== undefined;
+}
+
+/** Return the scoped walk owner only when its brief names the required acceptance. */
+export function walkAcceptanceId(
+  env: Environment,
+  required?: 'native' | 'browser',
+  cwd = process.cwd(),
+): string | undefined {
+  const native = nativeCheckContext(env, cwd);
+  const id = native?.unit ?? env.GOAL_TASK_ID;
+  const requires = native?.requires ?? (env.GOAL_ACCEPTANCE_REQUIRES ?? '').split(',');
+  if (!id || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,100}$/.test(id)) return undefined;
+  const allowed = requires.some((item) => (required ? item === required : item === 'native' || item === 'browser'));
+  return allowed ? id : undefined;
 }
 
 /** Host-wide walk admission, including concurrent remote-check checkouts. `TMPDIR` does not override it. */

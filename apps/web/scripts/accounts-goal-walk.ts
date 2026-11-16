@@ -5,6 +5,7 @@
  * bearers use the zero-scope login client then OAuth. Auth page-operation and management
  * client identities are inlined because Web cannot depend on auth-contract.
  */
+import { walkAcceptanceId } from '../../../scripts/stack-run.ts';
 import { createHash, randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { mkdir, open, readFile, writeFile } from 'node:fs/promises';
@@ -305,7 +306,7 @@ export function finishUnobservedJourneys(
 
 /** Own only the supported stack command; its existing signal/cleanup handling owns stack resources. */
 async function launchWalk(): Promise<number> {
-  if (!process.env.GOAL_TASK_ID || !/native|browser/.test(process.env.GOAL_ACCEPTANCE_REQUIRES ?? ''))
+  if (!walkAcceptanceId(process.env))
     throw new Error('This walk runs on a controller-owned walk stack with native and browser acceptance');
   const revision = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: root }).stdout.toString().trim();
   const started = Date.now();
@@ -1030,7 +1031,7 @@ type CaptureHandoff = {
 };
 
 async function captureOriginalAuthJourneys(): Promise<number> {
-  if (!process.env.GOAL_TASK_ID || !/native/.test(process.env.GOAL_ACCEPTANCE_REQUIRES ?? ''))
+  if (!walkAcceptanceId(process.env, 'native'))
     throw new Error('API capture requires native acceptance');
   const directory = join(root, API_CAPTURE_DIRECTORY);
   await mkdir(directory, { recursive: true, mode: 0o700 });
@@ -1132,7 +1133,7 @@ if (import.meta.main && !process.argv.includes('--api-capture') && process.argv.
 }
 
 if (import.meta.main && !process.argv.includes('--api-capture') && !process.argv.includes('--launch')) {
-  if (!process.env.GOAL_TASK_ID || !/native|browser/.test(process.env.GOAL_ACCEPTANCE_REQUIRES ?? ''))
+  if (!walkAcceptanceId(process.env))
     throw new Error('This walk runs on a controller-owned walk stack with native and browser acceptance');
 
   const sourceRevision = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: root }).stdout.toString().trim();

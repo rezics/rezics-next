@@ -6,6 +6,7 @@
  * this walk does not repair startup or seed transport. The 17-row report and its evidence stay under
  * `.temp/goal/performance/` and never record secrets.
  */
+import { walkAcceptanceId } from '../../../scripts/stack-run.ts';
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -664,7 +665,7 @@ function hourly(results: PathResult[]): void {
 }
 
 export async function run(): Promise<PathResult[]> {
-  if (!process.env.GOAL_TASK_ID || !/(native|browser)/.test(process.env.GOAL_ACCEPTANCE_REQUIRES ?? ''))
+  if (!walkAcceptanceId(process.env))
     throw new Error(
       'The first-public journey walk runs on a walk stack whose brief lists native and browser acceptance',
     );

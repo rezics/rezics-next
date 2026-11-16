@@ -1,6 +1,20 @@
 export const NATIVE_UNIT_CONTEXT_VARIABLE = 'REZICS_NATIVE_UNIT_CONTEXT';
 export const NATIVE_UNIT_RUN_VARIABLE = 'REZICS_NATIVE_UNIT_RUN_ID';
 
+/** Desktop commands use the caller's Codex thread, which still requires state and registry verification. */
+export function desktopCodexCaller(env: Record<string, string | undefined>): string {
+  const threadId = env.CODEX_THREAD_ID;
+  if (
+    !threadId ||
+    (env.CODEX_SESSION_ID && env.CODEX_SESSION_ID !== threadId) ||
+    env.CLAUDE_CODE_SESSION_ID ||
+    env.GOAL_TASK_ID ||
+    env.GOAL_ATTEMPT
+  )
+    throw new Error('Native desktop units require an unambiguous Codex caller');
+  return threadId;
+}
+
 /** Original launcher context carried unchanged into an admitted remote check. */
 export type NativeUnitContext = {
   version: 1;

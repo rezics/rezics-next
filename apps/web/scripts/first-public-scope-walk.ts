@@ -3,6 +3,7 @@
  * pages and kernel readback. Paths owned by isolated native/browser host suites name their exact separate
  * entrypoints and stay FAIL-unreached here. Evidence stays under `.temp/goal/web/` and never records secrets.
  */
+import { walkAcceptanceId } from '../../../scripts/stack-run.ts';
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -633,7 +634,7 @@ function hourly(results: PathResult[]): void {
 }
 
 export async function run(): Promise<PathResult[]> {
-  if (!process.env.GOAL_TASK_ID || !/(native|browser)/.test(process.env.GOAL_ACCEPTANCE_REQUIRES ?? ''))
+  if (!walkAcceptanceId(process.env))
     throw new Error('The first-public-scope walk runs on a walk stack whose brief lists native and browser acceptance');
   await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
   await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });

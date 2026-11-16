@@ -4,6 +4,7 @@
  * persona, seeds the development showcase, starts Auth pages and Web after the seed, then runs the journey from
  * apps/web so root bun-test preloads cannot send it to check hosts. Evidence stays under `.temp/ratings-walk/`.
  */
+import { walkAcceptanceId } from '../../../scripts/stack-run.ts';
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -74,7 +75,7 @@ async function run(): Promise<void> {
   assert.equal(pageTypes.questionId, QUESTION);
   assert.equal(pageTypes.population, GLOBAL);
 
-  if (!process.env.GOAL_TASK_ID || !/native/.test(process.env.GOAL_ACCEPTANCE_REQUIRES ?? ''))
+  if (!walkAcceptanceId(process.env, 'native'))
     throw new Error('The ratings walk runs on a walk stack whose brief lists native and browser acceptance');
   if (!process.env.REZICS_LOCAL_STACK_KERNEL_ORIGIN || !process.env.REZICS_LOCAL_STACK_ISSUER_ORIGIN)
     throw new Error('The ratings walk needs the walk stack origins from dev-stack.ts walk');

@@ -7,6 +7,7 @@
  * Evidence stays under `.temp/content-walk/`. A wrong result becomes a repair brief naming trigger, defect and correct
  * result.
  */
+import { walkAcceptanceId } from '../../../scripts/stack-run.ts';
 import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -15,6 +16,7 @@ import {
   waitUntilIdentityBootstrapRemainingZero,
   waitUntilWalkReady,
   walkIssuerForward,
+  walkStackLogPath,
 } from '../../../scripts/walk-stack.ts';
 import {
   identityEpochBootstrapRemaining,
@@ -1942,7 +1944,8 @@ async function main(): Promise<void> {
     });
     process.exit(await child.exited);
   }
-  if (!process.env.GOAL_TASK_ID || !/native|browser/.test(process.env.GOAL_ACCEPTANCE_REQUIRES ?? ''))
+  const walkId = walkAcceptanceId(process.env);
+  if (!walkId)
     throw new Error('The Content Goal walk runs on a walk stack whose brief lists native and browser acceptance');
   await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
   await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
@@ -1956,7 +1959,7 @@ async function main(): Promise<void> {
     await waitUntilIdentityBootstrapRemainingZero(() => identityEpochBootstrapRemaining(databaseUrl));
   } catch (error) {
     // A pre-seed failure is not a failed product journey. Retain the worker's causal trace before teardown.
-    const stackLog = join(root, '.temp/walk', process.env.GOAL_TASK_ID, 'stack.log');
+    const stackLog = walkStackLogPath(root, walkId);
     await writeFile(join(evidenceDir, 'bootstrap-stack.log'), publicStackLog(await readFile(stackLog, 'utf8')), {
       mode: 0o600,
     });
