@@ -208,7 +208,7 @@ test.each([
     mode: 'complete-merge',
   },
   {
-    label: 'records a visible merge removal in its actor admission home',
+    label: 'completes merge and unmerge with a writer in the actor admission home',
     intent: 'merge',
     resumed: false,
     mode: 'same-home-merge',
@@ -589,8 +589,10 @@ test.each([
   const captureQueue: Capture[] = [];
   let captureRole: { account_id: string; role: string } | undefined;
   let captureNativeTransaction: string | null = null;
+  let captureRoleTransaction: string | null = null;
   const capturedEvents: Capture[] = [];
   let interruptApplicationCapture = false;
+  let rejectNativeApplicationProof = false;
   let discardedClients = 0;
   let replaceClient = false;
   let readOnly = false;
@@ -1505,7 +1507,7 @@ test.each([
         }
         writingCustody = {
           epoch: 1,
-          position: String(Number(nativePosition()) + 1),
+          position: completeMerge ? String(controlPosition + 1) : String(Number(nativePosition()) + 1),
           transaction_id: String(values[3]),
         };
         rows = [{}];
@@ -1575,9 +1577,14 @@ test.each([
         sql === receivingStatements.sameCommandApplied ||
         sql === planSql.applied.sql
       ) {
+        if (sql === planSql.applied.sql && values[6] === true) {
+          expect(writing?.transactionId).toBe(writingOperation?.applied_transaction_id);
+          expect(writing?.frontier).toEqual(writingOperation?.frontier);
+          if (rejectNativeApplicationProof) return { rows: [], rowCount: 0 };
+        }
         if (foreignCapture && sql === receivingStatements.insertApplied) {
           expect(values[0]).toBe(writerHome);
-          expect(values[3]).toBe(captureNativeTransaction);
+          expect(values[3]).toBe(captureRoleTransaction);
           captureQueue.push({
             store: 'identity_epoch_receiving_effect',
             partition: writerHome,
@@ -1747,7 +1754,7 @@ test.each([
           const sameHomeCheckpoint =
             values[0] === writerHome &&
             writerHome === jobHome &&
-            ['search-writer-admitted', 'search-writer-support'].includes(String(writing.frontier.after[0]));
+            ['search-writer-admitted', 'search-writer-support', selected].includes(String(writing.frontier.after[0]));
           expect(captureNativeTransaction).toBe(sameHomeCheckpoint ? null : writing.transactionId);
           captureQueue.push({
             store: 'identity_epoch_step',
@@ -1762,7 +1769,12 @@ test.each([
         rows = [];
       } else if (foreignCapture && sql.startsWith('INSERT INTO semantic.erasure_source_role')) {
         if (values[0] === writerHome || values[0] === jobHome) {
-          expect(values.slice(1)).toEqual([captureNativeTransaction, [actorId], ['actor']]);
+          expect(values.slice(1)).toEqual([
+            captureNativeTransaction ?? writingOperation?.applied_transaction_id,
+            [actorId],
+            ['actor'],
+          ]);
+          captureRoleTransaction = String(values[1]);
           captureRole = { account_id: actorId!, role: 'actor' };
         }
         rows = [];
@@ -1790,9 +1802,9 @@ test.each([
         const event = captureQueue.find((event) => !event.armed)!;
         expect(values[0]).toBe(event.partition);
         expect([event.transactionId, captureNativeTransaction]).toContain(values[1]);
-        rows = captureRole && values[1] === captureNativeTransaction ? [captureRole] : [];
+        rows = captureRole && values[1] === captureRoleTransaction ? [captureRole] : [];
       } else if (captureQueue.length && sql === searchReceivingCaptureStatements.sourceNext) {
-        expect(values.slice(1)).toEqual([captureNativeTransaction, actorId, 'actor']);
+        expect(values.slice(1)).toEqual([captureRoleTransaction, actorId, 'actor']);
         rows = [];
       } else if (captureQueue.length && sql === searchReceivingCaptureStatements.basis) {
         const event = captureQueue.find((event) => !event.armed)!;
@@ -1804,11 +1816,12 @@ test.each([
         const event = captureQueue[cursor]!;
         const ordinal = String(cursor + 1);
         const admission = event.transactionId === admissionTransaction;
-        const sources = captureRole ? 1 : 0;
+        const sources =
+          captureRole && [event.transactionId, captureNativeTransaction].includes(captureRoleTransaction) ? 1 : 0;
         expect(values.slice(0, 5)).toEqual([ordinal, event.transactionId, captureNativeTransaction, 0, sources]);
         expect(values.slice(5, 9)).toEqual([admission ? 2 : null, admission ? 0 : null, null, null]);
         const digest = createHash('sha256')
-          .update(`${'0'.repeat(64)}|source|${captureNativeTransaction}|${actorId}|actor`)
+          .update(`${'0'.repeat(64)}|source|${captureRoleTransaction}|${actorId}|actor`)
           .digest('hex');
         expect(values.slice(9)).toEqual(['0'.repeat(64), sources ? digest : '0'.repeat(64)]);
         if (interruptApplicationCapture && captureQueue.length === 2 && cursor === 1)
@@ -1820,6 +1833,7 @@ test.each([
         capturedEvents.push(...captureQueue.splice(0));
         captureRole = undefined;
         captureNativeTransaction = null;
+        captureRoleTransaction = null;
         if (writingSearchAck) {
           searchAcks.set(jobId, writingSearchAck);
           searchAckWrites++;
@@ -1847,6 +1861,7 @@ test.each([
         captureQueue.length = 0;
         captureRole = undefined;
         captureNativeTransaction = null;
+        captureRoleTransaction = null;
         writing = undefined;
         writingOperation = undefined;
         writingSearchAck = undefined;
@@ -1896,6 +1911,7 @@ test.each([
         captureQueue.length = 0;
         captureRole = undefined;
         captureNativeTransaction = null;
+        captureRoleTransaction = null;
         writing = undefined;
         writingOperation = undefined;
         writingSearchAck = undefined;
@@ -2450,13 +2466,22 @@ test.each([
             expect(applicationRequest.receipt).toEqual(request);
             expect(committedOperation?.state).toBe('visible');
             if (sameHomeMerge && writerHome === jobHome) {
-              expect(submitted).toEqual([{ id: selected, operation: 'delete' }]);
+              expect(submitted.at(-1)).toEqual({ id: selected, operation: canonicalTerms ? 'index' : 'delete' });
               expect(preparedWriter).toMatchObject({
                 dispatch_state: 'settled',
                 visible_transaction_id: committedOperation?.visible_transaction_id,
                 visible_position: committedOperation?.visible_position,
               });
-              return;
+              const committedSteps = committed.length;
+              const captured = capturedEvents.length;
+              rejectNativeApplicationProof = true;
+              await expect(prepare(pool, applicationRequest.receipt)).rejects.toThrow(
+                'Native operation, common effect and fixed-step frontier must commit in the same T',
+              );
+              rejectNativeApplicationProof = false;
+              expect(committed).toHaveLength(committedSteps);
+              expect(capturedEvents).toHaveLength(captured);
+              expect(committedOperation?.state).toBe('visible');
             }
             const readsBeforeApplication = originalReads;
             if (foreignCapture) {
@@ -2538,13 +2563,16 @@ test.each([
               const foreignSteps = scopeSteps().filter(({ frontier }) =>
                 ['search-writer-admitted', 'search-writer-support', selected].includes(String(frontier.after[0])),
               );
-              expect(capturedTransactions('identity_epoch_step', writerHome)).toEqual(
-                foreignSteps.map(({ transactionId }) => transactionId),
-              );
               const controlSteps = intent === 'unmerge' && !restoring ? 5 : 4;
-              expect(capturedTransactions('identity_epoch_step', jobHome)).toEqual(
-                Array(controlSteps).fill(admissionTransaction),
-              );
+              const checkpoints = capturedTransactions('identity_epoch_step', jobHome);
+              if (writerHome === jobHome) {
+                expect(checkpoints).toEqual(Array(controlSteps + foreignSteps.length).fill(admissionTransaction));
+              } else {
+                expect(capturedTransactions('identity_epoch_step', writerHome)).toEqual(
+                  foreignSteps.map(({ transactionId }) => transactionId),
+                );
+                expect(checkpoints).toEqual(Array(controlSteps).fill(admissionTransaction));
+              }
               expect(capturedTransactions('identity_epoch_receiving_effect')).toEqual([committedOperation?.applied_transaction_id]);
               expect(capturedTransactions('identity_epoch_effect_receipt')).toEqual([
                 admissionTransaction,
@@ -2622,7 +2650,7 @@ test.each([
   }
 
   await driveOriginal();
-  if (completeMerge && !sameHomeMerge) {
+  if (completeMerge) {
     const redirected = retiredOriginals[0]!;
     expect(redirected.original).toBe(first);
     expect(committed.at(-1)?.frontier.after).toEqual(['search-directory', first, 1]);
