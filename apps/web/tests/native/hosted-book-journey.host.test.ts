@@ -163,19 +163,40 @@ async function observeCoverWork(mediaId: string): Promise<string> {
   );
 }
 
-async function observeDraftReadiness(authorId: string, postId: string): Promise<string> {
+async function observeDraftReadiness(authorId: string, postId: string, revisionId: string): Promise<string> {
   const authorRoute = routeOf(authorId);
   const postRoute = routeOf(postId);
   if (authorRoute === null || postRoute === null) return 'unavailable';
   return observeContentFailure(
     `SELECT p.draft_locator_pending,a.draft_state,
        a.draft_revision_id=p.head_revision_id AS exact_head_projected,
-       g.complete AS coverage_complete
+       g.complete AS coverage_complete,
+       p.head_revision_id=$5 AS saved_revision_is_head,
+       b.transaction_id IS NOT NULL AS saved_revision_basis,
+       o.position::text AS saved_revision_event_position,
+       CASE WHEN o.event_seq IS NULL OR c.epoch IS NULL THEN NULL
+            WHEN c.epoch<>o.epoch THEN 'other-epoch'
+            WHEN c.position>=o.position THEN 'reached'
+            ELSE 'behind' END AS effects_checkpoint,
+       l.state AS locator_obligation,s.status AS locator_effect,s.queue_name AS locator_queue
      FROM content.post p
+     LEFT JOIN content.revision r ON (r.route,r.thread_id,r.post_id,r.revision_id)=
+       (p.route,p.thread_id,p.post_id,$5)
+     LEFT JOIN editorial.write_basis b ON (b.partition_no,b.transaction_id)=($6,r.recorded_transaction_id)
+     LEFT JOIN core.outbox o ON (o.partition_no,o.epoch,o.position)=(b.partition_no,b.epoch,b.position)
+       AND o.type='com.rezics.content.revision.created.v1'
+       AND o.data->>'itemId'=p.post_id::text AND o.data->>'revisionId'=r.revision_id::text
+     LEFT JOIN core.consumer_checkpoint c ON c.partition_no=o.partition_no AND c.consumer='effects'
+     LEFT JOIN LATERAL (
+       SELECT concat('fx:',o.epoch,':',o.partition_no,':',o.position,':',o.event_seq,':content_author_item') AS id
+       WHERE o.event_seq IS NOT NULL
+     ) w ON true
+     LEFT JOIN access.erasure_locator_work l ON l.workflow_id=w.id
+     LEFT JOIN dbos.workflow_status s ON s.workflow_uuid=w.id
      LEFT JOIN content.author_item a ON (a.route,a.author_account_id,a.item_kind,a.item_id)=($1,$2,'post',$4)
      LEFT JOIN content.own_draft_progress g ON g.singleton=0
-     WHERE (p.route,p.post_id,p.author_account_id)=($3,$4,$2)`,
-    [authorRoute, authorId, postRoute, postId],
+     WHERE (p.route,p.post_id,p.author_account_id)=($3,$4,$2) LIMIT 1`,
+    [authorRoute, authorId, postRoute, postId, revisionId, partitionOf(postRoute)],
   );
 }
 
@@ -847,7 +868,7 @@ nativeTest(
           async () => {
             const [browser, draft] = await Promise.all([
               pageObservation(page),
-              observeDraftReadiness(seed!.authorAccountId, chapterTwo!.id),
+              observeDraftReadiness(seed!.authorAccountId, chapterTwo!.id, chapterTwo!.revisionId),
             ]);
             return `${browser}; exact draft readiness=${draft}`;
           },
