@@ -459,7 +459,7 @@ function SettingsSections({
     ),
     notifications:
       'preferences' in page ? (
-        <section id="notifications" aria-labelledby="settings-notifications-heading" className="scroll-mt-6">
+        <section id="notifications" aria-label={m.inbox_notification_preferences()} className="scroll-mt-6">
           {page.page && page.notifications ? (
             <NotificationsCard
               key={csrfToken}

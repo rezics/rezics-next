@@ -239,7 +239,7 @@ export const DefaultReadRecovery: Story = {
     await pageReady(context);
     const { canvasElement } = context;
     await selectSettingsCategory(canvasElement, m.settings_notifications_heading());
-    const region = within(canvasElement).getByRole('region', { name: m.settings_notifications_heading() });
+    const region = within(canvasElement).getByRole('region', { name: m.inbox_notification_preferences() });
     const view = within(region);
     const fixture = recoveryFixtures.get(canvasElement.firstElementChild!)!;
     const reply = view.getByRole('switch', { name: m.settings_notification_reply() });
