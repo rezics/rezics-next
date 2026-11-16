@@ -4941,6 +4941,7 @@ def lifetime():
     cleanup_incomplete = False
     remaining_processes = {}
     packages = []
+    observed = []
     diagnostics = None
     while True:
         now = time.monotonic()
@@ -4968,9 +4969,9 @@ def lifetime():
                 if code is None:
                     reason = 'abort'
             elif code is None and not (root / '.bun-install-complete').exists():
-                current = active_packages(root)
-                if current:
-                    packages = current
+                packages = active_packages(root)
+                if packages:
+                    observed = packages
                 if now >= preparation_deadline:
                     reason = 'install/preparation'
         if code is None and reason is None and not (root / '.command-result').exists() and now >= next_pressure:
@@ -5054,6 +5055,7 @@ def lifetime():
         result_code = 124 if reason in ['run-lifetime', 'host-pressure'] else 128 + interrupted[0] if interrupted else 70
         if reason == 'install/preparation':
             receipt.update({'reason': 'absolute preparation deadline exceeded', 'activePackages': packages,
+                            'lastObservedPackages': observed,
                             'packageClassification': 'active' if packages else 'unknown',
                             'logTail': preparation_log_tail(root),
                             **(diagnostics or preparation_diagnostics(root))})

@@ -8527,6 +8527,30 @@ test('remote dependency preparation has an absolute fifteen-minute default and r
   );
 });
 
+test('a retained preparation timeout distinguishes a completed postinstall from active packages', () => {
+  const fixture = preparationFixture();
+  const program = dependencyPreparationProgram.replace(
+    'PREPARATION_PRESSURE_SECONDS = {}',
+    `PREPARATION_PRESSURE_SECONDS = {}
+def update_host_pressure(directory, ordinary=False):
+    paused = PREPARATION_IO_PHASE in ('postinstall-inventory', 'host-pressure-wait')
+    return paused, False, {'memoryFull': 0, 'ioFull': 10}`,
+  );
+  const run = fixture.create({ program, delay: '0.5', bound: 4_000, timeout: 15_000 });
+  const result = run.execute();
+  expect(result.status, result.stderr).toBe(70);
+  const retained = join(fixture.directory, 'receipts', run.run.split('/').at(-1)!, 'preparation-status.json');
+  expect(JSON.parse(readFileSync(retained, 'utf8'))).toMatchObject({
+    phase: 'install/preparation',
+    stalledPhase: 'host-pressure-wait',
+    activePackages: [],
+    lastObservedPackages: [{ name: '@fixture/native-installer', version: '1.2.3' }],
+    packageClassification: 'unknown',
+  });
+  expect(existsSync(join(run.run, 'generated/lifecycle.txt'))).toBe(true);
+  expect(existsSync(join(run.run, 'command-invoked'))).toBe(false);
+});
+
 test('the preparation bound includes runtime verification and honestly reports unknown before any package starts', () => {
   const fixture = preparationFixture();
   const run = fixture.create({ mode: 'runtime-stall', bound: 8_000, timeout: 15_000 });
