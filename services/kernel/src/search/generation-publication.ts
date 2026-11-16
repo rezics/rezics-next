@@ -1287,7 +1287,13 @@ export function createSearchGenerationPublication(
         job.home = 0;
       }
     } else {
-      const validationHomes = job.family === 'subjects' ? SUBJECT_VALIDATION_HOMES : PAGE;
+      let validationHomes = PAGE;
+      if (job.family === 'subjects') {
+        // The held pass already paid for current Source completion and writer custody.
+        // Spend its remaining allowance on the same exact comparison before repeating those checks.
+        const remaining = job.fenced_pass ? PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - meter.inputKeys : 0;
+        validationHomes = Math.max(SUBJECT_VALIDATION_HOMES, remaining);
+      }
       const end = Math.min(4096, job.home + validationHomes);
       // An empty Subject home without writer custody can be witnessed at its current position.
       // The completed engine pass accounted for existing keys. Occupied homes and homes that
