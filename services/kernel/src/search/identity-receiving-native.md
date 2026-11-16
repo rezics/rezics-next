@@ -186,8 +186,12 @@ For a visible canonical original, the writer verifies the completed Source build
 reading one active term head and its complete fact slot. Each owned turn commits the slot cursor and a digest
 of the terms read so far. The native reader recovers the cursor from the preceding slot's indexed key and
 requires that head to remain current. An empty next seek closes term traversal. The continuation keeps term
-text in Source custody until document assembly. The writer still needs the remaining native document inputs
-before retaining an indexed action. Recovery of an uncertain dispatch requires evidence from the original operation.
+text in Source custody. Assembly replays the committed term work, requires the same complete digest, and uses
+the ordinary document serializer and installed name normalizer. The writer can retain a versioned index action
+when an exact seek proves no adopted statements. It reads native Credit eligibility, Rating and Library in the
+same source snapshot. Dispatch rechecks the Source build, selection absence and current serialized Rating,
+Library and relation-roster fields in the dispatch command. Larger term bodies or adopted statements still require
+staged assembly. Recovery of an uncertain dispatch requires evidence from the original operation.
 
 ## Cost
 

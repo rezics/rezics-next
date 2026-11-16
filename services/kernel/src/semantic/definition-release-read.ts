@@ -49,9 +49,12 @@ export async function readRelease(
 
 export async function activeRelease(
   pool: Pool | CommandTransaction,
+  mode?: 'native',
 ): Promise<{ digest: string; head: number; release: Release } | null> {
   return definitionRead(pool, async (db) => {
-    const active = await releasePointer.run(db, { route: 0 });
+    const active = await (mode === 'native'
+      ? nativeSourceQuery(db, releasePointer, { route: 0 })
+      : releasePointer.run(db, { route: 0 }));
     if (!active) return null;
     const release = releases.get(active.digest) ?? (await readRelease(db, active.digest));
     if (!release) throw new Error('Active definition release is missing');

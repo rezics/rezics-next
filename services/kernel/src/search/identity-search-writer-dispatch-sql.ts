@@ -1,5 +1,5 @@
 /** Exact committed preparation and accepted hold, with the retained writer's actual body size. */
-export const readSearchIdentityDispatchBasisSql = `SELECT h.hold_id::text,n.source,n.effect_key,n.action_digest,
+export const readSearchIdentityDispatchBasisSql = `SELECT h.hold_id::text,n.source,n.effect_key,n.action_digest,n.obligations,
   octet_length(w.repair_action) AS action_bytes, o.state,h.accepted_epoch,h.accepted_position::text,h.accepted_transaction_id::text,
   (v.transaction_id IS NOT NULL) AS visible, (r.transaction_id IS NOT NULL) AS released
  FROM search.identity_receiving_native_plan n

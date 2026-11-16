@@ -101,14 +101,18 @@ export async function creditPlan(pool: Pool, work: WorkHeader): Promise<CreditPl
   const releases = await inSearchSnapshot(pool, async (client) => loadReleases(client, [digest]));
   const release = releases.get(digest);
   if (!release) return 'unsupported';
-  const properties = workCreditProperties(
+  const properties = creditSearchProperties(release, work.type);
+  if (!properties.length) return 'unsupported';
+  return { properties, releases };
+}
+
+export function creditSearchProperties(release: Release, type: string): readonly string[] {
+  return workCreditProperties(
     release,
-    work.type,
+    type,
     semanticCopyWorkApplication().searchEvidence,
     createReleasedRelationDirectionResolver(release, releaseDigest(release)),
   );
-  if (!properties.length) return 'unsupported';
-  return { properties, releases };
 }
 
 export async function selectedCredits(

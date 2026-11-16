@@ -768,12 +768,13 @@ export type SearchWriterNativeCustody = SearchWriterGuard &
       original: string,
       allocation: Readonly<{ incarnation: string; writeAlias: string }>,
     ): Promise<Readonly<{ enrollmentGeneration: string; fenceGeneration: string; close: string | null }>>;
-    prepareIdentityRemoval(
+    prepareIdentityAction(
       tx: CommandTransaction,
       job: IdentityJobRef,
       original: string,
       planId: string,
       admission: SearchIdentityWriterAdmission,
+      document?: SubjectDocument,
     ): Promise<
       Readonly<{
         close: IdentityNativeReceipt;
@@ -1596,7 +1597,7 @@ export function createSearchWriterGuard(options: {
         close: row?.closed_transaction_id ?? null,
       };
     },
-    async prepareIdentityRemoval(tx, job, original, planId, admission) {
+    async prepareIdentityAction(tx, job, original, planId, admission, document) {
       const command = currentCommand(tx);
       if (currentCommandResources(tx).pool !== options.pool || command.partition !== subjectPartition(original))
         throw unavailable('Search writer preparation requires the original home and Pool');
@@ -1691,7 +1692,11 @@ export function createSearchWriterGuard(options: {
         throw unavailable('Search original prior visibility requires retained writer custody');
       if (close.position > BigInt(Number.MAX_SAFE_INTEGER))
         throw unavailable('Search writer close cannot be represented as an external version');
-      const action: IndexAction = { op: 'delete', id: original, version: close.position };
+      if (document && (document.id !== original || document.partition !== close.partition))
+        throw unavailable('Canonical Search document does not belong to its original');
+      const action: IndexAction = document
+        ? { op: 'index', id: original, version: close.position, document }
+        : { op: 'delete', id: original, version: close.position };
       const body = repairEncode(action);
       const prepared = await tx.query(prepareSearchIdentityOriginalSql, [
         close.partition,
@@ -1707,7 +1712,7 @@ export function createSearchWriterGuard(options: {
         body,
         admission.close,
       ]);
-      if (prepared.rowCount !== 1) throw unavailable('Search original changed while retaining its removal action');
+      if (prepared.rowCount !== 1) throw unavailable('Search original changed while retaining its action');
       return {
         close,
         physicalGeneration: generation,

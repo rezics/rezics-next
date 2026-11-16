@@ -76,7 +76,6 @@ import {
   lockSearchIdentityOriginalSql,
   readSearchIdentityPlanComponentSql,
   revalidateSearchIdentityPlanFenceSql,
-  prepareSearchIdentityOriginalSql,
   readSearchIdentityPredecessorSql,
 } from './identity-search-writer-plan-sql.ts';
 
@@ -127,8 +126,7 @@ function searchIdentityParticipantStatementCosts(): SearchReceivingWorkDeclarati
         [searchNativeOriginalOperationSql(), 4, 4, 4096],
         [searchNativeReleaseAppliedSql(), 4, 4, 2048],
         [readSearchIdentityPredecessorSql, 6, 6, 4096],
-        [prepareSearchIdentityOriginalSql, 1, 2, 4096],
-        [readSearchIdentityDispatchBasisSql, 9, 9, 16384],
+        [readSearchIdentityDispatchBasisSql, 9, 9, 20480],
         [dispatchSearchIdentityOriginalSql, 1, 1, 1024],
         [readSearchIdentityPlanBodySizeSql, 1, 1, 512],
         [searchIdentityWriterSettlementSql(), 1, 1, 2048],
