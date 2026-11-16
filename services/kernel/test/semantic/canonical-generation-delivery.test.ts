@@ -5,6 +5,7 @@ import { projectBatch, type CloudEvent } from '../../src/events/log.ts';
 import { rebuildRealmRankCanonicalOrder } from '../../src/rating/realm-rank-convergence.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import {
+  CANONICAL_GENERATION_PAGE_SIZE,
   deliverCanonicalGenerationEvent,
   readCanonicalGenerationDeliveryPage,
   resumeCanonicalGenerationDelivery,
@@ -20,6 +21,32 @@ import { WORK_QUEUES } from '../../src/work/queues.ts';
 import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { fixture, readContext } from './support/public-filter-source.ts';
+
+test('canonical delivery recovery yields after eight native homes even with a retained wide request', async () => {
+  const f = await fixture();
+  try {
+    const pool = f.db.openPool({ max: 1 });
+    const request = { after: 0, limit: CANONICAL_GENERATION_PAGE_SIZE };
+    const { homes } = await readCanonicalGenerationDeliveryPage(
+      pool,
+      { ...request, limit: 9 },
+      { deadline: Date.now() + 2_000 },
+    );
+    expect(homes).toHaveLength(9);
+
+    await resumeCanonicalGenerationDelivery(pool, request);
+    const { rows } = await f.db.admin.query(
+      'SELECT type,data FROM core.outbox WHERE type IN ($1,$2) ORDER BY partition_no,position,event_seq',
+      [CANONICAL_GENERATION_COMMITTED, CANONICAL_GENERATION_CONTINUATION],
+    );
+    expect(rows).toEqual([
+      ...homes.slice(0, 8).map((data) => ({ type: CANONICAL_GENERATION_COMMITTED, data })),
+      { type: CANONICAL_GENERATION_CONTINUATION, data: { after: homes[7]!.partition, limit: request.limit } },
+    ]);
+  } finally {
+    await f.close();
+  }
+});
 
 test('default Content dispatch requires a complete native rebuild before acknowledging a canonical generation', async () => {
   const f = await fixture();
@@ -113,7 +140,7 @@ test('default Content dispatch requires a complete native rebuild before acknowl
     expect(first.data).toEqual({ partition, generation: initial.generation });
     expect(first.source).toMatch(new RegExp(`^urn:rezics:log:${partition}\\.[1-9][0-9]*$`));
     if (partition < 4095) {
-      expect(firstEvents.find((event) => event.type === CANONICAL_GENERATION_CONTINUATION)?.data).toEqual({
+      expect(firstEvents.findLast((event) => event.type === CANONICAL_GENERATION_CONTINUATION)?.data).toEqual({
         after: partition,
         limit: 1,
       });
