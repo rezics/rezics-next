@@ -1,4 +1,4 @@
-import { identityChangePageCosts } from './identity-change-page-work.ts';
+import { identitySearchSourcePageCosts } from './identity-search-source-page-work.ts';
 import structuralHomeGate from './identity-epoch-store-select-home-gate.sql';
 import { memoizedValue } from '../memoized.ts';
 import { receivingSqlKey } from './identity-search-receiving-work.ts';
@@ -50,14 +50,19 @@ import extensionHeadRead from './extension-active.sql';
 import extensionRead from './extension-read.sql';
 import eligibilityRead from './scope-leaf-evidence-eligibility.sql';
 import sourceVisibilityRead from './read-visibility.sql';
-import projectionSubjectsRead from './search-source-subjects.sql';
 import projectionReleasesRead from './search-source-releases.sql';
 import projectionPrivacyRead from './public-filter-projection-head-read.sql';
 import projectionBuildRead from './public-filter-projection-build-read.sql';
-import projectionBuildRetire from './public-filter-projection-build-retire.sql';
+import {
+  invalidateProjectionBuildSql,
+  lockProjectionBuildForHeadsSql,
+  lockProjectionBuildForRetirementSql,
+  retireProjectionHeadSql,
+} from './public-filter-projection-build-control.ts';
 import projectionBuildStart from './public-filter-projection-build-start.sql';
 import projectionPageRead from './public-filter-projection-page.sql';
 import projectionHeadsWrite from './public-filter-projection-head-upsert.sql';
+import projectionCurrentHead from './public-filter-projection-head-current.sql';
 import sourceFencesRead from '../content/read-source-fences.sql';
 import { permissionCheckStatements } from '../access/permission.ts';
 
@@ -99,14 +104,17 @@ function sourceStatementCosts(): readonly (readonly [string, Cost])[] {
         [extensionRead.sql, [1, 1, 1, 65536, 1]],
         [eligibilityRead.sql, [1, 1, 1, 1024, 1]],
         [sourceVisibilityRead.sql, [1, 1, 1, 512, 1]],
-        [projectionSubjectsRead.sql, [8, 8, 1, 16384, 1]],
         [projectionReleasesRead.sql, [1, 1, 1, 65536, 1]],
         [projectionPrivacyRead.sql, [1, 1, 1, 512, 1]],
         [projectionBuildRead.sql, [1, 1, 1, 2048, 1]],
-        [projectionBuildRetire.sql, [1, 1, 1, 512, 0]],
+        [lockProjectionBuildForRetirementSql, [1, 1, 1, 1024, 1]],
+        [retireProjectionHeadSql, [2, 2, 1, 1024, 1]],
+        [invalidateProjectionBuildSql, [1, 1, 1, 1024, 1]],
+        [lockProjectionBuildForHeadsSql, [1, 1, 1, 512, 1]],
         [projectionBuildStart.sql, [1, 1, 1, 2048, 0]],
         [projectionPageRead.sql, [1, 1, 1, 131072, 1]],
         [projectionHeadsWrite.sql, [8, 8, 1, 2048, 0]],
+        [projectionCurrentHead.sql, [2, 2, 1, 1024, 1]],
         [sourceFencesRead.sql, [100, 100, 1, 131072, 1]],
         [permissionCheckStatements.time, [1, 1, 1, 512, 1]],
         [permissionCheckStatements.formula, [16, 16, 1, 32768, 1]],
@@ -217,7 +225,7 @@ export function commonSearchReceivingStatements(): readonly string[] {
           participantReplay.sql,
           participantJob.sql,
           participantAck.sql,
-          ...identityChangePageCosts().map(({ sql }) => sql),
+          ...identitySearchSourcePageCosts().map(({ sql }) => sql),
           nativeDefinition.sql,
           ...sourceStatementCosts().map(([sql]) => sql),
           'BEGIN ISOLATION LEVEL SERIALIZABLE',
@@ -307,7 +315,7 @@ const receivingCost: Partial<Record<keyof typeof receivingStatements, Cost>> = {
 export function searchReceivingCapturedStatementCosts(): SearchReceivingWorkDeclaration['statements'] {
   const costs = new Map<string, Readonly<{ sql: string; work: WorkDimensions }>>();
   const add = (sql: string, cost: Cost) => costs.set(receivingSqlKey(sql), Object.freeze({ sql, work: work(cost) }));
-  for (const { sql, work } of identityChangePageCosts()) costs.set(receivingSqlKey(sql), Object.freeze({ sql, work }));
+  for (const { sql, work } of identitySearchSourcePageCosts()) costs.set(receivingSqlKey(sql), Object.freeze({ sql, work }));
   for (const entry of searchReceivingCaptureStatementCosts) costs.set(receivingSqlKey(entry.sql), entry);
   for (const [name, sql] of Object.entries(receivingStatements)) {
     const cost = receivingCost[name as keyof typeof receivingStatements];

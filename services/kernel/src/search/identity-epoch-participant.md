@@ -98,8 +98,11 @@ writer request at the same directory key when the original needs a plan. The def
 configured Search writer step after the Source frame returns. That step revalidates the exact committed request
 and current original. It reads the physical allocation under the Search turn, then acquires the original's
 structural, publication-admission and generation gates to retain its admission. Same-request replay reuses the
-original admission at its current owner. Plan preparation and dispatch still require the writer's original
-support, action and hold binding.
+original admission at its current owner. The writer then resolves the admitted definition and retains separate
+Source cursors for original and terminal support. Verified progress keeps the coordinator on the same request
+until those Source reads finish. Each private projection turn retains its selection or one dependency page.
+Superseded builds invalidate the old generation and reclaim one dependency head per turn. The next writer
+phase must bind these current references to the exact native action and accepted hold.
 For an existing accepted scope it fuses actual native operation application, the common effect and fixed Search
 `more` step in one transaction, then reconciles original custody. Each common Search plan enters the operational `identity_receiving_native_scope_pending` queue when it commits.
 The participant resumes at the last Search directory key retained in the committed native step. It reads one

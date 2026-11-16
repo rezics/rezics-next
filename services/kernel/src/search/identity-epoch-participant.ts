@@ -62,6 +62,7 @@ import {
   readSearchIdentityMaterializedOriginalSql,
   readSearchIdentityOriginalPlanSql,
   readSearchIdentityWriterAdmissionSql,
+  readSearchIdentityWriterSupportSql,
 } from './identity-search-receiving-directory-sql.ts';
 
 export type { SearchReceivingConfiguration };
@@ -97,6 +98,7 @@ function searchIdentityParticipantStatementCosts(): SearchReceivingWorkDeclarati
     ...(
       [
         [readSearchIdentityWriterAdmissionSql, 3, 3, 4096],
+        [readSearchIdentityWriterSupportSql, 3, 3, 4096],
         [lockPublicationAdmission, 1, 1, 512],
         [readWriterPublicationWitness, 1, 1, 512],
         [insertWriterPublicationWitness, 1, 1, 512],

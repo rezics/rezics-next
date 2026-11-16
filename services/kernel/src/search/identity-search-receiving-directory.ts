@@ -15,6 +15,7 @@ const unavailable = () =>
   new IdentityEpochStoreError('identity_epoch_unavailable', 'Search directory or checkpoint changed');
 type Directory = Readonly<{
   scope: string;
+  release: string;
   transactionId: string | null;
   after: string | null;
   count: number;
@@ -25,6 +26,7 @@ export async function readSearchIdentityDirectory(tx: CommandTransaction, job: I
   const row = (
     await tx.query<{
       scope_digest: string;
+      release: string;
       transaction_id: string | null;
       native_epoch: number | null;
       native_position: string | null;
@@ -32,8 +34,10 @@ export async function readSearchIdentityDirectory(tx: CommandTransaction, job: I
       proven: boolean;
     }>(readSearchIdentityDirectorySql, [identityJobPartition(job), job.jobId, String(job.epoch)])
   ).rows[0];
-  if (!row?.proven || !/^[0-9a-f]{64}$/.test(row.scope_digest)) throw unavailable();
-  if (row.transaction_id === null) return { scope: row.scope_digest, transactionId: null, after: null, count: 0 };
+  if (!row?.proven || !/^[0-9a-f]{64}$/.test(row.scope_digest) || !/^sha256:[0-9a-f]{64}$/.test(row.release))
+    throw unavailable();
+  if (row.transaction_id === null)
+    return { scope: row.scope_digest, release: row.release, transactionId: null, after: null, count: 0 };
   const frontier = snapshotSearchIdentityReceivingFrontier(row.frontier);
   const [kind, after, count, action, original, terminal] = frontier?.after ?? [];
   if (
@@ -45,7 +49,13 @@ export async function readSearchIdentityDirectory(tx: CommandTransaction, job: I
     (count === 0 ? after !== null : typeof after !== 'string' || !uuid.test(after))
   )
     throw unavailable();
-  const previous = { scope: row.scope_digest, transactionId: row.transaction_id, after: after as string | null, count };
+  const previous = {
+    scope: row.scope_digest,
+    release: row.release,
+    transactionId: row.transaction_id,
+    after: after as string | null,
+    count,
+  };
   if (frontier.after.length === 3 && count > 0) return previous;
   if (
     frontier.after.length !== 6 ||
@@ -82,7 +92,12 @@ export async function requireCurrentSearchIdentityDirectory(
   expected: Directory,
 ) {
   const actual = await readSearchIdentityDirectory(tx, job);
-  if (actual.transactionId !== expected.transactionId || actual.scope !== expected.scope) throw unavailable();
+  if (
+    actual.transactionId !== expected.transactionId ||
+    actual.scope !== expected.scope ||
+    actual.release !== expected.release
+  )
+    throw unavailable();
 }
 
 export async function readSearchIdentityDirectoryOriginal(

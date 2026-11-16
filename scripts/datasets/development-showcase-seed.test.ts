@@ -23,7 +23,11 @@ const roots = [
   { source: 'bangumi' as const, externalId: '84148', type: 'schema:Book', property: 'wdt:P5732' },
 ];
 
-async function captureSeedOptions(timestamp?: string, catalogueOnly = false): Promise<CrossMediaSeedCliOptions> {
+async function captureSeedOptions(
+  timestamp?: string,
+  catalogueOnly = false,
+  publishReviewedPersonMerge?: false,
+): Promise<CrossMediaSeedCliOptions> {
   const tempRoot = join(process.cwd(), '.temp');
   await mkdir(tempRoot, { recursive: true });
   const root = await mkdtemp(join(tempRoot, 'seed-provenance-'));
@@ -34,6 +38,7 @@ async function captureSeedOptions(timestamp?: string, catalogueOnly = false): Pr
     const seed = catalogueOnly ? seedDevelopmentCatalogue : runDevelopmentSeed;
     await seed({
       root,
+      ...(publishReviewedPersonMerge === false && { publishReviewedPersonMerge }),
       waitForKernel: async () => {},
       env: {
         REZICS_DEV_PERSONA_ACCOUNT_KEY: 'persona.key',
@@ -98,6 +103,7 @@ test('catalogue seed uses the same selected native import without composing the 
   const { composePersona, ...catalogue } = await captureSeedOptions(pinned);
   expect(composePersona).toBeFunction();
   expect(await captureSeedOptions(pinned, true)).toEqual(catalogue);
+  expect(await captureSeedOptions(pinned, true, false)).toEqual({ ...catalogue, publishReviewedPersonMerge: false });
 });
 
 test('cross-media seed caller prints local dump metadata and preserves reviewed-catalogue attribution', async () => {

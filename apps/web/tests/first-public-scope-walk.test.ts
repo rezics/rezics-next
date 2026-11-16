@@ -62,3 +62,13 @@ test('required Book and knowledge paths identify real separate native/browser su
   expect(walk).toContain("results.some((row) => row.status !== 'PASS')");
   expect(walk).not.toContain('${passing}/35');
 });
+
+test('the walk requires the admitted Web fixture and stops on incomplete catalogue seeding', () => {
+  const walk = readFileSync(resolve(import.meta.dir, '../scripts/first-public-scope-walk.ts'), 'utf8');
+  expect(walk).toContain('!firstPublicWebWalk()');
+  expect(walk).toContain('!walkStackAdmitted(process.env, root)');
+  expect(walk).toContain("'--dev-catalogue', '--without-person-merge'");
+  expect(walk).toContain('if (seedCode !== 0) throw');
+  expect(walk).not.toContain("'persona'");
+  expect(walk).not.toContain("'--dev'");
+});

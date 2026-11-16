@@ -5,6 +5,8 @@ import { PARTITIONS, partitionOf, routeOf } from '../route/contract.ts';
 import { identityChangeFirstInputsSQL, identityChangeTransformSQL } from './identity-epoch-store-change-transform.ts';
 import inputs from './identity-epoch-store-select-input.sql';
 import originals from './identity-epoch-store-select-original.sql';
+import projectionHeads from './public-filter-projection-head-page.sql';
+import projectionSubjects from './search-source-subjects.sql';
 
 const uuid = (value: unknown) =>
   typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
@@ -29,7 +31,15 @@ const transformBytes = Buffer.byteLength(
   }),
 );
 
-type ChangePageCost = Readonly<{
+function textArray(value: unknown): string[] | undefined {
+  if (typeof value !== 'string' || !value.startsWith('{') || !value.endsWith('}')) return undefined;
+  return value
+    .slice(1, -1)
+    .split(',')
+    .map((item) => (item.startsWith('"') && item.endsWith('"') ? item.slice(1, -1) : item));
+}
+
+type PageCost = Readonly<{
   sql: string;
   work: WorkDimensions;
   footprint(values: readonly unknown[]): WorkDimensions | undefined;
@@ -42,11 +52,11 @@ function indexedRead(sql: string, values: readonly unknown[]): WorkDimensions | 
   return cost && Object.freeze({ ...cost, identityMetadataRows: 0 });
 }
 
-export function identityChangePageCosts(): readonly ChangePageCost[] {
-  return memoizedValue(identityChangePageCosts, () => {
-    const declare = (sql: string, values: readonly unknown[], footprint: ChangePageCost['footprint']) => {
+export function identitySearchSourcePageCosts(): readonly PageCost[] {
+  return memoizedValue(identitySearchSourcePageCosts, () => {
+    const declare = (sql: string, values: readonly unknown[], footprint: PageCost['footprint']) => {
       const work = footprint(values);
-      if (!work) throw new TypeError('Missing Identity change page work declaration');
+      if (!work) throw new TypeError('Missing Search Source page work declaration');
       return Object.freeze({ sql, work, footprint });
     };
     return Object.freeze([
@@ -89,6 +99,75 @@ export function identityChangePageCosts(): readonly ChangePageCost[] {
       declare(inputs.sql, [maxHome, maxId], (values) =>
         values.length === 2 && jobHome(values[0], values[1]) ? indexedRead(inputs.sql, values) : undefined,
       ),
+      declare(
+        projectionSubjects.sql,
+        [
+          String(maxHome),
+          `{${Array<string>(256)
+            .fill(String(maxHome * 16 + 15))
+            .join(',')}}`,
+          `{${Array<string>(256).fill(maxId).join(',')}}`,
+        ],
+        (values) => {
+          const [home, rawRoutes, rawSubjects] = values;
+          const routes = textArray(rawRoutes);
+          const subjects = textArray(rawSubjects);
+          if (
+            values.length !== 3 ||
+            typeof home !== 'string' ||
+            !/^(0|[1-9][0-9]{0,3})$/.test(home) ||
+            Number(home) > maxHome ||
+            !routes ||
+            !subjects ||
+            routes.length < 1 ||
+            routes.length > 256 ||
+            routes.length !== subjects.length ||
+            subjects.some(
+              (id, index) =>
+                !uuid(id) ||
+                String(routeOf(id)) !== routes[index] ||
+                Math.floor(Number(routes[index]) / 16) !== Number(home),
+            )
+          )
+            return undefined;
+          // Each requested key reads Subject, selection state, its latest redirect and its latest revision.
+          return Object.freeze({
+            candidateKeys: 0,
+            identityMetadataRows: 0,
+            nativeRows: 4 * subjects.length,
+            nativePoints: 4 * subjects.length,
+            witnessKeys: 0,
+            statements: 1,
+            bytes: 16384 * subjects.length,
+            emptySeeks: 1,
+          });
+        },
+      ),
+      declare(projectionHeads.sql, [maxId, String(maxHome), '1000'], (values) => {
+        const [build, after, limit] = values;
+        if (
+          values.length !== 3 ||
+          !uuid(build) ||
+          typeof after !== 'string' ||
+          !/^(?:-1|0|[1-9][0-9]{0,3})$/.test(after) ||
+          Number(after) > maxHome ||
+          typeof limit !== 'string' ||
+          !/^[1-9][0-9]{0,3}$/.test(limit) ||
+          Number(limit) > 1000
+        )
+          return undefined;
+        const rows = Number(limit);
+        return Object.freeze({
+          candidateKeys: 0,
+          identityMetadataRows: 0,
+          nativeRows: rows + 1,
+          nativePoints: rows + 1,
+          witnessKeys: 0,
+          statements: 1,
+          bytes: Buffer.byteLength(projectionHeads.sql) + Buffer.byteLength(JSON.stringify(values)) + rows * 256,
+          emptySeeks: 1,
+        });
+      }),
       declare(originals.sql, [maxId, maxId, 100, maxId, maxHome], (values) => {
         const [generation, after, limit, terminal, home] = values;
         return values.length === 5 &&

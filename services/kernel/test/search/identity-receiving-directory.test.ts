@@ -1,6 +1,7 @@
 import { beforeAll, expect, test } from 'bun:test';
-import { EventEmitter } from 'node:events';
-import type { Pool, QueryConfig } from 'pg';
+import { createHash } from 'node:crypto';
+import { Pool, type QueryConfig } from 'pg';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import time from '../../src/command/time.sql';
 import commandFence from '../../src/command/fence.sql';
 import { installNativeHistoryPreload } from '../../src/composition/preload.ts';
@@ -19,6 +20,32 @@ import { searchIdentityWriterAdmissionSql } from '../../src/search/writer-guard.
 import { SEARCH_IDENTITY_WRITER_REQUEST } from '../../src/semantic/contract/identity-epoch-ports.ts';
 import { identityEpochReceiptLocator } from '../../src/semantic/core/identity-epoch-sequence.ts';
 import nativeCommit from '../../src/semantic/identity-epoch-store-insert-native-commit.sql';
+import releaseExists from '../../src/semantic/definitions-exists.sql';
+import releaseRead from '../../src/semantic/definitions-read.sql';
+import sourceDefine from '../../src/semantic/public-filter-source-binding-define.sql';
+import definitionRead from '../../src/semantic/public-filter-source-binding-definition.sql';
+import sourceRegister from '../../src/semantic/public-filter-source-binding-register.sql';
+import visibilityRead from '../../src/semantic/read-visibility.sql';
+import mappingOwners from '../../src/semantic/identity-epoch-read-owners.sql';
+import mappingSources from '../../src/semantic/identity-epoch-read-sources.sql';
+import mappingPending from '../../src/semantic/identity-epoch-read-pending.sql';
+import mappingCurrent from '../../src/semantic/identity-terminal-closure-current.sql';
+import projectionRelease from '../../src/semantic/search-source-releases.sql';
+import projectionSubjects from '../../src/semantic/search-source-subjects.sql';
+import projectionPrivacy from '../../src/semantic/public-filter-projection-head-read.sql';
+import projectionPage from '../../src/semantic/public-filter-projection-page.sql';
+import projectionStart from '../../src/semantic/public-filter-projection-build-start.sql';
+import projectionBuild from '../../src/semantic/public-filter-projection-build-read.sql';
+import {
+  invalidateProjectionBuildSql,
+  lockProjectionBuildForHeadsSql,
+  lockProjectionBuildForRetirementSql,
+  retireProjectionHeadSql,
+  retiredProjectionMeaning,
+} from '../../src/semantic/public-filter-projection-build-control.ts';
+import projectionHeads from '../../src/semantic/public-filter-projection-head-upsert.sql';
+import projectionHeadPage from '../../src/semantic/public-filter-projection-head-page.sql';
+import projectionCurrentHead from '../../src/semantic/public-filter-projection-head-current.sql';
 import structuralGate from '../../src/semantic/identity-epoch-store-select-home-gate.sql';
 import type { IdentityFrontier } from '../../src/semantic/identity-epoch-contract.ts';
 import {
@@ -30,6 +57,7 @@ import {
   readSearchIdentityMaterializedOriginalSql,
   readSearchIdentityOriginalPlanSql,
   readSearchIdentityWriterAdmissionSql,
+  readSearchIdentityWriterSupportSql,
 } from '../../src/search/identity-search-receiving-directory-sql.ts';
 import { installIdentityAdapterRuntime } from '../../src/semantic/identity-adapter-runtime.ts';
 import {
@@ -61,6 +89,19 @@ const alias = `${index}-writer-${'a'.repeat(32)}`;
 
 test.each([
   { label: 'selects the initial merge key', intent: 'merge', resumed: false, mode: 'input' },
+  { label: 'resumes a visible terminal projection', intent: 'merge', resumed: false, mode: 'visible' },
+  {
+    label: 'restarts a terminal projection whose build changes during completion',
+    intent: 'merge',
+    resumed: false,
+    mode: 'superseded',
+  },
+  {
+    label: 'reclaims a superseded terminal build one dependency at a time',
+    intent: 'merge',
+    resumed: false,
+    mode: 'retire',
+  },
   { label: 'uses the existing writer admission witness and gate', intent: 'merge', resumed: false, mode: 'existing' },
   { label: 'preserves an active publication fence', intent: 'merge', resumed: false, mode: 'fenced' },
   { label: 'resumes unmerge from the checkpoint', intent: 'unmerge', resumed: true, mode: 'input' },
@@ -78,16 +119,40 @@ test.each([
   const jobId = newId(jobHome << 4);
   const job = { jobId, epoch: 1n };
   const savedJob = { jobId, epoch: '1' };
+  const visible = ['visible', 'retire', 'superseded'].includes(mode);
+  const oldBuild = crypto.randomUUID();
+  const oldHeads = mode === 'retire' ? [0, writerHome] : [];
+  let oldMeaning = bundledDigest;
+  let oldGeneration = '4';
+  const newGeneration = mode === 'retire' ? '6' : '1';
   const after = resumed ? previous : null;
   const frontier = resumed ? { after: ['search-directory', previous, 9], segment: 0 } : null;
   const leftGeneration = newId(jobHome << 4);
   const rightGeneration = newId(jobHome << 4);
   const selected = mode === 'materialized' ? first : intent === 'unmerge' ? second : first;
-  const pool = new EventEmitter() as EventEmitter & Pool;
+  const pool = new Pool();
+  const routeKey = new Uint8Array(32);
+  const routeDigest = createHash('sha256').update(routeKey).digest('hex');
+  const sourceId = crypto.randomUUID();
+  const sourceConfig = crypto.randomUUID();
+  const definitionId = crypto.randomUUID();
+  let capture: string | undefined;
+  let dependencies: string | undefined;
+  const projectedSubjects: string[] = [];
+  const projectionHeadCursors: string[] = [];
+  let retainedBuild: string | undefined;
+  let readBuilds = 0;
   const forbidden = () => {
     throw new Error('Unexpected Access or Pool call');
   };
-  pool.query = forbidden;
+  pool.query = (async (query: string | QueryConfig, positional: unknown[]) => {
+    const connection = await pool.connect();
+    try {
+      return await connection.query(query, positional);
+    } finally {
+      connection.release();
+    }
+  }) as Pool['query'];
   const checkpoint = crypto.randomUUID();
   const replacement = crypto.randomUUID();
   let directoryReads = 0;
@@ -126,7 +191,7 @@ test.each([
               redirected: first,
               survivor: second,
               undoJob: savedJob,
-              release: 'fixture',
+              release: bundledDigest,
             },
             receipt: { kind: 'subject.merge', command: { digest: 'AA==' } },
           },
@@ -145,6 +210,7 @@ test.each([
         rows = [
           {
             scope_digest: directoryScope,
+            release: bundledDigest,
             transaction_id:
               saved?.transactionId ??
               (!resumed ? null : mode === 'changed' && directoryReads > 1 ? replacement : checkpoint),
@@ -195,8 +261,102 @@ test.each([
         rows = [];
       } else if (sql === readSearchIdentityWriterAdmissionSql) {
         expect(values).toEqual([writerHome, jobId, '1', committed[0]?.transactionId, directoryScope, selected]);
-        rows = committed.some((step) => step.frontier.after[0] === 'search-writer-admitted') ? [{ proven: true }] : [];
-      } else if (locks.includes(sql)) {
+        const step = committed.find((step) => step.frontier.after[0] === 'search-writer-admitted');
+        rows = step ? [{ transaction_id: step.transactionId, proven: true }] : [];
+      } else if (sql === readSearchIdentityWriterSupportSql) {
+        expect(values.slice(0, 4)).toEqual([writerHome, jobId, '1', committed[0]?.transactionId]);
+        const step = committed.findLast(
+          (step) => step.frontier.after[0] === 'search-writer-support' && step.frontier.after[2] === values[4],
+        );
+        rows = step ? [{ transaction_id: step.transactionId, frontier: step.frontier, proven: true }] : [];
+      } else if (sql === releaseRead.sql || sql === releaseExists.sql) {
+        expect(values).toEqual(['0', bundledDigest]);
+        rows = [[sql === releaseRead.sql ? JSON.stringify(bundledRelease) : bundledDigest]];
+      } else if (sql === sourceRegister.sql) {
+        expect(values).toEqual([routeDigest]);
+        rows = [[sourceId, sourceConfig, '1']];
+      } else if (sql === sourceDefine.sql) {
+        capture = values.find((value): value is string => typeof value === 'string' && value.startsWith('["object"'));
+        dependencies =
+          values.find((value): value is string => typeof value === 'string' && value.startsWith('[{"kind"')) ?? '[]';
+        expect(capture).toBeDefined();
+        rows = [[definitionId]];
+      } else if (sql === definitionRead.sql) {
+        expect(values[0]).toBe(definitionId);
+        const captureBytes = Buffer.byteLength(capture!) + Buffer.byteLength(dependencies!);
+        rows = [
+          [sourceId, sourceConfig, '1', routeDigest, bundledDigest, capture!, dependencies!, String(captureBytes)],
+        ];
+      } else if (sql === visibilityRead.sql || sql === visibilityRead['~standard'].query.text) {
+        projectedSubjects.push(String(values[1]));
+        rows = [[visible && values[1] === second ? 'visible' : 'hidden', '1', 'schema:Person']];
+      } else if (visible && sql === mappingOwners.sql)
+        rows = [{ partition_no: (values[0] as number[])[0], epoch: 1, position: '0', write_state: 'active' }];
+      else if (visible && sql === mappingSources.sql) {
+        expect(values[0]).toEqual([second]);
+        rows = [
+          {
+            subject_id: second,
+            original: second,
+            control_partition: jobHome,
+            control_group: second,
+            terminal: second,
+            current_target: null,
+            epoch: '1',
+            owner_epoch: 1,
+            dirty_revision: '0',
+            captured_revision: '0',
+            closure_state: 'legacy',
+          },
+        ];
+      } else if (visible && sql === mappingPending.sql)
+        rows = [{ partition_no: jobHome, terminal: second, pending_job: jobId, pending_epoch: '1' }];
+      else if (visible && sql === mappingCurrent.sql)
+        rows = [
+          {
+            partition_no: jobHome,
+            terminal: second,
+            requested_original: second,
+            owner_epoch: 1,
+            closure_state: 'open',
+            redirected: false,
+          },
+        ];
+      else if (visible && sql === projectionRelease.sql) rows = [[bundledDigest, JSON.stringify(bundledRelease)]];
+      else if (visible && sql === projectionSubjects.sql)
+        rows = [[String(writerHome << 4), second, 'schema:Person', 'visible', '1', bundledDigest, null, 't', '1']];
+      else if (visible && sql === projectionPrivacy.sql) rows = [['0']];
+      else if (visible && sql === projectionPage.sql) rows = [];
+      else if (visible && sql === lockProjectionBuildForRetirementSql)
+        rows = mode === 'retire' ? [{ build_id: oldBuild, generation: oldGeneration, meaning_digest: oldMeaning }] : [];
+      else if (visible && sql === retireProjectionHeadSql) {
+        expect(values).toEqual([oldBuild]);
+        const partition = oldHeads.shift();
+        rows = partition === undefined ? [] : [{ partition_no: partition }];
+      } else if (visible && sql === invalidateProjectionBuildSql) {
+        expect(values).toEqual([oldBuild, '4', retiredProjectionMeaning]);
+        oldGeneration = '5';
+        oldMeaning = retiredProjectionMeaning;
+        rows = [{ generation: oldGeneration }];
+      } else if (visible && sql === lockProjectionBuildForHeadsSql) {
+        expect(values).toEqual([retainedBuild, newGeneration, retiredProjectionMeaning]);
+        rows = [{}];
+      } else if (visible && sql === projectionStart.sql) {
+        retainedBuild = String(values[4]);
+        rows = [[retainedBuild, newGeneration, String(writerHome << 4)]];
+      } else if (visible && sql === projectionBuild.sql) {
+        readBuilds++;
+        rows =
+          mode === 'superseded' && readBuilds === 3
+            ? []
+            : [[retainedBuild, newGeneration, String(writerHome << 4), '1', '0', '0', second, '1', '1', bundledDigest]];
+      } else if (visible && sql === projectionHeads.sql) rows = [[String(writerHome)]];
+      else if (visible && sql === projectionHeadPage.sql) {
+        expect(values[2]).toBe('1');
+        projectionHeadCursors.push(String(values[1]));
+        rows = Number(values[1]) < writerHome ? [[String(writerHome), '1', '0']] : [];
+      } else if (visible && sql === projectionCurrentHead.sql) rows = [['0', '1', 'active']];
+      else if (locks.includes(sql)) {
         observedLocks.push(sql);
         if (sql === structuralGate.sql) rows = [{ pending_job: jobId, pending_epoch: '1' }];
         else if (sql === readWriterPublicationWitness && (mode === 'existing' || mode === 'fenced')) rows = [{}];
@@ -227,6 +387,8 @@ test.each([
         sql === searchReceivingCaptureStatements.next ||
         [
           'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
+          'BEGIN ISOLATION LEVEL REPEATABLE READ',
+          'BEGIN',
           'BEGIN ISOLATION LEVEL SERIALIZABLE',
           'COMMIT',
           'ROLLBACK',
@@ -266,13 +428,15 @@ test.each([
     },
     bulk: forbidden,
   };
-  const routeKey = new Uint8Array(32);
   const receiving = searchIdentityReceivingComposition({
     pool,
     search,
     prefix,
     routeKey,
-    access: { authorize: forbidden, authenticate: forbidden } as never,
+    access: {
+      authorize: visible ? async () => true : forbidden,
+      authenticate: forbidden,
+    } as never,
     clock: () => new Date(),
     identitySourceSupportReaderFactory: composeSearchNativePorts().createIdentitySourceSupportReader,
     work: searchReceivingProductionDeclaration(),
@@ -281,7 +445,9 @@ test.each([
   const result = withIdentitySourceConsumerMaintenance({ pool, env: {} }, { deadline: Date.now() + 5000 }, () =>
     step(pool, job),
   );
-  const requestsWriter = ['input', 'materialized', 'existing', 'fenced'].includes(mode);
+  const requestsWriter = ['input', 'materialized', 'existing', 'fenced', 'visible', 'retire', 'superseded'].includes(
+    mode,
+  );
   if (!requestsWriter) {
     await expect(result).rejects.toThrow(
       mode === 'stale' || mode === 'changed'
@@ -333,7 +499,10 @@ test.each([
         ]);
         return;
       }
-      expect(await prepare(pool, progress.receipt)).toBe('pending');
+      expect(await prepare(pool, progress.receipt)).toEqual({
+        state: 'progress',
+        transactionId: committed[1]?.transactionId,
+      });
       expect(committed[1]?.frontier.after).toEqual([
         'search-writer-admitted',
         progress.receipt.native.transactionId,
@@ -353,9 +522,52 @@ test.each([
             )
           : locks,
       );
-      expect(await prepare(pool, progress.receipt)).toBe('pending');
+      expect(await prepare(pool, progress.receipt)).toEqual({
+        state: 'progress',
+        transactionId: committed[2]?.transactionId,
+      });
+      expect(committed[2]?.frontier.after).toEqual([
+        'search-writer-support',
+        progress.receipt.native.transactionId,
+        'definition',
+        definitionId,
+        bundledDigest,
+      ]);
+      expect(await prepare(pool, progress.receipt)).toEqual({
+        state: 'progress',
+        transactionId: committed[3]?.transactionId,
+      });
+      const nextSupport = async (expected: readonly unknown[]) => {
+        const position = committed.length;
+        expect(await prepare(pool, progress.receipt)).toEqual({
+          state: 'progress',
+          transactionId: committed[position]?.transactionId,
+        });
+        expect(committed[position]?.frontier.after.slice(2, 2 + expected.length)).toEqual(expected);
+      };
+      if (mode === 'retire') {
+        await nextSupport(['terminal', 'retiring', oldBuild, '5', 0]);
+        await nextSupport(['terminal', 'retiring', oldBuild, '5', writerHome]);
+        expect(oldHeads).toEqual([]);
+      }
+      if (visible) {
+        await nextSupport(['terminal', 'progress']);
+        expect(projectionHeadCursors).toEqual([]);
+        await nextSupport(['terminal', 'progress', retainedBuild, newGeneration]);
+        if (mode === 'superseded') {
+          await nextSupport(['terminal', 'restart']);
+          expect(engineReads).toBe(1);
+          expect(readBuilds).toBe(3);
+          return;
+        }
+        await nextSupport(['terminal', 'complete', retainedBuild, newGeneration]);
+        expect(projectionHeadCursors).toEqual(['-1', String(writerHome)]);
+      } else await nextSupport(['terminal', 'withheld']);
+      expect(committed[3]?.frontier.after.slice(2)).toEqual(['original', 'withheld']);
+      expect(projectedSubjects).toEqual([first, ...Array(mode === 'retire' ? 5 : visible ? 3 : 1).fill(second)]);
+      expect(await prepare(pool, progress.receipt)).toEqual({ state: 'pending' });
       expect(engineReads).toBe(1);
-      expect(committed).toHaveLength(2);
+      expect(committed.map((step) => step.engineRequests)).toEqual([0, 1, ...Array(committed.length - 2).fill(0)]);
       return;
     }
   }
