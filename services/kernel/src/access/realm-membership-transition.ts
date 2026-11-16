@@ -123,12 +123,11 @@ export function createRealmMembershipTransitions(config: {
             transition: input.transition,
             proofTransactionId: value.transactionId,
             outcome: value.outcome,
-            publicationTransactionId: value.publicationTransactionId,
           };
         },
       );
-      // Keep the established receipt digest stable while returning the full
-      // source proof identity, including when replaying an older receipt.
+      // The lifecycle executor uses its body result for both the receipt and
+      // the closed consumed event. Extend only the returned API value, including on replay.
       return {
         ...outcome,
         get value() {
