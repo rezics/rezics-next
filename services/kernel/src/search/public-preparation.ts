@@ -36,6 +36,8 @@ export type PublicPreparationOptions = {
 
 // Yield ordinary reconciliation after four independently metered turns.
 const publicationTurnsPerDelivery = 4;
+// Reserve time inside the delivery for the frontier commit and successor enqueue.
+const populationHandoffMs = 1000;
 
 const databaseLifetimeOptions = {
   deadlineError: () => new SearchUnavailableError('Public preparation database deadline expired'),
@@ -127,12 +129,13 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
   async function population(
     record: PreparationRecord,
     state: PopulationFrontier,
-    context: PublicFilterConsumerContext,
+    deliveryDeadline: number,
     mayContinue: (sourceAdvanced: boolean) => boolean,
   ): Promise<string | undefined> {
+    const context = { deadline: deliveryDeadline - populationHandoffMs };
     const advance = async (locator: PreparationLocator | null, delayMs = 0, ready = false, sourceAdvanced = false) => {
       const continueInline = ready && mayContinue(sourceAdvanced);
-      const revision = await store.advance(record, locator, delayMs, context.deadline, continueInline);
+      const revision = await store.advance(record, locator, delayMs, deliveryDeadline, continueInline);
       return continueInline ? (revision ?? undefined) : undefined;
     };
     const search = searchWithin(context.deadline);
@@ -222,6 +225,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
         activated.sourceAdvanced === true,
       );
     }
+    if (activated.reason === 'deadline') return advance(state);
     // An unready activation can have durably restarted reconciliation. The subsequent step
     // will resolve its native phase, including a retained fence or ambiguous alias intent.
     return advance({ ...state, phase: 'native' }, 1000);
@@ -293,7 +297,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
           }
           try {
             if (record.locator.kind === 'population') {
-              const next = await population(record, record.locator, context, (sourceAdvanced) => {
+              const next = await population(record, record.locator, context.deadline, (sourceAdvanced) => {
                 const now = Date.now();
                 longestTurnMs = Math.max(longestTurnMs, now - started);
                 // Cold Source preparation needs hundreds of metered turns. Keep its
@@ -303,7 +307,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
                   !paused &&
                   !stopped &&
                   (turn < publicationTurnsPerDelivery || sourceAdvanced) &&
-                  now + 2 * longestTurnMs < context.deadline
+                  now + 2 * longestTurnMs < context.deadline - populationHandoffMs
                 );
               });
               failures.delete(record.locator.kind);

@@ -2701,7 +2701,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             charge,
           );
           const body = encodeNative(intent);
-          const [saved] = await repairPageSave.run(m.pool, {
+          const saved = await repairPageSave.run(m.pool, {
             ...keys,
             has_repairs: intent.repairs.length > 0 || intent.account !== undefined,
             intent: body,
