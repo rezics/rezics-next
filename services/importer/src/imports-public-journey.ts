@@ -35,11 +35,14 @@ import {
 import { BOOK_OWNER_GRANT_ACTIONS, grantOrdinaryOwnerActions } from './ordinary-owner-grants.ts';
 import {
   citedAnimeCreditTargets,
+  journeyTargets,
+  journeyViewports,
   runBangumiJourney,
   selectJourneyWorks,
   startWalkStackActions,
   type JourneyMountedVisit,
   type JourneyPublishedRow,
+  type JourneyTarget,
 } from './showcase-bangumi-journey.ts';
 import type { CrossMediaSeedReport } from './cross-media-seed.ts';
 import type { ShowcasePublicationResult } from './showcase-publication-contract.ts';
@@ -128,6 +131,7 @@ export type WalkInventory = {
   endedAt: string;
   passing: number;
   total: number;
+  browserStageFailure?: string;
   slowestFailing: { id: FirstPublicImportRowId; path: string; elapsedMs: number; cause: string } | null;
   rows: WalkRowResult[];
 };
@@ -169,12 +173,46 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-export function mountedVisitsForRow(id: 'I05' | 'I11' | 'I12', visits: readonly JourneyMountedVisit[]) {
+type MountedRowId = 'I05' | 'I11' | 'I12';
+
+function isMountedRow(id: FirstPublicImportRowId): id is MountedRowId {
+  return id === 'I05' || id === 'I11' || id === 'I12';
+}
+
+export function mountedVisitsForRow<Visit extends JourneyTarget>(id: MountedRowId, visits: readonly Visit[]) {
   if (id === 'I05') return visits.filter((visit) => visit.role === 'anime');
   const series = id === 'I11' ? '499' : '2815';
   return visits.filter(
     (visit) => (visit.series ?? visit.sourceKey) === series || (id === 'I12' && visit.sourceKey === '233'),
   );
+}
+
+export function mountedWalkRow(
+  row: WalkRowResult,
+  visits: readonly JourneyMountedVisit[],
+  elapsedMs = 0,
+  browserFailure?: string,
+): WalkRowResult {
+  if (!isMountedRow(row.id)) return row;
+  const browserVisits = mountedVisitsForRow(row.id, visits);
+  const complete = mountedVisitsForRow(row.id, journeyTargets).every((target) =>
+    Object.keys(journeyViewports).every((viewport) =>
+      browserVisits.some((visit) => visit.sourceKey === target.sourceKey && visit.viewport === viewport),
+    ),
+  );
+  return {
+    ...row,
+    elapsedMs: row.elapsedMs === null ? null : row.elapsedMs + elapsedMs,
+    result: row.result === 'passing' && complete ? 'passing' : 'failing',
+    cause: row.cause ?? (complete ? null : (browserFailure ?? 'Required mounted visits are incomplete')),
+    evidence: {
+      ...row.evidence,
+      native: row.result,
+      browser: complete ? 'passing' : browserFailure ? 'failing' : 'pending',
+      browserVisits,
+      ...(!complete && browserFailure ? { browserError: browserFailure } : {}),
+    },
+  };
 }
 
 export function walkInventorySummary(inventory: WalkInventory): string {
@@ -239,6 +277,7 @@ export function applyWalkInventoryToCapabilities(markdown: string, inventory: Wa
     inventory.slowestFailing
       ? `Slowest failing: ${inventory.slowestFailing.id} ${inventory.slowestFailing.elapsedMs}ms ${inventory.slowestFailing.cause}.`
       : 'No failing journey.',
+    ...(inventory.browserStageFailure ? [`Mounted stage failure: ${inventory.browserStageFailure}.`] : []),
     '',
   ].join('\n');
   if (text.includes(OBSERVED_WALK_HEADING)) {
@@ -352,7 +391,8 @@ export function sealInterruptedWalkInventory(
   terminal: { finishedAt: string; cause: string; checkId: string; runElapsedMs: number },
 ): WalkInventory {
   const observed = new Map(rows.map((row) => [row.id, row]));
-  if (!observed.has(active.id)) {
+  const activeRow = observed.get(active.id);
+  if (!activeRow || (activeRow.evidence.native === 'passing' && activeRow.evidence.browser === 'pending')) {
     observed.set(active.id, {
       id: active.id,
       path: firstPublicRow(active.id).path,
@@ -360,12 +400,13 @@ export function sealInterruptedWalkInventory(
       elapsedMs: null,
       cause: terminal.cause,
       evidence: {
+        ...activeRow?.evidence,
         interrupted: true,
         activeStartedAt: active.startedAt,
         controllerFinishedAt: terminal.finishedAt,
         checkId: terminal.checkId,
         runElapsedMs: terminal.runElapsedMs,
-        currentRead: 'not reached',
+        ...(activeRow ? {} : { currentRead: 'not reached' }),
       },
     });
   }
@@ -1279,21 +1320,28 @@ async function walkSelectedSynopsis(api: string, publication: ShowcasePublicatio
   };
 }
 
+async function writeWalkRow(row: WalkRowResult) {
+  const path = resolve(evidenceRoot, `${row.id.toLowerCase()}-row.json`);
+  const pending = `${path}.pending`;
+  await writeFile(pending, JSON.stringify(row), { mode: 0o600 });
+  await rename(pending, path);
+}
+
+function markActiveWalkRow(id: FirstPublicImportRowId, started: number) {
+  return writeFile(
+    resolve(evidenceRoot, 'active-row.json'),
+    JSON.stringify({ id, path: firstPublicRow(id).path, startedAt: new Date(started).toISOString() }),
+    { mode: 0o600 },
+  );
+}
+
 async function walkRow(
   id: FirstPublicImportRowId,
   run: (reached: Record<string, unknown>) => Promise<Record<string, unknown>>,
 ): Promise<WalkRowResult> {
   const meta = firstPublicRow(id);
   const started = Date.now();
-  await writeFile(
-    resolve(evidenceRoot, 'active-row.json'),
-    JSON.stringify({
-      id,
-      path: meta.path,
-      startedAt: new Date(started).toISOString(),
-    }),
-    { mode: 0o600 },
-  );
+  await markActiveWalkRow(id, started);
   let row: WalkRowResult;
   const reached: Record<string, unknown> = {};
   try {
@@ -1312,7 +1360,7 @@ async function walkRow(
       evidence: { ...reached, error: cause },
     };
   }
-  await writeFile(resolve(evidenceRoot, `${id.toLowerCase()}-row.json`), JSON.stringify(row), { mode: 0o600 });
+  await writeWalkRow(mountedWalkRow(row, []));
   return row;
 }
 
@@ -1325,6 +1373,7 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
   const rows: WalkRowResult[] = [];
   let persona: SeedEnv | undefined;
   let sharedStartup: string | null = null;
+  let browserStageFailure: string | undefined;
   try {
     persona = await loadPersona();
     await grantOwner(persona);
@@ -1356,7 +1405,7 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
           }
         : await walkRow(id, (reached) => runOperator(id, operator, reached));
     rows.push(row);
-    await writeFile(resolve(evidenceRoot, `${id.toLowerCase()}-row.json`), JSON.stringify(row), { mode: 0o600 });
+    await writeWalkRow(row);
   };
 
   // Run the ordinary cover import before the bulk seed can spend this account's upload quota.
@@ -1494,7 +1543,18 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
     );
 
     const browserVisits: JourneyMountedVisit[] = [];
-    const browser = await walkRow('I05', async () => {
+    const nativeRows = rows.map((row, index) => ({ row, index })).filter(({ row }) => isMountedRow(row.id));
+    const browserStarted = Date.now();
+    const recordMountedRows = async (cause?: string) => {
+      for (const { row, index } of nativeRows) {
+        if (rows[index]!.evidence.browser === 'passing') continue;
+        const updated = mountedWalkRow(row, browserVisits, Date.now() - browserStarted, cause);
+        await writeWalkRow(updated);
+        rows[index] = updated;
+      }
+    };
+    await markActiveWalkRow('I05', browserStarted);
+    try {
       const frontends = await startWalkStackActions(
         ['pages', 'web'],
         [`${origins.issuer}/.well-known/openid-configuration`, origins.web],
@@ -1504,34 +1564,26 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
           skipPersona: true,
           skipSeed: true,
           startFrontends: false,
-          onMountedVisit: (visit) => browserVisits.push(visit),
+          async onMountedVisit(visit) {
+            browserVisits.push(visit);
+            await recordMountedRows();
+          },
         });
-        return { browser: 'passing' };
+      } catch (error) {
+        browserStageFailure = walkFailureCause(error);
       } finally {
         await frontends.stop();
       }
-    });
-    for (const id of ['I05', 'I11', 'I12'] as const) {
-      const index = rows.findIndex((row) => row.id === id);
-      const current = rows[index]!;
-      rows[index] = {
-        ...current,
-        elapsedMs: current.elapsedMs! + browser.elapsedMs!,
-        evidence: {
-          ...current.evidence,
-          browser: browser.result,
-          browserVisits: mountedVisitsForRow(id, browserVisits),
-          ...(browser.cause ? { browserError: browser.cause } : {}),
-        },
-        ...(browser.result === 'failing' && current.result === 'passing'
-          ? { result: 'failing' as const, cause: browser.cause }
-          : {}),
-      };
+    } catch (error) {
+      const cause = walkFailureCause(error);
+      if (browserStageFailure) console.error(`mounted stage cleanup failed; ${cause}`);
+      browserStageFailure ??= cause;
     }
+    if (browserStageFailure) console.error(`mounted stage failed; ${browserStageFailure}`);
+    await recordMountedRows(browserStageFailure);
   }
 
-  for (const row of rows)
-    await writeFile(resolve(evidenceRoot, `${row.id.toLowerCase()}-row.json`), JSON.stringify(row), { mode: 0o600 });
+  for (const row of rows) await writeWalkRow(row);
 
   // These callers share the ordinary account/source authority. Keep native writes serial.
   // Open Library is last so its unresolved operation cannot hide the other observations.
@@ -1550,6 +1602,7 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
     endedAt,
     passing: rows.filter((row) => row.result === 'passing').length,
     total: FIRST_PUBLIC_IMPORT_ROWS.length,
+    ...(browserStageFailure ? { browserStageFailure } : {}),
     slowestFailing: slowestFailing
       ? {
           id: slowestFailing.id,
@@ -1568,5 +1621,5 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
 
 if (import.meta.main) {
   const inventory = await runImportsPublicJourney();
-  if (inventory.passing < inventory.total) process.exitCode = 1;
+  if (inventory.passing < inventory.total || inventory.browserStageFailure) process.exitCode = 1;
 }

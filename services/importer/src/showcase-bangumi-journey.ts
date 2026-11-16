@@ -18,7 +18,7 @@ import type { ShowcasePublicationResult } from './showcase-publication-contract.
 const root = resolve(import.meta.dir, '../../..');
 const evidence = resolve(root, '.temp/anime-journey', randomUUID().slice(0, 8));
 const privateLogs = resolve(root, '.temp/anime-stack', randomUUID().slice(0, 8));
-const viewports = {
+export const journeyViewports = {
   phone: { width: 390, height: 844 },
   desktop: { width: 1280, height: 900 },
 } as const;
@@ -442,7 +442,7 @@ export type BangumiJourneyOptions = {
   skipPersona?: boolean;
   skipSeed?: boolean;
   startFrontends?: boolean | 'web';
-  onMountedVisit?(visit: JourneyMountedVisit): void;
+  onMountedVisit?(visit: JourneyMountedVisit): void | Promise<void>;
 };
 
 export async function startWalkStackActions(actions: readonly ('pages' | 'web')[], readyUrls: readonly string[]) {
@@ -661,7 +661,7 @@ export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
       text: string;
       targets: JourneyBrowserTarget[];
     }[] = [];
-    for (const [name, viewport] of Object.entries(viewports)) {
+    for (const [name, viewport] of Object.entries(journeyViewports)) {
       const context = await browser.newContext({ viewport, locale: 'en-US' });
       const page = await context.newPage();
       try {
@@ -694,7 +694,7 @@ export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
             assert.ok(text.includes('文学少女'), `${name} Book Girl volume retains its exact title`);
           if (work.sourceKey === '233')
             assert.ok(text.includes('劇場版 空の境界 第一章 俯瞰風景'), `${name} anime 233 shows its exact und name`);
-          options.onMountedVisit?.({
+          await options.onMountedVisit?.({
             sourceKey: work.sourceKey,
             role: work.role,
             ...(work.series ? { series: work.series } : {}),
