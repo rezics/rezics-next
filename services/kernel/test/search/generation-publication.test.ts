@@ -333,12 +333,20 @@ test('scheduled preparation resumes its stored publication and advances four met
     },
     publication: f.operations,
   } as unknown as DefaultPublicFilterRuntime;
+  const mappingRequests: string[] = [];
+  const schedulerSearch: typeof search = {
+    ...search,
+    request(method, path, ...args) {
+      if (path.endsWith('/_mapping')) mappingRequests.push(method);
+      return search.request(method, path, ...args);
+    },
+  };
   const start = (selected = runtime) =>
     createPublicPreparation({
       pool,
       work,
       prefix: f.prefix,
-      search,
+      search: schedulerSearch,
       source: {} as PublicPreparationOptions['source'],
       listing: {} as PublicPreparationOptions['listing'],
       runtime: selected,
@@ -420,6 +428,7 @@ test('scheduled preparation resumes its stored publication and advances four met
     });
     await maintenance.run(id, activation);
     expect(repaired).toEqual(Array.from({ length: 4 }, () => retained));
+    expect(mappingRequests).toEqual([]);
     const pending = await read();
     expect(BigInt(pending.revision)).toBe(BigInt(activation) + 8n);
     expect(pending.locator).toMatchObject({ phase: 'activate', publication: retained });
