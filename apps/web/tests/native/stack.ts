@@ -64,6 +64,8 @@ export type NativeAccountOperationActor = {
 export type NativeWebStackOptions = {
   /** Observe actual Access results for the frozen personal boundary contract. */
   observePersonalAccess?: boolean;
+  /** Give the isolated showcase governor the native Global Board-creation grant. */
+  localShowcaseBoardCreation?: boolean;
   /** Restrict test-only native write-rate changes to an explicitly configured fixture stack. */
   writeRateOverrides?: string;
   /** Enable the production Commerce composition against an owned Stripe API fixture. */
@@ -1108,6 +1110,7 @@ async function startStack(): Promise<
       {
         linkProjection: 'external',
         strictCleanup: true,
+        localShowcaseBoardCreation: process.env.NATIVE_WEB_LOCAL_SHOWCASE_BOARD_CREATION === '1',
       },
     );
     reportStackProgress('Native web stack startup: native kernel and Auth fixtures ready');
@@ -1616,6 +1619,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
     ...process.env,
     NATIVE_WEB_STACK_HOST: '1',
     NATIVE_WEB_COMMERCE: options.commerce ? '1' : '0',
+    NATIVE_WEB_LOCAL_SHOWCASE_BOARD_CREATION: options.localShowcaseBoardCreation ? '1' : '0',
     NATIVE_WEB_OBSERVE_PERSONAL_ACCESS: options.observePersonalAccess ? '1' : '0',
     ...(options.commerce
       ? {
