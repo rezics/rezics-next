@@ -165,18 +165,16 @@ export async function prepareHostedVersionDraftMovePlan(
     throw new Error('Hosted version draft selection returned different sibling roots for one parent');
   }
 
-  const [siblingRanks, preorderRanks] = await Promise.all([
-    selectedRanks(indexes.siblings, [
-      { rootId: selection.sourceSiblingRootId, nodeId: source.occurrenceId },
-      ...(before === null ? [] : [{ rootId: selection.destinationSiblingRootId, nodeId: before.occurrenceId }]),
-    ]),
-    selectedRanks(
-      indexes.preorder,
-      [source, ...(destinationParent === null ? [] : [destinationParent]), ...(before === null ? [] : [before])].map(
-        ({ occurrenceId }) => ({ rootId: selection.preorderRootId, nodeId: occurrenceId }),
-      ),
-    ),
+  const siblingRanks = await selectedRanks(indexes.siblings, [
+    { rootId: selection.sourceSiblingRootId, nodeId: source.occurrenceId },
+    ...(before === null ? [] : [{ rootId: selection.destinationSiblingRootId, nodeId: before.occurrenceId }]),
   ]);
+  const preorderRanks = await selectedRanks(
+    indexes.preorder,
+    [source, ...(destinationParent === null ? [] : [destinationParent]), ...(before === null ? [] : [before])].map(
+      ({ occurrenceId }) => ({ rootId: selection.preorderRootId, nodeId: occurrenceId }),
+    ),
+  );
   const sourceSiblingRank = siblingRanks[0]!;
   const sourcePreorderRank = preorderRanks[0]!;
   const destinationPreorderRank = destinationParent === null ? null : preorderRanks[1]!;
