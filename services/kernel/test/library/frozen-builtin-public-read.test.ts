@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { createCurrentConsentReader } from '@rezics/auth/current-consent';
 import { builtinCollectionId } from '../../src/library/builtin-identity.ts';
 import outputHead from '../../src/library/collection-source-output-head.sql';
-import { routeOf } from '../../src/route/route.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createSubjectIndex } from '../../src/search/indices.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -58,12 +58,15 @@ async function verifyFrozenPublication(redirect: boolean) {
     );
     const searchPrefix = `library-publish-${randomUUID().replaceAll('-', '')}`;
     await createSubjectIndex(createOpenSearch(searchUrl), searchPrefix, 1);
-    await f.start({
-      ...consentServer.env,
-      KERNEL_ROUTE_KEY: Buffer.from(testRouteKey()).toString('base64url'),
-      OPENSEARCH_URL: searchUrl,
-      KERNEL_SEARCH_PREFIX: searchPrefix,
-    });
+    await f.start(
+      {
+        ...consentServer.env,
+        KERNEL_ROUTE_KEY: Buffer.from(testRouteKey()).toString('base64url'),
+        OPENSEARCH_URL: searchUrl,
+        KERNEL_SEARCH_PREFIX: searchPrefix,
+      },
+      redirect ? undefined : partitionOf(routeOf(owner.accountId)!),
+    );
 
     const steward = f.people.staff;
     if (redirect) {
@@ -184,6 +187,7 @@ async function verifyFrozenPublication(redirect: boolean) {
           selection,
           eligibleGeneration: eligible ?? null,
           queueWarning: f.effectsQueueWarning,
+          effectsRelay: f.effectsRelayProgress,
         })}`,
         {
           cause,

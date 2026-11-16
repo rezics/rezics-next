@@ -7,7 +7,7 @@ import { LOCATOR_EFFECTS_QUEUE, WORK_QUEUES } from '../work/queues.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import type { Relay } from './relays.ts';
 import { lookupEventType } from './catalogue.ts';
-import { projectBatch, type CloudEvent, type Envelope } from './log.ts';
+import { projectBatch, type CloudEvent, type Envelope, type ProjectionProgress } from './log.ts';
 import {
   associateIdentityFxOriginal,
   isIdentityOriginalEffect,
@@ -275,14 +275,28 @@ export async function shutdownWork(): Promise<void> {
   await worker?.stop();
 }
 
+export type EffectsRelayProgress =
+  | ProjectionProgress
+  | { stage: 'prepare' | 'admit' | 'enqueue' }
+  | { stage: 'failed'; name?: string; sqlState?: string };
+export type EffectsRelayProbe = { partition: number; report(progress: EffectsRelayProgress): void };
+
 /** A batch failing after enqueuing is read again and finds the workflows it started. */
-export function relayEffects(pool: Pool, effects: ReturnType<typeof registerEffects>, partition: number) {
+export function relayEffects(
+  pool: Pool,
+  effects: ReturnType<typeof registerEffects>,
+  partition: number,
+  observe?: EffectsRelayProbe['report'],
+) {
   return projectBatch(pool, {
     consumer: EFFECTS_CONSUMER,
     partition,
+    ...(observe ? { observe } : {}),
     apply: async (envelopes) => {
+      observe?.({ stage: 'prepare' });
       await identityOriginalPreparations.get(effects)?.(envelopes);
       if (effects.admit) {
+        observe?.({ stage: 'admit' });
         await withConnection(pool, async (client) => {
           await client.query('BEGIN');
           try {
@@ -301,14 +315,40 @@ export function relayEffects(pool: Pool, effects: ReturnType<typeof registerEffe
           }
         });
       }
+      observe?.({ stage: 'enqueue' });
       await effects.enqueue(envelopes);
     },
   });
 }
 
-export function effectsRelay(pool: Pool, effects: ReturnType<typeof registerEffects>): Relay {
+export function effectsRelay(
+  pool: Pool,
+  effects: ReturnType<typeof registerEffects>,
+  probe?: EffectsRelayProbe,
+): Relay {
+  const observe =
+    probe &&
+    ((progress: EffectsRelayProgress) => {
+      try {
+        probe.report(progress);
+      } catch {
+        // Probe output cannot participate in delivery.
+      }
+    });
   return {
     consumer: EFFECTS_CONSUMER,
-    run: (partition) => relayEffects(pool, effects, partition),
+    run(partition) {
+      if (partition !== probe?.partition || !observe) return relayEffects(pool, effects, partition);
+      return relayEffects(pool, effects, partition, observe).catch((error: unknown) => {
+        const name = error instanceof Error && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(error.name) ? error.name : undefined;
+        const code = error instanceof Error && 'code' in error ? error.code : undefined;
+        observe({
+          stage: 'failed',
+          ...(name ? { name } : {}),
+          ...(typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code) ? { sqlState: code } : {}),
+        });
+        throw error;
+      });
+    },
   };
 }
