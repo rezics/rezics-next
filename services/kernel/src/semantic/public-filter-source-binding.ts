@@ -11,7 +11,7 @@ import { runCommand, noEffect, currentCommand } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import { readRelease } from './definition-release-read.ts';
-import { nativeSourceQuery } from './native-source-query.ts';
+import { nativeSourceQuery } from '../database/native-source-query.ts';
 import { freeze } from './core/freeze.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { ProblemError } from '../http/problem-error.ts';

@@ -8,7 +8,7 @@ import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-val
 import { DefinitionInputError, DefinitionNotFoundError } from './contract/definition-values.ts';
 import { freeze } from './core/freeze.ts';
 import releaseExists from './definitions-exists.sql';
-import { nativeSourceQuery } from './native-source-query.ts';
+import { nativeSourceQuery } from '../database/native-source-query.ts';
 import releaseRead from './definitions-read.sql';
 import releasePointer from './definitions-active.sql';
 import composite from './composite-read.sql';

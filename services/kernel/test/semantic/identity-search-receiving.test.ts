@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
-import type { Pool } from 'pg';
+import type { Pool, QueryConfig } from 'pg';
+import readPartitionStatement from '../../src/partition/read.sql';
+import { readPartition } from '../../src/partition/partition.ts';
 import {
   searchReceivingOwnedStatementCosts,
   searchReceivingOwnedPageStatements,
@@ -97,14 +99,16 @@ const begin = 'BEGIN ISOLATION LEVEL SERIALIZABLE';
 const nativeWrite = 'INSERT INTO native_owner VALUES ($1)';
 const commonWrite = 'INSERT INTO common_receiving VALUES ($1)';
 /** Driver harness for the production accountant, never a receiving evidence adapter. */
-function driver(fail?: string) {
+function driver(fail?: string, readRows?: (sql: string, values: unknown[]) => unknown[]) {
   const calls: string[] = [];
   const pool = new EventEmitter() as EventEmitter & Pool;
   const client = {
-    async query(sql: string) {
+    async query(input: string | QueryConfig, values: unknown[] = []) {
+      const sql = typeof input === 'string' ? input : input.text;
       calls.push(sql);
       if (sql === fail) throw new Error('native/common write failure');
-      return { rows: [], rowCount: 0 };
+      const rows = readRows?.(sql, typeof input === 'string' ? values : (input.values ?? [])) ?? [];
+      return { rows, rowCount: rows.length };
     },
     release() {},
   };
@@ -655,6 +659,44 @@ test('common SQL and the actual checkout debit both original ledgers outside a n
     expect(before.statements - after.statements).toBe(1);
     expect(before.bytes - after.bytes).toBe(32);
     expect(result.work.used).toEqual({ ...zero(), nativeRows: 2, nativePoints: 2, statements: 1, bytes: 32 });
+  });
+});
+
+test('Search receiving dispatches only the declared partition owner lookup', async () => {
+  const { pool, calls } = driver(undefined, (sql, values) => {
+    expect(sql).toBe(readPartitionStatement.sql);
+    expect(values).toEqual(['4095']);
+    return [['4095', 'b', 'active', null, '1', '9007199254740993']];
+  });
+  await funded(pool, async (context) => {
+    const declaration = receivingWorkDeclaration(searchReceivingProductionDeclaration());
+    const result = await withSearchReceivingWork(pool, context, declaration, [readPartitionStatement.sql], async () => {
+      const client = await pool.connect();
+      try {
+        return await readPartition(client, 4095);
+      } finally {
+        client.release();
+      }
+    });
+    expect(calls).toEqual([readPartitionStatement.sql]);
+    expect(result.value).toEqual({
+      partitionNo: 4095,
+      node: 'b',
+      writeState: 'active',
+      movedTo: null,
+      epoch: 1,
+      position: 9007199254740993n,
+    });
+    const cost = declaration.footprint(readPartitionStatement.sql)!;
+    expect(result.work.used).toEqual({ ...cost, nativePoints: cost.nativePoints + 1, emptySeeks: 0 });
+    const remaining = identitySourceConsumerNativeWork(pool, context.identityConsumerWork, context.deadline)!;
+    expect(remaining).toEqual({
+      rows: context.allowance.rows - cost.nativeRows,
+      points: context.allowance.points - cost.nativePoints - 1,
+      statements: context.allowance.statements - cost.statements,
+      bytes: context.allowance.bytes - cost.bytes,
+      engineRequests: context.allowance.engineRequests,
+    });
   });
 });
 
