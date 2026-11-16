@@ -1,0 +1,3 @@
+[test]
+# The mounted Web Worker installs its render binding at the Subject page entry.
+preload = ["./tests/helpers/cloudflare-workers-shim.ts"]
