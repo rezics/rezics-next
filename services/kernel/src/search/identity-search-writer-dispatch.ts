@@ -8,8 +8,9 @@ import { identitySourceConsumerNativeWork } from '../semantic/identity-source-co
 import { advanceSearchIdentityReceivingReconciliation } from '../semantic/identity-receiving-effects.ts';
 import type { IdentityReceivingEffect } from '../semantic/identity-receiving-effects-types.ts';
 import { withReadTransaction } from '../semantic/read.ts';
+import { prepareRetainedIdentitySourceProjections } from '../semantic/search-source.ts';
 import type { SearchIdentityReceivingSelection } from './identity-receiving-native-contract.ts';
-import type { StoredSource } from './identity-receiving-native-internal.ts';
+import type { StoredReferences, StoredSource } from './identity-receiving-native-internal.ts';
 import type { SearchReceivingConfiguration } from './identity-receiving-native.ts';
 import { createSearchIdentityReceivingNativeStore } from './identity-receiving-native-store.ts';
 import {
@@ -24,6 +25,7 @@ import type { OpenSearch } from './opensearch.ts';
 import { subjectPartition } from './source.ts';
 import { decodeSearchIdentityWriterAction, type SearchWriterNativeCustody } from './writer-guard.ts';
 import { validateIndexWriteReceipt, writeIndexActions } from './write-actions.ts';
+import { verifyCanonicalIdentityDocumentAtDispatch } from './identity-search-writer-document.ts';
 
 const unavailable = (message: string) => new IdentityEpochStoreError('identity_epoch_unavailable', message);
 
@@ -44,6 +46,7 @@ export async function readSearchIdentityDispatchBasis(
           source: StoredSource;
           effect_key: string;
           action_digest: string;
+          obligations: StoredReferences;
           action_bytes: number;
           accepted_epoch: number;
           accepted_position: string;
@@ -119,16 +122,29 @@ export async function advanceSearchIdentityDispatch(
 ) {
   const { pool, index, clock } = configuration;
   const { deadline } = context;
-  const basis = await readSearchIdentityDispatchBasis(
+  const { basis, roles } = await withReadTransaction(
     pool,
-    job,
-    {
-      original: request.original,
-      terminal: request.terminal,
-      native: { partition: subjectPartition(request.original), planId: request.planId },
+    async () => {
+      const basis = await readSearchIdentityDispatchBasis(
+        pool,
+        job,
+        {
+          original: request.original,
+          terminal: request.terminal,
+          native: { partition: subjectPartition(request.original), planId: request.planId },
+        },
+        scope,
+        index,
+        deadline,
+      );
+      return {
+        basis,
+        roles:
+          basis?.state === null && basis.hold_id === request.holdId && basis.source.consumer === configuration.consumer
+            ? await identityErasureRoles(pool, job.jobId)
+            : [],
+      };
     },
-    scope,
-    index,
     deadline,
   );
   if (!basis || basis.hold_id !== request.holdId || basis.source.consumer !== configuration.consumer)
@@ -149,6 +165,20 @@ export async function advanceSearchIdentityDispatch(
   if (basis.visible) return { state: 'prepared' } as const;
   if (basis.state !== null) throw unavailable('Search writer awaits the original uncertain dispatch result');
 
+  const originalSupport = source.original === source.terminal ? basis.obligations?.originalSupport : null;
+  const support = originalSupport && { ...originalSupport, generation: BigInt(originalSupport.generation) };
+  const verify =
+    support &&
+    (await prepareRetainedIdentitySourceProjections(configuration, {
+      job,
+      original: source.original,
+      terminal: source.terminal,
+      release: basis.obligations.release,
+      originalSupport: support,
+      terminalSupport: support,
+      deadline,
+    }));
+
   const allocation = async () => {
     const actual = await readSearchWriterPhysicalTarget(engine, index);
     if (actual.incarnation !== source.incarnation || actual.writeAlias !== source.writeAlias)
@@ -156,7 +186,6 @@ export async function advanceSearchIdentityDispatch(
   };
   const token = crypto.randomUUID();
   const operationId = crypto.randomUUID();
-  const roles = await identityErasureRoles(pool, job.jobId);
   const command = { partition: source.receivingHome, deadline, clock };
   const remaining = () => {
     const allowance = identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline);
@@ -180,6 +209,11 @@ export async function advanceSearchIdentityDispatch(
     )
       throw unavailable('Search writer lost the immutable action before dispatch');
     const action = decodeSearchIdentityWriterAction(retained.value, source);
+    if (
+      action.op === 'index' &&
+      (!verify || !(await verify(tx)) || !(await verifyCanonicalIdentityDocumentAtDispatch(tx, action.document)))
+    )
+      throw unavailable('Canonical Search Source changed before dispatch');
     const dispatch = await writer.dispatchIdentityAction(tx, job, source, token);
     bindSemanticProducerRoles(tx, roles);
     await store.recordDispatch(tx, selection.native, basis.hold_id, operationId, remaining(), basis.action_bytes);

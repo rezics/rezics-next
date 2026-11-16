@@ -18,6 +18,8 @@ import mappingSources from './identity-epoch-read-sources.sql';
 import mappingPending from './identity-epoch-read-pending.sql';
 import mappingCurrent from './identity-terminal-closure-current.sql';
 import projectionSubjects from './search-source-subjects.sql';
+import { readIdentitySearchIndexTermsSql, SEARCH_INDEX_TERM_REPLAY_POINTS } from './identity-search-index-terms.ts';
+import { prepareSearchIdentityOriginalSql } from '../search/identity-search-writer-plan-sql.ts';
 
 import {
   readBoundedSearchIdentityActionSql,
@@ -79,6 +81,72 @@ export function identitySearchSourcePageCosts(): readonly PageCost[] {
       return Object.freeze({ sql, work, footprint });
     };
     return Object.freeze([
+      declare(readIdentitySearchIndexTermsSql, [65535, maxId, SEARCH_INDEX_TERM_REPLAY_POINTS], (values) => {
+        const [route, subject, points] = values;
+        if (
+          values.length !== 3 ||
+          typeof route !== 'number' ||
+          !Number.isInteger(route) ||
+          route < 0 ||
+          route > 65535 ||
+          typeof subject !== 'string' ||
+          routeOf(subject) !== route ||
+          typeof points !== 'number' ||
+          !Number.isInteger(points) ||
+          points < 1 ||
+          points > SEARCH_INDEX_TERM_REPLAY_POINTS
+        )
+          return undefined;
+        return Object.freeze({
+          candidateKeys: 0,
+          identityMetadataRows: 0,
+          nativeRows: points,
+          nativePoints: points,
+          witnessKeys: 0,
+          statements: 1,
+          bytes: 4096 + 8192 * points,
+          emptySeeks: points,
+        });
+      }),
+      declare(
+        prepareSearchIdentityOriginalSql,
+        [
+          maxHome,
+          'target',
+          maxId,
+          'physical',
+          1,
+          maxId,
+          '1',
+          maxId,
+          '1',
+          maxId,
+          'a'.repeat(SEARCH_IDENTITY_WRITER_BODY_MAX),
+          null,
+        ],
+        (values) => {
+          const body = values[10];
+          const bytes = typeof body === 'string' ? searchIdentityWriterBodyBytes(Buffer.byteLength(body)) : undefined;
+          if (
+            values.length !== 12 ||
+            !partition(values[0]) ||
+            !uuid(values[2]) ||
+            !uuid(values[9]) ||
+            bytes === undefined
+          )
+            return undefined;
+          return Object.freeze({
+            candidateKeys: 0,
+            identityMetadataRows: 0,
+            nativeRows: 1,
+            nativePoints: 2,
+            witnessKeys: 0,
+            statements: 1,
+            bytes: bytes + 3072,
+            emptySeeks: 1,
+          });
+        },
+      ),
       ...(
         [
           [mappingOwners.sql, [partition], 4096, 1, 512, [maxHome]],
