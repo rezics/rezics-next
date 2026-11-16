@@ -871,7 +871,8 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
         ).rows[0];
         if (!evidence?.value) work.fail('unavailable', 'Actual retained native settlement receipt unavailable');
         const retained = decodeSearchRepairWriterReceipt(evidence.value);
-        validateSearchRepairWriterEvidence(index, retained);
+        // A matching current hit and refresh cannot settle this original identity dispatch.
+        validateSearchRepairWriterEvidence(index, retained, { allowReadbackRecovery: false });
         if (
           retained.locator !== op.writer_locator ||
           evidence.repair_locator !== op.writer_locator ||
