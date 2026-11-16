@@ -1461,7 +1461,7 @@ BEGIN
   native_tx:=(SELECT recorded_transaction_id FROM semantic.identity_epoch_job WHERE partition_no=NEW.partition_no AND job_id=NEW.job_id);
  END IF;
  PERFORM semantic.capture_erasure_roles(NEW.partition_no,'identity_epoch_step',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
