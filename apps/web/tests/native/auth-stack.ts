@@ -457,17 +457,33 @@ export async function startAuthStack(
           await hydrate(page);
           await page.locator('#account-menu-button').waitFor({ state: 'visible' });
         } catch (error) {
+          const refreshed = moduleFailureTrace
+            ? await settledWithin(
+                stack.refreshKernelRequests().then(() => true),
+                1_000,
+              ).catch(() => false)
+            : false;
           const cookieNames = (await browserContext.cookies()).map(({ name, domain, path }) => ({
             name,
             domain,
             path,
           }));
-          throw new Error(
-            `Signed-in web page was not ready at ${page.url()}: ${await page.locator('body').innerText()}; sign-in status=${authResponses.at(-1)?.status() ?? 'missing'}; visited=${JSON.stringify(visitedUrls.map((value) => new URL(value).pathname))}; responses=${JSON.stringify(pageResponses)}; failed requests=${JSON.stringify(pageFailures)}; page errors=${JSON.stringify(pageErrors)}; cookie names=${JSON.stringify(cookieNames)}; web output=${stack.webOutput()}`,
-            {
-              cause: error,
-            },
-          );
+          const memory = refreshed ? stack.memoryObservation() : undefined;
+          const details = [
+            `Signed-in web page was not ready at ${page.url()}: ${await page.locator('body').innerText()}`,
+            `sign-in status=${authResponses.at(-1)?.status() ?? 'missing'}`,
+            `visited=${JSON.stringify(visitedUrls.map((value) => new URL(value).pathname))}`,
+            `responses=${JSON.stringify(pageResponses)}`,
+            `failed requests=${JSON.stringify(pageFailures)}`,
+            `page errors=${JSON.stringify(pageErrors)}`,
+            `cookie names=${JSON.stringify(cookieNames)}`,
+            `web output (${refreshed ? 'refreshed' : 'last observation'})=${stack.webOutput()}`,
+          ];
+          if (memory)
+            details.push(
+              `native memory sample=${JSON.stringify({ sampledAt: memory.sampledAt, cgroup: memory.cgroup })}`,
+            );
+          throw new Error(details.join('; '), { cause: error });
         }
       }
       await page.waitForLoadState('domcontentloaded');
