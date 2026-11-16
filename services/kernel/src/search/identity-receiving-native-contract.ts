@@ -153,6 +153,7 @@ export interface SearchIdentityReceivingNative {
     locator: SearchIdentityReceivingLocator,
     after: string | null,
     context: SearchIdentityReceivingContext,
+    record?: SearchIdentityReceivingRecord,
   ): Promise<SearchIdentityReceivingResult<Readonly<{ after: string | null; state: 'progress' | 'settled' }>>>;
   releaseHold(
     tx: CommandTransaction,

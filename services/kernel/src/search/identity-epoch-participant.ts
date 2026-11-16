@@ -85,8 +85,8 @@ import {
   readSearchIdentityPlanBodySizeSql,
   readSearchIdentityDispatchBasisSql,
 } from './identity-search-writer-dispatch-sql.ts';
-import { readSearchIdentityDispatchBasis } from './identity-search-writer-dispatch.ts';
-import { searchNativeOriginalOperationSql } from './identity-receiving-native-work.ts';
+import { readSearchIdentityDispatchBasis, searchIdentityDispatchEffect } from './identity-search-writer-dispatch.ts';
+import { searchNativeOriginalOperationSql, searchNativeReleaseAppliedSql } from './identity-receiving-native-work.ts';
 export type { SearchReceivingConfiguration };
 
 const participantStatementWork = (
@@ -125,9 +125,10 @@ function searchIdentityParticipantStatementCosts(): SearchReceivingWorkDeclarati
         [readSearchIdentityPlanComponentSql, 1, 1, 512],
         [revalidateSearchIdentityPlanFenceSql, 5, 5, 2048],
         [searchNativeOriginalOperationSql(), 4, 4, 4096],
+        [searchNativeReleaseAppliedSql(), 4, 4, 2048],
         [readSearchIdentityPredecessorSql, 6, 6, 4096],
         [prepareSearchIdentityOriginalSql, 1, 2, 4096],
-        [readSearchIdentityDispatchBasisSql, 7, 7, 16384],
+        [readSearchIdentityDispatchBasisSql, 9, 9, 16384],
         [dispatchSearchIdentityOriginalSql, 1, 1, 1024],
         [readSearchIdentityPlanBodySizeSql, 1, 1, 512],
         [searchIdentityWriterSettlementSql(), 1, 1, 2048],
@@ -410,21 +411,13 @@ export function createSearchIdentityEpochParticipant(options: {
           : null;
         if (plan.originalBarrier) {
           if (!dispatch) return stageWriter({ planId: selection.native.planId });
-          if (!dispatch.visible) return stageWriter({ planId: selection.native.planId, holdId: dispatch.hold_id });
+          if (dispatch.effect_key !== selection.effectKey || dispatch.source.consumer !== configuration.consumer)
+            throw unavailable('Retained dispatch differs from the selected original plan');
+          if (!dispatch.visible || (dispatch.state === 'applied' && !dispatch.released))
+            return stageWriter({ planId: selection.native.planId, holdId: dispatch.hold_id });
         }
         const effect = dispatch
-          ? {
-              kind: 'receiving' as const,
-              job: ref,
-              original: selection.original,
-              effectKey: selection.effectKey,
-              receipt: {
-                partition: selection.native.partition,
-                epoch: dispatch.accepted_epoch,
-                position: BigInt(dispatch.accepted_position),
-                transactionId: dispatch.accepted_transaction_id,
-              },
-            }
+          ? searchIdentityDispatchEffect(ref, selection, dispatch)
           : await prepareSearchIdentityReceivingEffect(pool, selection);
         const row = await withReadTransaction(
           pool,
@@ -504,7 +497,10 @@ export function createSearchIdentityEpochParticipant(options: {
             work: searchIdentityWorkUsed(pool, context),
           } satisfies IdentityStepProgress;
         }
-        const applied = await reconcileIdentityReceivingEffect(pool, effect);
+        const applied = dispatch?.released
+          ? application.value.receipt
+          : await reconcileIdentityReceivingEffect(pool, effect);
+        if (!applied) throw unavailable('Released scope lost its applied receipt');
         const frontier = advanceSearchIdentityDirectory(directory, change.original);
         // Releasing custody and retiring its pending key comes before moving past this original.
         // A lost response reuses the still-selected original or reads the committed checkpoint.

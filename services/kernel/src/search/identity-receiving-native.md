@@ -171,7 +171,10 @@ strictly newer and verified replacement settlement. A successor uses the previou
 The dispatch continuation consumes the exact retained request and accepted hold. It commits the actual writer
 dispatch before OpenSearch, writes through the allocation alias with its external version and refresh, and records
 the original bulk receipt and visibility in the same settlement transaction. Replays reuse committed visibility.
-An uncertain dispatch retains its token and waits for original operation recovery.
+An uncertain dispatch retains its token and waits for original operation recovery. Original-specific reconciliation advances registered
+copies and then checks the original and terminal projections in separate turns. The fixed Search directory
+holds traversal of the job's originals. After committed control custody, an invocation-bound observation
+rechecks the original plan, application, copies and control receipt before releasing its hold.
 
 The existing writer owns enrollment, dispatch, settlement and retained copies. Its `SearchWriterBarrier` reports
 `firstApply: 'unavailable'` and `prepared: 'unavailable'`; no first-apply receiving preparation/dispatch hook is

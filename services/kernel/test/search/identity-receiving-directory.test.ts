@@ -27,6 +27,7 @@ import {
 import { searchNativeReceivingStatements } from '../../src/search/identity-receiving-native-store.ts';
 import {
   searchNativeOriginalOperationSql,
+  searchNativeReleaseAppliedSql,
   sizedSearchIdentityPlanSql,
 } from '../../src/search/identity-receiving-native-work.ts';
 import type {
@@ -96,6 +97,7 @@ import {
 import {
   readSearchIdentityDirectorySql,
   readSearchIdentityCommonPlanSql,
+  advanceSearchIdentityOriginalSql,
   readSearchIdentityMaterializedOriginalSql,
   readSearchIdentityOriginalPlanSql,
   readSearchIdentityWriterAdmissionSql,
@@ -119,6 +121,9 @@ import receivingJob from '../../src/semantic/identity-epoch-store-receiving-job.
 import receivingLookup from '../../src/semantic/identity-epoch-store-receiving-lookup.sql';
 import receivingPlan from '../../src/semantic/identity-epoch-store-receiving-plan.sql';
 import receivingProgress from '../../src/semantic/identity-search-receiving-progress-insert.sql';
+import receivingProgressRead from '../../src/semantic/identity-search-receiving-progress-read.sql';
+import receivingProgressAdvance from '../../src/semantic/identity-search-receiving-progress-advance.sql';
+import receivingProgressRelease from '../../src/semantic/identity-search-receiving-progress-release.sql';
 import {
   activeIdentitySourceConsumerMaintenance,
   withIdentitySourceConsumerMaintenance,
@@ -249,13 +254,36 @@ test.each([
   let acceptedRecorded = false;
   let accepting = false;
   let dispatchRequestPosition = '1';
+  type Progress = {
+    revision: string;
+    after_key: string | null;
+    state: 'progress' | 'settled' | 'released';
+    applied_transaction_id: string | null;
+    released_transaction_id?: string;
+  };
+  let receivingContinuation: Progress = {
+    revision: '0',
+    after_key: null,
+    state: 'progress',
+    applied_transaction_id: null,
+  };
+  let writingContinuation: Progress | undefined;
+  let controlCustody: { epoch: number; position: string; transaction_id: string } | undefined;
+  let writingCustody: typeof controlCustody;
+  let controlApplied: unknown[] | undefined;
+  let writingHoldRelease: string | undefined;
+  let releasePosition: string | undefined;
+  let appliedPosition = 33;
+  let retiredScope = false;
   const nativePosition = () =>
     dispatchRequest?.frontier.after[3] === SEARCH_IDENTITY_WRITER_DISPATCH
-      ? committedOperation?.state === 'visible'
-        ? '32'
-        : committedOperation
-          ? '31'
-          : '30'
+      ? committedOperation?.state === 'applied'
+        ? String(appliedPosition)
+        : committedOperation?.state === 'visible'
+          ? '32'
+          : committedOperation
+            ? '31'
+            : '30'
       : accepting
         ? '21'
         : '20';
@@ -305,7 +333,9 @@ test.each([
       else if (sql === readSearchIdentityDirectorySql) {
         expect(values).toEqual([jobHome, jobId, '1']);
         directoryReads++;
-        const saved = dispatchRequest ?? committed.find((step) => step.frontier.after[0] === 'search-directory');
+        const saved = retiredScope
+          ? committed.at(-1)
+          : (dispatchRequest ?? committed.find((step) => step.frontier.after[0] === 'search-directory'));
         rows = [
           {
             scope_digest: directoryScope,
@@ -552,13 +582,15 @@ test.each([
                 {
                   hold_id: hold!.hold_id,
                   source: retainedPlan.source,
+                  effect_key: retainedPlan.effect_key,
                   action_digest: createHash('sha256').update(retainedAction!).digest('hex'),
                   action_bytes: Buffer.byteLength(retainedAction!),
                   accepted_epoch: hold!.accepted_epoch,
                   accepted_position: hold!.accepted_position,
                   accepted_transaction_id: hold!.accepted_transaction_id,
                   state: committedOperation?.state ?? null,
-                  visible: committedOperation?.state === 'visible',
+                  visible: committedOperation?.state === 'visible' || committedOperation?.state === 'applied',
+                  released: receivingContinuation.state === 'released',
                 },
               ]
             : [];
@@ -601,7 +633,7 @@ test.each([
             native_position: '21',
           },
         ];
-      } else if (sql === planSql.hold.sql || sql === planSql.peekHold.sql) rows = hold ? [hold] : [];
+      } else if (sql === planSql.hold.sql || sql === planSql.peekHold.sql) rows = hold ? [{ ...hold }] : [];
       else if (sql === planSql.accepted.sql) {
         expect(values[6]).toBe(hold?.accepted_transaction_id);
         expect(acceptedRecorded).toBe(true);
@@ -671,7 +703,67 @@ test.each([
         sql === receivingStatements.acceptedReplay
       )
         rows = [];
-      else if (sql === receivingLookup.sql)
+      else if (sql === receivingProgressRead.sql) rows = [{ ...receivingContinuation }];
+      else if (sql === planSql.copies.sql || sql === planSql.pending.sql) rows = [];
+      else if (sql === receivingProgressAdvance.sql) {
+        expect(String(values[5])).toBe(receivingContinuation.revision);
+        writingContinuation = {
+          ...receivingContinuation,
+          revision: String(Number(receivingContinuation.revision) + 1),
+          after_key: String(values[6]),
+          state: values[7] as Progress['state'],
+          applied_transaction_id: String(values[8]),
+        };
+        rows = [{ revision: writingContinuation.revision }];
+      } else if (sql === receivingStatements.expectedApplied)
+        rows = [
+          {
+            native_partition: controlApplied?.[4] ?? null,
+            native_epoch: controlApplied?.[5] ?? null,
+            native_position: controlApplied?.[6] ?? null,
+            native_transaction_id: controlApplied?.[7] ?? null,
+          },
+        ];
+      else if (sql === receivingStatements.acknowledgeApplied) {
+        expect(values.slice(4)).toEqual([writerHome, 1, '33', committedOperation?.applied_transaction_id]);
+        controlApplied = values;
+        rows = [{}];
+      } else if (sql === receivingStatements.controlCustody || sql === planSql.control.sql)
+        rows = controlCustody ? [controlCustody] : [];
+      else if (sql === receivingStatements.insertCustody) {
+        writingCustody = {
+          epoch: 1,
+          position: String(Number(nativePosition()) + 1),
+          transaction_id: String(values[3]),
+        };
+        rows = [{}];
+      } else if (sql === searchNativeReleaseAppliedSql()) {
+        expect(values.slice(-2)).toEqual([committedOperation?.applied_transaction_id, hold?.hold_id]);
+        rows = [{ epoch: 1, position: '33' }];
+      } else if (sql === planSql.release.sql) {
+        expect(controlCustody).toBeDefined();
+        expect(values[2]).toBe(hold?.hold_id);
+        writingHoldRelease = String(values[3]);
+        releasePosition = String(Number(nativePosition()) + 1);
+        rows = [{}];
+      } else if (sql === planSql.releaseProof.sql) {
+        const id = values[3] ? writingHoldRelease : hold?.released_transaction_id;
+        rows = id ? [{ transaction_id: id, epoch: 1, position: releasePosition }] : [];
+      } else if (sql === receivingProgressRelease.sql) {
+        expect(values[7]).toBe(writingHoldRelease);
+        writingContinuation = {
+          ...receivingContinuation,
+          state: 'released',
+          revision: String(Number(receivingContinuation.revision) + 1),
+          released_transaction_id: String(values[7]),
+        };
+        rows = [{ revision: writingContinuation.revision }];
+      } else if (sql === advanceSearchIdentityOriginalSql) {
+        expect(receivingContinuation.state).toBe('released');
+        expect(values.slice(6, 10)).toEqual([writerHome, 1, '33', committedOperation?.applied_transaction_id]);
+        retiredScope = true;
+        rows = [{}];
+      } else if (sql === receivingLookup.sql)
         rows = [
           {
             binding: commonPlan?.binding,
@@ -688,9 +780,10 @@ test.each([
               position: hold?.accepted_position,
             },
             native_hold: acceptedNativeHold,
-            effect_transaction_id: null,
-            effect_epoch: null,
-            effect_position: null,
+            effect_transaction_id: committedOperation?.applied_transaction_id ?? null,
+            effect_epoch: committedOperation?.state === 'applied' ? 1 : null,
+            effect_position: committedOperation?.applied_position ?? null,
+            frontier: committedOperation?.frontier,
           },
         ];
       else if (sql === receivingStatements.lookupGate) rows = [{ pending_job: jobId, pending_epoch: '1' }];
@@ -822,6 +915,15 @@ test.each([
         if (writing) committed.push(writing);
         if (stagingPlan) retainedPlan = stagingPlan;
         if (writingOperation) committedOperation = writingOperation;
+        if (writingContinuation) {
+          receivingContinuation = writingContinuation;
+          appliedPosition++;
+        }
+        if (writingCustody) controlCustody = writingCustody;
+        if (writingHoldRelease && hold) hold = { ...hold, released_transaction_id: writingHoldRelease };
+        writingContinuation = undefined;
+        writingCustody = undefined;
+        writingHoldRelease = undefined;
         writingOperation = undefined;
         stagingPlan = undefined;
         writing = undefined;
@@ -1150,6 +1252,27 @@ test.each([
           expect(applied.frontier.after).toEqual([selected, retainedPlan?.effect_key]);
           expect(applied.receipt.native.position).toBe(33n);
           expect(committedOperation?.state).toBe('applied');
+          expect(engineReads).toBe(4);
+          for (const phase of ['original', 'terminal', null]) {
+            const next = await prepare(pool, request);
+            expect(next.state).toBe('progress');
+            expect(JSON.parse(receivingContinuation.after_key!).phase ?? null).toBe(phase);
+          }
+          expect(receivingContinuation.state).toBe('settled');
+          expect(await prepare(pool, request)).toEqual({
+            state: 'progress',
+            transactionId: controlCustody?.transaction_id,
+          });
+          expect(await prepare(pool, request)).toEqual({ state: 'prepared' });
+          expect(receivingContinuation.state).toBe('released');
+          expect(hold?.released_transaction_id).toBe(receivingContinuation.released_transaction_id);
+          const retired = await withIdentitySourceConsumerMaintenance(
+            { pool, env: {} },
+            { deadline: Date.now() + 5000 },
+            () => step(pool, job),
+          );
+          expect(retired.frontier.after).toEqual(['search-directory', selected, 1]);
+          expect(retiredScope).toBe(true);
           expect(engineReads).toBe(4);
         }
         expect(bulkCalls).toBe(1);

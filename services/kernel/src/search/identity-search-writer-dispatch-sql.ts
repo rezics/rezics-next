@@ -1,7 +1,7 @@
 /** Exact committed preparation and accepted hold, with the retained writer's actual body size. */
-export const readSearchIdentityDispatchBasisSql = `SELECT h.hold_id::text,n.source,n.action_digest,
+export const readSearchIdentityDispatchBasisSql = `SELECT h.hold_id::text,n.source,n.effect_key,n.action_digest,
   octet_length(w.repair_action) AS action_bytes, o.state,h.accepted_epoch,h.accepted_position::text,h.accepted_transaction_id::text,
-  (v.transaction_id IS NOT NULL) AS visible
+  (v.transaction_id IS NOT NULL) AS visible, (r.transaction_id IS NOT NULL) AS released
  FROM search.identity_receiving_native_plan n
  JOIN semantic.identity_epoch_native_commit p ON (p.partition_no,p.transaction_id)=(n.partition_no,n.transaction_id)
   AND p.purpose='search-canonical-index' AND p.xmin=n.xmin
@@ -17,6 +17,15 @@ export const readSearchIdentityDispatchBasisSql = `SELECT h.hold_id::text,n.sour
   AND v.purpose='search-canonical-index' AND v.epoch=c.epoch AND c.position>=v.position
   AND (o.state='applied' OR v.xmin=o.xmin)
   AND v.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid
+ LEFT JOIN semantic.identity_epoch_receiving_search_progress s
+  ON (s.partition_no,s.job_id,s.effect_key,s.accepted_transaction_id)=(n.partition_no,n.job_id,n.effect_key,h.accepted_transaction_id)
+  AND s.state='released' AND s.released_transaction_id=h.released_transaction_id
+  AND s.applied_transaction_id=o.applied_transaction_id
+ LEFT JOIN semantic.identity_epoch_native_commit r
+  ON (r.partition_no,r.transaction_id)=(s.partition_no,s.released_transaction_id)
+  AND r.purpose='identity-receiving-custody' AND r.xmin=s.xmin AND r.xmin=h.xmin
+  AND r.epoch=c.epoch AND c.position>=r.position
+  AND r.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid
  WHERE (n.partition_no,n.plan_id,n.job_id,n.job_epoch,n.physical_target,n.original_id,n.scope_digest)=
   ($1,$2,$3,$4,$5,$6,$7) AND h.accepted_epoch=c.epoch AND h.accepted_position<=c.position`;
 
