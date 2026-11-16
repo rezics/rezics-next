@@ -14,6 +14,16 @@ const standaloneOperations = new Set([
   'knowledge_document.public_export',
 ]);
 
+const scopedLibraryLabelOperations = new Set([
+  'library_label.assignment_list',
+  'library_label.list',
+  'library_label.create',
+  'library_label.rename',
+  'library_label.delete',
+  'library_label.assign',
+  'library_label.unassign',
+]);
+
 /** Capture the complete mounted catalogue on the first request, as the served OpenAPI route does. */
 export function admittedGroupsRoutes(
   app: ReturnType<typeof definitionRoutes>,
@@ -51,10 +61,12 @@ export function admittedGroupsRoutes(
         if (exposure.startsWith('gate:')) admitted.add(exposure.slice(5));
         const scopedKnowledgeOperation =
           (operationId.startsWith('knowledge_document.') || operationId.startsWith('knowledge_notebook.')) &&
-          (action === 'account:read' || action === 'account:update') &&
+          (action === 'account:read' || action === 'account:update');
+        const scopedAccountOperation =
           actor.kind === 'account' &&
-          actor.scopes.includes(action);
-        if (standaloneOperations.has(operationId) || scopedKnowledgeOperation) admitted.add(operationId);
+          actor.scopes.includes(action) &&
+          (scopedKnowledgeOperation || scopedLibraryLabelOperations.has(operationId));
+        if (standaloneOperations.has(operationId) || scopedAccountOperation) admitted.add(operationId);
       }
       set.headers['cache-control'] = 'no-store';
       return { admitted: [...admitted].sort() };

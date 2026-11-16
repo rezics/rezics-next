@@ -79,7 +79,7 @@ function mountedGroups(): string[] {
   ].sort();
 }
 
-async function read(token?: string, knowledgeOperations: readonly string[] = []): Promise<string[]> {
+async function read(token?: string, scopedOperations: readonly string[] = []): Promise<string[]> {
   const response = await kernel.handle(
     new Request('http://kernel.test/v1/platform/exposure', {
       ...(token ? { headers: { authorization: `Bearer ${token}` } } : {}),
@@ -108,7 +108,7 @@ async function read(token?: string, knowledgeOperations: readonly string[] = [])
   const journeys = visible.flatMap(({ operationId }) =>
     ['commerce_sale.list', ...publicJourneys].includes(operationId) ? [operationId] : [],
   );
-  expect(body.admitted).toEqual([...new Set([...visibleGroups, ...journeys, ...knowledgeOperations])].sort());
+  expect(body.admitted).toEqual([...new Set([...visibleGroups, ...journeys, ...scopedOperations])].sort());
   for (const group of mountedGroups().filter((group) => !body.admitted.includes(group))) {
     expect(text).not.toContain(group);
   }
@@ -261,6 +261,35 @@ test('Knowledge controls receive only the mounted operations for the current Acc
     'knowledge_notebook.create',
     'knowledge_notebook.move_placement',
   ]);
+});
+
+test('Library label controls receive exact mounted operations only for a scoped viewer of an admitted group', async () => {
+  const readOnly = await bearer(ordinaryId, undefined, ['exposure:read', 'library_entry:read', 'library_entry:list']);
+  const writeOnly = await bearer(ordinaryId, undefined, ['exposure:read', 'library_entry:update']);
+  await read(readOnly);
+  await read(writeOnly);
+
+  const opens = new Date(instant.getTime() + 2);
+  await pool.query(
+    `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
+     VALUES ('personal_library', tstzrange($1::timestamptz, NULL, '[)'), $2)`,
+    [opens.toISOString(), fixture.transactionId],
+  );
+  now = opens;
+  try {
+    await read();
+    await read(await bearer(ordinaryId, undefined, ['exposure:read']));
+    await read(readOnly, ['library_label.assignment_list', 'library_label.list']);
+    await read(writeOnly, [
+      'library_label.assign',
+      'library_label.create',
+      'library_label.delete',
+      'library_label.rename',
+      'library_label.unassign',
+    ]);
+  } finally {
+    now = new Date(instant);
+  }
 });
 
 test('the response is no-store and declares public optional authentication with a read action', async () => {
