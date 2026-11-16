@@ -195,6 +195,12 @@ acceptance, gate and native plan and commits the applied effect and fixed step t
 application and hold release each yield their committed transaction before the next owner turn. Directory retirement
 still rechecks the committed control plan after release.
 
+Before acceptance, the writer records the checked binding digest against the exact retained request and native plan.
+The next turn uses that proof to fund both control captures and returns the commit receipt directly. It observes the
+pending job without a row lock and locks the job when writing the control plan. The receiving hold still verifies its
+current native plan and fence. Reconciliation reads the exact applied record and control custody in the dispatch
+snapshot before releasing that snapshot and advancing the next owned command.
+
 For a visible canonical original, the writer verifies the completed Source build and current Access before
 reading one active term head and its complete fact slot. Each owned turn commits the slot cursor and a digest
 of the terms read so far. The native reader recovers the cursor from the preceding slot's indexed key and
