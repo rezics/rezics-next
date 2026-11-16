@@ -31,6 +31,8 @@ export type AuthJourney = {
   url: string;
   context: BrowserContext;
   visitedUrls: string[];
+  /** Reuse the authenticated page and stop adding requests to the sign-in trace. */
+  continueOnPage(): Page;
   response(): Promise<PlaywrightResponse>;
   requestHeaders(): Promise<Headers[]>;
   serverFunctionRequests(): Promise<
@@ -345,11 +347,12 @@ export async function startAuthStack(
         );
         if (!closed) throw new Error('Native Auth journey page did not close within 1500ms');
       };
-      pageOwner.register({
+      const releasePage = pageOwner.register({
         label: 'native Auth journey page',
         close: closePage,
         force: () => page.close().catch(() => {}),
       });
+      page.once('close', releasePage);
       page.setDefaultTimeout(15_000);
       const webOrigin = new URL(stack.web).origin;
       const authResponses: PlaywrightResponse[] = [];
@@ -368,7 +371,7 @@ export async function startAuthStack(
           promise: Promise<PlaywrightResponse>;
         }
       >();
-      page.on('request', (request) => {
+      const recordRequest = (request: import('playwright').Request) => {
         pageRequests.push(request);
         if (request.isNavigationRequest() && request.frame() === page.mainFrame()) visitedUrls.push(request.url());
         const { origin, pathname } = new URL(request.url());
@@ -378,7 +381,8 @@ export async function startAuthStack(
           const promise = new Promise<PlaywrightResponse>((done) => (resolve = done));
           functionResponses.set(request, { resolve, promise });
         }
-      });
+      };
+      page.on('request', recordRequest);
       page.on('response', (response) => {
         const url = new URL(response.url());
         if (url.origin === webOrigin && url.pathname.startsWith('/_serverFn/')) {
@@ -480,6 +484,10 @@ export async function startAuthStack(
         url: current,
         context: browserContext,
         visitedUrls,
+        continueOnPage() {
+          page.off('request', recordRequest);
+          return page;
+        },
         response,
         async requestHeaders() {
           return Promise.all(pageRequests.map(async (request) => new Headers(await request.allHeaders())));
