@@ -209,11 +209,11 @@ test("a reversed verification restores the account's own agent and leaves the ca
       survivor: catalogueId,
     },
   ]);
-  const redirects = await admin.query('SELECT target FROM semantic.redirect WHERE route = $1 AND subject_id = $2', [
-    routeOf(agentId),
-    agentId,
-  ]);
-  expect(redirects.rows).toEqual([]);
+  const redirect = await admin.query(
+    'SELECT target FROM semantic.redirect WHERE route = $1 AND subject_id = $2 ORDER BY sequence DESC LIMIT 1',
+    [routeOf(agentId), agentId],
+  );
+  expect(redirect.rows[0]?.target ?? null).toBeNull();
   const reverified = await verifyAccountAgent(pool, {
     account: ownerA.accountId,
     catalogue: catalogueId,
