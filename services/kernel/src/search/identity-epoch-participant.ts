@@ -18,10 +18,9 @@ import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts
 import { recordIdentityEpochNativeCommit } from '../semantic/identity-adapters/identity-epoch-binding.ts';
 import { serializeIdentityValue as json } from '../semantic/identity-core/encoding.ts';
 import {
+  applySearchIdentityReceivingEffect,
   installSearchIdentityReceivingNative,
-  lookupIdentityReceivingEffect,
   prepareSearchIdentityReceivingEffect,
-  recordIdentityReceivingEffect,
   reconcileIdentityReceivingEffect,
   type SearchReceivingWorkDeclaration,
 } from '../semantic/identity-receiving-effects.ts';
@@ -425,6 +424,64 @@ export function createSearchIdentityEpochParticipant(options: {
         const effect = dispatch
           ? searchIdentityDispatchEffect(ref, selection, dispatch)
           : await prepareSearchIdentityReceivingEffect(pool, selection);
+        const roles = await identityErasureRoles(pool, ref.jobId);
+        const application = await runCommand<{ frontier: IdentityFrontier; receipt: IdentityNativeReceipt | null }>(
+          pool,
+          { partition: effect.receipt.partition, deadline, clock: configured.configuration.clock },
+          async (tx) => {
+            // Actual dispatch/visibility belongs to the sole writer. This fused application refuses
+            // until that original operation is visibly settled; it never issues a second engine write.
+            const { scopeDigest, ...applied } = await applySearchIdentityReceivingEffect(
+              tx,
+              effect,
+              {
+                scopeDigest: directory.scope,
+                consumer: configuration.consumer,
+                physicalTarget: configuration.index,
+                planId: selection.native.planId,
+              },
+              roles,
+            );
+            if (applied.receipt) return noEffect(applied);
+            registerCommandCallback(tx, async (id) => {
+              const work = searchIdentityWorkUsed(pool, context);
+              const inserted = await tx.query(stepSql.sql, [
+                currentCommand(tx).partition,
+                id,
+                ref.jobId,
+                String(ref.epoch),
+                scopeDigest,
+                json(applied.frontier),
+                json(work),
+              ]);
+              if (inserted.rowCount !== 1) throw unavailable('Search application lost its same-transaction fixed step');
+            });
+            return { value: applied, events: searchIdentityWriterChanged() };
+          },
+        );
+        if (plan.originalBarrier && application.value.receipt === null) {
+          return {
+            job: ref,
+            frontier: application.value.frontier,
+            state: 'more',
+            receipt: {
+              job: ref,
+              step: 'search-canonical-index',
+              version: 1,
+              native: {
+                partition: application.partition,
+                epoch: application.epoch,
+                position: application.position,
+                transactionId: application.transactionId,
+              },
+            },
+            work: searchIdentityWorkUsed(pool, context),
+          } satisfies IdentityStepProgress;
+        }
+        const applied = dispatch?.released
+          ? application.value.receipt
+          : await reconcileIdentityReceivingEffect(pool, effect);
+        if (!applied) throw unavailable('Released scope lost its applied receipt');
         const row = await withReadTransaction(
           pool,
           async (tx) =>
@@ -455,58 +512,6 @@ export function createSearchIdentityEpochParticipant(options: {
           binding.source.physicalTarget !== configuration.index
         )
           throw unavailable('Prepared scope differs from its configured native Search owner');
-        const roles = await identityErasureRoles(pool, ref.jobId);
-        const application = await runCommand<{ frontier: IdentityFrontier; receipt: IdentityNativeReceipt | null }>(
-          pool,
-          { partition: effect.receipt.partition, deadline, clock: configured.configuration.clock },
-          async (tx) => {
-            const record = await lookupIdentityReceivingEffect(tx, effect, 'search-canonical-index');
-            if (!record) throw unavailable('Prepared original has no committed common/native acceptance');
-            if (record.applied) return noEffect(record.applied);
-            bindSemanticProducerRoles(tx, roles);
-            const frontier = { after: [record.original, record.effectKey], segment: 0 };
-            // Actual dispatch/visibility belongs to the sole writer. This fused application refuses
-            // until that original operation is visibly settled; it never issues a second engine write.
-            await recordIdentityReceivingEffect(tx, effect, { frontier });
-            registerCommandCallback(tx, async (id) => {
-              const work = searchIdentityWorkUsed(pool, context);
-              const inserted = await tx.query(stepSql.sql, [
-                currentCommand(tx).partition,
-                id,
-                ref.jobId,
-                String(ref.epoch),
-                record.scopeDigest,
-                json(frontier),
-                json(work),
-              ]);
-              if (inserted.rowCount !== 1) throw unavailable('Search application lost its same-transaction fixed step');
-            });
-            return { value: { frontier, receipt: null }, events: searchIdentityWriterChanged() };
-          },
-        );
-        if (plan.originalBarrier && application.value.receipt === null) {
-          return {
-            job: ref,
-            frontier: application.value.frontier,
-            state: 'more',
-            receipt: {
-              job: ref,
-              step: 'search-canonical-index',
-              version: 1,
-              native: {
-                partition: application.partition,
-                epoch: application.epoch,
-                position: application.position,
-                transactionId: application.transactionId,
-              },
-            },
-            work: searchIdentityWorkUsed(pool, context),
-          } satisfies IdentityStepProgress;
-        }
-        const applied = dispatch?.released
-          ? application.value.receipt
-          : await reconcileIdentityReceivingEffect(pool, effect);
-        if (!applied) throw unavailable('Released scope lost its applied receipt');
         const frontier = advanceSearchIdentityDirectory(directory, change.original);
         // Releasing custody and retiring its pending key comes before moving past this original.
         // A lost response reuses the still-selected original or reads the committed checkpoint.

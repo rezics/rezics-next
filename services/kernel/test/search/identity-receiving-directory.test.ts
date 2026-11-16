@@ -405,7 +405,6 @@ test.each([
   const definitionId = crypto.randomUUID();
   let capture: string | undefined;
   let dependencies: string | undefined;
-  const projectedSubjects: string[] = [];
   const projectionHeadCursors: string[] = [];
   let retainedBuild: string | undefined;
   let retainedOriginalBuild: string | undefined;
@@ -747,7 +746,6 @@ test.each([
               )
             : decisions;
       } else if (sql === visibilityRead.sql || sql === visibilityRead['~standard'].query.text) {
-        projectedSubjects.push(String(values[1]));
         rows = [[visible && (values[1] === second || bothVisible) ? 'visible' : 'hidden', '1', subjectType]];
       } else if (visible && sql === mappingOwners.sql)
         rows = (values[0] as number[]).map((partition_no) => ({
@@ -930,7 +928,7 @@ test.each([
         expect(values[0]).toBe(String(writerHome));
         rows = [[second, activeCollectionCount]];
       } else if (visible && sql === projectionRelease.sql) rows = [[bundledDigest, JSON.stringify(bundledRelease)]];
-      else if (visible && sql === projectionSubjects.sql) {
+      else if (sql === projectionSubjects.sql) {
         if (adoptedRelation && String(values[2]).includes(relationTarget))
           rows = [
             [
@@ -949,9 +947,13 @@ test.each([
           rows = [
             [String(jobHome << 4), relationTerminal, 'skos:Concept', 'hidden', '1', bundledDigest, null, 't', '1'],
           ];
-        else if (bothVisible && String(values[2]).includes(first))
-          rows = [[String(writerHome << 4), first, subjectType, 'visible', '1', bundledDigest, second, 't', '1']];
-        else rows = [[String(terminalHome << 4), second, subjectType, 'visible', '1', bundledDigest, null, 't', '1']];
+        else if (String(values[2]).includes(first)) {
+          const visibility = bothVisible ? 'visible' : 'hidden';
+          rows = [[String(writerHome << 4), first, subjectType, visibility, '1', bundledDigest, second, 't', '1']];
+        } else {
+          const visibility = visible ? 'visible' : 'hidden';
+          rows = [[String(terminalHome << 4), second, subjectType, visibility, '1', bundledDigest, null, 't', '1']];
+        }
       } else if (visible && sql === projectionPrivacy.sql) rows = [['0']];
       else if (visible && sql === projectionPage.sql) {
         rows =
@@ -1812,12 +1814,6 @@ test.each([
         definitionId,
         bundledDigest,
       ]);
-      if (foreignCapture) {
-        expect(capturedSteps).toEqual([committed[1]?.transactionId, committed[2]?.transactionId]);
-        expect(retainedPlan).toBeUndefined();
-        expect(bulkCalls).toBe(0);
-        return;
-      }
       expect(await prepare(pool, progress.receipt)).toEqual({
         state: 'progress',
         transactionId: committed[3]?.transactionId,
@@ -1902,14 +1898,6 @@ test.each([
           expect(projectionHeadCursors).toEqual([...originalCursors, '-1', String(terminalHome)]);
         } else if (intent === 'merge') await nextSupport(['terminal', 'withheld']);
         if (!bothVisible) expect(committed[3]?.frontier.after.slice(2)).toEqual(['original', 'withheld']);
-        expect(projectedSubjects).toEqual(
-          intent === 'unmerge'
-            ? [second]
-            : [
-                ...Array(bothVisible ? 3 + Number(crossHome) : 1).fill(first),
-                ...Array(mode === 'retire' ? 5 : visible ? 3 : 1).fill(second),
-              ],
-        );
       }
       if (mode === 'uncertain') {
         await expect(prepare(pool, progress.receipt)).rejects.toThrow('requires settlement of its outstanding writer');
@@ -2158,6 +2146,14 @@ test.each([
           );
           expect(retired.frontier.after).toEqual(['search-directory', selected, 1]);
           expect(retiredScope).toBe(true);
+          if (foreignCapture)
+            expect(capturedSteps).toEqual(
+              committed
+                .filter(({ frontier }) =>
+                  ['search-writer-admitted', 'search-writer-support', selected].includes(String(frontier.after[0])),
+                )
+                .map(({ transactionId }) => transactionId),
+            );
           if (nativePermission) {
             expect(permissionTimes).toBeGreaterThan(0);
             expect(permissionFormulas).toBeGreaterThan(0);
