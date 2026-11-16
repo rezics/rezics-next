@@ -201,9 +201,15 @@ test('exact citations survive publication updates, close on withdrawal and reope
     fixture.author.actor.accountId,
     ['moderation:hide', 'moderation:takedown'],
   );
+  const accountId = fixture.author.actor.accountId;
+  const compare =
+    `/v1/accounts/${accountId}/knowledge/notebooks/${notebook.notebookId}/documents/${document.documentId}` +
+    `/compare?leftRevisionId=${document.revisionId}&rightRevisionId=${revisionB.revisionId}`;
+  expect((await fixture.call('GET', compare)).status).toBe(200);
   await fixture.command(`/v1/subjects/${historicalSubject.id}:hide`, { reason: 'Withhold old attachment' }, 200);
   expect((await read()).status).toBe(200);
   expect((await read(document.revisionId)).status).toBe(404);
+  expect((await fixture.call('GET', compare)).status).toBe(404);
   const withheldCopy = await fixture.call('GET', '/v1/knowledge/documents/' + copy.documentId, undefined, {
     anonymous: true,
   });
