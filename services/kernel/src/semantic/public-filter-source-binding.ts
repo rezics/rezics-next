@@ -3220,6 +3220,16 @@ export function createNativePublicFilterSourceBinding(
     return { ...result, cost: retained.cost };
   });
   nativePublicationCompletions.set(bootstrapBinding, async (request, context, spent) => {
+    if (
+      spent &&
+      (!Number.isSafeInteger(spent.inputKeys) ||
+        spent.inputKeys < 0 ||
+        spent.inputKeys >= preparationInputLimit ||
+        !Number.isSafeInteger(spent.bytes) ||
+        spent.bytes < 0 ||
+        spent.bytes >= 4 * 1024 * 1024)
+    )
+      return fail('owner_unavailable');
     const input = structuredClone(request),
       deadline = context.deadline;
     return run({ deadline }, async (cost, db) => {
