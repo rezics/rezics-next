@@ -327,8 +327,11 @@ test('a later metadata reconciliation step resumes the committed raw frontier be
   let frontier: unknown[] | undefined;
   let after: { route: number; id: string } | null = raw;
   const pool = {
+    options: { max: 10 },
     connect: async () => ({
-      async query(sql: string, values?: unknown[]) {
+      async query(input: string | { text: string; values?: unknown[] }, parameters?: unknown[]) {
+        const sql = typeof input === 'string' ? input : input.text;
+        const values = typeof input === 'string' ? parameters : input.values;
         if (sql === DISCOVERY_LIVE_GENERATIONS_SQL) return { rows: [target] };
         if (sql.includes('SELECT partition_no AS partition,owner'))
           return {
@@ -383,10 +386,20 @@ test('a later metadata reconciliation step resumes the committed raw frontier be
   };
   const account = { owner: 'accounts', kind: 'account' };
   const collection = { owner: 'commerce', kind: 'collection' };
+  let identityReads = 0;
   const search = {
-    async request(_method: string, path: string) {
-      expect(path).toBe('/searchdiscovery-g1/_settings');
-      return { status: 200, body: { 'searchdiscovery-g1': { settings: { index: { uuid: target.uuid } } } } };
+    async request(method: string, path: string) {
+      expect([method, path]).toEqual(['GET', '/searchdiscovery-g1']);
+      identityReads++;
+      return {
+        status: 200,
+        body: {
+          'searchdiscovery-g1': {
+            settings: { index: { uuid: target.uuid } },
+            mappings: { _meta: { incarnation: target.incarnation } },
+          },
+        },
+      };
     },
   } as unknown as OpenSearch;
   const options = {
@@ -402,9 +415,11 @@ test('a later metadata reconciliation step resumes the committed raw frontier be
   };
   await advanceDiscovery(options);
   expect(pages).toBe(1);
+  expect(identityReads).toBe(1);
   expect(frontier?.slice(4, 9)).toEqual([160, next.id, null, false, '7']);
   await advanceDiscovery(options);
   expect(pages).toBe(2);
+  expect(identityReads).toBe(2);
   expect(frontier?.slice(4, 9)).toEqual([null, null, null, true, '7']);
 });
 
