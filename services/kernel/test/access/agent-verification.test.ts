@@ -253,27 +253,12 @@ async function fixturePhase<T>(name: string, work: () => T | Promise<T>): Promis
   }
 }
 
-function mountFixtureKernels() {
-  const receiptKeys = testReceiptKeys();
-  const catalogueKernel = createKernel({
-    pool,
-    routeKey,
-    tokens,
-    receiptKeys,
-    clock,
-    writeRate: {
-      async spend() {
-        return { allowed: true };
-      },
-    },
-  });
-  const actions = new Map(actionCatalogue(catalogueKernel));
-  access = admittedAccess({ actions });
+function mountFixtureKernel() {
   kernel = createKernel({
     pool,
     routeKey,
     tokens,
-    receiptKeys,
+    receiptKeys: testReceiptKeys(),
     clock,
     access: () => access,
     writeRate: {
@@ -282,6 +267,8 @@ function mountFixtureKernels() {
       },
     },
   });
+  // The request host resolves Access lazily, so use the serving kernel's mounted actions.
+  access = admittedAccess({ actions: actionCatalogue(kernel) });
 }
 
 async function seedFixtureAccounts() {
@@ -316,7 +303,7 @@ async function setupFixture() {
     return bootstrapRelease(pool, bundledRelease);
   });
 
-  await fixturePhase('kernelComposition', mountFixtureKernels);
+  await fixturePhase('kernelComposition', mountFixtureKernel);
   await fixturePhase('seedAccounts', seedFixtureAccounts);
   await fixturePhase('governance', () => bootstrapGovernance(pool, staff.id));
 
