@@ -788,7 +788,7 @@ test('a file whose only failures are timeouts or deadline errors is rerun once a
   });
 });
 
-test('a single named case that times out in an isolated lane keeps its original failure', async () => {
+test('a single named case that times out keeps its original failure at default concurrency', async () => {
   await withDirectory(async (directory) => {
     const module = resolve(directory, 'module');
     const file = 'test/diagnostic.test.ts';
@@ -800,6 +800,8 @@ test('a single named case that times out in an isolated lane keeps its original 
       ].join('\n'),
     });
     const env = laneEnvironment(directory, 1);
+    delete env.FIXTURE_CHECK_CONCURRENCY;
+    env.REZICS_STACK_LEASE = 'off';
     const created: string[] = [];
     const dropped: string[] = [];
     let failure: string | undefined;
@@ -821,7 +823,8 @@ test('a single named case that times out in an isolated lane keeps its original 
       },
       env,
     });
-    expect(result).toEqual({ failed: [file], concurrency: 1 });
+    expect(result).toEqual({ failed: [file], concurrency: 6 });
+    expect(failure).toContain('1 filtered out');
     expect(failure).toContain('this test timed out after 20ms');
     expect(created).toEqual(['fixture_test_1']);
     expect(dropped).toEqual(created);
