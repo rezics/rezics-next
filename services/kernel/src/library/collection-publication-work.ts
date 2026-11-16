@@ -1,4 +1,8 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
+import { Value } from 'typebox/value';
+import { HistorySealedError } from '../history/contract/index.ts';
+import { receiveHistoryWork } from '../work/history-enqueue.ts';
+import { COLLECTION_PUBLICATION_REQUESTED, LIBRARY_EVENTS } from './events.ts';
 import { publicOutputAdvanceWork } from '../semantic/identity-public-output-work.ts';
 import { withCollectionReadSnapshot } from './collection-read-connection.ts';
 import { collectionPublicationOutputProducer } from './collection-publication-output.ts';
@@ -196,6 +200,30 @@ async function captureSelectedOutput(context: Context, input: WorkflowInput): Pr
 
 /** Register the locator-only continuation on the Library module's existing workflows queue. */
 export function registerCollectionPublicationWork(context: WorkContext): void {
+  context.addEffects([
+    {
+      name: 'library_collection_publication_receive',
+      types: [COLLECTION_PUBLICATION_REQUESTED],
+      async run(event) {
+        if (!Value.Check(LIBRARY_EVENTS[COLLECTION_PUBLICATION_REQUESTED], event.data))
+          throw new TypeError('Invalid Collection publication request event');
+        const { collectionId, publicationId } = event.data;
+        const route = routeOf(collectionId);
+        if (route === null || routeOf(publicationId) !== route || event.subject !== collectionId)
+          throw new TypeError('Invalid Collection publication request address');
+        const partition = partitionOf(route);
+        if (!event.source.startsWith(`urn:rezics:log:${partition}.`))
+          throw new TypeError('Collection publication request has a foreign source partition');
+        try {
+          await receiveHistoryWork(context.pool, context.client, partition, publicationId);
+        } catch (error) {
+          // A terminal History seal fences new SDK copies. Erasure retains ownership of the staged origin.
+          if (!(error instanceof HistorySealedError)) throw error;
+        }
+      },
+    },
+  ]);
+
   const prepare = DBOS.registerStep((input: WorkflowInput) => prepareCollectionPublicationSource(context, input), {
     name: 'library.collectionPublicationPrepare',
     retriesAllowed: true,
