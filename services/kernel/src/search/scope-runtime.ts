@@ -1,9 +1,9 @@
 import type { WorkContext } from '../work/registry.ts';
 import type { ScopeRuntime } from './service-scope.ts';
 
-export const collectionPublicationScopeRuntimes = new WeakMap<WorkContext, ScopeRuntime>();
+export const collectionPublicationScopeRuntimes = new WeakMap<WorkContext['pool'], ScopeRuntime>();
 
-/** The Library consumer borrows this worker's existing Search client and rated source for a guarded step. */
-export function collectionPublicationScopeRuntime(context: WeakKey): ScopeRuntime | undefined {
-  return collectionPublicationScopeRuntimes.get(context as WorkContext);
+/** Worker modules have separate registration contexts around the same pool. */
+export function collectionPublicationScopeRuntime(context: Pick<WorkContext, 'pool'>): ScopeRuntime | undefined {
+  return collectionPublicationScopeRuntimes.get(context.pool);
 }
