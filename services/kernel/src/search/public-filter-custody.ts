@@ -561,10 +561,14 @@ export async function readPublicFilterConsumerCustody(
 // Constructor routing only, analogous to publicFilterSourceOrigin. No receipt, positive result,
 // settlement or retained state is cached here. Recovery must install the real owner binding again.
 const repairSources = new WeakMap<Pool, PublicFilterRepairSourceBinding>();
-const repairAllowance = new AsyncLocalStorage<CustodyCost>();
+const repairAllowance = new AsyncLocalStorage<Readonly<{ spent: CustodyCost; maintenance: boolean }>>();
 /** Keep all reader phases within the calling consumer's already-spent allowance. */
-export function withPublicFilterRepairAllowance<T>(spent: CustodyCost, work: () => Promise<T>): Promise<T> {
-  return repairAllowance.run({ ...spent }, work);
+export function withPublicFilterRepairAllowance<T>(
+  spent: CustodyCost,
+  work: () => Promise<T>,
+  maintenance = false,
+): Promise<T> {
+  return repairAllowance.run({ spent: { ...spent }, maintenance }, work);
 }
 
 /** The sole native guard: owner verification runs between released and freshly reopened local homes. */
@@ -578,7 +582,8 @@ export async function readPublicFilterRepairSettlement(
 ): Promise<PublicFilterRepairSettlementResult> {
   context = requestContext(context);
   const meter = operationCost(pool, context);
-  const spent = repairAllowance.getStore() ?? cost();
+  const allowance = repairAllowance.getStore();
+  const spent = allowance?.spent ?? cost();
   const input = structuredClone(request);
   try {
     check(context);
@@ -591,12 +596,15 @@ export async function readPublicFilterRepairSettlement(
     const transport = createOpenSearch(url);
     const admit = () => {
       check(context);
+      const inputs = spent.inputKeys + meter.inputKeys;
+      // The owning publication meter charges maintenance by native inputs.
+      const width = Math.max(allowance?.maintenance ? inputs : spent.candidates + meter.candidates, 1);
       if (
-        spent.inputKeys + meter.inputKeys > 1000 ||
+        inputs > 1000 ||
         spent.bytes + meter.bytes > 4 * 1024 * 1024 ||
-        spent.rows + meter.rows > 64 + 16 * Math.max(spent.candidates + meter.candidates, 1) ||
+        spent.rows + meter.rows > 64 + 16 * width ||
         spent.accessPoints + meter.accessPoints + spent.dependencyPoints + meter.dependencyPoints >
-          16 + 8 * Math.max(spent.candidates + meter.candidates, 1)
+          16 + 8 * width
       )
         throw new Failure('owner_unavailable');
     };

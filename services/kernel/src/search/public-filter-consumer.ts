@@ -1119,6 +1119,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       native,
       pool,
       inputLimit,
+      maintenance,
       enrollmentOnly,
       enrollmentAdvanced: false,
     };
@@ -2754,15 +2755,23 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         if (!complete) return { status: 'progress' as const, job, cost: m.cost };
       }
       // The canonical reader is the native guard. FAA's separate settle joins its own Source verifier.
+      const spent = () => ({
+        ...m.cost,
+        inputKeys: PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - m.inputLimit + m.cost.inputKeys,
+      });
       const nativeSettlement = m.take(
-        await withPublicFilterRepairAllowance(m.cost, () =>
-          readPublicFilterRepairSettlement(config.pool, { queried: q, execution: work.execution! }, context),
+        await withPublicFilterRepairAllowance(
+          spent(),
+          () => readPublicFilterRepairSettlement(config.pool, { queried: q, execution: work.execution! }, context),
+          m.maintenance,
         ),
       );
       if (nativeSettlement.status !== 'settled') return m.unavailable('source_pending');
       const settled = m.take(
-        await withPublicFilterRepairAllowance(m.cost, () =>
-          binding.settle({ bootstrap: work.bootstrap.id, queried: q, execution: work.execution! }, context),
+        await withPublicFilterRepairAllowance(
+          spent(),
+          () => binding.settle({ bootstrap: work.bootstrap.id, queried: q, execution: work.execution! }, context),
+          m.maintenance,
         ),
       );
       if (settled.status !== 'joined') return m.unavailable('source_pending');

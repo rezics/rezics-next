@@ -148,7 +148,7 @@ export type PublicFilterSearchBindingPort = Readonly<{
     request: Readonly<{ queried: PublicFilterQueriedObservation; execution: string }>,
     context: PublicFilterConsumerContext,
   ): Promise<SourceBindingSettlementResult>;
-  withRepairAllowance<T>(spent: PublicFilterCost, work: () => Promise<T>): Promise<T>;
+  withRepairAllowance<T>(spent: PublicFilterCost, work: () => Promise<T>, maintenance?: boolean): Promise<T>;
 }>;
 
 /** Access supplies current Account repair inputs, authorization and deadline classification. */

@@ -2406,7 +2406,7 @@ export function createNativePublicFilterSourceBinding(
           spent.bytes += ackBytes(1);
         }
       }
-      const settled = await (spent ? ports.search.withRepairAllowance(spent, readSettlement) : readSettlement());
+      const settled = await (spent ? ports.search.withRepairAllowance(spent, readSettlement, true) : readSettlement());
       addCost(cost, settled.cost);
       if (settled.status !== 'settled') return { ...settled, cost };
       requireSameDefinition(cut.definition, settled.definition);
