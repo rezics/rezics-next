@@ -310,9 +310,9 @@ test('anonymous community navigation, native membership actions, protected admis
   );
   expect(emptyPublications.items).toEqual([]);
 
-  const aliceJourney = await auth.signIn('alice');
+  const aliceJourney = await auth.signIn('alice', { returnTo: `/en/spaces/${fixture.publicRealm.address}` });
   const alice = aliceJourney.context.pages().at(-1)!;
-  const bobJourney = await auth.signIn('bob');
+  const bobJourney = await auth.signIn('bob', { returnTo: '/en/realms' });
   const bob = bobJourney.context.pages().at(-1)!;
   await alice.setViewportSize({ width: 390, height: 844 });
   await bob.setViewportSize({ width: 1280, height: 900 });
