@@ -353,7 +353,8 @@ export async function startAuthStack(
       const authResponses: PlaywrightResponse[] = [];
       const visitedUrls: string[] = [];
       const pageRequests: import('playwright').Request[] = [];
-      const pageResponses: { path: string; method: string; status: number }[] = [];
+      const pageResponses: { origin: string; path: string; method: string; status: number }[] = [];
+      const responseCounts = new Map<number, number>();
       const pageFailures: {
         path: string;
         method: string;
@@ -378,40 +379,79 @@ export async function startAuthStack(
       });
       page.on('response', (response) => {
         const url = new URL(response.url());
-        pageResponses.push({
-          path: url.pathname,
-          method: response.request().method(),
-          status: response.status(),
-        });
+        const status = response.status();
+        const request = response.request();
+        responseCounts.set(status, (responseCounts.get(status) ?? 0) + 1);
+        if (pageResponses.length < 32 && (request.isNavigationRequest() || status >= 400))
+          pageResponses.push({ origin: url.origin, path: url.pathname, method: request.method(), status });
         if (url.pathname === '/signin') authResponses.push(response);
         functionResponses.get(response.request())?.resolve(response);
       });
       page.on('pageerror', (error) => {
         if (pageErrors.length < 12) pageErrors.push(error.message.slice(0, 512));
       });
-      page.on('requestfailed', (request) =>
+      page.on('requestfailed', (request) => {
+        if (pageFailures.length >= 32) return;
         pageFailures.push({
           path: new URL(request.url()).pathname,
           method: request.method(),
           error: request.failure()?.errorText,
-        }),
-      );
+        });
+      });
+      const requirePageReady = async (label: string, action: () => Promise<void>) => {
+        try {
+          await action();
+        } catch (cause) {
+          const [refreshed, body, cookies] = await Promise.all([
+            moduleFailureTrace
+              ? settledWithin(
+                  stack.refreshKernelRequests().then(() => true),
+                  1_000,
+                ).catch(() => false)
+              : false,
+            settledWithin(page.locator('body').innerText({ timeout: 1_000 }), 1_000).catch(() => undefined),
+            settledWithin(browserContext.cookies(), 1_000).catch(() => undefined),
+          ]);
+          const memory = refreshed ? stack.memoryObservation() : undefined;
+          const details = [
+            `${label} was not ready at ${page.url().split(/[?#]/u, 1)[0]}: ${body?.slice(0, 2_048) ?? 'body unavailable'}`,
+            `sign-in status=${authResponses.at(-1)?.status() ?? 'missing'}`,
+            `visited=${JSON.stringify(visitedUrls.slice(-16).map((value) => new URL(value).pathname))}`,
+            `response counts=${JSON.stringify(Object.fromEntries(responseCounts))}`,
+            `navigation and failed responses=${JSON.stringify(pageResponses)}`,
+            `failed requests=${JSON.stringify(pageFailures)}`,
+            `page errors=${JSON.stringify(pageErrors)}`,
+            `cookie names=${JSON.stringify(cookies?.map(({ name, domain, path }) => ({ name, domain, path })))}`,
+            `Auth app output=${output}`,
+            `web output (${refreshed ? 'refreshed' : 'last observation'})=${stack.webOutput()}`,
+          ];
+          if (memory)
+            details.push(
+              `native memory sample=${JSON.stringify({ sampledAt: memory.sampledAt, cgroup: memory.cgroup })}`,
+            );
+          throw new Error(details.join('; '), { cause });
+        }
+      };
       assertActive('read native Auth account for browser sign-in');
       const email = signup ? `${crypto.randomUUID()}@example.test` : (await stack.authPersona(persona)).email;
       const formPassword = signup ? `newcomer-${crypto.randomUUID()}` : password;
       const signInUrl = new URL('/auth/sign-in', stack.web);
       if (options.returnTo !== undefined) signInUrl.searchParams.set('return_to', options.returnTo);
       assertActive('open native Auth sign-in page');
-      await page.goto(signInUrl.href, { waitUntil: 'domcontentloaded' });
-      await hydrate(page);
+      await requirePageReady('Native Auth sign-in page', async () => {
+        await page.goto(signInUrl.href, { waitUntil: 'domcontentloaded' });
+        await hydrate(page);
+      });
       const webOrigin = new URL(stack.web).origin;
       let callbackResponse: Promise<PlaywrightResponse> | undefined;
       if (signup) {
         assertActive('open native Auth sign-up page');
         const signupLink = page.getByRole('link', { name: /create an account|sign up/i }).first();
-        await signupLink.click();
-        await page.waitForURL((url) => url.origin === origin && url.pathname === '/signup');
-        await hydrate(page);
+        await requirePageReady('Native Auth sign-up page', async () => {
+          await signupLink.click();
+          await page.waitForURL((url) => url.origin === origin && url.pathname === '/signup');
+          await hydrate(page);
+        });
         assertActive('submit native Auth sign-up form');
         await page.getByLabel('Handle', { exact: true }).fill(`newcomer-${crypto.randomUUID().slice(0, 8)}`);
         await page.getByLabel('Email', { exact: true }).fill(email);
@@ -448,43 +488,15 @@ export async function startAuthStack(
         assertActive('finish native Auth callback');
         const callback = await callbackResponse;
         console.info(`Native Auth callback for ${persona}: HTTP ${callback?.status() ?? 'missing'}`);
-        await page.waitForURL((url) => url.origin === webOrigin && !url.pathname.startsWith('/auth/'), {
-          timeout: 30_000,
-          waitUntil: 'domcontentloaded',
-        });
-        try {
+        await requirePageReady('Signed-in web page', async () => {
+          await page.waitForURL((url) => url.origin === webOrigin && !url.pathname.startsWith('/auth/'), {
+            timeout: 30_000,
+            waitUntil: 'domcontentloaded',
+          });
           // The return route is public SSR. Its session query starts in the hydrated client.
           await hydrate(page);
           await page.locator('#account-menu-button').waitFor({ state: 'visible' });
-        } catch (error) {
-          const refreshed = moduleFailureTrace
-            ? await settledWithin(
-                stack.refreshKernelRequests().then(() => true),
-                1_000,
-              ).catch(() => false)
-            : false;
-          const cookieNames = (await browserContext.cookies()).map(({ name, domain, path }) => ({
-            name,
-            domain,
-            path,
-          }));
-          const memory = refreshed ? stack.memoryObservation() : undefined;
-          const details = [
-            `Signed-in web page was not ready at ${page.url()}: ${await page.locator('body').innerText()}`,
-            `sign-in status=${authResponses.at(-1)?.status() ?? 'missing'}`,
-            `visited=${JSON.stringify(visitedUrls.map((value) => new URL(value).pathname))}`,
-            `responses=${JSON.stringify(pageResponses)}`,
-            `failed requests=${JSON.stringify(pageFailures)}`,
-            `page errors=${JSON.stringify(pageErrors)}`,
-            `cookie names=${JSON.stringify(cookieNames)}`,
-            `web output (${refreshed ? 'refreshed' : 'last observation'})=${stack.webOutput()}`,
-          ];
-          if (memory)
-            details.push(
-              `native memory sample=${JSON.stringify({ sampledAt: memory.sampledAt, cgroup: memory.cgroup })}`,
-            );
-          throw new Error(details.join('; '), { cause: error });
-        }
+        });
       }
       await page.waitForLoadState('domcontentloaded');
       await sampleMemory();
