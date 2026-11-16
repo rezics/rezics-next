@@ -219,12 +219,19 @@ export const SharedVersionRecovery: Story = {
       await selectSettingsCategory(canvasElement, m.settings_notifications_heading());
     };
 
-    // A lost automatic save and a later local edit establish a real retained full review draft.
+    const reaffirm = async (choice: HTMLElement) => {
+      await userEvent.click(choice);
+      await userEvent.click(choice);
+    };
+
+    // Only choices made after dispatch can survive acknowledgement and rebase.
     await waitFor(() => expect(reply()).toHaveAttribute('data-slot', 'switch'));
     await userEvent.click(reply());
     await notices.findByText(m.settings_notifications_uncertain_title());
     const original = fixture.commands[0]!;
     await userEvent.click(mention());
+    await reaffirm(reply());
+    await reaffirm(digest());
     await userEvent.click(retry());
     await notices.findByText(m.settings_notifications_review_title());
     await expect(fixture.commands[1]!.input).toBe(original.input);
@@ -303,6 +310,8 @@ export const SharedVersionRecovery: Story = {
     await expect(Object.isFrozen(uncertain.input)).toBe(true);
     await expect(Object.isFrozen(uncertain.input.notifications)).toBe(true);
     await userEvent.click(mention());
+    await reaffirm(reply());
+    await reaffirm(digest());
     const releaseReplayRead = fixture.holdRead();
     await userEvent.click(retry());
     try {
