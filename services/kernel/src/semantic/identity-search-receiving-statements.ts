@@ -131,7 +131,6 @@ function sourceStatementCosts(): readonly (readonly [string, Cost])[] {
         [projectionHeadsWrite.sql, [8, 8, 1, 2048, 0]],
         [projectionCurrentHead.sql, [2, 2, 1, 1024, 1]],
         [permissionCheckStatements.time, [1, 1, 1, 512, 1]],
-        [permissionCheckStatements.formula, [16, 16, 1, 32768, 1]],
         [
           "SELECT 1 FROM semantic.context_extension e WHERE e.route=$1 AND e.context_id=$2 AND e.digest=$3 AND (\n        EXISTS (SELECT 1 FROM semantic.context_extension_head(e.route,e.context_id) h WHERE h.digest=e.digest)\n        OR EXISTS (SELECT 1 FROM editorial.write_basis b JOIN access.account a\n          ON a.route=((get_byte(uuid_send(b.principal_id),10)*256)+get_byte(uuid_send(b.principal_id),11))\n          AND a.account_id=b.principal_id AND a.state='active' AND NOT a.authn_fenced\n          WHERE b.partition_no=e.route/16 AND b.transaction_id=e.recorded_transaction_id AND b.principal_kind='account'))",
           [1, 1, 1, 2048, 1],

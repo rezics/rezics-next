@@ -53,7 +53,7 @@ export function ArchiveProgressRecoveryPage() {
   }, [scope, connectionAttempt]);
   if (scope.current() && failed === scope)
     return (
-      <main className="space-y-4 p-6">
+      <div className="space-y-4 p-6">
         <PageHeading>{m.library_archive_progress_title()}</PageHeading>
         <p role="status">{m.library_archive_unavailable()}</p>
         <Button
@@ -65,14 +65,14 @@ export function ArchiveProgressRecoveryPage() {
         >
           {m.library_archive_progress_retry()}
         </Button>
-      </main>
+      </div>
     );
   const snap = journey?.snapshot();
   if (!scope.current() || !journey || !snap)
     return (
-      <main className="p-6">
+      <div className="p-6">
         <p role="status">{m.library_archive_progress_preparing()}</p>
-      </main>
+      </div>
     );
   return <RecoveryJourney key={scope.address + scope.csrfToken} journey={journey} snap={snap} owner={scope.subject} />;
 }
@@ -292,7 +292,7 @@ export function RecoveryJourney({ journey, snap, owner }: { journey: Journey; sn
     </section>
   ) : null;
   return (
-    <main className="h-auto mx-auto w-full max-w-7xl space-y-6 px-4 py-6 [overflow-wrap:anywhere]">
+    <div className="h-auto mx-auto w-full max-w-7xl space-y-6 px-4 py-6 [overflow-wrap:anywhere]">
       <PageHeading>{m.library_archive_progress_title()}</PageHeading>
       <p>{m.library_archive_progress_intro()}</p>
       <ArchiveRecoveryDestinations current="progress" />
@@ -318,6 +318,6 @@ export function RecoveryJourney({ journey, snap, owner }: { journey: Journey; sn
         onCancel={() => void journey.cancel()}
         onLeave={() => journey.retire()}
       />
-    </main>
+    </div>
   );
 }

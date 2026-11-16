@@ -59,18 +59,18 @@ function ArchiveCollectionRecoveryPageForVisit({ current }: { current: RecoveryV
   const operation = useOperationAdmission('collection.list');
   if (!current) {
     return (
-      <main className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6">
+      <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6">
         <PageHeading>{m.library_archive_recovery_title()}</PageHeading>
         <p role="status">{m.library_archive_recovery_sign_in()}</p>
-      </main>
+      </div>
     );
   }
   if (operation !== 'available') {
     return (
-      <main className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6">
+      <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6">
         <PageHeading>{m.library_archive_recovery_title()}</PageHeading>
         <p role="status">{m.library_archive_recovery_unavailable()}</p>
-      </main>
+      </div>
     );
   }
   return <RecoverySession key={`${visitKey(current)}:${operation}`} visit={current} />;

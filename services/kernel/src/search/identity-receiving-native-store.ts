@@ -173,6 +173,7 @@ type ReleaseEvidence = {
   frontier: IdentityFrontier;
   plan: SearchNativeReceivingPlan;
   hold: HoldRow;
+  originalHome?: Readonly<{ epoch: number; position: bigint }>;
 };
 type Component = { epoch: number; position: string };
 type WriterEvidence = { repair_locator: string | null; value: string | null };
@@ -454,7 +455,7 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
   ) {
     const { source, selection } = plan;
     work.reserve({ rows: 5, points: 5, statements: 1, bytes: 2048, engineRequests: 0 });
-    const value = await tx.query(revalidateSearchIdentityPlanFenceSql, [
+    const value = await tx.query<Component>(revalidateSearchIdentityPlanFenceSql, [
       source.receivingHome,
       source.locator.planId,
       source.plan.transactionId,
@@ -468,8 +469,16 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
       String(source.fenceGeneration),
       String(source.enrollmentGeneration),
     ]);
-    if (source.plan.transactionId !== source.originalFence.transactionId || value.rowCount !== 1)
+    const owner = value.rows[0];
+    if (
+      source.plan.transactionId !== source.originalFence.transactionId ||
+      value.rowCount !== 1 ||
+      !owner ||
+      owner.epoch !== source.receivingEpoch ||
+      !unsigned.test(owner.position)
+    )
       work.fail('changed', 'Original Search plan or close changed during Source resolution');
+    return { epoch: owner.epoch, position: BigInt(owner.position) };
   }
 
   function nativeCommit(tx: CommandTransaction, work: SearchNativeReceivingWork, purpose = 'search-canonical-index') {
@@ -1123,7 +1132,7 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
     },
     readPlanPoint(locator: SearchIdentityReceivingLocator, context: SearchIdentityReceivingContext) {
       return perform(context, null, false, (work: SearchNativeReceivingWork) =>
-        withBoundedReadConnection(pool, work.context.deadline, (client) => readPlan(client, work, locator)),
+        withBoundedReadConnection(pool, work.context.deadline, (client) => readPlan(client, work, locator, true)),
       );
     },
     revalidateOriginalPlanFence(plan: SearchNativeReceivingPlan, context: SearchIdentityReceivingContext) {
@@ -1359,7 +1368,7 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
             if (expected) {
               if (!same(plan.source.locator, locator) || !same(expected.accepted, acceptance))
                 work.fail('changed', 'Original custody changed during Source closure');
-              await verifyOriginalPlanFence(tx, work, plan);
+              const originalHome = await verifyOriginalPlanFence(tx, work, plan);
               work.reserve({ rows: 4, points: 4, statements: 1, bytes: 2048, engineRequests: 0 });
               const applied = (
                 await tx.query<Component>(searchNativeReleaseAppliedSql(), [
@@ -1374,7 +1383,14 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
                 BigInt(applied.position) !== expected.applied.position
               )
                 work.fail('changed', 'Original applied custody changed during Source closure');
-              return { plan, hold, applied: expected.applied, frontier: expected.frontier, accepted: acceptance };
+              return {
+                plan,
+                hold,
+                applied: expected.applied,
+                frontier: expected.frontier,
+                accepted: acceptance,
+                originalHome,
+              };
             }
             const row = await operation(tx, work, plan);
             if (
@@ -1431,6 +1447,7 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
           frontier: local.frontier,
           plan: local.plan,
           hold: local.hold,
+          ...(local.originalHome && { originalHome: local.originalHome }),
         });
         return observation;
       });
@@ -1477,7 +1494,14 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
         const hold = originalBarrier ? evidence.hold : (await sql<HoldRow>(tx, work, 'peekHold', key(locator))).rows[0];
         if (!hold || hold.hold_id !== holdId) work.fail('changed', 'Original native release hold absent');
         if (record) matchesRecord(plan, hold, record, work);
-        await accepted(tx, work, plan, hold, false);
+        // The observation checked accepted and applied custody in the same
+        // original-home snapshot. The next fenced position can reuse those proofs.
+        const sameOriginalHome =
+          originalBarrier &&
+          evidence.originalHome &&
+          own.epoch === evidence.originalHome.epoch &&
+          own.position === evidence.originalHome.position + 1n;
+        if (!sameOriginalHome) await accepted(tx, work, plan, hold, false);
         await writer(tx, work, plan);
         await lockDocument(tx, work, plan);
         const locked = (await sql<HoldRow>(tx, work, 'hold', key(locator))).rows[0];
@@ -1497,7 +1521,7 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
         )
           work.fail('changed', 'Genuine original applied control custody required for release');
 
-        if (originalBarrier) {
+        if (originalBarrier && !sameOriginalHome) {
           work.reserve({ rows: 4, points: 4, statements: 1, bytes: 2048, engineRequests: 0 });
           const applied = (
             await tx.query<Component>(searchNativeReleaseAppliedSql(), [
@@ -1512,7 +1536,7 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
             BigInt(applied.position) !== evidence.applied.position
           )
             work.fail('changed', 'Original native application changed before release');
-        } else {
+        } else if (!originalBarrier) {
           const op = await operation(tx, work, plan);
           if (
             !op ||
