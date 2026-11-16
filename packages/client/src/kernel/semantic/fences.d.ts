@@ -49,7 +49,7 @@ export declare function enforceSourceFence(tx: CommandTransaction, plan: SourceF
 export declare function fencedIds(client: Pick<PoolClient, 'query'>, routeKey: Uint8Array, rows: readonly {
     id: string;
     source: CandidateSource | null;
-}[]): Promise<Set<string>>;
+}[], requireActiveOwner?: boolean): Promise<Set<string>>;
 type ProvenanceRow = {
     route: number;
     subject_id: string;
@@ -57,6 +57,6 @@ type ProvenanceRow = {
     slot_id?: string;
 };
 /** Point probes for the proposing source of each shown candidate, then the recording revision of a compact fact. */
-export declare function candidateSources(client: Pick<PoolClient, 'query'>, entries: readonly ProvenanceRow[]): Promise<Map<string, CandidateSource | null>>;
-export declare function withoutFencedEntries<T extends ProvenanceRow>(client: Pick<PoolClient, 'query'>, routeKey: Uint8Array, entries: readonly T[]): Promise<T[]>;
+export declare function candidateSources(client: Pick<PoolClient, 'query'>, entries: readonly ProvenanceRow[], maxBytes?: number): Promise<Map<string, CandidateSource | null>>;
+export declare function withoutFencedEntries<T extends ProvenanceRow>(client: Pick<PoolClient, 'query'>, routeKey: Uint8Array, entries: readonly T[], provenanceBytes?: number): Promise<T[]>;
 export {};

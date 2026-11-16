@@ -31,6 +31,37 @@ export type BatchResult = {
     envelopes: number;
     position: bigint;
 };
+type LogRow = {
+    head_epoch: number | null;
+    position: bigint | null;
+    event_seq: number | null;
+    event_count: number | null;
+    epoch: number | null;
+    id: string | null;
+    type: string | null;
+    subject: string | null;
+    data: unknown;
+    time: string | null;
+    payload_state: string | null;
+};
+declare function logPoint(row: LogRow): {
+    epoch: number | null;
+    position: string;
+    eventSeq: number | null;
+    eventId: string | null;
+    type: string | null;
+};
+export type ProjectionProgress = {
+    stage: 'read' | 'read_busy' | 'checkpoint' | 'checkpoint_busy' | 'checkpoint_advanced';
+} | {
+    stage: 'released';
+    checkpoint: string;
+    readThrough: string;
+    validatedThrough: string;
+    first?: ReturnType<typeof logPoint>;
+    blocked?: ReturnType<typeof logPoint>;
+    reason?: StopReason;
+};
 /**
  * Reads and applies one short transactional batch. `apply` runs inside the open transaction, whose
  * session becomes idle in a transaction after five seconds, so effects should only record or enqueue work.
@@ -47,4 +78,5 @@ export declare function projectBatch(pool: Pool, options: {
     partition: number;
     apply: (envelopes: readonly Envelope[]) => Promise<void>;
     envelopes?: number;
+    observe?: (progress: ProjectionProgress) => void;
 }): Promise<BatchResult>;

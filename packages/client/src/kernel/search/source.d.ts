@@ -1,7 +1,7 @@
 import type { FilterQualifier, SpoilerThreshold } from '@rezics/filter';
 import type { CalendarDate } from '@rezics/filter';
 import type { PublicRatingFigure } from './rating-source.ts';
-import type { CreditSearchProjection, CreditSearchSource } from './credit-search.ts';
+import type { CreditSearchIndexProjection, CreditSearchSource } from './credit-search.ts';
 import type { DocumentTextProjection } from './document-text.ts';
 export type LanguageValue = {
     language: string;
@@ -109,7 +109,7 @@ export type SubjectSnapshot = {
     position: bigint;
     subjects: IndexedSubject[];
     /** Complete creator projections are attached only by the private index-input read. */
-    creditSearch?: ReadonlyMap<string, CreditSearchProjection>;
+    creditSearch?: ReadonlyMap<string, CreditSearchIndexProjection>;
 };
 /** A page retains its source cuts and complete per-pool authorization until disclosure finishes. */
 export type RetainedRelationFacetPage = Readonly<{

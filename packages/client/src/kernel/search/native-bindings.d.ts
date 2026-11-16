@@ -37,6 +37,7 @@ export declare let readCollectionPublicationWorkDefinition: SearchNativePorts['r
 export declare let readErasureStatus: SearchNativePorts['readErasureStatus'];
 export declare let readIdentityMappings: SearchNativePorts['readIdentityMappings'];
 export declare let readIdentitySourceProjection: SearchNativePorts['readIdentitySourceProjection'];
+export declare let prepareRetainedIdentitySourceProjections: SearchNativePorts['prepareRetainedIdentitySourceProjections'];
 export declare let readNativePublicFilterAccountRepair: SearchNativePorts['readNativePublicFilterAccountRepair'];
 export declare let readNativePublicFilterPublicationCompletion: SearchNativePorts['readNativePublicFilterPublicationCompletion'];
 export declare let readNativePublicFilterRepairStart: SearchNativePorts['readNativePublicFilterRepairStart'];

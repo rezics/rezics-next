@@ -121,6 +121,7 @@ export declare const EVENT_CLASSIFICATIONS: Readonly<{
     'com.rezics.access.authentication-established.v1': EventClassification;
     'com.rezics.access.authentication-fenced.v1': EventClassification;
     'com.rezics.access.authentication-floor-advanced.v1': EventClassification;
+    'com.rezics.access.website-session-floor-advanced.v1': EventClassification;
     'com.rezics.access.cleanup-continuation.recorded.v1': EventClassification;
     'com.rezics.access.cleanup-continuation.renewed.v1': EventClassification;
     'com.rezics.access.coordination-reserved.v1': EventClassification;
@@ -329,6 +330,7 @@ export declare const EVENT_CLASSIFICATIONS: Readonly<{
     'com.rezics.library.collection.listing.changed.v1': EventClassification;
     'com.rezics.library.collection.member.changed.v1': EventClassification;
     'com.rezics.library.collection.updated.v1': EventClassification;
+    'com.rezics.library.collection.publication-requested.v1': EventClassification;
     'com.rezics.library.copy.deleted.v1': EventClassification;
     'com.rezics.library.copy.updated.v1': EventClassification;
     'com.rezics.library.entry.deleted.v1': EventClassification;

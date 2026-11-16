@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import type { CommandEvent, CommandTransaction } from '../command/command.ts';
 import type { AccessClient } from '../request/access.ts';
 import { type RealmTransitionAuthority } from './realm-membership-transition.ts';
 export declare const MEMBERSHIP_LIMIT = 1000;
@@ -108,7 +109,11 @@ export declare function createMembershipInverseCommands(config: {
     reserve(input: MembershipAdmission): Promise<import("../command/command.ts").CommandOutcome<MembershipReservation & {
         sourceTransactionId?: string;
     }>>;
-    release(input: MembershipRelease): Promise<import("../command/command.ts").CommandOutcome<{
+    release(input: MembershipRelease, cleanup?: {
+        spaceId: string;
+        publicationTransactionId: string;
+        removeFollow(tx: CommandTransaction): Promise<CommandEvent | null>;
+    }): Promise<import("../command/command.ts").CommandOutcome<{
         organizationId?: string;
         memberAccountId?: string;
         accountId: string;

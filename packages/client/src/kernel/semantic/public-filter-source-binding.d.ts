@@ -253,7 +253,13 @@ type NativePreparationInput = (Parameters<PublicFilterSourceBootstrapBinding['be
 export type NativePublicFilterPreparation = PublicSourceBootstrapResult | Readonly<{
     status: 'preparing';
     bootstrap: PublicSourceBootstrap;
+    enrollmentAdvanced: boolean;
     cost: PublicFilterCost;
+}>;
+type NativeRepairStartInput = Readonly<{
+    bootstrap: string;
+    queried: PublicFilterQueriedObservation;
+    publicationJob?: string;
 }>;
 export declare function joinNativePublicFilterRepair(binding: PublicFilterSourceBinding, request: Parameters<PublicFilterSourceBinding['join']>[0], context: PublicFilterConsumerContext): Promise<Readonly<{
     status: 'unready' | 'unavailable';
@@ -278,10 +284,7 @@ export declare function readNativePublicFilterAccountRepair(binding: PublicFilte
     account: AccountDiscoveryRepairObservation | null;
     cost: PublicFilterCost;
 }> | null>;
-export declare function readNativePublicFilterRepairStart(binding: PublicFilterSourceBinding, request: Readonly<{
-    bootstrap: string;
-    queried: PublicFilterQueriedObservation;
-}>, context: PublicFilterConsumerContext): Promise<Readonly<{
+export declare function readNativePublicFilterRepairStart(binding: PublicFilterSourceBinding, request: NativeRepairStartInput, context: PublicFilterConsumerContext): Promise<Readonly<{
     start: PrivacyReductionStart;
     cost: PublicFilterCost;
 }> | null>;

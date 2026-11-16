@@ -19,13 +19,24 @@ export declare function readIdentityScopeConsumerWork(pool: Pool, ticket: Identi
  * Each native projection below is fixed or schema-bounded (seal <=4096 bytes).
  */
 export declare function scopeConsumerFootprint(sql: string, values: readonly unknown[]): WorkDimensions | undefined;
+type FrozenLibrarySource = {
+    route: number;
+    collectionId: string;
+    generation: string;
+    accountId: string;
+    incarnation: string;
+    ownerEpoch: number;
+    deadline: number;
+};
 /** Incarnation identifies the Source; per-effect receiving hints never create a second Source registry. */
 export declare function identityScopeAddress(key: S.IdentityScopeKey): {
     partition: number;
     source: string;
     scope: string;
 };
-export declare function createIdentityScopedObservations(pool: Pool, suppliedNativePublicOutput?: NativePublicOutputPort): S.IdentityScopedObservations;
+export declare function createIdentityScopedObservations(pool: Pool, suppliedNativePublicOutput?: NativePublicOutputPort): S.IdentityScopedObservations & {
+    advanceFrozenLibrarySourceRetirement(input: FrozenLibrarySource): Promise<boolean>;
+};
 export declare function nextIdentityScopeRepairHomes(pool: Pool): Promise<number[]>;
 export declare function nextIdentityScopeRepairTarget(pool: Pool, partition: number): Promise<S.IdentityScopeKey | null>;
 /** Retained fair repair shares the native maintenance queue; workflow arguments contain only a home. */

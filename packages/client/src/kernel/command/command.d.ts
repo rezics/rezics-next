@@ -11,6 +11,7 @@ export type CommandEvent = {
 };
 export type CommandTransaction = Pick<PoolClient, 'query'>;
 export declare function withSingleCommandAttempt<T>(body: () => Promise<T>): Promise<T>;
+export declare function withCompiledCommandControls<T>(pool: Pool, body: () => Promise<T>): Promise<T>;
 export type CommandCallback = (transactionId: string) => void | Promise<void>;
 export type CommandResult<T> = Readonly<{
     value: T;
@@ -193,7 +194,7 @@ export declare function registerCommandCallback(tx: CommandTransaction, callback
  */
 export declare function hasLiveCommandTransaction(tx: CommandTransaction): boolean;
 /** Mints an authoritative time for a read outside a command, with no command context. */
-export declare function mintReadTime(client: CommandTransaction, clock?: () => Date): Promise<AuthoritativeTime>;
+export declare function mintReadTime(client: CommandTransaction, clock?: () => Date, pool?: Pool): Promise<AuthoritativeTime>;
 export declare class IdempotencyConflictError extends Error {
     readonly partition: number;
     constructor(partition: number);

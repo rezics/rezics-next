@@ -41,6 +41,7 @@ export declare function enrollAccountDiscoveryHome(pool: Pool, input: Readonly<{
     readDefinition: string;
     keys: readonly string[];
     accounts: boolean;
+    keyLimit: number;
 }>, context: Readonly<{
     deadline: number;
 }>): Promise<AccountDiscoveryEnrollment>;

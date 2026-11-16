@@ -318,6 +318,9 @@ export declare function ACCESS_EVENTS(): {
         kind: Type.TLiteral<"fence" | "tombstone">;
         priorOperatorAccountId: Type.TNull | Type.TUnion<[Type.TString, Type.TNull]>;
     }>;
+    readonly 'com.rezics.access.website-session-floor-advanced.v1': Type.TObject<{
+        accountId: Type.TString;
+    }>;
     readonly 'com.rezics.access.authentication-fenced.v1': Type.TObject<{
         receiptId: Type.TString;
         accountId: Type.TString;

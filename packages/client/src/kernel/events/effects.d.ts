@@ -1,6 +1,6 @@
 import { type Pool, type PoolClient } from 'pg';
 import type { Relay } from './relays.ts';
-import { type CloudEvent, type Envelope } from './log.ts';
+import { type CloudEvent, type Envelope, type ProjectionProgress } from './log.ts';
 export { DBOS_SCHEMA } from '../work/client.ts';
 export declare const EFFECTS_QUEUE = "effects";
 export declare const EFFECTS_CONSUMER = "effects";
@@ -32,6 +32,17 @@ export declare function registerEffects(effects: RegisteredEffect[], pool?: Pool
 /** Compatibility for tests that register effects before launching the shared executor. */
 export declare function launchWork(options: WorkOptions): Promise<void>;
 export declare function shutdownWork(): Promise<void>;
+export type EffectsRelayProgress = ProjectionProgress | {
+    stage: 'prepare' | 'admit' | 'enqueue';
+} | {
+    stage: 'failed';
+    name?: string;
+    sqlState?: string;
+};
+export type EffectsRelayProbe = {
+    partition: number;
+    report(progress: EffectsRelayProgress): void;
+};
 /** A batch failing after enqueuing is read again and finds the workflows it started. */
-export declare function relayEffects(pool: Pool, effects: ReturnType<typeof registerEffects>, partition: number): Promise<import("./log.ts").BatchResult>;
-export declare function effectsRelay(pool: Pool, effects: ReturnType<typeof registerEffects>): Relay;
+export declare function relayEffects(pool: Pool, effects: ReturnType<typeof registerEffects>, partition: number, observe?: EffectsRelayProbe['report']): Promise<import("./log.ts").BatchResult>;
+export declare function effectsRelay(pool: Pool, effects: ReturnType<typeof registerEffects>, probe?: EffectsRelayProbe): Relay;

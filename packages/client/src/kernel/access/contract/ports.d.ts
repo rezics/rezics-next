@@ -86,7 +86,7 @@ export type IdentitySemanticPort = {
     verifyOriginalAccountAgentIdentity?(tx: unknown, selection: unknown, result: unknown): Promise<boolean>;
     withReadTransaction<T>(pool: AccessPool, body: (client: AccessQueryClient) => Promise<T>): Promise<T>;
     activeIdentitySourceConsumerMaintenance?(pool: AccessPool): boolean;
-    readPublicSubject?(client: AccessQueryClient, subjectId: string): Promise<{
+    readPublicSubject?(client: AccessQueryClient, subjectId: string, unverifiedOwnerId?: string): Promise<{
         id: string;
         label: string;
         type: string;

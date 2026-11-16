@@ -33,6 +33,17 @@ export declare function purgeExpiredCollectionPage({ pool, clock, deadline }: {
 export declare function purgeTerminalCollectionPage(tx: CommandTransaction, input: {
     accountId: string;
     collectionId: string;
+    retainedGeneration?: string;
 }): Promise<CollectionCleanupPage>;
+/** Reinspect the exact frozen generation after its committed successor becomes visible. */
+export declare function reinspectFrozenCollection(pool: Pool, input: {
+    accountId: string;
+    collectionId: string;
+    retainedGeneration: string;
+}, deadline: number): Promise<Readonly<{
+    status: 'progress' | 'purged' | 'stale' | 'not_due' | 'retained';
+    removed: number;
+    custody?: 'collection_source_and_destination_disposition' | 'native_source_capture' | 'account_fence';
+}>>;
 /** Installs on the one default Library runtime and existing bounded maintenance queue. */
 export declare function registerCollectionRetention({ pool, client, clock }: WorkContext): Promise<void>;

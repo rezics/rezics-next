@@ -38,7 +38,9 @@ export type SearchIdentityReceivingSource = Readonly<{
     physicalGeneration: number;
     enrollmentGeneration: bigint;
     fenceGeneration: bigint;
-    barrier: SearchWriterBarrierLocator;
+    barrier: SearchWriterBarrierLocator & Readonly<{
+        kind?: 'original';
+    }>;
     originalFence: IdentityNativeReceipt;
     plan: IdentityNativeReceipt;
 }>;
@@ -82,7 +84,7 @@ export interface SearchIdentityReceivingNative {
     recordApplied(tx: CommandTransaction, record: SearchIdentityReceivingRecord, frontier: IdentityFrontier, context: SearchIdentityReceivingContext): Promise<SearchIdentityReceivingResult<Readonly<{
         holdId: string;
     }>>>;
-    reconcileOriginal(locator: SearchIdentityReceivingLocator, after: string | null, context: SearchIdentityReceivingContext): Promise<SearchIdentityReceivingResult<Readonly<{
+    reconcileOriginal(locator: SearchIdentityReceivingLocator, after: string | null, context: SearchIdentityReceivingContext, record?: SearchIdentityReceivingRecord): Promise<SearchIdentityReceivingResult<Readonly<{
         after: string | null;
         state: 'progress' | 'settled';
     }>>>;

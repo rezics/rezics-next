@@ -2,6 +2,8 @@ import { type ConceptStatementReader } from '../search/concept-browse-statements
 import type { ConceptBrowseBinding, ConceptBrowseSource, ConceptDescendantSelection } from '../search/concept-browse.ts';
 import { type Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
+import { type CommandTransaction } from '../command/command.ts';
+import { type Partition } from '../partition/partition.ts';
 import { type CompleteWorkLinkReservation, type NativeWorkLinkValue, type IndexedStatement, type RelationFacetMatch, type RelationFacetProbe, type RetainedRelationFacetPage } from '../search/source.ts';
 import { activeRelease } from './definition-release-read.ts';
 export type SelectedStatement = {
@@ -54,6 +56,11 @@ type Prepared = {
 /** A raw key budget bounds rejects as well as published rows. No permission survives a call. */
 export declare function relationSource(pool: Pool, routeKey?: Uint8Array): {
     readConceptStatements: ConceptStatementReader;
+    projectSelectedRelationsInSnapshot(tx: CommandTransaction, subject: SourceSubject, rows: readonly SelectedStatement[], releases: ReadonlyMap<string, Release>, runtime: NonNullable<Prepared['runtime']>): Promise<{
+        statements: IndexedStatement[];
+        subjects: Map<string, SourceSubject | null>;
+        owners: Map<number, Partition>;
+    }>;
     prepare(client: PoolClient, subjects: readonly SourceSubject[], releases: ReadonlyMap<string, Release>, partition: number): Promise<Prepared>;
     finish(prepared: Prepared): Promise<Map<string, {
         statements: IndexedStatement[];

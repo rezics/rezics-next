@@ -133,7 +133,9 @@ export type DurableInitiatorRecord = Readonly<{
  *   original floor/operator and original delegation transaction/range snapshot.
  *   Return cloneable/canonicalizable data without replacing creation snapshots.
  */
-export type DurableInitiatorReader = (client: AccessClient, operation: DurableOperationAnchor, time: AuthoritativeTime) => Promise<DurableInitiatorRecord | null>;
+export type DurableInitiatorReader = (client: AccessClient, operation: DurableOperationAnchor, time: AuthoritativeTime, 
+/** Optional diagnostic checkpoint before the owning module reads its creation receipt. */
+enterOperationReceipt?: () => void) => Promise<DurableInitiatorRecord | null>;
 export type InitiatorRestoreInput = Readonly<{
     operation: DurableOperationAnchor;
     action: string;
@@ -151,8 +153,16 @@ export type InitiatorRestorerConfig = Readonly<{
      */
     readConsent: CurrentConsentReader;
 }>;
+export type InitiatorRestoreStage = 'validate_input' | 'read_operation' | 'read_operation_receipt' | 'read_creation_receipt' | 'read_current_consent' | 'read_current_account' | 'read_current_delegation' | 'restore_identity' | 'prepare_permission' | 'validate_resource' | 'authorize_resource';
+export type InitiatorRestoreFailure = Readonly<{
+    initiatorStage: InitiatorRestoreStage;
+    initiatorElapsedMs: number;
+    initiatorStageElapsedMs: number;
+    requestRemainingMs?: number;
+    evidenceRemainingMs?: number;
+}>;
 export type InitiatorRestorer = Readonly<{
-    restoreInitiator(operation: InitiatorRestoreInput, time: AuthoritativeTime): Promise<AccountActor>;
+    restoreInitiator(operation: InitiatorRestoreInput, time: AuthoritativeTime, onFailure?: (failure: InitiatorRestoreFailure) => void): Promise<AccountActor>;
 }>;
 /** Restore inside CommandAuthorization.prepare, at the SAME live attempt T,
  * before target checkout. Every retry, step and receipt replay must invoke this

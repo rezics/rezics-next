@@ -1,4 +1,4 @@
-import type { CreditSearchProjection } from './credit-search.ts';
+import type { CreditSearchIndexProjection } from './credit-search.ts';
 /** One nested document per (statement, creator name). Shape matches `credit-search-mapping.ts`. */
 export type CreditedNameDocument = {
     workId: string;
@@ -28,4 +28,4 @@ export type CreditSearchFields = {
  * the previous names with an explicit incomplete cut, so a stale creator name cannot survive.
  * The projection is already validated by `projectCreditSearch`; its witnesses are published unchanged.
  */
-export declare function creditSearchFields(projection: CreditSearchProjection | undefined): CreditSearchFields;
+export declare function creditSearchFields(projection: CreditSearchIndexProjection | undefined): CreditSearchFields;
