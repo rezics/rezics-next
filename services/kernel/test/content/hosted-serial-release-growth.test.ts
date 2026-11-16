@@ -1,10 +1,13 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText, serializeDocument } from '@rezics/document';
+import { decodeJwt } from 'jose';
 import { materializeHostedSelection } from '../../src/content/hosted-direct-selection.ts';
 import { HOSTED_PAGE_LIMIT } from '../../src/content/hosted-chapters-limits.ts';
 import type { HostedPlacement } from '../../src/content/hosted-chapters-model.ts';
 import { HOSTED_PUBLICATION_STAGING_STEP_LIMIT } from '../../src/content/hosted-publication-staging-model.ts';
 import { HOSTED_VERSION_RELEASE_CANDIDATE_PAGE_MAX } from '../../src/content/hosted-version-release-candidate-model.ts';
+import { withBoundedReadConnection } from '../../src/database/pool.ts';
+import { routeOf } from '../../src/route/route.ts';
 import { captureWithFoldedCost, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 
@@ -330,7 +333,39 @@ test('a growing serial keeps exact public releases and advances preparation in b
   }
   await grow(10_002);
   const selectedBody = fromPlainText('Explicitly selected replacement');
+  const reviseStartedAt = Date.now();
   const revised = await native.revise(source.firstPost, { body: selectedBody });
+  if (revised.status !== 200) {
+    const reviseEndedAt = Date.now();
+    const { exp } = decodeJwt(native.author.bearer);
+    const post = await withBoundedReadConnection(native.pool, reviseEndedAt + 3_000, (client) =>
+      client.query(
+        `SELECT p.head_revision_id=$4 AS original_head_current,p.author_account_id=$5 AS author_matches,
+                p.visibility AS post_visibility,p.availability,t.visibility AS thread_visibility,
+                p.security_revision IS NOT NULL AND t.security_revision IS NOT NULL AS security_revisions_present
+         FROM content.post p JOIN content.thread t USING(route,thread_id)
+         WHERE p.route=$1 AND p.thread_id=$2 AND p.post_id=$3`,
+        [
+          routeOf(source.firstPost.id),
+          source.id,
+          source.firstPost.id,
+          source.firstPost.revisionId,
+          native.author.actor.accountId,
+        ],
+      ),
+    ).then(
+      (result) => result.rows[0] ?? null,
+      () => 'unavailable',
+    );
+    console.info('Hosted serial late source revise', {
+      status: revised.status,
+      code: revised.value.code,
+      effectStatus: revised.value.effect_status,
+      bearerRemainingAtStartMs: exp === undefined ? null : exp * 1_000 - reviseStartedAt,
+      bearerRemainingAtEndMs: exp === undefined ? null : exp * 1_000 - reviseEndedAt,
+      post,
+    });
+  }
   expect(revised.status).toBe(200);
   const selectedTarget = { ...target, revisionId: revised.value.post.revisionId, sha256: revised.value.post.sha256 };
   head = (
