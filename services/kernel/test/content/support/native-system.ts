@@ -30,7 +30,10 @@ import { assertSetupResponse } from './setup-response.ts';
 import { grantNativeCreationAuthority } from './native-board-host.ts';
 import type { ContentActors, ContentCredential, ContentSystem, ContentSystemOptions } from './system.ts';
 
-export type NativeContentSystem = Omit<ContentSystem, 'actors' | 'auth'> & {
+type NativeCloseObserver = (phase: string, state: 'starting' | 'completed' | 'failed') => void;
+
+export type NativeContentSystem = Omit<ContentSystem, 'actors' | 'auth' | 'close'> & {
+  close(observe?: NativeCloseObserver): Promise<void>;
   readonly actors: Omit<ContentActors, 'worker' | 'otherWorker'>;
   readonly auth: Omit<ContentSystem['auth'], 'websiteClient'>;
   /** The full fixture registers its website client on this same real Auth service. */
@@ -126,25 +129,35 @@ async function createNativeContentSystemWithOptions(
   let authCreated = false;
   let host: Awaited<ReturnType<typeof createAuthHost>> | undefined;
   let closing: Promise<void> | undefined;
-  const close = () =>
+  const close = (observe?: NativeCloseObserver) =>
     (closing ??= (async () => {
       const errors: unknown[] = [];
-      const release = async (operation: () => Promise<unknown>) => {
+      const report: NativeCloseObserver = (phase, state) => {
         try {
-          await operation();
-        } catch (error) {
-          errors.push(error);
+          observe?.(phase, state);
+        } catch {
+          // Observability must not interrupt release of owned resources.
         }
       };
-      if (host) await release(() => host!.stop());
-      if (closeAuthPool) await release(closeAuthPool);
-      await release(() => pool.end());
+      const release = async (phase: string, operation: () => Promise<unknown>) => {
+        report(phase, 'starting');
+        try {
+          await operation();
+          report(phase, 'completed');
+        } catch (error) {
+          errors.push(error);
+          report(phase, 'failed');
+        }
+      };
+      if (host) await release('Auth host stop', () => host!.stop());
+      if (closeAuthPool) await release('Auth pool end', closeAuthPool);
+      await release('app pool end', () => pool.end());
       // Only these randomly named databases were created by this invocation.
       // Do not terminate sessions or remove any caller-owned namespace.
-      if (authCreated) await release(() => dropTestDatabase(authAdmin, authName));
-      if (appCreated) await release(() => admin.query(`DROP DATABASE ${appName}`));
-      await release(() => authAdmin.end());
-      await release(() => admin.end());
+      if (authCreated) await release('owned Auth database drop', () => dropTestDatabase(authAdmin, authName));
+      if (appCreated) await release('owned app database drop', () => admin.query(`DROP DATABASE ${appName}`));
+      await release('Auth admin pool end', () => authAdmin.end());
+      await release('app admin pool end', () => admin.end());
       if (errors.length) throw new AggregateError(errors, 'Native content cleanup failed');
     })());
 

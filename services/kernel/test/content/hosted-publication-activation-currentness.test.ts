@@ -64,7 +64,10 @@ afterAll(async () => {
     console.info('Hosted currentness second pool before end', { totalCount, idleCount, waitingCount });
     await closePhase('secondPool.end()', () => secondPool.end());
   }
-  if (f) await closePhase('hostedChaptersFixture.close()', () => f.close());
+  if (f)
+    await closePhase('hostedChaptersFixture.close()', () =>
+      f.close((phase, state) => console.info(`Hosted fixture teardown: ${state} ${phase}`)),
+    );
   if (failures.length) throw new AggregateError(failures, 'Hosted currentness teardown failed');
 });
 

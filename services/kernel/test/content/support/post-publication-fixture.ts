@@ -244,7 +244,7 @@ export async function postPublicationFixture() {
       revise,
       evidence,
       state,
-      close: () => system.close(),
+      close: system.close,
     };
   } catch (error) {
     await system.close();
