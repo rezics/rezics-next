@@ -3,10 +3,7 @@ import { registerAccountDiscoveryWork } from './account-discovery-work.ts';
 import { registerRealmMembershipReconciliation } from './realm-membership-transition-legacy.ts';
 import { registerOrganizationCloseWork } from './organization-close-work.ts';
 import { registerOperatorFenceWork } from './operator-fence-work.ts';
-import {
-  registerSessionRevocationWork,
-  type CommittedSessionRevocationWorkflow,
-} from './session-revocation-work.ts';
+import { registerSessionRevocationWork, type CommittedSessionRevocationWorkflow } from './session-revocation-work.ts';
 import type { MembershipWorkInput, MembershipWorkResult, MembershipWorkflowPorts } from '@rezics/auth-contract';
 import {
   MEMBERSHIP_WORKFLOW_NAME,
@@ -85,6 +82,18 @@ type Options = {
   sessionRevocation?: CommittedSessionRevocationWorkflow;
 };
 
+async function observeRealmMembershipWork<T>(
+  operation: 'authorize' | 'recover_proof' | 'consume_recovered_proof',
+  run: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    console.error({ code: 'realm_membership_work_failed', operation });
+    throw error;
+  }
+}
+
 /** Native Access-only ports. Direct component construction defers approval
  * configuration until use; WorkModule registration validates it eagerly. */
 export function createMembershipWorkPorts(
@@ -145,7 +154,8 @@ function membershipWorkPorts(
     async authorize(reference, input) {
       // Realm enqueue and publication both resolve through the installed port.
       // Organization creation and membership keep their existing resolver.
-      if (input.kind === 'membership' && input.principal.kind === 'realm') return realm().authorize(reference, input);
+      if (input.kind === 'membership' && input.principal.kind === 'realm')
+        return observeRealmMembershipWork('authorize', () => realm().authorize(reference, input));
       if (options.authorize) return options.authorize(reference, input);
       if (input.kind !== 'membership' || input.principal.kind !== 'organization')
         throw new MembershipAuthorizationUnavailableError();
@@ -200,9 +210,13 @@ function membershipWorkPorts(
         pool: context.pool,
         authority: { readTransition: realm().authority.readTransition! },
       });
-      const proof = await transitions.proof(held as RealmMembershipTransition);
+      const proof = await observeRealmMembershipWork('recover_proof', () =>
+        transitions.proof(held as RealmMembershipTransition),
+      );
       if (!proof) return false;
-      await transitions.consume({ ...(held as RealmMembershipTransition), key });
+      await observeRealmMembershipWork('consume_recovered_proof', () =>
+        transitions.consume({ ...(held as RealmMembershipTransition), key }),
+      );
       if (proof.outcome !== 'published') throw new MembershipAuthorizationUnavailableError();
       return true;
     },
