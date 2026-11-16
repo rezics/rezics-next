@@ -208,7 +208,7 @@ test.each([
     mode: 'complete-merge',
   },
   {
-    label: 'prepares a visible merge original in its actor admission home',
+    label: 'records a visible merge removal in its actor admission home',
     intent: 'merge',
     resumed: false,
     mode: 'same-home-merge',
@@ -497,6 +497,7 @@ test.each([
   let commonPlan: { binding: unknown; binding_digest: string; transaction_id: string; native_position: string } | undefined;
   let acceptedNativeHold: unknown;
   let acceptedRecorded = false;
+  let acceptedRecordPosition: string | undefined;
   let accepting = false;
   let changedBindingProof = false;
   let admissionTransaction = crypto.randomUUID();
@@ -528,7 +529,7 @@ test.each([
   let reconciledCopy: string | undefined;
   let controlPosition = 0;
   const nativePosition = () => {
-    if (sameHomeMerge) return String(controlPosition);
+    if (writerHome === jobHome) return String(controlPosition);
     return dispatchRequest?.frontier.after[3] === SEARCH_IDENTITY_WRITER_DISPATCH
       ? committedOperation?.state === 'applied'
         ? String(appliedPosition)
@@ -543,6 +544,7 @@ test.each([
         ? originPosition(21)
         : originPosition(20);
   };
+  const writerClosePosition = () => String(preparedWriter!.closed_position);
   const publicationWrites: string[] = [];
 
   type Step = {
@@ -1229,7 +1231,7 @@ test.each([
           rows = publishedMerge && prior ? [{ plan_id: prior.planId }] : [];
         } else rows = [{ plan_id: previousPlan }];
       } else if (sql === prepareSearchIdentityOriginalSql) {
-        const closePosition = sameHomeMerge ? String(controlPosition + 1) : originPosition(21);
+        const closePosition = writerHome === jobHome ? String(controlPosition + 1) : originPosition(21);
         expect(values.slice(0, 9)).toEqual([
           writerHome,
           index,
@@ -1332,14 +1334,14 @@ test.each([
             transaction_id: plan.source.plan.transactionId,
             initial_copy_count: priorVisible ? 1 : 0,
             native_epoch: 1,
-            native_position: originPosition(21),
+            native_position: writerClosePosition(),
           },
         ];
       } else if (sql === planSql.hold.sql || sql === planSql.peekHold.sql) rows = hold ? [{ ...hold }] : [];
       else if (sql === planSql.accepted.sql) {
         expect(values[6]).toBe(hold?.accepted_transaction_id);
         expect(acceptedRecorded).toBe(true);
-        rows = [{ epoch: 1, position: originPosition(22) }];
+        rows = [{ epoch: 1, position: acceptedRecordPosition }];
       } else if (sql === planSql.operation.sql || sql === searchNativeOriginalOperationSql())
         rows = committedOperation ? [committedOperation] : [];
       else if (sql === planSql.dispatch.sql) {
@@ -1354,7 +1356,7 @@ test.each([
           writer_position: String(values[6]),
           dispatch_transaction_id: String(values[7]),
           dispatch_epoch: 1,
-          dispatch_position: originPosition(31),
+          dispatch_position: writerHome === jobHome ? String(controlPosition + 1) : originPosition(31),
           visible_transaction_id: null,
           visible_position: null,
           writer_evidence_digest: null,
@@ -1368,10 +1370,10 @@ test.each([
         expect(values.slice(4, 8)).toEqual([
           committedOperation?.writer_token,
           committedOperation?.dispatch_transaction_id,
-          originPosition(31),
+          committedOperation?.dispatch_position,
           [selected],
         ]);
-        expect(values[10]).toBe(originPosition(21));
+        expect(values[10]).toBe(writerClosePosition());
         Object.assign(preparedWriter!, {
           writer_token: null,
           dispatch_state: 'settled',
@@ -1446,7 +1448,7 @@ test.each([
         expect(copySettlement).toEqual({
           partition: writerHome,
           epoch: 1,
-          position: originPosition(33),
+          position: committedOperation?.visible_position,
           transactionId: committedOperation?.visible_transaction_id,
         });
         reconciledCopy = String(values[3]);
@@ -1474,7 +1476,7 @@ test.each([
         expect(values.slice(4)).toEqual([
           writerHome,
           1,
-          String(applicationPosition()),
+          committedOperation?.applied_position,
           committedOperation?.applied_transaction_id,
         ]);
         if (foreignCapture) {
@@ -1509,7 +1511,7 @@ test.each([
         rows = [{}];
       } else if (sql === searchNativeReleaseAppliedSql()) {
         expect(values.slice(-2)).toEqual([committedOperation?.applied_transaction_id, hold?.hold_id]);
-        rows = lateReleaseCheck ? [] : [{ epoch: 1, position: String(applicationPosition()) }];
+        rows = lateReleaseCheck ? [] : [{ epoch: 1, position: committedOperation?.applied_position }];
       } else if (sql === planSql.release.sql) {
         expect(controlCustody).toBeDefined();
         expect(values[2]).toBe(hold?.hold_id);
@@ -1539,7 +1541,7 @@ test.each([
         expect(values.slice(8, 12)).toEqual([
           writerHome,
           1,
-          String(applicationPosition()),
+          committedOperation?.applied_position,
           committedOperation?.applied_transaction_id,
         ]);
         retiredScope = true;
@@ -1591,7 +1593,7 @@ test.each([
           state: 'applied',
           applied_transaction_id: String(values[3]),
           frontier: JSON.parse(String(values[4])),
-          applied_position: String(applicationPosition()),
+          applied_position: writerHome === jobHome ? String(controlPosition + 1) : String(applicationPosition()),
         };
         rows = [{ operation_id: writingOperation.operation_id }];
       } else if (sql === receivingJob.sql) {
@@ -1676,6 +1678,7 @@ test.each([
         acceptedNativeHold = JSON.parse(String(values[11]));
         expect(JSON.parse(String(values[11])).holdId).toBe(hold?.hold_id);
         acceptedRecorded = true;
+        acceptedRecordPosition = writerHome === jobHome ? String(controlPosition + 1) : originPosition(22);
         rows = [{}];
       } else if (sql === planSql.bindAcceptance.sql) {
         expect(acceptedRecorded).toBe(true);
@@ -1941,7 +1944,7 @@ test.each([
       expect(committedOperation?.state).toBe('dispatched');
       const op = canonicalTerms ? 'index' : 'delete';
       submitted.push({ id: selected, operation: op });
-      const target = { _index: alias, _id: selected, version: Number(originPosition(21)), version_type: 'external' };
+      const target = { _index: alias, _id: selected, version: Number(writerClosePosition()), version_type: 'external' };
       expect(lines).toEqual(
         canonicalTerms ? [{ index: target }, expect.objectContaining(canonicalDocument())] : [{ delete: target }],
       );
@@ -1956,7 +1959,7 @@ test.each([
             [op]: {
               _index: index,
               _id: selected,
-              _version: Number(originPosition(21)),
+              _version: Number(writerClosePosition()),
               _shards: { total: 1, successful: 1, failed: 0 },
               _seq_no: 1,
               _primary_term: 1,
@@ -2230,7 +2233,7 @@ test.each([
           disposition: priorVisible ? 'NEW' : mode === 'first' || canonicalTerms ? 'first-apply' : 'OLD',
           barrier: { kind: 'original', partition: writerHome },
           originalFence: {
-            position: sameHomeMerge ? String(controlPosition) : originPosition(21),
+            position: writerHome === jobHome ? String(controlPosition) : originPosition(21),
             epoch: 1,
             partition: writerHome,
           },
@@ -2255,8 +2258,8 @@ test.each([
         expect(engineReads).toBe(preparationReads);
         expect(normalizationCalls).toBe(Number(canonicalTerms) + Number(rejectsUnpublishedHandoff));
         expect(scopeSteps().map((step) => step.engineRequests)).toEqual([0, 1, ...Array(scopeSteps().length - 2).fill(0)]);
-        if (sameHomeMerge) {
-          expect(capturedEvents).toEqual(
+        if (sameHomeMerge && writerHome === jobHome) {
+          expect(capturedEvents.slice(captureStart)).toEqual(
             scopeSteps().map(() => ({
               store: 'identity_epoch_step',
               partition: jobHome,
@@ -2265,7 +2268,6 @@ test.each([
             })),
           );
           expect(bulkCalls).toBe(0);
-          return;
         }
         if (canonicalTerms || bothVisible || ['dispatch', 'lost', 'handoff', 'changed-proof'].includes(mode)) {
           accepting = true;
@@ -2397,7 +2399,7 @@ test.each([
                   [canonicalTerms ? 'index' : 'delete']: expect.objectContaining({
                     _index: index,
                     _id: selected,
-                    _version: Number(originPosition(21)),
+                    _version: Number(writerClosePosition()),
                     _seq_no: 1,
                     _primary_term: 1,
                     _shards: { total: 1, successful: 1, failed: 0 },
@@ -2447,6 +2449,15 @@ test.each([
             const applicationRequest = await directoryStep();
             expect(applicationRequest.receipt).toEqual(request);
             expect(committedOperation?.state).toBe('visible');
+            if (sameHomeMerge && writerHome === jobHome) {
+              expect(submitted).toEqual([{ id: selected, operation: 'delete' }]);
+              expect(preparedWriter).toMatchObject({
+                dispatch_state: 'settled',
+                visible_transaction_id: committedOperation?.visible_transaction_id,
+                visible_position: committedOperation?.visible_position,
+              });
+              return;
+            }
             const readsBeforeApplication = originalReads;
             if (foreignCapture) {
               const before = capturedEvents.length;
@@ -2464,7 +2475,9 @@ test.each([
             const applied = await prepare(pool, applicationRequest.receipt);
             expect(applied).toEqual({ state: 'progress', transactionId: committedOperation?.applied_transaction_id });
             expect(committed.at(-1)?.frontier.after).toEqual([selected, retainedPlan?.effect_key]);
-            expect(committedOperation?.applied_position).toBe(String(applicationPosition()));
+            expect(committedOperation?.applied_position).toBe(
+              writerHome === jobHome ? String(controlPosition) : String(applicationPosition()),
+            );
             expect(originalReads).toBe(readsBeforeApplication);
             expect(committedOperation?.state).toBe('applied');
             expect(engineReads).toBe(expectedAllocationReads);
@@ -2593,6 +2606,7 @@ test.each([
     commonPlan = undefined;
     acceptedNativeHold = undefined;
     acceptedRecorded = false;
+    acceptedRecordPosition = undefined;
     controlCustody = undefined;
     controlApplied = undefined;
     receivingContinuation = { revision: '0', after_key: null, state: 'progress', applied_transaction_id: null };

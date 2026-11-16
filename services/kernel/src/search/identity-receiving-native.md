@@ -176,6 +176,10 @@ copies and then checks the original and terminal projections in separate turns. 
 holds traversal of the job's originals. After committed control custody, an invocation-bound observation
 rechecks the original plan, application, copies and control receipt before releasing its hold.
 
+Dispatch epoch and position come from the exact native dispatch commit. The current operation proof reads
+the native visibility or application commit for that state using one indexed key. Application has already
+verified the retained visibility. The release follows that committed application in the same owner epoch.
+
 Acceptance and final release verify the admitted meaning and retained Source projections together in one
 repeatable-read snapshot. For visible subjects, Semantic checks current anonymous Access, the signed build
 cursor, the exact subject and privacy revisions, the empty dependency tail and the mapping for the admitted
@@ -208,6 +212,7 @@ Canonical term support checks the selected slot's sequence range before reading 
 that range and one extra row, and rejects a changed slot or a result larger than the range.
 
 Before acceptance, the writer records the checked binding digest against the exact retained request and native plan.
+This checkpoint uses the same erasure origin rule as the other writer support checkpoints.
 The next turn uses that proof to fund both control captures and returns the commit receipt directly. It observes the
 pending job without a row lock and locks the job when writing the control plan. The receiving hold still verifies its
 current native plan and fence. Reconciliation reads the exact applied record and control custody in the dispatch
