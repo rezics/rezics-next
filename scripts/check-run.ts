@@ -2198,16 +2198,16 @@ async function runCheckWithFinalSettlement(
             },
             stateOptions,
           );
-          const message = createCheckRunNativeTerminalMessage({
-            invocationId: establishedRegistration.invocationId,
-            nonce: establishedRegistration.nonce,
-            binding,
-            physical: { host: parsed.host, run: parsed.run },
-            receipt: parsed,
-          });
           const nativeWriter =
             dependencies.receiptWriter ?? (receiptChannel?.invocationId ? receiptChannel.write : undefined);
           if (nativeWriter) {
+            const message = createCheckRunNativeTerminalMessage({
+              invocationId: establishedRegistration.invocationId,
+              nonce: establishedRegistration.nonce,
+              binding,
+              physical: { host: parsed.host, run: parsed.run },
+              receipt: parsed,
+            });
             try {
               nativeWriter(`${JSON.stringify(message)}\n`);
             } catch (error) {
