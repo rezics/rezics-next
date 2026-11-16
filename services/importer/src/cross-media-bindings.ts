@@ -986,6 +986,8 @@ export class CrossMediaGraph {
         continue;
       }
       const qualifiers = (draft.qualifiers ?? []).map((qualifier) => {
+        // Literal qualifiers can share the spelling of a provider's subject key.
+        if (bundledRelease.properties[qualifier.property]?.datatype !== 'wikibase-item') return qualifier;
         if (typeof qualifier.content !== 'string') return qualifier;
         const bound = input.claim({ source: draft.alias, external_id: qualifier.content });
         return bound?.state === 'bound' ? { ...qualifier, content: bound.subject } : qualifier;
