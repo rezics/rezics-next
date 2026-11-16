@@ -10,7 +10,7 @@ import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
 import { zeroScopeWork } from '../search/scope-execution.ts';
 import type { PoolClient } from 'pg';
 import { builtinCollectionId } from './builtin-identity.ts';
-import { openOwnerQuery, ownerQueryWork, type OwnerQueryDependencies } from './builtin-runtime-query.ts';
+import { openOwnerQuery, continueOwnerQueryWork, type OwnerQueryDependencies } from './builtin-runtime-query.ts';
 import { readOwnerOriginalActivityPrefix, type OwnerActivitySeek } from './owner-index-continue.ts';
 import { evaluateContinueGroup, readContinueOriginalFacts } from './continue-source.ts';
 import type { ContinuePage, ContinueSubject } from './continue-reads.ts';
@@ -74,7 +74,7 @@ export async function readContinueOwnerPage(
       routeOf(String(cursor.after[3])) === null)
   )
     throw new ProblemError('invalid_cursor');
-  const work = ownerQueryWork(input.limit);
+  const work = continueOwnerQueryWork(input.limit);
   const collectionId = builtinCollectionId(input.actor.accountId, {
     kind: 'everything',
   });
