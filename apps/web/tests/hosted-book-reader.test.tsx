@@ -1027,7 +1027,7 @@ test('the default production route reads native contents and exact chapters, the
   canonical.href = 'https://reader.test/en/';
   document.head.append(canonical);
   try {
-    const { Route } = await import('../src/routes/books.$id.read');
+    const { Route } = await import('../src/routes/books_.$id.read');
     setLocale('en', { reload: false });
     window.history.replaceState(null, '', 'https://reader.test/en/');
     client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -1972,7 +1972,7 @@ test('the mounted chooser rereads exact sparse, previous, retry, first and selec
       readHostedBook(api, data.request, data.publicationTitle, new AbortController().signal),
   }));
   try {
-    const { Route } = await import('../src/routes/books.$id.read');
+    const { Route } = await import('../src/routes/books_.$id.read');
     setLocale('en', { reload: false });
     client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     client.setQueryData(['session'], { state: 'signed-out', subject: null, csrfToken: null });

@@ -1,4 +1,7 @@
 import { expect, mock, test } from 'bun:test';
+import { QueryClient } from '@tanstack/react-query';
+import { createMemoryHistory, createRouter } from '@tanstack/react-router';
+import { anonymousReadMode } from '../src/kernel/credential.ts';
 import { publicCacheGrowthSample, publicCacheSamples } from './support/public-cache-samples.ts';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -80,6 +83,29 @@ test('the generated router marks only the public page routes for shared caching'
   ]) {
     expect(isPublicCacheRequest(new Request(`https://rezics.test${path}`)), `${path} must stay private`).toBe(false);
   }
+});
+
+test('the generated Book reader route stays outside the public Book catalogue', () => {
+  const path = '/books/00000000-0000-4000-8000-000000000001/read';
+  const router = createRouter({
+    routeTree,
+    history: createMemoryHistory(),
+    context: { queryClient: new QueryClient(), credentialMode: anonymousReadMode },
+  });
+  const discovery = new Request(`https://rezics.test/en${path}?view=catalogues`);
+  const reader = new Request(`https://rezics.test/en${path}`);
+  const catalogue = new Request('https://rezics.test/en/books');
+  expect({
+    matches: router.matchRoutes(path, { view: 'catalogues' }).map((match) => match.routeId),
+    discoveryPublic: isPublicCacheRequest(discovery),
+    readerPublic: isPublicCacheRequest(reader),
+    cataloguePublic: isPublicCacheRequest(catalogue),
+  }).toEqual({
+    matches: ['__root__', '/books_/$id/read'],
+    discoveryPublic: false,
+    readerPublic: false,
+    cataloguePublic: true,
+  });
 });
 
 test('a recorded public thread renders current disclosure on every anonymous request', async () => {

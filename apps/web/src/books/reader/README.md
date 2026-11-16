@@ -57,8 +57,9 @@ retires revealed outline pages so their labels and targets cannot leak into the 
 
 ## Production admission and links
 
-`routes/books.$id.read.tsx` follows the existing file-route generator and locale rewrite. It has no public cache,
-preload cache or stale route payload: `staleTime: 0`, `gcTime: 0`, `shouldReload: true` and `sessionReread: true`.
+`routes/books_.$id.read.tsx` uses the file router's non-nested segment to mount the session-aware reader beside the
+public `/books` catalogue. The locale rewrite exposes the same reader URL. The route uses `staleTime: 0`,
+`gcTime: 0`, `shouldReload: true` and `sessionReread: true`.
 The default catalogue visit is the current public publication's root contents. Subject discovery uses the same
 route with `view=catalogues`; its path ID is then the Subject ID. It calls the generated
 `subjects({id}).hostedCatalogues.get` once with `includeTitle=1`, `limit=20` and the original optional opaque cursor
