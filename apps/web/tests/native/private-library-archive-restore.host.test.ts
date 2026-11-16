@@ -90,6 +90,7 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
   const marker = crypto.randomUUID().slice(0, 8);
   const title = `Native archive work ${marker}`;
   const collectionTitle = `Portable archive ${marker}`;
+  const labelName = `Archive label ${marker}`;
   const createdSubject = await stack.kernel(
     '/v1/subjects',
     {
@@ -237,7 +238,7 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
           'content-type': 'application/json',
           'idempotency-key': key(),
         },
-        body: JSON.stringify({ name: `Archive label ${marker}` }),
+        body: JSON.stringify({ name: labelName }),
       },
       'alice',
     ),
@@ -286,6 +287,7 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
     collectionId: collection.collection.id,
     collectionTitle,
     labelId: label.label.id,
+    labelName,
     sessionId: session.progressSession.id,
     stateId: activeState!.id,
   };
@@ -407,39 +409,99 @@ test('owner exports a populated Library and restores Collection, Entry and progr
     timeout: 60_000,
   });
 
+  const entryPath = `/v1/libraryEntries/${prepared.subjectId}`;
+  type Entry = { subjectId: string; state: string; incarnationId: string; revision: number };
+  const { libraryEntry: originalEntry } = await json<{ libraryEntry: Entry }>(
+    await stack.kernel(entryPath, undefined, 'alice'),
+    200,
+    'read original Entry guard',
+  );
+  expect(originalEntry.state).toBe(prepared.stateId);
+  expect(originalEntry.incarnationId).toBeTruthy();
+  const guard = new URLSearchParams({
+    revision: String(originalEntry.revision),
+    incarnationId: originalEntry.incarnationId,
+  });
+  await json<null>(
+    await stack.kernel(`${entryPath}?${guard}`, { method: 'DELETE', headers: { 'idempotency-key': key() } }, 'alice'),
+    204,
+    'clear original fixture Entry before recovery',
+  );
+  await json<unknown>(await stack.kernel(entryPath, undefined, 'alice'), 404, 'Entry absent before recovery');
+
+  type Label = { id: string; name: string; revision: number };
+  const originalLabelPath = `/v1/libraryLabels?q=${encodeURIComponent(prepared.labelName)}`;
+  const { labels } = await json<{ labels: Label[] }>(
+    await stack.kernel(originalLabelPath, undefined, 'alice'),
+    200,
+    'read original label guard',
+  );
+  const originalLabel = labels.find((label) => label.id === prepared.labelId);
+  if (!originalLabel) throw new Error('The archived label must exist before renaming the fixture');
+  await json<unknown>(
+    await stack.kernel(
+      `/v1/libraryLabels/${originalLabel.id}`,
+      {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', 'idempotency-key': key() },
+        body: JSON.stringify({ name: `Current ${prepared.labelName}`, revision: originalLabel.revision }),
+      },
+      'alice',
+    ),
+    200,
+    'rename original fixture label before recovery',
+  );
+
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole('link', { name: 'Recover from a Library archive' }).click();
   await hydrated(page);
   await page.getByRole('heading', { name: 'Recover from a Library archive' }).waitFor({ state: 'visible' });
   await page.getByLabel('Choose your completed Library archive').setInputFiles(archivePath);
-  await page.getByText('entries', { exact: true }).first().waitFor({ state: 'visible', timeout: 60_000 });
-  const entryForm = page.locator('article').filter({ hasText: '· entries ·' }).first();
-  await entryForm.getByLabel('Current canonical Subject ID').fill(prepared.subjectId);
+  const entryForm = page.locator('article').filter({
+    has: page.getByText(await message('en', 'library_export_section_entries')),
+  });
+  await entryForm.waitFor({ state: 'visible', timeout: 60_000 });
+  await entryForm
+    .getByLabel(await message('en', 'library_archive_entry_subject_id'), { exact: true })
+    .fill(prepared.subjectId);
+  await entryForm.getByLabel(await message('en', 'library_archive_entry_action'), { exact: true }).click();
+  await page.getByRole('option', { name: await message('en', 'library_archive_entry_create'), exact: true }).click();
+  await entryForm
+    .getByLabel(await message('en', 'library_archive_entry_state_id'), { exact: true })
+    .fill(prepared.stateId);
   await entryForm.getByRole('button', { name: /Select record / }).click();
-  const labelForm = page.locator('article').filter({ hasText: '· labels ·' }).first();
-  await labelForm.getByLabel('Choose a label operation').selectOption('create');
+
+  const labelForm = page.locator('article').filter({
+    has: page.getByText(await message('en', 'library_export_section_labels')),
+  });
+  await labelForm.getByLabel(await message('en', 'library_archive_entry_label_choice'), { exact: true }).click();
+  await page.getByRole('option', { name: await message('en', 'library_archive_entry_create_label'), exact: true }).click();
   await labelForm.getByRole('button', { name: /Select record / }).click();
   await page.getByRole('button', { name: 'Review selected changes', exact: true }).click();
-  await page
-    .getByText('I confirm these exact displayed records, review revisions and choices.', { exact: false })
-    .waitFor({ state: 'visible' });
-  await page
-    .getByRole('checkbox', {
-      name: 'I confirm these exact displayed records, review revisions and choices. A refreshed review requires confirmation again.',
-    })
-    .check();
+  await page.getByRole('checkbox', { name: await message('en', 'library_archive_entry_confirm'), exact: true }).check();
   await page.getByRole('button', { name: 'Apply confirmed changes', exact: true }).click();
-  await page.getByRole('button', { name: 'Read actual current facts' }).first().waitFor({
-    state: 'visible',
-    timeout: 60_000,
-  });
-  await page.getByRole('button', { name: 'Read actual current facts' }).first().click();
-  const entryRead = await json<{ libraryEntry: { subjectId: string; state: string } }>(
-    await stack.kernel(`/v1/libraryEntries/${prepared.subjectId}`, undefined, 'alice'),
+  const readCurrent = page.getByRole('button', {
+    name: await message('en', 'library_archive_entry_read_current'),
+    exact: true,
+  }).first();
+  await readCurrent.waitFor({ state: 'visible', timeout: 60_000 });
+  await readCurrent.click();
+  const { libraryEntry: restoredEntry } = await json<{ libraryEntry: Entry }>(
+    await stack.kernel(entryPath, undefined, 'alice'),
     200,
-    'entry readback',
+    'restored Entry readback',
   );
-  expect(entryRead.libraryEntry.subjectId).toBe(prepared.subjectId);
+  expect(restoredEntry).toMatchObject({ subjectId: prepared.subjectId, state: prepared.stateId });
+  expect(restoredEntry.incarnationId).toBeTruthy();
+  expect(restoredEntry.incarnationId).not.toBe(originalEntry.incarnationId);
+  const { labels: restoredLabels } = await json<{ labels: Label[] }>(
+    await stack.kernel(originalLabelPath, undefined, 'alice'),
+    200,
+    'restored label readback',
+  );
+  const restoredLabel = restoredLabels.find((label) => label.name === prepared.labelName);
+  expect(restoredLabel?.id).toBeTruthy();
+  expect(restoredLabel?.id).not.toBe(originalLabel.id);
 
   await page.getByRole('link', { name: 'Recover archived progress' }).click();
   await hydrated(page);
@@ -449,15 +511,21 @@ test('owner exports a populated Library and restores Collection, Entry and progr
     timeout: 60_000,
   });
   await page.getByRole('button', { name: 'Map this occurrence', exact: true }).click();
-  await page.getByLabel('Current canonical Subject UUID').fill(prepared.subjectId);
+  await page
+    .getByLabel(await message('en', 'library_archive_progress_subject'), { exact: true })
+    .fill(prepared.subjectId);
   await page.getByRole('button', { name: 'Read current profile choices', exact: true }).click();
-  const pair = page.getByLabel('Current mode and unit');
+  const pair = page.getByLabel(await message('en', 'library_archive_progress_pair'), { exact: true });
   await pair.waitFor({ state: 'visible', timeout: 30_000 });
-  await pair.selectOption({ index: 1 });
+  await pair.click();
+  await page
+    .getByRole('option', { name: `${await message('en', 'library_progress_mode_amount')} · page`, exact: true })
+    .click();
   await page.getByRole('button', { name: 'Review this exact mapping', exact: true }).click();
   await page
     .getByRole('checkbox', {
-      name: 'I reviewed this review ID and mapping and consent to one fresh private Session for this occurrence.',
+      name: await message('en', 'library_archive_progress_consent'),
+      exact: true,
     })
     .check();
   await page.getByRole('button', { name: 'Confirm and create this Session', exact: true }).click();
@@ -466,7 +534,9 @@ test('owner exports a populated Library and restores Collection, Entry and progr
     timeout: 60_000,
   });
   await page.getByRole('button', { name: 'Read current Session and exact units', exact: true }).click();
-  const sessions = await json<{ progressSessions: { id: string; subjectId: string }[] }>(
+  const sessions = await json<{
+    progressSessions: { id: string; subjectId: string; mode: string; unit: string; total: string | null }[];
+  }>(
     await stack.kernel(
       `/v1/progressSessions?subjectId=${encodeURIComponent(prepared.subjectId)}&limit=100`,
       undefined,
@@ -476,7 +546,14 @@ test('owner exports a populated Library and restores Collection, Entry and progr
     'progress readback',
   );
   expect(sessions.progressSessions.some((row) => row.id === prepared.sessionId)).toBe(true);
-  expect(sessions.progressSessions.length).toBeGreaterThan(1);
+  const restoredSessions = sessions.progressSessions.filter((row) => row.id !== prepared.sessionId);
+  expect(restoredSessions).toHaveLength(1);
+  expect(restoredSessions[0]).toMatchObject({
+    subjectId: prepared.subjectId,
+    mode: 'scalar_amount',
+    unit: 'page',
+    total: '12',
+  });
 
   const bob = await auth.signIn('bob', { returnTo: `/en/collections/${restoredId}` });
   const bobPage = bob.context.pages().at(-1)!;
@@ -515,7 +592,11 @@ test('owner exports a populated Library and restores Collection, Entry and progr
           sourceCollectionId: prepared.collectionId,
           restoredCollectionId: restoredId,
           labelId: prepared.labelId,
+          restoredLabelId: restoredLabel?.id,
+          sourceEntryIncarnation: originalEntry.incarnationId,
+          restoredEntryIncarnation: restoredEntry.incarnationId,
           sourceSessionId: prepared.sessionId,
+          restoredSessionId: restoredSessions[0]!.id,
         },
         archive: {
           path: archivePath,
