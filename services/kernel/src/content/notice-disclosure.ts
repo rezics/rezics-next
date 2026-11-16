@@ -51,6 +51,7 @@ export type NoticeProjection = Readonly<{
   actor: NoticeActor;
   actorId: string | null;
   target: NoticeTarget;
+  decisionTarget?: NoticePostReference;
   summary: string;
   open: NoticeOpenAction;
   decisionId: string | null;
@@ -218,26 +219,29 @@ export async function discloseNoticeCandidates(
         candidate.decision_id,
         { actor: dependencies.actor, deadline: dependencies.deadline },
       );
-      if (!decision?.value || decision.value.id !== candidate.decision_id) continue;
+      if (
+        !decision?.value ||
+        decision.value.id !== candidate.decision_id ||
+        !decision.threadId ||
+        decision.threadId !== candidate.thread_id
+      )
+        continue;
       sourceObservations.set(candidate.notice_id, {
         kind: 'decision',
         epoch: decision.anchor.epoch,
         id: decision.value.id,
         target: { kind: decision.value.targetKind, id: decision.value.targetId },
+        threadId: decision.threadId,
       });
       const appeal = decision.value.appeal;
       if (candidate.source_id !== decision.value.id && (!appeal || candidate.source_id !== appeal.id)) continue;
       const isAppeal = appeal?.id === candidate.source_id && appeal.outcome !== null;
       if (candidate.source_id !== decision.value.id && !isAppeal) continue;
       let ref: NoticePostReference | undefined;
-      if (decision.value.targetKind === 'thread' && candidate.thread_id === decision.value.targetId) {
-        ref = { threadId: candidate.thread_id, postId: null };
-      } else if (
-        decision.value.targetKind === 'post' &&
-        candidate.post_id === decision.value.targetId &&
-        candidate.thread_id
-      ) {
-        ref = { threadId: candidate.thread_id, postId: candidate.post_id };
+      if (decision.value.targetKind === 'thread' && decision.threadId === decision.value.targetId) {
+        ref = { threadId: decision.threadId, postId: null };
+      } else if (decision.value.targetKind === 'post' && candidate.post_id === decision.value.targetId) {
+        ref = { threadId: decision.threadId, postId: decision.value.targetId };
       } else {
         continue;
       }
@@ -376,7 +380,10 @@ export async function discloseNoticeCandidates(
         if (candidate.source_id === after.value.id || isAppeal) {
           currentSourceIds.add(candidate.notice_id);
           const originalTarget = source.get(candidate.notice_id)!;
-          const sameTarget = after.value.targetKind === before.target.kind && after.value.targetId === before.target.id;
+          const sameTarget =
+            after.value.targetKind === before.target.kind &&
+            after.value.targetId === before.target.id &&
+            after.threadId === before.threadId;
           const summary = isAppeal
             ? appeal.outcome === 'reversed'
               ? 'your appeal restored the content'
@@ -446,6 +453,8 @@ export async function discloseNoticeCandidates(
       actor,
       actorId: actor.state === 'available' ? actor.accountId : null,
       target: boardContext ? projectionBoardTarget(board) : projectionTarget(context),
+      // The author's decision receipt has its own identifiers even when the content context is withheld.
+      ...(disclosed.decisionId && disclosed.ref ? { decisionTarget: disclosed.ref } : {}),
       summary: disclosed.summary,
       open:
         context || board || disclosed.open?.kind === 'moderation_decision' || disclosed.open?.kind === 'report_outcome'
