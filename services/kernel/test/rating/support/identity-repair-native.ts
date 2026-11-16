@@ -109,6 +109,12 @@ export async function openIdentityRepairNative(
     outsider: newId(IDENTITY_REPAIR_FOREIGN_ROUTE),
   };
   const access = await createRealAccess(db.admin, accounts, [...actions]);
+  // The native repair runner authorizes rating:vote against the calling account.
+  // The stranger may run their own commands, including the original stale-work check.
+  for (const persona of ['voter', 'stranger'] as const) {
+    const id = accounts[persona];
+    await access.grant({ route, id }, persona, 'rating:vote');
+  }
   const applicationAccess = access.access({
     actions: new Map(actions.map((action) => [action, { anonymous: action === 'subject:read' }])),
   });
