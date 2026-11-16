@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import { expect, test } from 'bun:test';
+import { planPublicFilterEnrollment } from '../../src/semantic/public-filter-preparation-budget.ts';
 import type { Pool } from 'pg';
 import {
-  adoptPublicFilterCoverageBaseline,
+  adoptPublicFilterCoverageBaselinePage,
   beginPublicFilterCoverageBaseline,
 } from '../../src/semantic/public-filter-coverage-baseline.ts';
 
@@ -46,7 +47,7 @@ function fixture() {
 
 // Transaction-boundary double, not native coverage or funding proof. It refuses
 // overlapping checkouts and mutates inputs at the real owner/receiver boundary.
-function receiver(onConnect = () => {}, onCommit = () => {}) {
+function receiver(onConnect = () => {}, onCommit = () => {}, originals = [{ partition: 2, valid: true }]) {
   const original = fixture();
   const calls: { sql: string; values: readonly unknown[] }[] = [];
   let held = false,
@@ -68,13 +69,11 @@ function receiver(onConnect = () => {}, onCommit = () => {}) {
           calls.push({ sql, values: [...values] });
           if (sql === 'COMMIT' && ++commits === 1) onCommit();
           let rows: unknown[] = [];
-          if (sql.startsWith('SELECT epoch,write_state')) rows = [{ epoch: 3, write_state: 'active' }];
-          else if (sql.startsWith('SELECT write_state')) rows = [{ write_state: 'active' }];
+          if (sql.includes('FROM jsonb_to_recordset')) rows = originals;
+          else if (sql.includes('SELECT write_state')) rows = [{ write_state: 'active' }];
           else if (sql.includes('SELECT consumer,state,coverage_generation'))
             rows = [{ consumer: original.binding.consumer, state: 'active', coverage_generation: '1' }];
-          else if (sql.startsWith('SELECT receipt FROM semantic.public_filter_home_enrollment'))
-            rows = [{ receipt: original.enrollment.receipt }];
-          else if (sql.startsWith('SELECT definition::text,consumer,generation::text'))
+          else if (sql.includes('SELECT definition::text,consumer,generation::text'))
             rows = [
               {
                 definition: original.binding.definition,
@@ -100,9 +99,19 @@ test('owner verification and receiver adoption consume the original tuple after 
     Object.assign(binding.registration, { partition: 4, id: 'changed' });
     Object.assign(enrollment, { partition: 9, epoch: 10, sourcePosition: 99n, receipt: 'changed' });
   });
-  const result = await adoptPublicFilterCoverageBaseline(r.pool, binding, enrollment, Date.now() + 60_000);
+  const adopted: unknown[] = [];
+  await adoptPublicFilterCoverageBaselinePage(
+    r.pool,
+    binding,
+    [enrollment],
+    Date.now() + 60_000,
+    async (client, result) => {
+      expect(typeof client.query).toBe('function');
+      adopted.push(result);
+    },
+  );
   const root = hash(['b'.repeat(64), 2, original.enrollment.receipt]);
-  expect(result).toEqual({ after: 3, root, generation: 1n });
+  expect(adopted).toEqual([{ after: 3, root, generation: 1n }]);
   expect(r.calls.find(({ sql }) => sql.includes('INSERT INTO search.public_filter_coverage_baseline'))?.values).toEqual(
     [
       0,
@@ -188,9 +197,69 @@ test('accessors, proxy registrations and coercible positions refuse before any c
     const f = make(),
       r = receiver();
     await expect(
-      adoptPublicFilterCoverageBaseline(r.pool, f.binding, f.enrollment, Date.now() + 60_000),
+      adoptPublicFilterCoverageBaselinePage(r.pool, f.binding, [f.enrollment], Date.now() + 60_000, async () => {}),
     ).rejects.toBeInstanceOf(TypeError);
     expect(r.counts()).toEqual({ connections: 0, releases: 0 });
   }
   expect(evaluated).toBe(0);
+});
+
+test('a missing original stops the page at its last verified home', async () => {
+  const { binding, enrollment } = fixture();
+  const enrollments = [
+    enrollment,
+    ...[3, 4].map((partition) => ({
+      ...enrollment,
+      partition,
+      receipt: hash([
+        partition,
+        binding.bootstrap,
+        0,
+        binding.registration.id,
+        binding.definition,
+        3,
+        '6',
+        '7',
+        '8',
+        '4',
+        '5',
+        enrollment.keyDigest,
+      ]),
+    })),
+  ];
+  const r = receiver(undefined, undefined, [
+    { partition: 2, valid: true },
+    { partition: 4, valid: true },
+  ]);
+  const advanced: number[] = [];
+  await adoptPublicFilterCoverageBaselinePage(
+    r.pool,
+    binding,
+    enrollments,
+    Date.now() + 60_000,
+    async (_, adoption) => {
+      advanced.push(adoption.after);
+    },
+  );
+  expect(advanced).toEqual([3]);
+  expect(r.counts()).toEqual({ connections: 2, releases: 2 });
+});
+
+test('narrow and wide Source bursts stay inside the offered input budget', () => {
+  // Reserve 64 owner inputs from the largest Search offer. Every default
+  // Subject home enrolls the type/id, subject and unresolved keys.
+  const inputBudget = 872 - 64;
+  let homesLeft = 4096;
+  let turns = 0;
+  while (homesLeft > 0) {
+    const page = planPublicFilterEnrollment({ inputBudget, keyCount: 4, homesLeft });
+    expect(page.homes).toBeGreaterThan(0);
+    expect(5 + page.homes * (34 + 2 * page.keyLimit)).toBeLessThanOrEqual(inputBudget);
+    homesLeft -= page.homes;
+    turns++;
+  }
+  expect(turns).toBe(216);
+  const wide = planPublicFilterEnrollment({ inputBudget, keyCount: 900, homesLeft: 4096 });
+  expect(wide).toEqual({ homes: 1, keyLimit: 384 });
+  expect(planPublicFilterEnrollment({ inputBudget: 40, keyCount: 4, homesLeft: 1 })).toEqual({ homes: 0, keyLimit: 0 });
 });
