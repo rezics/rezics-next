@@ -5,13 +5,35 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { withCompiledCommandControls } from '../../src/command/command.ts';
 import time from '../../src/command/time.sql';
 import commandFence from '../../src/command/fence.sql';
+import commandNoEffect from '../../src/command/no-effect-fence.sql';
 import { installNativeHistoryPreload } from '../../src/composition/preload.ts';
 import { composeSearchNativePorts } from '../../src/composition/search-native.ts';
 import partitionRead from '../../src/partition/read.sql';
 import { newId } from '../../src/route/route.ts';
 import stepSql from '../../src/search/identity-epoch-participant-step.sql';
+import {
+  dispatchSearchIdentityOriginalSql,
+  readBoundedSearchIdentityActionSql,
+  readBoundedSearchIdentityReceiptSql,
+  readSearchIdentityDispatchBasisSql,
+  readSearchIdentityPlanBodySizeSql,
+  retainSearchIdentityWriterReceiptSql,
+} from '../../src/search/identity-search-writer-dispatch-sql.ts';
+import nativeDefinition from '../../src/search/identity-receiving-native-definition.sql';
+import {
+  readSearchIdentityPlanComponentSql,
+  revalidateSearchIdentityPlanFenceSql,
+} from '../../src/search/identity-search-writer-plan-sql.ts';
 import { searchNativeReceivingStatements } from '../../src/search/identity-receiving-native-store.ts';
-import type { StoredReferences, StoredSource } from '../../src/search/identity-receiving-native-internal.ts';
+import {
+  searchNativeOriginalOperationSql,
+  sizedSearchIdentityPlanSql,
+} from '../../src/search/identity-receiving-native-work.ts';
+import type {
+  OperationRow,
+  StoredReferences,
+  StoredSource,
+} from '../../src/search/identity-receiving-native-internal.ts';
 import {
   lockSearchIdentityOriginalSql,
   prepareSearchIdentityOriginalSql,
@@ -27,8 +49,16 @@ import {
   readPublicationFence,
   readWriterPublicationWitness,
 } from '../../src/search/publication-admission.ts';
-import { createSearchWriterGuard, searchIdentityWriterAdmissionSql } from '../../src/search/writer-guard.ts';
-import { SEARCH_IDENTITY_WRITER_REQUEST } from '../../src/semantic/contract/identity-epoch-ports.ts';
+import {
+  createSearchWriterGuard,
+  searchIdentityWriterAdmissionSql,
+  searchIdentityWriterSettlementSql,
+} from '../../src/search/writer-guard.ts';
+import {
+  SEARCH_IDENTITY_WRITER_ACCEPT,
+  SEARCH_IDENTITY_WRITER_DISPATCH,
+  SEARCH_IDENTITY_WRITER_REQUEST,
+} from '../../src/semantic/contract/identity-epoch-ports.ts';
 import { identityEpochReceiptLocator } from '../../src/semantic/core/identity-epoch-sequence.ts';
 import nativeCommit from '../../src/semantic/identity-epoch-store-insert-native-commit.sql';
 import releaseExists from '../../src/semantic/definitions-exists.sql';
@@ -65,6 +95,7 @@ import {
 } from '../../src/search/identity-epoch-participant.ts';
 import {
   readSearchIdentityDirectorySql,
+  readSearchIdentityCommonPlanSql,
   readSearchIdentityMaterializedOriginalSql,
   readSearchIdentityOriginalPlanSql,
   readSearchIdentityWriterAdmissionSql,
@@ -79,7 +110,15 @@ import ackRead from '../../src/semantic/identity-epoch-store-select-ack.sql';
 import jobRead from '../../src/semantic/identity-epoch-store-select-job.sql';
 import originals from '../../src/semantic/identity-epoch-store-select-original.sql';
 import { searchReceivingCaptureStatements } from '../../src/semantic/identity-search-receiving-capture.ts';
-import { searchReceivingProductionDeclaration } from '../../src/semantic/identity-search-receiving-statements.ts';
+import {
+  receivingStatements,
+  searchReceivingProductionDeclaration,
+} from '../../src/semantic/identity-search-receiving-statements.ts';
+import receivingSelection from '../../src/semantic/identity-receiving-selection-read.sql';
+import receivingJob from '../../src/semantic/identity-epoch-store-receiving-job.sql';
+import receivingLookup from '../../src/semantic/identity-epoch-store-receiving-lookup.sql';
+import receivingPlan from '../../src/semantic/identity-epoch-store-receiving-plan.sql';
+import receivingProgress from '../../src/semantic/identity-search-receiving-progress-insert.sql';
 import {
   activeIdentitySourceConsumerMaintenance,
   withIdentitySourceConsumerMaintenance,
@@ -100,6 +139,8 @@ const alias = `${index}-writer-${'a'.repeat(32)}`;
 
 test.each([
   { label: 'selects the initial merge key', intent: 'merge', resumed: false, mode: 'input' },
+  { label: 'dispatches and settles the exact accepted removal', intent: 'merge', resumed: false, mode: 'dispatch' },
+  { label: 'retains a lost response as uncertain without resubmission', intent: 'merge', resumed: false, mode: 'lost' },
   { label: 'proves an original first absence under its own close', intent: 'unmerge', resumed: false, mode: 'first' },
   { label: 'hands off a released original during unmerge', intent: 'unmerge', resumed: false, mode: 'handoff' },
   { label: 'keeps an outstanding original writer pending', intent: 'merge', resumed: false, mode: 'uncertain' },
@@ -197,6 +238,27 @@ test.each([
   let stagingPlan: DriverPlan | undefined;
   let retainedPlan: DriverPlan | undefined;
   let predecessorReads = 0;
+  let dispatchRequest: Step | undefined;
+  let writingOperation: OperationRow | undefined;
+  let committedOperation: OperationRow | undefined;
+  let receiptText: string | undefined;
+  let bulkCalls = 0;
+  let hold: HoldRow | undefined;
+  let commonPlan: { binding: unknown; binding_digest: string; transaction_id: string } | undefined;
+  let acceptedNativeHold: unknown;
+  let acceptedRecorded = false;
+  let accepting = false;
+  let dispatchRequestPosition = '1';
+  const nativePosition = () =>
+    dispatchRequest?.frontier.after[3] === SEARCH_IDENTITY_WRITER_DISPATCH
+      ? committedOperation?.state === 'visible'
+        ? '32'
+        : committedOperation
+          ? '31'
+          : '30'
+      : accepting
+        ? '21'
+        : '20';
   const publicationWrites: string[] = [];
 
   type Step = { transactionId: string; frontier: IdentityFrontier; engineRequests: number };
@@ -215,7 +277,7 @@ test.each([
             'active',
             null,
             '1',
-            engineReads > 1 && values[0] === String(writerHome) ? '20' : '0',
+            engineReads > 1 && values[0] === String(writerHome) ? nativePosition() : '0',
           ],
         ];
       else if (sql === jobRead.sql)
@@ -243,7 +305,7 @@ test.each([
       else if (sql === readSearchIdentityDirectorySql) {
         expect(values).toEqual([jobHome, jobId, '1']);
         directoryReads++;
-        const saved = committed.find((step) => step.frontier.after[0] === 'search-directory');
+        const saved = dispatchRequest ?? committed.find((step) => step.frontier.after[0] === 'search-directory');
         rows = [
           {
             scope_digest: directoryScope,
@@ -252,7 +314,7 @@ test.each([
               saved?.transactionId ??
               (!resumed ? null : mode === 'changed' && directoryReads > 1 ? replacement : checkpoint),
             native_epoch: 1,
-            native_position: '1',
+            native_position: dispatchRequest ? dispatchRequestPosition : '1',
             frontier: saved?.frontier ?? frontier,
             proven: mode !== 'stale',
           },
@@ -474,9 +536,239 @@ test.each([
           closed_position: '21',
         };
         rows = [{ original_id: selected }];
+      } else if (sql === readSearchIdentityDispatchBasisSql) {
+        expect(values).toEqual([
+          writerHome,
+          retainedPlan?.source.locator.planId,
+          jobId,
+          '1',
+          index,
+          selected,
+          directoryScope,
+        ]);
+        rows =
+          retainedPlan && hold
+            ? [
+                {
+                  hold_id: hold!.hold_id,
+                  source: retainedPlan.source,
+                  action_digest: createHash('sha256').update(retainedAction!).digest('hex'),
+                  action_bytes: Buffer.byteLength(retainedAction!),
+                  accepted_epoch: hold!.accepted_epoch,
+                  accepted_position: hold!.accepted_position,
+                  accepted_transaction_id: hold!.accepted_transaction_id,
+                  state: committedOperation?.state ?? null,
+                  visible: committedOperation?.state === 'visible',
+                },
+              ]
+            : [];
+      } else if (sql === readBoundedSearchIdentityActionSql || sql === readBoundedSearchIdentityReceiptSql) {
+        const body = sql === readBoundedSearchIdentityActionSql ? retainedAction : receiptText;
+        expect(values).toEqual([writerHome, index, selected, Buffer.byteLength(body!)]);
+        rows = [{ value: body, repair_locator: retainedPlan?.source.locator.planId }];
+      } else if (sql === dispatchSearchIdentityOriginalSql) {
+        expect(values.slice(0, 4)).toEqual([writerHome, index, selected, retainedPlan?.source.locator.planId]);
+        Object.assign(preparedWriter!, {
+          writer_token: values[4],
+          writer_transaction_id: values[5],
+          writer_position: values[6],
+          dispatch_state: 'dispatched',
+          changed_in_command: true,
+        });
+        rows = [{}];
+      } else if (sql === readSearchIdentityPlanBodySizeSql) {
+        const plan = retainedPlan!;
+        rows = [
+          {
+            bytes: Buffer.byteLength(JSON.stringify(plan.source)) + Buffer.byteLength(JSON.stringify(plan.references)),
+          },
+        ];
+      } else if (sql === planSql.plan.sql || sql === sizedSearchIdentityPlanSql()) {
+        expect(values.slice(0, 2)).toEqual([writerHome, retainedPlan?.source.locator.planId]);
+        const plan = retainedPlan!;
+        rows = [
+          {
+            source: plan.source,
+            obligations: plan.references,
+            scope_digest: directoryScope,
+            action_digest: createHash('sha256').update(retainedAction!).digest('hex'),
+            job_id: jobId,
+            job_epoch: '1',
+            effect_key: plan.effect_key,
+            transaction_id: plan.source.plan.transactionId,
+            initial_copy_count: 0,
+            native_epoch: 1,
+            native_position: '21',
+          },
+        ];
+      } else if (sql === planSql.hold.sql || sql === planSql.peekHold.sql) rows = hold ? [hold] : [];
+      else if (sql === planSql.accepted.sql) {
+        expect(values[6]).toBe(hold?.accepted_transaction_id);
+        expect(acceptedRecorded).toBe(true);
+        rows = [{ epoch: 1, position: '22' }];
+      } else if (sql === planSql.operation.sql || sql === searchNativeOriginalOperationSql())
+        rows = committedOperation ? [committedOperation] : [];
+      else if (sql === planSql.dispatch.sql) {
+        expect(values[3]).toBe(hold?.hold_id);
+        writingOperation = {
+          operation_id: String(values[2]),
+          hold_id: hold!.hold_id,
+          state: 'dispatched',
+          writer_token: String(values[4]),
+          writer_locator: String(values[8]),
+          writer_transaction_id: String(values[5]),
+          writer_position: String(values[6]),
+          dispatch_transaction_id: String(values[7]),
+          dispatch_epoch: 1,
+          dispatch_position: '31',
+          visible_transaction_id: null,
+          visible_position: null,
+          writer_evidence_digest: null,
+          visibility_component: null,
+          applied_transaction_id: null,
+          applied_position: null,
+          frontier: null,
+        };
+        rows = [{ operation_id: writingOperation.operation_id }];
+      } else if (sql === searchIdentityWriterSettlementSql()) {
+        expect(values.slice(4, 8)).toEqual([
+          committedOperation?.writer_token,
+          committedOperation?.dispatch_transaction_id,
+          '31',
+          [selected],
+        ]);
+        expect(values[10]).toBe('21');
+        Object.assign(preparedWriter!, {
+          writer_token: null,
+          dispatch_state: 'settled',
+          changed_in_command: true,
+          settled_transaction_id: values[8],
+          settled_position: values[9],
+          visible_transaction_id: values[8],
+          visible_position: values[9],
+          source_position: values[10],
+        });
+        rows = [{}];
+      } else if (sql === retainSearchIdentityWriterReceiptSql) {
+        receiptText = String(values[4]);
+        rows = [{}];
+      } else if (sql === planSql.visible.sql) {
+        expect(values[2]).toBe(committedOperation?.operation_id);
+        expect(values[5]).toBe(createHash('sha256').update(receiptText!).digest('hex'));
+        writingOperation = {
+          ...committedOperation!,
+          state: 'visible',
+          visible_transaction_id: String(values[3]),
+          visible_position: String(values[4]),
+          visibility_component: String(values[4]),
+          writer_evidence_digest: String(values[5]),
+        };
+        rows = [{ operation_id: writingOperation.operation_id }];
+      } else if (
+        sql === receivingSelection.sql ||
+        sql === receivingStatements.existingPlan ||
+        sql === receivingStatements.completedStep ||
+        sql === receivingStatements.acceptedReplay
+      )
+        rows = [];
+      else if (sql === receivingLookup.sql)
+        rows = [
+          {
+            binding: commonPlan?.binding,
+            binding_digest: commonPlan?.binding_digest,
+            owner_id: selected,
+            owner_epoch: 1,
+            native_epoch: 1,
+            native_position: hold?.accepted_position,
+            plan: { partition: jobHome, transactionId: commonPlan?.transaction_id, epoch: 1, position: '22' },
+            source_hold: {
+              partition: writerHome,
+              transactionId: hold?.accepted_transaction_id,
+              epoch: 1,
+              position: hold?.accepted_position,
+            },
+            native_hold: acceptedNativeHold,
+            effect_transaction_id: null,
+            effect_epoch: null,
+            effect_position: null,
+          },
+        ];
+      else if (sql === receivingStatements.lookupGate) rows = [{ pending_job: jobId, pending_epoch: '1' }];
+      else if (
+        sql === receivingStatements.insertApplied ||
+        sql === receivingStatements.sameCommandApplied ||
+        sql === planSql.applied.sql
+      )
+        rows = [{}];
+      else if (sql === planSql.apply.sql) {
+        expect(values[2]).toBe(committedOperation?.operation_id);
+        writingOperation = {
+          ...committedOperation!,
+          state: 'applied',
+          applied_transaction_id: String(values[3]),
+          frontier: JSON.parse(String(values[4])),
+          applied_position: '33',
+        };
+        rows = [{ operation_id: writingOperation.operation_id }];
+      } else if (sql === receivingJob.sql) rows = [{ state: 'pending', scope_digest: directoryScope }];
+      else if (sql === receivingStatements.inputBasis)
+        rows = [
+          { control_partition: otherControlHome, terminal: selected, generation: leftGeneration, owner_epoch: 1 },
+        ];
+      else if (
+        sql === receivingStatements.originalMembership ||
+        sql === readSearchIdentityPlanComponentSql ||
+        sql === revalidateSearchIdentityPlanFenceSql ||
+        sql === receivingStatements.retainGate ||
+        sql === receivingStatements.expectEffect ||
+        sql === receivingProgress.sql
+      )
+        rows = [{}];
+      else if (sql === receivingStatements.insertPlan) {
+        commonPlan = {
+          binding: JSON.parse(String(values[4])),
+          binding_digest: String(values[5]),
+          transaction_id: String(values[6]),
+        };
+        rows = [{}];
+      } else if (sql === receivingPlan.sql)
+        rows = commonPlan ? [{ ...commonPlan, native_epoch: 1, native_position: '22' }] : [];
+      else if (sql === readSearchIdentityCommonPlanSql)
+        rows = [{ ...commonPlan, plan_transaction_id: commonPlan?.transaction_id, scope_digest: directoryScope }];
+      else if (sql === nativeDefinition.sql) {
+        expect(values).toEqual([definitionId]);
+        rows = [{ release_digest: bundledDigest, route_digest: routeDigest }];
+      } else if (sql === planSql.copyOwner.sql)
+        rows = [
+          {
+            ...preparedWriter,
+            close_proven: true,
+            epoch: 1,
+            position: nativePosition(),
+            writer_token: null,
+          },
+        ];
+      else if (sql === planSql.accept.sql) {
+        hold = {
+          hold_id: String(values[2]),
+          accepted_transaction_id: String(values[3]),
+          accepted_epoch: null,
+          accepted_position: null,
+          released_transaction_id: null,
+        };
+        rows = [{ hold_id: hold.hold_id }];
+      } else if (sql === receivingStatements.insertAccepted) {
+        acceptedNativeHold = JSON.parse(String(values[11]));
+        expect(JSON.parse(String(values[11])).holdId).toBe(hold?.hold_id);
+        acceptedRecorded = true;
+        rows = [{}];
+      } else if (sql === planSql.bindAcceptance.sql) {
+        expect(acceptedRecorded).toBe(true);
+        Object.assign(hold!, { accepted_epoch: values[3], accepted_position: values[4] });
+        rows = [{ hold_id: hold?.hold_id }];
       } else if (sql === planSql.owner.sql) {
         expect(values).toEqual([writerHome]);
-        rows = [{ epoch: 1, position: '20' }];
+        rows = [{ epoch: 1, position: nativePosition() }];
       } else if (sql === planSql.writer.sql) {
         expect(values).toEqual([writerHome, index, selected]);
         rows = preparedWriter ? [preparedWriter] : [];
@@ -529,11 +821,15 @@ test.each([
       } else if (sql === 'COMMIT') {
         if (writing) committed.push(writing);
         if (stagingPlan) retainedPlan = stagingPlan;
+        if (writingOperation) committedOperation = writingOperation;
+        writingOperation = undefined;
         stagingPlan = undefined;
         writing = undefined;
         rows = [];
       } else if (sql === nativeCommit.sql) rows = [{}];
-      else if (sql === commandFence['~standard'].query.text) rows = [['1', engineReads > 1 ? '21' : '1']];
+      else if (sql === commandNoEffect['~standard'].query.text) rows = [['1', nativePosition()]];
+      else if (sql === commandFence['~standard'].query.text)
+        rows = [['1', engineReads > 1 ? String(Number(nativePosition()) + 1) : '1']];
       else if (sql === time['~standard'].query.text) rows = [['2026-01-01T00:00:00.000Z']];
       else if (
         sql.startsWith('SELECT l.account_id::text,l.role FROM semantic.identity_epoch_job j') ||
@@ -582,7 +878,32 @@ test.each([
         } as T,
       };
     },
-    bulk: forbidden,
+    async bulk<T>(lines: readonly unknown[], options?: { query?: Record<string, unknown> }) {
+      expect(checkedOut).toBe(false);
+      expect(activeIdentitySourceConsumerMaintenance(pool)).toBeNull();
+      expect(committedOperation?.state).toBe('dispatched');
+      expect(lines).toEqual([{ delete: { _index: alias, _id: selected, version: 21, version_type: 'external' } }]);
+      expect(options?.query).toMatchObject({ require_alias: true, refresh: 'wait_for' });
+      bulkCalls++;
+      if (mode === 'lost') throw new Error('Synthetic transport response lost');
+      return {
+        errors: false,
+        items: [
+          {
+            delete: {
+              _index: index,
+              _id: selected,
+              _version: 21,
+              _shards: { total: 1, successful: 1, failed: 0 },
+              _seq_no: 1,
+              _primary_term: 1,
+              status: 200,
+              result: 'deleted',
+            },
+          },
+        ],
+      } as T;
+    },
   };
   const receiving = searchIdentityReceivingComposition({
     pool,
@@ -603,6 +924,8 @@ test.each([
   );
   const requestsWriter = [
     'input',
+    'dispatch',
+    'lost',
     'materialized',
     'existing',
     'fenced',
@@ -759,6 +1082,78 @@ test.each([
       expect(await prepare(pool, progress.receipt)).toEqual({ state: 'prepared' });
       expect(engineReads).toBe(2);
       expect(committed.map((step) => step.engineRequests)).toEqual([0, 1, ...Array(committed.length - 2).fill(0)]);
+      if (mode === 'dispatch' || mode === 'lost') {
+        accepting = true;
+        const acceptance = await withIdentitySourceConsumerMaintenance(
+          { pool, env: {} },
+          { deadline: Date.now() + 5000 },
+          () => step(pool, job),
+        );
+        expect(acceptance.frontier.after.slice(3)).toEqual([
+          SEARCH_IDENTITY_WRITER_ACCEPT,
+          selected,
+          second,
+          retainedPlan!.source.locator.planId,
+        ]);
+        dispatchRequest = {
+          transactionId: acceptance.receipt.native.transactionId,
+          engineRequests: 0,
+          frontier: acceptance.frontier,
+        };
+        dispatchRequestPosition = String(acceptance.receipt.native.position);
+        expect(await prepare(pool, acceptance.receipt)).toEqual({
+          state: 'progress',
+          transactionId: commonPlan?.transaction_id,
+        });
+        expect(await prepare(pool, acceptance.receipt)).toEqual({ state: 'prepared' });
+        expect(engineReads).toBe(2);
+        const staged = await withIdentitySourceConsumerMaintenance(
+          { pool, env: {} },
+          { deadline: Date.now() + 5000 },
+          () => step(pool, job),
+        );
+        expect(staged.state).toBe('more');
+        const keep = progress.frontier.after;
+        expect(staged.frontier.after).toEqual([
+          'search-directory',
+          keep[1],
+          keep[2],
+          SEARCH_IDENTITY_WRITER_DISPATCH,
+          selected,
+          second,
+          retainedPlan!.source.locator.planId,
+          hold?.hold_id,
+        ]);
+        expect(hold?.accepted_epoch).toBe(1);
+        expect(acceptedRecorded).toBe(true);
+        const request = staged.receipt;
+        dispatchRequest = { transactionId: request.native.transactionId, engineRequests: 0, frontier: staged.frontier };
+        dispatchRequestPosition = String(request.native.position);
+        if (mode === 'lost') {
+          await expect(prepare(pool, request)).rejects.toThrow('Synthetic transport response lost');
+          await expect(prepare(pool, request)).rejects.toThrow('awaits the original uncertain dispatch result');
+          expect(committedOperation?.state).toBe('dispatched');
+          expect(receiptText).toBeUndefined();
+          expect(engineReads).toBe(3);
+        } else {
+          expect(await prepare(pool, request)).toEqual({ state: 'prepared' });
+          expect(committedOperation?.state).toBe('visible');
+          expect(receiptText).toContain('"kind":"bulk"');
+          expect(await prepare(pool, request)).toEqual({ state: 'prepared' });
+          expect(engineReads).toBe(4);
+          const applied = await withIdentitySourceConsumerMaintenance(
+            { pool, env: {} },
+            { deadline: Date.now() + 5000 },
+            () => step(pool, job),
+          );
+          expect(applied.state).toBe('more');
+          expect(applied.frontier.after).toEqual([selected, retainedPlan?.effect_key]);
+          expect(applied.receipt.native.position).toBe(33n);
+          expect(committedOperation?.state).toBe('applied');
+          expect(engineReads).toBe(4);
+        }
+        expect(bulkCalls).toBe(1);
+      }
       if (mode === 'input') {
         const guard = createSearchWriterGuard({
           ...receiving.configuration,

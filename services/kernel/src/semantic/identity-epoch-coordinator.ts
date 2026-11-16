@@ -15,6 +15,8 @@ import type {
 } from './identity-epoch-contract.ts';
 import {
   SEARCH_IDENTITY_WRITER_REQUEST,
+  SEARCH_IDENTITY_WRITER_ACCEPT,
+  SEARCH_IDENTITY_WRITER_DISPATCH,
   type IdentityEpochParticipantPorts,
   type IdentityStepReceiptLocator,
 } from './contract/identity-epoch-ports.ts';
@@ -189,7 +191,9 @@ export function registerIdentityEpochCoordinator(
             writerRequested:
               step === 'search-canonical-index' &&
               progress.state === 'more' &&
-              progress.frontier.after[3] === SEARCH_IDENTITY_WRITER_REQUEST,
+              (progress.frontier.after[3] === SEARCH_IDENTITY_WRITER_REQUEST ||
+                progress.frontier.after[3] === SEARCH_IDENTITY_WRITER_ACCEPT ||
+                progress.frontier.after[3] === SEARCH_IDENTITY_WRITER_DISPATCH),
           };
         },
       );

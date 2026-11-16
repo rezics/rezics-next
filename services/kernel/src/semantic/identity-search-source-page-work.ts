@@ -5,8 +5,23 @@ import { PARTITIONS, partitionOf, routeOf } from '../route/contract.ts';
 import { identityChangeFirstInputsSQL, identityChangeTransformSQL } from './identity-epoch-store-change-transform.ts';
 import inputs from './identity-epoch-store-select-input.sql';
 import originals from './identity-epoch-store-select-original.sql';
+import accepted from '../search/identity-receiving-native-accepted.sql';
+import {
+  sizedSearchIdentityPlanSql,
+  searchIdentityPlanBodyWorkBytes,
+  searchNativeAcceptedBytes,
+  searchNativeReceivingSqlCost,
+} from '../search/identity-receiving-native-work.ts';
 import projectionHeads from './public-filter-projection-head-page.sql';
 import projectionSubjects from './search-source-subjects.sql';
+
+import {
+  readBoundedSearchIdentityActionSql,
+  readBoundedSearchIdentityReceiptSql,
+  retainSearchIdentityWriterReceiptSql,
+  SEARCH_IDENTITY_WRITER_BODY_MAX,
+  searchIdentityWriterBodyBytes,
+} from '../search/identity-search-writer-dispatch-sql.ts';
 
 const uuid = (value: unknown) =>
   typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
@@ -60,6 +75,101 @@ export function identitySearchSourcePageCosts(): readonly PageCost[] {
       return Object.freeze({ sql, work, footprint });
     };
     return Object.freeze([
+      declare(sizedSearchIdentityPlanSql(), [maxHome, maxId, 16384], (values) => {
+        const [home, plan, size] = values;
+        const bytes = searchIdentityPlanBodyWorkBytes(size);
+        return values.length === 3 && partition(home) && uuid(plan) && bytes !== undefined
+          ? Object.freeze({
+              candidateKeys: 0,
+              identityMetadataRows: 0,
+              nativeRows: 3,
+              nativePoints: 3,
+              witnessKeys: 0,
+              statements: 1,
+              bytes,
+              emptySeeks: 1,
+            })
+          : undefined;
+      }),
+      Object.freeze({
+        sql: accepted.sql,
+        work: Object.freeze({
+          candidateKeys: 0,
+          identityMetadataRows: 0,
+          nativeRows: 4,
+          nativePoints: 4,
+          witnessKeys: 0,
+          statements: 1,
+          bytes: searchNativeReceivingSqlCost.accepted[2],
+          emptySeeks: 0,
+        }),
+        footprint(values: readonly unknown[]) {
+          const bytes = searchNativeAcceptedBytes(values[8]);
+          return values.length === 11 && bytes !== undefined
+            ? Object.freeze({
+                candidateKeys: 0,
+                identityMetadataRows: 0,
+                nativeRows: 4,
+                nativePoints: 4,
+                witnessKeys: 0,
+                statements: 1,
+                bytes,
+                emptySeeks: 0,
+              })
+            : undefined;
+        },
+      }),
+      declare(
+        retainSearchIdentityWriterReceiptSql,
+        [maxHome, 'target', maxId, maxId, 'a'.repeat(SEARCH_IDENTITY_WRITER_BODY_MAX)],
+        (values) => {
+          const [home, target, document, locator, body] = values;
+          const bytes = typeof body === 'string' ? searchIdentityWriterBodyBytes(Buffer.byteLength(body)) : undefined;
+          return values.length === 5 &&
+            partition(home) &&
+            typeof target === 'string' &&
+            target.length > 0 &&
+            target.length <= 255 &&
+            uuid(document) &&
+            uuid(locator) &&
+            bytes !== undefined
+            ? Object.freeze({
+                candidateKeys: 0,
+                identityMetadataRows: 0,
+                nativeRows: 1,
+                nativePoints: 1,
+                witnessKeys: 0,
+                statements: 1,
+                bytes,
+                emptySeeks: 1,
+              })
+            : undefined;
+        },
+      ),
+      ...[readBoundedSearchIdentityActionSql, readBoundedSearchIdentityReceiptSql].map((sql) =>
+        declare(sql, [maxHome, 'target', maxId, SEARCH_IDENTITY_WRITER_BODY_MAX], (values) => {
+          const [home, target, document, bound] = values;
+          const bytes = searchIdentityWriterBodyBytes(bound);
+          return values.length === 4 &&
+            partition(home) &&
+            typeof target === 'string' &&
+            target.length > 0 &&
+            target.length <= 255 &&
+            uuid(document) &&
+            bytes !== undefined
+            ? Object.freeze({
+                candidateKeys: 0,
+                identityMetadataRows: 0,
+                nativeRows: 1,
+                nativePoints: 1,
+                witnessKeys: 0,
+                statements: 1,
+                bytes,
+                emptySeeks: 1,
+              })
+            : undefined;
+        }),
+      ),
       declare(identityChangeTransformSQL, [maxHome, maxId, maxEpoch], (values) => {
         const [home, job, epoch] = values;
         if (

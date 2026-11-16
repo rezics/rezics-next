@@ -1,5 +1,12 @@
 import { currentReadSnapshot, recordIdentityEpochNativeCommit, withReadTransaction } from './native-bindings.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { memoizedValue } from '../memoized.ts';
+import {
+  readBoundedSearchIdentityActionSql,
+  readBoundedSearchIdentityReceiptSql,
+  searchIdentityWriterBodyBytes,
+  readSearchIdentityPlanBodySizeSql,
+} from './identity-search-writer-dispatch-sql.ts';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { QueryResultRow } from 'pg';
@@ -41,10 +48,18 @@ import type {
 import {
   SearchNativeReceivingError,
   SearchNativeReceivingWork,
+  searchNativeAcceptedBytes,
+  searchNativeOriginalOperationSql,
+  sizedSearchIdentityPlanSql,
+  searchIdentityPlanBodyWorkBytes,
   type SearchNativeReceivingSql,
 } from './identity-receiving-native-work.ts';
 import ownerSql from './identity-receiving-native-owner.sql';
 import planSql from './identity-receiving-native-plan.sql';
+import {
+  readSearchIdentityPlanComponentSql,
+  revalidateSearchIdentityPlanFenceSql,
+} from './identity-search-writer-plan-sql.ts';
 import prepareSql from './identity-receiving-native-prepare.sql';
 import documentSql from './identity-receiving-native-document.sql';
 import lockSql from './identity-receiving-native-lock.sql';
@@ -198,6 +213,22 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
       work.fail('unavailable', 'Registered original copy has unavailable commit provenance');
     return result;
   }
+  async function writerEvidence(
+    tx: CommandTransaction,
+    work: SearchNativeReceivingWork,
+    name: 'action' | 'receipt',
+    partition: number,
+    document: string,
+    bound: number | undefined,
+  ) {
+    if (bound === undefined) return (await sql<WriterEvidence>(tx, work, name, [partition, index, document])).rows[0];
+    const bytes = searchIdentityWriterBodyBytes(bound);
+    if (bytes === undefined) work.fail('changed', 'Invalid retained Search writer body bound');
+    work.reserve({ rows: 1, points: 1, statements: 1, bytes, engineRequests: 0 });
+    const query = name === 'action' ? readBoundedSearchIdentityActionSql : readBoundedSearchIdentityReceiptSql;
+    return (await tx.query<WriterEvidence>(query, [partition, index, document, bound])).rows[0];
+  }
+
   async function copies(
     tx: CommandTransaction,
     work: SearchNativeReceivingWork,
@@ -300,9 +331,19 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
     tx: CommandTransaction,
     work: SearchNativeReceivingWork,
     locator: SearchIdentityReceivingLocator,
+    sized = false,
   ) {
     validateLocator(locator, work);
-    const row = (await sql<PlanRow>(tx, work, 'plan', key(locator))).rows[0];
+    let row: PlanRow | undefined;
+    if (sized) {
+      work.reserve({ rows: 1, points: 1, statements: 1, bytes: 512, engineRequests: 0 });
+      const size = (await tx.query<{ bytes: number }>(readSearchIdentityPlanBodySizeSql, [...key(locator)])).rows[0]
+        ?.bytes;
+      const bytes = searchIdentityPlanBodyWorkBytes(size);
+      if (bytes === undefined) work.fail('changed', 'Invalid retained Search plan size');
+      work.reserve({ rows: 3, points: 3, statements: 1, bytes, engineRequests: 0 });
+      row = (await tx.query<PlanRow>(sizedSearchIdentityPlanSql(), [...key(locator), size])).rows[0];
+    } else row = (await sql<PlanRow>(tx, work, 'plan', key(locator))).rows[0];
     if (!row) work.fail('unavailable', 'Native plan is absent, uncommitted or no longer at its owner');
     const s = row.source;
     if (
@@ -412,6 +453,12 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
       registerCommandCallback(tx, body);
     });
   }
+  function reserveAccepted(work: SearchNativeReceivingWork, source: string) {
+    const bytes = searchNativeAcceptedBytes(source);
+    if (bytes === undefined) work.fail('changed', 'Accepted Search source exceeds its native binding');
+    work.reserve({ rows: 4, points: 4, statements: 1, bytes, engineRequests: 0 });
+  }
+
   async function accepted(
     tx: CommandTransaction,
     work: SearchNativeReceivingWork,
@@ -433,9 +480,8 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
       current,
       plan.source.locator.planId,
     ];
-    const rows = reserved
-      ? (await tx.query<Component>(acceptedSql.sql, args)).rows
-      : (await sql<Component>(tx, work, 'accepted', args)).rows;
+    if (!reserved) reserveAccepted(work, json(plan.source));
+    const rows = (await tx.query<Component>(acceptedSql.sql, args)).rows;
     const row = rows[0];
     if (
       !row ||
@@ -451,9 +497,10 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
     locator: SearchIdentityReceivingLocator,
     holdId: string,
     allowReleased = false,
+    sizedPlan = false,
   ) {
     const own = await owner(tx, work, locator);
-    const plan = await readPlan(tx, work, locator);
+    const plan = await readPlan(tx, work, locator, sizedPlan);
     if (own.epoch !== plan.source.receivingEpoch) work.fail('changed', 'Accepted native owner moved');
     const hold = (await sql<HoldRow>(tx, work, 'peekHold', key(locator))).rows[0];
     if (!hold || hold.hold_id !== holdId || (hold.released_transaction_id && !allowReleased))
@@ -493,7 +540,11 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
       work.fail('changed', 'Exact original common/native receiving record required');
   }
   async function operation(tx: CommandTransaction, work: SearchNativeReceivingWork, plan: SearchNativeReceivingPlan) {
-    const row = (await sql<OperationRow>(tx, work, 'operation', key(plan.source.locator))).rows[0];
+    let row: OperationRow | undefined;
+    if (plan.source.barrier.kind === 'original') {
+      work.reserve({ rows: 4, points: 4, statements: 1, bytes: 4096, engineRequests: 0 });
+      row = (await tx.query<OperationRow>(searchNativeOriginalOperationSql(), [...key(plan.source.locator)])).rows[0];
+    } else row = (await sql<OperationRow>(tx, work, 'operation', key(plan.source.locator))).rows[0];
     if (
       row &&
       (row.dispatch_epoch !== plan.source.receivingEpoch ||
@@ -763,7 +814,7 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
         const result = await sql(tx, work, 'accept', [...key(locator), holdId, own.transactionId]);
         if (result.rowCount !== 1) work.fail('changed', 'Native hold acquisition lost custody');
         // Charge both deferred probes now, before registering any deferred dispatch.
-        work.sql('accepted');
+        reserveAccepted(work, json(plan.source));
         work.sql('bindAcceptance');
         const hold: HoldRow = {
           hold_id: holdId,
@@ -805,6 +856,7 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
       holdId: string,
       operationId: string,
       context: SearchIdentityReceivingContext,
+      actionBytes?: number,
     ) {
       return perform(context, tx, true, async (work: SearchNativeReceivingWork) => {
         const { plan, own, writerRow: row } = await held(tx, work, locator, holdId);
@@ -817,14 +869,15 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
         if (
           !uuid.test(operationId) ||
           !row.changed_in_command ||
+          (plan.source.barrier.kind === 'original' &&
+            (row.writer_transaction_id !== own.transactionId || row.writer_position !== String(own.position))) ||
           row.dispatch_state !== 'dispatched' ||
           !row.writer_token ||
           !row.writer_transaction_id ||
           !row.writer_position
         )
           work.fail('draining', 'Genuine native writer dispatch with the prepared action is required');
-        const action = (await sql<WriterEvidence>(tx, work, 'action', [own.partition, index, plan.source.documentId]))
-          .rows[0];
+        const action = await writerEvidence(tx, work, 'action', own.partition, plan.source.documentId, actionBytes);
         if (!action?.value || !action.repair_locator || hash(action.value) !== plan.actionDigest)
           work.fail('changed', 'Actual retained native dispatch action differs from its immutable plan');
         const result = await sql(tx, work, 'dispatch', [
@@ -849,6 +902,7 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
       holdId: string,
       operationId: string,
       context: SearchIdentityReceivingContext,
+      receiptBytes?: number,
     ) {
       return perform(context, tx, true, async (work: SearchNativeReceivingWork) => {
         const { plan, own, writerRow: row } = await held(tx, work, locator, holdId);
@@ -874,9 +928,7 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
           row.visible_position !== String(own.position)
         )
           work.fail('draining', 'Original writer dispatch has no genuine same-transaction visibility settlement');
-        const evidence = (
-          await sql<WriterEvidence>(tx, work, 'receipt', [own.partition, index, plan.source.documentId])
-        ).rows[0];
+        const evidence = await writerEvidence(tx, work, 'receipt', own.partition, plan.source.documentId, receiptBytes);
         if (!evidence?.value) work.fail('unavailable', 'Actual retained native settlement receipt unavailable');
         const retained = decodeSearchRepairWriterReceipt(evidence.value);
         // A matching current hit and refresh cannot settle this original identity dispatch.
@@ -919,7 +971,14 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
       return perform(context, tx, true, async (work: SearchNativeReceivingWork) => {
         const savedFrontier = snapshotSearchIdentityReceivingFrontier(frontier);
         if (!savedFrontier) work.fail('changed', 'Invalid native application frontier');
-        const { plan, own, hold } = await held(tx, work, locator, holdId);
+        const { plan, own, hold } = await held(
+          tx,
+          work,
+          locator,
+          holdId,
+          false,
+          record?.source.barrier.kind === 'original',
+        );
         if (record) matchesRecord(plan, hold, record, work);
         // The public adapter uses null: resolve the actual operation on this SAME client/T.
         // The historical store signature remains available to the sole writer's exact replay path.
@@ -1022,6 +1081,35 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
         );
       });
     },
+    readPlanPoint(locator: SearchIdentityReceivingLocator, context: SearchIdentityReceivingContext) {
+      return perform(context, null, false, (work: SearchNativeReceivingWork) =>
+        withBoundedReadConnection(pool, work.context.deadline, (client) => readPlan(client, work, locator)),
+      );
+    },
+    revalidateOriginalPlanFence(plan: SearchNativeReceivingPlan, context: SearchIdentityReceivingContext) {
+      return perform(context, null, false, (work: SearchNativeReceivingWork) =>
+        withBoundedReadConnection(pool, work.context.deadline, async (client) => {
+          const { source, selection } = plan;
+          work.reserve({ rows: 5, points: 5, statements: 1, bytes: 2048, engineRequests: 0 });
+          const value = await client.query(revalidateSearchIdentityPlanFenceSql, [
+            source.receivingHome,
+            source.locator.planId,
+            source.plan.transactionId,
+            source.physicalTarget,
+            selection.job.jobId,
+            String(selection.job.epoch),
+            source.original,
+            source.incarnation,
+            source.writeAlias,
+            source.consumer,
+            String(source.fenceGeneration),
+            String(source.enrollmentGeneration),
+          ]);
+          if (source.plan.transactionId !== source.originalFence.transactionId || value.rowCount !== 1)
+            work.fail('changed', 'Original Search plan or close changed during Source resolution');
+        }),
+      );
+    },
     /** Actual structural close at the ORIGINAL home. No current Subject read stands in for this. */
     observeOriginalFence(plan: SearchNativeReceivingPlan, context: SearchIdentityReceivingContext) {
       return perform(context, null, false, async (work: SearchNativeReceivingWork) => {
@@ -1048,6 +1136,20 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
               work.fail('changed', 'Original structural close requires genuine retained owner handoff');
             if (row.writer_token || row.dispatch_state === 'enrolled' || row.dispatch_state === 'dispatched')
               work.fail('draining', 'Original structural close still has uncertain writer custody');
+            if (source.barrier.kind === 'original') {
+              work.reserve({ rows: 1, points: 1, statements: 1, bytes: 512, engineRequests: 0 });
+              if (
+                source.plan.transactionId !== fence.transactionId ||
+                !(
+                  await tx.query(readSearchIdentityPlanComponentSql, [
+                    fence.partition,
+                    source.locator.planId,
+                    fence.transactionId,
+                  ])
+                ).rowCount
+              )
+                work.fail('changed', 'Original plan changed during Source resolution');
+            }
             return fence;
           },
           work.context.deadline,

@@ -3,7 +3,11 @@ import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts
 import { identityJobPartition } from '../semantic/identity-adapters/identity-epoch-contract.ts';
 import { identityEpochStore, type IdentityJobRef } from '../semantic/identity-adapters/index.ts';
 import type { IdentityFrontier, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
-import { SEARCH_IDENTITY_WRITER_REQUEST } from '../semantic/contract/identity-epoch-ports.ts';
+import {
+  SEARCH_IDENTITY_WRITER_ACCEPT,
+  SEARCH_IDENTITY_WRITER_DISPATCH,
+  SEARCH_IDENTITY_WRITER_REQUEST,
+} from '../semantic/contract/identity-epoch-ports.ts';
 import { snapshotSearchIdentityReceivingFrontier } from './identity-receiving-native-contract.ts';
 import {
   readSearchIdentityDirectorySql,
@@ -13,13 +17,21 @@ import {
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const unavailable = () =>
   new IdentityEpochStoreError('identity_epoch_unavailable', 'Search directory or checkpoint changed');
+export type SearchWriterPlanRequest = Readonly<{ planId: string; holdId?: string }>;
+
 type Directory = Readonly<{
   scope: string;
   release: string;
   transactionId: string | null;
   after: string | null;
   count: number;
-  writerRequest?: { frontier: IdentityFrontier; native: IdentityNativeReceipt; original: string; terminal: string };
+  writerRequest?: {
+    frontier: IdentityFrontier;
+    native: IdentityNativeReceipt;
+    original: string;
+    terminal: string;
+    plan?: SearchWriterPlanRequest;
+  };
 }>;
 
 export async function readSearchIdentityDirectory(tx: CommandTransaction, job: IdentityJobRef): Promise<Directory> {
@@ -39,7 +51,7 @@ export async function readSearchIdentityDirectory(tx: CommandTransaction, job: I
   if (row.transaction_id === null)
     return { scope: row.scope_digest, release: row.release, transactionId: null, after: null, count: 0 };
   const frontier = snapshotSearchIdentityReceivingFrontier(row.frontier);
-  const [kind, after, count, action, original, terminal] = frontier?.after ?? [];
+  const [kind, after, count, action, original, terminal, planId, holdId] = frontier?.after ?? [];
   if (
     frontier?.segment !== 0 ||
     kind !== 'search-directory' ||
@@ -57,9 +69,22 @@ export async function readSearchIdentityDirectory(tx: CommandTransaction, job: I
     count,
   };
   if (frontier.after.length === 3 && count > 0) return previous;
+  const plan =
+    action === SEARCH_IDENTITY_WRITER_DISPATCH &&
+    frontier.after.length === 8 &&
+    typeof planId === 'string' &&
+    uuid.test(planId) &&
+    typeof holdId === 'string' &&
+    uuid.test(holdId)
+      ? { planId, holdId }
+      : action === SEARCH_IDENTITY_WRITER_ACCEPT &&
+          frontier.after.length === 7 &&
+          typeof planId === 'string' &&
+          uuid.test(planId)
+        ? { planId }
+        : undefined;
   if (
-    frontier.after.length !== 6 ||
-    action !== SEARCH_IDENTITY_WRITER_REQUEST ||
+    (!plan && (frontier.after.length !== 6 || action !== SEARCH_IDENTITY_WRITER_REQUEST)) ||
     typeof original !== 'string' ||
     !uuid.test(original) ||
     typeof terminal !== 'string' ||
@@ -76,6 +101,7 @@ export async function readSearchIdentityDirectory(tx: CommandTransaction, job: I
       frontier,
       original,
       terminal,
+      ...(plan && { plan }),
       native: {
         partition: identityJobPartition(job),
         transactionId: row.transaction_id,
@@ -139,10 +165,29 @@ export function requestSearchIdentityWriter(
   directory: Directory,
   original: string,
   terminal: string,
+  plan?: SearchWriterPlanRequest,
 ): IdentityFrontier {
-  if (directory.writerRequest || (directory.after !== null && original <= directory.after)) throw unavailable();
+  const prior = directory.writerRequest;
+  if (
+    (prior && (!plan || prior.plan?.holdId || (prior.plan && prior.plan.planId !== plan.planId))) ||
+    (directory.after !== null && original <= directory.after)
+  )
+    throw unavailable();
   return {
-    after: ['search-directory', directory.after, directory.count, SEARCH_IDENTITY_WRITER_REQUEST, original, terminal],
+    after: [
+      'search-directory',
+      directory.after,
+      directory.count,
+      plan?.holdId
+        ? SEARCH_IDENTITY_WRITER_DISPATCH
+        : plan
+          ? SEARCH_IDENTITY_WRITER_ACCEPT
+          : SEARCH_IDENTITY_WRITER_REQUEST,
+      original,
+      terminal,
+      ...(plan ? [plan.planId] : []),
+      ...(plan?.holdId ? [plan.holdId] : []),
+    ],
     segment: 0,
   };
 }
