@@ -88,6 +88,10 @@ stays part of the verified predecessor, and the next scan starts after the drain
 Bound Subject publication also batches creation windows containing only unrelated events. Its proof re-reads
 every position, sequence, group count and owner epoch through the retained per-home cut within the original
 allowance. A gap, oversized window or Subject event keeps that home in ordinary repair.
+The publication ACK step may fill its existing bounded page across adjacent verified compact ranges.
+After the terminal root and full ACK, the native population read accepts the pinned maintenance execution's
+original bootstrap start. It checks that exact retained start, execution and seal before running the same
+current pending, fence and receiver summary checks used for public population reads.
 
 Decision: native identity mapping resumes from its admitted original selector. Each accepted mapping row carries the
 transaction ID of its actual native mapping commit. Receiving keeps one persisted page cursor, and terminal custody is

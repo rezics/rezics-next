@@ -1,5 +1,8 @@
 /* semantic.privacy-role */
-WITH input AS MATERIALIZED (SELECT $5::bigint AS now,$9::text AS execution_id,$10::uuid AS start_id,$11::bigint AS deadline,$12::uuid AS page_id),
+WITH input AS MATERIALIZED (
+  SELECT $5::bigint AS now,$9::text AS execution_id,$10::uuid AS start_id,$11::bigint AS deadline,$12::uuid AS page_id,
+    $13::uuid AS publication_job,$14::uuid AS publication_bootstrap,$15::uuid AS terminal_step,$16::text AS terminal_root
+),
 binding AS MATERIALIZED (
   SELECT o.partition_no,o.observation,o.registration,o.queried,o.covered,
     r.consumer,r.definition,r.coverage_generation,
@@ -41,11 +44,21 @@ binding AS MATERIALIZED (
     AND s.route_digest=$8::text AND d.coverage_keys IS NOT NULL
     AND (EXISTS (SELECT 1 FROM semantic.definition_release WHERE route=0 AND digest=d.release_digest)
       OR EXISTS (SELECT 1 FROM semantic.release_composite WHERE digest=d.release_digest))
-    AND ((SELECT execution_id FROM input) IS NULL OR (e.id IS NOT NULL AND st.id IS NOT NULL
-      AND (st.registration,st.observation,st.bootstrap,st.read_definition,st.consumer,
-           st.covered_generation,st.owner_epoch)=
-          (o.registration,o.observation,b.bootstrap,b.read_definition,r.consumer,b.coverage_generation,p.epoch)
-      ))
+    AND (
+      ((SELECT publication_job FROM input) IS NULL AND ((SELECT execution_id FROM input) IS NULL OR
+        (e.id IS NOT NULL AND st.id IS NOT NULL
+         AND (st.registration,st.observation,st.bootstrap,st.read_definition,st.consumer,
+              st.covered_generation,st.owner_epoch)=
+             (o.registration,o.observation,b.bootstrap,b.read_definition,r.consumer,b.coverage_generation,p.epoch))))
+      OR EXISTS (
+        SELECT 1 FROM input i JOIN semantic.public_filter_repair_step seal
+          ON (seal.partition_no,seal.bootstrap,seal.execution,seal.step)=(0,b.bootstrap,e.id,i.terminal_step)
+        WHERE i.publication_job=b.publication_job AND i.publication_bootstrap=b.bootstrap
+          AND b.publication_observation=o.observation AND b.publication_execution=e.id
+          AND b.snapshot_kind='prepared' AND e.page_id IS NULL AND e.consumer_window IS NULL
+          AND seal.complete AND seal.verified_root=i.terminal_root AND seal.verified_next IS NULL AND seal.ack_after=4096
+      )
+    )
     AND ((pg.id IS NULL AND (SELECT page_id FROM input) IS NULL AND e.page_id IS NULL)
       OR ((pg.observation,pg.registration,pg.definition,pg.consumer)=
         (o.observation,o.registration,r.definition,r.consumer)

@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { createHash, randomUUID } from 'node:crypto';
-import { nativePopulationStartId } from './public-filter-coverage-population.ts';
+import { nativePopulationStartId, readPublicFilterPopulation } from './public-filter-coverage-population.ts';
 import {
   readOriginalPublicFilterProjectionPage,
   readRetainedPublicFilterProjectionPage,
@@ -43,6 +43,7 @@ import {
   readPublicFilterRepairVerificationTip,
   retainPublicFilterRepairVerification,
   readPublicFilterRepairHomeSeal,
+  readPublicFilterRepairHomeBatches,
   advancePublicFilterRepairAckFrontier,
   PUBLIC_FILTER_REPAIR_ACK_BATCH_LIMIT,
 } from './public-filter-repair-chain.ts';
@@ -2393,18 +2394,34 @@ export function createNativePublicFilterSourceBinding(
         if (original.input.phase !== 'window') throw new BindingError('binding_mismatch');
         const batch = original.windowBatch;
         const available = preparationInputLimit - (publicationCost?.inputKeys ?? 0) - cost.inputKeys;
-        const count = batched
-          ? Math.min(
-              PUBLIC_FILTER_REPAIR_ACK_BATCH_LIMIT,
-              batch.from + batch.count - seal.home,
-              Math.max(1, Math.floor((available - ackKeys(1)) / 9)),
-            )
+        const cap = batched
+          ? Math.min(PUBLIC_FILTER_REPAIR_ACK_BATCH_LIMIT, Math.max(1, Math.floor((available - ackKeys(1)) / 9)))
           : 1;
-        if (count < 1) throw new BindingError('owner_unavailable');
-        for (let home = seal.home; home < seal.home + count; home++) {
-          const window = creationWindowFromBatch(batch, home);
-          if (!window) throw new BindingError('owner_unavailable');
-          windows.push(window);
+        const end = Math.min(4096, seal.home + cap);
+        const append = (retained: NonNullable<RepairRecord['windowBatch']>) => {
+          const start = seal.home + windows.length;
+          for (let home = start; home < Math.min(end, retained.from + retained.count); home++) {
+            const window = creationWindowFromBatch(retained, home);
+            if (!window) throw new BindingError('owner_unavailable');
+            windows.push(window);
+          }
+        };
+        append(batch);
+        if (windows.length === 0) throw new BindingError('owner_unavailable');
+        // Use the remainder of this ACK page when the next independently
+        // verified compact range starts exactly where the current one ends.
+        const next = seal.home + windows.length;
+        if (next < end) {
+          for (const row of await readPublicFilterRepairHomeBatches(db, chain, seal.terminal, next, end)) {
+            const original = decode<RepairRecord>(row.state);
+            if (
+              row.home !== seal.home + windows.length ||
+              original.input.phase !== 'window' ||
+              original.windowBatch?.from !== row.home
+            )
+              break;
+            append(original.windowBatch);
+          }
         }
       } else if (original) {
         if (
@@ -3490,13 +3507,22 @@ export function createNativePublicFilterSourceBinding(
         };
       // Clean current population alone cannot replace the independently verified original
       // chain and Search's dispatch/winner/copy/writer/physical-target completion above.
-      const observation = await sourceReader(cut.definition).readPrivacyReductionHeads({
-        kind: 'population',
-        queried: native.queried,
-        start: settled.execution!.start,
-        execution: retained.execution,
-        context: { deadline },
-      });
+      const observation = await readPublicFilterPopulation(
+        db,
+        nativeRouting,
+        {
+          kind: 'population',
+          queried: native.queried,
+          start: settled.execution!.start,
+          execution: retained.execution,
+          context: { deadline },
+        },
+        ports.search,
+        ports.access,
+        settled.execution!.start.observation === publication.bootstrap
+          ? { job: publication.job, bootstrap: retained.bootstrap, terminal: settled.terminal }
+          : undefined,
+      );
       addCost(cost, observation.cost);
       if (
         observation.status !== 'observed' ||

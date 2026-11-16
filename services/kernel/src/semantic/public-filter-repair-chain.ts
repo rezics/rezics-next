@@ -276,6 +276,40 @@ export async function readPublicFilterRepairHomeSeal(pool: Pool, chain: Chain) {
 
 export const PUBLIC_FILTER_REPAIR_ACK_BATCH_LIMIT = 16;
 
+/** Additional indexed ranges within this terminal's already verified chain. */
+export async function readPublicFilterRepairHomeBatches(
+  pool: Pool,
+  chain: Chain,
+  terminal: string,
+  from: number,
+  to: number,
+) {
+  const count = to - from;
+  if (
+    !Number.isInteger(from) ||
+    !Number.isInteger(to) ||
+    from < 0 ||
+    to > 4096 ||
+    count < 1 ||
+    count >= PUBLIC_FILTER_REPAIR_ACK_BATCH_LIMIT
+  )
+    throw new TypeError('Expected a bounded range inside the current ACK page');
+  const result = await pool.query<{ state: string; home: number }>(
+    `/* semantic.native-keyed:${1 + count}:${4 + count} */
+     SELECT w.state,w.verified_home AS home
+     FROM semantic.public_filter_repair_step t
+     JOIN semantic.public_filter_repair_step w ON
+       (w.partition_no,w.bootstrap,w.execution)=(t.partition_no,t.bootstrap,t.execution)
+     WHERE (t.partition_no,t.bootstrap,t.execution,t.step)=(0,$1,$2,$3)
+       AND t.verified_binding=$4 AND t.verified_root IS NOT NULL AND t.complete AND t.verified_next IS NULL
+       AND w.verified_binding=t.verified_binding AND w.verified_root IS NOT NULL
+       AND w.verified_ordinal<t.verified_ordinal AND w.verified_home >= $5 AND w.verified_home < $6
+     ORDER BY w.verified_home LIMIT $7`,
+    [chain.bootstrap, chain.execution, terminal, chain.binding, from, to, count],
+  );
+  return result.rows;
+}
+
 /** Receiver ACK commits first. Advancing this original terminal's bounded home
  * frontier is a separate Source phase; replay repeats the same idempotent ACK.
  */

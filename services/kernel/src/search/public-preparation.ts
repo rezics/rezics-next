@@ -223,7 +223,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
       return advance(
         next,
         activated.advanced ? 0 : 1000,
-        activated.advanced === true && next.phase === 'activate',
+        activated.advanced === true,
       );
     }
     // An unready activation can have durably restarted reconciliation. The subsequent step
