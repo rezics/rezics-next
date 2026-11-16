@@ -70,7 +70,6 @@ import {
 } from './public-filter-projection-build-control.ts';
 import projectionBuildStart from './public-filter-projection-build-start.sql';
 import projectionPageRead from './public-filter-projection-page.sql';
-import projectionHeadsWrite from './public-filter-projection-head-upsert.sql';
 import projectionCurrentHead from './public-filter-projection-head-current.sql';
 import { permissionCheckStatements } from '../access/permission.ts';
 
@@ -129,7 +128,6 @@ function sourceStatementCosts(): readonly (readonly [string, Cost])[] {
         [verifyCompletedPublicFilterProjectionSql, [6, 6, 1, 2048, 1]],
         [projectionBuildStart.sql, [1, 1, 1, 2048, 0]],
         [projectionPageRead.sql, [1, 1, 1, 131072, 1]],
-        [projectionHeadsWrite.sql, [8, 8, 1, 2048, 0]],
         [projectionCurrentHead.sql, [2, 2, 1, 1024, 1]],
         [permissionCheckStatements.time, [1, 1, 1, 512, 1]],
         [
