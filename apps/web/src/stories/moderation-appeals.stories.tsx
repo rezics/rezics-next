@@ -85,7 +85,8 @@ export const Pending: Story = {
     const view = within(main);
     await expect(canvas.getByRole('heading', { level: 1 })).toHaveTextContent(m.moderation_appeals_heading());
     const reports = view.getByRole('link', { name: m.moderation_reports_tab() });
-    const statement = view.getByRole('textbox', { name: m.moderation_statement_label() });
+    const statement = await view.findByRole('textbox', { name: m.moderation_statement_label() });
+    const reference = view.getByText(m.reporter_status_reference(), { exact: true });
     const uphold = view.getByRole('button', { name: m.moderation_appeal_uphold_action() });
     const article = view.getByRole('article', {
       name: new RegExp(`${m.moderation_appeals_tab()}.*${m.moderation_queue_post()}`),
@@ -111,10 +112,12 @@ export const Pending: Story = {
     await userEvent.tab();
     await expect(reports).toHaveFocus();
     await userEvent.tab();
-    await expect(view.getByText(m.reporter_status_reference(), { exact: true })).toHaveFocus();
-    await userEvent.tab();
     await expect(statement).toHaveFocus();
     await expect(uphold).toBeDisabled();
+    await userEvent.tab();
+    await expect(reference).toHaveFocus();
+    await userEvent.tab({ shift: true });
+    await expect(statement).toHaveFocus();
     await userEvent.type(statement, 'Illustrative independent review statement.');
     await expect(statement).toHaveValue('Illustrative independent review statement.');
     await expect(uphold).toBeEnabled();
@@ -126,8 +129,8 @@ export const Pending: Story = {
     await expect(view.getByRole('blockquote').textContent).toBe(m.moderation_target_unavailable());
     await expect(view.queryByText(m.moderation_appeals_empty())).not.toBeInTheDocument();
 
-    await userEvent.click(view.getByText(m.reporter_status_reference(), { exact: true }));
-    const referenceDetails = view.getByText(m.reporter_status_reference(), { exact: true }).closest('details');
+    await userEvent.click(reference);
+    const referenceDetails = reference.closest('details');
     if (!referenceDetails) throw new Error('Appeal Reference details were not rendered.');
     await expect(referenceDetails).toHaveAttribute('open');
     await expectTargetIdentityWithheld();

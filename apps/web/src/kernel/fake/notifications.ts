@@ -1,6 +1,7 @@
 import { fromPlainText } from '@rezics/document';
 import type { FakeRoute } from '../fake-modules.ts';
 import type { ReporterStatus } from '../../moderation/reporter-status-model';
+import recordedThread from '../recorded/thread.json';
 
 function storyFixture(request: Request): string | null {
   const context = (globalThis as typeof globalThis & { __rezicsStoryContext?: { url: string } }).__rezicsStoryContext;
@@ -72,6 +73,7 @@ function composeNotice(
     reportId: string | null;
     unread: boolean;
     actorState?: 'available' | 'withheld' | 'system';
+    threadTitle?: string;
   },
   accountId: string,
 ) {
@@ -87,7 +89,7 @@ function composeNotice(
         : board && item.threadId
           ? { kind: 'thread' as const, threadId: item.threadId }
           : null;
-  const { actorState, ...wire } = item;
+  const { actorState, threadTitle, ...wire } = item;
   const actor =
     actorState === 'withheld' || (!item.actorId && actorState !== 'system' && item.kind !== 'moderation_decision')
       ? withheldActor
@@ -103,7 +105,7 @@ function composeNotice(
           threadId: item.threadId,
           postId: item.postId,
           boardId: board ? storyBoard : null,
-          threadTitle: item.kind === 'thread_watch' ? 'Reading together' : 'Current discussion',
+          threadTitle: threadTitle ?? (item.kind === 'thread_watch' ? 'Reading together' : 'Current discussion'),
           boardTitle: board ? 'Books' : null,
         }
       : withheldTarget,
@@ -280,11 +282,7 @@ function inboxEnvelope(
   };
 }
 
-function listPage(
-  request: Request,
-  rows: (typeof fixtureRows)[keyof typeof fixtureRows] | readonly (typeof fixtureRows.mixed)[number][],
-  next: string | null,
-) {
+function listPage(request: Request, rows: readonly Parameters<typeof composeNotice>[0][], next: string | null) {
   const url = new URL(request.url);
   const accountId = url.pathname.split('/')[3]!;
   const selection = url.searchParams.get('selection') === 'unread' ? 'unread' : 'all';
@@ -375,6 +373,21 @@ const list: FakeRoute = {
       return url.searchParams.has('cursor')
         ? listPage(request, fixtureRows.unavailable, null)
         : listPage(request, fixtureRows.mixed, fixture === 'seen-wait' ? 'story-seen-next' : null);
+    if (fixture === 'keyboard-return') {
+      const { id, title, firstPost } = recordedThread.thread;
+      return listPage(
+        request,
+        [
+          {
+            ...fixtureRows['thread-watch'][0]!,
+            threadId: id,
+            postId: firstPost.id,
+            threadTitle: title,
+          },
+        ],
+        null,
+      );
+    }
     if (fixture === 'thread-watch') return listPage(request, fixtureRows['thread-watch'], null);
     if (fixture === 'observation-recovery') {
       inboxTriageStory.pageReads++;

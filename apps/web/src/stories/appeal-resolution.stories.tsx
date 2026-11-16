@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSession } from '../session/query';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { AppealResolution, type ResolveAppeal } from '../moderation/appeal-resolution';
@@ -35,7 +36,7 @@ type Story = StoryObj<typeof meta>;
 const success: ResolveAppeal = async ({ outcome, statement }) => ({ state: 'resolved', outcome, statement });
 async function enterStatement(canvasElement: HTMLElement) {
   const view = within(canvasElement);
-  await userEvent.type(view.getByRole('textbox'), 'Independent review of the original decision.');
+  await userEvent.type(await view.findByRole('textbox'), 'Independent review of the original decision.');
   return view;
 }
 
@@ -71,6 +72,8 @@ function RetryExample() {
       return { state: 'resolved', outcome: command.outcome, statement: command.statement };
     };
   });
+  const session = useSession();
+  if (session.state !== 'signed-in' || !session.subject || !session.csrfToken) return null;
   return <AppealResolution appealId="0192f3a0-6c1e-7b2a-9d4e-000000000001" mayResolve onResolve={resolve} />;
 }
 export const LostResponseRetry: Story = {
@@ -79,7 +82,7 @@ export const LostResponseRetry: Story = {
     const view = await enterStatement(canvasElement);
     const reverse = view.getByRole('button', { name: m.moderation_appeal_reverse_action() });
     await userEvent.click(reverse);
-    await view.findByRole('alert');
+    await expect(await view.findByRole('alert')).toHaveTextContent(m.moderation_appeal_intent_uncertain());
     await expect(view.getByRole('textbox')).toHaveValue('Independent review of the original decision.');
     await expect(view.getByRole('textbox')).toBeDisabled();
     await expect(reverse).toBeDisabled();

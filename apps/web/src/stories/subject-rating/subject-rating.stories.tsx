@@ -136,10 +136,8 @@ export const SaveClearZero: Story = {
     await expectComfortableAction(clear);
     await expect(save).toBeDisabled();
     await expect(clear).toBeDisabled();
-    const slider = view.getByLabelText<HTMLInputElement>(standardRatingQuestion.label, {
-      selector: 'input[type="range"]',
-    });
-    slider.focus();
+    const slider = view.getByRole('slider', { name: standardRatingQuestion.label });
+    await userEvent.tab();
     await expect(slider).toHaveFocus();
     await userEvent.keyboard('{Home}');
     await expect(slider).toHaveAttribute('aria-valuenow', '0');
@@ -514,14 +512,16 @@ export const IndependentSources: Story = {
   },
 };
 
-/** Full route: independent public sources, exact zero answer and an ordinary editable control. */
+// The Reviews route retains the detailed public rating sources.
+const detailedRatingsPath = `${pagePaths.subject}/reviews`;
+
 export const RichRatings: Story = {
-  render: () => <PageStory visitor="Signed In" path={pagePaths.subject} ratingsFixture="subject-ratings-rich" />,
+  render: () => <PageStory visitor="Signed In" path={detailedRatingsPath} ratingsFixture="subject-ratings-rich" />,
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
     await expect(await canvas.findByRole('slider')).toHaveAttribute('aria-valuenow', '0');
-    const sources = context.canvasElement.querySelector<HTMLElement>('[data-slot="rating-imported"]')!;
+    const sources = await canvas.findByRole('region', { name: m.rating_population_source_statistics() });
     await expect(sources).toBeVisible();
     await expect(within(sources).getByRole('heading', { name: 'VNDB' })).toBeVisible();
     await expect(within(sources).getByRole('heading', { name: 'Bangumi' })).toBeVisible();
