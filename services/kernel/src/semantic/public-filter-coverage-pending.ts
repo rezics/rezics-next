@@ -8,6 +8,18 @@ import { runPublicFilterCollectionReductionQuery } from './public-filter-collect
 // growing home-level union, a hash of an input, or a list of matching subjects.
 export const PUBLIC_FILTER_SUBJECT_SCOPE = JSON.stringify(['scope', 'subject']);
 export const PUBLIC_FILTER_UNRESOLVED_SCOPE = JSON.stringify(['scope', 'unresolved']);
+const CATALOGUE_TEXT_SCOPE = JSON.stringify(['scope', 'catalogue-text']);
+export const PUBLIC_FILTER_CATALOGUE_TEXT_KEYS = Object.freeze(
+  (
+    [
+      { kind: 'field', field: 'aliases' },
+      { kind: 'field', field: 'descriptions' },
+      { kind: 'field', field: 'labels' },
+      { kind: 'order', order: 'name' },
+      { kind: 'order', order: 'relevance' },
+    ] satisfies PublicFilterDependencyKey[]
+  ).map(publicFilterCoverageKey),
+);
 
 export function publicFilterCoverageKey(key: PublicFilterDependencyKey): string {
   switch (key.kind) {
@@ -54,6 +66,7 @@ export async function enqueuePublicFilterCoverage(
     if (impact.kind === 'subject') keys.add(PUBLIC_FILTER_SUBJECT_SCOPE);
     else for (const key of impact.keys) keys.add(publicFilterCoverageKey(key));
   }
+  if (PUBLIC_FILTER_CATALOGUE_TEXT_KEYS.some((key) => keys.has(key))) keys.add(CATALOGUE_TEXT_SCOPE);
   // Keep ALL-key current subject metadata independently of the query closure. An
   // unrelated property on a returned original/terminal still invalidates its cut.
   for (const affected of entry.affected) {
@@ -77,8 +90,16 @@ export async function enqueuePublicFilterCoverage(
 }
 
 /** Full compiler closure, including explicit whole-subject and unresolved scopes. */
-export function publicFilterCoverageKeys(keys: readonly PublicFilterDependencyKey[]): readonly string[] {
+export function publicFilterCoverageKeys(
+  keys: readonly PublicFilterDependencyKey[],
+  catalogue = false,
+): readonly string[] {
   return [
-    ...new Set([PUBLIC_FILTER_SUBJECT_SCOPE, PUBLIC_FILTER_UNRESOLVED_SCOPE, ...keys.map(publicFilterCoverageKey)]),
+    ...new Set([
+      PUBLIC_FILTER_SUBJECT_SCOPE,
+      PUBLIC_FILTER_UNRESOLVED_SCOPE,
+      ...(catalogue ? [CATALOGUE_TEXT_SCOPE] : []),
+      ...keys.map(publicFilterCoverageKey),
+    ]),
   ].sort();
 }

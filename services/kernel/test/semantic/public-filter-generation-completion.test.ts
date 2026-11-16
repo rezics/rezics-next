@@ -15,6 +15,7 @@ import { subjectListingSource } from '../../src/library/listing-counts.ts';
 import { subjectConsumer } from '../../src/search/runner.ts';
 import { createDefaultPublicFilterRuntime } from '../../src/search/public-runtime.ts';
 import { PUBLIC_PREPARATION_BUDGET_MS } from '../../src/search/public-preparation-store.ts';
+import { PUBLIC_FILTER_REPAIR_ACK_BATCH_LIMIT } from '../../src/semantic/public-filter-repair-chain.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 
 // Actual generation, original Source, ordinary writer and engine: no home/ACK/phase setters.
@@ -343,3 +344,178 @@ test('an unfenced engine page completes after exact inline replay of an advanced
     }
   }
 }, 120_000);
+
+test('native publication starts repair from the original adopted Source execution and acknowledges a bounded prefix', async () => {
+  const f = await fixture();
+  const search = createOpenSearch(process.env.OPENSEARCH_URL!);
+  const prefix = `source-repair-start-${crypto.randomUUID().slice(0, 8)}-`;
+  const target = subjectIndexName(prefix, 1);
+  const runtime = createDefaultPublicFilterRuntime({ ...f.config, search, prefix });
+  try {
+    const book = await f.create('schema:Book');
+    const partition = partitionOf(routeOf(book)!);
+    await createSubjectIndex(search, prefix, 1);
+    const writer = createSearchWriterGuard({
+      pool: f.db.pool,
+      search,
+      index: target,
+      consumer: subjectConsumer(prefix, 1),
+      source: createRatedSubjectSource(f.db.pool, f.config.routeKey).source,
+      listing: subjectListingSource(f.db.pool),
+    });
+    const position = await f.db.pool.query<{ position: string }>(
+      'SELECT position::text FROM core.partition WHERE partition_no=$1',
+      [partition],
+    );
+    await writer.write(partition, [book], BigInt(position.rows[0]!.position));
+    const deadline = Date.now() + 200_000;
+    const context = () => ({ deadline: Math.min(deadline, Date.now() + PUBLIC_PREPARATION_BUDGET_MS) });
+    const publication = await runtime.preparePublication(1, context());
+    if (publication.status !== 'preparing') throw new Error(publication.reason);
+    const { job } = publication;
+    const registration = await f.db.pool.query<{ definition: string }>(
+      'SELECT definition FROM search.public_filter_registration WHERE partition_no=0 AND physical_target=$1',
+      [target],
+    );
+    const retained = decodePublicFilterNativeState<{ data: { meaning: { release: unknown } } }>(
+      registration.rows[0]!.definition,
+    );
+    expect(retained.data.meaning.release).toEqual({ authority: 'semantic.readRelease', digest: f.meaning.digest });
+    let activate = false;
+    let boundAttempts = 0;
+    let acknowledged = 0;
+    let last: { status: string; reason?: string; cost?: unknown } = { status: 'registered' };
+    for (let turn = 0; turn < 500 && Date.now() < deadline; turn++) {
+      if (!activate) {
+        const step = await runtime.publication.step(job, context(), { enrollSource: true });
+        last = { status: step.status, ...('reason' in step && { reason: step.reason }), cost: step.cost };
+        activate = step.status === 'reconciled';
+        continue;
+      }
+      const result = await runtime.publication.activate(job, context());
+      last = { status: result.status, ...('reason' in result && { reason: result.reason }), cost: result.cost };
+      if (result.status === 'preparing' && result.next === 'step') activate = false;
+      const source = await f.db.pool.query<{
+        state: string;
+        observation: string;
+        execution: string;
+        root: boolean;
+        ack_after: number;
+        bootstrap: string;
+      }>(
+        `SELECT b.bootstrap::text,b.state,b.publication_observation AS observation,b.publication_execution AS execution,
+                EXISTS(SELECT 1 FROM semantic.public_filter_repair_step r
+                  WHERE (r.partition_no,r.bootstrap,r.execution)=(b.partition_no,b.bootstrap,b.publication_execution)
+                  AND r.predecessor IS NULL) AS root,
+                COALESCE(t.ack_after,0) AS ack_after
+           FROM semantic.public_filter_bootstrap b
+           LEFT JOIN semantic.public_filter_repair_step t
+             ON (t.partition_no,t.bootstrap,t.execution)=(b.partition_no,b.bootstrap,b.publication_execution)
+             AND t.complete AND t.verified_root IS NOT NULL AND t.verified_next IS NULL
+          WHERE (b.partition_no,b.publication_job)=(0,$1::uuid)`,
+        [job.job],
+      );
+      const original = source.rows[0];
+      if (original?.state !== 'adopted') continue;
+      expect(original.execution).toBe(job.job);
+      expect(original.observation).toMatch(/^0:/);
+      if (!original.root) {
+        if (++boundAttempts === 8) break;
+        continue;
+      }
+      const advanced = original.ack_after - acknowledged;
+      expect(advanced).toBeGreaterThanOrEqual(0);
+      expect(advanced).toBeLessThanOrEqual(PUBLIC_FILTER_REPAIR_ACK_BATCH_LIMIT);
+      acknowledged = original.ack_after;
+      if (advanced < 2) continue;
+      expect(result).toMatchObject({ status: 'preparing', next: 'activate', advanced: true });
+      expect(result.cost.inputKeys).toBeLessThanOrEqual(1000);
+      const receipts = await f.db.pool.query<{ homes: number }>(
+        `SELECT count(*)::int AS homes
+         FROM search.public_filter_coverage_home h
+         JOIN search.public_filter_coverage_baseline b
+           ON (b.partition_no,b.registration,b.source_home,b.bootstrap)=
+              (h.partition_no,h.registration,h.source_home,h.acknowledged_baseline)
+         WHERE h.acknowledged_baseline=$1 AND h.acknowledged_observation=$2 AND h.acknowledged_execution=$3
+           AND h.acknowledged_settlement IS NOT NULL AND h.source_home<$4
+           AND h.acknowledged_position=b.source_position
+           AND h.acknowledged_native_enqueue=b.native_enqueue_revision
+           AND h.acknowledged_native_revision IS NOT DISTINCT FROM b.native_revision
+           AND h.acknowledged_native_claim_revision IS NOT DISTINCT FROM b.native_claim_revision`,
+        [original.bootstrap, original.observation, original.execution, acknowledged],
+      );
+      expect(receipts.rows[0]?.homes).toBe(acknowledged);
+      const binding = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
+      const exhausted = await readNativePublicFilterPublicationCompletion(binding, { job: job.job }, context(), {
+        inputKeys: 1000,
+        bytes: 0,
+      });
+      expect(exhausted).toMatchObject({ status: 'unavailable', reason: 'owner_unavailable', cost: { inputKeys: 0 } });
+      const frontier = await f.db.pool.query<{ ack_after: number }>(
+        `SELECT ack_after FROM semantic.public_filter_repair_step
+         WHERE (partition_no,bootstrap,execution)=(0,$1,$2) AND complete
+           AND verified_root IS NOT NULL AND verified_next IS NULL`,
+        [original.bootstrap, original.execution],
+      );
+      expect(frontier.rows).toEqual([{ ack_after: acknowledged }]);
+      console.info(
+        'Native original Source acknowledgement prefix',
+        JSON.stringify({
+          job: job.job,
+          observation: original.observation,
+          acknowledged,
+          advanced,
+          inputKeys: result.cost.inputKeys,
+        }),
+      );
+      return;
+    }
+    const terminal = await f.db.pool.query<{
+      phase: string;
+      source_state: string | null;
+      source_ordinal: string | null;
+      source_complete: boolean | null;
+      ack_after: number | null;
+      repair_settlement: string | null;
+    }>(
+      `SELECT j.phase,b.state AS source_state,t.verified_ordinal::text AS source_ordinal,
+              t.complete AS source_complete,t.ack_after,e.repair_settlement
+       FROM search.generation_publication j
+       LEFT JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.publication_job)=(0,j.job)
+       LEFT JOIN semantic.public_filter_repair_step t
+         ON (t.partition_no,t.bootstrap,t.execution)=(b.partition_no,b.bootstrap,b.publication_execution)
+         AND t.verified_root IS NOT NULL AND t.verified_next IS NULL
+       LEFT JOIN search.public_filter_execution e
+         ON (e.partition_no,e.observation,e.id)=(0,b.publication_observation,b.publication_execution)
+       WHERE (j.partition_no,j.job)=(0,$1)`,
+      [job.job],
+    );
+    const { repair_settlement, ...source } = terminal.rows[0] ?? {};
+    const settlement = repair_settlement
+      ? decodePublicFilterNativeState<{ pages: number; closed: boolean; fence?: unknown }>(repair_settlement)
+      : undefined;
+    throw new Error(
+      `Original Source repair did not acknowledge a batch: ${JSON.stringify({
+        job: job.job,
+        acknowledged,
+        last,
+        source,
+        searchSettlement: settlement && {
+          pages: settlement.pages,
+          closed: settlement.closed,
+          fenced: !!settlement.fence,
+        },
+      })}`,
+    );
+  } finally {
+    try {
+      await runtime.close();
+    } finally {
+      try {
+        await search.request('DELETE', `/${target}`);
+      } finally {
+        await f.close();
+      }
+    }
+  }
+}, 240_000);

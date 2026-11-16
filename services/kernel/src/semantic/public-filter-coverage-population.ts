@@ -4,7 +4,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
 import { BoundedReadDeadlineError, withBoundedReadConnection } from '../database/pool.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
-import { publicFilterCoverageKeys } from './public-filter-coverage-pending.ts';
+import { publicFilterCoverageKeys, PUBLIC_FILTER_CATALOGUE_TEXT_KEYS } from './public-filter-coverage-pending.ts';
 import { hasPublicFilterMeaningShape } from './public-filter-source-contract.ts';
 import { PUBLIC_FILTER_ACCOUNT_DOMAIN } from './public-filter-coverage-maintenance.ts';
 import type { PublicCanonicalCaptureInput } from '../search/index.ts';
@@ -101,10 +101,17 @@ type Row = {
   own_homes: number;
   own_subjects: number;
 };
+type PublicationPopulation = Readonly<{
+  job: string;
+  bootstrap: string;
+  terminal: Readonly<{ step: string; root: string }>;
+}>;
+
 function validBindings(
   row: Row,
   request: Extract<PrivacyReductionObservationRequest, { kind: 'population' }>,
   search: PublicFilterSearchBindingPort,
+  publication?: PublicationPopulation,
 ) {
   const q = request.queried;
   const retained = search.decodeState<{ digest: string; data: CustodyRetainedDefinition }>(row.definition);
@@ -113,7 +120,10 @@ function validBindings(
   search.catalogue(q.consumer, 'representation' in capture);
   const covered = search.decodeState<{ observation: string }>(row.covered);
   const expectedKeys = [
-    ...publicFilterCoverageKeys(row.dependency_keys),
+    ...publicFilterCoverageKeys(
+      row.dependency_keys,
+      'catalogueCoverage' in capture && capture.catalogueCoverage === true,
+    ),
     ...('representation' in capture ? [PUBLIC_FILTER_ACCOUNT_DOMAIN] : []),
   ].sort();
   if (
@@ -140,6 +150,16 @@ function validBindings(
     q.consumer.readDefinition !== row.read_definition
   )
     return false;
+  if (publication) {
+    if (row.execution === null || row.consumer_window !== null || row.page_id !== null) return false;
+    const execution = search.decodeState<CustodyExecution>(row.execution);
+    return (
+      execution.id === request.execution &&
+      isDeepStrictEqual(execution.start, request.start) &&
+      Array.isArray(execution.ownRows) &&
+      execution.ownRows.length === 0
+    );
+  }
   if (request.start !== null) {
     // Known relevant change is already sufficient to block; no own/child scan
     // is dispatched after this indexed fail-fast result.
@@ -274,6 +294,7 @@ export async function readPublicFilterPopulation(
   request: Extract<PrivacyReductionObservationRequest, { kind: 'population' }>,
   search: PublicFilterSearchBindingPort,
   access: PublicFilterAccessBindingPort,
+  publication?: PublicationPopulation,
 ): Promise<PrivacyReductionObservation> {
   const final = request.start !== null;
   // Reserve misses, controls and the attempted start write before submitting SQL.
@@ -316,8 +337,23 @@ export async function readPublicFilterPopulation(
       return unready();
     const q = request.queried;
     if (!q || !/^0:/.test(q.snapshot.observation)) return unready();
+    if (
+      publication &&
+      (request.start?.observation !== `0:${publication.bootstrap}` ||
+        q.snapshot.kind !== 'prepared' ||
+        q.snapshot.build !== request.start.observation ||
+        !uuid.test(publication.job) ||
+        !uuid.test(publication.bootstrap) ||
+        !uuid.test(publication.terminal.step) ||
+        !/^[0-9a-f]{64}$/.test(publication.terminal.root))
+    )
+      return unready();
     const pageId = final ? null : search.coverageStart(request.context);
-    const start = final ? nativePopulationStartId(request.start!.observation) : (pageId ?? randomUUID());
+    const start = publication
+      ? null
+      : final
+        ? nativePopulationStartId(request.start!.observation)
+        : (pageId ?? randomUUID());
     if (pageId !== null) cost.resultWrites++;
     if (final) cost.resultWrites++; // attempted native root finish, including misses
     const sql = statement.replace('semantic.privacy-role', final ? 'semantic.privacy-final' : 'semantic.privacy-start');
@@ -334,6 +370,11 @@ export async function readPublicFilterPopulation(
       start,
       deadline,
       pageId,
+      publication?.job ?? null,
+      publication?.bootstrap ?? null,
+      publication?.terminal.step ?? null,
+      publication?.terminal.root ?? null,
+      [...PUBLIC_FILTER_CATALOGUE_TEXT_KEYS],
     ];
     cost.statements++;
     cost.bytes += Buffer.byteLength(sql) + Buffer.byteLength(search.encodeState(values));
@@ -360,7 +401,7 @@ export async function readPublicFilterPopulation(
     if (
       cost.inputKeys > 1000 ||
       cost.bytes > 4 * 1024 * 1024 ||
-      !validBindings(row, request, search) ||
+      !validBindings(row, request, search, publication) ||
       row.pending ||
       row.fenced ||
       row.heads.some(
@@ -386,7 +427,7 @@ export async function readPublicFilterPopulation(
     return {
       status: 'observed',
       coverage: 'all_native_homes',
-      start: { observation: `population:${start}` },
+      start: publication ? request.start! : { observation: `population:${start}` },
       routingComplete: true,
       unacknowledged: heads.filter((head) => head.phase === 'pending').map((head) => head.head),
       changed: heads.filter((head) => head.phase === 'changed').map((head) => head.head),

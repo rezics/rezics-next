@@ -32,12 +32,7 @@ import type {
   PublicFilterQueriedObservation,
   PublicSuggestionCaptureInput,
 } from './public-filter-consumer-contract.ts';
-import {
-  subjectGenerations,
-  subjectIndexName,
-  readSubjectCalendarMappingFormat,
-  readSubjectCreditMappingFormat,
-} from './indices.ts';
+import { subjectGenerations, subjectIndexName, readSubjectCalendarMappingFormat } from './indices.ts';
 import type { OpenSearch, SearchRequestOptions } from './opensearch.ts';
 import type { CreditSearchSource } from './credit-search.ts';
 import type { FacetDiscoveryProvider } from './facet-discovery-native.ts';
@@ -205,8 +200,8 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     )
       notReady();
     const search = requestSearch(context);
+    // This native mapping read admits both the calendar and credit formats.
     await readSubjectCalendarMappingFormat(search, config.prefix, generation);
-    await readSubjectCreditMappingFormat(search, config.prefix, generation);
     return sourcePublication.createGenerationPublication({
       pool: config.pool,
       search: config.search,
@@ -404,7 +399,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
           {
             source,
             meaning: { digest: current.digest, release: current.release },
-            capture: { filterDocument: undefined, text: undefined, sort: 'id', size: 1 },
+            capture: { filterDocument: undefined, text: undefined, sort: 'id', size: 1, catalogueCoverage: true },
           },
           context,
         );

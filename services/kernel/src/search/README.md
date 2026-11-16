@@ -2120,7 +2120,11 @@ then passes the returned consumer to `prepare`. It retains only the publication 
 Cold population and ordinary replay both use the delivered native writer's admission gate; no publication
 callback supplies authority. Maintenance resumes the stored job and its original consumer directly; it does
 not repeat the retired fixed-cut scan or register a replacement consumer on restart.
-Job recovery also covers interruption after native prepare commits and before maintenance saves its locator.
+Generation population uses the existing workflows queue and remains eligible for delivery during whole-catalogue
+maintenance sweeps. Request-specific repair stays on maintenance. A population
+delivery and any queued legacy delivery still compete for the same retained revision and lease. Discovery
+enqueues only available revisions and can recover an expired lease. Job recovery also covers interruption
+after native prepare commits and before the scheduler saves its locator.
 Native complete key pages may retain their terminal cursor or advance past only filtered rows; the next home starts without
 that cursor. The publication's finite passes own population, repair, reconciliation and activation through
 the same worker. CLI rebuild waits for that worker-owned alias publication. Retirement
@@ -2215,7 +2219,9 @@ barrier evidence returns typed unready; no observation readiness is minted here.
 remain bound to their own exact physical target and definition.
 
 Publication persists native fencing invocation intent before requesting the gate, and alias intent, including
-the previous physical target/UUID, before the native alias switch. A lost fence response resolves through the
+the previous physical target/UUID, before the native alias switch.
+The alias intent resumes on a fresh publication turn. Each fence check uses its own verified Source proof
+for the exact publication pin, and the swap and its readback still have separate current checks. A lost fence response resolves through the
 same producer/job. A Source change during adoption safely recovers outstanding intent before returning unready.
 Only exact native alias readback settles a lost response. Source and writer/copy custody are revalidated through
 the critical section, before generation metadata becomes active; release occurs afterwards. A safe abort restores
@@ -2258,6 +2264,10 @@ Cost: pages admit 50 native inputs, preserve the lower owner 100/256-key limits 
 native generation preparation/repair shares one maintenance meter whose point and row multipliers apply to
 examined input keys, as in Source's maintenance-step bound, rather than serving candidates. Serving retains
 its candidate-based bound. Both retain the 1000-input and 4 MiB ceilings without resetting between owners.
+Bound Subject publication admits up to 128 homes per native Source scan or creation-window page. The original
+projection limit and retained page sizes still govern projection and replay. A publication turn can receive up
+to four pages with the same meter and deadline, saving each verified successor before asking for another.
+The next turn verifies the closed Search settlement before Source can acknowledge coverage.
 Steps retain a scalar frontier. Subject reconciliation validates up to 256 saved native home heads in one
 statement snapshot per step. After engine traversal, Search can refresh that pass's position witness for an
 empty home with the same active epoch and no retained writer row for this physical target. Each refresh uses
@@ -2306,6 +2316,8 @@ replay accounting may change, as in Source's original projection digest. The act
 charged and the retained original intent is preserved. The final owner step additionally proves its original
 complete window/chain and creation/change closure; an empty final step needs no item receipt.
 Search does not infer this from counts, a current equivalent page, callback completion or a serialized brand.
+For an exact bound Subject publication, the same native step invocation can supply the verified repair bodies.
+Search compares them to its retained intent. The other paths keep separate receipt and Account owner reads.
 It then opens a fresh local transaction and compares the entire staged custody/execution/work, retained
 intent/effect, physical allocation, owner epoch, writer and enrollment/fence generation basis before its actual
 native writer verification, readback and refresh. A changed basis invalidates that invocation's owner positives.

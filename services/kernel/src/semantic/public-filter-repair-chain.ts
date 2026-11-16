@@ -274,6 +274,42 @@ export async function readPublicFilterRepairHomeSeal(pool: Pool, chain: Chain) {
   );
 }
 
+export const PUBLIC_FILTER_REPAIR_ACK_BATCH_LIMIT = 16;
+
+/** Additional indexed ranges within this terminal's already verified chain. */
+export async function readPublicFilterRepairHomeBatches(
+  pool: Pool,
+  chain: Chain,
+  terminal: string,
+  from: number,
+  to: number,
+) {
+  const count = to - from;
+  if (
+    !Number.isInteger(from) ||
+    !Number.isInteger(to) ||
+    from < 0 ||
+    to > 4096 ||
+    count < 1 ||
+    count >= PUBLIC_FILTER_REPAIR_ACK_BATCH_LIMIT
+  )
+    throw new TypeError('Expected a bounded range inside the current ACK page');
+  const result = await pool.query<{ state: string; home: number }>(
+    `/* semantic.native-keyed:${1 + count}:${4 + count} */
+     SELECT w.state,w.verified_home AS home
+     FROM semantic.public_filter_repair_step t
+     JOIN semantic.public_filter_repair_step w ON
+       (w.partition_no,w.bootstrap,w.execution)=(t.partition_no,t.bootstrap,t.execution)
+     WHERE (t.partition_no,t.bootstrap,t.execution,t.step)=(0,$1,$2,$3)
+       AND t.verified_binding=$4 AND t.verified_root IS NOT NULL AND t.complete AND t.verified_next IS NULL
+       AND w.verified_binding=t.verified_binding AND w.verified_root IS NOT NULL
+       AND w.verified_ordinal<t.verified_ordinal AND w.verified_home >= $5 AND w.verified_home < $6
+     ORDER BY w.verified_home LIMIT $7`,
+    [chain.bootstrap, chain.execution, terminal, chain.binding, from, to, count],
+  );
+  return result.rows;
+}
+
 /** Receiver ACK commits first. Advancing this original terminal's bounded home
  * frontier is a separate Source phase; replay repeats the same idempotent ACK.
  */
@@ -282,31 +318,38 @@ export async function advancePublicFilterRepairAckFrontier(
   chain: Chain,
   terminal: string,
   home: number,
+  homes: number,
 ): Promise<boolean> {
-  const result = await pool.query(
-    `/* semantic.native-keyed:6:16 */
-     UPDATE semantic.public_filter_repair_step SET ack_after=ack_after+1
-     WHERE (partition_no,bootstrap,execution,step)=(0,$1,$2,$3)
-       AND verified_binding=$4 AND complete AND verified_next IS NULL AND ack_after=$5
-       AND EXISTS (SELECT 1 FROM core.partition p
-         JOIN semantic.public_filter_bootstrap b ON b.partition_no=p.partition_no
-         WHERE (b.partition_no,b.bootstrap)=(0,$1) AND b.owner_epoch=p.epoch
-           AND p.write_state='active' AND b.state='adopted')
-       AND EXISTS (SELECT 1 FROM semantic.public_filter_home_enrollment e
-         JOIN search.public_filter_coverage_home h ON
-           (h.partition_no,h.registration,h.source_home)=(e.registration_partition,e.registration,e.partition_no)
-         JOIN search.public_filter_coverage_baseline b ON
-           (b.partition_no,b.registration,b.bootstrap,b.source_home)=
-           (e.registration_partition,e.registration,e.bootstrap,e.partition_no)
-         WHERE (e.partition_no,e.bootstrap)=($5,$1) AND e.complete AND b.receipt=e.receipt
-           AND h.source_epoch=e.owner_epoch AND h.baseline_bootstrap=e.bootstrap
-           AND h.acknowledged_baseline=e.bootstrap AND h.acknowledged_position>=b.source_position
-           AND h.acknowledged_execution=$2 AND h.acknowledged_settlement IS NOT NULL
-           AND h.acknowledged_native_enqueue>=b.native_enqueue_revision
-           AND h.acknowledged_native_revision IS NOT DISTINCT FROM b.native_revision
-           AND h.acknowledged_native_claim_revision IS NOT DISTINCT FROM b.native_claim_revision)
-     RETURNING ack_after`,
-    [chain.bootstrap, chain.execution, terminal, chain.binding, home],
-  );
-  return result.rowCount === 1;
+  if (
+    !Number.isInteger(home) ||
+    home < 0 ||
+    !Number.isInteger(homes) ||
+    homes < 1 ||
+    homes > PUBLIC_FILTER_REPAIR_ACK_BATCH_LIMIT ||
+    home + homes > 4096
+  )
+    throw new TypeError('Source ACK requires a bounded contiguous home range');
+  // The terminal and its trigger read the original owner and three receiver
+  // relations per home. Charge the whole attempted prefix, including a gap.
+  try {
+    const result = await pool.query(
+      `/* semantic.native-keyed:${3 + 3 * homes}:${7 + 9 * homes} */
+       UPDATE semantic.public_filter_repair_step SET ack_after=$6
+       WHERE (partition_no,bootstrap,execution,step)=(0,$1,$2,$3)
+         AND verified_binding=$4 AND complete AND verified_next IS NULL AND ack_after=$5
+       RETURNING ack_after`,
+      [chain.bootstrap, chain.execution, terminal, chain.binding, home, home + homes],
+    );
+    return result.rowCount === 1;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      'code' in error &&
+      error.code === '23514' &&
+      'constraint' in error &&
+      error.constraint === 'public_filter_repair_ack_receiver_prefix'
+    )
+      return false;
+    throw error;
+  }
 }

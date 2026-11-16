@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { PublicSourceRepair } from '../semantic/public-filter-source-binding.ts';
-import { readNativePublicFilterAccountRepair } from './native-bindings.ts';
+import { nativeSubjectPublicationRepairEvidence, readNativePublicFilterAccountRepair } from './native-bindings.ts';
 import type { PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
 import type { PublicFilterConsumerContext } from './public-filter-consumer-contract.ts';
 import type {
@@ -60,6 +60,7 @@ export async function verifyPublicFilterRepairSourcePage(
   }>,
   context: PublicFilterConsumerContext,
   charge: (cost?: PublicFilterCost) => void,
+  subjectPublication = false,
 ): Promise<RetainedRepairPage> {
   if (typeof binding.readRepairStep !== 'function' || typeof binding.readRepairReceipt !== 'function')
     throw new PublicFilterRepairSourceError('owner_unavailable');
@@ -95,6 +96,9 @@ export async function verifyPublicFilterRepairSourcePage(
     )
   )
     throw new PublicFilterRepairSourceError('binding_mismatch');
+  const nativeRepairs = subjectPublication ? nativeSubjectPublicationRepairEvidence?.(binding, step) : undefined;
+  if (nativeRepairs && nativeRepairs.length !== repairs.length)
+    throw new PublicFilterRepairSourceError('binding_mismatch');
   for (const [item, receipt] of receipts.entries()) {
     if (
       receipt.bootstrap !== request.bootstrap ||
@@ -102,17 +106,23 @@ export async function verifyPublicFilterRepairSourcePage(
       receipt.step !== step.step
     )
       throw new PublicFilterRepairSourceError('binding_mismatch');
-    charge();
-    const verified = await owner(() =>
-      binding.readRepairReceipt!({ receipt, queried: request.queried, execution: request.execution }, context),
-    );
-    charge(verified.cost);
-    if (verified.status !== 'verified') throw new PublicFilterRepairSourceError(verified.reason);
-    if (!isDeepStrictEqual(repairBody(sourceRepair(verified.repair)), repairBody(repairs[item]!)))
+    let verifiedRepair = nativeRepairs?.[item];
+    if (!verifiedRepair) {
+      charge();
+      const verified = await owner(() =>
+        binding.readRepairReceipt!({ receipt, queried: request.queried, execution: request.execution }, context),
+      );
+      charge(verified.cost);
+      if (verified.status !== 'verified') throw new PublicFilterRepairSourceError(verified.reason);
+      verifiedRepair = verified.repair;
+    }
+    if (!isDeepStrictEqual(repairBody(sourceRepair(verifiedRepair)), repairBody(repairs[item]!)))
       throw new PublicFilterRepairSourceError('binding_mismatch');
   }
   charge();
-  const nativeAccount = await owner(() => readNativePublicFilterAccountRepair(binding, request, context));
+  const nativeAccount = nativeRepairs
+    ? null
+    : await owner(() => readNativePublicFilterAccountRepair(binding, request, context));
   if (nativeAccount) charge(nativeAccount.cost);
   if (expected.account !== undefined && !isDeepStrictEqual(expected.account, nativeAccount?.account))
     throw new PublicFilterRepairSourceError('binding_mismatch');

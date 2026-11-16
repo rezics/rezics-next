@@ -95,6 +95,7 @@ async function currentSuggestions(driver: SearchDriver, query: string): Promise<
 test('default Subject Search activates and returns an authored Book', async () => {
   const client = createDriverClient();
   const driver = await client.init();
+  let assertionFailure: Error | undefined;
   try {
     const label = `Catalogue ${randomUUID().replaceAll('-', '')}`;
     const created = await driver.request(
@@ -109,18 +110,51 @@ test('default Subject Search activates and returns an authored Book', async () =
     // This starts at cold worker admission, before the fixture's source writes have drained.
     const page = await currentPage(driver, { text: label, languages: ['en'] }, { waitMs: 240_000, retryMs: 500 });
     expect(subjects(page)).toContainEqual(expect.objectContaining({ id, type: 'schema:Book', labels: { en: label } }));
-    expect((await client.inspect({ preparation: true })).workerStats?.preparation?.generations).toMatchObject({
-      active: 1,
+    const inspect = async () => (await client.inspect({ preparation: true })).workerStats?.preparation;
+    const sealDeadline = Date.now() + 10_000;
+    let prepared = await inspect();
+    type PublicationWitness = { family: string; generation: string; phase: string; source_sealed: boolean };
+    const subjectWitness = () =>
+      (prepared?.publication as { jobs?: PublicationWitness[] } | undefined)?.jobs?.find(
+        ({ family, generation }) => family === 'subjects' && generation === '1',
+      );
+    while (subjectWitness()?.phase !== 'active' && Date.now() < sealDeadline) {
+      await Bun.sleep(100);
+      prepared = await inspect();
+    }
+    expect(prepared?.generations).toMatchObject({ active: 1 });
+    const witness = subjectWitness();
+    expect(witness).toMatchObject({
+      phase: 'active',
+      source_sealed: true,
+      source_bootstrap: expect.any(String),
+      source_observation: expect.stringMatching(/^0:/),
+      source_execution: expect.any(String),
+      source_repair_step: expect.any(String),
+      source_repair_root: expect.stringMatching(/^[a-f0-9]{64}$/),
+      source_ack_after: 4096,
     });
+    console.info('Anonymous Search HTTP 200 and original Source seal', JSON.stringify(witness));
   } catch (error) {
     const output = await client.inspect({ preparation: true }).then(
       ({ workerStats, workerOutput }) =>
-        `${JSON.stringify(workerStats?.preparation?.publication)}\n${workerOutput.slice(-4000)}`,
+        `${JSON.stringify({
+          publication: workerStats?.preparation?.publication,
+          workflows: workerStats?.preparation?.workflows,
+          maintenance: workerStats?.preparation?.maintenance,
+        })}\n${workerOutput.slice(-4000)}`,
       (failure) => String(failure).slice(0, 500),
     );
-    throw new Error(`Native Book Search failed. Worker output:\n${output}`, { cause: error });
+    assertionFailure = new Error(`Native Book Search failed. Worker output:\n${output}`, { cause: error });
+    throw assertionFailure;
   } finally {
-    await driver.close();
+    try {
+      await driver.close();
+    } catch (cleanupError) {
+      if (assertionFailure)
+        throw new AggregateError([assertionFailure, cleanupError], 'Native Book Search and fixture cleanup both failed');
+      throw cleanupError;
+    }
   }
 }, 600_000);
 

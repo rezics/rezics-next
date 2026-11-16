@@ -73,6 +73,10 @@ function definitionRead<T>(db: Db, read: (client: Db) => Promise<T>, deadline?: 
 const extensions = new Map<string, Extension>();
 /** Composed releases by their own digest, and the digest each (parent, extension) pair composes to. */
 const composed = new Map<string, Release>();
+/** Identify the immutable body already digest-checked by the Definitions owner. This grants no current read. */
+export function hasVerifiedReleaseDigest(release: Release, digest: string): boolean {
+  return releases.get(digest) === release || composed.get(digest) === release;
+}
 const pairs = new Map<string, string>();
 /** The published release each composed digest builds on. */
 const bases = new Map<string, string>();

@@ -15,6 +15,21 @@ Binding and receipt fields are copied before checkout. They must be own data fie
 proxies, coercible positions and out-of-domain scalars are refused before native work. The database proof and receiver
 use the same snapshot.
 
+## Serving from published catalogue coverage
+
+Full Subject publication enrolls a catalogue-text key for label, alias, description, name-order and relevance
+reductions. The same native outbox fanout writes this key alongside each matching exact dependency. Its receiver
+uses the original enrollment, creation pin, verified terminal chain and contiguous ACK.
+
+An eligible serving plan retains its own definition, bootstrap and observation. The bootstrap pins the exact job
+and current receiver generation of a clean active publication whose coverage includes every compiled dependency.
+The publication keeps its own coverage seal and its maintenance payload stays unavailable to serving. Each current
+population read resolves the pinned publication again and applies the existing pending, fence, receiver-generation
+and keyed own-row checks. A missing or incompatible parent follows ordinary independent enrollment at capture.
+Later loss of the parent prevents the attached read from completing. The first attached request may retain a
+single preparation segment within the existing prepared-page allowance. An unfinished build uses the ordinary
+worker; recovery identifies the original observation by bootstrap and snapshot kind.
+
 ## Preparation cost
 
 Each home reserves 15 Access inputs, three committed-receipt inputs, nine coverage adoption inputs and seven

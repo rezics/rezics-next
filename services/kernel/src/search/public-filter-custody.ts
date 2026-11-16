@@ -561,10 +561,14 @@ export async function readPublicFilterConsumerCustody(
 // Constructor routing only, analogous to publicFilterSourceOrigin. No receipt, positive result,
 // settlement or retained state is cached here. Recovery must install the real owner binding again.
 const repairSources = new WeakMap<Pool, PublicFilterRepairSourceBinding>();
-const repairAllowance = new AsyncLocalStorage<CustodyCost>();
+const repairAllowance = new AsyncLocalStorage<Readonly<{ spent: CustodyCost; maintenance: boolean }>>();
 /** Keep all reader phases within the calling consumer's already-spent allowance. */
-export function withPublicFilterRepairAllowance<T>(spent: CustodyCost, work: () => Promise<T>): Promise<T> {
-  return repairAllowance.run({ ...spent }, work);
+export function withPublicFilterRepairAllowance<T>(
+  spent: CustodyCost,
+  work: () => Promise<T>,
+  maintenance = false,
+): Promise<T> {
+  return repairAllowance.run({ spent: { ...spent }, maintenance }, work);
 }
 
 /** The sole native guard: owner verification runs between released and freshly reopened local homes. */
@@ -578,7 +582,8 @@ export async function readPublicFilterRepairSettlement(
 ): Promise<PublicFilterRepairSettlementResult> {
   context = requestContext(context);
   const meter = operationCost(pool, context);
-  const spent = repairAllowance.getStore() ?? cost();
+  const allowance = repairAllowance.getStore();
+  const spent = allowance?.spent ?? cost();
   const input = structuredClone(request);
   try {
     check(context);
@@ -591,12 +596,15 @@ export async function readPublicFilterRepairSettlement(
     const transport = createOpenSearch(url);
     const admit = () => {
       check(context);
+      const inputs = spent.inputKeys + meter.inputKeys;
+      // The owning publication meter charges maintenance by native inputs.
+      const width = Math.max(allowance?.maintenance ? inputs : spent.candidates + meter.candidates, 1);
       if (
-        spent.inputKeys + meter.inputKeys > 1000 ||
+        inputs > 1000 ||
         spent.bytes + meter.bytes > 4 * 1024 * 1024 ||
-        spent.rows + meter.rows > 64 + 16 * Math.max(spent.candidates + meter.candidates, 1) ||
+        spent.rows + meter.rows > 64 + 16 * width ||
         spent.accessPoints + meter.accessPoints + spent.dependencyPoints + meter.dependencyPoints >
-          16 + 8 * Math.max(spent.candidates + meter.candidates, 1)
+          16 + 8 * width
       )
         throw new Failure('owner_unavailable');
     };
@@ -945,6 +953,7 @@ export async function readPublicFilterRepairSettlement(
           entry.page,
           context,
           charge,
+          allowance?.maintenance,
         ),
       );
     }
@@ -2361,6 +2370,7 @@ export async function readGenerationPublicationCustody(
   sourceHome: number | undefined,
   context: PublicFilterConsumerContext,
   observation?: string,
+  recovery?: Readonly<{ bootstrap: { observation: string }; snapshot: 'pit' | 'prepared' }>,
 ): Promise<
   | Readonly<{
       definition: CustodyRetainedDefinition;
@@ -2378,39 +2388,45 @@ export async function readGenerationPublicationCustody(
     const registered = await sql(
       pool,
       meter,
-      `SELECT r.partition_no,r.id,r.definition FROM search.public_filter_registration r
+      `SELECT r.partition_no,r.id,r.definition,o.queried,o.expires_at
+       FROM search.public_filter_registration r
        JOIN search.public_filter_target t USING(partition_no,physical_target)
-       WHERE ($1::integer IS NULL OR r.partition_no=$1) AND r.physical_target=$2 AND md5(r.consumer)=md5($3) AND r.consumer=$3 AND r.state='active'
-       AND t.incarnation=$4 LIMIT 2`,
-      [sourceHome, consumer.physicalTarget, encode(consumer), consumer.incarnation],
+       LEFT JOIN LATERAL (
+         SELECT queried,expires_at FROM search.public_filter_observation
+         WHERE (partition_no,registration)=(r.partition_no,r.id)
+           AND (observation=$5::text OR $5::text IS NULL) AND state='open'
+           AND ($6::text IS NULL OR
+             (md5(covered)=md5($6) AND covered=$6 AND prepared_build IS NOT DISTINCT FROM $7::text))
+         ORDER BY observation DESC LIMIT (CASE WHEN $6::text IS NULL THEN 1 ELSE 2 END)
+       ) o ON true
+       WHERE ($1::integer IS NULL OR r.partition_no=$1) AND r.physical_target=$2 AND md5(r.consumer)=md5($3)
+         AND r.consumer=$3 AND r.state='active' AND t.incarnation=$4 LIMIT 2`,
+      [
+        sourceHome,
+        consumer.physicalTarget,
+        encode(consumer),
+        consumer.incarnation,
+        observation ?? null,
+        recovery ? encode(recovery.bootstrap) : null,
+        recovery?.snapshot === 'prepared' ? recovery.bootstrap.observation : null,
+      ],
     );
     const row = registered.rows[0];
     if (!row || registered.rows.length !== 1) throw new Failure('definition_missing');
-    sourceHome = row.partition_no as number;
     const definition = decode<{ digest: string; data: CustodyRetainedDefinition }>(row.definition);
     requireValue(definition.digest === digest(definition.data));
-    const found =
-      observation === undefined
-        ? await sql(
-            pool,
-            meter,
-            `SELECT queried FROM search.public_filter_observation WHERE partition_no=$1 AND registration=$2
-         AND state='open' ORDER BY observation DESC LIMIT 1`,
-            [sourceHome, row.id],
-          )
-        : await sql(
-            pool,
-            meter,
-            `SELECT queried FROM search.public_filter_observation WHERE partition_no=$1 AND registration=$2
-         AND observation=$3 AND state='open'`,
-            [sourceHome, row.id, observation],
-          );
     const registration = { partition: row.partition_no as number, id: row.id as string };
-    if (!found.rows[0]) return { definition: definition.data, registration, queried: null, cost: meter };
-    const q = decode<PublicFilterQueriedObservation>(found.rows[0].queried);
-    requireValue(encode(q.consumer) === encode(consumer));
-    const native = await read(pool, { queried: q }, context, meter);
-    return { definition: native.definition, registration, queried: native.queried, cost: meter };
+    if (row.queried === null) return { definition: definition.data, registration, queried: null, cost: meter };
+    const q = decode<PublicFilterQueriedObservation>(row.queried);
+    queried(q);
+    requireValue(encode(q.consumer) === encode(consumer) && encode(q) === row.queried);
+    if (!(Number(row.expires_at) > Date.now())) throw new Failure('observation_lost');
+    if (isReleaseReference(definition.data.meaning.release)) {
+      requireValue(definition.data.meaning.release.digest === definition.data.meaning.digest);
+      await requireReleaseAuthority(pool, meter, definition.data.meaning.digest);
+    }
+    check(context);
+    return { definition: definition.data, registration, queried: q, cost: meter };
   } catch (error) {
     return failure(error, meter);
   }

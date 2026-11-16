@@ -27,3 +27,18 @@ export function publicFilterCaptureDependencies(
     ...[...orders].map((order): PublicFilterDependencyKey => ({ kind: 'order', order })),
   ];
 }
+
+/** Only an unfiltered ID population can enroll the complete native catalogue. */
+export function validateCatalogueCoverage(input: PublicFilterConsumerCaptureInput): void {
+  if (
+    input.catalogueCoverage !== undefined &&
+    (input.catalogueCoverage !== true ||
+      input.sort !== 'id' ||
+      input.filterDocument !== undefined ||
+      input.text !== undefined ||
+      input.after !== undefined ||
+      input.overflowProperties !== undefined ||
+      input.rating !== undefined)
+  )
+    throw new TypeError('Catalogue coverage requires an unfiltered ID population');
+}

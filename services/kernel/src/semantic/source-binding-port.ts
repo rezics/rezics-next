@@ -142,13 +142,14 @@ export type PublicFilterSearchBindingPort = Readonly<{
     sourceHome: number | undefined,
     context: PublicFilterConsumerContext,
     observation?: string,
+    recovery?: Readonly<{ bootstrap: PrivacyReductionStart; snapshot: 'pit' | 'prepared' }>,
   ): Promise<SourceBindingGenerationResult>;
   readRepairSettlement(
     pool: Pool,
     request: Readonly<{ queried: PublicFilterQueriedObservation; execution: string }>,
     context: PublicFilterConsumerContext,
   ): Promise<SourceBindingSettlementResult>;
-  withRepairAllowance<T>(spent: PublicFilterCost, work: () => Promise<T>): Promise<T>;
+  withRepairAllowance<T>(spent: PublicFilterCost, work: () => Promise<T>, maintenance?: boolean): Promise<T>;
 }>;
 
 /** Access supplies current Account repair inputs, authorization and deadline classification. */
