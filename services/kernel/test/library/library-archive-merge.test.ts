@@ -1832,6 +1832,19 @@ test('a merged canonical target invalidates the reviewed observation identity', 
   const prefix = `library-archive-${randomUUID().replaceAll('-', '')}`;
   await createSubjectIndex(createOpenSearch(searchUrl), prefix, 1);
   const client = await createWorkClient(databaseUrl);
+  // During the ordinary worker run, avoid the fixture's separate bootstrap driver.
+  const sendNative = (method: 'GET' | 'POST', path: string, body?: unknown) =>
+    f.handle(
+      new Request(`http://kernel.test${path}`, {
+        method,
+        headers: {
+          authorization: `Bearer ${identityOwner.bearer}`,
+          'idempotency-key': JSON.stringify(key()),
+          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
+    );
   try {
     const worker = await startErasureWorker(databaseUrl, client, {
       ...f.workerEnv,
@@ -1839,13 +1852,13 @@ test('a merged canonical target invalidates the reviewed observation identity', 
       KERNEL_SEARCH_PREFIX: prefix,
     });
     try {
-      const admitted = await send(identityOwner, 'POST', '/v1/subjects:merge', { subjects: [survivor, redirected] });
+      const admitted = await sendNative('POST', '/v1/subjects:merge', { subjects: [survivor, redirected] });
       if (admitted.status !== 202) throw new Error(`${admitted.status}: ${await admitted.text()}`);
       const { operation } = (await admitted.json()) as { operation: { id: string } };
       expect(operation.id).toBeString();
       const deadline = performance.now() + 90_000;
       const readOperation = async () => {
-        const response = await send(identityOwner, 'GET', `/v1/subjectIdentityOperations/${operation.id}`);
+        const response = await sendNative('GET', `/v1/subjectIdentityOperations/${operation.id}`);
         if (response.status !== 200) throw new Error(`${response.status}: ${await response.text()}`);
         return ((await response.json()) as { operation: { id: string; done: boolean } }).operation;
       };
@@ -1870,7 +1883,7 @@ test('a merged canonical target invalidates the reviewed observation identity', 
   }
   const reviewRevision = review.reviewed[0].reviewRevision;
   const applied = await json(
-    await send(identityOwner, 'POST', `${mergePath}/${id}/apply`, selected([row.ordinal], reviewRevision)),
+    await sendNative('POST', `${mergePath}/${id}/apply`, selected([row.ordinal], reviewRevision)),
   );
   expect(applied.applied).toMatchObject([{ ordinal: row.ordinal, status: 'stale', result: { visibility: 'private' } }]);
   const requestKey = `archive-merge-${id.replaceAll('-', '')}-${row.ordinal}-${reviewRevision}`;
