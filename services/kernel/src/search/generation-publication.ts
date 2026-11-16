@@ -1647,7 +1647,11 @@ export function createSearchGenerationPublication(
               if ('reason' in result) throw new Pending(result.reason);
               if (!same(result.fence, fence(job))) throw new Pending('incarnation_changed');
               if (result.status === 'draining') return preparing('activate', result.advanced);
-              await held(job, context, meter);
+              const source = nativeSourceForHeldPublication(result);
+              if (source) {
+                const retained = jobPin(job);
+                if (!retained || !sameGenerationPublicationPin(retained, source)) throw new Pending('source_pending');
+              } else await held(job, context, meter);
               // Revisit the real finite key population under the continuously held writer/copy barrier.
               job.fenced_pass = true;
               job.pass = (BigInt(job.pass) + 1n).toString();
@@ -1701,8 +1705,10 @@ export function createSearchGenerationPublication(
                 async () => (await aliasTarget(job, context, meter)) === job.physical_target,
                 'Generation publication alias could not be established',
               );
+              // The retained intent and fence own confirmation on the next metered turn.
+              if (job.family === 'subjects') return preparing('activate', true);
             }
-            await adoptHeld(job, context, meter);
+            if (job.family === 'discovery') await adoptHeld(job, context, meter);
             if ((await aliasTarget(job, context, meter)) !== job.physical_target) throw new Pending('source_pending');
             // Native readback precedes metadata. Lost replies replay the retained intent under the same fence.
             if (job.family === 'discovery') {

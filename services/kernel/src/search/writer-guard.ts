@@ -1441,6 +1441,22 @@ export function createSearchWriterGuard(options: {
     });
     return result.value;
   }
+  async function confirmDrainedPublication(
+    input: SearchWriterPublicationFence,
+    context: PublicFilterConsumerContext,
+    cost: PublicationCost,
+  ) {
+    const publication = await publicationSource(input, context, cost);
+    await publicationPhysical(input, context);
+    const row = await withReadTransaction(
+      options.pool,
+      (tx) => publicationRetained(tx, input, context),
+      context.deadline,
+    );
+    publicationDeadline(context);
+    if (row.publication_home !== 4096) return pendingPublication();
+    return publication;
+  }
   const publication: Omit<SearchWriterPublicationGuard, 'write'> = {
     fencePublication(request, context) {
       const input = structuredClone(request);
@@ -1520,8 +1536,10 @@ export function createSearchWriterGuard(options: {
         );
         publicationDeadline(context);
         if (before.publication_home === 4096) {
-          await publicationSource(input, context, cost);
-          return { status: 'drained' as const, fence: input, cost };
+          const source = await confirmDrainedPublication(input, context, cost);
+          const result = { status: 'drained' as const, fence: input, cost };
+          if (source) heldPublicationSources.set(result, source);
+          return result;
         }
         const progress = home === 4096 ? null : await drainPublicationHome(input, context, cost, before, home);
         publicationDeadline(context);
@@ -1560,15 +1578,7 @@ export function createSearchWriterGuard(options: {
     adoptPublication(value, context) {
       const input = structuredClone(value);
       return publicationCall(context, async (cost, context) => {
-        const publication = await publicationSource(input, context, cost);
-        await publicationPhysical(input, context);
-        const row = await withReadTransaction(
-          options.pool,
-          (tx) => publicationRetained(tx, input, context),
-          context.deadline,
-        );
-        publicationDeadline(context);
-        if (row.publication_home !== 4096) return pendingPublication();
+        const publication = await confirmDrainedPublication(input, context, cost);
         const result = { status: 'held' as const, fence: input, cost };
         if (publication) heldPublicationSources.set(result, publication);
         return result;
