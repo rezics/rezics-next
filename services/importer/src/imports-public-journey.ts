@@ -1342,6 +1342,26 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
     { mode: 0o600 },
   );
 
+  const operator = persona;
+  const recordOperator = async (id: keyof typeof operatorSpecs) => {
+    const row: WalkRowResult =
+      !operator || sharedStartup
+        ? {
+            id,
+            path: firstPublicRow(id).path,
+            result: 'failing',
+            elapsedMs: 0,
+            cause: sharedStartup ?? 'persona unavailable',
+            evidence: { sharedStartup: true },
+          }
+        : await walkRow(id, (reached) => runOperator(id, operator, reached));
+    rows.push(row);
+    await writeFile(resolve(evidenceRoot, `${id.toLowerCase()}-row.json`), JSON.stringify(row), { mode: 0o600 });
+  };
+
+  // Run the ordinary cover import before the bulk seed can spend this account's upload quota.
+  await recordOperator('I01');
+
   const seedStarted = Date.now();
   let seedElapsedMs = 0;
   let seedCause: string | null = sharedStartup;
@@ -1515,21 +1535,7 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
 
   // These callers share the ordinary account/source authority. Keep native writes serial.
   // Open Library is last so its unresolved operation cannot hide the other observations.
-  for (const id of ['I01', 'I02', 'I04', 'I03'] as const) {
-    const row: WalkRowResult =
-      !persona || sharedStartup
-        ? {
-            id,
-            path: firstPublicRow(id).path,
-            result: 'failing',
-            elapsedMs: 0,
-            cause: sharedStartup ?? 'persona unavailable',
-            evidence: { sharedStartup: true },
-          }
-        : await walkRow(id, (reached) => runOperator(id, persona!, reached));
-    rows.push(row);
-    await writeFile(resolve(evidenceRoot, `${id.toLowerCase()}-row.json`), JSON.stringify(row), { mode: 0o600 });
-  }
+  for (const id of ['I02', 'I04', 'I03'] as const) await recordOperator(id);
   rows.sort((left, right) => left.id.localeCompare(right.id));
 
   const endedAt = new Date().toISOString();
