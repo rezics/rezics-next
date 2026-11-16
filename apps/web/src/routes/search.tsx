@@ -6,15 +6,15 @@ import { env } from 'cloudflare:workers';
 import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import {
   correctSearchInput,
-  SearchInputRecovery,
-  SearchPage,
   searchInputDependency,
   searchInputFingerprint,
   searchLoaderDeps,
   searchParams,
   searchUrlIntake,
   removeSearchInput,
-} from '../search/search.tsx';
+} from '../search/search-params';
+import { SearchInputRecovery } from '../search/search-input-recovery';
+import { SearchPage } from '../search/search';
 import { searchQueryOptions } from '../search/search-query-options';
 import { searchSessionOwner } from '../search/search-session-owner';
 import { searchRequiresCurrentReader, searchSessionLifetime } from '../search/scoped-search-lifetime';

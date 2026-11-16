@@ -1,7 +1,8 @@
 import { isView } from '@rezics/composition';
 import { createFileRoute, notFound } from '@tanstack/react-router';
 import { getLocale } from '../../paraglide/runtime.js';
-import { ZoneSubjectRoute, readZoneSubjectRoute, zoneSubjectHead } from '../../zones/zone-shell';
+import { ZoneSubjectRoute } from '../../zones/zone-shell';
+import { readZoneSubjectRoute, zoneSubjectHead } from '../../zones/zone-subject-route-data';
 
 export const Route = createFileRoute('/zones/$id_/subjects/$subjectId_/$view')({
   staticData: { sessionReread: true },

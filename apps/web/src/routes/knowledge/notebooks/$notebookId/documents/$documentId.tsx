@@ -1,5 +1,6 @@
 import { createFileRoute, notFound, useLoaderData } from '@tanstack/react-router';
-import { KnowledgePrivatePage, parseKnowledgePrivateAddress } from '../../../../../knowledge/route';
+import { KnowledgePrivatePage } from '../../../../../knowledge/private-page';
+import { parseKnowledgePrivateAddress } from '../../../../../knowledge/private-knowledge';
 import { m } from '../../../../../paraglide/messages.js';
 import { pageHead } from '../../../../../shell/head';
 import { pageHeadContext } from '../../../../../shell/head-context';

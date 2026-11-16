@@ -1,13 +1,9 @@
 import type { KernelClient } from '@rezics/client';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
-import {
-  loadSubjectPage,
-  pageContext,
-  subjectBody,
-  subjectPageTitle,
-  PageReadError,
-  type SubjectPageLoad,
-} from '../features/pages/subject';
+import { pageContext } from '../features/pages/page-model';
+import { loadSubjectPage, PageReadError, type SubjectPageLoad } from '../features/pages/subject-page-load';
+import { subjectPageTitle } from '../features/pages/subject-page-summary';
+import { subjectBody } from '../features/pages/subject-read';
 import { publicCover } from './public-card';
 import { shareCardId, shareCardTitle, type ShareCardProjection, type ShareCardTarget } from './share-card';
 
