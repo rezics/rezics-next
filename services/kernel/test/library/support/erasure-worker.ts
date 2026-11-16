@@ -54,7 +54,7 @@ async function readEnqueuedEffect(
 }
 
 /** Read only the admitted job and its exact outbox position before the fixture tears down. */
-export async function readLibraryMergeDispatch(pool: Pool, client: WorkClient, jobId: string) {
+export async function readLibraryMergeDispatch(pool: Pool, client: WorkClient, jobId: string, queueWarning?: string) {
   const { partitionOf, routeOf } = await import('../../../src/route/route.ts');
   const { identityEpochStore } = await import('../../../src/semantic/identity-adapters/index.ts');
   const { identityEpochWorkflowId } = await import('../../../src/semantic/core/identity-epoch-sequence.ts');
@@ -98,6 +98,7 @@ export async function readLibraryMergeDispatch(pool: Pool, client: WorkClient, j
     ),
     effect: effect?.status ?? 'absent',
     enqueuedEffect: effect ? await readEnqueuedEffect(client, effect) : undefined,
+    queueWarning,
     workflow: workflow?.status ?? 'absent',
   };
 }
@@ -109,6 +110,7 @@ export async function startErasureWorker(
   environment: NodeJS.ProcessEnv = {},
 ) {
   let output = '';
+  let effectsQueueWarning: string | undefined;
   let ready!: () => void;
   const readiness = new Promise<void>((resolve) => {
     ready = resolve;
@@ -130,6 +132,7 @@ export async function startErasureWorker(
     const decoder = new TextDecoder();
     for await (const chunk of stream) {
       output = (output + decoder.decode(chunk, { stream: true })).slice(-4096);
+      effectsQueueWarning ??= output.match(/Error getting startable workflows for queue effects: ([^\r\n]+)\r?\n/)?.[1];
       if (output.includes('Worker ready')) ready();
     }
   };
@@ -152,6 +155,9 @@ export async function startErasureWorker(
   return {
     get output() {
       return output;
+    },
+    get effectsQueueWarning() {
+      return effectsQueueWarning;
     },
     async close() {
       // Pending erasure coordinators are deliberate long-running workflows. The
@@ -240,6 +246,9 @@ export async function createOwnedErasureFixture() {
     request,
     json,
     subject,
+    get effectsQueueWarning() {
+      return worker?.effectsQueueWarning;
+    },
     async start(environment?: Record<string, string>) {
       worker = await startErasureWorker(db.url, client, environment);
     },

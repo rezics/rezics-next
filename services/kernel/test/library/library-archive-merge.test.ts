@@ -1837,27 +1837,26 @@ test('a merged canonical target invalidates the reviewed observation identity', 
       KERNEL_SEARCH_PREFIX: prefix,
     });
     try {
-      const merged = await send(identityOwner, 'POST', '/v1/subjects:merge', { subjects: [survivor, redirected] });
-      expect([200, 202]).toContain(merged.status);
-      const admission = (await merged.json()) as {
-        operation?: { id?: string };
-        survivor?: string;
-        redirected?: string;
-      };
-      if (merged.status === 202) expect(admission.operation?.id).toBeString();
-      else expect(admission).toMatchObject({ survivor, redirected });
-      const store = identityEpochStore();
+      const { operation } = await json(
+        await send(identityOwner, 'POST', '/v1/subjects:merge', { subjects: [survivor, redirected] }),
+        202,
+      );
+      expect(operation.id).toBeString();
       const deadline = performance.now() + 90_000;
-      let mapping = await store.readMapping(f.pool, redirected);
-      while ((mapping.state !== 'mapped' || mapping.terminal !== survivor) && performance.now() < deadline) {
+      const readOperation = async () =>
+        (await json(await send(identityOwner, 'GET', `/v1/subjectIdentityOperations/${operation.id}`))).operation;
+      let current = await readOperation();
+      while (!current.done && performance.now() < deadline) {
         await Bun.sleep(100);
-        mapping = await store.readMapping(f.pool, redirected);
+        current = await readOperation();
       }
-      if ((mapping.state !== 'mapped' || mapping.terminal !== survivor) && admission.operation?.id) {
-        const dispatch = await readLibraryMergeDispatch(f.pool, client, admission.operation.id);
+      if (!current.done) {
+        const dispatch = await readLibraryMergeDispatch(f.pool, client, operation.id, worker.effectsQueueWarning);
         throw new Error(`Archive redirect did not publish: ${JSON.stringify(dispatch)}`);
       }
-      expect(mapping).toMatchObject({ state: 'mapped', terminal: survivor });
+      expect(current).toMatchObject({ id: operation.id, done: true, result: { survivor, redirected } });
+      const store = identityEpochStore();
+      expect(await store.readMapping(f.pool, redirected)).toMatchObject({ state: 'mapped', terminal: survivor });
       expect(await store.readMapping(f.pool, survivor)).toMatchObject({ state: 'mapped', terminal: survivor });
     } finally {
       await worker.close();

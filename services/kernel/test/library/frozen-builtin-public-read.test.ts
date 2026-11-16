@@ -81,7 +81,7 @@ async function verifyFrozenPublication(redirect: boolean) {
         async () => (await f.json(steward, 'GET', `/v1/subjectIdentityOperations/${operation.id}`, 200)).operation,
         (value) => value.done === true,
       ).catch(async (cause: unknown) => {
-        const dispatch = await readLibraryMergeDispatch(f.db.pool, f.client, operation.id);
+        const dispatch = await readLibraryMergeDispatch(f.db.pool, f.client, operation.id, f.effectsQueueWarning);
         throw new Error(`Subject merge dispatch: ${JSON.stringify(dispatch)}`, { cause });
       });
       expect(merged.result).toMatchObject({ survivor: terminal, redirected: original });
