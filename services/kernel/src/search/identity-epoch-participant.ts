@@ -50,6 +50,7 @@ import jobScopeSql from './identity-epoch-participant-job-scope.sql';
 import enrollSql from './identity-search-receiving-enroll.sql';
 import existingPlansSql from './identity-search-receiving-existing-plans.sql';
 import { validSearchIdentityReceivingFrontier } from './identity-receiving-native-contract.ts';
+import { readRetainedWriterCopySql } from './writer-guard.ts';
 import {
   commitSearchIdentityReceivingPlans,
   enrollSearchIdentityReceivingPlans,
@@ -80,6 +81,7 @@ function searchIdentityParticipantStatementCosts(): SearchReceivingWorkDeclarati
     Object.freeze({ sql: completeSql.sql, work: participantStatementWork(6, 6, 6, 4096, 0) }),
     Object.freeze({ sql: directorySql.sql, work: participantStatementWork(8, 8, 1, 16384, 1) }),
     Object.freeze({ sql: existingPlansSql.sql, work: participantStatementWork(100, 2, 1, 8192, 1) }),
+    Object.freeze({ sql: readRetainedWriterCopySql, work: participantStatementWork(3, 3, 1, 1024, 1) }),
     Object.freeze({ sql: jobScopeSql.sql, work: participantStatementWork(1, 1, 1, 256, 1) }),
     Object.freeze({ sql: enrollSql.sql, work: participantStatementWork(8, 8, 1, 16384, 1) }),
   ]);

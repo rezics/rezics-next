@@ -126,13 +126,6 @@ export async function commitSearchIdentityReceivingPlans(
   const fences = new Map<string, Awaited<ReturnType<typeof guard.fenceOriginal>>>();
   for (const original of ids) fences.set(original, await guard.fenceOriginal(job, original));
   const barrier = await guard.closeGeneration(partition);
-  const copies: Awaited<ReturnType<typeof guard.readRetainedCopies>>['copies'][number][] = [];
-  for (let cursor: string | null = null; ;) {
-    const page = await guard.readRetainedCopies(barrier.locator, cursor);
-    copies.push(...page.copies);
-    if (!page.next) break;
-    cursor = page.next;
-  }
   const store = createSearchIdentityReceivingNativeStore({
     pool,
     index: configuration.index,
@@ -155,7 +148,8 @@ export async function commitSearchIdentityReceivingPlans(
       throw unavailable('Search receiving original has no published mapping; absence is not a self binding');
     if (mapping.terminal !== change.terminal)
       throw unavailable('Search receiving mapping disagrees with the change page');
-    const retained = copies.filter((copy) => copy.original === change.original);
+    const copy = await guard.readRetainedCopy(barrier.locator, change.original, context.deadline);
+    const retained = copy ? [copy] : [];
     const disposition = receivingDisposition(change, retained);
     const documentId = disposition === 'OLD' ? change.original : change.terminal;
     const ownerRoute = routeOf(documentId);
