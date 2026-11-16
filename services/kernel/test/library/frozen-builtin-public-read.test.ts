@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createCurrentConsentReader } from '@rezics/auth/current-consent';
@@ -21,6 +22,8 @@ async function waitFor<T>(phase: string, read: () => Promise<T>, ready: (value: 
 }
 
 test('anonymous members retain the selected built-in generation after curator erasure and recheck live Subject disclosure', async () => {
+  const searchUrl = process.env.OPENSEARCH_URL;
+  if (!searchUrl) throw new Error('Built-in publication Staging needs the owned Search service');
   const f = await createOwnedErasureFixture();
   let consentServer: ConsentServer | undefined;
   try {
@@ -39,7 +42,12 @@ test('anonymous members retain the selected built-in generation after curator er
       async (input) => (await consent.readCurrentConsent(input))?.scopes ?? null,
       temporaryRoot,
     );
-    await f.start({ ...consentServer.env, KERNEL_ROUTE_KEY: Buffer.from(testRouteKey()).toString('base64url') });
+    await f.start({
+      ...consentServer.env,
+      KERNEL_ROUTE_KEY: Buffer.from(testRouteKey()).toString('base64url'),
+      OPENSEARCH_URL: searchUrl,
+      KERNEL_SEARCH_PREFIX: `library-publish-${randomUUID().replaceAll('-', '')}`,
+    });
     const admitted = await f.json(owner, 'POST', `${path}:publish`, 202, { revision: 0, visibility: 'public' });
     const completed = await waitFor(
       'Built-in publication did not complete',

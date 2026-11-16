@@ -11,6 +11,8 @@ import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes
 import { purgeOwnedGraphPage } from '../../src/library/erasure-owned-graph.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
+import { createSubjectIndex } from '../../src/search/indices.ts';
+import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identityEpochStore } from '../../src/semantic/identity-adapters/index.ts';
 import { identityEpochWorkflowId } from '../../src/semantic/core/index.ts';
@@ -1824,11 +1826,17 @@ test('a merged canonical target invalidates the reviewed observation identity', 
   );
   // Publishing the actual redirect needs both fixed identity participants on the default worker.
   const databaseUrl = f.pool.options.connectionString;
-  if (!databaseUrl || !process.env.OPENSEARCH_URL)
-    throw new Error('Native identity worker needs PostgreSQL and Search');
+  const searchUrl = process.env.OPENSEARCH_URL;
+  if (!databaseUrl || !searchUrl) throw new Error('Native identity worker needs PostgreSQL and Search');
+  const prefix = `library-archive-${randomUUID().replaceAll('-', '')}`;
+  await createSubjectIndex(createOpenSearch(searchUrl), prefix, 1);
   const client = await createWorkClient(databaseUrl);
   try {
-    const worker = await startErasureWorker(databaseUrl, client, f.workerEnv);
+    const worker = await startErasureWorker(databaseUrl, client, {
+      ...f.workerEnv,
+      OPENSEARCH_URL: searchUrl,
+      KERNEL_SEARCH_PREFIX: prefix,
+    });
     try {
       const merged = await send(identityOwner, 'POST', '/v1/subjects:merge', { subjects: [survivor, redirected] });
       expect([200, 202]).toContain(merged.status);
