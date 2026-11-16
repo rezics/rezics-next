@@ -622,13 +622,15 @@ const nativeAccountRepairs = new WeakMap<
     }>
   >
 >();
+type NativeRepairStartInput = Readonly<{
+  bootstrap: string;
+  queried: PublicFilterQueriedObservation;
+  publicationJob?: string;
+}>;
 const nativeRepairStarts = new WeakMap<
   PublicFilterSourceBinding,
   (
-    request: Readonly<{
-      bootstrap: string;
-      queried: PublicFilterQueriedObservation;
-    }>,
+    request: NativeRepairStartInput,
     context: PublicFilterConsumerContext,
   ) => Promise<Readonly<{ start: PrivacyReductionStart; cost: PublicFilterCost }>>
 >();
@@ -651,10 +653,7 @@ export async function readNativePublicFilterAccountRepair(
 }
 export async function readNativePublicFilterRepairStart(
   binding: PublicFilterSourceBinding,
-  request: Readonly<{
-    bootstrap: string;
-    queried: PublicFilterQueriedObservation;
-  }>,
+  request: NativeRepairStartInput,
   context: PublicFilterConsumerContext,
 ) {
   return nativeRepairStarts.get(binding)?.(request, context) ?? null;
@@ -3070,11 +3069,46 @@ export function createNativePublicFilterSourceBinding(
       if (
         !cut.row.coverage_sealed ||
         cut.row.coverage_after !== 4096 ||
-        cut.row.state !== 'adopted' ||
-        cut.row.queried !== joined.queried.snapshot.observation ||
         encode(cut.bootstrap.covered) !== encode(joined.covered)
       )
         throw new BindingError('binding_mismatch');
+      const observation = joined.queried.snapshot.observation;
+      const adopted = cut.row.state === 'adopted' && cut.row.queried === observation;
+      if (request.publicationJob !== undefined) {
+        requirePopulationBaseline(cut.row);
+        const begun = cut.row.state === 'begun' && cut.row.queried === null;
+        if (
+          cut.bootstrap.snapshot !== 'prepared' ||
+          (!adopted && !begun) ||
+          (cut.row.publication_job !== null &&
+            (cut.row.publication_job !== request.publicationJob ||
+              cut.row.publication_observation !== observation ||
+              cut.row.publication_execution !== request.publicationJob))
+        )
+          throw new BindingError('binding_mismatch');
+        // Publication appends its original execution before Source pins and adopts
+        // the tuple. Only the reconciled generation may start from this sealed cut.
+        const consumer = joined.queried.consumer;
+        const retained = await db.query(
+          `/* semantic.native-keyed:1:1 */
+           SELECT 1 FROM search.generation_publication
+           WHERE (partition_no,job)=(0,$1::uuid) AND phase='reconciled' AND fence IS NULL
+             AND consumer=$2::jsonb AND physical_target=$3 AND native_incarnation=$4
+             AND source_home=0 AND binding->>'readDefinition'=$5
+             AND (observation IS NULL OR observation=$6)`,
+          [
+            request.publicationJob,
+            consumer,
+            consumer.physicalTarget,
+            consumer.incarnation,
+            cut.definition.readDefinition,
+            observation,
+          ],
+        );
+        if (retained.rowCount !== 1) throw new BindingError('binding_mismatch');
+      } else if (!adopted) {
+        throw new BindingError('binding_mismatch');
+      }
       // This is an original maintenance locator, not a clean population result.
       // It cannot authorize enumeration or renew an immutable served observation.
       return { status: 'start' as const, start: joined.covered, cost };

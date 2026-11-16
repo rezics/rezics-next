@@ -3063,6 +3063,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
               {
                 bootstrap: work.bootstrap.id,
                 queried: q,
+                publicationJob: input.job,
               },
               context,
             );
