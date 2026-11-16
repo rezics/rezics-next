@@ -1,7 +1,7 @@
 import { afterAll, expect, setDefaultTimeout } from 'bun:test';
 import type { Locator, Page } from 'playwright';
 import { mkdir } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
 import { startNativeWebStack, type NativeKernelRequest, type NativeWebStack } from './stack.ts';
@@ -17,6 +17,13 @@ import {
 setDefaultTimeout(600_000);
 
 const lifecycle = new NativeTestLifecycle('native Realm and Space journey');
+
+const reactStart = Bun.resolveSync('@tanstack/react-start/client-rpc', import.meta.dir);
+const startClientCore = Bun.resolveSync('@tanstack/start-client-core', dirname(reactStart));
+const serovalPath = Bun.resolveSync('seroval', dirname(startClientCore));
+const { fromCrossJSON } = (await import(serovalPath)) as {
+  fromCrossJSON(value: unknown, options: Record<string, never>): unknown;
+};
 
 let stack: NativeWebStack;
 let auth: NativeAuthStack;
@@ -109,23 +116,27 @@ async function waitForKernelRequest(
   throw new Error(`Native request did not arrive within ${timeoutMs}ms`);
 }
 
-async function changeMembershipFromPage(page: Page, button: 'Join' | 'Leave'): Promise<void> {
+async function changeMembershipFromPage(page: Page, button: 'Join' | 'Leave', realmId: string): Promise<void> {
   const requestStart = stack.kernelRequests().length;
-  const operation = page.waitForRequest(
-    (request) => request.method() === 'POST' && new URL(request.url()).pathname.startsWith('/_serverFn/'),
-  );
-  const result = page.waitForResponse(
-    (response) => response.request().method() === 'POST' && new URL(response.url()).pathname.startsWith('/_serverFn/'),
-  );
-  await page.getByRole('button', { name: button, exact: true }).click();
-  const [request, response] = await Promise.all([operation, result]);
+  const origin = new URL(page.url()).origin;
+  const [response] = await Promise.all([
+    page.waitForResponse((response) => {
+      const request = response.request();
+      const url = new URL(request.url());
+      return request.method() === 'POST' && url.origin === origin && url.pathname.startsWith('/_serverFn/');
+    }),
+    page.getByRole('button', { name: button, exact: true }).click(),
+  ]);
+  const request = response.request();
   const body = await response.text();
   expect(response.status(), `${response.url()} returned ${body}`).toBe(200);
+  expect(await response.headerValue('x-tss-serialized')).toBe('true');
   await stack.refreshKernelRequests();
   const nativeRequests = stack.kernelRequests().slice(requestStart);
-  const nativeEvidence = nativeRequests.map(({ method, url, failure }) => ({
+  const nativeEvidence = nativeRequests.map(({ method, url, responseStatus, failure }) => ({
     method,
     url,
+    responseStatus,
     ...(failure ? { failure } : {}),
   }));
   const requestHeaders = await request.allHeaders();
@@ -136,9 +147,22 @@ async function changeMembershipFromPage(page: Page, button: 'Join' | 'Leave'): P
     hasCsrfToken: Boolean(requestHeaders['x-csrf-token']),
   };
   expect(
-    JSON.stringify(JSON.parse(body)),
+    fromCrossJSON(JSON.parse(body), {}),
     `Membership result; server request: ${JSON.stringify(requestEvidence)}; native requests: ${JSON.stringify(nativeEvidence)}`,
-  ).toContain('"outcome":"accepted"');
+  ).toMatchObject({
+    result: {
+      outcome: 'accepted',
+      workflowId: expect.stringMatching(new RegExp(`^community\\.${button.toLowerCase()}:[a-f0-9]{32}$`)),
+    },
+  });
+  expect(nativeRequests).toContainEqual(
+    expect.objectContaining({
+      method: button === 'Join' ? 'POST' : 'DELETE',
+      url: `/v1/realms/${realmId}/membership`,
+      fixtureRequest: false,
+      responseStatus: 202,
+    }),
+  );
 }
 
 type BrowserEvidence = { events: string[]; responseBodies: Promise<void>[] };
@@ -363,7 +387,7 @@ async function runNativeRealmsSpacesJourney() {
   expect(publicJoinReads).toBe(200);
   const membership = alice.getByRole('region', { name: 'Membership' });
   await expectAttribute(membership, 'data-member-state', 'none');
-  await changeMembershipFromPage(alice, 'Join');
+  await changeMembershipFromPage(alice, 'Join', fixture.publicRealm.realmId);
   await waitForRealmMembership(stack, fixture.publicRealm.realmId, 'alice', 'member');
   await alice.reload({ waitUntil: 'domcontentloaded' });
   await hydrated(alice);
@@ -495,7 +519,7 @@ async function runNativeRealmsSpacesJourney() {
   expect(await bob.locator('body').innerText()).not.toContain(fixture.protectedRealm.boardTitle);
   await bob.close();
 
-  await changeMembershipFromPage(alice, 'Leave');
+  await changeMembershipFromPage(alice, 'Leave', fixture.protectedRealm.realmId);
   await waitForRealmMembership(stack, fixture.protectedRealm.realmId, 'alice', 'none');
   const nextProtectedRead = await communityRequest('alice', 'GET', `/v1/boards/${fixture.protectedRealm.boardId}`);
   const missingBoard = await communityRequest('alice', 'GET', '/v1/boards/00000000-0000-4000-8000-000000000000');
@@ -596,7 +620,7 @@ async function runNativeRealmsSpacesJourney() {
   );
   await open(alice, `/spaces/${fixture.publicRealm.address}`);
   await expectAttribute(alice.getByRole('region', { name: 'Membership' }), 'data-member-state', 'none');
-  await changeMembershipFromPage(alice, 'Join');
+  await changeMembershipFromPage(alice, 'Join', fixture.publicRealm.realmId);
   await waitForRealmMembership(stack, fixture.publicRealm.realmId, 'alice', 'member');
   await alice.reload({ waitUntil: 'domcontentloaded' });
   await hydrated(alice);
