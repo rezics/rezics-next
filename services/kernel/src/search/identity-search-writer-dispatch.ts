@@ -13,7 +13,7 @@ import { bindSemanticProducerRoles, identityErasureRoles } from '../semantic/era
 import type { IdentityJobRef, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import { identitySourceConsumerNativeWork } from '../semantic/identity-source-consumer-maintenance.ts';
 import {
-  advanceSearchIdentityReceivingReconciliation,
+  prepareSearchIdentityReceivingReconciliation,
   applySearchIdentityReceivingEffect,
 } from '../semantic/identity-receiving-effects.ts';
 import { serializeIdentityValue as json } from '../semantic/identity-core/encoding.ts';
@@ -107,7 +107,7 @@ export async function readSearchIdentityDispatchBasis(
 
 export function searchIdentityDispatchEffect(
   job: IdentityJobRef,
-  selection: SearchIdentityReceivingSelection,
+  selection: Pick<SearchIdentityReceivingSelection, 'original' | 'effectKey' | 'native'>,
   basis: NonNullable<Awaited<ReturnType<typeof readSearchIdentityDispatchBasis>>>,
 ): IdentityReceivingEffect {
   return {
@@ -172,7 +172,7 @@ export async function advanceSearchIdentityDispatch(
 ) {
   const { pool, index, clock } = configuration;
   const { deadline } = context;
-  const { basis, roles } = await withReadTransaction(
+  const { basis, roles, reconcile } = await withReadTransaction(
     pool,
     async () => {
       const basis = await readSearchIdentityDispatchBasis(
@@ -187,21 +187,22 @@ export async function advanceSearchIdentityDispatch(
         index,
         deadline,
       );
+      if (!basis || basis.hold_id !== request.holdId || basis.source.consumer !== configuration.consumer)
+        throw unavailable('Search writer dispatch request no longer names the accepted hold');
+      const reconcile = basis.state === 'applied' && !basis.released
+        ? await prepareSearchIdentityReceivingReconciliation(pool, searchIdentityDispatchEffect(job, {
+            original: basis.source.original, effectKey: basis.effect_key, native: basis.source.locator,
+          }, basis))
+        : null;
       return {
         basis,
-        roles:
-          basis &&
-          (basis.state === null || basis.state === 'visible') &&
-          basis.hold_id === request.holdId &&
-          basis.source.consumer === configuration.consumer
-            ? await identityErasureRoles(pool, job.jobId)
-            : [],
+        roles: basis.state === null || basis.state === 'visible' ? await identityErasureRoles(pool, job.jobId) : [],
+        reconcile,
       };
     },
     deadline,
   );
-  if (!basis || basis.hold_id !== request.holdId || basis.source.consumer !== configuration.consumer)
-    throw unavailable('Search writer dispatch request no longer names the accepted hold');
+  if (reconcile) return reconcile();
   const { source, action_digest: actionDigest, action_bytes: actionBytes } = basis;
   const selection: SearchIdentityReceivingSelection = {
     job,
@@ -213,8 +214,6 @@ export async function advanceSearchIdentityDispatch(
     disposition: source.disposition,
     native: source.locator,
   };
-  if (basis.state === 'applied' && !basis.released)
-    return advanceSearchIdentityReceivingReconciliation(pool, searchIdentityDispatchEffect(job, selection, basis));
   if (basis.state === 'visible') {
     const effect = searchIdentityDispatchEffect(job, selection, basis);
     const applied = await applySearchIdentityWriterStep(configuration, effect, request.planId, scope, context, roles);

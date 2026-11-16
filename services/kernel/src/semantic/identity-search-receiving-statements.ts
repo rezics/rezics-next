@@ -141,6 +141,12 @@ function sourceStatementCosts(): readonly (readonly [string, Cost])[] {
 
 /** Literal inventory used by production calls, including the private pre-COMMIT capture planner. */
 export const receivingStatements = Object.freeze({
+  pendingJobScope: `SELECT j.scope_digest FROM semantic.identity_epoch_job j
+    JOIN semantic.identity_epoch_native_commit c
+      ON (c.partition_no,c.transaction_id)=(j.partition_no,j.recorded_transaction_id)
+    JOIN core.partition p ON p.partition_no=j.partition_no AND p.write_state='active' AND p.epoch=c.epoch
+    WHERE (j.partition_no,j.job_id,j.epoch)=($1,$2,$3) AND j.state='pending'
+      AND c.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid`,
   inputBasis:
     'SELECT control_partition,terminal,generation,owner_epoch FROM semantic.identity_epoch_input WHERE partition_no=$1 AND job_id=$2 ORDER BY terminal LIMIT 2',
   originalMembership:
@@ -300,6 +306,7 @@ export function searchReceivingDeferredCaptureStatements() {
   );
 }
 const receivingCost: Partial<Record<keyof typeof receivingStatements, Cost>> = {
+  pendingJobScope: [3, 3, 1, 512, 1],
   inputBasis: [2, 1, 1, 512, 1],
   originalMembership: [1, 1, 1, 256, 1],
   libraryReplay: [2, 2, 1, 512, 1],

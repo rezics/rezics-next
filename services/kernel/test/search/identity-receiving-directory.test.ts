@@ -463,6 +463,8 @@ test.each([
   let acceptedNativeHold: unknown;
   let acceptedRecorded = false;
   let accepting = false;
+  let changedBindingProof = false;
+  const admissionTransaction = crypto.randomUUID();
   let dispatchRequestPosition = '1';
   type Progress = {
     revision: string;
@@ -509,7 +511,14 @@ test.each([
   let writing: Step | undefined;
   const committed: Step[] = [];
   type Capture = {
-    store: 'identity_epoch_step' | 'identity_epoch_receiving_effect';
+    store:
+      | 'identity_epoch_step'
+      | 'identity_epoch_receiving_effect'
+      | 'identity_epoch_effect_receipt'
+      | 'identity_epoch_receiving_plan'
+      | 'identity_epoch_receiving_record'
+      | 'identity_epoch_receiving_custody';
+    partition: number;
     transactionId: string;
     armed: boolean;
   };
@@ -520,10 +529,12 @@ test.each([
   let interruptApplicationCapture = false;
   let discardedClients = 0;
   let replaceClient = false;
+  let readOnly = false;
   const driver = {
     async query(input: string | QueryConfig, positional: unknown[] = []) {
       const sql = typeof input === 'string' ? input : input.text;
       const values = typeof input === 'string' ? positional : (input.values ?? []);
+      if (sql.startsWith('BEGIN')) readOnly = sql.endsWith('READ ONLY');
       let rows: readonly unknown[];
       if (sql === partitionRead.sql)
         rows = [
@@ -636,11 +647,15 @@ test.each([
         ]);
         rows = step ? [{}] : [];
       } else if (sql === readSearchIdentityWriterSupportSql) {
-        expect(values.slice(0, 4)).toEqual([writerHome, jobId, '1', committed[0]?.transactionId]);
+        const requestId = values[4] === 'binding' ? dispatchRequest?.transactionId : committed[0]?.transactionId;
+        expect(values.slice(0, 4)).toEqual([writerHome, jobId, '1', requestId]);
         const step = committed.findLast(
           (step) => step.frontier.after[0] === 'search-writer-support' && step.frontier.after[2] === values[4],
         );
-        rows = step ? [{ transaction_id: step.transactionId, frontier: step.frontier, proven: true }] : [];
+        const frontier = changedBindingProof && values[4] === 'binding'
+          ? { ...step!.frontier, after: [...step!.frontier.after.slice(0, 4), '0'.repeat(64)] }
+          : step?.frontier;
+        rows = step ? [{ transaction_id: step.transactionId, frontier, proven: true }] : [];
       } else if (sql === releaseRead.sql || sql === releaseExists.sql) {
         expect(values).toEqual(['0', bundledDigest]);
         rows = [[sql === releaseRead.sql ? JSON.stringify(bundledRelease) : bundledDigest]];
@@ -1327,11 +1342,30 @@ test.each([
           String(applicationPosition),
           committedOperation?.applied_transaction_id,
         ]);
+        if (foreignCapture) {
+          expect(values[0]).toBe(jobHome);
+          captureQueue.push({
+            store: 'identity_epoch_effect_receipt',
+            partition: jobHome,
+            transactionId: admissionTransaction,
+            armed: false,
+          });
+        }
         controlApplied = values;
         rows = [{}];
       } else if (sql === receivingStatements.controlCustody || sql === planSql.control.sql)
         rows = controlCustody ? [controlCustody] : [];
       else if (sql === receivingStatements.insertCustody) {
+        if (foreignCapture) {
+          expect(values[0]).toBe(jobHome);
+          expect(values[3]).toBe(captureNativeTransaction);
+          captureQueue.push({
+            store: 'identity_epoch_receiving_custody',
+            partition: jobHome,
+            transactionId: String(values[3]),
+            armed: false,
+          });
+        }
         writingCustody = {
           epoch: 1,
           position: String(Number(nativePosition()) + 1),
@@ -1403,6 +1437,7 @@ test.each([
           expect(values[3]).toBe(captureNativeTransaction);
           captureQueue.push({
             store: 'identity_epoch_receiving_effect',
+            partition: writerHome,
             transactionId: String(values[3]),
             armed: false,
           });
@@ -1418,7 +1453,13 @@ test.each([
           applied_position: String(applicationPosition),
         };
         rows = [{ operation_id: writingOperation.operation_id }];
-      } else if (sql === receivingJob.sql) rows = [{ state: 'pending', scope_digest: directoryScope }];
+      } else if (sql === receivingJob.sql) {
+        expect(readOnly).toBe(false);
+        rows = [{ state: 'pending', scope_digest: directoryScope }];
+      } else if (sql === receivingStatements.pendingJobScope) {
+        expect(readOnly).toBe(true);
+        rows = [{ scope_digest: directoryScope }];
+      }
       else if (sql === receivingStatements.inputBasis)
         rows = [
           { control_partition: otherControlHome, terminal: selected, generation: leftGeneration, owner_epoch: 1 },
@@ -1428,6 +1469,12 @@ test.each([
       else if (sql === readSearchIdentityPlanComponentSql) {
         lateReleaseCheck = releaseOwnerAdvanced;
         rows = [{}];
+      } else if (foreignCapture && sql === receivingStatements.expectEffect) {
+        expect(values[0]).toBe(jobHome);
+        captureQueue.push({
+          store: 'identity_epoch_effect_receipt', partition: jobHome, transactionId: admissionTransaction, armed: false,
+        });
+        rows = [{}];
       } else if (
         sql === receivingStatements.originalMembership ||
         sql === receivingStatements.retainGate ||
@@ -1436,6 +1483,13 @@ test.each([
       )
         rows = [{}];
       else if (sql === receivingStatements.insertPlan) {
+        if (foreignCapture) {
+          expect(values[0]).toBe(jobHome);
+          expect(values[6]).toBe(captureNativeTransaction);
+          captureQueue.push({
+            store: 'identity_epoch_receiving_plan', partition: jobHome, transactionId: String(values[6]), armed: false,
+          });
+        }
         commonPlan = {
           binding: JSON.parse(String(values[4])),
           binding_digest: String(values[5]),
@@ -1469,6 +1523,16 @@ test.each([
         };
         rows = [{ hold_id: hold.hold_id }];
       } else if (sql === receivingStatements.insertAccepted) {
+        if (foreignCapture) {
+          expect(values[0]).toBe(writerHome);
+          expect(values[10]).toBe(captureNativeTransaction);
+          captureQueue.push({
+            store: 'identity_epoch_receiving_record',
+            partition: writerHome,
+            transactionId: String(values[10]),
+            armed: false,
+          });
+        }
         acceptedNativeHold = JSON.parse(String(values[11]));
         expect(JSON.parse(String(values[11])).holdId).toBe(hold?.hold_id);
         acceptedRecorded = true;
@@ -1531,26 +1595,31 @@ test.each([
         };
         if (foreignCapture && values[0] === writerHome) {
           expect(captureNativeTransaction).toBe(writing.transactionId);
-          captureQueue.push({ store: 'identity_epoch_step', transactionId: writing.transactionId, armed: false });
+          captureQueue.push({
+            store: 'identity_epoch_step',
+            partition: writerHome,
+            transactionId: writing.transactionId,
+            armed: false,
+          });
         }
         rows = [{ transaction_id: writing.transactionId }];
       } else if (foreignCapture && sql.startsWith("SELECT set_config('semantic.erasure_native_transaction'")) {
         captureNativeTransaction = String(values[0]);
         rows = [];
       } else if (foreignCapture && sql.startsWith('INSERT INTO semantic.erasure_source_role')) {
-        if (values[0] === writerHome) {
+        if (values[0] === writerHome || values[0] === jobHome) {
           expect(values.slice(1)).toEqual([captureNativeTransaction, [actorId], ['actor']]);
           captureRole = { account_id: actorId!, role: 'actor' };
         }
         rows = [];
       } else if (captureQueue.length && sql === searchReceivingCaptureStatements.next) {
-        // Both immediate triggers queue the receiving command's native transaction.
+        // The expected effect uses the admission origin. Other records use their native transactions.
         const cursor = Number(values[0]);
         const event = captureQueue[cursor];
         rows = event
           ? [{
               ordinal: String(cursor + 1),
-              partition_no: writerHome,
+              partition_no: event.partition,
               store: event.store,
               record_key: String(cursor + 1),
               source_transaction_id: event.transactionId,
@@ -1559,26 +1628,32 @@ test.each([
           : [];
       } else if (captureQueue.length && sql === searchReceivingCaptureStatements.copyFirst) {
         const cursor = captureQueue.findIndex((event) => !event.armed);
-        expect(values).toEqual([writerHome, captureQueue[cursor]?.store, String(cursor + 1), captureNativeTransaction]);
+        const event = captureQueue[cursor]!;
+        expect(values.slice(0, 3)).toEqual([event.partition, event.store, String(cursor + 1)]);
+        expect([event.transactionId, captureNativeTransaction]).toContain(values[3]);
         rows = [];
       } else if (captureQueue.length && sql === searchReceivingCaptureStatements.sourceFirst) {
-        expect(values).toEqual([writerHome, captureNativeTransaction]);
-        rows = captureRole ? [captureRole] : [];
+        const event = captureQueue.find((event) => !event.armed)!;
+        expect(values[0]).toBe(event.partition);
+        expect([event.transactionId, captureNativeTransaction]).toContain(values[1]);
+        rows = captureRole && values[1] === captureNativeTransaction ? [captureRole] : [];
       } else if (captureQueue.length && sql === searchReceivingCaptureStatements.sourceNext) {
-        expect(values).toEqual([writerHome, captureNativeTransaction, actorId, 'actor']);
+        expect(values.slice(1)).toEqual([captureNativeTransaction, actorId, 'actor']);
         rows = [];
       } else if (captureQueue.length && sql === searchReceivingCaptureStatements.basis) {
-        expect(values).toEqual([writerHome, captureNativeTransaction]);
-        rows = [];
+        const event = captureQueue.find((event) => !event.armed)!;
+        expect(values[0]).toBe(event.partition);
+        expect([event.transactionId, captureNativeTransaction]).toContain(values[1]);
+        rows = values[1] === admissionTransaction ? [{ actor: true, delegated: false, requested_bytes: 0 }] : [];
       } else if (captureQueue.length && sql === searchReceivingCaptureStatements.arm) {
         const cursor = captureQueue.findIndex((event) => !event.armed);
         const event = captureQueue[cursor]!;
         const ordinal = String(cursor + 1);
-        expect(values.slice(0, 9)).toEqual([
-          ordinal, event.transactionId, captureNativeTransaction, 0, 1, null, null, null, null,
-        ]);
+        const admission = event.transactionId === admissionTransaction;
+        expect(values.slice(0, 5)).toEqual([ordinal, event.transactionId, captureNativeTransaction, 0, 1]);
+        expect(values.slice(5, 9)).toEqual([admission ? 2 : null, admission ? 0 : null, null, null]);
         const digest = createHash('sha256')
-          .update(`${'0'.repeat(64)}|source|${event.transactionId}|${actorId}|actor`)
+          .update(`${'0'.repeat(64)}|source|${captureNativeTransaction}|${actorId}|actor`)
           .digest('hex');
         expect(values.slice(9)).toEqual(['0'.repeat(64), digest]);
         if (interruptApplicationCapture && captureQueue.length === 2 && cursor === 1)
@@ -1998,6 +2073,18 @@ test.each([
           if (!crossHome) return;
           terminalBuildCurrent = true;
         }
+        const checked = await prepare(pool, acceptance.receipt);
+        expect(checked).toEqual({ state: 'progress', transactionId: committed.at(-1)?.transactionId });
+        expect(committed.at(-1)?.frontier.after.slice(2, 4)).toEqual(['binding', retainedPlan?.source.locator.planId]);
+        expect(commonPlan).toBeUndefined();
+        expect(hold).toBeUndefined();
+        if (foreignCapture) {
+          changedBindingProof = true;
+          await expect(prepare(pool, acceptance.receipt)).rejects.toMatchObject({ code: 'identity_effect_stale' });
+          changedBindingProof = false;
+          expect(commonPlan).toBeUndefined();
+          expect(hold).toBeUndefined();
+        }
         expect(await prepare(pool, acceptance.receipt)).toEqual({
           state: 'progress',
           transactionId: commonPlan?.transaction_id,
@@ -2216,6 +2303,13 @@ test.each([
             );
             expect(capturedTransactions('identity_epoch_step')).toEqual(foreignSteps.map(({ transactionId }) => transactionId));
             expect(capturedTransactions('identity_epoch_receiving_effect')).toEqual([committedOperation?.applied_transaction_id]);
+            expect(capturedTransactions('identity_epoch_effect_receipt')).toEqual([
+              admissionTransaction,
+              admissionTransaction,
+            ]);
+            expect(capturedTransactions('identity_epoch_receiving_plan')).toEqual([commonPlan?.transaction_id]);
+            expect(capturedTransactions('identity_epoch_receiving_record')).toEqual([hold?.accepted_transaction_id]);
+            expect(capturedTransactions('identity_epoch_receiving_custody')).toEqual([controlCustody?.transaction_id]);
           }
           if (nativePermission) {
             expect(permissionTimes).toBeGreaterThan(0);
