@@ -31,6 +31,7 @@ import {
   firstPublicRow,
   licensedVndbArchive,
   mountedVisitsForRow,
+  mountedWalkRow,
   operatorResponseEvidence,
   retireWalkJournals,
   selectPublished,
@@ -84,6 +85,40 @@ test('mounted result rows retain only completed visits for their sources', () =>
   expect(mountedVisitsForRow('I05', visits).map(({ sourceKey }) => sourceKey)).toEqual(['10380', '51', '233', '233']);
   expect(mountedVisitsForRow('I11', visits).map(({ sourceKey }) => sourceKey)).toEqual(['499', '26']);
   expect(mountedVisitsForRow('I12', visits).map(({ sourceKey }) => sourceKey)).toEqual(['233', '2815', '5329', '10862', '233']);
+});
+
+test('mounted verdicts require every visit independently of later shared failures', () => {
+  const native: WalkRowResult = {
+    id: 'I11',
+    path: firstPublicRow('I11').path,
+    result: 'passing',
+    elapsedMs: 5,
+    cause: null,
+    evidence: { series: 'native-series' },
+  };
+  const visits = ['phone', 'desktop'].flatMap((viewport) =>
+    journeyTargets.map((target) => ({ ...target, viewport, path: `/en/${target.sourceKey}`, targets: [] })),
+  );
+  const incomplete = visits.filter((visit) => !(visit.sourceKey === '26' && visit.viewport === 'desktop'));
+  expect(mountedWalkRow(native, incomplete)).toMatchObject({
+    result: 'failing',
+    evidence: { native: 'passing', browser: 'pending' },
+  });
+  expect(mountedWalkRow(native, visits, 20, 'later browser failure')).toMatchObject({
+    result: 'passing',
+    cause: null,
+    elapsedMs: 25,
+    evidence: { browser: 'passing' },
+  });
+  expect(mountedWalkRow(native, incomplete, 20, 'mount failed')).toMatchObject({
+    result: 'failing',
+    cause: 'mount failed',
+    evidence: { browser: 'failing' },
+  });
+  expect(mountedWalkRow({ ...native, result: 'failing', cause: 'native read failed' }, visits)).toMatchObject({
+    result: 'failing',
+    cause: 'native read failed',
+  });
 });
 
 test('a missing or duplicated target stops the journey by its exact source key', () => {
@@ -712,4 +747,19 @@ test('a settled infrastructure termination seals only its active row and keeps i
   expect(() => sealInterruptedWalkInventory(run, rows.slice(1), active, terminal)).toThrow(
     'No returned walk observation for I01',
   );
+
+  const book = inventory.rows.find((row) => row.id === 'I11')!;
+  const pending = mountedWalkRow({ ...book, result: 'passing', cause: null, evidence: { series: 'observed' } }, []);
+  const interrupted = sealInterruptedWalkInventory(
+    run,
+    inventory.rows.map((row) => (row.id === 'I11' ? pending : row)),
+    { ...active, id: 'I11' },
+    terminal,
+  );
+  expect(interrupted.passing).toBe(0);
+  expect(interrupted.rows.find((row) => row.id === 'I11')).toMatchObject({
+    result: 'failing',
+    elapsedMs: null,
+    evidence: { series: 'observed', native: 'passing', browser: 'pending', interrupted: true },
+  });
 });
