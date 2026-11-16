@@ -43,6 +43,7 @@ import {
   retainPublicFilterRepairVerification,
   readPublicFilterRepairHomeSeal,
   advancePublicFilterRepairAckFrontier,
+  PUBLIC_FILTER_REPAIR_ACK_BATCH_LIMIT,
 } from './public-filter-repair-chain.ts';
 import repairState from './public-filter-source-binding-repair-state.sql';
 import repairRead from './public-filter-source-binding-repair-read.sql';
@@ -98,19 +99,21 @@ type PublicFilterRepairBaseline = Readonly<{
   bootstrap: string;
   registration: string;
   registrationPartition: number;
-  home: number;
-  epoch: number;
-  receipt: string;
-  sourcePosition: string;
-  enqueue: string;
-  revision: string | null;
-  claimRevision: string | null;
   observation: string;
   execution: string;
   settlement: string;
   consumer: string;
   physicalTarget: string;
   incarnation: string;
+}>;
+type PublicFilterRepairHome = Readonly<{
+  home: number;
+  epoch: number;
+  receipt: string;
+  source_position: string;
+  enqueue: string;
+  revision: string | null;
+  claim_revision: string | null;
 }>;
 
 /** ACK only this original baseline's complete prefix. Subsequent Source positions
@@ -120,9 +123,16 @@ type PublicFilterRepairBaseline = Readonly<{
 async function acknowledgePublicFilterRepairBaseline(
   pool: Pool,
   baseline: PublicFilterRepairBaseline,
+  homes: readonly PublicFilterRepairHome[],
   deadline: number,
-): Promise<boolean> {
+): Promise<void> {
   requireAccessDeadline(deadline);
+  if (
+    !homes.length ||
+    homes.length > PUBLIC_FILTER_REPAIR_ACK_BATCH_LIMIT ||
+    homes.some((home, index) => home.home !== homes[0]!.home + index)
+  )
+    throw new TypeError('Receiver ACK requires a bounded contiguous home range');
   return withConnection(pool, async (client) => {
     await client.query('BEGIN');
     try {
@@ -170,89 +180,52 @@ async function acknowledgePublicFilterRepairBaseline(
         registration.physical_target !== baseline.physicalTarget
       )
         throw new CommandUnavailableError('fenced', baseline.registrationPartition);
-      const summary = (
-        await client.query<{
-          source_epoch: number;
-          baseline_bootstrap: string;
-          acknowledged_position: string;
-          acknowledged_native_enqueue: string;
-        }>(
-          `/* semantic.native-keyed:1:3 */
-         SELECT source_epoch,baseline_bootstrap::text,acknowledged_position::text,
-           acknowledged_native_enqueue::text
-         FROM search.public_filter_coverage_home
-         WHERE (partition_no,registration,source_home)=($1,$2,$3) FOR UPDATE`,
-          [baseline.registrationPartition, baseline.registration, baseline.home],
-        )
-      ).rows[0];
-      const original = (
-        await client.query<{
-          receipt: string;
-          source_epoch: number;
-          source_position: string;
-          native_enqueue_revision: string;
-          native_revision: string | null;
-          native_claim_revision: string | null;
-        }>(
-          `/* semantic.native-keyed:1:4 */
-         SELECT receipt,source_epoch,source_position::text,native_enqueue_revision::text,
-           native_revision::text,native_claim_revision::text
-         FROM search.public_filter_coverage_baseline
-         WHERE (partition_no,registration,bootstrap,source_home)=($1,$2,$3,$4)`,
-          [baseline.registrationPartition, baseline.registration, baseline.bootstrap, baseline.home],
-        )
-      ).rows[0];
-      if (
-        !summary ||
-        !original ||
-        summary.source_epoch !== baseline.epoch ||
-        summary.baseline_bootstrap !== baseline.bootstrap ||
-        original.receipt !== baseline.receipt ||
-        original.source_epoch !== baseline.epoch ||
-        original.source_position !== baseline.sourcePosition ||
-        original.native_enqueue_revision !== baseline.enqueue ||
-        original.native_revision !== baseline.revision ||
-        original.native_claim_revision !== baseline.claimRevision ||
-        BigInt(summary.acknowledged_position) > BigInt(baseline.sourcePosition) ||
-        BigInt(summary.acknowledged_native_enqueue) > BigInt(baseline.enqueue)
-      )
-        throw new CommandUnavailableError('contention', baseline.registrationPartition);
-      // The verified full native baseline plus its original creation/change
-      // successors covers every obligation through these exact positions. This
-      // is not max(delivered), a counter tick, or an event-delivery receipt.
+      // Lock and confirm the whole original receiver prefix before changing it.
+      // Later obligations remain behind their actual native revision and position.
       const acknowledged = await client.query(
-        `/* semantic.native-keyed:1:3 */
-         UPDATE search.public_filter_coverage_home SET
-           acknowledged_position=$4::bigint,acknowledged_native_enqueue=$5::bigint,
-           acknowledged_native_revision=$6::bigint,acknowledged_native_claim_revision=$7::bigint,
-           acknowledged_baseline=$8::uuid,
-           acknowledged_observation=$9,acknowledged_execution=$10,acknowledged_settlement=$11,
-           behind=(relevant_position>$4::bigint OR native_enqueue_revision>$5::bigint
-             OR native_revision IS DISTINCT FROM $6::bigint
-             OR native_claim_revision IS DISTINCT FROM $7::bigint)
-         WHERE (partition_no,registration,source_home)=($1,$2,$3)
-         RETURNING source_epoch,acknowledged_position::text,acknowledged_native_enqueue::text,
-           acknowledged_native_revision::text,acknowledged_native_claim_revision::text,
-           acknowledged_baseline::text,acknowledged_observation,acknowledged_execution,
-           acknowledged_settlement,behind`,
+        `/* semantic.native-keyed:${3 * homes.length}:${10 * homes.length}:${homes.length} */
+         WITH eligible AS MATERIALIZED (
+           SELECT x.* FROM jsonb_to_recordset($3::jsonb) AS x(
+             home integer,epoch integer,receipt text,source_position bigint,
+             enqueue bigint,revision bigint,claim_revision bigint)
+           JOIN search.public_filter_coverage_home h
+             ON (h.partition_no,h.registration,h.source_home)=($1,$2,x.home)
+           JOIN search.public_filter_coverage_baseline b
+             ON (b.partition_no,b.registration,b.bootstrap,b.source_home)=($1,$2,$4::uuid,x.home)
+           WHERE h.source_epoch=x.epoch AND h.baseline_bootstrap=$4
+             AND b.receipt=x.receipt AND b.source_epoch=x.epoch
+             AND b.source_position=x.source_position AND b.native_enqueue_revision=x.enqueue
+             AND b.native_revision IS NOT DISTINCT FROM x.revision
+             AND b.native_claim_revision IS NOT DISTINCT FROM x.claim_revision
+             AND h.acknowledged_position<=x.source_position AND h.acknowledged_native_enqueue<=x.enqueue
+           ORDER BY h.source_home FOR UPDATE OF h
+         )
+         UPDATE search.public_filter_coverage_home h SET
+           acknowledged_position=x.source_position,acknowledged_native_enqueue=x.enqueue,
+           acknowledged_native_revision=x.revision,acknowledged_native_claim_revision=x.claim_revision,
+           acknowledged_baseline=$4::uuid,
+           acknowledged_observation=$5,acknowledged_execution=$6,acknowledged_settlement=$7,
+           behind=(h.relevant_position>x.source_position OR h.native_enqueue_revision>x.enqueue
+             OR h.native_revision IS DISTINCT FROM x.revision
+             OR h.native_claim_revision IS DISTINCT FROM x.claim_revision)
+         FROM eligible x
+         WHERE (h.partition_no,h.registration,h.source_home)=($1,$2,x.home)
+           AND (SELECT count(*) FROM eligible)=jsonb_array_length($3::jsonb)
+         RETURNING h.source_home`,
         [
           baseline.registrationPartition,
           baseline.registration,
-          baseline.home,
-          baseline.sourcePosition,
-          baseline.enqueue,
-          baseline.revision,
-          baseline.claimRevision,
+          JSON.stringify(homes),
           baseline.bootstrap,
           baseline.observation,
           baseline.execution,
           baseline.settlement,
         ],
       );
-      if (acknowledged.rowCount !== 1) throw new CommandUnavailableError('contention', baseline.registrationPartition);
+      if (acknowledged.rowCount !== homes.length)
+        throw new CommandUnavailableError('contention', baseline.registrationPartition);
       requireAccessDeadline(deadline);
       await client.query('COMMIT');
-      return true;
     } catch (error) {
       try {
         await client.query('ROLLBACK');
@@ -2304,11 +2277,30 @@ export function createNativePublicFilterSourceBinding(
         throw new BindingError('binding_mismatch');
       const predecessor = seal.after === 4096 ? terminal.predecessor : seal.predecessor;
       const original = seal.after === 4096 ? null : decode<RepairRecord>(seal.state);
-      let retainedWindow: PublicFilterCreationWindow | null = null;
+      const windows: PublicFilterCreationWindow[] = [];
+      const batched = publicationCost !== undefined && original?.windowBatch !== undefined;
+      // After the first authority read the remaining ACK work is one more
+      // authority read (9 keys/home), receiver ACK (10/home + 7), and the
+      // terminal prefix update with its trigger (9/home + 7).
+      const ackKeys = (homes: number) => 14 + 28 * homes;
+      const ackBytes = (homes: number) => 48 * 1024 + 8 * 1024 * homes;
       if (original?.windowBatch) {
         if (original.input.phase !== 'window') throw new BindingError('binding_mismatch');
-        retainedWindow = creationWindowFromBatch(original.windowBatch, seal.home);
-        if (!retainedWindow) throw new BindingError('owner_unavailable');
+        const batch = original.windowBatch;
+        const available = preparationInputLimit - (publicationCost?.inputKeys ?? 0) - cost.inputKeys;
+        const count = batched
+          ? Math.min(
+              PUBLIC_FILTER_REPAIR_ACK_BATCH_LIMIT,
+              batch.from + batch.count - seal.home,
+              Math.max(1, Math.floor((available - ackKeys(1)) / 9)),
+            )
+          : 1;
+        if (count < 1) throw new BindingError('owner_unavailable');
+        for (let home = seal.home; home < seal.home + count; home++) {
+          const window = creationWindowFromBatch(batch, home);
+          if (!window) throw new BindingError('owner_unavailable');
+          windows.push(window);
+        }
       } else if (original) {
         if (
           original.input.phase !== 'bridge' ||
@@ -2319,22 +2311,10 @@ export function createNativePublicFilterSourceBinding(
           original.next.phase !== 'window'
         )
           throw new BindingError('binding_mismatch');
-        retainedWindow = original.input.bridge;
+        windows.push(original.input.bridge);
       }
       const verify = async () => {
-        if (original?.windowBatch && retainedWindow) {
-          cost.rows += 2;
-          cost.dependencyPoints += 2;
-          cost.inputKeys++;
-          const current = await readPublicFilterCreationWindow(
-            db,
-            { bootstrap: nativeId(input.bootstrap), partition: seal.home },
-            { deadline },
-            retainedWindow,
-          );
-          if (!isDeepStrictEqual(current, retainedWindow)) throw new BindingError('configuration_changed');
-          return;
-        }
+        if (original?.windowBatch) return; // The authority read checks every retained empty window.
         const verified = await bootstrapBinding.readRepairStep(
           {
             bootstrap: input.bootstrap,
@@ -2353,62 +2333,76 @@ export function createNativePublicFilterSourceBinding(
           throw new BindingError('owner_unavailable');
       };
       await verify();
-      const authority = async () => {
-        if (!original) return null;
-        if (!retainedWindow) throw new BindingError('binding_mismatch');
+      const authority = async (range: readonly PublicFilterCreationWindow[]) => {
+        if (!range.length) return [];
         // Reserve each of the six native relation points once, independently
         // of whether the join succeeds or returns no current authority.
-        const row = (
-          await db.query<{
+        const { rows } = await db.query<
+          PublicFilterRepairHome & {
             registration: string;
             registration_partition: number;
-            owner_epoch: number;
-            receipt: string;
-            source_position: string;
-            native_enqueue_revision: string;
-            native_revision: string | null;
-            native_claim_revision: string | null;
             current_position: string;
             current_creation: string;
             current_revision: string;
             current_claim: string;
-          }>(
-            `/* semantic.native-keyed:6:9 */
-             SELECT e.registration,e.registration_partition,e.owner_epoch,e.receipt,e.source_position::text,
-               e.native_enqueue_revision::text,e.native_revision::text,e.native_claim_revision::text,
+          }
+        >(
+          `/* semantic.native-keyed:${6 * range.length}:${9 * range.length} */
+             SELECT e.partition_no AS home,e.registration,e.registration_partition,e.owner_epoch AS epoch,
+               e.receipt,e.source_position::text,e.native_enqueue_revision::text AS enqueue,
+               e.native_revision::text AS revision,e.native_claim_revision::text AS claim_revision,
                h.position::text AS current_position,p.position::text AS current_creation,
                a.revision::text AS current_revision,a.claim_revision::text AS current_claim,
                e.complete,p.epoch,p.write_state,h.owner_epoch AS source_epoch,
                c.consumer,c.position::text AS checkpoint_position,c.epoch AS checkpoint_epoch,
                b.state,b.coverage_sealed,b.coverage_after
-             FROM semantic.public_filter_home_enrollment e
+             FROM jsonb_to_recordset($1::jsonb) AS x(home integer,epoch integer,receipt text,base bigint,through bigint)
+             JOIN semantic.public_filter_home_enrollment e ON (e.partition_no,e.bootstrap)=(x.home,$2)
              JOIN core.partition p ON p.partition_no=e.partition_no
              JOIN semantic.public_filter_privacy_head h ON h.partition_no=e.partition_no
              JOIN access.account_discovery_population a ON a.partition_no=e.partition_no
              JOIN core.consumer_checkpoint c ON (c.partition_no,c.consumer)=(e.partition_no,e.creation_consumer)
              JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap)=(0,e.bootstrap)
-             WHERE (e.partition_no,e.bootstrap)=($1,$2) AND e.complete AND e.receipt=$3
-               AND e.read_definition=$4 AND p.write_state='active' AND p.epoch=e.owner_epoch
+             WHERE e.complete AND e.receipt=x.receipt AND e.creation_position=x.base
+               AND e.creation_consumer=$3 AND p.position>=x.through
+               AND e.read_definition=$4 AND p.write_state='active' AND p.epoch=e.owner_epoch AND p.epoch=x.epoch
                AND h.owner_epoch=p.epoch AND h.position>=e.source_position
                AND c.position<=e.creation_position AND (c.epoch IS NULL OR c.epoch=p.epoch)
-               AND b.state='adopted' AND b.coverage_sealed AND b.coverage_after=4096`,
-            [seal.home, nativeId(input.bootstrap), retainedWindow.receipt, joined.definition.readDefinition],
-          )
-        ).rows[0];
-        if (
-          !row ||
-          row.owner_epoch !== retainedWindow.epoch ||
-          row.receipt !== retainedWindow.receipt ||
-          BigInt(row.current_creation) < retainedWindow.through
-        )
-          throw new BindingError('configuration_changed');
-        return row;
+               AND b.state='adopted' AND b.coverage_sealed AND b.coverage_after=4096
+             ORDER BY e.partition_no`,
+          [
+            JSON.stringify(
+              range.map(({ partition, epoch, receipt, base, through }) => ({
+                home: partition,
+                epoch,
+                receipt,
+                base: String(base),
+                through: String(through),
+              })),
+            ),
+            chain.bootstrap,
+            publicFilterCreationConsumer(chain.bootstrap),
+            joined.definition.readDefinition,
+          ],
+        );
+        return rows;
       };
-      const before = await authority();
+      const before = await authority(windows);
+      const gap = windows.findIndex((window, index) => before[index]?.home !== window.partition);
+      let count = gap === -1 ? windows.length : gap;
+      if (windows.length > 0 && count === 0) throw new BindingError('configuration_changed');
+      if (batched) cost.candidates += before.length;
       const readSettlement = () =>
         ports.search.readRepairSettlement(pool, { queried: input.queried, execution: input.execution }, { deadline });
       const spent = publicationCost ? { ...publicationCost } : undefined;
-      if (spent) addCost(spent, cost);
+      if (spent) {
+        addCost(spent, cost);
+        if (batched) {
+          // Leave room for at least one fully measured ACK after Search's proof.
+          spent.inputKeys += ackKeys(1);
+          spent.bytes += ackBytes(1);
+        }
+      }
       const settled = await (spent ? ports.search.withRepairAllowance(spent, readSettlement) : readSettlement());
       addCost(cost, settled.cost);
       if (settled.status !== 'settled') return { ...settled, cost };
@@ -2424,20 +2418,37 @@ export function createNativePublicFilterSourceBinding(
       // Search performs staged foreign owner reads. Re-read the original Source window after it
       // releases them; the native settlement locator alone cannot preserve Source currency.
       await verify();
-      const after = await authority();
-      if (!isDeepStrictEqual(before, after)) throw new BindingError('configuration_changed');
-      if (after) {
+      if (batched && publicationCost) {
+        const remaining = preparationInputLimit - publicationCost.inputKeys - cost.inputKeys;
+        const bytes = 4 * 1024 * 1024 - publicationCost.bytes - cost.bytes;
+        count = Math.min(count, Math.floor((remaining - 14) / 28), Math.floor((bytes - ackBytes(0)) / (8 * 1024)));
+        if (count < 1) throw new BindingError('owner_unavailable');
+      }
+      const range = windows.slice(0, count);
+      const current = await authority(range);
+      const changed = range.findIndex((_, index) => !isDeepStrictEqual(before[index], current[index]));
+      const after = changed === -1 ? current : current.slice(0, changed);
+      if (count > 0 && after.length === 0) throw new BindingError('configuration_changed');
+      if (after.length) {
+        if (
+          batched &&
+          publicationCost &&
+          (publicationCost.inputKeys + cost.inputKeys + 14 + 19 * after.length > preparationInputLimit ||
+            publicationCost.bytes + cost.bytes + 32 * 1024 + 4 * 1024 * after.length > 4 * 1024 * 1024)
+        )
+          throw new BindingError('owner_unavailable');
+        const first = after[0]!;
+        if (
+          after.some(
+            (home) =>
+              home.registration !== first.registration || home.registration_partition !== first.registration_partition,
+          )
+        )
+          throw new BindingError('binding_mismatch');
         const baseline: PublicFilterRepairBaseline = {
           bootstrap: nativeId(input.bootstrap),
-          registration: after.registration,
-          registrationPartition: after.registration_partition,
-          home: seal.home,
-          epoch: after.owner_epoch,
-          receipt: after.receipt,
-          sourcePosition: after.source_position,
-          enqueue: after.native_enqueue_revision,
-          revision: after.native_revision,
-          claimRevision: after.native_claim_revision,
+          registration: first.registration,
+          registrationPartition: first.registration_partition,
           observation: settled.queried.snapshot.observation,
           execution: settled.execution.id,
           settlement: settled.settlement.id,
@@ -2445,13 +2456,26 @@ export function createNativePublicFilterSourceBinding(
           physicalTarget: settled.queried.consumer.physicalTarget,
           incarnation: settled.queried.consumer.incarnation,
         };
-        await acknowledgePublicFilterRepairBaseline(db, baseline, deadline);
+        await acknowledgePublicFilterRepairBaseline(
+          db,
+          baseline,
+          after.map(({ home, epoch, receipt, source_position, enqueue, revision, claim_revision }) => ({
+            home,
+            epoch,
+            receipt,
+            source_position,
+            enqueue,
+            revision,
+            claim_revision,
+          })),
+          deadline,
+        );
         // The Source frontier is adopted only after the actual registration
         // ACK commit. A crash before this CAS repeats that same prefix safely.
         cost.frontierWrites++;
-        if (!(await advancePublicFilterRepairAckFrontier(db, chain, seal.terminal, seal.home)))
+        if (!(await advancePublicFilterRepairAckFrontier(db, chain, seal.terminal, seal.home, after.length)))
           throw new BindingError('owner_unavailable');
-        if (seal.home !== 4095) return { ...fail('owner_unavailable', cost), advanced: true as const };
+        if (seal.home + after.length < 4096) return { ...fail('owner_unavailable', cost), advanced: true as const };
       }
       return {
         ...joined,
