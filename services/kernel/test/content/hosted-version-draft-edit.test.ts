@@ -14,6 +14,7 @@ import {
   type HostedVersionDraftMoveSelection,
 } from '../../src/content/hosted-version-draft-edit-model.ts';
 import { RevisionPreconditionError } from '../../src/content/commands.ts';
+import { newId } from '../../src/route/route.ts';
 import { createHostedVersionDraftMoveNativeAdapter } from '../../src/content/hosted-version-draft-native.ts';
 import type { HostedVersionDraftMoveSelectedOccurrence } from '../../src/content/hosted-version-draft-native-model.ts';
 import draftHeadSql from '../../src/content/hosted-version-draft-native-read-head.sql';
@@ -74,12 +75,20 @@ function makeIndexes(
   snapshots: Readonly<{ siblings: Snapshot; preorder: Snapshot; chapters: Snapshot }>,
   batches?: { index: 'siblings' | 'preorder' | 'chapters'; ids: readonly string[] }[],
 ) {
+  let snapshotReadPending = false;
   const access = (index: 'siblings' | 'preorder' | 'chapters') =>
     createVersionedOutlineSequenceReadWriteSet<string>(
       async (id) => snapshots[index].get(id) ?? null,
       async (ids) => {
-        batches?.push({ index, ids: [...ids] });
-        return new Map(ids.map((id) => [id, snapshots[index].get(id) ?? null]));
+        if (snapshotReadPending) throw new Error('Hosted draft move overlapped reads on one transaction');
+        snapshotReadPending = true;
+        try {
+          await Promise.resolve();
+          batches?.push({ index, ids: [...ids] });
+          return new Map(ids.map((id) => [id, snapshots[index].get(id) ?? null]));
+        } finally {
+          snapshotReadPending = false;
+        }
       },
     );
   const accesses = {
@@ -479,7 +488,9 @@ test('promotes a large subtree to the root, reorders root siblings, and skips an
 });
 
 test('binds staged move roots to one adapter commit, skips adjacent no-ops, and rejects a lost head CAS', async () => {
-  const revisionId = 'draft-v7';
+  const catalogueId = newId(1);
+  const revisionId = newId(1);
+  const generationId = newId(1);
   const input: HostedVersionDraftMoveInput = {
     expectedRevisionId: revisionId,
     occurrenceId: 'source',
@@ -557,11 +568,29 @@ test('binds staged move roots to one adapter commit, skips adjacent no-ops, and 
       ['parent-b', siblingB.rootId],
     ]),
   };
-  const tx = {} as CommandTransaction;
+  const tx = {
+    async query(sql: string, args: readonly unknown[]) {
+      expect(sql).toContain('FROM content.hosted_structure_revision');
+      expect(args).toEqual([1, catalogueId, revisionId]);
+      return {
+        rows: [
+          {
+            revision_id: revisionId,
+            revision_kind: 'structure',
+            source_revision_id: null,
+            descriptor_revision_id: revisionId,
+            generation_id: generationId,
+            generation_kind: 'draft',
+            sequence: '7',
+          },
+        ],
+      };
+    },
+  } as unknown as CommandTransaction;
   const write = {
-    catalogueId: 'catalogue-1',
+    catalogueId,
     input,
-    revisionId: 'draft-v8',
+    revisionId: newId(1),
     transactionId: 'transaction-1',
     recordedAt: '2026-11-13T00:00:00.000Z',
   };
@@ -585,7 +614,10 @@ test('binds staged move roots to one adapter commit, skips adjacent no-ops, and 
           committed.snapshot.indexes.preorder.nodeWrites.size,
           committed.snapshot.indexes.chapters.nodeWrites.size,
         ];
-        expect(counts.every((count) => count > 0)).toBe(true);
+        expect(counts[0]).toBeGreaterThan(0);
+        expect(counts[1]).toBeGreaterThan(0);
+        expect(counts[2]).toBe(0);
+        expect(committed.plan.chapterRootId).toBe(chapters.rootId);
         stagedWrites.push(...counts);
         return commitResult;
       },
@@ -666,7 +698,7 @@ function nativePreflightFixture() {
   );
   const facts = new Map<string, HostedVersionDraftMoveSelectedOccurrence>();
   for (const [occurrenceId, parentOccurrenceId, subtreeSize, chapterCount, subtreeHeight] of [
-    [outer, null, 6007n, 3001n, 3],
+    [outer, null, 6006n, 3001n, 3],
     [parentA, outer, 6002n, 3000n, 2],
     [source, parentA, 6001n, 3000n, 1],
     [parentB, outer, 3n, 1n, 1],
@@ -696,8 +728,8 @@ function nativePreflightFixture() {
     sequence: '7',
     preorder_root_id: preorder.rootId,
     chapter_root_id: chapters.rootId,
-    placement_count: '6008',
-    chapter_count: '3002',
+    placement_count: String(preorder.nodes.size),
+    chapter_count: String(chapters.nodes.size),
   };
   const descriptor = {
     kind: 'ordered',
@@ -715,7 +747,7 @@ function nativePreflightFixture() {
     { parent_id: parentB, root_node_id: null, sequence: '7' },
     { parent_id: empty, root_node_id: null, sequence: '6' },
   ];
-  const tx = {
+  const backend = {
     async query(sql: string, args: readonly unknown[]) {
       if (sql === draftHeadSql.sql) return { rows: [{ head_revision_id: revisionId }] };
       if (sql === snapshotSql.sql || sql === versionHeadSql.sql) return { rows: [snapshotRow] };
@@ -764,6 +796,18 @@ function nativePreflightFixture() {
         return { rows: siblingRoots.filter(({ parent_id }) => ids.includes(parent_id)) };
       }
       throw new Error('Unexpected preflight SQL');
+    },
+  };
+  let queryPending = false;
+  const tx = {
+    async query(sql: string, args: unknown[] = []) {
+      if (queryPending) throw new Error('Hosted draft preflight overlapped queries on one transaction');
+      queryPending = true;
+      try {
+        return await backend.query(sql, args);
+      } finally {
+        queryPending = false;
+      }
     },
   } as unknown as CommandTransaction;
   const input: HostedVersionDraftMoveInput = {

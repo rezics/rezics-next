@@ -368,16 +368,14 @@ export function createHostedVersionDraftMoveNativeAdapter(): HostedVersionDraftM
         }
         const start = ranksByOccurrence.get(source.occurrenceId)!.chapterRank;
         const lastRank = start + source.value.chapterCount - 1n;
-        const [preorderBoundaries, chapterBoundaries] = await Promise.all([
-          selectVersionedOutlineSequenceChapters(
-            indexes.preorder,
-            [start, lastRank].map((rank) => ({ rootId: snapshot.preorderRootId, rank })),
-          ),
-          selectVersionedOutlineSequenceNodes(
-            indexes.chapters,
-            [start, lastRank].map((rank) => ({ rootId: snapshot.chapterRootId, rank })),
-          ),
-        ]);
+        const preorderBoundaries = await selectVersionedOutlineSequenceChapters(
+          indexes.preorder,
+          [start, lastRank].map((rank) => ({ rootId: snapshot.preorderRootId, rank })),
+        );
+        const chapterBoundaries = await selectVersionedOutlineSequenceNodes(
+          indexes.chapters,
+          [start, lastRank].map((rank) => ({ rootId: snapshot.chapterRootId, rank })),
+        );
         const firstInPreorder = preorderBoundaries[0]!;
         const lastInPreorder = preorderBoundaries[1]!;
         const firstInChapters = chapterBoundaries[0]!;

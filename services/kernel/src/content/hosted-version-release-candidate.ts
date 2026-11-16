@@ -505,11 +505,9 @@ async function verifyCompleteRoots(
   placementCount: bigint,
   chapterCount: bigint,
 ): Promise<void> {
-  const [siblings, preorder, chapters] = await Promise.all([
-    rootSiblingRootId === null ? null : indexes.siblings.readNode(rootSiblingRootId),
-    preorderRootId === null ? null : indexes.preorder.readNode(preorderRootId),
-    chapterRootId === null ? null : indexes.chapters.readNode(chapterRootId),
-  ]);
+  const siblings = rootSiblingRootId === null ? null : await indexes.siblings.readNode(rootSiblingRootId);
+  const preorder = preorderRootId === null ? null : await indexes.preorder.readNode(preorderRootId);
+  const chapters = chapterRootId === null ? null : await indexes.chapters.readNode(chapterRootId);
   if (
     (siblings?.treeParentId ?? null) !== null ||
     (siblings?.count ?? 0n) !== rootCount ||

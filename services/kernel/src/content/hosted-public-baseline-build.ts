@@ -666,11 +666,16 @@ export async function sealHostedPublicBaselineBuild(
     );
   }
 
-  const [siblingRoot, preorderRoot, chapterRoot] = await Promise.all([
-    readSequenceRoot(tx, work, state.source, state.buildId, 'siblings', state.rootSiblingRootId),
-    readSequenceRoot(tx, work, state.source, state.buildId, 'preorder', state.preorderRootId),
-    readSequenceRoot(tx, work, state.source, state.buildId, 'chapters', state.chapterRootId),
-  ]);
+  const siblingRoot = await readSequenceRoot(
+    tx,
+    work,
+    state.source,
+    state.buildId,
+    'siblings',
+    state.rootSiblingRootId,
+  );
+  const preorderRoot = await readSequenceRoot(tx, work, state.source, state.buildId, 'preorder', state.preorderRootId);
+  const chapterRoot = await readSequenceRoot(tx, work, state.source, state.buildId, 'chapters', state.chapterRootId);
   const placementCount = BigInt(state.source.expectedPlacementCount);
   const rootCount = BigInt(state.rootNextPosition);
   const chapterCount = BigInt(chapterRoot?.node_count ?? '0');

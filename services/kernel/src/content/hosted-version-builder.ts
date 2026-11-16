@@ -978,11 +978,9 @@ export async function requireHostedVersionBuilderSealFacts(
     (source.identity.kind === 'prefix' && BigInt(source.identity.highWater) >= 0n
       ? BigInt(source.identity.highWater) + 1n
       : 0n);
-  const [siblingRoot, preorderRoot, chapterRoot] = await Promise.all([
-    readSequenceRoot(tx, work, source, 'siblings', state.rootSiblingRootId),
-    readSequenceRoot(tx, work, source, 'preorder', state.preorderRootId),
-    readSequenceRoot(tx, work, source, 'chapters', state.chapterRootId),
-  ]);
+  const siblingRoot = await readSequenceRoot(tx, work, source, 'siblings', state.rootSiblingRootId);
+  const preorderRoot = await readSequenceRoot(tx, work, source, 'preorder', state.preorderRootId);
+  const chapterRoot = await readSequenceRoot(tx, work, source, 'chapters', state.chapterRootId);
   if (
     state.rootNextPosition !== Number(expectedRoots) ||
     (siblingRoot?.tree_parent_id ?? null) !== null ||

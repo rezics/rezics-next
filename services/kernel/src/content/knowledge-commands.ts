@@ -344,14 +344,14 @@ async function rebalanceKnowledgeSiblings(
       ? undefined
       : { position: beforePosition.toString(), placementId: beforePlacementId };
   const page = { omit: moving.placement_id, limit: siblingLimit + 1 };
-  const [leftRows, rightRows] = await Promise.all([
-    knowledgeSiblings(tx, route, notebookId, destinationParentId, {
-      ...page,
-      direction: 'before',
-      ...(anchor ? { anchor } : {}),
-    }),
-    anchor ? knowledgeSiblings(tx, route, notebookId, destinationParentId, { ...page, direction: 'from', anchor }) : [],
-  ]);
+  const leftRows = await knowledgeSiblings(tx, route, notebookId, destinationParentId, {
+    ...page,
+    direction: 'before',
+    ...(anchor ? { anchor } : {}),
+  });
+  const rightRows = anchor
+    ? await knowledgeSiblings(tx, route, notebookId, destinationParentId, { ...page, direction: 'from', anchor })
+    : [];
 
   if (beforePlacementId !== null && rightRows[0]?.placement_id !== beforePlacementId)
     throw new KnowledgeNotFoundError();

@@ -41,10 +41,8 @@ async function writeNode<Key, Value, Summary extends VersionedOutlineSummary>(
   leftId: string | null,
   rightId: string | null,
 ): Promise<VersionedOutlineNode<Value, Summary>> {
-  const [left, right] = await Promise.all([
-    leftId === null ? null : ports.read(leftId),
-    rightId === null ? null : ports.read(rightId),
-  ]);
+  const left = leftId === null ? null : await ports.read(leftId);
+  const right = rightId === null ? null : await ports.read(rightId);
   if ((leftId !== null && !left) || (rightId !== null && !right))
     throw new Error('Versioned outline order references a missing child');
   return ports.write(value, leftId, rightId, ports.summarize(value, left?.summary ?? null, right?.summary ?? null));
