@@ -18,6 +18,7 @@ import mappingSources from './identity-epoch-read-sources.sql';
 import mappingPending from './identity-epoch-read-pending.sql';
 import mappingCurrent from './identity-terminal-closure-current.sql';
 import projectionSubjects from './search-source-subjects.sql';
+import relatedVisibility from './read-subject-related-states.sql';
 import provenance from './scope-leaf-selection-provenance.sql';
 import sourceFencesRead from '../content/read-source-fences.sql';
 import {
@@ -29,6 +30,11 @@ import {
 import { readIdentitySearchIndexTermsSql, SEARCH_INDEX_TERM_REPLAY_POINTS } from './identity-search-index-terms.ts';
 import { prepareSearchIdentityOriginalSql } from '../search/identity-search-writer-plan-sql.ts';
 import { bindSemanticProducerRolesSql } from './erasure-producer.ts';
+import {
+  anonymousSubjectFormulaBound,
+  permissionCheckStatements,
+  usesPermissionFormulaBatch,
+} from '../access/permission.ts';
 
 import {
   readBoundedSearchIdentityActionSql,
@@ -89,7 +95,67 @@ export function identitySearchSourcePageCosts(): readonly PageCost[] {
       if (!work) throw new TypeError('Missing Search Source page work declaration');
       return Object.freeze({ sql, work, footprint });
     };
+    const permissionWork = Object.freeze({
+      candidateKeys: 0,
+      identityMetadataRows: 0,
+      nativeRows: 16,
+      nativePoints: 16,
+      witnessKeys: 0,
+      statements: 1,
+      bytes: 32768,
+      emptySeeks: 1,
+    });
     return Object.freeze([
+      Object.freeze({
+        sql: permissionCheckStatements.formula,
+        work: Object.freeze({ ...permissionWork, nativeRows: 24 }),
+        footprint(values: readonly unknown[]) {
+          const bound = anonymousSubjectFormulaBound(values);
+          return bound && bound.bytes <= permissionWork.bytes
+            ? Object.freeze({
+                ...permissionWork,
+                nativeRows: bound.rows,
+                nativePoints: bound.points,
+                bytes: bound.bytes,
+              })
+            : usesPermissionFormulaBatch(values)
+              ? undefined
+              : permissionWork;
+        },
+      }),
+      declare(relatedVisibility.sql, [String(maxHome), '{65535,65535}', `{${maxId},${maxId}}`], (values) => {
+        const [home, rawRoutes, rawSubjects] = values;
+        const routes = textArray(rawRoutes);
+        const subjects = textArray(rawSubjects);
+        if (
+          values.length !== 3 ||
+          typeof home !== 'string' ||
+          !/^(0|[1-9][0-9]{0,3})$/.test(home) ||
+          !partition(Number(home)) ||
+          !routes ||
+          !subjects ||
+          subjects.length < 1 ||
+          subjects.length > 2 ||
+          routes.length !== subjects.length ||
+          subjects.some(
+            (id, index) =>
+              !uuid(id) ||
+              String(routeOf(id)) !== routes[index] ||
+              Math.floor(Number(routes[index]) / 16) !== Number(home),
+          )
+        )
+          return undefined;
+        return Object.freeze({
+          candidateKeys: 0,
+          identityMetadataRows: 0,
+          nativeRows: subjects.length,
+          nativePoints: subjects.length,
+          witnessKeys: 0,
+          statements: 1,
+          bytes: 2048,
+          emptySeeks: subjects.length,
+        });
+      }),
       declare(
         bindSemanticProducerRolesSql,
         [maxHome, maxId, Array(8).fill(maxId), Array(8).fill('acting-human')],

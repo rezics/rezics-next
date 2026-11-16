@@ -179,8 +179,11 @@ rechecks the original plan, application, copies and control receipt before relea
 Acceptance and final release verify the admitted meaning and retained Source projections together in one
 repeatable-read snapshot. For visible subjects, Semantic checks current anonymous Access, the signed build
 cursor, the exact subject and privacy revisions, the empty dependency tail and the mapping for the admitted
-job. Search rereads the immutable original plan and writer fence after Source resolution. The release command
-checks the current continuation revision and the live native hold and application for the same accepted effect.
+job. When both roots require verification, Access uses one bounded anonymous batch over current visibility
+in that snapshot. Search reserves the actual bounded plan body and rereads the immutable plan and writer fence
+after Source resolution. Release checks the current continuation and locks the live native hold. It reuses the
+accepted and applied proofs from its observation only at the next fenced position of the same original home.
+An advanced position requires fresh proofs in the release command.
 
 For a visible canonical original, the writer verifies the completed Source build and current Access before
 reading one active term head and its complete fact slot. Each owned turn commits the slot cursor and a digest

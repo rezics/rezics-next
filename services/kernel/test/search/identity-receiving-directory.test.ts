@@ -10,6 +10,11 @@ import { installNativeHistoryPreload } from '../../src/composition/preload.ts';
 import { composeSearchNativePorts } from '../../src/composition/search-native.ts';
 import partitionRead from '../../src/partition/read.sql';
 import { newId, partitionOf } from '../../src/route/route.ts';
+import { anonymousSubjectFormulaBound, createAccess } from '../../src/access/permission.ts';
+import permissionTime from '../../src/access/permission-time.sql';
+import permissionFormula from '../../src/access/permission-check.sql';
+import subjectEligibility from '../../src/semantic/scope-leaf-evidence-eligibility.sql';
+import relatedVisibility from '../../src/semantic/read-subject-related-states.sql';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import stepSql from '../../src/search/identity-epoch-participant-step.sql';
 import {
@@ -175,7 +180,7 @@ test.each([
   { label: 'proves an original first absence under its own close', intent: 'unmerge', resumed: false, mode: 'first' },
   { label: 'hands off a released original during unmerge', intent: 'unmerge', resumed: false, mode: 'handoff' },
   { label: 'keeps an outstanding original writer pending', intent: 'merge', resumed: false, mode: 'uncertain' },
-  { label: 'resumes a visible terminal projection', intent: 'merge', resumed: false, mode: 'visible' },
+  { label: 'reconciles Access for both visible merge roots', intent: 'merge', resumed: false, mode: 'visible' },
   {
     label: 'reindexes and retires a visible canonical unmerge original',
     intent: 'unmerge',
@@ -236,7 +241,12 @@ test.each([
   const job = { jobId, epoch: 1n };
   const savedJob = { jobId, epoch: '1' };
   const creditedCreator = mode === 'canonical-credit';
-  const actorId = creditedCreator ? newId(jobHome << 4) : null;
+  const nativePermission = mode === 'canonical-terms' || mode === 'visible';
+  const bothVisible = mode === 'visible';
+  let permissionTimes = 0;
+  let permissionFormulas = 0;
+  let permissionBatches = 0;
+  const actorId = creditedCreator || nativePermission ? newId(jobHome << 4) : null;
   const adoptedRelation = mode === 'canonical-relation' || creditedCreator;
   const canonicalTerms = mode === 'canonical-terms' || mode === 'canonical-merge' || adoptedRelation;
   const priorVisible = mode === 'handoff' || mode === 'canonical-terms';
@@ -307,6 +317,8 @@ test.each([
   let normalizationCalls = 0;
   let unavailableAllocation = false;
   let corruptReceipt = false;
+  let releaseOwnerAdvanced = false;
+  let lateReleaseCheck = false;
   const canonicalDocument = {
     id: second,
     partition: writerHome,
@@ -378,6 +390,7 @@ test.each([
   const projectedSubjects: string[] = [];
   const projectionHeadCursors: string[] = [];
   let retainedBuild: string | undefined;
+  let retainedOriginalBuild: string | undefined;
   let readBuilds = 0;
   const forbidden = () => {
     throw new Error('Unexpected Access or Pool call');
@@ -616,9 +629,103 @@ test.each([
         rows = [
           [sourceId, sourceConfig, '1', routeDigest, bundledDigest, capture!, dependencies!, String(captureBytes)],
         ];
+      } else if (nativePermission && sql === permissionTime['~standard'].query.text) {
+        permissionTimes++;
+        const at = new Date().toISOString();
+        rows = typeof input !== 'string' && input.rowMode === 'array' ? [[at, at]] : [{ at, databaseAt: at }];
+      } else if (nativePermission && sql === subjectEligibility.sql) {
+        expect(values[0]).toBe(writerHome << 4);
+        expect([first, second]).toContain(values[1]);
+        rows = [{ visibility: values[1] === second || bothVisible ? 'visible' : 'hidden', security_revision: '1' }];
+      } else if (nativePermission && sql === relatedVisibility.sql) {
+        expect(bothVisible).toBe(true);
+        expect(String(values[2])).toContain(first);
+        expect(String(values[2])).toContain(second);
+        rows = [
+          [first, 'visible'],
+          [second, 'visible'],
+        ];
+      } else if (nativePermission && sql === permissionFormula['~standard'].query.text) {
+        permissionFormulas++;
+        const ids = String(values[permissionFormula.params.indexOf('resource_ids')]);
+        const resources = [first, second].filter((id) => ids.includes(id));
+        expect(resources.length).toBeGreaterThan(0);
+        if (permissionFormulas === 1) {
+          expect(anonymousSubjectFormulaBound(values)?.points).toBe(1);
+          for (const [name, argument] of [
+            ['include_global', 't'],
+            ['actor_id', second],
+            ['assignment_request_id', second],
+            ['roles', '[{}]'],
+          ] as const) {
+            const wider = [...values];
+            wider[permissionFormula.params.indexOf(name)] = argument;
+            expect(anonymousSubjectFormulaBound(wider)).toBeNull();
+          }
+        }
+        const at = new Date().toISOString();
+        const batch = values[permissionFormula.params.indexOf('batch')] === 't';
+        if (batch) {
+          permissionBatches++;
+          expect(resources).toEqual([first, second]);
+          expect(anonymousSubjectFormulaBound(values)?.points).toBe(1);
+        }
+        const decisions = resources.map((resourceId) => ({
+          resourceId,
+          allowed: !batch,
+          governanceReach: false,
+          explicit: false,
+          publicAllowed: true,
+          assignmentValid: true,
+          deadlineLive: true,
+          localDenied: false,
+          actorActionGrant: false,
+          actorResourceRoleGrant: false,
+          actorOwnAccountGrant: false,
+          actorAuthenticatedBenefitGrant: false,
+          principalActionGrant: false,
+          principalResourceRoleGrant: false,
+          principalOwnAccountGrant: false,
+          principalAuthenticatedBenefitGrant: false,
+          globalDenied: null,
+          globalActorActionGrant: null,
+          globalActorResourceRoleGrant: null,
+          globalActorOwnAccountGrant: null,
+          globalActorAuthenticatedBenefitGrant: null,
+          globalPrincipalActionGrant: null,
+          globalPrincipalResourceRoleGrant: null,
+          globalPrincipalOwnAccountGrant: null,
+          globalPrincipalAuthenticatedBenefitGrant: null,
+          explicitLocalDenied: null,
+          explicitActorActionGrant: null,
+          explicitActorResourceRoleGrant: null,
+          explicitActorOwnAccountGrant: null,
+          explicitActorAuthenticatedBenefitGrant: null,
+          explicitPrincipalActionGrant: null,
+          explicitPrincipalResourceRoleGrant: null,
+          explicitPrincipalOwnAccountGrant: null,
+          explicitPrincipalAuthenticatedBenefitGrant: null,
+          explicitGlobalDenied: null,
+          explicitGlobalActorActionGrant: null,
+          explicitGlobalActorResourceRoleGrant: null,
+          explicitGlobalActorOwnAccountGrant: null,
+          explicitGlobalActorAuthenticatedBenefitGrant: null,
+          explicitGlobalPrincipalActionGrant: null,
+          explicitGlobalPrincipalResourceRoleGrant: null,
+          explicitGlobalPrincipalOwnAccountGrant: null,
+          explicitGlobalPrincipalAuthenticatedBenefitGrant: null,
+          at,
+          live: true,
+        }));
+        rows =
+          typeof input !== 'string' && input.rowMode === 'array'
+            ? decisions.map((decision) =>
+                Object.values(decision).map((value) => (typeof value === 'boolean' ? (value ? 't' : 'f') : value)),
+              )
+            : decisions;
       } else if (sql === visibilityRead.sql || sql === visibilityRead['~standard'].query.text) {
         projectedSubjects.push(String(values[1]));
-        rows = [[visible && values[1] === second ? 'visible' : 'hidden', '1', subjectType]];
+        rows = [[visible && (values[1] === second || bothVisible) ? 'visible' : 'hidden', '1', subjectType]];
       } else if (visible && sql === mappingOwners.sql)
         rows = (values[0] as number[]).map((partition_no) => ({
           partition_no,
@@ -627,24 +734,23 @@ test.each([
           write_state: 'active',
         }));
       else if (visible && sql === mappingSources.sql) {
-        const creator = creditedCreator && (values[0] as string[])[0] === relationTarget;
-        const id = creator ? relationTarget : second;
-        expect(values[0]).toEqual([id]);
-        rows = [
-          {
+        rows = (values[0] as string[]).map((id) => {
+          const creator = creditedCreator && id === relationTarget;
+          expect(creator || id === second || (bothVisible && id === first)).toBe(true);
+          return {
             subject_id: id,
             original: id,
             control_partition: creator ? otherControlHome : jobHome,
-            control_group: id,
-            terminal: id,
-            current_target: null,
+            control_group: creator ? relationTarget : second,
+            terminal: creator ? relationTarget : second,
+            current_target: id === first ? second : null,
             epoch: '1',
             owner_epoch: 1,
             dirty_revision: '0',
             captured_revision: '0',
             closure_state: 'legacy',
-          },
-        ];
+          };
+        });
       } else if (visible && sql === mappingPending.sql)
         rows =
           creditedCreator && (values[1] as string[])[0] === relationTarget
@@ -664,22 +770,21 @@ test.each([
                   published_epoch: '1',
                 },
               ]
-            : [
-                {
-                  partition_no: jobHome,
-                  terminal: second,
-                  requested_original: second,
-                  owner_epoch: 1,
-                  closure_state: 'open',
-                  redirected: false,
-                },
-              ];
+            : (values[2] as string[]).map((original) => ({
+                partition_no: jobHome,
+                terminal: second,
+                requested_original: original,
+                owner_epoch: 1,
+                closure_state: 'open',
+                redirected: false,
+              }));
       else if (sql === verifyCompletedPublicFilterProjectionSql) {
+        const original = values[2] === first && bothVisible;
         expect(values).toEqual([
           writerHome,
           writerHome << 4,
-          second,
-          retainedBuild,
+          original ? first : second,
+          original ? retainedOriginalBuild : retainedBuild,
           newGeneration,
           1,
           bundledDigest,
@@ -819,6 +924,8 @@ test.each([
           rows = [
             [String(jobHome << 4), relationTerminal, 'skos:Concept', 'hidden', '1', bundledDigest, null, 't', '1'],
           ];
+        else if (bothVisible && String(values[2]).includes(first))
+          rows = [[String(writerHome << 4), first, subjectType, 'visible', '1', bundledDigest, second, 't', '1']];
         else rows = [[String(writerHome << 4), second, subjectType, 'visible', '1', bundledDigest, null, 't', '1']];
       } else if (visible && sql === projectionPrivacy.sql) rows = [['0']];
       else if (visible && sql === projectionPage.sql) {
@@ -855,17 +962,25 @@ test.each([
         oldMeaning = retiredProjectionMeaning;
         rows = [{ generation: oldGeneration }];
       } else if (visible && sql === lockProjectionBuildForHeadsSql) {
-        expect(values).toEqual([retainedBuild, newGeneration, retiredProjectionMeaning]);
+        expect([retainedBuild, retainedOriginalBuild]).toContain(values[0]);
+        expect(values.slice(1)).toEqual([newGeneration, retiredProjectionMeaning]);
         rows = [{}];
       } else if (visible && sql === projectionStart.sql) {
-        retainedBuild = String(values[4]);
-        rows = [[retainedBuild, newGeneration, String(writerHome << 4)]];
+        const build = String(values[4]);
+        if (bothVisible && values[projectionStart.params.indexOf('subject_id')] === first)
+          retainedOriginalBuild = build;
+        else retainedBuild = build;
+        rows = [[build, newGeneration, String(writerHome << 4)]];
       } else if (visible && sql === projectionBuild.sql) {
         readBuilds++;
+        const build =
+          bothVisible && values[projectionBuild.params.indexOf('subject_id')] === first
+            ? retainedOriginalBuild
+            : retainedBuild;
         rows =
           mode === 'superseded' && readBuilds === 3
             ? []
-            : [[retainedBuild, newGeneration, String(writerHome << 4), '1', '0', '0', second, '1', '1', bundledDigest]];
+            : [[build, newGeneration, String(writerHome << 4), '1', '0', '0', second, '1', '1', bundledDigest]];
       } else if (visible && sql === projectionHeads.sql) {
         const heads = JSON.parse(String(values[projectionHeads.params.indexOf('heads')])) as { partition_no: number }[];
         rows = heads.map(({ partition_no }) => [String(partition_no)]);
@@ -1184,7 +1299,7 @@ test.each([
         rows = [{}];
       } else if (sql === searchNativeReleaseAppliedSql()) {
         expect(values.slice(-2)).toEqual([committedOperation?.applied_transaction_id, hold?.hold_id]);
-        rows = [{ epoch: 1, position: String(applicationPosition) }];
+        rows = lateReleaseCheck ? [] : [{ epoch: 1, position: String(applicationPosition) }];
       } else if (sql === planSql.release.sql) {
         expect(controlCustody).toBeDefined();
         expect(values[2]).toBe(hold?.hold_id);
@@ -1258,10 +1373,13 @@ test.each([
         rows = [
           { control_partition: otherControlHome, terminal: selected, generation: leftGeneration, owner_epoch: 1 },
         ];
-      else if (
+      else if (sql === revalidateSearchIdentityPlanFenceSql)
+        rows = [{ epoch: 1, position: releaseOwnerAdvanced ? String(Number(nativePosition()) - 1) : nativePosition() }];
+      else if (sql === readSearchIdentityPlanComponentSql) {
+        lateReleaseCheck = releaseOwnerAdvanced;
+        rows = [{}];
+      } else if (
         sql === receivingStatements.originalMembership ||
-        sql === readSearchIdentityPlanComponentSql ||
-        sql === revalidateSearchIdentityPlanFenceSql ||
         sql === receivingStatements.retainGate ||
         sql === receivingStatements.expectEffect ||
         sql === receivingProgress.sql
@@ -1482,10 +1600,15 @@ test.each([
     search,
     prefix,
     routeKey,
-    access: {
-      authorize: visible ? async () => true : forbidden,
-      authenticate: forbidden,
-    } as never,
+    access: nativePermission
+      ? createAccess({
+          actions: new Map([['subject:read', { anonymous: true }]]),
+          accountEvidence: () => null,
+        })
+      : ({
+          authorize: visible ? async () => true : forbidden,
+          authenticate: forbidden,
+        } as never),
     clock: () => new Date(),
     identitySourceSupportReaderFactory: composeSearchNativePorts().createIdentitySourceSupportReader,
     work: searchReceivingProductionDeclaration(),
@@ -1655,6 +1778,11 @@ test.each([
           creatorNamesOpen = false;
         }
       } else {
+        if (bothVisible) {
+          expect(committed[3]?.frontier.after.slice(2, 4)).toEqual(['original', 'progress']);
+          await nextSupport(['original', 'progress', retainedOriginalBuild, newGeneration]);
+          await nextSupport(['original', 'complete', retainedOriginalBuild, newGeneration]);
+        }
         if (mode === 'retire') {
           await nextSupport(['terminal', 'retiring', oldBuild, '5', 0]);
           await nextSupport(['terminal', 'retiring', oldBuild, '5', writerHome]);
@@ -1662,7 +1790,7 @@ test.each([
         }
         if (visible) {
           await nextSupport(['terminal', 'progress']);
-          expect(projectionHeadCursors).toEqual([]);
+          expect(projectionHeadCursors).toEqual(bothVisible ? ['-1', String(writerHome)] : []);
           await nextSupport(['terminal', 'progress', retainedBuild, newGeneration]);
           if (mode === 'superseded') {
             await nextSupport(['terminal', 'restart']);
@@ -1671,11 +1799,18 @@ test.each([
             return;
           }
           await nextSupport(['terminal', 'complete', retainedBuild, newGeneration]);
-          expect(projectionHeadCursors).toEqual(['-1', String(writerHome)]);
+          expect(projectionHeadCursors).toEqual(
+            bothVisible ? ['-1', String(writerHome), '-1', String(writerHome)] : ['-1', String(writerHome)],
+          );
         } else if (intent === 'merge') await nextSupport(['terminal', 'withheld']);
-        expect(committed[3]?.frontier.after.slice(2)).toEqual(['original', 'withheld']);
+        if (!bothVisible) expect(committed[3]?.frontier.after.slice(2)).toEqual(['original', 'withheld']);
         expect(projectedSubjects).toEqual(
-          intent === 'unmerge' ? [second] : [first, ...Array(mode === 'retire' ? 5 : visible ? 3 : 1).fill(second)],
+          intent === 'unmerge'
+            ? [second]
+            : [
+                ...Array(bothVisible ? 3 : 1).fill(first),
+                ...Array(mode === 'retire' ? 5 : visible ? 3 : 1).fill(second),
+              ],
         );
       }
       if (mode === 'uncertain') {
@@ -1696,7 +1831,10 @@ test.each([
       expect(retainedPlan?.references).toMatchObject({
         definition: definitionId,
         release: bundledDigest,
-        originalSupport: canonicalTerms ? { build: retainedBuild, generation: newGeneration } : null,
+        originalSupport:
+          canonicalTerms || bothVisible
+            ? { build: bothVisible ? retainedOriginalBuild : retainedBuild, generation: newGeneration }
+            : null,
         terminalSupport: visible ? { build: retainedBuild, generation: newGeneration } : null,
         predecessor: priorVisible ? { planId: previousPlan } : null,
       });
@@ -1902,6 +2040,14 @@ test.each([
             state: 'progress',
             transactionId: controlCustody?.transaction_id,
           });
+          if (mode === 'dispatch') {
+            releaseOwnerAdvanced = true;
+            await expect(prepare(pool, request)).rejects.toThrow('Native Search releaseHold: changed');
+            expect(lateReleaseCheck).toBe(true);
+            expect(hold?.released_transaction_id).toBeNull();
+            releaseOwnerAdvanced = false;
+            lateReleaseCheck = false;
+          }
           expect(await prepare(pool, request)).toEqual({ state: 'prepared' });
           expect(receivingContinuation.state).toBe('released');
           expect(hold?.released_transaction_id).toBe(receivingContinuation.released_transaction_id);
@@ -1912,6 +2058,11 @@ test.each([
           );
           expect(retired.frontier.after).toEqual(['search-directory', selected, 1]);
           expect(retiredScope).toBe(true);
+          if (nativePermission) {
+            expect(permissionTimes).toBeGreaterThan(0);
+            expect(permissionFormulas).toBeGreaterThan(0);
+            if (bothVisible) expect(permissionBatches).toBeGreaterThan(0);
+          }
           expect(engineReads).toBe(expectedAllocationReads);
         }
         expect(bulkCalls).toBe(1);

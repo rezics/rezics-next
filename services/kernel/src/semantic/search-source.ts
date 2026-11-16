@@ -31,7 +31,7 @@ import readReleases from './search-source-releases.sql';
 import readPosition from './search-source-position.sql';
 import readStatements from './search-source-statements.sql';
 import readSubjects from './search-source-subjects.sql';
-import { accessCheck } from '../request/access.ts';
+import { accessCheck, prepareReadDecisions } from '../request/access.ts';
 import { commandTime, DEFAULT_REQUEST_DEADLINE_MS, mintReadTime, type CommandTransaction } from '../command/command.ts';
 import { nativeSourceQuery } from '../database/native-source-query.ts';
 import { withBoundedReadConnection } from '../database/pool.ts';
@@ -52,6 +52,7 @@ import type {
   PublicFilterSourceFactory,
 } from './public-filter-source-contract.ts';
 import readVisibility from './read-visibility.sql';
+import readRelatedStates from './read-subject-related-states.sql';
 import { withReadTransaction } from './read.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 
@@ -418,29 +419,68 @@ export async function prepareRetainedIdentitySourceProjections(
       : [{ id: input.original, frontier: input.originalSupport }];
   if (!input.phase && input.original !== input.terminal)
     requested.push({ id: input.terminal, frontier: input.terminalSupport });
+  if (requested.some(({ id }) => routeOf(id) === null)) return null;
+  const actor = { kind: 'anonymous' } as const;
+  const context = { pool: config.pool, deadline: input.deadline };
+  const batch =
+    requested.length === 2 && config.access.prepareReadDecisions
+      ? await prepareReadDecisions(config.access, { actor, actions: new Set(['subject:read']), context })
+      : null;
   const checks: {
     id: string;
     route: number;
     frontier: PublicFilterProjectionFrontier | null;
-    authorize: Awaited<ReturnType<typeof accessCheck>>;
+    authorize: Awaited<ReturnType<typeof accessCheck>> | null;
   }[] = [];
   for (const item of requested) {
     const route = routeOf(item.id);
     if (route === null) return null;
     const resource = { route, id: item.id };
-    const authorize = await accessCheck(
-      config.access,
-      { kind: 'anonymous' },
-      'subject:read',
-      { ...resource, eligibility: subjectReadEligibility(resource) },
-      { pool: config.pool, deadline: input.deadline },
-    );
+    const authorize = batch
+      ? null
+      : await accessCheck(
+          config.access,
+          actor,
+          'subject:read',
+          { ...resource, eligibility: subjectReadEligibility(resource) },
+          context,
+        );
     checks.push({ ...item, route, authorize });
   }
   return async (tx) => {
     const visibleIds: string[] = [];
     const owners = new Map<number, Partition>();
     let at: Awaited<ReturnType<typeof mintReadTime>> | undefined;
+    let decisions: Awaited<ReturnType<NonNullable<typeof batch>['decide']>> | null = null;
+    if (batch) {
+      const publicSubjects = new Map<string, boolean>();
+      const homes = new Set(checks.map(({ route }) => partitionOf(route)));
+      for (const partition of homes) {
+        const members = checks.filter(({ route }) => partitionOf(route) === partition);
+        const states = (await nativeSourceQuery(tx, readRelatedStates, {
+          partition_no: partition,
+          routes: members.map(({ route }) => route),
+          subject_ids: members.map(({ id }) => id),
+        })) as { id: string; visibility: string | null }[];
+        for (const { id, visibility } of states)
+          if (visibility !== null) publicSubjects.set(id, visibility === 'visible');
+      }
+      const ids = checks.map(({ id }) => id);
+      if (ids.some((id) => !publicSubjects.has(id))) return null;
+      at = commandTime(tx) ?? (await mintReadTime(tx, config.clock, config.pool));
+      decisions = await batch.decide(
+        tx,
+        {
+          ids,
+          action: 'subject:read',
+          resourceType: 'semantic.subject',
+          // These are the current floor rows from this same retained Source snapshot.
+          eligibility: async (_client, targets) =>
+            Object.fromEntries(targets.map((id) => [id, publicSubjects.get(id) === true])),
+        },
+        at,
+      );
+    }
     for (const check of checks) {
       const partition = partitionOf(check.route);
       let owner = owners.get(partition);
@@ -450,12 +490,14 @@ export async function prepareRetainedIdentitySourceProjections(
         owner = current;
         owners.set(partition, owner);
       }
-      const state = await nativeSourceQuery(tx, readVisibility, { route: check.route, subject_id: check.id });
-      if (!state) return null;
-      let visible = false;
-      if (state.visibility === 'visible') {
-        at ??= commandTime(tx) ?? (await mintReadTime(tx, config.clock, config.pool));
-        visible = await check.authorize(tx, at);
+      let visible = decisions?.[check.id]?.allowed === true;
+      if (check.authorize) {
+        const state = await nativeSourceQuery(tx, readVisibility, { route: check.route, subject_id: check.id });
+        if (!state) return null;
+        if (state.visibility === 'visible') {
+          at ??= commandTime(tx) ?? (await mintReadTime(tx, config.clock, config.pool));
+          visible = await check.authorize(tx, at);
+        }
       }
       if (visible !== Boolean(check.frontier)) return null;
       if (!check.frontier) continue;
