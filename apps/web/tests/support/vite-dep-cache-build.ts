@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
   hashViteDepCacheIdentity,
@@ -17,7 +17,7 @@ function readReady(directory: string, lockHash: string): ViteDepCacheReady | und
   const path = join(directory, viteDepCacheReadyName);
   if (!existsSync(path)) return undefined;
   const parsed = JSON.parse(readFileSync(path, 'utf8')) as ViteDepCacheReady;
-  if (parsed.lockHash !== lockHash) return undefined;
+  if (parsed.lockHash !== lockHash || typeof parsed.workspaceRoot !== 'string') return undefined;
   return parsed;
 }
 
@@ -74,13 +74,19 @@ export async function prepareViteDepCache(options: PrepareViteDepCacheOptions): 
   const pollIntervalMs = options.pollIntervalMs ?? 50;
   const waitMs = options.waitMs ?? 180_000;
   mkdirSync(dirname(directory), { recursive: true, mode: 0o700 });
-  if (readReady(directory, lockHash)) return { directory, lockHash, reused: true };
+  const cached = () => {
+    const ready = readReady(directory, lockHash);
+    return ready && { directory, lockHash, workspaceRoot: ready.workspaceRoot, reused: true };
+  };
+  const existing = cached();
+  if (existing) return existing;
 
   const lockDirectory = join(directory + '.lock');
   let owned = false;
   const deadline = Date.now() + waitMs;
   while (!owned) {
-    if (readReady(directory, lockHash)) return { directory, lockHash, reused: true };
+    const existing = cached();
+    if (existing) return existing;
     try {
       mkdirSync(lockDirectory);
       owned = true;
@@ -92,7 +98,9 @@ export async function prepareViteDepCache(options: PrepareViteDepCacheOptions): 
   }
 
   try {
-    if (readReady(directory, lockHash)) return { directory, lockHash, reused: true };
+    const existing = cached();
+    if (existing) return existing;
+    const workspaceRoot = realpathSync(options.workspaceRoot);
     const staging = `${directory}.staging-${process.pid}`;
     rmSync(staging, { recursive: true, force: true });
     mkdirSync(staging, { recursive: true, mode: 0o700 });
@@ -100,6 +108,7 @@ export async function prepareViteDepCache(options: PrepareViteDepCacheOptions): 
       const build = options.build ?? ((path, buildEnv) => defaultBuild(path, buildEnv, options.appRoot));
       await build(staging, { ...env, WEB_VITE_CACHE_DIR: staging, REZICS_TEST_RUNTIME: '1' });
       const ready: ViteDepCacheReady = {
+        workspaceRoot,
         lockHash,
         builtAt: (options.now ?? (() => new Date()))().toISOString(),
       };
@@ -110,7 +119,7 @@ export async function prepareViteDepCache(options: PrepareViteDepCacheOptions): 
       rmSync(staging, { recursive: true, force: true });
       throw error;
     }
-    return { directory, lockHash, reused: false };
+    return { directory, lockHash, workspaceRoot, reused: false };
   } finally {
     rmSync(lockDirectory, { recursive: true, force: true });
   }
