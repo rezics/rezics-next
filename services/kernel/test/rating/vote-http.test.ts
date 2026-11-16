@@ -1,16 +1,15 @@
 import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createHash, randomUUID } from 'node:crypto';
-import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { randomUUID } from 'node:crypto';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
-import type { AccountActor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 
@@ -24,14 +23,6 @@ const accountIds = {
 type Persona = keyof typeof accountIds | 'anonymous';
 const tokens = new Map<string, string>();
 const scopes = ['subject:read', 'rating:vote'];
-const owner: AccountActor = {
-  kind: 'account',
-  accountId: accountIds.owner,
-  clientId: 'rating-vote-http',
-  scopes,
-  requestedBy: null,
-  authnEpoch: 1,
-};
 let database: GrowthDatabase;
 let app: ReturnType<typeof createKernel>;
 
@@ -60,17 +51,9 @@ function request(
 
 async function subject() {
   const key = randomUUID();
-  return (
-    await createSubject(database.pool, {
-      actor: owner,
-      target: subjectTarget(routeKey, owner.accountId, key),
-      idempotencyKey: key,
-      digest: createHash('sha256').update(key).digest(),
-      item: { type: 'schema:Book', labels: { en: key } },
-      release: { digest: bundledDigest, release: bundledRelease },
-      authorize: async () => true,
-    })
-  ).subject.id;
+  const response = await request('POST', '/v1/subjects', { type: 'schema:Book', labels: { en: key } }, 'owner', key);
+  const created: { subject: { id: string } } = await json(response, 201);
+  return created.subject.id;
 }
 
 async function json(response: Response, status = 200) {
@@ -123,7 +106,8 @@ beforeAll(async () => {
        VALUES ($1, $2, 'actor', $3, $2)`,
       [routeOf(accountId), accountId, 'active'],
     );
-    const tokenScopes = persona === 'unscoped' ? ['subject:read'] : scopes;
+    const tokenScopes =
+      persona === 'owner' ? [...scopes, 'subject:create'] : persona === 'unscoped' ? ['subject:read'] : scopes;
     tokens.set(
       persona,
       await new SignJWT({
@@ -142,6 +126,11 @@ beforeAll(async () => {
         .sign(signing.privateKey),
     );
   }
+  await database.admin.query(
+    `INSERT INTO access.resource_grant (route, resource_id, subject_id, action, valid, transaction_id)
+     VALUES ($1, $2, $3, 'subject:create', '(,)', $3)`,
+    [GLOBAL_CONTEXT.route, GLOBAL_CONTEXT.id, accountIds.owner],
+  );
   await suspendAccount(database.admin, accountIds.suspended);
   await database.admin.query(
     `INSERT INTO access.exposure_opening ("group", valid, transaction_id)

@@ -1,30 +1,21 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createHash, randomUUID } from 'node:crypto';
-import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { randomUUID } from 'node:crypto';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createAccess } from '../../src/access/index.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
-import type { AccountActor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const routeKey = new Uint8Array(32).fill(93);
 const accountId = newId(0x2201);
 const tokens = new Map<string, string>();
-const scopes = ['subject:read', 'rating:vote'];
-const reader: AccountActor = {
-  kind: 'account',
-  accountId,
-  clientId: 'rating-aggregate-http',
-  scopes,
-  requestedBy: null,
-  authnEpoch: 1,
-};
+const scopes = ['subject:read', 'rating:vote', 'subject:create'];
 const standardQuestion = '00000000-0000-7000-8000-000000000001';
 const episodeQuestion = '00000000-0000-7000-8000-000000000002';
 const characterQuestion = '00000000-0000-7000-8000-000000000003';
@@ -47,17 +38,20 @@ async function json(response: Response, status = 200) {
 
 async function subject() {
   const key = randomUUID();
-  return (
-    await createSubject(database.pool, {
-      actor: reader,
-      target: subjectTarget(routeKey, accountId, key),
-      idempotencyKey: key,
-      digest: createHash('sha256').update(key).digest(),
-      item: { type: 'schema:Book', labels: { en: key } },
-      release: { digest: bundledDigest, release: bundledRelease },
-      authorize: async () => true,
-    })
-  ).subject.id;
+  const response = await app.handle(
+    new Request('http://kernel.test/v1/subjects', {
+      method: 'POST',
+      headers: {
+        'x-request-id': 'rating-aggregate-http',
+        authorization: `Bearer ${tokens.get('reader')!}`,
+        'idempotency-key': JSON.stringify(key),
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ type: 'schema:Book', labels: { en: key } }),
+    }),
+  );
+  const created: { subject: { id: string } } = await json(response, 201);
+  return created.subject.id;
 }
 
 async function realm(visibility: 'public' | 'protected') {
@@ -140,7 +134,8 @@ beforeAll(async () => {
     ratePeer: () => '127.0.0.1',
     routeKey,
     clock: () => new Date(),
-    tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(17)]]) },
+    tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(23)]]) },
+    receiptKeys: testReceiptKeys(),
     access: (config) =>
       createAccess({
         ...config,
@@ -156,6 +151,11 @@ beforeAll(async () => {
     `INSERT INTO access.account(route, account_id, kind, state, transaction_id)
      VALUES ($1, $2, 'actor', 'active', $2)`,
     [routeOf(accountId), accountId],
+  );
+  await database.admin.query(
+    `INSERT INTO access.resource_grant (route, resource_id, subject_id, action, valid, transaction_id)
+     VALUES ($1, $2, $3, 'subject:create', '(,)', $3)`,
+    [GLOBAL_CONTEXT.route, GLOBAL_CONTEXT.id, accountId],
   );
   tokens.set(
     'reader',
