@@ -276,6 +276,28 @@ test('an unfenced engine page completes after exact inline replay of an advanced
     const admitted = await runtime.preparePublication(1, readContext());
     if (admitted.status !== 'preparing') throw new Error(admitted.reason);
     const { job } = admitted;
+    expect((await runtime.publication.step(job, readContext())).status).toBe('progress');
+    const {
+      rows: [enrollment],
+    } = await f.db.pool.query<{
+      state: string;
+      coverage_after: number;
+      opened_observation: boolean;
+    }>(
+      `SELECT b.state,b.coverage_after,EXISTS (
+         SELECT FROM search.public_filter_observation o
+         JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)
+         WHERE r.physical_target=j.physical_target
+       ) AS opened_observation
+       FROM search.generation_publication j
+       JOIN semantic.public_filter_bootstrap b
+         ON b.partition_no=j.source_home AND b.read_definition::text=j.binding->>'readDefinition'
+       WHERE j.partition_no=0 AND j.job=$1`,
+      [job.job],
+    );
+    expect(enrollment).toMatchObject({ state: 'capturing', opened_observation: false });
+    expect(enrollment!.coverage_after).toBeGreaterThan(0);
+    expect(await subjectGenerations(search, prefix)).toMatchObject({ active: null });
     const publication = async () =>
       (
         await f.db.pool.query<{ phase: string; pit: string | null; has_cursor: boolean }>(

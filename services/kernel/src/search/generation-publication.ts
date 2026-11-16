@@ -1,4 +1,8 @@
-import { advanceNativeGenerationSource } from './public-filter-consumer.ts';
+import {
+  advanceNativeGenerationSource,
+  PUBLIC_FILTER_PREPARATION_INPUT_LIMIT,
+  PUBLIC_FILTER_PREPARATION_INPUT_RESERVE,
+} from './public-filter-consumer.ts';
 import { bindSearchWriterPublicationReader, readSearchWriterGenerationActions } from './writer-guard.ts';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
@@ -456,7 +460,13 @@ export function createSearchGenerationPublication(
     if (!retained) persistPin(job, pin);
     return completion.publication.queried;
   }
-  async function completeSource(job: Job, client: PoolClient, context: PublicFilterConsumerContext, meter: Meter) {
+  async function completeSource(
+    job: Job,
+    client: PoolClient,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+    enrollmentOnly = false,
+  ) {
     const custody = await readGenerationPublicationCustody(
       pool,
       job.consumer,
@@ -466,6 +476,9 @@ export function createSearchGenerationPublication(
     );
     add(meter, custody.cost);
     if (!('definition' in custody)) throw new Pending('source_pending');
+    const remainingInputs = PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - meter.inputKeys;
+    if (enrollmentOnly && remainingInputs <= PUBLIC_FILTER_PREPARATION_INPUT_RESERVE)
+      return { complete: false, advanced: false, enrollmentAdvanced: false };
     const completion = await advanceNativeGenerationSource(
       {
         pool,
@@ -483,6 +496,7 @@ export function createSearchGenerationPublication(
         consumer: job.consumer,
         capture: publicationCapture(custody.definition.capture) as PublicFilterConsumerCaptureInput,
         ...(job.observation ? { observation: job.observation } : {}),
+        ...(enrollmentOnly ? { enrollmentInputLimit: remainingInputs } : {}),
       },
       context,
     );
@@ -1435,8 +1449,20 @@ export function createSearchGenerationPublication(
     step(input, context) {
       return run(context, (meter) =>
         locked(input, context, meter, async (job, client) => {
+          const mayEnroll =
+            !registry &&
+            job.family === 'subjects' &&
+            !job.fence &&
+            !job.fenced_pass &&
+            !job.observation &&
+            (job.phase === 'subject' || job.phase === 'engine' || job.phase === 'validate');
           try {
             await advance(job, client, context, meter);
+            if (
+              mayEnroll &&
+              meter.inputKeys < PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE
+            )
+              await completeSource(job, client, context, meter, true);
           } catch (error) {
             if (
               error instanceof Pending &&
