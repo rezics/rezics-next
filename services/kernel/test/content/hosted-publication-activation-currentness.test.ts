@@ -22,6 +22,7 @@ import {
 import { issueRevisionDisclosure, revokeRevisionDisclosure } from '../../src/content/revision-disclosure.ts';
 import type { HostedChapterTarget, HostedPlacement } from '../../src/content/hosted-chapters-model.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { seedGovernanceAuthority } from './support/disclosure-fixtures.ts';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 import { observeSql } from './support/sql-observer.ts';
@@ -41,6 +42,7 @@ beforeAll(async () => {
   ).options.connectionString;
   if (!connectionString) throw new Error('The native fixture pool has no isolated connection string');
   secondPool = new Pool({ connectionString });
+  configureTestReceiptKeys(secondPool);
 });
 
 afterAll(async () => {
@@ -833,11 +835,6 @@ test.each([true, false])(
         await cancellingClient.query('COMMIT');
         expect(activated.value.publicationId).not.toBeNull();
         expect(await publicationId(catalogueId)).toBe(activated.value.publicationId);
-        await secondPool.query(
-          `UPDATE content.hosted_publication_staging SET expires_at='2000-01-01T00:00:00Z'
-         WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
-          [route, catalogueId, stageId],
-        );
         const replayed = await activateCandidate(deps, author, catalogueId, stageId, context);
         expect(replayed).toMatchObject({
           replayed: true,
