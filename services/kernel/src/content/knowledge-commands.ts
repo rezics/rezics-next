@@ -16,7 +16,7 @@ import {
 } from '../command/command.ts';
 import { requestDigest } from '../command/request.ts';
 import { accessCheck } from './access-port.ts';
-import { prepareEditionSubjectIdentities } from './edition-subject.ts';
+import { prepareKnowledgeSubjectDisclosure } from './knowledge-subject-disclosure.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { RevisionPreconditionError, ContentForbiddenError } from './commands.ts';
 import { validateContentDocument } from './document.ts';
@@ -122,11 +122,7 @@ async function preparePublicSubjects(
 ): Promise<() => Promise<boolean>> {
   const subjects = knowledgeSubjectTargets(subjectId, references);
   const context = { actor: { kind: 'anonymous' as const }, deadline };
-  const read = await prepareEditionSubjectIdentities(deps, subjects, context);
-  const verify = async () => {
-    const current = await read();
-    return subjects.every((id) => current.get(id)?.kind === 'available');
-  };
+  const verify = await prepareKnowledgeSubjectDisclosure(deps, subjects, context);
   if (!(await verify())) throw new KnowledgeNotFoundError();
   return verify;
 }

@@ -8,7 +8,7 @@ import {
 } from './knowledge-portable.ts';
 import { createHash } from 'node:crypto';
 import { accessCheck } from './access-port.ts';
-import { prepareEditionSubjectIdentities } from './edition-subject.ts';
+import { prepareKnowledgeSubjectDisclosure } from './knowledge-subject-disclosure.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import { ContentNotFoundError } from './reads.ts';
@@ -134,14 +134,10 @@ export async function readKnowledgePublicDocument(
     throw new KnowledgeNotFoundError();
   const subjects = knowledgeSubjectTargets(selected.subject_id, selected.subject_ids);
 
-  const prepareSubjects = await prepareEditionSubjectIdentities(deps, subjects, {
+  const visible = await prepareKnowledgeSubjectDisclosure(deps, subjects, {
     actor: { kind: 'anonymous' },
     deadline: readContext.deadline,
   });
-  const visible = async () => {
-    const identities = await prepareSubjects();
-    return subjects.every((id) => identities.get(id)?.kind === 'available');
-  };
   if (!(await visible())) throw new KnowledgeNotFoundError();
 
   const final = await snapshot(deps, documentId, readContext, async (client) => {
@@ -883,15 +879,7 @@ async function verifyKnowledgeSubjects(
     for (const subjectId of knowledgeSubjectTargets(notebookSubjectId, revision.subject_ids)) subjectIds.add(subjectId);
   }
   if (revisions.length === 0) subjectIds.add(notebookSubjectId);
-  const subjects = [...subjectIds];
-  const readSubjects = await prepareEditionSubjectIdentities(deps, subjects, {
-    actor: context.actor,
-    deadline: context.deadline,
-  });
-  const verify = async () => {
-    const current = await readSubjects();
-    return subjects.every((subjectId) => current.get(subjectId)?.kind === 'available');
-  };
+  const verify = await prepareKnowledgeSubjectDisclosure(deps, [...subjectIds], context);
   if (!(await verify())) throw new KnowledgeNotFoundError();
   return verify;
 }
