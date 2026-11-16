@@ -1,6 +1,6 @@
 import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
 import { exportJWK, generateKeyPair, jwtVerify } from 'jose';
-import { revokeWebsiteRefresh } from './accounts-goal-walk.ts';
+import { collectApiCapture, originalJ10, revokeWebsiteRefresh } from './accounts-goal-walk.ts';
 
 const stack = {
   issuer: 'https://issuer.example.test',
@@ -57,4 +57,53 @@ test.each([
   request.mockResolvedValueOnce(Response.json(metadata));
   await expect(revokeWebsiteRefresh(stack, {}, {}, 'refresh')).rejects.toThrow(error);
   expect(request).toHaveBeenCalledTimes(1);
+});
+
+test('J10 retains the revoke refusal and reads with its original bearer again', async () => {
+  const accountId = '00000000-0000-8000-8000-000000000001';
+  const { privateKey } = await generateKeyPair('ES256', { extractable: true });
+  const key = { ...(await exportJWK(privateKey)), kid: 'website' };
+  const endpoint = `${stack.issuer}/revoke`;
+  request.mockResolvedValueOnce(Response.json({ accountId }, { status: 201 }));
+  request.mockResolvedValueOnce(
+    Response.json(
+      { account_id: accountId, client_id: 'login', scope: [] },
+      { headers: { 'set-cookie': 'fixture=opaque; Path=/' } },
+    ),
+  );
+  request.mockImplementationOnce(async (url) => {
+    const callback = new URL('/auth/callback', stack.web);
+    callback.searchParams.set('code', 'fixture-code');
+    callback.searchParams.set('state', new URL(String(url)).searchParams.get('state')!);
+    return Response.redirect(callback, 302);
+  });
+  request.mockResolvedValueOnce(Response.json({ access_token: 'fixture-bearer', refresh_token: 'fixture-refresh' }));
+  request.mockResolvedValueOnce(Response.json({ accountId }));
+  request.mockResolvedValueOnce(Response.json({ issuer: stack.issuer, revocation_endpoint: endpoint }));
+  request.mockResolvedValueOnce(Response.json({ error: 'invalid_request' }, { status: 400 }));
+  request.mockResolvedValueOnce(Response.json({ accountId }));
+
+  const unused = async () => {
+    throw new Error('Only J10 should run');
+  };
+  const [result] = await collectApiCapture(
+    { J03: unused, J04: unused, J10: () => originalJ10(stack, {}, key) },
+    async () => {},
+    ['J10'],
+  );
+  expect(result).toMatchObject({
+    id: 'J10',
+    result: 'FAIL',
+    firstFailingOperation: 'website refresh-family revoke: POST /revoke',
+  });
+  expect(result?.phases.slice(-2)).toMatchObject([
+    { phase: 'website refresh-family revoke', status: 400 },
+    { phase: 'original Kernel bearer read after revoke refusal', status: 200, bearerPresent: true },
+  ]);
+  const originalRead = request.mock.calls[4]!;
+  const readAfterRefusal = request.mock.calls[7]!;
+  expect(readAfterRefusal[0]).toBe(originalRead[0]);
+  expect(new Headers(readAfterRefusal[1]?.headers).get('authorization')).toBe('Bearer fixture-bearer');
+  expect(new Headers(originalRead[1]?.headers).get('authorization')).toBe('Bearer fixture-bearer');
+  expect(JSON.stringify(result)).not.toContain('fixture-bearer');
 });

@@ -44,6 +44,9 @@ For Website revocation, require discovery from the configured issuer and refuse 
 `client_assertion`, `resource`, `token` and `token_type_hint=refresh_token` without browser Origin or cookies.
 The [walk request test](../../apps/web/scripts/accounts-goal-walk.test.ts) pins the request, and the
 [Auth security tests](../../services/auth/test/website-security.test.ts) pin resource refusal and family invalidation.
+If revocation returns a refusal, repeat the same Kernel read with the original bearer before recording the failure.
+The admitted ordinary Auth walk can record the last native revocation stage and allowlisted provider result from
+that exact response. Its loopback diagnostic does not enter the public response contract or carry request values.
 
 [Guarded recovery](../../services/auth/README.md#guarded-human-recovery),
 [trusted account effects](../../services/auth/README.md#trusted-account-effects),
