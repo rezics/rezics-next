@@ -132,6 +132,11 @@ export async function compileEntryRelease(
   const prefix = presentationType.split(':')[0]!;
   schema.prefixes[prefix] = bundledRelease.prefixes[prefix];
   schema.classes.CollectionPresentation = { class_uri: presentationType };
+  // The identities provisioned by this fixture are people. The native Account
+  // Agent effect resolves their type from the active release.
+  const accountAgentType = 'schema:Person';
+  schema.prefixes.schema = bundledRelease.prefixes.schema;
+  schema.classes.AccountAgent = { class_uri: accountAgentType };
   schema.classes.Recipe = { class_uri: 'ex:Recipe', annotations: { library: profiles.recipe } };
   schema.classes.Record = {
     class_uri: 'ex:Record',
@@ -145,6 +150,7 @@ export async function compileEntryRelease(
       'ex:Recipe': 'recipe',
       'ex:Record': 'record',
       [presentationType]: 'presentation selection',
+      [accountAgentType]: bundledRelease.types[accountAgentType]!.labels[locale],
     });
     for (const profile of [profiles.recipe, ...(version === 'original' ? [profiles.record] : [])])
       labels.libraryProfiles[profile.id] = libraryLabels(profile, locale);
