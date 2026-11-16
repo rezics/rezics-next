@@ -4,6 +4,7 @@ import {
   recoveryNativeError,
   recoveryResponseByteBounds,
   CONSENT_PAGE_MAX_SCOPES,
+  AUTH_MANAGEMENT_SCOPES,
   securityScopeLimit,
   securityResponseByteBudgets,
   securityResponseLimits,
@@ -2230,6 +2231,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                 client_id: binding.clientId,
                 now: trustedNowSeconds(),
                 fresh: trustedNowSeconds() - human.auth_time <= 600,
+                credentialScope: human.scope.includes(AUTH_MANAGEMENT_SCOPES.security[0]),
                 passwordCommands: !!(
                   trustedAccess.approveCredentialEffect &&
                   trustedAccess.revalidateCredentialEffect &&
