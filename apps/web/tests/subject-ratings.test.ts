@@ -1,3 +1,4 @@
+import { m } from '../src/paraglide/messages.js';
 import { expect, mock, test } from 'bun:test';
 import * as start from '../.storybook/react-start';
 mock.module('@tanstack/react-start', () => start);
@@ -310,7 +311,9 @@ test('Subject rating presents one primary result and an accessible bounded distr
       expect(sources.closest('details')).toBeNull();
       for (const detail of ['Example', '84', '100', '50', '2025', 'ODbL-1.0', 'Example contributors'])
         expect(sources.textContent).toContain(detail);
-      expect(document.querySelector('[data-slot="rating-provenance"]')!.textContent).toContain('Bayesian');
+      expect(document.querySelector('[data-slot="rating-provenance"]')!.textContent).toContain(
+        m.rating_public_ordering(),
+      );
       expect(primary.closest('[data-slot="rating-public"]')).not.toBeNull();
       expect(action.closest('[data-slot="rating-personal"]')).not.toBeNull();
     } finally {
@@ -348,7 +351,7 @@ test('missing comparison figure or mean stays unavailable while zero, threshold 
     expect(rows.get('zero')).not.toContain('unavailable');
     expect(rows.get('threshold')).toContain('2 more ratings');
     expect(rows.get('threshold')).not.toContain('out of 10');
-    expect(rows.get('updating')).toContain('publication is updating');
+    expect(rows.get('updating')).toContain(m.rating_public_updating());
     expect(rows.get('updating')).not.toContain('out of 10');
   } finally {
     await window.happyDOM.close();
@@ -399,7 +402,7 @@ test('five supplied comparisons mount initially and local reveal/collapse mounts
     expect(host.textContent).not.toContain('Duplicate Global');
     expect(host.textContent).not.toContain('Supplied context 7');
     const button = disclosure.querySelector('button')!;
-    expect(button.textContent).toContain('3 more supplied contexts');
+    expect(button.textContent).toContain(m.subject_ratings_more_comparisons({ count: '3' }));
     expect(button.getAttribute('aria-expanded')).toBe('false');
     const remainder = host.querySelector(`#${button.getAttribute('aria-controls')}`)!;
     expect(remainder.hasAttribute('hidden')).toBe(true);
@@ -483,12 +486,12 @@ test('a vote write quotes its command key and treats 503 atomic_guard_unavailabl
   ).toBe('stale');
 });
 
-test('own exact units, public scores and independent imported scales keep separate regions', async () => {
+test('the personal score uses the standard display scale and imported scores retain their own scales', async () => {
   const statistics = [imported, { ...imported, source: 'Second source', mean: 7.2, scale: { min: 1, max: 10 } }];
   const window = await ratingDocument(render({ ...hierarchyData, own: 0, statistics }));
   try {
     const document = window.document;
-    expect(document.querySelector('[data-slot="rating-personal"]')!.textContent).toContain('0 / 20');
+    expect(document.querySelector('[data-slot="rating-personal"]')!.textContent).toContain('0 / 10');
     expect(document.querySelector('[data-slot="rating-public"]')!.textContent).toContain('8.4 out of 10');
     expect(document.querySelectorAll('[data-slot="imported-score"]')).toHaveLength(2);
     for (const row of document.querySelectorAll('[data-slot="imported-score"]'))

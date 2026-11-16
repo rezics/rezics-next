@@ -94,7 +94,7 @@ async function profileShellReady(canvasElement: HTMLElement, heading: string = m
   const main = await canvas.findByRole('main');
   await expect(canvas.getAllByRole('main')).toHaveLength(1);
   const view = within(main);
-  await expect(view.getByRole('heading', { level: 1, name: heading })).toBeVisible();
+  await expect(await view.findByRole('heading', { level: 1, name: heading })).toBeVisible();
   return view;
 }
 
@@ -118,10 +118,20 @@ export const Human: Story = {
   render: () => <PageStory visitor="Signed Out" path="/@mira" />,
   play: async (context) => {
     await pageReady(context);
-    await profileShellReady(context.canvasElement, 'Mira Okabe');
+    const view = await profileShellReady(context.canvasElement, 'Mira Okabe');
+    const follow = await view.findByRole('link', { name: m.library_follow(), exact: true });
+    await expect(follow).toHaveAttribute(
+      'href',
+      `/auth/sign-in?return_to=${encodeURIComponent(`/${getLocale()}/@mira`)}`,
+    );
   },
 };
-export const SignedIn: Story = { render: () => <PageStory visitor="Signed In" path="/@mira" />, play: pageReady };
+export const SignedIn: Story = {
+  render: () => <PageStory visitor="Signed In" path="/@mira" />,
+  play: async ({ canvasElement }) => {
+    await profileShellReady(canvasElement, 'Mira Okabe');
+  },
+};
 export const Verified: Story = {
   render: () => <Example mode="verified" />,
   play: async ({ canvasElement }) => {

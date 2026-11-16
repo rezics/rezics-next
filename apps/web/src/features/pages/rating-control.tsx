@@ -51,7 +51,7 @@ function formResultFailure(locale: string, result: SubjectRatingFormHint | undef
 }
 
 const actionClassName =
-  'h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 export async function applyOptimisticRatingChange(input: {
   queryClient: ReturnType<typeof useQueryClient>;

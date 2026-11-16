@@ -202,6 +202,10 @@ test('each Realm membership transition gets its own workflow and settled owner a
 
   const protectedRealm = await createSpaceAndRealm('protected', 'protected-owner-addition');
   const threadId = await createProtectedThread(protectedRealm);
+  const protectedPath = `/v1/realms/${protectedRealm.realmId}`;
+  const ownMembership = `${protectedPath}/members/me`;
+  expect((await request('GET', ownMembership, actor)).response.status).toBe(404);
+  expect((await request('GET', ownMembership, fixture.outsider)).response.status).toBe(404);
   expect((await request('GET', `/v1/threads/${threadId}`, actor)).response.status).toBe(404);
   expect((await request('GET', `/v1/realms/${protectedRealm.realmId}/participation`, actor)).response.status).toBe(404);
   const added = await request('POST', `/v1/realms/${protectedRealm.realmId}/members`, fixture.owner, {
@@ -210,7 +214,21 @@ test('each Realm membership transition gets its own workflow and settled owner a
   });
   expect(added.response.status).toBe(202);
   await driver.settle();
-  expect(await membershipWorkflows(protectedRealm.realmId, actor.id)).toHaveLength(1);
+  const children = await membershipWorkflows(protectedRealm.realmId, actor.id);
+  expect(children).toHaveLength(1);
+  expect(
+    await queryCommunityDatabase(
+      'SELECT name, status FROM dbos.workflow_status WHERE workflow_uuid IN ($1, $2) ORDER BY name',
+      [added.value.workflowId, children[0]],
+    ),
+  ).toEqual([
+    { name: 'accounts.membership', status: 'SUCCESS' },
+    { name: 'community.join', status: 'SUCCESS' },
+  ]);
+  const own = await request('GET', ownMembership, actor);
+  expect(own.response.status).toBe(200);
+  expect(own.value).toMatchObject({ state: 'member', since: expect.any(String) });
+  expect((await request('GET', ownMembership, fixture.outsider)).response.status).toBe(404);
   const protectedFacts = await queryCommunityDatabase<{
     memberships: number;
     groupGrants: number;
@@ -236,4 +254,11 @@ test('each Realm membership transition gets its own workflow and settled owner a
     body: { body: fromPlainText('The added member can post.'), licence: 'CC-BY-4.0', subjectIds: [] },
   });
   expect(post.response.status).toBe(201);
+  const protectedLeave = await request('DELETE', `${protectedPath}/membership`, actor, {
+    key: key('protected-member-leave'),
+  });
+  expect(protectedLeave.response.status).toBe(202);
+  await driver.settle();
+  expect((await request('GET', ownMembership, actor)).response.status).toBe(404);
+  expect((await request('GET', ownMembership, fixture.outsider)).response.status).toBe(404);
 });

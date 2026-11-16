@@ -32,6 +32,7 @@ export type SecurityPageEnvelope = {
 };
 type Viewer = SecurityPageEnvelope['viewer'] & {
   fresh: boolean;
+  credentialScope: boolean;
   credentialCommands: boolean;
   passwordCommands: boolean;
   now: number;
@@ -48,9 +49,10 @@ function text(value: unknown): value is string {
  * never infer completeness from a saturated window. Authority surrounds this read.
  */
 export async function composeSecurityPage(database: Pool, viewer: Viewer): Promise<SecurityPageEnvelope> {
+  const credentialReady = viewer.fresh && viewer.credentialScope;
   const credential: SecurityAdvice = !viewer.credentialCommands
     ? 'unavailable'
-    : viewer.fresh
+    : credentialReady
       ? 'allowed'
       : 'step-up-required';
   const page: SecurityPageEnvelope = {
@@ -62,7 +64,7 @@ export async function composeSecurityPage(database: Pool, viewer: Viewer): Promi
     sessions: { kind: 'unavailable' },
     passkeys: { kind: 'unavailable' },
     actions: {
-      change_password: viewer.passwordCommands ? (viewer.fresh ? 'allowed' : 'step-up-required') : 'unavailable',
+      change_password: viewer.passwordCommands ? (credentialReady ? 'allowed' : 'step-up-required') : 'unavailable',
       register_passkey: 'unavailable',
     },
   };

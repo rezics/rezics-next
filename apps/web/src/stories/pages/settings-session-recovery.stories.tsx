@@ -91,7 +91,7 @@ async function recoveryView(canvasElement: HTMLElement) {
   ).toBeEnabled();
   await expect(within(display).getByRole('button', { name: m.shell_theme() })).toBeEnabled();
   await expect(view.queryByRole('region', { name: m.settings_reading_heading() })).toBeNull();
-  await expect(view.queryByRole('region', { name: m.settings_notifications_heading() })).toBeNull();
+  await expect(view.queryByRole('region', { name: m.inbox_notification_preferences() })).toBeNull();
   await expect(canvasElement.querySelector('[name="csrf_token"]')).toBeNull();
   await expect(within(canvasElement).getAllByRole('main')).toHaveLength(1);
   return view;

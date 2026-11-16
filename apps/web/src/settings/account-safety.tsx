@@ -353,7 +353,7 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
     renameReload.current?.focus();
   }, [read?.loading, isCurrent]);
   const actionClass =
-    'h-auto w-full min-w-0 max-w-full whitespace-normal text-center [overflow-wrap:anywhere] sm:max-w-sm min-h-7';
+    'h-auto w-full min-w-0 max-w-full whitespace-normal text-center [overflow-wrap:anywhere] sm:max-w-sm min-h-11';
   return (
     <ContentSection className="min-w-0 max-w-full">
       <ContentSectionHeader>

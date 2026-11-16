@@ -4,6 +4,7 @@
  * the documented Space/Realm/Board/thread/publication commands using actual seeded work identities, then walks
  * anonymous, ordinary-member and Realm-member personas. It never substitutes Global.
  */
+import { walkAcceptanceId } from '../../../scripts/stack-run.ts';
 import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -500,7 +501,7 @@ const evidence: Evidence = {
   defects: [],
 };
 
-if (!process.env.GOAL_TASK_ID || !/native|browser/.test(process.env.GOAL_ACCEPTANCE_REQUIRES ?? ''))
+if (!walkAcceptanceId(process.env))
   throw new Error('This walk runs on a controller-owned walk stack with native and browser acceptance');
 
 await run(['bun', 'services/auth/scripts/dev-stack.ts', 'persona']);

@@ -55,6 +55,7 @@ function selectionIdentity({ stream, kind, spaceId, ratingQuestionId }: FeedInpu
 export function HomeFeed({
   result,
   locale,
+  as: Root = 'main',
   stream = 'home',
   signedIn = false,
   busy = false,
@@ -75,6 +76,7 @@ export function HomeFeed({
 }: {
   result: HomeFeedResult;
   locale: string;
+  as?: 'main' | 'div' | undefined;
   stream?: FeedStream;
   signedIn?: boolean;
   busy?: boolean;
@@ -149,7 +151,7 @@ export function HomeFeed({
   const resultMessages = homeFeedRecoveryMessages(locale, emptyContext);
   const feedHeading = stream === 'following' ? m.home_feed_following({}, options) : m.home_feed_discovery({}, options);
   return (
-    <main
+    <Root
       className="mx-auto w-full max-w-6xl space-y-6 text-foreground"
       aria-busy={busy || result.state === 'loading'}
       data-home-feed-mounted={mounted ? 'true' : 'false'}
@@ -323,7 +325,7 @@ export function HomeFeed({
         />
       </div>
       {stream === 'home' && (!page || page.sources.discovery !== 'ready') ? catalogue : null}
-    </main>
+    </Root>
   );
 }
 
@@ -331,6 +333,7 @@ export function HomeFeed({
 export function HomeFeedConsumer({
   initial,
   locale,
+  as,
   signedIn,
   read,
   readKinds,
@@ -347,6 +350,7 @@ export function HomeFeedConsumer({
 }: {
   initial: HomeFeedResult;
   locale: string;
+  as?: 'main' | 'div' | undefined;
   signedIn: boolean;
   read: (input: FeedInput, signal: AbortSignal) => Promise<HomeFeedResult>;
   readKinds: HomeKindsReader;
@@ -695,6 +699,7 @@ export function HomeFeedConsumer({
   const feed = (
     <HomeFeed
       result={snapshot.result}
+      as={as}
       catalogue={catalogue}
       verification={verification}
       locale={locale}

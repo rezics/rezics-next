@@ -396,7 +396,7 @@ export const routes: FakeRoute[] = [
     story: ({ request, match }) => {
       const value = allThreads.find((item) => item.id === match?.[1]);
       if (!value) return;
-      if (match?.[2] === '/reading-page') return { status: 200, ...readingPage(value, request) };
+      if (match?.[2] === '/reading-page') return { status: 200, __responseBody: readingPage(value, request) };
       if (match?.[2] === '/reaction') return { status: 200, kind: null };
       if (match?.[2] === '/watch')
         return value.id === conversationFailure.id

@@ -1,5 +1,7 @@
 import { createConnection } from 'node:net';
 import { createInterface } from 'node:readline';
+import { realpathSync } from 'node:fs';
+import { parseArgs } from 'node:util';
 import {
   backlogStatus,
   clearBacklogNoWorkDisposition,
@@ -12,13 +14,15 @@ import type { HostRequest, IntegrationRuntime } from './integration-runtime.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { authenticatedCallingManager, callingManager, recordManagerCommand } from './manager-command-context.ts';
 import { createHourlyReportScheduler, serveManagers, singleFlight, startOrphanRecoveryTimer } from './manager-host.ts';
-import { readManagerOwnership, recordManagerDecision } from './managers.ts';
+import { readManagerOwnership, recordManagerDecision, registerResidentSupermanager } from './managers.ts';
 import { MergeTrain } from './merge-train.ts';
 import { git } from './merge.ts';
 import { defaultPolicy } from './policy.ts';
 import { authenticatedManager } from './priority-authority.ts';
 import { WorkerStore } from './store.ts';
 import { ensureServiceHost } from './service.ts';
+import { desktopCodexCaller } from './native-unit-context.ts';
+import { readNativeGoal } from './native-units.ts';
 
 export type { HostRequest, IntegrationRuntime };
 export { authenticatedCallingManager, recordManagerCommand };
@@ -269,11 +273,11 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
     return 0;
   }
   if (command === 'manager' && subcommand === 'register-supermanager') {
-    if (id !== undefined && (id !== '--replace-session' || flags.length !== 1))
-      throw new Error('usage: manager register-supermanager [--replace-session <previous-thread-id>]');
-    if (id === undefined && flags.length)
-      throw new Error('usage: manager register-supermanager [--replace-session <previous-thread-id>]');
-    const replaceSession = id === '--replace-session' ? flags[0] : undefined;
+    const { values } = parseArgs({
+      args: argv.slice(2),
+      options: { desktop: { type: 'string' }, 'replace-session': { type: 'string' } },
+    });
+    const replaceSession = values['replace-session'];
     const validSession = (value: string) =>
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
     if (replaceSession !== undefined && !validSession(replaceSession))
@@ -299,6 +303,20 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
     if (env.GOAL_MANAGER && env.GOAL_MANAGER !== manager)
       throw new Error('GOAL_MANAGER does not match the configured supermanager identity');
 
+    if (values.desktop !== undefined) {
+      const threadId = desktopCodexCaller(env);
+      const pool = runtime.pools?.find((candidate) => candidate.name === values.desktop && candidate.cli === 'codex');
+      if (!pool) throw new Error('Desktop resident registration needs an existing configured Codex pool');
+      const { thread } = readNativeGoal(pool.configDirectory, threadId, true);
+      if (realpathSync(thread.cwd) !== realpathSync(runtime.mainCheckout))
+        throw new Error('Desktop resident Goal must be in the main checkout');
+      const resident = registerResidentSupermanager(runtime.db, manager, threadId, {
+        provider: 'codex',
+        ...(replaceSession !== undefined ? { replaceSession } : {}),
+      });
+      console.log(JSON.stringify(resident));
+      return 0;
+    }
     await ensureHost(runtime);
     let result: unknown;
     try {

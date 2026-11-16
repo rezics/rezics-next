@@ -127,6 +127,28 @@ test('handle reads the public profile and ids keep their identity projection wit
   expect(await read(`ids=${accountId}`)).toEqual({ status: 200, body: { accounts: [identity], next: null } });
 });
 
+test('both public lookups resolve the same visible account agent without a label until the owner is fenced', async () => {
+  const handle = 'unlabeled_profile';
+  const owner = await person(handle);
+  const id = accountAgentId(owner);
+  await ensureAccountAgent(pool, { account: owner, kind: 'person', name: null });
+  const byHandle = await read(`handle=${handle}`);
+  expect(byHandle).toMatchObject({
+    status: 200,
+    body: { accounts: [{ id: owner, subject: { id, type: 'schema:Person', label: '' }, verified: false }] },
+  });
+  expect(await read(`agent=${id}`)).toEqual(byHandle);
+
+  // The public owner fence takes effect even before the graph effect has erased a stale label.
+  await ensureAccountAgent(pool, { account: owner, kind: 'person', name: 'Native label' });
+  await internal.raiseFence({ accountId: owner, key: key() });
+  expect(await read(`handle=${handle}`)).toMatchObject({
+    status: 200,
+    body: { accounts: [{ id: owner, subject: null }] },
+  });
+  expect(await read(`agent=${id}`)).toEqual({ status: 200, body: { accounts: [], next: null } });
+});
+
 test('profile patch opts Realms into the public identity read', async () => {
   await commands.updateAccount(await context(accountId), {
     accountId,

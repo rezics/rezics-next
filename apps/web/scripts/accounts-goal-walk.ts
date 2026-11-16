@@ -5,6 +5,7 @@
  * bearers use the zero-scope login client then OAuth. Auth page-operation and management
  * client identities are inlined because Web cannot depend on auth-contract.
  */
+import { walkAcceptanceId } from '../../../scripts/stack-run.ts';
 import { createHash, randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { mkdir, open, readFile, writeFile } from 'node:fs/promises';
@@ -23,12 +24,16 @@ const AUTH_MANAGEMENT_SCOPES = {
   transfer: ['account:manage'] as const,
   'transfer-acceptance': ['account:manage'] as const,
   opening: ['account:manage'] as const,
+  security: ['account:manage'] as const,
 };
 const WEBSITE_CLIENT_ID = 'rezics-website';
 const WEBSITE_AUDIENCE = 'https://api.rezics.test';
 const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
 const CAPABILITIES = 'docs/goals/accounts.capabilities.md';
 const JOURNEY_HEADING = '## First-public journeys';
+
+// Reuse the original native persona and request path in the focused acceptance probe.
+export { GLOBAL_CONTEXT, asId, kernel, origins, parseEnv, signup, websiteToken };
 
 export const JOURNEYS = [
   { id: 'J01', journey: 'signup → callback → authenticated Home', owner: 'Auth c883' },
@@ -305,7 +310,7 @@ export function finishUnobservedJourneys(
 
 /** Own only the supported stack command; its existing signal/cleanup handling owns stack resources. */
 async function launchWalk(): Promise<number> {
-  if (!process.env.GOAL_TASK_ID || !/native|browser/.test(process.env.GOAL_ACCEPTANCE_REQUIRES ?? ''))
+  if (!walkAcceptanceId(process.env))
     throw new Error('This walk runs on a controller-owned walk stack with native and browser acceptance');
   const revision = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: root }).stdout.toString().trim();
   const started = Date.now();
@@ -519,25 +524,38 @@ function accountRow(value: Json): Json | undefined {
   return Array.isArray(accounts) ? (accounts[0] as Json | undefined) : undefined;
 }
 
-function agentSubjectId(row: Json | undefined, label: string): string {
-  const subject = row?.subject;
-  const id = subject && typeof subject === 'object' ? (subject as Json).id : undefined;
-  if (typeof id !== 'string' || !uuid.test(id)) throw new Error(`${label} omitted a public agent subject`);
-  return id;
+async function publicAgentSubject(stack: Origins, target: Person, label: string): Promise<string | null> {
+  const profile = accountRow(
+    requireStatus(await kernel(stack, 'GET', '/v1/accounts', { query: { handle: target.handle } }), label, 200),
+  );
+  if (!profile) return null;
+  if (profile.id !== target.accountId) throw new Error(`${label} resolved to a different account`);
+  const subject = profile.subject as Json | null | undefined;
+  const id = subject?.id;
+  if (id === undefined) return null;
+  return asId(id, `${label} subject`);
 }
 
-async function waitForPublicAgentSubject(stack: Origins, handle: string, label: string): Promise<string> {
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    const publicTarget = accountRow(
-      requireStatus(await kernel(stack, 'GET', '/v1/accounts', { query: { handle } }), label, 200),
-    );
-    try {
-      return agentSubjectId(publicTarget, label);
-    } catch {
-      await Bun.sleep(250);
-    }
+type WaitForAccountAgent = (accountId: string) => Promise<string>;
+
+async function resolveFollowTarget(
+  stack: Origins,
+  target: Person,
+  label: string,
+  waitForAccountAgent?: WaitForAccountAgent,
+): Promise<string> {
+  if (waitForAccountAgent) {
+    const received = await waitForAccountAgent(target.accountId);
+    const subject = await publicAgentSubject(stack, target, label);
+    if (subject !== received) throw new Error(`${label} did not disclose the received agent subject`);
+    return subject;
   }
+  const deadline = Date.now() + 30_000;
+  do {
+    const subject = await publicAgentSubject(stack, target, label);
+    if (subject) return subject;
+    await Bun.sleep(250);
+  } while (Date.now() < deadline);
   throw new Error(`${label} omitted a public agent subject`);
 }
 
@@ -651,12 +669,23 @@ async function signIn(
   const persona = `account ${accountId}`;
   observedPersonas.add(persona);
   journeyPersonas.add(persona);
-  if (activeCapture)
+  if (activeCapture) {
+    const granted = result.value.scope;
+    if (
+      accountId !== activeCapture.authority?.subjectAccountId ||
+      result.value.client_id !== clientId ||
+      !Array.isArray(granted) ||
+      granted.length !== scopes.length ||
+      !scopes.every((scope) => granted.includes(scope))
+    )
+      throw new Error('Sign-in did not return the selected account, client and scopes');
     activeCapture.authority = {
       ...activeCapture.authority,
-      sameSubject: activeCapture.authority?.subjectAccountId === accountId,
+      sameSubject: true,
       client: clientId,
+      grantedScopes: [...scopes],
     };
+  }
   return {
     accountId,
     cookie: result.cookie,
@@ -838,50 +867,19 @@ async function fillPasswordSignIn(page: import('playwright').Page, email: string
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 }
 
-async function startFrontend(action: 'pages' | 'web', stack: Origins) {
-  const child = Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', action], {
-    cwd: root,
-    env: process.env,
-    stdin: 'ignore',
-    stdout: 'inherit',
-    stderr: 'inherit',
-  });
-  const url = action === 'pages' ? `${stack.issuer}/` : `${stack.web}/`;
-  const label = action === 'pages' ? 'Auth pages' : 'Web';
-  const deadline = Date.now() + 600_000;
-  try {
-    while (Date.now() < deadline) {
-      if (child.exitCode !== null) throw new Error(`${label} exited ${child.exitCode} before becoming ready`);
-      const ok = await fetch(url, { signal: AbortSignal.timeout(2_000) }).then(
-        (response) => response.status < 500,
-        () => false,
-      );
-      if (ok) break;
-      await Bun.sleep(500);
-    }
-    if (child.exitCode !== null) throw new Error(`${label} exited ${child.exitCode} before becoming ready`);
-    const ok = await fetch(url, { signal: AbortSignal.timeout(2_000) }).then(
-      (response) => response.status < 500,
-      () => false,
-    );
-    if (!ok) throw new Error(`${label} was not ready after ten minutes`);
-  } catch (error) {
-    child.kill('SIGTERM');
-    await child.exited;
-    throw error;
-  }
-  return {
-    stop: async () => {
-      child.kill('SIGTERM');
-      await child.exited;
-    },
-  };
-}
-
 /** API-only evidence never updates the complete census or the visual owner's output. */
 export const API_CAPTURE_JOURNEYS = ['J03', 'J04', 'J10'] as const;
 export const API_CAPTURE_DIRECTORY = '.temp/goal/accounts/post-seed-api-capture';
 type CaptureId = (typeof API_CAPTURE_JOURNEYS)[number];
+
+export function selectApiCaptureJourneys(argv: readonly string[]): readonly CaptureId[] {
+  const requested = argv.filter((argument) => argument.startsWith('--journey=')).map((argument) => argument.slice(10));
+  if (!requested.length) return API_CAPTURE_JOURNEYS;
+  const selected = API_CAPTURE_JOURNEYS.filter((id) => requested.includes(id));
+  if (requested.some((id) => !selected.some((selectedId) => selectedId === id)))
+    throw new Error('API capture journeys are J03, J04 and J10');
+  return selected;
+}
 type CaptureCase = {
   id: CaptureId;
   personaRole: 'newly registered ordinary human';
@@ -901,6 +899,7 @@ export function captureResponse(input: unknown): Json {
   const fields = [
     'success',
     'error',
+    'code',
     'effect_status',
     'accountId',
     'account_id',
@@ -922,9 +921,12 @@ export function captureResponse(input: unknown): Json {
     'access_denied',
     'temporarily_unavailable',
   ];
+  const code = [value.code, value.error].find(
+    (candidate) => typeof candidate === 'string' && codes.includes(candidate),
+  );
   return {
     shape,
-    ...(typeof value.error === 'string' && codes.includes(value.error) ? { code: value.error } : {}),
+    ...(code === undefined ? {} : { code }),
     ...(['not_applied', 'applied'].includes(String(value.effect_status)) ? { effectStatus: value.effect_status } : {}),
   };
 }
@@ -949,7 +951,11 @@ function beginCaptureRequest(url: string, init: Parameters<typeof send>[1]): Jso
     ),
     origin: init?.origin ?? init?.headers?.origin ?? null,
     client:
-      fields.client_id === WEBSITE_CLIENT_ID ? WEBSITE_CLIENT_ID : fields.client_id === 'login' ? 'login' : undefined,
+      fields.client_id === WEBSITE_CLIENT_ID ||
+      fields.client_id === AUTH_MANAGEMENT_CLIENT_ID ||
+      fields.client_id === 'login'
+        ? fields.client_id
+        : undefined,
     resource:
       typeof fields.resource === 'string' && fields.resource.startsWith('https://') ? fields.resource : undefined,
     tokenKind: fields.token_type_hint === 'refresh_token' ? 'refresh_token' : undefined,
@@ -987,9 +993,10 @@ function captureLocalDelivery() {
 export async function collectApiCapture(
   operations: Record<CaptureId, () => Promise<unknown>>,
   persist: (cases: CaptureCase[]) => Promise<void>,
+  selected: readonly CaptureId[] = API_CAPTURE_JOURNEYS,
 ): Promise<CaptureCase[]> {
   const cases: CaptureCase[] = [];
-  for (const id of API_CAPTURE_JOURNEYS) {
+  for (const id of selected) {
     const started = Date.now();
     const current: CaptureCase = {
       id,
@@ -1029,9 +1036,8 @@ type CaptureHandoff = {
   recoveryDirectory: string;
 };
 
-async function captureOriginalAuthJourneys(): Promise<number> {
-  if (!process.env.GOAL_TASK_ID || !/native/.test(process.env.GOAL_ACCEPTANCE_REQUIRES ?? ''))
-    throw new Error('API capture requires native acceptance');
+async function captureOriginalAuthJourneys(selected: readonly CaptureId[]): Promise<number> {
+  if (!walkAcceptanceId(process.env, 'native')) throw new Error('API capture requires native acceptance');
   const directory = join(root, API_CAPTURE_DIRECTORY);
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const sourceRevision = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: root }).stdout.toString().trim();
@@ -1087,11 +1093,12 @@ async function captureOriginalAuthJourneys(): Promise<number> {
         },
       },
       persist,
+      selected,
     );
     console.log(`accounts-api-capture: ${cases.map((entry) => `${entry.id} ${entry.result}`).join('; ')}`);
     return cases.every((entry) => entry.result === 'PASS') ? 0 : 1;
   } catch {
-    const cases = API_CAPTURE_JOURNEYS.map((id) => ({
+    const cases = selected.map((id) => ({
       id,
       result: 'unverified',
       prerequisite,
@@ -1124,7 +1131,7 @@ async function captureOriginalAuthJourneys(): Promise<number> {
 }
 
 if (import.meta.main && process.argv.includes('--api-capture')) {
-  process.exitCode = await captureOriginalAuthJourneys();
+  process.exitCode = await captureOriginalAuthJourneys(selectApiCaptureJourneys(process.argv.slice(2)));
 }
 
 if (import.meta.main && !process.argv.includes('--api-capture') && process.argv.includes('--launch')) {
@@ -1132,7 +1139,7 @@ if (import.meta.main && !process.argv.includes('--api-capture') && process.argv.
 }
 
 if (import.meta.main && !process.argv.includes('--api-capture') && !process.argv.includes('--launch')) {
-  if (!process.env.GOAL_TASK_ID || !/native|browser/.test(process.env.GOAL_ACCEPTANCE_REQUIRES ?? ''))
+  if (!walkAcceptanceId(process.env))
     throw new Error('This walk runs on a controller-owned walk stack with native and browser acceptance');
 
   const sourceRevision = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: root }).stdout.toString().trim();
@@ -1313,8 +1320,6 @@ if (import.meta.main && !process.argv.includes('--api-capture') && !process.argv
     let organizationId = '';
     let orgHandle = '';
     let humanSoftwareId = '';
-    let followTarget: Person | undefined;
-    let followTargetId = '';
     let realmId = '';
     let spaceId = '';
 
@@ -1672,63 +1677,17 @@ if (import.meta.main && !process.argv.includes('--api-capture') && !process.argv
       return 'person, organization and agent omit private fields';
     });
 
-    await runJourney('J13', 'PUT /v1/follows/{id} → GET /v1/follows → DELETE /v1/follows/{id}', async () => {
-      const follower = walker ?? (await signup(stack, 'j13a'));
-      followTarget = await signup(stack, 'j13b');
-      const token = await websiteToken(stack, follower, bindings, keys.website);
-      followTargetId = await waitForPublicAgentSubject(stack, followTarget.handle, 'follow target');
-      const followed = await kernel(stack, 'PUT', `/v1/follows/${followTargetId}`, { bearer: token.bearer });
-      if (followed.status !== 200) throw new Error(`follow HTTP ${followed.status}: ${summarize(followed.value)}`);
-      const listed = await kernel(stack, 'GET', '/v1/follows', { bearer: token.bearer, query: { limit: '20' } });
-      requireStatus(listed, 'Following', 200);
-      const removed = await kernel(stack, 'DELETE', `/v1/follows/${followTargetId}`, { bearer: token.bearer });
-      requireStatus(removed, 'unfollow', 200);
-      const again = await kernel(stack, 'PUT', `/v1/follows/${followTargetId}`, { bearer: token.bearer });
-      requireStatus(again, 'refollow', 200);
-      const deleteSession = await signIn(
-        stack,
-        followTarget,
-        AUTH_PAGE_OPERATION_CLIENT_ID,
-        AUTH_PAGE_OPERATION_SCOPES.delete,
-      );
-      const erased = await operate(
-        stack,
-        deleteSession,
-        { kind: 'delete', accountId: followTarget.accountId },
-        { confirmation: followTarget.handle },
-      );
-      const unavailable = await kernel(stack, 'DELETE', `/v1/follows/${followTargetId}`, { bearer: token.bearer });
-      if (unavailable.status !== 200 && erased.status !== 200)
-        throw new Error(
-          `unavailable unfollow HTTP ${unavailable.status} after target delete HTTP ${erased.status}: ${summarize(unavailable.value)}`,
-        );
-      if (unavailable.status !== 200)
-        throw new Error(`stored unavailable unfollow HTTP ${unavailable.status}: ${summarize(unavailable.value)}`);
-      return `followed then removed unavailable ${followTargetId}`;
-    });
+    await runJourney('J13', 'PUT /v1/follows/{id} → GET /v1/follows → DELETE /v1/follows/{id}', () =>
+      originalFollowJourney(stack, bindings, keys.website, { follower: walker }),
+    );
 
     await runJourney('J14', 'GET /v1/followCounts/outgoing → stranger GET /v1/followCounts/{type}/{id}', async () => {
-      const anonymous = await kernel(stack, 'GET', '/v1/followCounts/outgoing');
-      if (anonymous.status === 200 && typeof anonymous.value.followingCount === 'number')
-        throw new Error('anonymous reader received a private outgoing count');
-      if (kernelBearerCause)
-        throw new Error(`anonymous outgoing HTTP ${anonymous.status}; not reached: own count (${kernelBearerCause})`);
-      const follower = walker ?? (await signup(stack, 'j14a'));
-      const target = outsider ?? (await signup(stack, 'j14b'));
-      const token = await websiteToken(stack, follower, bindings, keys.website);
-      const stranger = await websiteToken(stack, target, bindings, keys.website);
-      const subjectId = await waitForPublicAgentSubject(stack, target.handle, 'count target');
-      await kernel(stack, 'PUT', `/v1/follows/${subjectId}`, { bearer: token.bearer });
-      const own = await kernel(stack, 'GET', '/v1/followCounts/outgoing', { bearer: token.bearer });
-      await rememberKernelBearerFailure(own, 'own outgoing count');
-      requireStatus(own, 'own outgoing count', 200);
-      if (typeof own.value.followingCount !== 'number') throw new Error('outgoing omitted followingCount');
-      const concealed = await kernel(stack, 'GET', `/v1/followCounts/subject/${subjectId}`, {
-        bearer: stranger.bearer,
+      if (kernelBearerCause) throw new Error(`not reached: own count (${kernelBearerCause})`);
+      return originalFollowCountJourney(stack, bindings, keys.website, {
+        follower: walker,
+        target: outsider,
+        observeOwnerResponse: (response) => rememberKernelBearerFailure(response, 'own outgoing count'),
       });
-      if (concealed.status === 200 && typeof concealed.value.followerCount === 'number')
-        throw new Error('unrelated reader received the private follower aggregate');
-      return `own followingCount ${String(own.value.followingCount)}; stranger HTTP ${concealed.status}; anonymous HTTP ${anonymous.status}`;
     });
 
     await runJourney(
@@ -1917,13 +1876,13 @@ if (import.meta.main && !process.argv.includes('--api-capture') && !process.argv
       return `open access HTTP ${actual.status}; closed HTTP ${afterActual.status}`;
     });
 
-    const frontends: Array<{ stop: () => Promise<void> }> = [];
+    let frontends: { stop(): Promise<void> } | undefined;
     let browser: import('playwright').Browser | undefined;
     try {
       if (process.env.REZICS_WALK_STACK_SLOT) {
-        frontends.push(await startFrontend('pages', stack));
+        const { startSeededFrontends } = await import('../../../services/auth/scripts/dev-stack.ts');
+        frontends = await startSeededFrontends();
         note('auth-pages-ready');
-        frontends.push(await startFrontend('web', stack));
         note('web-ready');
       }
       const browserTemp = join(evidenceDir, 'browser');
@@ -2044,7 +2003,7 @@ if (import.meta.main && !process.argv.includes('--api-capture') && !process.argv
       note(`browser ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       await browser?.close();
-      for (const frontend of [...frontends].reverse()) await frontend.stop();
+      await frontends?.stop();
       await persist();
     }
   } catch (error) {
@@ -2063,6 +2022,118 @@ if (import.meta.main && !process.argv.includes('--api-capture') && !process.argv
     );
     await persist();
   }
+}
+
+type FollowJourneyOptions = {
+  follower?: Person | undefined;
+  waitForAccountAgent?: WaitForAccountAgent;
+};
+
+export async function originalFollowJourney(
+  stack: Origins,
+  bindings: Record<string, string>,
+  websiteKey: JWK,
+  options: FollowJourneyOptions = {},
+): Promise<string> {
+  const follower = options.follower ?? (await signup(stack, 'j13a'));
+  const target = await signup(stack, 'j13b');
+  const { bearer } = await websiteToken(stack, follower, bindings, websiteKey);
+  const subject = await resolveFollowTarget(stack, target, 'follow target', options.waitForAccountAgent);
+  const linked = requireStatus(
+    await kernel(stack, 'GET', '/v1/accounts', { query: { agent: subject } }),
+    'follow target by agent',
+    200,
+  );
+  const linkedProfile = accountRow(linked);
+  if (linkedProfile?.id !== target.accountId || (linkedProfile.subject as Json | undefined)?.id !== subject)
+    throw new Error('handle and agent lookups did not resolve to the same public identity');
+
+  const path = `/v1/follows/${subject}`;
+  requireStatus(await kernel(stack, 'PUT', path, { bearer }), 'follow', 200);
+  const following = async () => {
+    const result = requireStatus(
+      await kernel(stack, 'GET', '/v1/follows', { bearer, query: { limit: '20' } }),
+      'Following',
+      200,
+    );
+    if (!Array.isArray(result.follows)) throw new Error('Following response omitted its edges');
+    return (result.follows as Json[]).some((edge) => edge.targetId === subject && edge.state === 'following');
+  };
+  if (!(await following())) throw new Error('Following omitted the written edge');
+  requireStatus(await kernel(stack, 'DELETE', path, { bearer }), 'unfollow', 200);
+  if (await following()) throw new Error('Following retained the removed edge');
+
+  requireStatus(await kernel(stack, 'PUT', path, { bearer }), 'refollow', 200);
+  const session = await signIn(stack, target, AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES.delete);
+  const erased = await operate(
+    stack,
+    session,
+    { kind: 'delete', accountId: target.accountId },
+    {
+      confirmation: target.handle,
+    },
+  );
+  requireStatus(erased, 'follow target delete', 200);
+  const hidden = requireStatus(
+    await kernel(stack, 'GET', '/v1/accounts', { query: { agent: subject } }),
+    'deleted target by agent',
+    200,
+  );
+  if (!Array.isArray(hidden.accounts) || hidden.accounts.length !== 0)
+    throw new Error('deleted target still resolved publicly');
+  const edge = requireStatus(await kernel(stack, 'GET', path, { bearer }), 'stored unavailable follow', 200);
+  const stored = edge.follow as Json | undefined;
+  if (stored?.targetId !== subject || stored.state !== 'following')
+    throw new Error('stored edge did not survive loss of its public target');
+  requireStatus(await kernel(stack, 'DELETE', path, { bearer }), 'stored unavailable unfollow', 200);
+  if (await following()) throw new Error('Following retained the unavailable edge after removal');
+  return `followed then removed unavailable ${subject}`;
+}
+
+export async function originalFollowCountJourney(
+  stack: Origins,
+  bindings: Record<string, string>,
+  websiteKey: JWK,
+  options: FollowJourneyOptions & {
+    target?: Person | undefined;
+    observeOwnerResponse?: (response: { status: number; value: Json }, accountId: string) => Promise<void>;
+  } = {},
+): Promise<string> {
+  const outgoing = '/v1/followCounts/outgoing';
+  const anonymous = requireStatus(await kernel(stack, 'GET', outgoing), 'anonymous outgoing', 401);
+  if (anonymous.code !== 'authentication_required' || 'followingCount' in anonymous)
+    throw new Error('anonymous outgoing did not return the private count refusal');
+  const follower = options.follower ?? (await signup(stack, 'j14a'));
+  const target = options.target ?? (await signup(stack, 'j14b'));
+  const stranger = await signup(stack, 'j14c');
+  const { bearer } = await websiteToken(stack, follower, bindings, websiteKey);
+  const { bearer: unrelated } = await websiteToken(stack, stranger, bindings, websiteKey);
+  const subject = await resolveFollowTarget(stack, target, 'count target', options.waitForAccountAgent);
+
+  const count = async (label: string) => {
+    const response = await kernel(stack, 'GET', outgoing, { bearer });
+    await options.observeOwnerResponse?.(response, follower.accountId);
+    const { followingCount } = requireStatus(response, label, 200);
+    if (typeof followingCount !== 'number' || !Number.isSafeInteger(followingCount) || followingCount < 0)
+      throw new Error(`${label} omitted an exact followingCount`);
+    return followingCount;
+  };
+  const before = await count('baseline own outgoing count');
+  const path = `/v1/follows/${subject}`;
+  requireStatus(await kernel(stack, 'PUT', path, { bearer }), 'counted follow', 200);
+  const after = await count('own outgoing count');
+  if (after !== before + 1) throw new Error('own outgoing count did not increase after the follow');
+  const concealed = requireStatus(
+    await kernel(stack, 'GET', `/v1/followCounts/subject/${subject}`, { bearer: unrelated }),
+    'unrelated target count',
+    404,
+  );
+  if (concealed.code !== 'not_found' || 'followerCount' in concealed)
+    throw new Error('unrelated target count did not return the concealed refusal');
+  requireStatus(await kernel(stack, 'DELETE', path, { bearer }), 'counted unfollow', 200);
+  if ((await count('own outgoing count after unfollow')) !== before)
+    throw new Error('own outgoing count did not return to its baseline');
+  return `own followingCount ${after}; unrelated target count HTTP 404; anonymous outgoing HTTP 401`;
 }
 
 async function originalJ03(stack: Origins): Promise<string> {
@@ -2108,9 +2179,8 @@ async function originalJ03(stack: Origins): Promise<string> {
 async function originalJ04(stack: Origins): Promise<string> {
   capturePhase('independent persona signup');
   const person = await signup(stack, 'j04');
-  // Security uses the login client; a just-established session is the fresh step-up for this HTTP walk.
-  capturePhase('fresh same-subject login step-up');
-  const session = await signIn(stack, person, 'login', []);
+  capturePhase('fresh same-subject Security management step-up');
+  const session = await signIn(stack, person, AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.security);
   capturePhase('credential replacement');
   const changed = await credentialEffect(stack, session, session.accountId, {
     kind: 'password',
@@ -2125,7 +2195,7 @@ async function originalJ04(stack: Origins): Promise<string> {
     { email: person.email, password, client_id: 'login', scope: [] },
     15_000,
   );
-  if (stale.status === 200) throw new Error('old password still signed in after credential replace');
+  requireStatus(stale, 'old password after credential replacement', 401);
   capturePhase('new-password sign-in');
   const fresh = await signIn(stack, person, 'login', [], nextPassword);
   capturePhase('current-session readback');
@@ -2190,6 +2260,7 @@ export async function originalJ10(stack: Origins, bindings: Record<string, strin
   const after = await kernel(stack, 'GET', `/v1/accounts/${granted.session.accountId}/profile`, {
     bearer: granted.bearer,
   });
-  if (after.status === 200) throw new Error('revoked website family still read the editable profile');
+  if (!isInvalidCredentials(after))
+    throw new Error(`revoked bearer read returned HTTP ${after.status}: ${summarize(after.value)}`);
   return `profile after revoke HTTP ${after.status}`;
 }

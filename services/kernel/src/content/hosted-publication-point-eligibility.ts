@@ -1,3 +1,7 @@
+import {
+  capturePublicationAuthorityVector,
+  lockAndComparePublicationAuthorityHomes,
+} from '../database/publication-authority.ts';
 import type { ReadContext } from './model.ts';
 import type { AccessClient } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -55,7 +59,7 @@ async function preparePublicSource(
   target: HostedChapterTarget,
   context: ReadContext,
   opening: boolean,
-): Promise<HostedPointPublicEligibility | null> {
+): Promise<(HostedPointPublicEligibility & { authorId: string }) | null> {
   const sourceRoute = routeOf(target.threadId);
   if (sourceRoute === null || routeOf(target.postId) !== sourceRoute || routeOf(target.revisionId) !== sourceRoute)
     return null;
@@ -93,6 +97,7 @@ async function preparePublicSource(
   const originalLicence = initial.value.licence;
   const recheck = retained.current;
   return {
+    authorId: originalAuthor,
     async final() {
       try {
         const current = await recheck();
@@ -265,11 +270,32 @@ export async function observeHostedPublicationActivationTarget(
   )
     return null;
 
+  const homes = await publicationAuthorityHomes(
+    deps,
+    input.catalogueId,
+    input.target,
+    metadata.authorId,
+    anonymousContext,
+    input.additionalAuthorityIds,
+  );
+  return homes && { authorId: metadata.authorId, licence: metadata.licence, homes };
+}
+
+async function publicationAuthorityHomes(
+  deps: HostedDependencies,
+  catalogueId: string,
+  target: HostedChapterTarget,
+  authorId: string,
+  context: ReadContext,
+  additionalAuthorityIds: readonly string[] = [],
+): Promise<readonly number[] | null> {
+  const route = routeOf(target.threadId);
+  if (route === null) return null;
   const thread = (
-    await snapshot(deps, input.target.threadId, anonymousContext, (client) =>
+    await snapshot(deps, target.threadId, context, (client) =>
       client.query<{ board_id: string }>(`SELECT board_id FROM content.thread WHERE route=$1 AND thread_id=$2`, [
         route,
-        input.target.threadId,
+        target.threadId,
       ]),
     )
   ).value.rows[0];
@@ -277,7 +303,7 @@ export async function observeHostedPublicationActivationTarget(
   const boardRoute = routeOf(thread.board_id);
   if (boardRoute === null) return null;
   const board = (
-    await snapshot(deps, thread.board_id, anonymousContext, (client) =>
+    await snapshot(deps, thread.board_id, context, (client) =>
       client.query<{ realm_id: string | null }>(`SELECT realm_id FROM content.board WHERE route=$1 AND board_id=$2`, [
         boardRoute,
         thread.board_id,
@@ -288,13 +314,13 @@ export async function observeHostedPublicationActivationTarget(
 
   const homes = new Set<number>();
   for (const identity of [
-    input.catalogueId,
-    input.target.threadId,
-    input.target.postId,
-    input.target.revisionId,
-    metadata.authorId,
+    catalogueId,
+    target.threadId,
+    target.postId,
+    target.revisionId,
+    authorId,
     thread.board_id,
-    ...(input.additionalAuthorityIds ?? []),
+    ...additionalAuthorityIds,
   ]) {
     const home = homeOf(identity);
     if (home === null) return null;
@@ -304,7 +330,7 @@ export async function observeHostedPublicationActivationTarget(
     const realmRoute = routeOf(board.realm_id);
     if (realmRoute === null) return null;
     const realm = (
-      await snapshot(deps, board.realm_id, anonymousContext, (client) =>
+      await snapshot(deps, board.realm_id, context, (client) =>
         client.query<{ space_id: string }>(`SELECT space_id FROM community.realm WHERE route=$1 AND realm_id=$2`, [
           realmRoute,
           board.realm_id,
@@ -318,7 +344,7 @@ export async function observeHostedPublicationActivationTarget(
       homes.add(home);
     }
   }
-  return { authorId: metadata.authorId, licence: metadata.licence, homes: [...homes].sort((a, b) => a - b) };
+  return [...homes].sort((a, b) => a - b);
 }
 
 /**
@@ -334,10 +360,18 @@ export async function prepareHostedPointDisclosureEligibility(
   newlySelectedTargets: readonly HostedChapterTarget[],
   context: ReadContext,
 ): Promise<HostedPointDisclosureEligibility | null> {
+  const publicContext = { actor: anonymous, deadline: context.deadline };
+  const vector = (await snapshot(deps, catalogueId, publicContext, capturePublicationAuthorityVector)).value;
+  const requiredHomes = new Set<number>();
+  async function retainHomes(target: HostedChapterTarget, authorId: string) {
+    const homes = await publicationAuthorityHomes(deps, catalogueId, target, authorId, publicContext);
+    if (!homes) return false;
+    for (const home of homes) requiredHomes.add(home);
+    return true;
+  }
   const opening = await preparePublicSource(deps, catalogueOpening, context, true);
-  if (!opening) return null;
+  if (!opening || !(await retainHomes(catalogueOpening, opening.authorId))) return null;
 
-  const publicObservations: HostedPointPublicEligibility[] = [opening];
   const privateObservations: Array<Readonly<{ disclosureId: string; source: RevisionDisclosureSource }>> = [];
   const seen = new Set([hostedTargetKey(catalogueOpening)]);
 
@@ -348,18 +382,21 @@ export async function prepareHostedPointDisclosureEligibility(
 
     const publicObservation = await preparePublicSource(deps, target, context, false);
     if (publicObservation) {
-      publicObservations.push(publicObservation);
+      if (!(await retainHomes(target, publicObservation.authorId))) return null;
       continue;
     }
 
     const consent = await observeIssuedRevisionDisclosure(deps, { catalogueId, target }, context);
-    if (!consent) return null;
+    if (!consent || !(await retainHomes(target, consent.issuerAccountId))) return null;
     privateObservations.push({ disclosureId: consent.disclosureId, source: disclosureSource(consent) });
   }
 
+  const expected = vector.filter(({ home }) => requiredHomes.has(home));
   return {
     async final(client) {
-      for (const observation of publicObservations) if (!(await observation.final())) return false;
+      // The public observations used separate read lifetimes. Fence their native
+      // authorities on the writer's connection without reopening those reads.
+      if (!(await lockAndComparePublicationAuthorityHomes(client, expected)).matches) return false;
       for (const observation of privateObservations) {
         if (!(await revisionDisclosureSourceCurrent(client, observation.source))) return false;
         if (!(await revisionDisclosureStillIssued(client, observation.disclosureId))) return false;

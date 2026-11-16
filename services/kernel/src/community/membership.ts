@@ -890,7 +890,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
           publication_transaction_id: '',
           principal_id: identity.principal.id,
           command_kind: kind,
-          command_key: key,
+          command_key: currentCommandReceipt(tx).storageKey,
           at,
         });
         return {
@@ -967,7 +967,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
           publication_transaction_id: live ?? terminal!,
           principal_id: identity.principal.id,
           command_kind: kind,
-          command_key: key,
+          command_key: currentCommandReceipt(tx).storageKey,
           at,
         });
         return {
@@ -1059,7 +1059,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
               publication_transaction_id: '',
               principal_id: identity.principal.id,
               command_kind: TERMINAL_KIND,
-              command_key: key,
+              command_key: currentCommandReceipt(tx).storageKey,
               at,
             });
           }

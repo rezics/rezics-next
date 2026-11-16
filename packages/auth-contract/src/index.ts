@@ -276,6 +276,8 @@ interface SharedAccessPorts
         operationKey?: string;
         /** Exactly the operator opening that created the reducing session of an automated account. */
         openingReceiptId?: string;
+        /** Exact source session of a validated native Website invalidation. */
+        websiteSessionId?: string;
       }) => Promise<InvalidationReceipt>)
     | undefined;
   /** Recovery-only authoritative read may expose a fenced active human's current floor. */

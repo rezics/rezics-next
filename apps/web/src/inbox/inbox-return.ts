@@ -136,6 +136,12 @@ export function inboxReturnFor(router: object, expectedHistoryKey: string): Inbo
     : null;
 }
 
+/** The shell leaves entry focus to the returned Inbox window while it re-admits this receipt. */
+export function hasArrivedInboxReturn(router: object): boolean {
+  const receipt = slots.get(router)?.receipt;
+  return receipt?.phase === 'arrived' && receipt.owner.isCurrent();
+}
+
 export function completeInboxReturn(router: object, id: string) {
   const slot = slotFor(router);
   const receipt = slot.receipt;

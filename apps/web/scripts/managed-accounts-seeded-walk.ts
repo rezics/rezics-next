@@ -8,6 +8,7 @@
  * Kernel worker and a second Kernel process until after native HTTP. Kernel HTTP
  * is served from the Auth host. Issuer starts before Auth pages; Web starts after.
  */
+import { walkAcceptanceId } from '../../../scripts/stack-run.ts';
 import { createHash, randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -428,7 +429,7 @@ async function signInWebsitePage(
   await page.waitForURL(`${stack.web}/**`, { timeout: 120_000 });
 }
 
-if (!process.env.GOAL_TASK_ID || !/native|browser/.test(process.env.GOAL_ACCEPTANCE_REQUIRES ?? ''))
+if (!walkAcceptanceId(process.env))
   throw new Error('This walk runs on a controller-owned walk stack with native and browser acceptance');
 
 const sourceRevision = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: root }).stdout.toString().trim();

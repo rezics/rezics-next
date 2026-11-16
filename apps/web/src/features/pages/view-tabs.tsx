@@ -8,7 +8,7 @@ import { withSubjectVisitReturn } from './subject-visit-navigation';
 
 export type ViewTabLabels = { views: string; names: Record<View, string> };
 
-const barClass = 'sticky top-16 z-30 -mx-6 border-b border-border/60 bg-background/90 px-6 backdrop-blur';
+const barClass = 'sticky top-16 z-30 min-w-0 border-b border-border/60 bg-background/90 backdrop-blur';
 // The inactive color is the muted foreground: the 60% foreground the component defaults to does not clear 4.5:1.
 const triggerClass =
   'flex flex-none items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-3 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring data-active:border-primary data-active:text-foreground';

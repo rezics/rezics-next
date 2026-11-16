@@ -13,6 +13,8 @@ import { createSearchWriterGuard } from '../../src/search/writer-guard.ts';
 import { createRatedSubjectSource } from '../../src/search/rated-source.ts';
 import { subjectListingSource } from '../../src/library/listing-counts.ts';
 import { subjectConsumer } from '../../src/search/runner.ts';
+import { createDefaultPublicFilterRuntime } from '../../src/search/public-runtime.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 
 // Actual generation, original Source, ordinary writer and engine: no home/ACK/phase setters.
 test('generation restart keeps the original Source proof through lost observation, dispatch and drained replies', async () => {
@@ -245,3 +247,70 @@ test('generation restart keeps the original Source proof through lost observatio
     await f.close();
   }
 }, 1200000);
+
+test('an unfenced engine page completes after exact inline replay of an advanced Subject home', async () => {
+  const f = await fixture();
+  const search = createOpenSearch(process.env.OPENSEARCH_URL!);
+  const prefix = `source-inline-replay-${crypto.randomUUID().slice(0, 8)}-`;
+  const target = subjectIndexName(prefix, 1);
+  const runtime = createDefaultPublicFilterRuntime({ ...f.config, search, prefix });
+  const writer = createSearchWriterGuard({
+    pool: f.db.pool,
+    search,
+    index: target,
+    consumer: subjectConsumer(prefix, 1),
+    source: createRatedSubjectSource(f.db.pool, f.config.routeKey).source,
+    listing: subjectListingSource(f.db.pool),
+  });
+  try {
+    const book = await f.create('schema:Book');
+    const person = await f.create('schema:Person');
+    const position = async (id: string) =>
+      (
+        await f.db.pool.query<{ position: string }>('SELECT position::text FROM core.partition WHERE partition_no=$1', [
+          partitionOf(routeOf(id)!),
+        ])
+      ).rows[0]!.position;
+    await createSubjectIndex(search, prefix, 1);
+    for (const id of [book, person]) await writer.write(partitionOf(routeOf(id)!), [id], BigInt(await position(id)));
+    const admitted = await runtime.preparePublication(1, readContext());
+    if (admitted.status !== 'preparing') throw new Error(admitted.reason);
+    const { job } = admitted;
+    const publication = async () =>
+      (
+        await f.db.pool.query<{ phase: string; pit: string | null; has_cursor: boolean }>(
+          'SELECT phase,pit,engine_after IS NOT NULL AS has_cursor FROM search.generation_publication WHERE job=$1',
+          [job.job],
+        )
+      ).rows[0]!;
+    for (let turn = 0; turn < 24 && !(await publication()).pit; turn++) {
+      expect((await runtime.publication.step(job, readContext())).status).toBe('progress');
+    }
+    const before = await publication();
+    expect(before).toMatchObject({ phase: 'engine', has_cursor: false });
+    expect(before.pit).toBeTruthy();
+
+    const original = await position(book);
+    await f.propose(book, person);
+    const advanced = await position(book);
+    expect(BigInt(advanced)).toBeGreaterThan(BigInt(original));
+    expect((await runtime.publication.step(job, readContext())).status).toBe('progress');
+    expect(await publication()).toMatchObject({ phase: 'engine', has_cursor: true });
+    const witness = await f.db.pool.query<{ position: string }>(
+      'SELECT position::text FROM search.generation_publication_home WHERE (partition_no,job)=($1,$2)',
+      [partitionOf(routeOf(book)!), job.job],
+    );
+    expect(witness.rows).toEqual([{ position: advanced }]);
+    expect((await subjectGenerations(search, prefix)).active).toBeNull();
+  } finally {
+    try {
+      await runtime.close();
+    } finally {
+      try {
+        await search.request('DELETE', `/${target}`);
+      } finally {
+        await f.close();
+      }
+    }
+  }
+}, 120_000);

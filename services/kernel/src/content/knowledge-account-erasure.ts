@@ -1,5 +1,6 @@
 import { authoritativeTimeValue, commandTime, type CommandTransaction } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
+import { KNOWLEDGE_ANCESTOR_LIMIT } from './knowledge-model.ts';
 import nextNotebook from './knowledge-account-erasure-notebook.sql';
 import markDocument from './knowledge-account-erasure-mark.sql';
 import prepareDocument from './knowledge-account-erasure-document.sql';
@@ -303,6 +304,33 @@ export async function advanceKnowledgeAccountErasure(
       cursor = { ...cursor, phase: 'selections', documentId: rows[0].document_id, after: null };
       continue;
     }
+    if (cursor.phase === 'cut-placements' || cursor.phase === 'placements') {
+      // Follow one indexed child per level. Removing a leaf preserves the deferred
+      // parent FK without moving a child into an occupied root position.
+      const deleted = await tx.query(
+        `WITH RECURSIVE path(placement_id, depth) AS (
+           (SELECT placement_id, 0 FROM content.knowledge_placement
+            WHERE route=$1 AND notebook_id=$2 AND parent_id IS NULL
+            ORDER BY "position" LIMIT 1)
+           UNION ALL
+           SELECT child.placement_id, path.depth+1 FROM path
+           CROSS JOIN LATERAL (
+             SELECT placement_id FROM content.knowledge_placement
+             WHERE route=$1 AND notebook_id=$2 AND parent_id=path.placement_id
+             ORDER BY "position" LIMIT 1
+           ) child
+           WHERE path.depth<$3
+         )
+         DELETE FROM content.knowledge_placement
+         WHERE route=$1 AND notebook_id=$2
+           AND placement_id=(SELECT placement_id FROM path ORDER BY depth DESC LIMIT 1)`,
+        [route, cursor.notebookId, KNOWLEDGE_ANCESTOR_LIMIT],
+      );
+      used++;
+      found += deleted.rowCount ?? 0;
+      cursor = { ...cursor, phase: deleted.rowCount ? 'placements' : 'detach', after: null };
+      continue;
+    }
     if (cursor.phase === 'detach') {
       const remaining = limit - used;
       const rows = (
@@ -398,15 +426,11 @@ export async function advanceKnowledgeAccountErasure(
           `UPDATE content.knowledge_structure_page SET left_page_id=NULL,right_page_id=NULL WHERE ${exact.where}`,
           exact.values,
         );
-      else if (cursor.phase === 'cut-placements')
-        await tx.query(`UPDATE content.knowledge_placement SET parent_id=NULL WHERE ${exact.where}`, exact.values);
       else await tx.query(`DELETE FROM content.${shape.table} WHERE ${exact.where}`, exact.values);
     }
     used += Math.max(keys.length, 1);
     found += keys.length;
-    const replacing = ['selections', 'publications', 'revisions', 'headers', 'cut-pages', 'cut-placements'].includes(
-      cursor.phase,
-    );
+    const replacing = ['selections', 'publications', 'revisions', 'headers', 'cut-pages'].includes(cursor.phase);
     if (keys.length === remaining) {
       if (replacing) cursor = { ...cursor, after: keys.at(-1)! };
       continue;

@@ -1,6 +1,7 @@
 import { lazy, Suspense, useSyncExternalStore } from 'react';
 import { useSession } from '../../session/query';
-import { SignInPrompt } from '../../threads/write-prompts';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { websiteSignInHref } from '../../session/return-target';
 import { m } from '../../paraglide/messages.js';
 
 const FollowTargetControl = lazy(async () => {
@@ -23,7 +24,16 @@ export function AccountFollow(props: AccountFollowProps) {
 
 function CurrentAccountFollow({ targetId, accountId, returnTo }: AccountFollowProps) {
   const session = useSession();
-  if (session.state === 'signed-out') return <SignInPrompt compact label={m.library_follow()} returnTo={returnTo} />;
+  if (session.state === 'signed-out') {
+    return (
+      <a
+        href={websiteSignInHref(returnTo)}
+        className={`${buttonVariants({ variant: 'outline', size: 'sm' })} h-auto min-h-6 max-w-full whitespace-normal`}
+      >
+        {m.library_follow()}
+      </a>
+    );
+  }
   if (session.state !== 'signed-in' || session.subject === accountId) return null;
   return (
     <Suspense fallback={null}>

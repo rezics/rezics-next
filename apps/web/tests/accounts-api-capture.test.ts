@@ -6,6 +6,7 @@ import {
   API_CAPTURE_JOURNEYS,
   captureResponse,
   collectApiCapture,
+  selectApiCaptureJourneys,
 } from '../scripts/accounts-goal-walk.ts';
 
 test('capture selects only original recovery, replacement and revocation and retains failed siblings independently', async () => {
@@ -47,6 +48,12 @@ test('capture selects only original recovery, replacement and revocation and ret
     expect(await readFile(census, 'utf8')).toBe('complete nineteen-row census');
     expect(await readFile(visual, 'utf8')).toBe('visual owner evidence');
     expect(API_CAPTURE_DIRECTORY).toBe('.temp/goal/accounts/post-seed-api-capture');
+    called.length = 0;
+    const selected = selectApiCaptureJourneys(['--api-capture', '--journey=J10', '--journey=J04']);
+    const focused = await collectApiCapture(operations, async () => {}, selected);
+    expect(called).toEqual(['J04', 'J10']);
+    expect(focused.map((row) => row.result)).toEqual(['FAIL', 'PASS']);
+    expect(() => selectApiCaptureJourneys(['--journey=J01'])).toThrow();
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -73,5 +80,9 @@ test('capture response allowlist excludes arbitrary values and private fields', 
   });
   expect(captureResponse({ error: 'private diagnostic', effect_status: 'private' })).toEqual({
     shape: { error: 'string', effect_status: 'string' },
+  });
+  expect(captureResponse({ code: 'invalid_credentials', detail: 'private diagnostic' })).toEqual({
+    shape: { code: 'string' },
+    code: 'invalid_credentials',
   });
 });

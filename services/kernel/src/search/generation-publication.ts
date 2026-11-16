@@ -755,7 +755,13 @@ export function createSearchGenerationPublication(
     meter.frontierWrites += inserted.rowCount ?? 0;
     if (inserted.rowCount !== expected) throw new Pending('source_pending');
   }
-  async function remember(job: Job, before: Home, client: PoolClient) {
+  async function remember(
+    job: Job,
+    before: Home,
+    client: PoolClient,
+    meter: Meter,
+    verifyChanged?: () => Promise<boolean>,
+  ) {
     const {
       rows: [old],
     } = await client.query<Home>(
@@ -763,20 +769,30 @@ export function createSearchGenerationPublication(
       FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2 AND pass=$3`,
       [before.partition, job.job, job.pass],
     );
-    if (old && !same(old, before)) {
+    const changed = old && !same(old, before);
+    // With no cursor, the ordinary Subject scan is already about to replay this home from its first key.
+    const startsSubjectHome = job.family === 'subjects' && job.phase === 'subject' && !job.after_id && !job.fenced_pass;
+    const replayed =
+      changed &&
+      verifyChanged !== undefined &&
+      old.epoch === before.epoch &&
+      BigInt(old.position) < BigInt(before.position) &&
+      (await verifyChanged());
+    if (changed && !startsSubjectHome && !replayed) {
       console.warn('Search publication trace', { gate: 'remember', home: before.partition, old, before });
-      await client.query('DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2', [
-        before.partition,
-        job.job,
-      ]);
+      const deleted = await client.query(
+        'DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2',
+        [before.partition, job.job],
+      );
+      meter.frontierWrites += deleted.rowCount ?? 0;
       job.phase = 'subject';
       job.home = before.partition;
       job.after_route = null;
       job.after_id = null;
       throw new Pending('source_pending');
     }
-    if (!old)
-      await client.query(
+    if (!old || changed) {
+      const stored = await client.query(
         `INSERT INTO search.generation_publication_home
       (partition_no,job,epoch,position,account_revision,claim_revision,pass) VALUES($1,$2,$3,$4,$5,$6,$7)
       ON CONFLICT(partition_no,job) DO UPDATE SET epoch=EXCLUDED.epoch,position=EXCLUDED.position,
@@ -791,6 +807,9 @@ export function createSearchGenerationPublication(
           job.pass,
         ],
       );
+      meter.frontierWrites += stored.rowCount ?? 0;
+    }
+    return replayed === true;
   }
   function cursor(job: Job): SearchPublicFilterSourceKeyCursor | null {
     return job.after_id === null ? null : { route: job.after_route!, id: job.after_id };
@@ -808,6 +827,56 @@ export function createSearchGenerationPublication(
       return kind === undefined ? [] : [registry.key({ owner: 'semantic', kind, id, route: routeOf(id)! })];
     });
   }
+  async function verifySubjectKeys(
+    job: Job,
+    partition: number,
+    ids: readonly string[],
+    position: bigint,
+    meter: Meter,
+  ): Promise<'matched' | 'writer-pending' | 'engine-mismatch'> {
+    meter.inputKeys += ids.length * 3; // Publication inputs, current Source inputs and settled native copies.
+    const actions = await readSearchWriterGenerationActions(writerGuard, partition, ids, position);
+    if (!actions) {
+      console.warn('Search publication trace', { gate: 'writer-actions', partition, count: ids.length });
+      return 'writer-pending';
+    }
+    meter.engineSearches++;
+    try {
+      meter.inputKeys += await assertNativeGenerationActionsVisible(search, job.physical_target, actions);
+      return 'matched';
+    } catch (error) {
+      if (!(error instanceof GenerationReconciliationMismatch)) throw error;
+      console.warn('Search publication trace', { gate: 'engine-actions', partition, count: ids.length });
+      return 'engine-mismatch';
+    }
+  }
+  async function verifyChangedEngineHome(
+    job: Job,
+    before: Home,
+    ids: readonly string[],
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+  ): Promise<boolean> {
+    // A complete Source page can fit in this turn only if there is room for a lookahead
+    // key, the exact writer comparison and the remaining turn's ordinary engine keys.
+    const inputLimit = ids.length + 1;
+    if (inputLimit > PAGE || meter.inputKeys + inputLimit + 4 * PAGE > 1000) return false;
+    const page = await sourceKeys.read({ partition: before.partition, after: null, inputLimit }, context);
+    add(meter, page.cost);
+    if (
+      page.status !== 'eligible' ||
+      !page.complete ||
+      page.partition !== before.partition ||
+      page.epoch !== before.epoch ||
+      page.position !== BigInt(before.position) ||
+      !same([...page.ids].sort(), [...ids].sort())
+    ) {
+      return false;
+    }
+    check(context);
+    const verified = await verifySubjectKeys(job, before.partition, ids, page.position, meter);
+    return verified === 'matched' && same(before, await head(before.partition, context));
+  }
   async function reconcile(
     job: Job,
     partition: number,
@@ -819,25 +888,14 @@ export function createSearchGenerationPublication(
   ) {
     if (!ids.length) return;
     check(context);
-    meter.inputKeys += ids.length;
     if (job.family === 'subjects') {
-      const actions = await readSearchWriterGenerationActions(writerGuard, partition, ids, position);
-      meter.inputKeys += ids.length * 2; // current Source inputs and retained native copies
-      if (!actions) console.warn('Search publication trace', { gate: 'writer-actions', partition, count: ids.length });
-      if (actions) {
-        meter.engineSearches++;
-        try {
-          meter.inputKeys += await assertNativeGenerationActionsVisible(search, job.physical_target, actions);
-          return;
-        } catch (error) {
-          if (!(error instanceof GenerationReconciliationMismatch)) throw error;
-          console.warn('Search publication trace', { gate: 'engine-actions', partition, count: ids.length });
-        }
-      }
+      const verified = await verifySubjectKeys(job, partition, ids, position, meter);
+      if (verified === 'matched') return;
       // Subject population first waits for ordinary settlement to avoid competing for its initial write.
       // A settled copy can still lag a native projection that finished preparing after that write.
       // Repair the mismatch through the ordinary writer while the generation remains open.
-      if (job.fenced_pass || (job.phase === 'subject' && !actions)) throw new Pending('source_pending');
+      if (job.fenced_pass || (job.phase === 'subject' && verified === 'writer-pending'))
+        throw new Pending('source_pending');
       // Enrollment advances the native head. Replay the home before adopting a frontier or witness.
       try {
         await writerGuard.write(partition, ids, position);
@@ -849,6 +907,7 @@ export function createSearchGenerationPublication(
       meter.resultWrites += ids.length;
       throw new Pending('source_pending');
     }
+    meter.inputKeys += ids.length;
     if (!job.fenced_pass) {
       const projection = createDiscoveryProjection({
         pool,
@@ -900,6 +959,8 @@ export function createSearchGenerationPublication(
     if (job.phase === 'reconciled' || job.phase === 'fencing' || job.phase === 'intent' || job.phase === 'active')
       return;
     if (job.phase === 'subject' || job.phase === 'account') {
+      // A retained PIT marks an engine page interrupted by a changed Subject home.
+      const resumesSubjectEngine = job.family === 'subjects' && job.pit !== null;
       let emptySeeks = 0;
       for (;;) {
         if (job.home === 4096) {
@@ -909,7 +970,7 @@ export function createSearchGenerationPublication(
           return;
         }
         const before = await head(job.home, context);
-        await remember(job, before, client);
+        await remember(job, before, client, meter);
         const after = cursor(job);
         let ids: readonly string[],
           next: SearchPublicFilterSourceKeyCursor | null,
@@ -951,6 +1012,7 @@ export function createSearchGenerationPublication(
           if (
             !registry &&
             job.family === 'subjects' &&
+            !resumesSubjectEngine &&
             complete &&
             ids.length === 0 &&
             after === null
@@ -990,7 +1052,10 @@ export function createSearchGenerationPublication(
           job.after_route = null;
           job.after_id = null;
           if (job.phase === 'subject' && job.family === 'discovery') job.phase = 'account';
-          else {
+          else if (resumesSubjectEngine) {
+            job.phase = 'engine';
+            job.home = 0;
+          } else {
             job.phase = 'subject';
             job.home++;
           }
@@ -1111,7 +1176,11 @@ export function createSearchGenerationPublication(
         );
         if (job.fenced_pass && (coverage.missing.length || coverage.extra.length)) throw new Pending('source_pending');
         const before = await head(group.partition, context);
-        await remember(job, before, client);
+        const verifyChanged =
+          job.family === 'subjects' && !job.fenced_pass
+            ? () => verifyChangedEngineHome(job, before, group.ids, context, meter)
+            : undefined;
+        if (await remember(job, before, client, meter, verifyChanged)) continue;
         const discoveryKeys =
           job.family === 'discovery'
             ? group.keys.filter((key): key is DiscoveryKey => key.owner === 'semantic' || key.owner === 'accounts')
@@ -1129,20 +1198,51 @@ export function createSearchGenerationPublication(
     } else {
       const validationHomes = job.family === 'subjects' ? SUBJECT_VALIDATION_HOMES : PAGE;
       const end = Math.min(4096, job.home + validationHomes);
+      // An empty Subject home without writer custody can be witnessed at its current position.
+      // The completed engine pass accounted for existing keys. Occupied homes and homes that
+      // may own an engine copy still replay on any change.
       const compared = await client.query<
-        Home & { current_epoch: number | null; current_position: string | null; write_state: string | null }
+        Home & {
+          current_epoch: number | null;
+          current_position: string | null;
+          write_state: string | null;
+          refreshed: boolean;
+        }
       >(
-        `SELECT h.partition_no AS partition,h.epoch,h.position::text,h.account_revision::text,h.claim_revision::text,
-                p.epoch AS current_epoch,p.position::text AS current_position,p.write_state
-           FROM search.generation_publication_home h
-           LEFT JOIN core.partition p ON p.partition_no=h.partition_no
-          WHERE h.partition_no >= $1 AND h.partition_no < $2 AND h.job=$3 AND h.pass=$4
-          ORDER BY h.partition_no`,
-        [job.home, end, job.job, job.pass],
+        `WITH homes AS (
+           SELECT h.partition_no AS partition,h.epoch,h.position,h.account_revision,h.claim_revision,
+                  p.epoch AS current_epoch,p.position AS current_position,p.write_state
+             FROM search.generation_publication_home h
+             LEFT JOIN core.partition p ON p.partition_no=h.partition_no
+            WHERE h.partition_no >= $1 AND h.partition_no < $2 AND h.job=$3 AND h.pass=$4
+         ),
+         refreshed AS (
+           UPDATE search.generation_publication_home h
+              SET position=homes.current_position
+             FROM homes
+             LEFT JOIN semantic.partition_subjects s ON s.partition_no=homes.partition
+            WHERE $5::text IS NOT NULL AND h.job=$3 AND h.pass=$4 AND h.partition_no=homes.partition
+              AND homes.epoch=homes.current_epoch AND homes.write_state='active'
+              AND homes.position<homes.current_position AND coalesce(s.visible,0)=0
+              AND NOT EXISTS (
+                SELECT 1 FROM search.identity_writer w
+                WHERE w.physical_target=$5 AND w.partition_no=homes.partition
+              )
+           RETURNING h.partition_no
+         )
+         SELECT homes.partition,homes.epoch,
+                (CASE WHEN refreshed.partition_no IS NULL THEN homes.position ELSE homes.current_position END)::text
+                  AS position,
+                homes.account_revision::text,homes.claim_revision::text,homes.current_epoch,
+                homes.current_position::text,homes.write_state,(refreshed.partition_no IS NOT NULL) AS refreshed
+           FROM homes LEFT JOIN refreshed ON refreshed.partition_no=homes.partition
+          ORDER BY homes.partition`,
+        [job.home, end, job.job, job.pass, job.family === 'subjects' ? job.physical_target : null],
       );
       meter.inputKeys += compared.rows.length;
+      meter.frontierWrites += compared.rows.filter(({ refreshed }) => refreshed).length;
       if (compared.rows.length !== end - job.home) throw new Pending('routing_incomplete');
-      for (const { current_epoch, current_position, write_state, ...row } of compared.rows) {
+      for (const { current_epoch, current_position, write_state, refreshed: _refreshed, ...row } of compared.rows) {
         if (write_state !== 'active') throw new Pending('routing_incomplete');
         // The subject pass compares every native home in one statement snapshot. Mixed
         // publication additionally needs the Account owner's current reduction witness.

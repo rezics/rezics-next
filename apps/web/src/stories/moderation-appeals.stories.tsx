@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { ModerationAppealsView } from '../moderation/appeals-tab';
 import type { Appeal } from '../moderation/appeals-read';
 import type { ModerationTarget } from '../moderation/reports-page';
@@ -85,7 +85,8 @@ export const Pending: Story = {
     const view = within(main);
     await expect(canvas.getByRole('heading', { level: 1 })).toHaveTextContent(m.moderation_appeals_heading());
     const reports = view.getByRole('link', { name: m.moderation_reports_tab() });
-    const statement = view.getByRole('textbox', { name: m.moderation_statement_label() });
+    const statement = await view.findByRole('textbox', { name: m.moderation_statement_label() });
+    const reference = view.getByText(m.reporter_status_reference(), { exact: true });
     const uphold = view.getByRole('button', { name: m.moderation_appeal_uphold_action() });
     const article = view.getByRole('article', {
       name: new RegExp(`${m.moderation_appeals_tab()}.*${m.moderation_queue_post()}`),
@@ -105,6 +106,7 @@ export const Pending: Story = {
     await expect(view.getByRole('heading', { level: 3, name: m.moderation_current_target_label() })).toBeVisible();
     await expect(article.querySelector('time')).toHaveAttribute('dateTime', pendingAppeal.createdAt);
 
+    await waitFor(() => expect(statement).toBeEnabled());
     // The shell's skip target anchors keyboard progression inside the appeals page.
     main.focus();
     await expect(main).toHaveFocus();
@@ -113,6 +115,10 @@ export const Pending: Story = {
     await userEvent.tab();
     await expect(statement).toHaveFocus();
     await expect(uphold).toBeDisabled();
+    await userEvent.tab();
+    await expect(reference).toHaveFocus();
+    await userEvent.tab({ shift: true });
+    await expect(statement).toHaveFocus();
     await userEvent.type(statement, 'Illustrative independent review statement.');
     await expect(statement).toHaveValue('Illustrative independent review statement.');
     await expect(uphold).toBeEnabled();
@@ -124,8 +130,8 @@ export const Pending: Story = {
     await expect(view.getByRole('blockquote').textContent).toBe(m.moderation_target_unavailable());
     await expect(view.queryByText(m.moderation_appeals_empty())).not.toBeInTheDocument();
 
-    await userEvent.click(view.getByText(m.reporter_status_reference(), { exact: true }));
-    const referenceDetails = view.getByText(m.reporter_status_reference(), { exact: true }).closest('details');
+    await userEvent.click(reference);
+    const referenceDetails = reference.closest('details');
     if (!referenceDetails) throw new Error('Appeal Reference details were not rendered.');
     await expect(referenceDetails).toHaveAttribute('open');
     await expectTargetIdentityWithheld();
@@ -167,7 +173,7 @@ export const IllustrativeCurrentTargetWithLongReferences: Story = {
     await expect(view.getByRole('heading', { level: 3, name: m.moderation_current_target_label() })).toBeVisible();
     await expect(view.getByText(m.reporter_status_post(), { exact: true })).toBeVisible();
     await expect(view.getByText(currentText)).toBeVisible();
-    await expect(view.getByText(longAppeal.statement)).toBeVisible();
+    await expect(view.getByText(longAppeal.statement.replace(/\s+/g, ' '))).toBeVisible();
     await userEvent.click(view.getByText(m.reporter_status_reference(), { exact: true }));
     await expect(view.getByText(longAppeal.id, { exact: true })).toBeVisible();
     await expect(view.getByText(longAppeal.decisionId, { exact: true })).toBeVisible();

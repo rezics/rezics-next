@@ -14,8 +14,7 @@ import { DEVELOPMENT_SHOWCASE_SCOPES } from '../../../scripts/datasets/showcase-
 import { developmentCollectionScopes } from '../../../scripts/datasets/development-showcase.ts';
 import { developmentPersonalListScopes } from '../../importer/src/showcase-personal-list.ts';
 import type { StackSlot } from '../../../scripts/stack-lease.ts';
-import { walkStackRequired } from '../../../scripts/stack-run.ts';
-import { nativeUnitContext } from '../../../tools/goal/src/native-unit-context.ts';
+import { walkAcceptanceId } from '../../../scripts/stack-run.ts';
 import {
   ownerProcessIdentity,
   runDocker,
@@ -35,6 +34,7 @@ import {
   walkProcessEnvironment,
   walkPublishedPortAllocated,
   walkStackLimit,
+  walkStackLogPath,
   SEEDED_WEB_READY_PATH,
   walkStackNames,
   walkStackPorts,
@@ -781,9 +781,13 @@ export async function assemble(options?: {
     const startWork = () => {
       if (stopping) return Promise.reject(new Error('Native Auth/Work host is stopped'));
       return (startingWork ??= (async () => {
-        const { startAuthBoundKernelWorker } = await import('../../kernel/src/composition/work-auth-host.ts');
+        const [{ startAuthBoundKernelWorker }, { createCurrentConsentReader }] = await Promise.all([
+          import('../../kernel/src/composition/work-auth-host.ts'),
+          import('../src/current-consent.ts'),
+        ]);
         return startAuthBoundKernelWorker({
           sessionRevocation: host.workflows,
+          readRealmConsent: createCurrentConsentReader({ database }).readCurrentConsent,
           env: { ...workEnvironment, DATABASE_URL: config.databaseUrl },
           signal: workAbort.signal,
         });
@@ -1629,8 +1633,8 @@ export async function runWalk(
   command: string[],
   portsAvailable: typeof walkStackPortsAvailable = walkStackPortsAvailable,
 ): Promise<number> {
-  const task = process.env.GOAL_TASK_ID ?? nativeUnitContext(process.env)?.unit;
-  if (!task || !walkStackRequired(process.env))
+  const task = walkAcceptanceId(process.env);
+  if (!task)
     throw new Error('walk stacks are for a worker whose brief lists acceptance.requires native or browser');
   if (command.length === 0) throw new Error('Usage: bun services/auth/scripts/dev-stack.ts walk -- <command...>');
   const controller = new AbortController();
@@ -1715,7 +1719,7 @@ export async function runWalk(
             }
             if (status !== 0) throw new Error(`walk: ${script.join(' ')} failed`);
           }
-          const log = join(root, '.temp', 'walk', task, 'stack.log');
+          const log = walkStackLogPath(root, task);
           await mkdir(dirname(log), { recursive: true });
           await writeFile(log, '');
           // Every walk creates a new database, so retire old native identifiers even when slot URLs are reused.

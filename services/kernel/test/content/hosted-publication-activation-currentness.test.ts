@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
+import { ACCESS_EVIDENCE_TTL_MS } from '../../src/access/evidence-deadline.ts';
 import { Pool, type PoolClient } from 'pg';
 import type { AccessClient, AccountActor } from '../../src/request/access.ts';
 import * as reads from '../../src/content/reads.ts';
@@ -22,6 +23,7 @@ import {
 import { issueRevisionDisclosure, revokeRevisionDisclosure } from '../../src/content/revision-disclosure.ts';
 import type { HostedChapterTarget, HostedPlacement } from '../../src/content/hosted-chapters-model.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { seedGovernanceAuthority } from './support/disclosure-fixtures.ts';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 import { observeSql } from './support/sql-observer.ts';
@@ -41,6 +43,7 @@ beforeAll(async () => {
   ).options.connectionString;
   if (!connectionString) throw new Error('The native fixture pool has no isolated connection string');
   secondPool = new Pool({ connectionString });
+  configureTestReceiptKeys(secondPool);
 });
 
 afterAll(async () => {
@@ -314,13 +317,13 @@ test('21-target authority restarts after cross-home consent revoke and activates
     .find(({ target }) => partitionOf(routeOf(target.threadId)!) !== catalogueHome)?.target;
   if (!victim) throw new Error('The first authority page has no cross-home source');
   expect(partitionOf(routeOf(victim.threadId)!)).not.toBe(catalogueHome);
-  const victimOccurrence = f.newOccurrenceIdFor(catalogueId);
+  const oldOccurrence = f.newOccurrenceIdFor(catalogueId);
   const initial = await f.native.command('/v1/hostedCatalogues', {
     postId: catalogueId,
     threadId: catalogue.id,
     placements: [
       {
-        occurrenceId: victimOccurrence,
+        occurrenceId: oldOccurrence,
         parentId: null,
         position: 0,
         title: 'A stays selected',
@@ -334,7 +337,7 @@ test('21-target authority restarts after cross-home consent revoke and activates
     {
       expectedRevisionId: initial.revisionId,
       expectedPublicationId: null,
-      occurrenceIds: [victimOccurrence],
+      occurrenceIds: [oldOccurrence],
     },
     200,
   );
@@ -346,6 +349,7 @@ test('21-target authority restarts after cross-home consent revoke and activates
     kind: 'chapter' as const,
     target,
   }));
+  const victimOccurrence = occurrences.find(({ target }) => target === victim)!.occurrenceId;
   const revised = await f.native.command(
     `${path}:revise`,
     {
@@ -378,6 +382,8 @@ test('21-target authority restarts after cross-home consent revoke and activates
     if (args[2].postId === victim.postId && !invalidated) {
       invalidated = true;
       await revokeDisclosure(dependencies(secondPool), f.native.author, { disclosureId: victimDisclosureId! });
+      // The write should prepare fresh Access after a retained foreign observation outlives its TTL.
+      await Bun.sleep(ACCESS_EVIDENCE_TTL_MS + 25);
     }
     return result;
   });
@@ -388,6 +394,8 @@ test('21-target authority restarts after cross-home consent revoke and activates
     metadataSpy.mockRestore();
   }
   expect(invalidated).toBe(true);
+  const lastPage = await advanceActivation(activationDeps, f.native.author, catalogueId, candidate.stageId);
+  expect(lastPage.value).toMatchObject({ state: 'ready', checkedTargetCount: '22', totalTargetCount: '22' });
 
   const beforeStaleRestartEvents = await activationEventCounts(catalogueId);
   const staleFinal = await activateCandidate(activationDeps, f.native.author, catalogueId, candidate.stageId);
@@ -833,11 +841,6 @@ test.each([true, false])(
         await cancellingClient.query('COMMIT');
         expect(activated.value.publicationId).not.toBeNull();
         expect(await publicationId(catalogueId)).toBe(activated.value.publicationId);
-        await secondPool.query(
-          `UPDATE content.hosted_publication_staging SET expires_at='2000-01-01T00:00:00Z'
-         WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
-          [route, catalogueId, stageId],
-        );
         const replayed = await activateCandidate(deps, author, catalogueId, stageId, context);
         expect(replayed).toMatchObject({
           replayed: true,

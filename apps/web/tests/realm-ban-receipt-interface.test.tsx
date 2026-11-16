@@ -202,11 +202,11 @@ function confirmation(label: string) {
   return group;
 }
 function receipt(heading: string) {
-  const article = host.querySelector('article[role="status"]');
-  expect(article?.querySelector('h3')?.textContent).toBe(heading);
-  expect(article?.getAttribute('aria-labelledby')).toBe(article?.querySelector('h3')?.id);
-  if (!article) throw new Error('The native outcome must have a human article heading.');
-  return article;
+  const outcome = host.querySelector('[data-slot="realm-ban-outcome"][role="status"]');
+  expect(outcome?.querySelector('h3')?.textContent).toBe(heading);
+  expect(outcome?.getAttribute('aria-labelledby')).toBe(outcome?.querySelector('h3')?.id);
+  if (!outcome) throw new Error('The native outcome must have a heading and a status role.');
+  return outcome;
 }
 function preciseDate(scope: ParentNode, date = suppliedAt) {
   const time = scope.querySelector('time');
@@ -219,7 +219,7 @@ function withheld() {
   for (const details of host.querySelectorAll('details')) details.open = false;
   for (const privateText of [accountId, previousAccountId, actor, fullReason, suppliedAt, target.account.displayName])
     expect(host.textContent).not.toContain(privateText);
-  expect(host.querySelector('time, dd, input, textarea, article[role="status"]')).toBeNull();
+  expect(host.querySelector('time, dd, input, textarea, [data-slot="realm-ban-outcome"][role="status"]')).toBeNull();
 }
 afterEach(async () => {
   await close();
@@ -358,7 +358,7 @@ test('role-removal prerequisite stays visible and no request is retried automati
   expect(source.writes).toHaveLength(1);
   expect(source.lookups).toHaveLength(2);
   expect(source.reads).toEqual([]);
-  expect(host.querySelector('article[role="status"]')).toBeNull();
+  expect(host.querySelector('[data-slot="realm-ban-outcome"][role="status"]')).toBeNull();
 });
 
 test('withheld and refreshed denied/closed/unavailable/loading projections have no private rows or closed-details bypass', async () => {
@@ -473,7 +473,7 @@ test('shared departure preserves reviewed bans and recovery, then retires before
         read.resolve({ state: 'ready', page: { items: [row], next: 'old-next' } });
         await tick();
         expect(host.textContent).not.toContain(target.account.displayName);
-        expect(host.querySelector('article[role="status"]')).toBeNull();
+        expect(host.querySelector('[data-slot="realm-ban-outcome"][role="status"]')).toBeNull();
       },
     });
     const router = createRouter({

@@ -1,12 +1,22 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { PageStory, pagePaths, pageReady } from '../page';
+import { useQuery } from '@tanstack/react-query';
+import { PageStory, PatternStory, pagePaths, pageReady } from '../page';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { RatingControlView, RatingRecoveryView, type RatingAnswerRecovery } from '../../features/pages/rating-control';
 import type { QuestionBoundRatingInput } from '../../features/pages/rating-actions';
 import { RatingsView } from '../../features/pages/subject-ratings-view';
 import { GLOBAL, type PublicFigure, type Ratings } from '../../features/pages/subject-ratings';
-import { independentSourceStatistics, ratingsFixtures, standardRatingQuestion } from '../../kernel/fake/ratings';
+import {
+  independentSourceStatistics,
+  selectRatingsFixture,
+  ratingsFixtures,
+  standardRatingQuestion,
+} from '../../kernel/fake/ratings';
+import { subjectRatingQuery } from '../../features/pages/subject-queries';
+import { useSubjectPersonalReader } from '../../features/pages/subject-personal-reader';
+import { useSession } from '../../session/query';
+import recordedSubject from '../../kernel/recorded/subject.json';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 
@@ -136,21 +146,26 @@ export const SaveClearZero: Story = {
     await expectComfortableAction(clear);
     await expect(save).toBeDisabled();
     await expect(clear).toBeDisabled();
-    await userEvent.click(view.getByRole('slider'));
+    const slider = await view.findByRole('slider', { name: standardRatingQuestion.label });
+    await userEvent.tab();
+    await expect(slider).toHaveFocus();
     await userEvent.keyboard('{Home}');
-    await expect(view.getByRole('slider')).toHaveAttribute('aria-valuenow', '0');
+    await expect(slider).toHaveAttribute('aria-valuenow', '0');
     await userEvent.keyboard('{ArrowRight}');
-    await expect(view.getByRole('slider')).toHaveAttribute('aria-valuenow', '1');
+    await expect(slider).toHaveAttribute('aria-valuenow', '1');
+    await expect(slider).toHaveAttribute('aria-valuetext', `${new Intl.NumberFormat(getLocale()).format(0.5)} / 10`);
     await userEvent.keyboard('{Home}');
     await userEvent.tab();
     await expectKeyboardFocus(save);
-    await userEvent.click(view.getByRole('button', { name: m.subject_rating_control_save() }));
-    await expect(view.getByRole('button', { name: m.subject_rating_control_clear() })).toBeEnabled();
-    await expect(view.getByRole('slider')).toHaveAttribute('aria-valuenow', '0');
+    await userEvent.keyboard('{Enter}');
+    await expect(clear).toBeEnabled();
+    await expect(slider).toHaveAttribute('aria-valuenow', '0');
     await expect(save).toBeDisabled();
+    // Simulated Tab needs a starting node after the browser blurs the disabled Save button.
+    slider.focus();
     await userEvent.tab();
     await expectKeyboardFocus(clear);
-    await userEvent.click(view.getByRole('button', { name: m.subject_rating_control_clear() }));
+    await userEvent.keyboard('{Enter}');
     await expect(view.getByText(m.subject_rating_control_unrated())).toBeVisible();
   },
 };
@@ -326,7 +341,7 @@ export const StaleReview: Story = {
   ),
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
-    await expect(view.getByRole('status')).toHaveTextContent(m.subject_rating_control_stale());
+    await expect(view.getByText(m.subject_rating_control_stale())).toHaveAttribute('role', 'status');
     await expect(view.getByRole('button', { name: m.subject_rating_control_save() })).toBeDisabled();
   },
 };
@@ -509,18 +524,59 @@ export const IndependentSources: Story = {
   },
 };
 
-/** Full route: independent public sources, exact zero answer and an ordinary editable control. */
+function RichRatingPanel() {
+  const subjectId = recordedSubject.subject.id;
+  const locale = getLocale();
+  const session = useSession();
+  const ratings = useQuery(subjectRatingQuery(subjectId, locale));
+  const { ownRating, binding } = useSubjectPersonalReader({
+    subjectId,
+    locale,
+    view: 'overview',
+    session,
+    includeOwnRating: true,
+  });
+  if (!ratings.data) return null;
+  return (
+    <RatingsView
+      data={ratings.data}
+      id="ratings"
+      subject={subjectId}
+      locale={locale}
+      control={{
+        subjectId,
+        locale,
+        returnTo: `/${locale}${pagePaths.subject}`,
+        session: session.state,
+        own: ownRating,
+        ...(binding ? { binding } : {}),
+      }}
+    />
+  );
+}
+
+// Render the detailed panel with the public and current-answer reads used by the subject page.
 export const RichRatings: Story = {
-  render: () => <PageStory visitor="Signed In" path={pagePaths.subject} ratingsFixture="subject-ratings-rich" />,
+  beforeEach: () => {
+    selectRatingsFixture('subject-ratings-rich');
+    return () => selectRatingsFixture();
+  },
+  render: () => (
+    <PatternStory visitor="Signed In" path={pagePaths.subject}>
+      <main className="mx-auto w-full max-w-5xl p-4 sm:p-6">
+        <RichRatingPanel />
+      </main>
+    </PatternStory>
+  ),
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
     await expect(await canvas.findByRole('slider')).toHaveAttribute('aria-valuenow', '0');
-    const sources = context.canvasElement.querySelector<HTMLElement>('[data-slot="rating-imported"]')!;
+    const sources = await canvas.findByRole('region', { name: m.rating_population_source_statistics() });
     await expect(sources).toBeVisible();
     await expect(within(sources).getByRole('heading', { name: 'VNDB' })).toBeVisible();
     await expect(within(sources).getByRole('heading', { name: 'Bangumi' })).toBeVisible();
-    await expect(context.canvasElement.querySelector('[data-slot="rating-personal"]')).toHaveTextContent('0 / 20');
+    await expect(context.canvasElement.querySelector('[data-slot="rating-personal"]')).toHaveTextContent('0 / 10');
     await expect(context.canvasElement.querySelector('[data-slot="public-rating-figure"]')).toHaveTextContent('8.4');
     await expect(canvas.getByRole('button', { name: m.subject_rating_control_clear() })).toBeEnabled();
   },
@@ -532,7 +588,7 @@ export const MultipleIndependentSources: Story = {
     const sources = canvasElement.querySelector<HTMLElement>('[data-slot="rating-imported"]')!;
     await expect(sources.closest('details')).toBeNull();
     await expect(sources.querySelectorAll('[data-slot="imported-score"]')).toHaveLength(2);
-    await expect(canvasElement.querySelector('[data-slot="own-rating"]')).toHaveTextContent('0 / 20');
+    await expect(canvasElement.querySelector('[data-slot="own-rating"]')).toHaveTextContent('0 / 10');
   },
 };
 
