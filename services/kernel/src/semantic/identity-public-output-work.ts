@@ -190,8 +190,11 @@ export function outputCaptureFootprint(
   sql: string,
   values: readonly unknown[],
 ): WorkDimensions | undefined {
-  const control = controls.has(sql) || /^SET LOCAL statement_timeout = '[1-9][0-9]*ms'$/.test(sql);
-  let plan = plans().get(sql);
+  // Reylo appends this source comment before the final semicolon of dispatched statements.
+  // Recognize the original literal and continue charging the full dispatched text below.
+  const statement = sql.replace(/ \/\*file='(?:[^'\\]|\\')*'\*\/(?=;?\s*$)/, '');
+  const control = controls.has(statement) || /^SET LOCAL statement_timeout = '[1-9][0-9]*ms'$/.test(statement);
+  let plan = plans().get(statement);
   if (!plan && !control) return undefined;
   if (!plan) plan = [0, 0, 0, 0, 0, 0, 0];
   let [identityMetadataRows, nativeRows, nativePoints, bytes, candidateKeys, witnessKeys, emptySeeks, statements = 1] =
@@ -207,7 +210,7 @@ export function outputCaptureFootprint(
     bytes = bound;
   }
   // Array arguments retain their caller's smaller page bounds, including zero-key calls.
-  if (sql === ownersSQL.sql) {
+  if (statement === ownersSQL.sql) {
     const n = (values[0] as unknown[]).length;
     if (n > 100) return undefined;
     identityMetadataRows = n;
@@ -216,7 +219,7 @@ export function outputCaptureFootprint(
     bytes = n * 256;
     emptySeeks = n;
   }
-  if (sql === sourcesSQL.sql) {
+  if (statement === sourcesSQL.sql) {
     const n = (values[0] as unknown[]).length;
     identityMetadataRows = n * 4;
     nativeRows = n * 32;
@@ -224,7 +227,7 @@ export function outputCaptureFootprint(
     bytes = n * 1024;
     emptySeeks = n * 4;
   }
-  if (sql === pendingSQL.sql) {
+  if (statement === pendingSQL.sql) {
     const n = (values[0] as unknown[]).length;
     identityMetadataRows = n;
     nativeRows = n * 8;
@@ -232,7 +235,7 @@ export function outputCaptureFootprint(
     bytes = n * 256;
     emptySeeks = n;
   }
-  if (sql === currentSQL.sql) {
+  if (statement === currentSQL.sql) {
     const n = (values[0] as unknown[]).length;
     identityMetadataRows = n * 2;
     nativeRows = n * 16;
@@ -240,7 +243,7 @@ export function outputCaptureFootprint(
     bytes = n * 256;
     emptySeeks = n * 2;
   }
-  if (sql === s16.sql) {
+  if (statement === s16.sql) {
     const n = Number(values[3]);
     if (!Number.isInteger(n) || n < 1 || n > 101) return undefined;
     identityMetadataRows = n;
@@ -248,7 +251,7 @@ export function outputCaptureFootprint(
     candidateKeys = n;
     bytes = n * 64;
   }
-  if (sql === readableOriginalsSQL.sql) {
+  if (statement === readableOriginalsSQL.sql) {
     const n = Number(values[4]);
     if (!Number.isInteger(n) || n < 1 || n > 101) return undefined;
     identityMetadataRows = n;
@@ -256,7 +259,7 @@ export function outputCaptureFootprint(
     candidateKeys = n;
     bytes = n * 120;
   }
-  if (sql === s17.sql) {
+  if (statement === s17.sql) {
     const n = (values[2] as unknown[]).length;
     if (n > 100) return undefined;
     identityMetadataRows = n;
@@ -266,8 +269,8 @@ export function outputCaptureFootprint(
     bytes = n * 64;
     emptySeeks = n;
   }
-  if (sql === noEffectFenceSQL.sql && values[2] != null && values[2] !== 'null') return undefined;
-  if (sql === fenceSQL.sql) {
+  if (statement === noEffectFenceSQL.sql && values[2] != null && values[2] !== 'null') return undefined;
+  if (statement === fenceSQL.sql) {
     const events = typeof values[1] === 'string' ? JSON.parse(values[1]) : values[1];
     if (
       !Array.isArray(events) ||
