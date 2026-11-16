@@ -459,7 +459,7 @@ function SettingsSections({
     ),
     notifications:
       'preferences' in page ? (
-        <section id="notifications" aria-labelledby="settings-notifications-heading" className="scroll-mt-6">
+        <section id="notifications" aria-label={m.inbox_notification_preferences()} className="scroll-mt-6">
           {page.page && page.notifications ? (
             <NotificationsCard
               key={csrfToken}
@@ -553,7 +553,13 @@ function SettingsSections({
             if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
             event.preventDefault();
             setSectionFocus(event.detail === 0 ? 'keyboard' : 'pointer');
-            void router.navigate({ hash: id, search: true, resetScroll: false, hashScrollIntoView: false });
+            void router.navigate({
+              unsafeRelative: 'path',
+              hash: id,
+              search: true,
+              resetScroll: false,
+              hashScrollIntoView: false,
+            });
           }}
           admission={collectionsAdmission}
         />

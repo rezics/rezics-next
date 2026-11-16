@@ -123,10 +123,11 @@ export const AccountIdentityAndSafety: Story = {
         const reference = account.getByText(m.settings_account_rename_identity({ account: accountId }));
         await expect(reference).not.toBeVisible();
         const summary = details.querySelector('summary')!;
-        summary.focus();
-        await userEvent.keyboard('{Enter}');
+        await userEvent.click(summary);
+        await expect(summary).toHaveFocus();
         await expect(reference).toBeVisible();
-        await userEvent.keyboard('{Enter}');
+        await userEvent.click(summary);
+        await expect(reference).not.toBeVisible();
 
         const security = account.getByRole('link', { name: m.account_security_settings() });
         const deletion = account.getByRole('link', { name: m.settings_account_delete_continue() });

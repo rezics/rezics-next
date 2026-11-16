@@ -562,7 +562,7 @@ export const routes: FakeRoute[] = [
         page.watch = { state: 'unavailable', retryable: true };
         page.currentness.watch = 'unavailable';
       }
-      return { status: 200, ...page };
+      return { status: 200, __responseBody: page };
     },
   },
   {

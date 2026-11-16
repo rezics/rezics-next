@@ -99,12 +99,13 @@ export const UnavailableInspection: Story = {
   ...ErasedModeratorKeepsBanVisible,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByText(m.realm_bans_inspect_heading(), { selector: 'summary' }));
     await userEvent.type(
       canvas.getByRole('textbox', { name: m.realm_bans_inspect_account() }),
       '01a17a3b-70ea-712a-9ff7-81fc6a938199',
     );
     await userEvent.click(canvas.getByRole('button', { name: m.realm_bans_inspect_action() }));
-    await expect(canvas.getByText(m.realm_bans_inspect_unavailable())).toBeVisible();
+    await expect(await canvas.findByText(m.realm_bans_inspect_unavailable())).toBeVisible();
     await expect(canvas.getByRole('button', { name: m.realm_bans_inspect_retry() })).toBeEnabled();
   },
 };
@@ -126,6 +127,7 @@ export const DeniedInspection: Story = {
   ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByText(m.realm_bans_inspect_heading(), { selector: 'summary' }));
     await userEvent.type(
       canvas.getByRole('textbox', { name: m.realm_bans_inspect_account() }),
       '01a17a3b-70ea-712a-9ff7-81fc6a938199',
@@ -158,6 +160,7 @@ export const CurrentSelectedEpisode: Story = {
   ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByText(m.realm_bans_inspect_heading(), { selector: 'summary' }));
     await userEvent.type(
       canvas.getByRole('textbox', { name: m.realm_bans_inspect_account() }),
       '01a17a3b-70ea-712a-9ff7-81fc6a938199',
@@ -183,6 +186,7 @@ export const SelectedAccountAbsent: Story = {
   ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByText(m.realm_bans_inspect_heading(), { selector: 'summary' }));
     await userEvent.type(
       canvas.getByRole('textbox', { name: m.realm_bans_inspect_account() }),
       '01a17a3b-70ea-712a-9ff7-81fc6a938199',

@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { deadlineClient } from '../access/authenticate.ts';
 import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
-import { DEFAULT_REQUEST_DEADLINE_MS, noEffect, runCommand } from '../command/command.ts';
+import { type CommandTransaction, DEFAULT_REQUEST_DEADLINE_MS, noEffect, runCommand } from '../command/command.ts';
 import { withBoundedReadConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
@@ -10,6 +10,7 @@ import {
   CANONICAL_GENERATION_COMMITTED,
   CANONICAL_GENERATION_CONTINUATION,
   CANONICAL_GENERATION_DELIVERED,
+  CANONICAL_GENERATION_REBUILD_CONTINUED,
   SEMANTIC_EVENTS,
 } from './events.ts';
 
@@ -17,9 +18,17 @@ export const CANONICAL_GENERATION_PAGE_SIZE = 200;
 export type CanonicalGenerationDelivery = Readonly<{ partition: number; generation: string }>;
 export type CanonicalGenerationPageRequest = Readonly<{ after: number | null; limit: number }>;
 export type CanonicalGenerationReceiver = (
+  tx: CommandTransaction,
   generation: CanonicalGenerationDelivery,
   event: CloudEvent,
-) => Promise<unknown>;
+) => Promise<
+  Readonly<{
+    partition: number;
+    canonicalGeneration: string;
+    revision: string;
+    complete: boolean;
+  }>
+>;
 
 const maximumSerial = 9223372036854775807n;
 function validGeneration(value: unknown): value is string {
@@ -131,40 +140,51 @@ export async function resumeCanonicalGenerationDelivery(
   }
 }
 
-/** Bind this callable into Content's sole existing native canonical-work effect for COMMITTED.
- * `receive` must wait for native whole-home coverage, including an empty home; enqueue success
- * is insufficient. projectBatch/effects release the source receipt before this callback runs.
- * The original CloudEvent is passed intact; its source is the notification command, never a
- * fabricated Subject origin. A failed receiver leaves the retained generation outstanding.
+/** Run one receiving page under the native home command. A full page commits a continuation
+ * with the original notification intact. A terminal page and its checked watermark commit
+ * together, so a failed receiver or a bad witness leaves both unchanged.
  */
 export async function deliverCanonicalGenerationEvent(
   pool: Pool,
   event: CloudEvent,
   receive: CanonicalGenerationReceiver,
 ): Promise<void> {
-  if (
-    event.type !== CANONICAL_GENERATION_COMMITTED ||
-    !Value.Check(SEMANTIC_EVENTS[CANONICAL_GENERATION_COMMITTED], event.data)
-  )
+  const home = nativeHome(event);
+  const original = event.type === CANONICAL_GENERATION_REBUILD_CONTINUED ? event.data : event;
+  if (!Value.Check(SEMANTIC_EVENTS[CANONICAL_GENERATION_REBUILD_CONTINUED], original))
     throw new TypeError('Invalid committed canonical generation event');
-  const { partition, generation } = event.data as CanonicalGenerationDelivery;
-  if (nativeHome(event) !== partition || !validGeneration(generation))
+  const { partition, generation } = original.data;
+  if (home !== partition || nativeHome(original) !== partition || !validGeneration(generation))
     throw new TypeError('Canonical generation event does not belong to its native home');
-  await receive({ partition, generation }, event);
-  // Never hold a source command/receipt while awaiting WorkClient or a foreign receiver.
   await runCommand(pool, { partition }, async (tx) => {
-    const row = (await tx.query<{ generation: string; delivered: string }>(
-      `SELECT canonical_generation::text AS generation,canonical_delivered_generation::text AS delivered
+    const row = (
+      await tx.query<{ generation: string; delivered: string }>(
+        `SELECT canonical_generation::text AS generation,canonical_delivered_generation::text AS delivered
        FROM semantic.partition_subjects WHERE partition_no=$1 FOR UPDATE`,
-      [partition],
-    )).rows[0];
+        [partition],
+      )
+    ).rows[0];
     if (!row || BigInt(row.generation) < BigInt(generation))
       throw new Error('Canonical generation has not committed at its home');
     if (BigInt(row.delivered) >= BigInt(generation)) return noEffect(null);
-    await tx.query(
-      'UPDATE semantic.partition_subjects SET canonical_delivered_generation=$2 WHERE partition_no=$1',
-      [partition, generation],
-    );
+
+    const witness = await receive(tx, { partition, generation }, original);
+    if (
+      !witness ||
+      witness.partition !== partition ||
+      witness.canonicalGeneration !== row.generation ||
+      !validGeneration(witness.revision) ||
+      typeof witness.complete !== 'boolean'
+    )
+      throw new Error('Invalid whole-home canonical generation witness');
+    if (!witness.complete)
+      return { value: null, events: [{ type: CANONICAL_GENERATION_REBUILD_CONTINUED, data: original }] };
+
+    // A rebuild can cover a newer committed generation. This event acknowledges only its original generation.
+    await tx.query('UPDATE semantic.partition_subjects SET canonical_delivered_generation=$2 WHERE partition_no=$1', [
+      partition,
+      generation,
+    ]);
     return { value: null, events: [{ type: CANONICAL_GENERATION_DELIVERED, data: { partition, generation } }] };
   });
 }

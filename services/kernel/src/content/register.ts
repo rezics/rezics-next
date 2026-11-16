@@ -162,6 +162,7 @@ export type ContentWorkAmbient = Readonly<{
   now?: () => number;
   id?: () => string;
   readIdentityMappings: (pool: Pool, originals: readonly string[]) => Promise<readonly RealmSubjectIdentityMapping[]>;
+  receiveCanonicalGeneration?: Parameters<typeof contentEffects>[3];
 }>;
 
 /** Content's declared effects. The worker register consumes this; tests may install the same list. */
@@ -170,10 +171,16 @@ export function contentDeclaredEffects(
   client: Parameters<typeof contentEffects>[1],
   access: Parameters<typeof contentNoticeEffects>[1],
   readIdentityMappings: ContentWorkAmbient['readIdentityMappings'],
+  receiveCanonicalGeneration?: ContentWorkAmbient['receiveCanonicalGeneration'],
 ) {
   return Object.freeze([
     createConversationActivityEffect(pool as Parameters<typeof createConversationActivityEffect>[0]),
-    ...contentEffects(pool as Parameters<typeof contentEffects>[0], client, readIdentityMappings),
+    ...contentEffects(
+      pool as Parameters<typeof contentEffects>[0],
+      client,
+      readIdentityMappings,
+      receiveCanonicalGeneration,
+    ),
     createKnowledgeLifecycleRestoreEffect(pool as Parameters<typeof contentEffects>[0], client),
     ...contentNoticeEffects(pool as Parameters<typeof contentNoticeEffects>[0], access),
   ]);
@@ -220,7 +227,13 @@ export function createContentWorkModule(ambient: ContentWorkAmbient): WorkModule
       registerReportLocatorWork(context);
       registerModerationDirectoryWork(context);
       context.addEffects([
-        ...contentDeclaredEffects(context.pool, context.client, access, ambient.readIdentityMappings),
+        ...contentDeclaredEffects(
+          context.pool,
+          context.client,
+          access,
+          ambient.readIdentityMappings,
+          ambient.receiveCanonicalGeneration,
+        ),
       ]);
       await registerFeedWork(context);
     },

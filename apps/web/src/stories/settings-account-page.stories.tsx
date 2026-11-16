@@ -157,7 +157,7 @@ const preferenceTransition: Story = {
     await canvas.findByRole('region', { name: m.settings_reading_heading() });
     await userEvent.click(fixture.getByRole('button', { name: 'Unprepared viewer' }));
     await waitFor(() => expect(canvas.queryByRole('region', { name: m.settings_reading_heading() })).toBeNull());
-    await expect(canvas.queryByRole('region', { name: m.settings_notifications_heading() })).toBeNull();
+    await expect(canvas.queryByRole('region', { name: m.inbox_notification_preferences() })).toBeNull();
     await expect(canvasElement.querySelector('[name="csrf_token"]')).toBeNull();
     await expect(canvas.getByText(m.settings_sections_loading())).toBeVisible();
     await expect(canvas.getByRole('region', { name: m.settings_display_heading() })).toBeVisible();
@@ -166,7 +166,7 @@ const preferenceTransition: Story = {
     await userEvent.click(reading.getByRole('switch', { name: m.settings_suitability_title() }));
     await reading.findByText(m.settings_conflict_title());
     await selectSettingsCategory(canvasElement, m.settings_notifications_heading());
-    const notifications = within(canvas.getByRole('region', { name: m.settings_notifications_heading() }));
+    const notifications = within(canvas.getByRole('region', { name: m.inbox_notification_preferences() }));
     await userEvent.click(notifications.getByRole('switch', { name: m.settings_notification_reply() }));
     await notifications.findByText(m.settings_conflict_title());
     const notificationVersionFields = () =>
@@ -206,7 +206,7 @@ const preferenceTransition: Story = {
     await reading.findByText(m.settings_conflict_title());
     await userEvent.click(fixture.getByRole('button', { name: 'Switch viewer' }));
     await waitFor(() => expect(canvas.queryByRole('region', { name: m.settings_reading_heading() })).toBeNull());
-    await expect(canvas.queryByRole('region', { name: m.settings_notifications_heading() })).toBeNull();
+    await expect(canvas.queryByRole('region', { name: m.inbox_notification_preferences() })).toBeNull();
     await expect(canvasElement.querySelector('[name="expectedVersion"]')).toBeNull();
     await expect(canvasElement.querySelector('[name="csrf_token"]')).toBeNull();
     await userEvent.click(fixture.getByRole('button', { name: 'Prepare next viewer' }));
@@ -214,7 +214,7 @@ const preferenceTransition: Story = {
     await expect(nextReading.getByRole('switch', { name: m.settings_suitability_title() })).not.toBeChecked();
     await expect(nextReading.getByRole('radio', { name: m.settings_spoiler_0_title() })).toBeChecked();
     await selectSettingsCategory(canvasElement, m.settings_notifications_heading());
-    const nextNotifications = within(canvas.getByRole('region', { name: m.settings_notifications_heading() }));
+    const nextNotifications = within(canvas.getByRole('region', { name: m.inbox_notification_preferences() }));
     await expect(nextNotifications.getByRole('switch', { name: m.settings_notification_mention() })).not.toBeChecked();
     for (const input of canvasElement.querySelectorAll<HTMLInputElement>('[name="expectedVersion"]'))
       await expect(input.value).toBe('1');
@@ -289,7 +289,7 @@ export const NoticeDraftDecision: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Prepare current viewer' }));
     await selectSettingsCategory(canvasElement, m.settings_notifications_heading());
-    const notifications = within(await canvas.findByRole('region', { name: m.settings_notifications_heading() }));
+    const notifications = within(await canvas.findByRole('region', { name: m.inbox_notification_preferences() }));
     const reply = notifications.getByRole('switch', { name: m.settings_notification_reply() });
     await userEvent.click(reply);
     await notifications.findByText(m.settings_conflict_title());

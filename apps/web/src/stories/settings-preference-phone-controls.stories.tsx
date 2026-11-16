@@ -111,7 +111,7 @@ export const PreferenceControls: Story = {
 
     notificationMode = true;
     await selectSettingsCategory(context.canvasElement, m.settings_notifications_heading());
-    const noticesElement = await view.findByRole('region', { name: m.settings_notifications_heading() });
+    const noticesElement = await view.findByRole('region', { name: m.inbox_notification_preferences() });
     const notices = within(noticesElement);
     await expect(notices.getByRole('heading', { name: m.settings_notifications_heading() })).toHaveFocus();
     await notices.findByText(m.settings_automatic_save_help());
