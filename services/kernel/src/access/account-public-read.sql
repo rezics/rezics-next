@@ -1,4 +1,5 @@
 SELECT account_id AS "accountId", kind, state,
+       authn_fenced AS fenced,
        CASE WHEN state = 'active' AND NOT authn_fenced THEN avatar END AS avatar,
        CASE WHEN state = 'active' AND NOT authn_fenced
             THEN public_views || jsonb_build_object('realms', COALESCE(public_views->'realms', 'false'::jsonb))

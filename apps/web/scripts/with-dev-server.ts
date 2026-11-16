@@ -134,13 +134,14 @@ export async function prepareSharedWebDevCache(
       reused: env.WEB_TEST_DEV_SERVER_CACHE === 'reuse',
     };
   }
+  const workspaceRoot = resolve(options.workspaceRoot ?? workspace);
   const published = await prepareViteDepCache({
-    workspaceRoot: resolve(options.workspaceRoot ?? workspace),
+    workspaceRoot,
     appRoot: resolve(options.appDirectory ?? app),
     env: sharedViteChildEnvironment(env),
   });
   return {
-    directory: materializeViteDepCache(published, runCacheDirectory(env)),
+    directory: materializeViteDepCache(published, runCacheDirectory(env), workspaceRoot),
     lockHash: published.lockHash,
     reused: published.reused,
   };

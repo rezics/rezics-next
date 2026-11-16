@@ -3,6 +3,7 @@ import type { TSchema } from 'typebox';
 import { Value } from 'typebox/value';
 import { ACCESS_EVENTS } from '../../src/access/events.ts';
 import { EVENT_TYPES } from '../../src/events/log.ts';
+import { classifyEvent } from '../../src/history/contract/contracts.ts';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { newId } from '../../src/route/route.ts';
 
@@ -115,9 +116,18 @@ test('all eight concrete helper events have registered schemas for every return 
       'com.rezics.access.credential-approved-consumed.v1',
       'com.rezics.access.workflow-approvals-swept.v1',
       'com.rezics.access.credential-floor-advanced.v1',
+      'com.rezics.access.website-session-floor-advanced.v1',
       'com.rezics.access.standing-parent.installed.v1',
     ].sort(),
   );
+});
+
+test('Website floor advances classify the account and exclude the native session', () => {
+  const type = 'com.rezics.access.website-session-floor-advanced.v1';
+  const definition = schema(type);
+  expect(Value.Check(definition, { accountId: account })).toBe(true);
+  expect(Value.Check(definition, { accountId: account, sessionId: request })).toBe(false);
+  expect(classifyEvent(type)).toEqual(classifyEvent('com.rezics.access.authentication-floor-advanced.v1'));
 });
 
 test('payloads are exact, exclude command and private data, and reject wrong event families', () => {

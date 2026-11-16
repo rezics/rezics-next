@@ -1,5 +1,6 @@
 import { composeRatingDependencies } from './rating.ts';
 import { installRatingVoteSemantic } from './rating-votes.ts';
+import type { CurrentConsentReader } from '../access/auth-consent.ts';
 import { createInitiatorRestorer } from '../access/durable-initiator.ts';
 import { erasureWorkModule } from '../access/erasure.ts';
 import { sharedHistoryWorkModule } from '../history/application/index.ts';
@@ -50,6 +51,7 @@ function accountsWorkModule(
       throw new Error('Trusted Auth session revocation workflow is unavailable');
     },
   },
+  realmConsent?: CurrentConsentReader,
 ): WorkModule {
   return {
     name: 'accounts',
@@ -65,7 +67,7 @@ function accountsWorkModule(
           pool: context.pool,
           access,
           readOperation: readMembershipInitiator,
-          readConsent,
+          readConsent: realmConsent ?? readConsent,
         }),
       });
       await createAccountsWorkModule({ realm: membership, sessionRevocation }).register(context);
@@ -108,6 +110,7 @@ export function createKernelWorkModules(
   communityAmbient: CommunityAmbient = systemCommunityAmbient,
   suppliedSearchNativePorts?: SearchNativePortsComposer,
   sessionRevocation?: CommittedSessionRevocationWorkflow,
+  realmConsent?: CurrentConsentReader,
 ): readonly WorkModule[] {
   composeRatingDependencies();
   installIdentityRatingRepairProducer();
@@ -128,7 +131,7 @@ export function createKernelWorkModules(
   const contentWorkModule = contentDeclaration().work(contentWorkAmbient(ambient));
   const community = createCommunityDeclaration(communityAmbient);
   return [
-    accountsWorkModule(community, sessionRevocation),
+    accountsWorkModule(community, sessionRevocation, realmConsent),
     erasureWorkModule,
     sharedHistoryWorkModule,
     ratingNativeWorkModule,

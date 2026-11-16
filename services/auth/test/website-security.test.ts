@@ -63,7 +63,13 @@ beforeAll(async () => {
         if (!accounts.has(id)) throw new Error('Unknown owner');
         return { accountId: id };
       },
-      async invalidateAccount({ accountId, previousEpoch }) {
+      async invalidateAccount(proof) {
+        const { accountId, previousEpoch, reason, websiteSessionId } = proof;
+        if (reason !== 'consent-reduction') {
+          expect(websiteSessionId).toBeString();
+          expect(service.internal.verifyWebsiteSessionInvalidation(proof)).toBe(true);
+          expect(service.internal.verifyWebsiteSessionInvalidation({ ...proof })).toBe(false);
+        }
         const account = accounts.get(accountId)!;
         account.authnEpoch = Math.max(account.authnEpoch, previousEpoch) + 1;
         return { accountId, minimumAuthnEpoch: account.authnEpoch, receiptId: `floor-${account.authnEpoch}` };

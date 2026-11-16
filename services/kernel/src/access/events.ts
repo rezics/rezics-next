@@ -301,6 +301,10 @@ export function ACCESS_EVENTS() {
           { additionalProperties: false },
         ),
         'com.rezics.access.authentication-floor-advanced.v1': fenceReceipt('fence', 'null'),
+        'com.rezics.access.website-session-floor-advanced.v1': Type.Object(
+          { accountId: identity },
+          { additionalProperties: false },
+        ),
         'com.rezics.access.authentication-fenced.v1': fenceReceipt('fence', 'null'),
         'com.rezics.access.authentication-established.v1': Type.Object(
           { accountId: identity, receiptId: identity, minimumAuthnEpoch: epoch },

@@ -100,6 +100,7 @@ export type IdentitySemanticPort = {
   readPublicSubject?(
     client: AccessQueryClient,
     subjectId: string,
+    unverifiedOwnerId?: string,
   ): Promise<{ id: string; label: string; type: string } | null>;
 };
 

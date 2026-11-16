@@ -8,6 +8,7 @@ const viewer = {
   session_id: 'current',
   client_id: 'login',
   fresh: true,
+  credentialScope: true,
   credentialCommands: true,
   passwordCommands: true,
   now,
@@ -55,6 +56,9 @@ test('one native owner projection validates rows, current session, native freshn
   const stale = await composeSecurityPage(database({ password: true }).pool, { ...viewer, fresh: false });
   expect(stale.actions.change_password).toBe('step-up-required');
   expect(stale.passkeys.kind === 'ready' && stale.passkeys.rows[0]?.remove).toBe('step-up-required');
+  const login = await composeSecurityPage(db.pool, { ...viewer, credentialScope: false });
+  expect(login.actions).toEqual({ change_password: 'step-up-required', register_passkey: 'step-up-required' });
+  expect(login.passkeys.kind === 'ready' && login.passkeys.rows[0]?.remove).toBe('step-up-required');
 });
 test('a failed or malformed inventory stays unavailable while the other inventory remains usable', async () => {
   const failed = await composeSecurityPage(database({ fail: 'FROM passkey' }).pool, viewer);

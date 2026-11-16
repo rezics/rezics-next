@@ -23,6 +23,7 @@ import { effectsRelay } from './events/effects.ts';
 import { relayConcurrencyForPool, startRelays } from './events/relays.ts';
 import { configureReceiptKeys, readReceiptKeyRing } from './command/receipt-key.ts';
 import type { KeyRing } from './tokens/seal.ts';
+import type { CurrentConsentReader } from './access/auth-consent.ts';
 import type { CommittedSessionRevocationWorkflow } from './access/session-revocation-work.ts';
 
 /** Report each owned drain boundary without changing its failure or settlement order. */
@@ -69,6 +70,8 @@ export type WorkerConfig = {
   kernelPool?: (url: string) => pg.Pool | Promise<pg.Pool>;
   /** Supplied by the existing Auth host, directly or through its private worker channel. */
   sessionRevocation?: CommittedSessionRevocationWorkflow;
+  /** Native Realm work may read exact current consent through its trusted Auth host. */
+  realmConsent?: CurrentConsentReader;
   /** An enclosing worker entry may own signals and channel teardown. */
   handleSignals?: boolean;
 };
@@ -141,6 +144,7 @@ export async function startWorker(
       community.ambient,
       undefined,
       config.sessionRevocation,
+      config.realmConsent,
     );
   const receiptKeys = readReceiptKeyRing(env, config.receiptKeys);
   initializeEventTypes();

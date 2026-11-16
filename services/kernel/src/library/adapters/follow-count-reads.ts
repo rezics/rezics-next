@@ -5,7 +5,7 @@ import { GrantDeniedError } from '../../access/contract/errors.ts';
 import { accessCheck } from '../../request/access-check.ts';
 import type { Access, AccessClient } from '../../request/access.ts';
 import { partitionOf, routeOf } from '../../route/route.ts';
-import partitionRead from '../../partition/read.sql';
+import { readPartition } from '../../partition/partition.ts';
 import { createFollowCountReadApplication } from '../application/index.ts';
 import {
   FollowCountReadRefusedError,
@@ -38,7 +38,6 @@ export interface NativeFollowCountReadPorts {
   }> | null>;
   accountForAgent(pool: Pool, id: string): Promise<string | null>;
   spaceExists(client: AccessClient, id: string, at: string): Promise<boolean>;
-  deadlineClient(client: AccessClient, deadline: number): AccessClient;
   within<T>(deadline: number, work: () => Promise<T>): Promise<T>;
   destination(pool: Pool, target: FollowCountTarget): Promise<CountDestination>;
   isUnavailable(error: unknown): boolean;
@@ -50,7 +49,7 @@ export function createNativeFollowCountReads(
   ports: NativeFollowCountReadPorts,
 ): FollowCountReads {
   const read = <T>(deadline: number, body: (client: AccessClient) => Promise<T>): Promise<T> =>
-    withFollowCountReadConnection(pool, deadline, body, ports);
+    withFollowCountReadConnection(pool, deadline, body);
   const application = createFollowCountReadApplication<AuthoritativeTime, FollowReadAdmission>({
     route: routeOf,
     admit: (owner, deadline, expected) => admitPrivateFollowRead(pool, owner, deadline, expected),
@@ -77,8 +76,9 @@ export function createNativeFollowCountReads(
     },
     total(destination, type, deadline) {
       return read(deadline, async (tx) => {
-        const partition = await partitionRead.run(tx, { partition_no: partitionOf(destination.route) });
-        if (!partition || partition.writeState !== 'active') throw new FollowCountUnavailableError();
+        const partition = await readPartition(tx, partitionOf(destination.route));
+        if (!partition || partition.writeState !== 'active' || partition.movedTo !== null)
+          throw new FollowCountUnavailableError();
         const row = (
           await tx.query<{ total: string }>(
             `SELECT total::text FROM library.follow_count_total
@@ -92,8 +92,9 @@ export function createNativeFollowCountReads(
     outgoing(owner, deadline) {
       return read(deadline, async (tx) => {
         const route = countRoute(owner.accountId);
-        const partition = await partitionRead.run(tx, { partition_no: partitionOf(route) });
-        if (!partition || partition.writeState !== 'active') throw new FollowCountUnavailableError();
+        const partition = await readPartition(tx, partitionOf(route));
+        if (!partition || partition.writeState !== 'active' || partition.movedTo !== null)
+          throw new FollowCountUnavailableError();
         const row = (
           await tx.query<{ observed_live_count: string; bootstrap_complete: boolean }>(
             'SELECT observed_live_count::text,bootstrap_complete FROM library.follow_count_owner WHERE route=$1 AND account_id=$2',

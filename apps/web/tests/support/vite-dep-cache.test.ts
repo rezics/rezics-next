@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, sep } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import {
   alignViteDepCacheToOptimizer,
   alignViteLockfileHashes,
@@ -11,6 +11,7 @@ import {
   materializeViteDepCache,
   readPatchBytes,
   viteDepCacheMetadataFile,
+  viteDepCacheMetadataFiles,
   viteDepCacheMetadataName,
   viteDepCacheOptimizeCommand,
   viteDepCacheReadyName,
@@ -21,6 +22,7 @@ import {
   viteEnvironmentDepHashes,
   viteLockfileHash,
   webViteOptimizerIdentity,
+  webViteTestClientOptimizeDeps,
   webViteTypeboxWorkerGraph,
   webViteWarmSsrEnvName,
   webViteWorkerSsrEnvironment,
@@ -28,7 +30,7 @@ import {
 } from './vite-dep-cache.ts';
 import { prepareViteDepCache } from './vite-dep-cache-build.ts';
 
-const temporary = mkdtempSync(join(tmpdir(), 'rezics-vite-dep-cache-'));
+const temporary = mkdtempSync(join(realpathSync(tmpdir()), 'rezics-vite-dep-cache-'));
 
 afterAll(() => rmSync(temporary, { recursive: true, force: true }));
 
@@ -77,7 +79,11 @@ test('the installed Elysia graph fails first on typebox/type and resolves it thr
   );
 });
 
-test('walk optimizer inputs and the browser shim mapping are part of the shared cache identity', () => {
+test('client optimizer inputs and the browser shim mapping are part of the shared cache identity', () => {
+  expect(webViteOptimizerIdentity.client).toBe(webViteTestClientOptimizeDeps);
+  expect(webViteOptimizerIdentity.client.include).toEqual(
+    expect.arrayContaining(['typebox/type', 'typebox/compile', 'typebox/system']),
+  );
   expect(webViteOptimizerIdentity.walkClient.noDiscovery).toBe(true);
   expect(webViteOptimizerIdentity.walkClient.include).toContain('@base-ui/react/*');
   expect(webViteOptimizerIdentity.clientResolveAliases).toHaveLength(1);
@@ -120,7 +126,7 @@ test('a lock hash reuses one published cache and a changed lock builds its own d
     lockBytes: 'lock-a',
     build,
   });
-  expect(second).toEqual({ directory: first.directory, lockHash: first.lockHash, reused: true });
+  expect(second).toEqual({ ...first, reused: true });
   expect(builds).toBe(1);
 
   const changed = await prepareViteDepCache({
@@ -204,7 +210,7 @@ test('a materialized copy restamps Vite lockfileHash without rebuilding or mutat
   );
 
   const runDirectory = join(temporary, 'run-copy');
-  const copy = materializeViteDepCache(published, runDirectory);
+  const copy = materializeViteDepCache(published, runDirectory, workspaceRoot);
   expect(copy).toBe(runDirectory);
   alignViteLockfileHashes(copy, appRoot);
   const current = viteLockfileHash(appRoot);
@@ -228,7 +234,7 @@ test('a materialized copy restamps Vite lockfileHash without rebuilding or mutat
   expect(reused.directory).toBe(published.directory);
 });
 
-test('equivalent lock, patch bytes and optimizer config reuse across worktrees; a patch or optimizer change rebuilds', async () => {
+test('a warm cache reuses and rebases optimized sources across worktrees, until an input changes', async () => {
   const home = cacheHome();
   const firstRoot = join(temporary, 'worktree-a');
   const secondRoot = join(temporary, 'worktree-b');
@@ -238,10 +244,25 @@ test('equivalent lock, patch bytes and optimizer config reuse across worktrees; 
   writeFileSync(join(secondRoot, 'bun.lock'), 'lock-shared');
   writeFileSync(join(firstRoot, 'patches', 'keep.patch'), 'same-bytes');
   writeFileSync(join(secondRoot, 'patches', 'keep.patch'), 'same-bytes');
+  const sourcePath = join('node_modules', 'typebox', 'index.mjs');
+  const sharedSource = join(temporary, 'shared-dependency-store', 'index.mjs');
   let builds = 0;
   const build = async (staging: string) => {
     builds += 1;
-    writeFileSync(join(staging, 'marker'), `build-${builds}`);
+    for (const file of viteDepCacheMetadataFiles) {
+      const deps = dirname(join(staging, file));
+      mkdirSync(deps, { recursive: true });
+      writeFileSync(
+        join(staging, file),
+        JSON.stringify({
+          browserHash: 'browser-version',
+          optimized: {
+            typebox: { src: relative(deps, join(firstRoot, sourcePath)), file: 'typebox.js' },
+            react: { src: relative(deps, sharedSource), file: 'react.js' },
+          },
+        }),
+      );
+    }
   };
   const first = await prepareViteDepCache({
     workspaceRoot: firstRoot,
@@ -261,8 +282,21 @@ test('equivalent lock, patch bytes and optimizer config reuse across worktrees; 
     cacheHome: home,
     build,
   });
-  expect(second).toEqual({ directory: first.directory, lockHash: first.lockHash, reused: true });
+  expect(second).toEqual({ ...first, reused: true });
+  expect(second.workspaceRoot).toBe(firstRoot);
   expect(builds).toBe(1);
+  const run = materializeViteDepCache(second, join(secondRoot, '.temp', 'run', 'vite-deps'), secondRoot);
+  for (const file of viteDepCacheMetadataFiles) {
+    const path = join(run, file);
+    const metadata = JSON.parse(readFileSync(path, 'utf8'));
+    expect(resolve(dirname(path), metadata.optimized.typebox.src)).toBe(join(secondRoot, sourcePath));
+    expect(resolve(dirname(path), metadata.optimized.react.src)).toBe(sharedSource);
+    expect(metadata.optimized.typebox.file).toBe('typebox.js');
+    expect(metadata.browserHash).toBe('browser-version');
+    const original = join(first.directory, file);
+    const originalMetadata = JSON.parse(readFileSync(original, 'utf8'));
+    expect(resolve(dirname(original), originalMetadata.optimized.typebox.src)).toBe(join(firstRoot, sourcePath));
+  }
 
   writeFileSync(join(secondRoot, 'patches', 'keep.patch'), 'changed-bytes');
   const patched = await prepareViteDepCache({

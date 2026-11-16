@@ -1153,7 +1153,8 @@ Every positive native membership publication requires the fresh Access transitio
 Stable reservation and transition generation are separate. Under the Realm row lock the transaction writes
 membership (or confirms the same live reservation), its native receipt response and an immutable
 `realm_membership_proof` keyed by Realm, member and generation. The receipt binds the original operation, generation,
-stable reservation, outcome and publication transaction. `authority.readTransition(client, transition)` returns
+stable reservation, outcome and publication transaction. Publication, cancellation and terminalization name the exact
+receipt storage key selected by the command executor. `authority.readTransition(client, transition)` returns
 `RealmMembershipProof | null` only for this exact committed source. A closed or unrelated generation cannot publish;
 a queued old writer encounters the already committed proof slot and refuses. Raw native receipt replay retains its
 original digest and result.

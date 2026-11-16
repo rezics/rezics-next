@@ -68,7 +68,7 @@ export async function signInWithPasskey({
 }: {
   autofill?: boolean;
   operation?: AccountOperationStepUpKind;
-  management?: ManagementOperationKind;
+  management?: ManagementOperationKind | 'security';
   isCurrent?: () => boolean;
   onPhase?: LoginPhaseObserver;
 } = {}): Promise<PasskeySignInResult> {
