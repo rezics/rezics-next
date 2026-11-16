@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { currentCommandResources, runCommand } from '../command/command.ts';
+import { currentCommandResources, runCommand, type CommandTransaction } from '../command/command.ts';
 import { serializeIdentityValue } from '../semantic/identity-core/encoding.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
@@ -9,6 +9,7 @@ import {
   PublicFilterSourceDefinitionError,
   publicFilterSource,
   readIdentitySourceProjection,
+  prepareRetainedIdentitySourceProjections,
   readRelease,
   withReadTransaction,
   readPublicFilterSourceDefinition,
@@ -222,62 +223,56 @@ export function createSearchIdentityReceivingNative(
     // Release loading and Source reads are additionally charged by the enclosing exact SQL inventory.
     return loaded.definition;
   }
-  async function resolveOriginalMeaning(plan: SearchNativeReceivingPlan, work: SearchNativeReceivingWork) {
-    const { deadline } = work.context;
+  async function readOriginalMeaning(
+    tx: CommandTransaction,
+    plan: SearchNativeReceivingPlan,
+    work: SearchNativeReceivingWork,
+  ) {
     const digest = plan.references.release;
-    work.readTransaction();
     work.reserve({ rows: 3, points: 3, statements: 1, bytes: 2048, engineRequests: 0 });
-    return withReadTransaction(
+    const definition = (
+      await tx.query<{ release_digest: string; route_digest: string }>(nativeDefinitionSql.sql, [
+        plan.references.definition,
+      ])
+    ).rows[0];
+    if (
+      !definition ||
+      definition.release_digest !== digest ||
+      definition.route_digest !== createHash('sha256').update(config.routeKey).digest('hex')
+    )
+      work.fail('changed', 'Original Source definition or release changed');
+    const release = await readRelease(tx, digest);
+    if (!release) work.fail('unavailable', 'Original Source release is unavailable');
+    return { digest, release };
+  }
+
+  async function verifyRetainedProjections(
+    plan: SearchNativeReceivingPlan,
+    work: SearchNativeReceivingWork,
+    phase?: 'original' | 'terminal',
+  ) {
+    const { deadline } = work.context;
+    const verify = await prepareRetainedIdentitySourceProjections(config, {
+      job: plan.selection.job,
+      original: plan.source.original,
+      terminal: plan.source.terminal,
+      release: plan.references.release,
+      originalSupport: plan.references.originalSupport,
+      terminalSupport: plan.references.terminalSupport,
+      deadline,
+      ...(phase && { phase }),
+    });
+    if (!verify) work.fail('changed', 'Original Search Source projection references changed');
+    work.readTransaction();
+    const valid = await withReadTransaction(
       config.pool,
       async (tx) => {
-        const definition = (
-          await tx.query<{ release_digest: string; route_digest: string }>(nativeDefinitionSql.sql, [
-            plan.references.definition,
-          ])
-        ).rows[0];
-        if (
-          !definition ||
-          definition.release_digest !== digest ||
-          definition.route_digest !== createHash('sha256').update(config.routeKey).digest('hex')
-        )
-          work.fail('changed', 'Original Source definition or release changed');
-        const release = await readRelease(tx, digest);
-        if (!release) work.fail('unavailable', 'Original Source release is unavailable');
-        return { digest, release };
+        await readOriginalMeaning(tx, plan, work);
+        return verify(tx);
       },
       deadline,
     );
-  }
-
-  async function verifyOriginalProjection(
-    plan: SearchNativeReceivingPlan,
-    phase: 'original' | 'terminal',
-    meaning: Awaited<ReturnType<typeof resolveOriginalMeaning>>,
-    work: SearchNativeReceivingWork,
-  ) {
-    const id = plan.source[phase];
-    const frontier = phase === 'original' ? plan.references.originalSupport : plan.references.terminalSupport;
-    const projection = await readIdentitySourceProjection(config, source, {
-      job: plan.selection.job,
-      original: id,
-      terminal: plan.source.terminal,
-      meaning,
-      frontier,
-      inputLimit: 1,
-      context: { deadline: work.context.deadline },
-    });
-    if (projection.status !== 'projected')
-      work.fail(
-        projection.status === 'changed' ? 'changed' : 'unavailable',
-        'Original Search Source support is unavailable',
-      );
-    if (projection.projection?.status === 'progress')
-      work.fail('draining', 'Original Search Source support is incomplete');
-    if (
-      !!projection.projection !== !!frontier ||
-      (projection.projection && !isDeepStrictEqual(projection.projection.frontier, frontier))
-    )
-      work.fail('changed', 'Original Search Source support changed');
+    if (!valid) work.fail('changed', 'Original Search Source support changed');
   }
 
   async function requireCompleteOriginalSource(
@@ -338,11 +333,13 @@ export function createSearchIdentityReceivingNative(
       return perform(context, async (work: SearchNativeReceivingWork, call) => {
         const plan = await call((c) => store.readPlanPoint(selection.native, c));
         if (!isDeepStrictEqual(plan.selection, selection)) work.fail('changed', 'Exact native selection changed');
-        const originalBarrier = plan.source.barrier.kind === 'original';
-        if (!originalBarrier) await call((c) => store.observeOriginalFence(plan, c));
-        const meaning = originalBarrier
-          ? await resolveOriginalMeaning(plan, work)
-          : (await definition(plan.references.definition, plan.references.release, work)).meaning;
+        if (plan.source.barrier.kind === 'original') {
+          await verifyRetainedProjections(plan, work);
+          await call((c) => store.revalidateOriginalPlanFence(plan, c));
+          return plan.source;
+        }
+        await call((c) => store.observeOriginalFence(plan, c));
+        const { meaning } = await definition(plan.references.definition, plan.references.release, work);
         for (const [original, frontier] of [
           [plan.source.original, plan.references.originalSupport],
           [plan.source.terminal, plan.references.terminalSupport],
@@ -370,11 +367,8 @@ export function createSearchIdentityReceivingNative(
         }
         // Source reads run on released homes. Reestablish the actual receiving owner's immutable
         // component after those reads rather than returning a plan captured before relocation.
-        if (originalBarrier) await call((c) => store.revalidateOriginalPlanFence(plan, c));
-        else {
-          const current = await call((c) => store.readPlan(selection.native, c));
-          if (!isDeepStrictEqual(current, plan)) work.fail('changed', 'Native plan changed during Source resolution');
-        }
+        const current = await call((c) => store.readPlan(selection.native, c));
+        if (!isDeepStrictEqual(current, plan)) work.fail('changed', 'Native plan changed during Source resolution');
         return plan.source;
       });
     },
@@ -408,15 +402,6 @@ export function createSearchIdentityReceivingNative(
       invocation?.reconciliations.set(locatorKey, reconciliation);
       return perform(context, async (work: SearchNativeReceivingWork, call) => {
         const retained = cursor(after);
-        async function verifyReleaseSupport(plan: SearchNativeReceivingPlan) {
-          const meaning = await resolveOriginalMeaning(plan, work);
-          await verifyOriginalProjection(plan, 'original', meaning, work);
-          if (
-            plan.source.original !== plan.source.terminal ||
-            !isDeepStrictEqual(plan.references.originalSupport, plan.references.terminalSupport)
-          )
-            await verifyOriginalProjection(plan, 'terminal', meaning, work);
-        }
         function retainRelease(observation: SearchNativeReceivingReleaseObservation) {
           if (!invocation?.active || invocation.reconciliations.get(locatorKey) !== reconciliation)
             work.fail('changed', 'Terminal reconciliation was superseded');
@@ -440,7 +425,7 @@ export function createSearchIdentityReceivingNative(
               })
           )
             work.fail('changed', 'Original reconciliation identity changed before release');
-          await verifyReleaseSupport(plan);
+          await verifyRetainedProjections(plan, work);
           retainRelease(await call((c) => store.observeRelease(locator, c, expected)));
           return { after, state: 'settled' as const };
         }
@@ -463,8 +448,7 @@ export function createSearchIdentityReceivingNative(
         if (retained?.phase) {
           if (!originalBarrier || state.pending)
             work.fail('changed', 'Original copy closure changed before Source support');
-          const meaning = await resolveOriginalMeaning(state.plan, work);
-          await verifyOriginalProjection(state.plan, retained.phase, meaning, work);
+          await verifyRetainedProjections(state.plan, work, retained.phase);
           await verifyFence(state.plan);
           const terminal =
             retained.phase === 'terminal' ||
@@ -484,7 +468,7 @@ export function createSearchIdentityReceivingNative(
         if (retained?.terminal) {
           if (state.pending) work.fail('draining', 'Original copies prevent terminal revalidation');
           if (originalBarrier) {
-            await verifyReleaseSupport(state.plan);
+            await verifyRetainedProjections(state.plan, work);
           } else {
             const support = await requireCompleteOriginalSource(state.plan, work, retained?.support ?? null);
             if (support !== null)

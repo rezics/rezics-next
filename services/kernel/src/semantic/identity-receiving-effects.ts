@@ -934,9 +934,13 @@ async function releaseReceivingCustody(
   // continuations are scheduling state; neither one conveys reusable release authority.
   if (record.step === 'search-canonical-index') await revalidateSearchTerminal(pool, record, retained);
   // The released control transaction above verified the exact native effect, plan and immutable binding.
-  // Re-read that SAME effect at its own home before the owner's native release; no job-wide ACK substitutes.
   await runCommand(pool, { partition: record.source.receivingHome }, async (tx) => {
-    const { record: local } = await localRecord(tx, effect);
+    // The original hold release fences this exact record against the live accepted
+    // and applied rows. Reuse the record that authorized this owned turn.
+    const local =
+      retained && record.step === 'search-canonical-index' && record.source.barrier.kind === 'original'
+        ? record
+        : (await localRecord(tx, effect)).record;
     if (
       !local?.applied ||
       json(local.applied.receipt) !== json(native) ||
@@ -946,7 +950,11 @@ async function releaseReceivingCustody(
       throw stale();
     if (local.step === 'search-canonical-index') {
       const progress = await searchContinuation(tx, local);
-      if (progress.state !== 'settled' && progress.state !== 'released') throw stale();
+      if (
+        (progress.state !== 'settled' && progress.state !== 'released') ||
+        (retained && progress.revision !== retained.revision)
+      )
+        throw stale();
       const released = await searchNativeCall(tx, 'releaseHold', local);
       if (released.holdId !== local.nativeHold.holdId) throw stale();
       recordIdentityEpochNativeCommit(tx, 'identity-receiving-custody');
