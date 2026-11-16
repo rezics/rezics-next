@@ -90,13 +90,15 @@ async function reclaimInputPage(
         [home, terminal, owner],
       );
       if (!group.rowCount) return noEffect('blocked');
-      const bridge = await tx.query(
-        `SELECT 1 FROM semantic.identity_epoch_prearm_bridge
-        WHERE (partition_no,generation,terminal,owner_epoch,basis_version)=($1,$2,$3,$4,$5)
-          AND job_id IS NULL FOR UPDATE`,
-        [...range, terminal, owner, version],
-      );
-      if (!bridge.rowCount) return noEffect('blocked');
+      const bridge = (
+        await tx.query<{ reclaim_transaction_id: string | null }>(
+          `SELECT reclaim_transaction_id FROM semantic.identity_epoch_prearm_bridge
+          WHERE (partition_no,generation,terminal,owner_epoch,basis_version)=($1,$2,$3,$4,$5)
+            AND job_id IS NULL FOR UPDATE`,
+          [...range, terminal, owner, version],
+        )
+      ).rows[0];
+      if (!bridge) return noEffect('blocked');
       const directory = (
         await tx.query<{ reclaim_after: string | null; reclaim_transaction_id: string | null; reclaimed: boolean }>(
           `SELECT d.reclaim_after,d.reclaim_transaction_id,d.reclaimed
@@ -117,7 +119,8 @@ async function reclaimInputPage(
           [...key, job.epoch.toString(), terminal, owner, version, input.scope_digest],
         )
       ).rows[0];
-      if (!directory) return noEffect('blocked');
+      if (!directory || Boolean(directory.reclaim_transaction_id) !== Boolean(bridge.reclaim_transaction_id))
+        return noEffect('blocked');
       const slot = (
         await tx.query<{ erasure_key: string; ours: boolean }>(
           `SELECT erasure_key::text,
@@ -185,6 +188,15 @@ async function reclaimInputPage(
 
       recordIdentityEpochNativeCommit(tx, purpose);
       registerCommandCallback(tx, async (id) => {
+        if (!bridge.reclaim_transaction_id) {
+          // Update the lock row so a serializable writer with an older snapshot cannot miss the fence.
+          const fenced = await tx.query(
+            `UPDATE semantic.identity_epoch_prearm_bridge SET reclaim_transaction_id=$3
+            WHERE (partition_no,generation)=($1,$2) AND reclaim_transaction_id IS NULL AND job_id IS NULL`,
+            [...range, id],
+          );
+          if (fenced.rowCount !== 1) throw unavailable();
+        }
         const saved = await tx.query(
           `UPDATE semantic.identity_epoch_prearm_directory
           SET reclaim_after=$4,reclaim_transaction_id=$5,reclaimed=$6

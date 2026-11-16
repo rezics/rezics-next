@@ -11,7 +11,7 @@ import {
 } from '../../src/semantic/identity-generation-reclaim.ts';
 
 test('released input retains its slot until a separate indexed empty-range proof commits', async () => {
-  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL!, max: 1 });
+  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL!, max: 2 });
   const job = { jobId: newId(0), epoch: 2n };
   const [retired, current, admission, release, terminal, successor] = Array.from({ length: 6 }, () => newId(0));
   const originals = Array.from({ length: 10 }, () => newId(0)).sort();
@@ -125,7 +125,25 @@ test('released input retains its slot until a separate indexed empty-range proof
     });
     await pool.query('DELETE FROM semantic.identity_epoch_group WHERE partition_no=0 AND terminal=$1', [successor]);
     const titleRevision = (await state()).title_revision;
-    expect(await stepIdentityGenerationReclaim(pool, job)).toBe('more');
+    const previousSnapshot = await pool.connect();
+    try {
+      await previousSnapshot.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+      await previousSnapshot.query(
+        'SELECT generation FROM semantic.identity_epoch_prearm_bridge WHERE (partition_no,generation)=(0,$1)',
+        [retired],
+      );
+      expect(await stepIdentityGenerationReclaim(pool, job)).toBe('more');
+      await expect(
+        previousSnapshot.query(
+          `INSERT INTO semantic.identity_epoch_original(partition_no,generation,original,terminal,source_partition,source_generation,present)
+        VALUES(0,$1,$2,$3,0,1,true)`,
+          [retired, newId(0), terminal],
+        ),
+      ).rejects.toMatchObject({ code: '40001' });
+    } finally {
+      await previousSnapshot.query('ROLLBACK');
+      previousSnapshot.release();
+    }
     expect(await state()).toMatchObject({ members: 10, current: 10, slots: 1, reclaim_after: null, reclaimed: false });
     await expect(
       pool.query(
