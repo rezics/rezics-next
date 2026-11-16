@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
 import { createKernelClient, type KernelClient } from '@rezics/client';
 import { fromPlainText, type DocumentSnapshot, serializeDocument } from '@rezics/document';
+import { newId, routeOf } from '../../../../services/kernel/src/route/route.ts';
 import type { NativeWebStack } from './stack.ts';
 import { createPublishAttachmentWorkBoard } from './publish-attachment-reply-fixture.ts';
 
@@ -228,7 +229,9 @@ export async function createPrepublishedReaderControl(stack: NativeWebStack): Pr
     'Prepublished reader control · Chapter draft',
     'A separate reader control keeps its own lantern beside the harbor steps.',
   );
-  const occurrenceId = randomUUID();
+  const catalogueRoute = routeOf(opening.postId);
+  if (catalogueRoute === null) throw new Error('Generated control opening has no native catalogue route');
+  const occurrenceId = newId(catalogueRoute);
   const created = await base.author.hostedCatalogues.post(
     {
       postId: opening.postId,
