@@ -759,7 +759,7 @@ type NativeGenerationInput = Readonly<{
   observation?: string;
 }>;
 type NativeGenerationOutcome = (NativePublicFilterPublicationCompletion | PublicFilterConsumerUnavailable) &
-  Readonly<{ advanced?: boolean }>;
+  Readonly<{ advanced?: boolean; enrollmentAdvanced?: boolean }>;
 const generationSources = new WeakMap<
   PublicDiscoveryConsumerOperations,
   (
@@ -1100,7 +1100,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         return typeof value === 'function' ? value.bind(db) : value;
       },
     });
-    return { cost, add, check, sql, unavailable, take, takePreparation, native, pool };
+    return { cost, add, check, sql, unavailable, take, takePreparation, native, pool, enrollmentAdvanced: false };
   }
   type Meter = ReturnType<typeof meter>;
   function own(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext, m: Meter) {
@@ -1778,7 +1778,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (advanced.status !== 'begun' && advanced.status !== 'preparing') return m.unavailable('source_pending');
       if (!isDeepStrictEqual(retainedBootstrap(advanced.bootstrap), work.bootstrap))
         return m.unavailable('observation_lost');
-      if (advanced.status === 'preparing') return { status: 'preparing', repair: job, cost: m.cost };
+      if (advanced.status === 'preparing') {
+        m.enrollmentAdvanced = advanced.enrollmentAdvanced;
+        return { status: 'preparing', repair: job, cost: m.cost };
+      }
       recovery = { ...advanced, queried: null };
     }
     if (recovery.status !== 'begun' && recovery.status !== 'adopted') return m.unavailable('source_pending');
@@ -2215,7 +2218,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         adopted: false,
       };
       const encoded = await save(work, null, true, m);
-      if (begun.status === 'preparing')
+      if (begun.status === 'preparing') {
+        m.enrollmentAdvanced = begun.enrollmentAdvanced;
         return {
           status: 'preparing',
           repair: {
@@ -2224,6 +2228,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           },
           cost: m.cost,
         };
+      }
       return await advanceCapture(work, encoded, m, context, page, publication);
     } catch (error) {
       return failure(error, m);
@@ -2987,10 +2992,31 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         'SELECT consumer_work FROM search.public_filter_registration WHERE (partition_no,id)=($1,$2)',
         [retained.registration.partition, retained.registration.id],
       );
-      if (!q || q.snapshot.kind !== 'prepared' || preparing.rows[0]!.consumer_work) {
-        const capture = await capturePlan(input.capture, 'prepared', context, undefined, input.consumer, m);
+      const registrationWork = preparing.rows[0];
+      if (!registrationWork) return m.unavailable('registration_missing');
+      const encoded = registrationWork.consumer_work;
+      if (!q || q.snapshot.kind !== 'prepared' || encoded) {
+        let capture: PublicFilterConsumerCapture;
+        if (encoded) {
+          const work = decodeState<ConsumerWork>(encoded);
+          if (
+            !isDeepStrictEqual(retained.definition.capture, input.capture) ||
+            !isDeepStrictEqual(work.registration, retained.registration) ||
+            !isDeepStrictEqual(work.bootstrap.consumer, input.consumer) ||
+            work.bootstrap.snapshot !== 'prepared'
+          )
+            return m.unavailable('registration_missing');
+          if ('representation' in input.capture) await mixedGeneration(m);
+          capture = await advanceCapture(work, encoded, m, context, undefined, input.consumer);
+        } else {
+          capture = await capturePlan(input.capture, 'prepared', context, undefined, input.consumer, m);
+        }
         if (capture.status !== 'captured')
-          return { ...m.unavailable('source_pending'), advanced: capture.status === 'preparing' };
+          return {
+            ...m.unavailable('source_pending'),
+            advanced: capture.status === 'preparing',
+            enrollmentAdvanced: m.enrollmentAdvanced,
+          };
         q = capture.queried;
       }
       const job = { consumer: input.consumer, job: q.snapshot.observation };

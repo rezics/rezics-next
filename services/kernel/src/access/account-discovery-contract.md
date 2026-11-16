@@ -423,13 +423,13 @@ The returned `AccountDiscoveryEnrollment` keeps the native `epoch`, `revision`
 and `claimRevision` separate from `sourcePosition`, the original creation/change
 `creationPosition` and the Account-domain `enqueueRevision`. `keyDigest` binds the
 complete compiler closure; nullable `receipt` remains absent until the retained
-key frontier completes. A step inserts at most 900 keys, leaving room for native
-control and receipt work within the existing maintenance allowance. Replays of a
+key frontier completes. A step inserts at most 450 keys and respects the narrower budget supplied by Source. Each admitted key reserves
+its enrollment edge and foreign-key check along with the native controls. Replays of a
 sealed receipt retain its original positions and tuple rather than current heads.
 
-`semantic/public-filter-coverage-baseline.ts` resolves that exact committed owner
-receipt after releasing its writer home, then adopts it in the registration home.
-The predecessor/root chain advances one home at a time. The original covered
+`semantic/public-filter-coverage-baseline.ts` verifies a page of exact committed owner receipts
+after releasing the writer homes, then adopts the verified contiguous prefix in one registration transaction.
+The predecessor/root chain and the Source cursor advance through every original home in that transaction. The original covered
 generation is pinned before the first home; only the contiguous 4096-home chain
 can seal the Source bootstrap. Existing enrollment rows without these original
 receipts stay unknown. Each adopted baseline records its own outstanding repair

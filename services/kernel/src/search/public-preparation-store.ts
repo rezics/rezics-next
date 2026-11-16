@@ -154,14 +154,15 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
       locator: PreparationLocator | null,
       delayMs = 0,
       deadline = deadlineFor(PREPARATION_BUDGET_MS),
-    ): Promise<void> {
-      await transaction(deadline, async (client) => {
+      readySuccessor = false,
+    ): Promise<string | null> {
+      return transaction(deadline, async (client) => {
         if (locator === null) {
           await client.query(
             `DELETE FROM search.public_preparation WHERE partition_no = 0 AND prefix = $1 AND id = $2 AND revision = $3`,
             [prefix, record.id, record.revision],
           );
-          return;
+          return null;
         }
         const result = await client.query<{ revision: string }>(
           `
@@ -171,7 +172,11 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
           [prefix, record.id, record.revision, JSON.stringify(locator), Date.now() + delayMs],
         );
         const next = result.rows[0];
-        if (next) await enqueueWorkIntent(work, client, intent(record.id, next.revision, Date.now() + delayMs));
+        if (next && (!readySuccessor || delayMs !== 0))
+          await enqueueWorkIntent(work, client, intent(record.id, next.revision, Date.now() + delayMs));
+        // If the caller or a competing delivery cannot claim this ready
+        // successor, due() can still discover the committed revision.
+        return next?.revision ?? null;
       });
     },
     async due(deadline = deadlineFor(PREPARATION_BUDGET_MS)): Promise<void> {
