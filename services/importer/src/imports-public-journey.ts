@@ -22,7 +22,7 @@ import {
   readSeedRemainingRequest,
   remainingRequestFromPreparedJournal,
 } from './seed-remaining-request.ts';
-import { MAX_IMPORT_DEADLINE_MS } from './import-fetch.ts';
+import { importCorrelationId, MAX_IMPORT_DEADLINE_MS } from './import-fetch.ts';
 import { ImportSession } from './import-session.ts';
 import { sameStatementProvenance } from './statement-provenance.ts';
 import {
@@ -679,7 +679,40 @@ const operatorSpecs: Record<'I01' | 'I02' | 'I03' | 'I04', OperatorSpec> = {
   },
 };
 
-async function runOperator(id: 'I01' | 'I02' | 'I03' | 'I04', persona: SeedEnv): Promise<Record<string, unknown>> {
+export async function operatorResponseEvidence(response: Response) {
+  const payload: unknown =
+    response.body && response.headers.get('content-type')?.includes('json')
+      ? await response.clone().json().catch(() => undefined)
+      : undefined;
+  const problems =
+    isRecord(payload) && Array.isArray(payload.results)
+      ? payload.results
+          .filter(isRecord)
+          .filter((row) => row.problem !== undefined)
+          .map((row) => {
+            const problem = isRecord(row.problem) ? row.problem : {};
+            return reviewedCatalogueProblem({ ...problem, status: row.status ?? problem.status });
+          })
+      : response.status >= 400
+        ? [reviewedCatalogueProblem(payload)]
+        : [];
+  return { status: response.status, problems, correlation: importCorrelationId(response) };
+}
+
+type OperatorRequest = { method: string; path: string } & Partial<Awaited<ReturnType<typeof operatorResponseEvidence>>>;
+type OperatorTrace = {
+  pass: 'import' | 'reopen';
+  exitCode?: number;
+  lastRequest?: OperatorRequest;
+  firstRejection?: OperatorRequest;
+  lastStartedRecord?: { phase: string; recordKey: string };
+};
+
+async function runOperator(
+  id: 'I01' | 'I02' | 'I03' | 'I04',
+  persona: SeedEnv,
+  reached: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
   const spec = operatorSpecs[id];
   const directory = resolve(evidenceRoot, id.toLowerCase());
   await mkdir(directory, { recursive: true, mode: 0o700 });
@@ -704,44 +737,35 @@ async function runOperator(id: 'I01' | 'I02' | 'I03' | 'I04', persona: SeedEnv):
     '--client',
     persona.client,
   ];
+  let trace: OperatorTrace;
   const observedFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init);
     const requestId = randomUUID();
+    const currentTrace = trace;
+    const exchange: OperatorRequest = { method: request.method, path: new URL(request.url).pathname };
+    currentTrace.lastRequest = exchange;
     appendFileSync(
       resolve(directory, 'requests.jsonl'),
       `${JSON.stringify({
         requestId,
         event: 'start',
         at: new Date().toISOString(),
-        method: request.method,
-        path: new URL(request.url).pathname,
+        ...exchange,
       })}\n`,
       { mode: 0o600 },
     );
     const response = await fetch(request);
-    const payload: unknown = response.headers.get('content-type')?.includes('json')
-      ? await response.clone().json()
-      : undefined;
-    const problems =
-      isRecord(payload) && Array.isArray(payload.results)
-        ? payload.results
-            .filter(isRecord)
-            .filter((row) => row.problem !== undefined)
-            .map((row) => reviewedCatalogueProblem(row.problem))
-        : response.status >= 400
-          ? [reviewedCatalogueProblem(payload)]
-          : [];
+    const evidence = await operatorResponseEvidence(response);
+    Object.assign(exchange, evidence, { problems: evidence.problems.slice(0, 1) });
+    if (evidence.status >= 400 || evidence.problems.length) currentTrace.firstRejection ??= exchange;
     appendFileSync(
       resolve(directory, 'requests.jsonl'),
       `${JSON.stringify({
         requestId,
         event: 'response',
         at: new Date().toISOString(),
-        method: request.method,
-        path: new URL(request.url).pathname,
-        status: response.status,
-        problems,
-        correlation: response.headers.get('x-request-id'),
+        ...exchange,
+        problems: evidence.problems,
       })}\n`,
       { mode: 0o600 },
     );
@@ -756,6 +780,7 @@ async function runOperator(id: 'I01' | 'I02' | 'I03' | 'I04', persona: SeedEnv):
           ...options.observer,
           onRecordActive(phase, recordKey, active) {
             options.observer?.onRecordActive?.(phase, recordKey, active);
+            if (active) trace.lastStartedRecord = { phase, recordKey };
             appendFileSync(
               resolve(directory, 'records.jsonl'),
               `${JSON.stringify({
@@ -776,9 +801,15 @@ async function runOperator(id: 'I01' | 'I02' | 'I03' | 'I04', persona: SeedEnv):
       },
     },
     testOrigin: persona.kernel,
-    ...(spec.stdin ? { stdin: spec.stdin() } : {}),
   };
-  const first = await runImportCli(argv, cliOptions);
+  const runCli = async (pass: OperatorTrace['pass']) => {
+    trace = { pass };
+    reached.cli = trace;
+    const result = await runImportCli(argv, { ...cliOptions, ...(spec.stdin ? { stdin: spec.stdin() } : {}) });
+    trace.exitCode = result.code;
+    return result;
+  };
+  const first = await runCli('import');
   await writeFile(resolve(directory, 'cli-result.json'), JSON.stringify(first), { mode: 0o600 });
   assert.equal(
     first.code,
@@ -855,11 +886,7 @@ async function runOperator(id: 'I01' | 'I02' | 'I03' | 'I04', persona: SeedEnv):
     assertCurrentOperatorFact(read, spec.property, candidate.statement);
     adopted.push({ key, id, type: read.subject.type, candidate: candidate.id, statement: candidate.statement });
   }
-  const again = await runImportCli(argv, {
-    ...cliOptions,
-    testOrigin: persona.kernel,
-    ...(spec.stdin ? { stdin: spec.stdin() } : {}),
-  });
+  const again = await runCli('reopen');
   assert.equal(again.code, 0, `${spec.source} reopen ${again.stderr || again.stdout}`);
   const reread = new ImportSession(state);
   try {
@@ -1245,7 +1272,7 @@ async function walkSelectedSynopsis(api: string, publication: ShowcasePublicatio
 
 async function walkRow(
   id: FirstPublicImportRowId,
-  run: () => Promise<Record<string, unknown>>,
+  run: (reached: Record<string, unknown>) => Promise<Record<string, unknown>>,
 ): Promise<WalkRowResult> {
   const meta = firstPublicRow(id);
   const started = Date.now();
@@ -1259,18 +1286,21 @@ async function walkRow(
     { mode: 0o600 },
   );
   let row: WalkRowResult;
+  const reached: Record<string, unknown> = {};
   try {
-    const evidence = await run();
+    const evidence = await run(reached);
     row = { id, path: meta.path, result: 'passing', elapsedMs: Date.now() - started, cause: null, evidence };
   } catch (error) {
-    console.error(`${id} failing; ${Date.now() - started}ms; ${walkFailureCause(error)}`);
+    const elapsedMs = Date.now() - started;
+    const cause = walkFailureCause(error);
+    console.error(`${id} failing; ${elapsedMs}ms; ${cause}`);
     row = {
       id,
       path: meta.path,
       result: 'failing',
-      elapsedMs: Date.now() - started,
-      cause: walkFailureCause(error),
-      evidence: { error: walkFailureCause(error) },
+      elapsedMs,
+      cause,
+      evidence: { ...reached, error: cause },
     };
   }
   await writeFile(resolve(evidenceRoot, `${id.toLowerCase()}-row.json`), JSON.stringify(row), { mode: 0o600 });
@@ -1476,7 +1506,7 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
             cause: sharedStartup ?? 'persona unavailable',
             evidence: { sharedStartup: true },
           }
-        : await walkRow(id, () => runOperator(id, persona!));
+        : await walkRow(id, (reached) => runOperator(id, persona!, reached));
     rows.push(row);
     await writeFile(resolve(evidenceRoot, `${id.toLowerCase()}-row.json`), JSON.stringify(row), { mode: 0o600 });
   }

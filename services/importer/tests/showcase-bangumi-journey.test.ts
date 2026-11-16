@@ -30,6 +30,7 @@ import {
   currentAnimeCharacterIds,
   firstPublicRow,
   licensedVndbArchive,
+  operatorResponseEvidence,
   retireWalkJournals,
   selectPublished,
   walkChildFailure,
@@ -401,14 +402,16 @@ test('leftover walk journals are archived before persona so wiped slot databases
 
 test('operator causes keep safe status and request metadata without private nested text', () => {
   expect(walkFailureCause(new ImportTransportError(404))).toContain('status=404');
-  expect(walkFailureCause(new ImportTransportError(403, 'about:blank', 'forbidden'))).toContain(
-    'status=403 problem=forbidden',
-  );
+  const denied = walkFailureCause(new ImportTransportError(403, 'about:blank', 'forbidden'));
+  expect(denied).toContain('status=403');
+  expect(denied).toContain('problem=forbidden');
   const named = new ImportTransportError(503, undefined, undefined, false, undefined, undefined, {
     method: 'POST',
     path: '/v1/subjects:batchWrite',
   });
-  expect(walkFailureCause(named)).toContain('method=POST target=unknown-origin/v1/subjects:batchWrite status=503');
+  const unavailable = walkFailureCause(named);
+  expect(unavailable).toContain('status=503');
+  expect(unavailable).toContain('method=POST target=unknown-origin/v1/subjects:batchWrite');
   const nested = new ImportTransportError();
   nested.cause = new TypeError('Import requests must target the configured API origin under /v1/');
   expect(walkFailureCause(nested)).not.toContain('Import requests must target');
@@ -423,6 +426,21 @@ test('operator causes keep safe status and request metadata without private nest
   expect(walkChildFailure('seed', 1, 'noise\n', 'Invalid record binding operation\n').message).toBe(
     'seed exited 1: Invalid record binding operation',
   );
+});
+
+test('operator response evidence keeps per-command refusal metadata and accepts empty success', async () => {
+  const reply = Response.json(
+    { results: [{ status: 503, problem: { code: 'semantic_not_ready', detail: 'private response' } }] },
+    { headers: { 'x-request-id': 'response-id' } },
+  );
+  expect(await operatorResponseEvidence(reply)).toEqual({
+    status: 200,
+    problems: [{ status: 503, code: 'semantic_not_ready' }],
+    correlation: 'response-id',
+  });
+  expect(reply.bodyUsed).toBe(false);
+  const empty = new Response(null, { status: 204, headers: { 'content-type': 'application/json' } });
+  expect(await operatorResponseEvidence(empty)).toMatchObject({ status: 204, problems: [] });
 });
 
 test('seed remaining request names the prepared classification create without bodies', async () => {
