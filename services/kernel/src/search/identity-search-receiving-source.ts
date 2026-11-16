@@ -10,7 +10,11 @@ import { readSearchIdentityOriginalPlanSql } from './identity-search-receiving-d
 
 const unavailable = (detail: string) => new IdentityEpochStoreError('identity_epoch_unavailable', detail);
 
-function effectKey(consumer: string, original: string, disposition: SearchIdentityReceivingSelection['disposition']) {
+export function searchIdentityWriterEffectKey(
+  consumer: string,
+  original: string,
+  disposition: SearchIdentityReceivingSelection['disposition'],
+) {
   return `${consumer}:${original}:${disposition}`;
 }
 
@@ -23,7 +27,7 @@ export async function readSearchIdentityOriginalPlan(
 ): Promise<SearchIdentityReceivingSelection | null> {
   const partition = subjectPartition(change.original);
   const keys = (['OLD', 'NEW', 'first-apply', 'handoff'] as const).map((disposition) =>
-    effectKey(configuration.consumer, change.original, disposition),
+    searchIdentityWriterEffectKey(configuration.consumer, change.original, disposition),
   );
   const plans = await withReadTransaction(
     pool,
@@ -48,7 +52,7 @@ export async function readSearchIdentityOriginalPlan(
     source.terminal !== change.terminal ||
     source.consumer !== configuration.consumer ||
     source.physicalTarget !== configuration.index ||
-    plan.effect_key !== effectKey(source.consumer, source.original, source.disposition)
+    plan.effect_key !== searchIdentityWriterEffectKey(source.consumer, source.original, source.disposition)
   )
     throw unavailable('Retained Search plan changed for the selected original');
   return {

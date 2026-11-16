@@ -2443,6 +2443,13 @@ CREATE INDEX identity_receiving_native_copy_pending ON search.identity_receiving
 
 
 --
+-- Name: identity_receiving_native_pending_target; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX identity_receiving_native_pending_target ON search.identity_receiving_native_pending USING btree (physical_target, partition_no, plan_id);
+
+
+--
 -- Name: identity_writer_pending; Type: INDEX; Schema: search; Owner: -
 --
 

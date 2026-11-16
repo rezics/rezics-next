@@ -83,7 +83,7 @@ export const advanceSearchIdentityOriginalSql = `WITH settled AS MATERIALIZED (
 SELECT effect_key FROM settled`;
 
 /** One original-home admission can be retained for a committed control request. */
-export const readSearchIdentityWriterAdmissionSql = `SELECT s.transaction_id::text,
+export const readSearchIdentityWriterAdmissionSql = `SELECT s.transaction_id::text,s.frontier,
   (s.scope_digest=$5 AND s.frontier->'after'->>2=$6 AND o.partition_no IS NOT NULL) AS proven
  FROM semantic.identity_epoch_step s
  LEFT JOIN semantic.identity_epoch_native_commit c

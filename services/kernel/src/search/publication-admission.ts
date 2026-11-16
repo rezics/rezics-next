@@ -21,13 +21,12 @@ export async function lockWriterPublicationAdmission(
   if (!witness.rowCount) await tx.query(insertWriterPublicationWitness, [physicalTarget]);
 }
 
+export const advanceWriterPublicationAdmissionSql = `INSERT INTO search.generation_publication_lock AS witness (physical_target) VALUES ($1)
+     ON CONFLICT (physical_target) DO UPDATE SET revision=witness.revision+1`;
+
 export async function advanceWriterPublicationAdmission(
   tx: Pick<import('pg').PoolClient, 'query'>,
   physicalTarget: string,
 ): Promise<void> {
-  await tx.query(
-    `INSERT INTO search.generation_publication_lock AS witness (physical_target) VALUES ($1)
-     ON CONFLICT (physical_target) DO UPDATE SET revision=witness.revision+1`,
-    [physicalTarget],
-  );
+  await tx.query(advanceWriterPublicationAdmissionSql, [physicalTarget]);
 }
