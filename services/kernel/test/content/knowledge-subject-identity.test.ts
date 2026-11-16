@@ -1,53 +1,42 @@
 import { expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
-import { randomBytes, randomUUID } from 'node:crypto';
-import { createPool } from '../../src/database/pool.ts';
-import { createKernel } from '../../src/http/kernel.ts';
+import { randomUUID } from 'node:crypto';
+import { accessCommandAuthorization } from '../../src/request/access.ts';
 import { identityEpochStore } from '../../src/semantic/identity-adapters/index.ts';
+import { readIdentityEpochCutover } from '../../src/semantic/identity-epoch-bootstrap.ts';
 import type { IdentityIntent } from '../../src/semantic/identity-epoch-contract.ts';
-import { resumeIdentityEpochJob, waitIdentityEpochPublished } from '../../src/semantic/identity-epoch-coordinator.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createSubjectIndex } from '../../src/search/indices.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { readSearchConfig } from '../../src/search/work.ts';
-import { startWorker } from '../../src/worker.ts';
-import { cutoverFixture } from '../semantic/support/identity-epoch-cutover.ts';
 import { digest, release } from '../semantic/support/identity-epoch.ts';
-import { testReceiptKeys } from '../support/receipt-keys.ts';
-import { TEST_REQUEST_DEADLINE_MS } from '../support/test-kernel.ts';
-import { workerTestEnv } from '../support/worker-env.ts';
+import { nativeOperator } from './support/native-system.ts';
+import { openUserCasesSystem, startUserCasesWorker } from './support/user-cases-fixtures.ts';
 
 test('private Knowledge attachments stay on their originals through published merge and unmerge', async () => {
-  const fixture = await cutoverFixture();
+  const system = await openUserCasesSystem();
   try {
-    const { pool, real, accounts } = fixture;
-    const databaseUrl = pool.options.connectionString;
-    if (!databaseUrl || !process.env.OPENSEARCH_URL) throw new Error('Knowledge identity requires native Search');
-    const env = workerTestEnv({
-      ...process.env,
-      DATABASE_URL: databaseUrl,
-      KERNEL_SEARCH_PREFIX: `knowledge-${randomUUID().replaceAll('-', '')}`,
-    });
-    const search = readSearchConfig(env);
+    const { pool } = system.database;
+    await bootstrapRelease(pool, release.release);
+    const prefix = `knowledge-${randomUUID().replaceAll('-', '')}-`;
+    const search = readSearchConfig({ ...process.env, KERNEL_SEARCH_PREFIX: prefix });
     if (!search) throw new Error('Knowledge identity requires the native Search producer');
-    await createSubjectIndex(createOpenSearch(search.url), search.prefix, 1);
-    const workerPool = createPool(databaseUrl);
-    workerPool.options.max = 8;
-    const worker = await startWorker({ databaseUrl, poolSize: 8, kernelPool: () => workerPool }, undefined, env);
+    await createSubjectIndex(createOpenSearch(search.url), prefix, 1);
+    const worker = await startUserCasesWorker(system, prefix);
     try {
-      const accessActions = ['account:read', 'account:update', 'subject:read'];
-      const [owner, outsider] = await Promise.all([
-        real.bearerFor('editor', accessActions),
-        real.bearerFor('outsider', accessActions),
-      ]);
-      const kernel = createKernel({
-        pool,
-        routeKey: randomBytes(32),
-        tokens: { current: 1, keys: new Map([[1, randomBytes(32)]]) },
-        receiptKeys: testReceiptKeys(),
-        requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
-        access: (config) => real.access(config),
-        writeRate: real.writeRate,
-      });
+      async function awaitWorker(condition: () => Promise<boolean>, stage: string) {
+        const deadline = Date.now() + 120_000;
+        while (worker.child.exitCode === null && Date.now() < deadline) {
+          if (await condition()) return;
+          await Bun.sleep(300);
+        }
+        throw new Error(`Native worker did not complete ${stage}: ${worker.diagnostics().slice(-8000)}`);
+      }
+
+      await awaitWorker(async () => (await readIdentityEpochCutover(pool)).state === 'ready', 'identity topology');
+      const owner = system.actors.author.bearer;
+      const outsider = system.actors.other.bearer;
+      const kernel = system.kernel;
       const call = async (method: 'GET' | 'POST', path: string, body?: unknown, bearer = owner) => {
         const response = await kernel.handle(
           new Request(`https://kernel.test${path}`, {
@@ -68,9 +57,17 @@ test('private Knowledge attachments stay on their originals through published me
         expect(result.status, JSON.stringify(result.value)).toBe(201);
         return result.value;
       };
-      const survivor = (await fixture.create('Knowledge attachment survivor', 0x5d10)).id;
-      const original = (await fixture.create('Knowledge attachment original', 0x5e10)).id;
-      const inventory = `/v1/accounts/${accounts.editor}/knowledge/notebooks`;
+      const { subject: survivorSubject } = await create('/v1/subjects', {
+        type: 'schema:Person',
+        labels: { en: 'Knowledge attachment survivor' },
+      });
+      const { subject: originalSubject } = await create('/v1/subjects', {
+        type: 'schema:Person',
+        labels: { en: 'Knowledge attachment original' },
+      });
+      const survivor: string = survivorSubject.id;
+      const original: string = originalSubject.id;
+      const inventory = `/v1/accounts/${system.actors.author.actor.accountId}/knowledge/notebooks`;
       const scope = (id: string, limit = 20) => `${inventory}?subjectId=${id}&limit=${limit}`;
       const first = await create('/v1/knowledge/notebooks', { subjectId: survivor, title: 'Survivor notes' });
       const second = await create('/v1/knowledge/notebooks', { subjectId: survivor, title: 'More survivor notes' });
@@ -104,16 +101,24 @@ test('private Knowledge attachments stay on their originals through published me
       const beforeMerge = (await listed(survivor, 1)).next;
       expect(beforeMerge).toEqual(expect.any(String));
 
-      const actor = await fixture.actor();
-      if (actor.kind !== 'account') throw new Error('Expected the native Subject editor');
+      const actor = nativeOperator(system).actor;
       async function publish(intent: IdentityIntent) {
         const key = randomUUID();
+        const deadline = Date.now() + 20_000;
         const job = await identityEpochStore().prepareAdmission(
           pool,
           {
             basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
-            authorizationFor: () => fixture.authorization('subject:merge'),
-            deadline: Date.now() + TEST_REQUEST_DEADLINE_MS,
+            authorizationFor: () =>
+              accessCommandAuthorization(
+                system.access,
+                actor,
+                'subject:merge',
+                { route: 0, id: GLOBAL_CONTEXT },
+                { pool, deadline },
+                () => new Error('Native Subject identity maintenance is forbidden'),
+              ),
+            deadline,
           },
           {
             intent,
@@ -123,8 +128,10 @@ test('private Knowledge attachments stay on their originals through published me
             },
           },
         );
-        await resumeIdentityEpochJob(workerPool, job);
-        await waitIdentityEpochPublished(workerPool, job);
+        await awaitWorker(
+          async () => (await identityEpochStore().readJob(pool, job))?.state === 'published',
+          intent.kind,
+        );
         return job;
       }
 
@@ -159,6 +166,6 @@ test('private Knowledge attachments stay on their originals through published me
       await worker.stop();
     }
   } finally {
-    await fixture.close();
+    await system.close();
   }
-}, 420_000);
+}, 480_000);

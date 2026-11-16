@@ -38,8 +38,19 @@ export async function commitHostedDirectSelection(
   placements: readonly OrderedHostedPlacement[],
   selection: DirectSelection,
 ) {
+  if (placements.length > HOSTED_PLACEMENT_LIMIT) throw new InvalidHostedStructureError();
+  await materializeHostedSelection(client, catalogueId, placements, selection);
+}
+
+/** Initialize an ordered generation from validated preorder placements. */
+export async function materializeHostedSelection(
+  client: AccessClient,
+  catalogueId: string,
+  placements: readonly OrderedHostedPlacement[],
+  selection: DirectSelection,
+) {
   const route = routeOf(catalogueId);
-  if (route === null || placements.length > HOSTED_PLACEMENT_LIMIT) throw new InvalidHostedStructureError();
+  if (route === null) throw new InvalidHostedStructureError();
   await ensureHostedOccurrenceIdentities(client, catalogueId, placements);
   const children = new Map<string | null, OrderedHostedPlacement[]>();
   const values = new Map<string, HostedVersionPointValue>();
