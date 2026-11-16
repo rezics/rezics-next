@@ -12,8 +12,8 @@ import { m } from '../paraglide/messages.js';
 import { pageHead } from '../shell/head';
 import { pageHeadContext } from '../shell/head-context';
 
-/** The router's locale rewrite exposes /{locale}/books/{id}/read. Search values select native reads only. */
-export const Route = createFileRoute('/books/$id/read')({
+/** The books_ segment keeps the localized reader URL while mounting it beside the Book catalogue. */
+export const Route = createFileRoute('/books_/$id/read')({
   staticData: { sessionReread: true },
   validateSearch: parseHostedBookSearch,
   staleTime: 0,
