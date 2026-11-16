@@ -1,3 +1,4 @@
+import { identityChangePageCosts } from './identity-change-page-work.ts';
 import type { Pool, PoolClient } from 'pg';
 import { AsyncLocalStorage, AsyncResource } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
@@ -218,10 +219,14 @@ export function receivingWorkDeclaration(
   declaration: SearchReceivingWorkDeclaration,
   pageStatements: readonly Readonly<{ sql: string; kind: 'copies' | 'insertCopies' }>[] = [],
 ) {
+  const changePages = new Map(identityChangePageCosts().map((entry) => [receivingSqlKey(entry.sql), entry]));
   const statements = new Map<string, WorkDimensions>();
   for (const { sql, work } of declaration.statements) {
     const key = receivingSqlKey(sql);
     if (!key || statements.has(key) || !valid(work, axes)) throw new TypeError('Invalid receiving SQL declaration');
+    const minimum = changePages.get(key)?.work;
+    if (minimum && axes.some((axis) => work[axis] < minimum[axis]))
+      throw new TypeError('Invalid receiving Identity change page declaration');
     statements.set(key, Object.freeze({ ...work }));
   }
   // Only the installed owner's exact named page statements get a raw-size bound. Snapshot that
@@ -264,6 +269,15 @@ export function receivingWorkDeclaration(
         ? "SET LOCAL statement_timeout = '<remaining>ms'"
         : receivingSqlKey(sql);
       const maximum = statements.get(key);
+      const changePage = changePages.get(key);
+      if (maximum && changePage && values) {
+        const bound = changePage.footprint(values);
+        if (!bound || axes.some((axis) => bound[axis] > changePage.work[axis])) return undefined;
+        // Preserve configured surcharges. Only work excluded by the admitted bind can lower the maximum.
+        return Object.freeze(
+          Object.fromEntries(axes.map((axis) => [axis, maximum[axis] - changePage.work[axis] + bound[axis]])),
+        ) as unknown as WorkDimensions;
+      }
       const page = pages.get(key);
       if (!maximum || !page || !values) return maximum;
       let count: unknown;
