@@ -464,3 +464,23 @@ test('a failed build does not publish a ready cache', async () => {
     ),
   ).toBe(false);
 });
+
+test('aborting a build releases its lock and discards the partial dependency cache', async () => {
+  const home = cacheHome();
+  const options = { workspaceRoot: temporary, appRoot: temporary, cacheHome: home, lockBytes: 'lock-aborted' };
+  const controller = new AbortController();
+  const cancelled = new Error('native setup cancelled');
+  await expect(
+    prepareViteDepCache({
+      ...options,
+      signal: controller.signal,
+      build: async (staging) => {
+        writeFileSync(join(staging, 'marker'), 'partial');
+        controller.abort(cancelled);
+      },
+    }),
+  ).rejects.toBe(cancelled);
+  const retried = await prepareViteDepCache({ ...options, build: async () => {}, waitMs: 100 });
+  expect(retried.reused).toBe(false);
+  expect(existsSync(join(retried.directory, 'marker'))).toBe(false);
+});

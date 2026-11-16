@@ -125,8 +125,9 @@ function runCacheDirectory(env: NodeJS.ProcessEnv): string {
 
 export async function prepareSharedWebDevCache(
   env: NodeJS.ProcessEnv,
-  options: { appDirectory?: string; workspaceRoot?: string } = {},
+  options: { appDirectory?: string; workspaceRoot?: string; signal?: AbortSignal } = {},
 ): Promise<{ directory: string; lockHash: string; reused: boolean }> {
+  options.signal?.throwIfAborted();
   if (env[webTestDepCacheReadyEnvName] === '1' && env.WEB_VITE_CACHE_DIR) {
     return {
       directory: env.WEB_VITE_CACHE_DIR,
@@ -139,7 +140,9 @@ export async function prepareSharedWebDevCache(
     workspaceRoot,
     appRoot: resolve(options.appDirectory ?? app),
     env: sharedViteChildEnvironment(env),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
   });
+  options.signal?.throwIfAborted();
   return {
     directory: materializeViteDepCache(published, runCacheDirectory(env), workspaceRoot),
     lockHash: published.lockHash,
