@@ -3,11 +3,12 @@ import { fromPlainText } from '@rezics/document';
 import { randomUUID } from 'node:crypto';
 import { readErasureStatus } from '../../src/access/erasure.ts';
 import { validateContentDocument } from '../../src/content/document.ts';
+import { withBoundedReadConnection } from '../../src/database/pool.ts';
 import { accessCommandAuthorization } from '../../src/request/access.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { identityEpochStore } from '../../src/semantic/identity-adapters/index.ts';
 import { readIdentityEpochCutover } from '../../src/semantic/identity-epoch-bootstrap.ts';
-import type { IdentityIntent } from '../../src/semantic/identity-epoch-contract.ts';
+import { identityJobPartition, type IdentityIntent } from '../../src/semantic/identity-epoch-contract.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createSubjectIndex } from '../../src/search/indices.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
@@ -183,10 +184,37 @@ test('private Knowledge attachments stay on their originals through published me
             },
           },
         );
-        await awaitWorker(
-          async () => (await identityEpochStore().readJob(pool, job))?.state === 'published',
-          intent.kind,
-        );
+        try {
+          await awaitWorker(
+            async () => (await identityEpochStore().readJob(pool, job))?.state === 'published',
+            intent.kind,
+          );
+        } catch (error) {
+          // The fixture drops its database after stopping the worker. Read the
+          // retained boundary once before teardown without fetching source bodies.
+          const observed = await withBoundedReadConnection(pool, Date.now() + 3_000, (client) =>
+            client.query(
+              `SELECT j.state,j.prearm_phase,
+               (SELECT jsonb_agg(h ORDER BY h.resource_home) FROM (
+                 SELECT resource_home,prepared_transaction_id IS NOT NULL AS prepared,
+                   acquired_transaction_id IS NOT NULL AS acquired
+                 FROM semantic.identity_epoch_admission_plan
+                 WHERE partition_no=j.partition_no AND job_id=j.job_id ORDER BY resource_home LIMIT 2
+               ) h) AS homes,
+               (SELECT count(*)::int FROM semantic.identity_epoch_admission_source s
+                WHERE s.partition_no=j.partition_no AND s.job_id=j.job_id) AS sources,
+               (SELECT count(*)::int FROM semantic.identity_epoch_admission_validation v
+                WHERE v.partition_no=j.partition_no AND v.job_id=j.job_id) AS validated_sources
+               FROM semantic.identity_epoch_job j WHERE j.partition_no=$1 AND j.job_id=$2`,
+              [identityJobPartition(job), job.jobId],
+            ),
+          ).then(
+            ({ rows }) => rows[0] ?? null,
+            () => 'unavailable',
+          );
+          console.info('Knowledge retained identity admission', JSON.stringify({ intent: intent.kind, observed }));
+          throw error;
+        }
         return job;
       }
 
