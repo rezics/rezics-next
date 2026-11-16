@@ -37,7 +37,7 @@ for (const [key, value] of Object.entries(globals))
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
-let session = { state: 'signed-in' as 'signed-in' | 'signed-out', subject: 'reader', csrfToken: 'one' };
+let session = { state: 'signed-in' as 'unknown' | 'signed-in' | 'signed-out', subject: 'reader', csrfToken: 'one' };
 const sessionModule = {
   sessionQuery: {
     queryKey: ['session'] as const,
@@ -455,7 +455,7 @@ async function paint(page: SpacePageData, source = operations, admission?: Space
               admission={admission}
               target={target}
               locale="en"
-              credentialMode="session"
+              credentialMode={admission.credentialMode}
             >
               {content}
             </SpacePageLifetimeHost>
@@ -1158,6 +1158,30 @@ test('the initial public native Board link is canonical and recent discussion re
   } finally {
     navigate.mockRestore();
   }
+});
+
+test('an admitted anonymous native Board stays mounted when the initial browser session arrives', async () => {
+  session = { state: 'unknown', subject: '', csrfToken: '' };
+  client.removeQueries({ queryKey: sessionModule.sessionQuery.queryKey });
+  client.getQueryCache().build(client, { queryKey: sessionModule.sessionQuery.queryKey, gcTime: Infinity });
+  native = fixture(0, 'anonymous');
+  const page = await readNativeRealmHome(operations, { ...input, credentialMode: 'anonymous' });
+  page.realm!.boards.push({ id: id(80), title: 'Published Board', purpose: 'discussion', visibility: 'published' });
+  const original = captureSpacePageAdmission(client, { target, locale: 'en', credentialMode: 'anonymous' });
+  const admission = bindSpacePageResult(page, original, { kind: 'anonymous' })!;
+  await paint(page, operations, admission);
+  const boardLink = () => host.querySelector('[data-slot="realm-board-link"]');
+  expect(boardLink()?.textContent).toBe('Published Board');
+
+  await settle(() => {
+    session = { state: 'signed-out', subject: '', csrfToken: '' };
+    client.setQueryData(sessionModule.sessionQuery.queryKey, session);
+  });
+  expect(boardLink()?.textContent).toBe('Published Board');
+  expect(boardLink()?.getAttribute('href')).toBe(`/en/boards/${id(80)}`);
+
+  await settle(() => client.setQueryData(sessionModule.sessionQuery.queryKey, { ...session }));
+  expect(boardLink()).toBeNull();
 });
 
 test('a banned current reader keeps public shelves and never receives a join control', async () => {
