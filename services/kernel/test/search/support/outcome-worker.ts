@@ -456,7 +456,6 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
     try {
       const sample = await context.client.listWorkflows({
         workflowName: PUBLIC_PREPARATION_WORKFLOW,
-        queueName: 'maintenance',
         limit: 8,
         sortDesc: true,
         loadInput: true,

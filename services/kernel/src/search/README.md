@@ -2120,7 +2120,11 @@ then passes the returned consumer to `prepare`. It retains only the publication 
 Cold population and ordinary replay both use the delivered native writer's admission gate; no publication
 callback supplies authority. Maintenance resumes the stored job and its original consumer directly; it does
 not repeat the retired fixed-cut scan or register a replacement consumer on restart.
-Job recovery also covers interruption after native prepare commits and before maintenance saves its locator.
+Generation population uses the existing workflows queue and remains eligible for delivery during whole-catalogue
+maintenance sweeps. Request-specific repair stays on maintenance. A population
+delivery and any queued legacy delivery still compete for the same retained revision and lease. Discovery
+enqueues only available revisions and can recover an expired lease. Job recovery also covers interruption
+after native prepare commits and before the scheduler saves its locator.
 Native complete key pages may retain their terminal cursor or advance past only filtered rows; the next home starts without
 that cursor. The publication's finite passes own population, repair, reconciliation and activation through
 the same worker. CLI rebuild waits for that worker-owned alias publication. Retirement
