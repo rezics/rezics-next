@@ -308,24 +308,24 @@ test('capture reservation scales with complete roles and actual original request
   expect(searchReceivingCaptureCost(0, 0, null)).toEqual({
     candidateKeys: 0,
     identityMetadataRows: 0,
-    nativeRows: 8,
-    nativePoints: 8,
+    nativeRows: 6,
+    nativePoints: 6,
     witnessKeys: 0,
-    statements: 8,
+    statements: 6,
     bytes: 2048,
-    emptySeeks: 5,
+    emptySeeks: 3,
   });
   const a = searchReceivingCaptureCost(13, 21, { bytes: 92, locators: 5 });
   const b = searchReceivingCaptureCost(14, 21, { bytes: 92, locators: 5 });
   expect(a).toEqual({
     candidateKeys: 0,
     identityMetadataRows: 0,
-    nativeRows: 395,
-    nativePoints: 395,
+    nativeRows: 393,
+    nativePoints: 393,
     witnessKeys: 0,
-    statements: 356,
+    statements: 354,
     bytes: 121180,
-    emptySeeks: 200,
+    emptySeeks: 198,
   });
   expect(b.nativeRows - a.nativeRows).toBe(10);
   expect(b.nativePoints - a.nativePoints).toBe(10);
@@ -333,10 +333,10 @@ test('capture reservation scales with complete roles and actual original request
   expect(a.bytes).toBe(2048 + 34 * 3072 + 512 + 92 + 5 * 2816);
 });
 
-test('the actual original finite frame refuses unfunded deferred capture and atomically rolls back', async () => {
+test('the actual original finite frame refuses a deferred capture with two seeks left and rolls back', async () => {
   const value = await input();
   await withIdentitySourceConsumerMaintenance(
-    { pool: f.pool, env: {} },
+    { pool: f.pool, env: { KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_EMPTY_SEEKS: '3' } },
     { deadline: Date.now() + 5000 },
     async (context) => {
       const parent = identitySourceConsumerLibraryWork(f.pool, context.identityConsumerWork, context.deadline)!;
@@ -392,7 +392,7 @@ test('the actual original finite frame refuses unfunded deferred capture and ato
         ),
       ).rejects.toMatchObject({
         code: 'identity_epoch_unavailable',
-        message: 'Search receiving capture unavailable funding: original emptySeeks requires 5, remaining 2',
+        message: 'Search receiving capture unavailable funding: original emptySeeks requires 3, remaining 2',
       });
       expect(parent.receipt().used.nativePoints).toBeGreaterThan(0);
     },

@@ -71,11 +71,11 @@ export const searchReceivingCaptureStatementCosts = Object.freeze(
 
 type OriginalRole = Readonly<{ account_id: string; role: string | null }>;
 type Basis = Readonly<{ locators: number; bytes: number }>;
-const fixed = dimensions(8, 8, 8, 2048, 5);
+const fixed = dimensions(6, 6, 6, 2048, 3);
 const role = dimensions(10, 10, 9, 3072, 5);
-// A distinct native origin adds its write-basis lookup in the deferred body.
-// The planner's actually dispatched lookup is independently instrumented.
-const nativeOrigin = dimensions(1, 1, 1, 256, 1);
+// Only a distinct native origin adds another copy EOF, source EOF and write-basis lookup.
+// The planner's actually dispatched lookups are independently instrumented.
+const nativeOrigin = dimensions(3, 3, 3, 256, 3);
 // Additional identity state: 128 parameter bytes, 128 pending-row bytes,
 // 128 deferred projection bytes and two 64-byte rolling states. The arm SQL's
 // own text/parameters/result are independently prepaid in its 1024-byte bound.
@@ -100,13 +100,11 @@ function unavailable(detail: string): Error {
 }
 /** Deferred physical I/O subtotal, separate from instrumented planner SQL and bookkeeping.
  * The planner additionally prepays identity hashing in BOTH bodies via originControl/originMemory.
- * copyRoles counts both complete, distinct transaction prefixes. The fixed eight
- * rows/points/statements cover budget read/consume, partition, both copy EOFs,
- * both source EOFs and the original basis probe. A distinct native basis probe
- * remains additional. Shared origins conservatively retain the same base.
+ * copyRoles counts both complete, distinct transaction prefixes. The fixed six
+ * rows/points/statements cover budget read/consume, partition, the original
+ * copy and source EOFs, and the original basis probe.
  * The optional fourth operand describes a DISTINCT native transaction: null means its
- * basis is absent; undefined means no distinct native origin. This retains the original
- * conservative five-seek layout, not a repaired whole Source quote or an allowance.
+ * basis is absent; undefined means no distinct native origin.
  * Zero candidate/metadata/witness work describes these operational capture bodies only.
  */
 export function searchReceivingCaptureCost(

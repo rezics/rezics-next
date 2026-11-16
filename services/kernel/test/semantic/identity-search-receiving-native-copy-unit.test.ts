@@ -115,8 +115,8 @@ test('both complete copy origins survive the same physical account/role beyond e
   expect(p.reads.filter((read) => read.kind === 'copy' && read.transaction === original)).toHaveLength(18);
   expect(p.reads.filter((read) => read.kind === 'copy' && read.transaction === native)).toHaveLength(18);
   // 36 complete copied/carried roles: each 10 rows/points, 9 statements,
-  // 3072 deferred bytes + 1024 planner/identity bytes, 5 empty seeks. Base 8/8/8/2048/5,
-  // distinct native basis probe 1/1/1/256/1, control/identity bytes 1536. SQL is separate.
+  // 3072 deferred bytes + 1024 planner/identity bytes, 5 empty seeks. Base 6/6/6/2048/3,
+  // distinct native probes 3/3/3/256/3, control/identity bytes 1536. SQL is separate.
   const total: { -readonly [Axis in keyof WorkDimensions]: number } = {
     candidateKeys: 0,
     nativeRows: 0,

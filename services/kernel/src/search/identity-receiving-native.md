@@ -199,6 +199,11 @@ acceptance, gate and native plan and commits the applied effect and fixed step t
 application and hold release each yield their committed transaction before the next owner turn. Directory retirement
 still rechecks the committed control plan after release.
 
+When the original and job share a home, the applied effect captures the roles bound to its native application
+transaction and the fixed step captures the exact job admission. The native late proof verifies both rows and
+the operation together. Capture charges one copy-prefix end seek, one source-prefix end seek and one write-basis
+probe for each distinct origin.
+
 The job-home command selects the next original and commits its initial writer request in one snapshot, including
 capture. The writer discovers or replays the native plan after that request commits. If the directory has no further
 original, the same control command verifies exhaustion and seals completion.
@@ -321,11 +326,9 @@ use the same local origin. Job-home writer admission and Source support checkpoi
 admission directly. Their native commit still proves the writer checkpoint. Projection head upserts charge each
 key in the bounded input before dispatch, including when the statement returns no rows.
 The [eight-axis capture ledger](../semantic/identity-epoch-contract.md#public-output-finite-work)
-includes immediate writes, FKs, both queues/sequences and complete nested/deferred effects, with retained
-failure/rollback and repeated charges from the same original frame. The actual default frame cannot fund its
-five-empty-seek fixed deferred reservation. Missing Source/release/binding/projection and engine composition
-operands remain unavailable. This is source implementation with authored connected regressions UNRUN, not a
-native pass or complete aggregate fit.
+includes immediate writes, FKs, both queues/sequences and complete nested/deferred effects. Failed, rolled-back
+and repeated work retains its charges in the same original frame. Each capture reserves three fixed empty seeks
+for its original transaction and three more when it has a distinct native origin.
 
 The exact-origin source directory and its deletion cursor, refresh, hold, page and terminal consumers now
 retain distinct transaction/source-position origins even when their native delivery and physical key agree.
@@ -345,8 +348,7 @@ a 36-character transaction UUID. The 512-byte role bound includes those strings,
 and map-entry bookkeeping. The event map is discarded after that event; spent funding is never restored.
 The existing per-role deferred footprint is reserved before this additional reservation. Both remain
 charged on refusal, and subsequent SQL, arming and deferred work are not dispatched. All existing SQL,
-control, failure and rollback declarations remain additional; this is not a complete original quote
-or a change to the historical deferred formula or its five-empty-seek failure.
+control, failure and rollback declarations are charged in addition to these bookkeeping reservations.
 
 The dedicated planner guard, native same-actor provenance, both write-basis and complete copy-prefix
 regressions are authored UNRUN. The native cases use genuine command fences and deferred capture, including

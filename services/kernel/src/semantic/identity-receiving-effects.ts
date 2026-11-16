@@ -858,7 +858,11 @@ export async function applySearchIdentityReceivingEffect(
   if (local.row.effect_transaction_id) throw stale();
   const frontier = snapshotSearchIdentityReceivingFrontier({ after: [record.original, record.effectKey], segment: 0 });
   if (!frontier) throw stale();
-  bindSemanticProducerRoles(tx, roles);
+  // The receiving effect names the application as its own source. A colocated fixed step names
+  // the exact job admission, which already carries the job roles resolved for this application.
+  bindSemanticProducerRoles(tx, roles, {
+    exposeCaptureOrigin: effect.receipt.partition !== identityJobPartition(effect.job),
+  });
   await writeReceivingApplication(tx, effect, record, frontier);
   return { frontier, receipt: null, scopeDigest: record.scopeDigest };
 }
@@ -870,10 +874,9 @@ async function writeReceivingApplication(
   frontier: IdentityReceivingProgress['frontier'],
 ) {
   if (record.step === 'search-canonical-index') {
+    // The native owner's late proof verifies the operation, effect and fixed step in this T.
     const applied = await searchNativeCall(tx, 'recordApplied', record, frontier);
     if (applied.holdId !== record.nativeHold.holdId) throw stale();
-    // recordApplied already fenced the exact common acceptance, writer and native hold in this T.
-    registerReceivingApplication(tx, effect, record);
   }
   recordIdentityEpochNativeCommit(tx, record.step);
   registerCommandCallback(tx, async (id) => {
