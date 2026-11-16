@@ -2071,6 +2071,13 @@ The native control head retains one original and one link intent, at most two ou
 8-scalar/2048-byte frontier. Local effect receipts and the exact control custody row precede advancement;
 a lost local result resumes the same unit. Transient payloads are deleted only after released control custody.
 
+A later admitted job can reuse a retained destination fence or original gate after publication. The mapping
+producer reads the exact point's committed local effect and then confirms its effect receipt at the published
+job's control home. It compares the retained frame again under the destination lock before replacing it.
+Each point carries its own proof. A changed, unreceipted or still-live owner keeps the existing conflict.
+For a released self gate whose terminal changed, the new gate takes its basis from the current local published
+mapping only when that mapping agrees with the admitted previous terminal.
+
 Output memberships use separate immutable generations. Four home-local reservation slots cover partial outputs
 and retired inputs under the existing G/A allowance; unknown bootstrap exports pause allocation. These slots
 are not an erasure or reclaim producer. Missing minimizer and receiving-owner transfer remain pending.
