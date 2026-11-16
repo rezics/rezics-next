@@ -375,13 +375,16 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
     const source = plan.source;
     const row = (await sql<WriterRow>(tx, work, 'writer', [source.receivingHome, index, source.documentId])).rows[0];
     const fence = plan.references.documentFence;
+    const originalBarrier = source.barrier.kind === 'original';
     if (
       !row ||
       row.consumer !== consumer ||
       row.incarnation !== source.incarnation ||
       row.write_alias !== source.writeAlias ||
       row.owner_epoch !== source.receivingEpoch ||
-      BigInt(row.enrollment_generation) !== source.enrollmentGeneration ||
+      (originalBarrier
+        ? BigInt(row.enrollment_generation) < source.enrollmentGeneration
+        : BigInt(row.enrollment_generation) !== source.enrollmentGeneration) ||
       BigInt(row.fence_generation) !== source.fenceGeneration ||
       row.closed_job !== plan.selection.job.jobId ||
       row.closed_epoch !== String(plan.selection.job.epoch) ||
@@ -389,7 +392,12 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
       row.closed_position !== String(fence.position) ||
       fence.partition !== source.receivingHome ||
       fence.epoch !== row.owner_epoch ||
-      row.closed_token !== source.barrier.token ||
+      (originalBarrier
+        ? row.closed_token !== null ||
+          source.barrier.token !== fence.transactionId ||
+          source.original !== source.documentId ||
+          !same(source.originalFence, fence)
+        : row.closed_token !== source.barrier.token) ||
       source.barrier.partition !== source.receivingHome
     )
       work.fail('changed', 'Native writer preparation, original close or physical owner changed');
@@ -1062,7 +1070,12 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
             const plan = await readPlan(tx, work, locator);
             const row = (await sql<CopyRow>(tx, work, 'copy', [...key(locator), copyNo])).rows[0];
             if (!row) work.fail('unavailable', 'Original copy obligation unavailable');
-            return { plan, item: copy(row.locator) };
+            const item = copy(row.locator);
+            const replacement =
+              plan.source.barrier.kind === 'original' && item.visible && !item.enrollment
+                ? await operation(tx, work, plan)
+                : null;
+            return { plan, item, replacement };
           },
           work.context.deadline,
         );
@@ -1087,6 +1100,32 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
               row.closed_position !== String(item.close.position)
             )
               work.fail('changed', 'Original copy requires actual current-owner handoff');
+            const replacement = original.replacement;
+            if (replacement && item.visible && !item.enrollment) {
+              if (
+                replacement.state === 'dispatched' ||
+                !replacement.visible_transaction_id ||
+                !replacement.visibility_component ||
+                replacement.visible_position !== replacement.visibility_component ||
+                row.writer_token ||
+                row.dispatch_state !== 'settled' ||
+                row.writer_transaction_id !== replacement.writer_transaction_id ||
+                row.writer_position !== replacement.writer_position ||
+                row.settled_transaction_id !== replacement.visible_transaction_id ||
+                row.visible_transaction_id !== replacement.visible_transaction_id ||
+                row.settled_position !== replacement.visibility_component ||
+                row.visible_position !== replacement.visibility_component ||
+                BigInt(row.position) < BigInt(replacement.visibility_component) ||
+                BigInt(replacement.visibility_component) <= item.visible.position
+              )
+                work.fail('draining', 'Original visible copy still needs its exact replacement settlement');
+              return {
+                partition: item.home,
+                epoch: row.epoch,
+                position: BigInt(replacement.visibility_component),
+                transactionId: replacement.visible_transaction_id,
+              };
+            }
             // First absence is proven by the genuine native close under writer enrollment locks.
             if (
               !item.enrollment &&

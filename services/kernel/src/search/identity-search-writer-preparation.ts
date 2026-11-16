@@ -22,6 +22,7 @@ import {
 import { subjectSource } from '../semantic/search-source.ts';
 import {
   activeIdentitySourceConsumerMaintenance,
+  identitySourceConsumerNativeWork,
   withIdentitySourceConsumerMaintenance,
 } from '../semantic/identity-source-consumer-maintenance.ts';
 import { withReadTransaction } from '../semantic/read.ts';
@@ -30,6 +31,11 @@ import { searchIdentityWriterChanged } from './identity-epoch-participant-events
 import { readSearchWriterPhysicalTarget } from './identity-epoch-participant-physical.ts';
 import stepSql from './identity-epoch-participant-step.sql';
 import type { SearchReceivingConfiguration } from './identity-receiving-native.ts';
+import { createSearchIdentityReceivingNativeStore } from './identity-receiving-native-store.ts';
+import {
+  snapshotSearchIdentityReceivingFrontier,
+  type SearchIdentityReceivingSelection,
+} from './identity-receiving-native-contract.ts';
 import {
   readSearchIdentityDirectory,
   readSearchIdentityDirectoryOriginal,
@@ -37,9 +43,9 @@ import {
 } from './identity-search-receiving-directory.ts';
 import { readSearchIdentityWriterAdmissionSql } from './identity-search-receiving-directory-sql.ts';
 import { searchIdentityWorkContext, searchIdentityWorkUsed } from './identity-search-receiving-work.ts';
-import { readSearchIdentityOriginalPlan } from './identity-search-receiving-source.ts';
+import { readSearchIdentityOriginalPlan, searchIdentityWriterEffectKey } from './identity-search-receiving-source.ts';
 import { subjectPartition } from './source.ts';
-import { createSearchWriterGuard } from './writer-guard.ts';
+import { createSearchWriterGuard, type SearchIdentityWriterAdmission } from './writer-guard.ts';
 import { createSearchIdentityWriterSupport } from './identity-search-writer-support.ts';
 
 const unavailable = (message: string) => new IdentityEpochStoreError('identity_epoch_unavailable', message);
@@ -70,6 +76,41 @@ function retainWriterStep(
   });
 }
 
+function readWriterAdmission(
+  row: { transaction_id: string; frontier: unknown; proven: boolean },
+  request: string,
+  original: string,
+): SearchIdentityWriterAdmission & { transactionId: string } {
+  const frontier = snapshotSearchIdentityReceivingFrontier(row.frontier);
+  const [kind, retainedRequest, retainedOriginal, incarnation, writeAlias, enrollment, fence, close] =
+    frontier?.after ?? [];
+  if (
+    !row.proven ||
+    frontier?.segment !== 0 ||
+    frontier.after.length !== 8 ||
+    kind !== 'search-writer-admitted' ||
+    retainedRequest !== request ||
+    retainedOriginal !== original ||
+    typeof incarnation !== 'string' ||
+    !/^[A-Za-z0-9_-]{1,128}$/.test(incarnation) ||
+    typeof writeAlias !== 'string' ||
+    typeof enrollment !== 'string' ||
+    !/^(0|[1-9][0-9]*)$/.test(enrollment) ||
+    typeof fence !== 'string' ||
+    !/^(0|[1-9][0-9]*)$/.test(fence) ||
+    (close !== null && (typeof close !== 'string' || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(close)))
+  )
+    throw unavailable('Retained writer admission moved or lost its original proof');
+  return {
+    transactionId: row.transaction_id,
+    incarnation,
+    writeAlias,
+    enrollmentGeneration: BigInt(enrollment),
+    fenceGeneration: BigInt(fence),
+    close,
+  };
+}
+
 /** Worker-owned admission for the exact retained control request. Engine transport runs independently of Source accounting. */
 export function createSearchIdentityWriterPreparation(
   { configuration, work }: { configuration: SearchReceivingConfiguration; work: SearchReceivingWorkDeclaration },
@@ -82,6 +123,7 @@ export function createSearchIdentityWriterPreparation(
     listing: subjectListingSource(configuration.pool),
   });
   const resumeSupport = createSearchIdentityWriterSupport(configuration);
+  const store = createSearchIdentityReceivingNativeStore(configuration);
   return async (pool, request) => {
     if (pool !== configuration.pool || activeIdentitySourceConsumerMaintenance(pool))
       throw unavailable('Search writer preparation requires the separate owner turn');
@@ -117,26 +159,131 @@ export function createSearchIdentityWriterPreparation(
               const partition = subjectPartition(original);
               const admitted = async (tx: CommandTransaction) => {
                 const row = (
-                  await tx.query<{ proven: boolean; transaction_id: string }>(readSearchIdentityWriterAdmissionSql, [
-                    partition,
-                    job.jobId,
-                    String(job.epoch),
-                    native.transactionId,
-                    directory.scope,
-                    original,
-                  ])
+                  await tx.query<{ proven: boolean; transaction_id: string; frontier: unknown }>(
+                    readSearchIdentityWriterAdmissionSql,
+                    [partition, job.jobId, String(job.epoch), native.transactionId, directory.scope, original],
+                  )
                 ).rows[0];
-                if (row && !row.proven) throw unavailable('Retained writer admission moved or lost its original proof');
-                return row?.transaction_id ?? null;
+                return row ? readWriterAdmission(row, native.transactionId, original) : null;
               };
-              if (await withReadTransaction(pool, admitted, context.deadline)) {
+              const admission = await withReadTransaction(pool, admitted, context.deadline);
+              if (admission) {
                 const support = await resumeSupport(
                   { job, change, request: native.transactionId, scope: directory.scope, release: directory.release },
                   context.deadline,
                 );
-                if (!support) {
+                if (support.state === 'ready') {
                   const plan = await readSearchIdentityOriginalPlan(pool, job, change, configuration, context.deadline);
-                  return { state: plan ? 'prepared' : 'pending' } as const;
+                  if (plan) return { state: 'prepared' } as const;
+                  const redirected = original !== change.terminal;
+                  if (!redirected && support.originalSupport) return { state: 'pending' } as const;
+                  const allocation = await outsideSource(() =>
+                    readSearchWriterPhysicalTarget(turn.search(configuration.search), configuration.index),
+                  );
+                  if (
+                    allocation.incarnation !== admission.incarnation ||
+                    allocation.writeAlias !== admission.writeAlias
+                  )
+                    throw unavailable('Search writer allocation changed after retained admission');
+                  const roles = await identityErasureRoles(pool, job.jobId);
+                  const locator = {
+                    kind: 'search-canonical-index' as const,
+                    version: 1 as const,
+                    partition,
+                    planId: crypto.randomUUID(),
+                  };
+                  await runCommand(
+                    pool,
+                    { partition, deadline: context.deadline, clock: configuration.clock },
+                    async (tx) => {
+                      if ((await admitted(tx))?.transactionId !== admission.transactionId)
+                        throw unavailable('Search writer lost its retained admission');
+                      await support.compare(tx);
+                      const retained = await writer.prepareIdentityRemoval(
+                        tx,
+                        job,
+                        original,
+                        locator.planId,
+                        admission,
+                      );
+                      const disposition = redirected ? 'OLD' : retained.firstAbsence ? 'first-apply' : 'NEW';
+                      const effectKey = searchIdentityWriterEffectKey(configuration.consumer, original, disposition);
+                      const selection: SearchIdentityReceivingSelection = {
+                        job,
+                        original,
+                        effectKey,
+                        owner: original,
+                        sourceId: original,
+                        scope: effectKey,
+                        disposition,
+                        native: locator,
+                      };
+                      bindSemanticProducerRoles(tx, roles);
+                      const allowance = identitySourceConsumerNativeWork(
+                        pool,
+                        context.identityConsumerWork,
+                        context.deadline,
+                      );
+                      if (!allowance)
+                        throw unavailable('Search writer original preparation lost its Source work frame');
+                      await store.preparePlan(
+                        tx,
+                        {
+                          selection,
+                          scopeDigest: directory.scope,
+                          source: {
+                            locator,
+                            original,
+                            terminal: change.terminal,
+                            documentId: original,
+                            owner: original,
+                            sourceId: original,
+                            scope: effectKey,
+                            disposition,
+                            receivingHome: partition,
+                            receivingEpoch: retained.close.epoch,
+                            consumer: configuration.consumer,
+                            physicalTarget: configuration.index,
+                            incarnation: admission.incarnation,
+                            writeAlias: admission.writeAlias,
+                            physicalGeneration: retained.physicalGeneration,
+                            enrollmentGeneration: retained.enrollmentGeneration,
+                            fenceGeneration: retained.fenceGeneration,
+                            barrier: { kind: 'original', partition, token: retained.close.transactionId },
+                            originalFence: retained.close,
+                          },
+                          references: {
+                            originalSupport: support.originalSupport,
+                            terminalSupport: support.terminalSupport,
+                            definition: support.definition,
+                            release: support.release,
+                            documentFence: retained.close,
+                            predecessor: retained.previousPlan ? { ...locator, planId: retained.previousPlan } : null,
+                          },
+                          actionDigest: retained.actionDigest,
+                          copies: retained.previousVisible
+                            ? [
+                                {
+                                  state: 'settled',
+                                  home: partition,
+                                  consumer: configuration.consumer,
+                                  physicalTarget: configuration.index,
+                                  incarnation: admission.incarnation,
+                                  writeAlias: admission.writeAlias,
+                                  original,
+                                  close: retained.close,
+                                  enrollment: null,
+                                  visible: retained.previousVisible,
+                                },
+                              ]
+                            : [],
+                        },
+                        { deadline: context.deadline, allowance },
+                      );
+                      return { value: null, events: searchIdentityWriterChanged() };
+                    },
+                  );
+                  return { state: 'prepared' } as const;
                 }
                 const roles = await identityErasureRoles(pool, job.jobId);
                 const committed = await runCommand(
@@ -178,7 +325,7 @@ export function createSearchIdentityWriterPreparation(
                 { partition, deadline: context.deadline, clock: configuration.clock },
                 async (tx) => {
                   const prior = await admitted(tx);
-                  if (prior) return noEffect(prior);
+                  if (prior) return noEffect(prior.transactionId);
                   const observation = await writer.observeIdentityPreparation(tx, job, original, allocation);
                   const frontier = {
                     after: [

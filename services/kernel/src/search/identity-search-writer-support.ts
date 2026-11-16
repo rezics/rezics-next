@@ -98,7 +98,7 @@ function decodeProjection(row: Awaited<ReturnType<typeof retained>>): Projection
   return { transactionId: row.transactionId, state, frontier: { build, generation: BigInt(generation), continuation } };
 }
 
-function closed(value: Projection | null) {
+function closed(value: Projection | null): value is Projection {
   return value?.state === 'complete' || value?.state === 'withheld';
 }
 
@@ -109,10 +109,17 @@ export function createSearchIdentityWriterSupport(configuration: SearchReceiving
   return async (
     basis: Basis,
     deadline: number,
-  ): Promise<Readonly<{
-    frontier: IdentityFrontier;
-    compare(tx: CommandTransaction): Promise<void>;
-  }> | null> => {
+  ): Promise<
+    | Readonly<{ state: 'progress'; frontier: IdentityFrontier; compare(tx: CommandTransaction): Promise<void> }>
+    | Readonly<{
+        state: 'ready';
+        definition: string;
+        release: string;
+        originalSupport: PublicFilterProjectionFrontier | null;
+        terminalSupport: PublicFilterProjectionFrontier | null;
+        compare(tx: CommandTransaction): Promise<void>;
+      }>
+  > => {
     if (!releaseDigest.test(basis.release)) throw unavailable('Invalid admitted Search release');
     const saved = await withReadTransaction(
       pool,
@@ -121,15 +128,33 @@ export function createSearchIdentityWriterSupport(configuration: SearchReceiving
         if (!savedDefinition) return { definition: null, phase: 'definition' as const, projection: null };
         const original = decodeProjection(await retained(tx, basis, 'original'));
         if (!closed(original)) return { definition: savedDefinition, phase: 'original' as const, projection: original };
-        if (basis.change.original === basis.change.terminal) return null;
-        const terminal = decodeProjection(await retained(tx, basis, 'terminal'));
-        return closed(terminal)
-          ? null
-          : { definition: savedDefinition, phase: 'terminal' as const, projection: terminal };
+        const sameDocument = basis.change.original === basis.change.terminal;
+        const terminal = sameDocument ? original : decodeProjection(await retained(tx, basis, 'terminal'));
+        if (!closed(terminal)) return { definition: savedDefinition, phase: 'terminal' as const, projection: terminal };
+        return { phase: 'ready' as const, definition: savedDefinition, original, terminal, sameDocument };
       },
       deadline,
     );
-    if (!saved) return null;
+    if (saved.phase === 'ready') {
+      return {
+        state: 'ready',
+        definition: saved.definition.id,
+        release: saved.definition.release,
+        originalSupport: saved.original.frontier,
+        terminalSupport: saved.terminal.frontier,
+        async compare(tx) {
+          const retainedDefinition = await retained(tx, basis, 'definition');
+          const retainedOriginal = await retained(tx, basis, 'original');
+          const retainedTerminal = saved.sameDocument ? retainedOriginal : await retained(tx, basis, 'terminal');
+          if (
+            retainedDefinition?.transactionId !== saved.definition.transactionId ||
+            retainedOriginal?.transactionId !== saved.original.transactionId ||
+            retainedTerminal?.transactionId !== saved.terminal.transactionId
+          )
+            throw unavailable('Search writer Source support changed before preparation');
+        },
+      };
+    }
 
     const { phase } = saved;
     const after: (string | number | null)[] = [marker, basis.request, phase];
@@ -180,6 +205,7 @@ export function createSearchIdentityWriterSupport(configuration: SearchReceiving
     if (!frontier) throw unavailable('Search writer Source support exceeds its retained frontier bound');
     const expected = saved.projection?.transactionId ?? null;
     return {
+      state: 'progress',
       frontier,
       async compare(tx) {
         if (((await retained(tx, basis, phase))?.transactionId ?? null) !== expected)

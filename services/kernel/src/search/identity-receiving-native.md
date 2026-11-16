@@ -163,6 +163,11 @@ Search owner turn. The writer retains the observed current allocation and origin
 publication-admission, generation and writer locks. First-absence, action and hold authorization still require
 the per-document preparation below.
 
+The removal writer installs an original-specific barrier in the same transaction as immutable action preparation.
+Its generation-fence counter stays exact and its enrollment counter remains a floor for unaffected writers.
+The original close binds the planned document and version. A prior visible copy requires the original operation's
+strictly newer and verified replacement settlement. A successor uses the previous published and released plan.
+
 The existing writer owns enrollment, dispatch, settlement and retained copies. Its `SearchWriterBarrier` reports
 `firstApply: 'unavailable'` and `prepared: 'unavailable'`; no first-apply receiving preparation/dispatch hook is
 installed. The Source writer owner must receive the following disjoint native integration before readiness:

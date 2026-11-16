@@ -257,6 +257,8 @@ export function createSearchIdentityReceivingNative(
         );
       if (projection.projection?.status === 'progress')
         work.fail('draining', 'Complete Source original-support closure is incomplete');
+      if (plan.source.barrier.kind === 'original' && !!frontier !== !!projection.projection)
+        work.fail('changed', 'Original Source disclosure changed');
       if (frontier && projection.projection && !isDeepStrictEqual(projection.projection.frontier, frontier))
         work.fail('changed', 'Complete Source original-support frontier changed');
     }
@@ -289,6 +291,8 @@ export function createSearchIdentityReceivingNative(
             );
           if (projection.projection?.status === 'progress')
             work.fail('draining', 'Original Source projection is incomplete');
+          if (plan.source.barrier.kind === 'original' && !!frontier !== !!projection.projection)
+            work.fail('changed', 'Original Source disclosure changed');
           if (frontier && projection.projection && !isDeepStrictEqual(projection.projection.frontier, frontier))
             work.fail('changed', 'Original Source projection frontier changed');
         }
