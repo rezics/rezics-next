@@ -28,6 +28,9 @@ The guard exposes these operations (the exact exported types live beside the fac
 - `readRetainedCopies(locator,after)` pages at most 100 native operational key/copy rows in primary-key order.
   The returned `next` is a single original or null. Exact last-visible and active enrollment native receipts and
   source component remain available across later cancelled attempts. No Source body or support fact is mirrored.
+- `readRetainedCopy(locator,original,deadline)` resolves one original through the same active barrier and writer
+  keys. Receiving preparation uses this lookup and charges its owner, gate and writer points to the current
+  maintenance frame. It preserves live enrollment and last-visible receipts independently.
 - `recoverInterrupted(locator,after)` examines at most 100 pending keys through a partition-leading partial index.
   It revokes only still-enrolled attempts under the same locks as native dispatch. A delayed continuation then
   loses its dispatch CAS before any mutation. Dispatched or ambiguous requests remain counted as uncertain.
