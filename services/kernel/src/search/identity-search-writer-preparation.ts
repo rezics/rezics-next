@@ -157,27 +157,29 @@ export function createSearchIdentityWriterPreparation(
               )
                 throw unavailable('Search writer request is no longer the retained current step');
 
+              if (change.plan?.holdId) {
+                return advanceSearchIdentityDispatch(
+                  configuration,
+                  writer,
+                  store,
+                  job,
+                  {
+                    planId: change.plan.planId,
+                    holdId: change.plan.holdId,
+                    original: change.original,
+                    terminal: change.terminal,
+                  },
+                  directory.scope,
+                  context,
+                  turn.search(configuration.search),
+                  outsideSource,
+                );
+              }
               if (change.plan) {
                 const plan = await readSearchIdentityOriginalPlan(pool, job, change, configuration, context.deadline);
                 if (!plan?.originalBarrier || plan.selection.native.planId !== change.plan.planId)
                   throw unavailable('Search writer request lost its exact prepared original');
-                if (change.plan.holdId) {
-                  await advanceSearchIdentityDispatch(
-                    configuration,
-                    writer,
-                    store,
-                    job,
-                    plan.selection,
-                    { planId: change.plan.planId, holdId: change.plan.holdId },
-                    directory.scope,
-                    context,
-                    turn.search(configuration.search),
-                    outsideSource,
-                  );
-                } else {
-                  return advanceSearchIdentityReceivingAcceptance(pool, plan.selection);
-                }
-                return { state: 'prepared' } as const;
+                return advanceSearchIdentityReceivingAcceptance(pool, plan.selection);
               }
 
               const { original } = change;

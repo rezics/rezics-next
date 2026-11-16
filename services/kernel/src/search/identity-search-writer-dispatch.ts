@@ -5,6 +5,8 @@ import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts
 import { bindSemanticProducerRoles, identityErasureRoles } from '../semantic/erasure-producer.ts';
 import type { IdentityJobRef } from '../semantic/identity-epoch-contract.ts';
 import { identitySourceConsumerNativeWork } from '../semantic/identity-source-consumer-maintenance.ts';
+import { advanceSearchIdentityReceivingReconciliation } from '../semantic/identity-receiving-effects.ts';
+import type { IdentityReceivingEffect } from '../semantic/identity-receiving-effects-types.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import type { SearchIdentityReceivingSelection } from './identity-receiving-native-contract.ts';
 import type { StoredSource } from './identity-receiving-native-internal.ts';
@@ -19,6 +21,7 @@ import type { searchIdentityWorkContext } from './identity-search-receiving-work
 import { searchIdentityWriterChanged } from './identity-epoch-participant-events.ts';
 import { readSearchWriterPhysicalTarget } from './identity-epoch-participant-physical.ts';
 import type { OpenSearch } from './opensearch.ts';
+import { subjectPartition } from './source.ts';
 import { decodeSearchIdentityWriterAction, type SearchWriterNativeCustody } from './writer-guard.ts';
 import { validateIndexWriteReceipt, writeIndexActions } from './write-actions.ts';
 
@@ -27,7 +30,7 @@ const unavailable = (message: string) => new IdentityEpochStoreError('identity_e
 export async function readSearchIdentityDispatchBasis(
   pool: Pool,
   job: IdentityJobRef,
-  selection: SearchIdentityReceivingSelection,
+  selection: { native: { partition: number; planId: string }; original: string; terminal?: string },
   scope: string,
   index: string,
   deadline: number,
@@ -39,6 +42,7 @@ export async function readSearchIdentityDispatchBasis(
         await tx.query<{
           hold_id: string;
           source: StoredSource;
+          effect_key: string;
           action_digest: string;
           action_bytes: number;
           accepted_epoch: number;
@@ -46,6 +50,7 @@ export async function readSearchIdentityDispatchBasis(
           accepted_transaction_id: string;
           state: 'dispatched' | 'visible' | 'applied' | null;
           visible: boolean;
+          released: boolean;
         }>(readSearchIdentityDispatchBasisSql, [
           selection.native.partition,
           selection.native.planId,
@@ -62,10 +67,17 @@ export async function readSearchIdentityDispatchBasis(
   if (
     row.source.barrier.kind !== 'original' ||
     row.source.original !== selection.original ||
-    row.source.documentId !== selection.owner ||
+    row.source.documentId !== selection.original ||
+    row.source.owner !== selection.original ||
+    row.source.sourceId !== selection.original ||
     row.source.locator.planId !== selection.native.planId ||
-    row.source.terminal === undefined ||
+    (selection.terminal !== undefined && row.source.terminal !== selection.terminal) ||
+    row.source.receivingHome !== selection.native.partition ||
+    typeof row.effect_key !== 'string' ||
+    !row.effect_key ||
+    Buffer.byteLength(row.effect_key) > 256 ||
     (row.state === 'visible' || row.state === 'applied') !== row.visible ||
+    (row.released && row.state !== 'applied') ||
     searchIdentityWriterBodyBytes(row.action_bytes) === undefined ||
     !/^[1-9][0-9]*$/.test(row.accepted_position) ||
     row.accepted_epoch !== row.source.receivingEpoch ||
@@ -75,13 +87,31 @@ export async function readSearchIdentityDispatchBasis(
   return row;
 }
 
+export function searchIdentityDispatchEffect(
+  job: IdentityJobRef,
+  selection: SearchIdentityReceivingSelection,
+  basis: NonNullable<Awaited<ReturnType<typeof readSearchIdentityDispatchBasis>>>,
+): IdentityReceivingEffect {
+  return {
+    kind: 'receiving',
+    job,
+    original: selection.original,
+    effectKey: selection.effectKey,
+    receipt: {
+      partition: selection.native.partition,
+      transactionId: basis.accepted_transaction_id,
+      epoch: basis.accepted_epoch,
+      position: BigInt(basis.accepted_position),
+    },
+  };
+}
+
 export async function advanceSearchIdentityDispatch(
   configuration: SearchReceivingConfiguration,
   writer: SearchWriterNativeCustody,
   store: ReturnType<typeof createSearchIdentityReceivingNativeStore>,
   job: IdentityJobRef,
-  selection: SearchIdentityReceivingSelection,
-  request: Readonly<{ planId: string; holdId: string }>,
+  request: Readonly<{ planId: string; holdId: string; original: string; terminal: string }>,
   scope: string,
   context: ReturnType<typeof searchIdentityWorkContext>,
   engine: OpenSearch,
@@ -89,13 +119,36 @@ export async function advanceSearchIdentityDispatch(
 ) {
   const { pool, index, clock } = configuration;
   const { deadline } = context;
-  const basis = await readSearchIdentityDispatchBasis(pool, job, selection, scope, index, deadline);
-  if (!basis || selection.native.planId !== request.planId || basis.hold_id !== request.holdId)
+  const basis = await readSearchIdentityDispatchBasis(
+    pool,
+    job,
+    {
+      original: request.original,
+      terminal: request.terminal,
+      native: { partition: subjectPartition(request.original), planId: request.planId },
+    },
+    scope,
+    index,
+    deadline,
+  );
+  if (!basis || basis.hold_id !== request.holdId || basis.source.consumer !== configuration.consumer)
     throw unavailable('Search writer dispatch request no longer names the accepted hold');
-  if (basis.visible) return;
+  const source = basis.source;
+  const selection: SearchIdentityReceivingSelection = {
+    job,
+    original: source.original,
+    effectKey: basis.effect_key,
+    owner: source.owner,
+    sourceId: source.sourceId,
+    scope: source.scope,
+    disposition: source.disposition,
+    native: source.locator,
+  };
+  if (basis.state === 'applied' && !basis.released)
+    return advanceSearchIdentityReceivingReconciliation(pool, searchIdentityDispatchEffect(job, selection, basis));
+  if (basis.visible) return { state: 'prepared' } as const;
   if (basis.state !== null) throw unavailable('Search writer awaits the original uncertain dispatch result');
 
-  const source = basis.source;
   const allocation = async () => {
     const actual = await readSearchWriterPhysicalTarget(engine, index);
     if (actual.incarnation !== source.incarnation || actual.writeAlias !== source.writeAlias)
@@ -159,4 +212,5 @@ export async function advanceSearchIdentityDispatch(
     await store.recordVisible(tx, selection.native, basis.hold_id, operationId, remaining(), bytes);
     return { value: null, events: searchIdentityWriterChanged() };
   });
+  return { state: 'prepared' } as const;
 }

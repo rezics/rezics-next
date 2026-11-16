@@ -111,7 +111,10 @@ The coordinator stages the common binding and acquires its exact native hold in 
 then records the dispatch request. The writer commits the original dispatch before sending the retained action
 through the allocation alias, and commits the validated bulk receipt with native visibility settlement. An
 uncertain response keeps the original dispatch pending. Native application advances the participant separately
-from reconciliation and release. Visible Subject preparation still needs the bounded ordinary writer document input.
+from reconciliation and release. Each committed copy or Source page gives the coordinator an exact progress
+transaction. Control custody commits in its own turn, followed by a fresh original-scope release observation
+and the native hold release. The directory retires the original after both the native release and common
+release cursor are committed. Visible Subject preparation still needs the bounded ordinary writer document input.
 For an existing accepted scope it fuses actual native operation application, the common effect and fixed Search
 `more` step in one transaction, then reconciles original custody. Each common Search plan enters the operational `identity_receiving_native_scope_pending` queue when it commits.
 The participant resumes at the last Search directory key retained in the committed native step. It reads one
