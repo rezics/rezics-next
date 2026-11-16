@@ -1,4 +1,4 @@
-import { runCrossMediaSeedCli } from '../../services/importer/src/cross-media-seed.ts';
+import { runCrossMediaSeedCli, type CrossMediaSeedCliOptions } from '../../services/importer/src/cross-media-seed.ts';
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { createKernelClient } from '@rezics/client';
@@ -148,36 +148,38 @@ async function attachDevelopmentShowcase(path: string, report: DevelopmentShowca
   await writeFile(path, JSON.stringify({ ...result, developmentShowcase: report }, null, 2) + '\n', { mode: 0o600 });
 }
 
-export async function runDevelopmentSeed(
-  options: {
-    env?: NodeJS.ProcessEnv;
-    fetchDumps?: typeof fetchCrossMediaDumps;
-    runSeed?: typeof runCrossMediaSeedCli;
-    createTokenProvider?: typeof createAccountTokenProvider;
-    seedCatalogue?: typeof seedReviewedCatalogue;
-    waitForKernel?: typeof waitForKernelReadiness;
-    signal?: AbortSignal;
-    root?: string;
-  } = {},
-): Promise<DevelopmentShowcaseReport> {
+type DevelopmentSeedOptions = {
+  env?: NodeJS.ProcessEnv;
+  fetchDumps?: typeof fetchCrossMediaDumps;
+  runSeed?: typeof runCrossMediaSeedCli;
+  createTokenProvider?: typeof createAccountTokenProvider;
+  seedCatalogue?: typeof seedReviewedCatalogue;
+  waitForKernel?: typeof waitForKernelReadiness;
+  signal?: AbortSignal;
+  root?: string;
+};
+
+async function seedDevelopmentImport(
+  options: DevelopmentSeedOptions,
+  showcaseCredentials?: { accountKey: string; client: string; exportPath?: string },
+) {
   const env = options.env ?? process.env;
   const accountKey = requiredEnvironment('REZICS_DEV_PERSONA_ACCOUNT_KEY', env);
   const account = requiredEnvironment('REZICS_DEV_PERSONA_ACCOUNT', env);
   const client = requiredEnvironment('REZICS_DEV_PERSONA_CLIENT', env);
-  const showcaseAccountKey = requiredEnvironment('REZICS_DEV_SHOWCASE_ACCOUNT_KEY', env);
-  const showcaseClient = requiredEnvironment('REZICS_DEV_SHOWCASE_CLIENT', env);
   const auth = requiredEnvironment('AUTH_ORIGIN', env);
   const api = env.KERNEL_ORIGIN || 'http://127.0.0.1:' + (env.KERNEL_PORT || '4100');
   const characterVocabulary = env.REZICS_DEV_VNDB_CHARACTER_VOCABULARY?.trim();
   const gameEnvironmentBindings = env.REZICS_DEV_BANGUMI_GAME_ENVIRONMENT_BINDINGS?.trim();
   const gameGenreBindings = env.REZICS_DEV_BANGUMI_GAME_GENRE_BINDINGS?.trim();
-  const exportPath = env.REZICS_DEV_VNDB_EXPORT?.trim();
   await (options.waitForKernel ?? waitForKernelReadiness)({
     origin: api,
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   });
   options.signal?.throwIfAborted();
-  const personalXml = exportPath ? await readShowcasePersonalListExport(exportPath) : undefined;
+  const personalXml = showcaseCredentials?.exportPath
+    ? await readShowcasePersonalListExport(showcaseCredentials.exportPath)
+    : undefined;
   const dumps = await (options.fetchDumps ?? fetchCrossMediaDumps)();
   const root = options.root ?? resolve(import.meta.dir, '../..');
   const state = join(root, '.temp', 'cross-media-seed', 'state.sqlite');
@@ -229,14 +231,21 @@ export async function runDevelopmentSeed(
   if (gameEnvironmentBindings) args.push('--bangumi-game-environment-bindings', gameEnvironmentBindings);
   if (gameGenreBindings) args.push('--bangumi-game-genre-bindings', gameGenreBindings);
   if (characterVocabulary) args.push('--vndb-character-vocabulary', characterVocabulary);
-  const creatorToken = await (options.createTokenProvider ?? createAccountTokenProvider)({
-    accountKeyPath: showcaseAccountKey,
-    account,
-    client: showcaseClient,
-    authOrigin: auth,
-    scopes: developmentCollectionScopes,
-  });
-  const request = createDevelopmentShowcaseRequest({ origin: api, token: creatorToken });
+  const request = showcaseCredentials
+    ? createDevelopmentShowcaseRequest({
+        origin: api,
+        token: await (options.createTokenProvider ?? createAccountTokenProvider)({
+          accountKeyPath: showcaseCredentials.accountKey,
+          account,
+          client: showcaseCredentials.client,
+          authOrigin: auth,
+          scopes: developmentCollectionScopes,
+        }),
+      })
+    : undefined;
+  const composePersona: CrossMediaSeedCliOptions['composePersona'] = request
+    ? (context) => seedDevelopmentShowcase({ ...context, accountId: account, request })
+    : undefined;
   const importedResult = await (options.runSeed ?? runCrossMediaSeedCli)(args, {
     includeBooks: true,
     episodeCatalogueSubjects: reviewedCatalogue.subjects,
@@ -245,11 +254,28 @@ export async function runDevelopmentSeed(
     ...(dumps.sourceSnapshots.vndb.timestamp === undefined
       ? {}
       : { sourceSnapshotAsOf: dumps.sourceSnapshots.vndb.timestamp.slice(0, 10) }),
-    composePersona: (context) => seedDevelopmentShowcase({ ...context, accountId: account, request }),
+    ...(composePersona && { composePersona }),
     ...(process.env.REZICS_WALK_SMOL === '1' ? { onDumpTableReleased: releaseWalkFileCache } : {}),
   });
   if (!importedResult) throw new TypeError('Cross-media seed did not return its native result handoff');
+  return { importedResult, account, auth, api, dumps, showcase, result, personalXml };
+}
 
+export async function seedDevelopmentCatalogue(options: DevelopmentSeedOptions = {}): Promise<void> {
+  const { importedResult } = await seedDevelopmentImport(options);
+  if (importedResult.showcase?.status !== 'published')
+    throw new TypeError('Cross-media seed did not publish the selected catalogue');
+}
+
+export async function runDevelopmentSeed(options: DevelopmentSeedOptions = {}): Promise<DevelopmentShowcaseReport> {
+  const env = options.env ?? process.env;
+  const showcaseAccountKey = requiredEnvironment('REZICS_DEV_SHOWCASE_ACCOUNT_KEY', env);
+  const showcaseClient = requiredEnvironment('REZICS_DEV_SHOWCASE_CLIENT', env);
+  const exportPath = env.REZICS_DEV_VNDB_EXPORT?.trim();
+  const { importedResult, account, auth, api, dumps, showcase, result, personalXml } = await seedDevelopmentImport(
+    options,
+    { accountKey: showcaseAccountKey, client: showcaseClient, ...(exportPath && { exportPath }) },
+  );
   const credential = await credentialKeyId(showcaseAccountKey);
   const showcaseToken = await (options.createTokenProvider ?? createAccountTokenProvider)({
     accountKeyPath: showcaseAccountKey,
@@ -373,7 +399,8 @@ if (import.meta.main) {
     const args = Bun.argv.slice(2);
     if (args.length === 1 && args[0] === '--dev') {
       if ((await runDevelopmentSeed()).state !== 'complete') process.exitCode = 1;
-    } else await runCrossMediaSeedCli(args);
+    } else if (args.length === 1 && args[0] === '--dev-catalogue') await seedDevelopmentCatalogue();
+    else await runCrossMediaSeedCli(args);
   } catch (error) {
     const directory = resolve(import.meta.dir, '../../.temp/cross-media-seed');
     const reviewed = error instanceof ReviewedCatalogueCommandError ? error.remaining : undefined;

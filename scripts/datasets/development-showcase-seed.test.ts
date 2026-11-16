@@ -6,7 +6,7 @@ import type { CrossMediaReading } from '../../services/importer/src/cross-media-
 import type { CrossMediaSeedCliOptions } from '../../services/importer/src/cross-media-seed.ts';
 import { ReviewedCatalogueCommandError } from '../../services/importer/src/http.ts';
 import { ShowcaseJournal } from '../../services/importer/src/showcase-publication.ts';
-import { runDevelopmentSeed, seedFailureDetail } from './cross-media-seed.ts';
+import { runDevelopmentSeed, seedDevelopmentCatalogue, seedFailureDetail } from './cross-media-seed.ts';
 import { cacheDumpAsset } from './fetch-dumps.ts';
 import {
   createDevelopmentShowcaseRequest,
@@ -23,7 +23,7 @@ const roots = [
   { source: 'bangumi' as const, externalId: '84148', type: 'schema:Book', property: 'wdt:P5732' },
 ];
 
-async function captureSeedOptions(timestamp?: string): Promise<CrossMediaSeedCliOptions> {
+async function captureSeedOptions(timestamp?: string, catalogueOnly = false): Promise<CrossMediaSeedCliOptions> {
   const tempRoot = join(process.cwd(), '.temp');
   await mkdir(tempRoot, { recursive: true });
   const root = await mkdtemp(join(tempRoot, 'seed-provenance-'));
@@ -31,15 +31,20 @@ async function captureSeedOptions(timestamp?: string): Promise<CrossMediaSeedCli
   let captured: CrossMediaSeedCliOptions | undefined;
   let thrown: unknown;
   try {
-    await runDevelopmentSeed({
+    const seed = catalogueOnly ? seedDevelopmentCatalogue : runDevelopmentSeed;
+    await seed({
       root,
       waitForKernel: async () => {},
       env: {
         REZICS_DEV_PERSONA_ACCOUNT_KEY: 'persona.key',
         REZICS_DEV_PERSONA_ACCOUNT: owner,
         REZICS_DEV_PERSONA_CLIENT: 'persona-client',
-        REZICS_DEV_SHOWCASE_ACCOUNT_KEY: 'showcase.key',
-        REZICS_DEV_SHOWCASE_CLIENT: 'showcase-client',
+        ...(catalogueOnly
+          ? { REZICS_DEV_VNDB_EXPORT: join(root, 'unused-private-export.xml') }
+          : {
+              REZICS_DEV_SHOWCASE_ACCOUNT_KEY: 'showcase.key',
+              REZICS_DEV_SHOWCASE_CLIENT: 'showcase-client',
+            }),
         AUTH_ORIGIN: 'https://auth.seed.test',
       },
       fetchDumps: async () => ({
@@ -86,6 +91,13 @@ test('development seed carries the verified VNDB generation date and omits an un
   expect(pinned.sourceSnapshotAsOf).toBe('2026-11-04');
   const unpinned = await captureSeedOptions();
   expect(unpinned).not.toHaveProperty('sourceSnapshotAsOf');
+});
+
+test('catalogue seed uses the same selected native import without composing the development persona', async () => {
+  const pinned = '2026-11-04 08:00:24+00';
+  const { composePersona, ...catalogue } = await captureSeedOptions(pinned);
+  expect(composePersona).toBeFunction();
+  expect(await captureSeedOptions(pinned, true)).toEqual(catalogue);
 });
 
 test('cross-media seed caller prints local dump metadata and preserves reviewed-catalogue attribution', async () => {

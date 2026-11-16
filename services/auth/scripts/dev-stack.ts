@@ -254,6 +254,11 @@ export function semanticWalkClientRegistration() {
 }
 const personaClient = localClientIds.importer;
 const showcaseClient = localClientIds.showcase;
+
+function importCatalogueWalk(): boolean {
+  return process.env.REZICS_WALK_IMPORT_CATALOGUE === '1';
+}
+
 export function localShowcaseClientRegistration() {
   return {
     clientId: showcaseClient,
@@ -773,8 +778,10 @@ export async function assemble(options?: {
           firstParty: true,
           scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open', 'access:grant'])],
         });
-        await service.internal.registerClient(localShowcaseClientRegistration());
-        await service.internal.registerClient(semanticWalkClientRegistration());
+        if (!importCatalogueWalk()) {
+          await service.internal.registerClient(localShowcaseClientRegistration());
+          await service.internal.registerClient(semanticWalkClientRegistration());
+        }
       })(),
     );
     await phase('auth-worker', host.start());
@@ -815,9 +822,11 @@ const showcaseOpenings = [
 export async function openLocalShowcase(
   routes: Iterable<{ method: string; hooks?: { detail?: unknown } }>,
   open: (input: { group: string; key: string }) => Promise<unknown>,
+  catalogueOnly = false,
 ): Promise<void> {
-  const groups = new Set<string>(showcaseOpenings);
-  for (const route of routes) {
+  // Source statistic writes share the released personal Library gate.
+  const groups = new Set<string>(catalogueOnly ? ['personal_library'] : showcaseOpenings);
+  for (const route of catalogueOnly ? [] : routes) {
     const detail = route.hooks?.detail as { 'x-exposure'?: string; security?: Record<string, unknown>[] } | undefined;
     if (
       route.method === 'GET' &&
@@ -842,6 +851,7 @@ export async function openLocalShowcase(
 
 export async function provisionPersona(composition: Awaited<ReturnType<typeof assemble>>, directory = state) {
   const { host, access, kernelPool, keys, kernel } = composition;
+  const catalogueOnly = importCatalogueWalk();
   const { bootstrapGovernance, bootstrapLocalShowcaseBoardCreation, PLATFORM_RESOURCE } =
     await import('../../kernel/src/access/bootstrap-governance.ts');
   const { accessCommandAuthorization } = await import('../../kernel/src/request/access.ts');
@@ -867,7 +877,7 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
   let bearer: string;
   const bootstrap = async (accountId: string) => {
     await bootstrapGovernance(kernelPool, accountId);
-    await bootstrapLocalShowcaseBoardCreation(kernelPool, accountId);
+    if (!catalogueOnly) await bootstrapLocalShowcaseBoardCreation(kernelPool, accountId);
   };
   if (reusableAccountId) {
     // A completed local registration may outlive its staging TTL. Reuse only the exact
@@ -972,25 +982,31 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
   if (actor.kind !== 'account' || actor.accountId !== person.accountId)
     throw new Error('Local persona authentication did not match its account');
   const exposure = createExposureCommands({ pool: kernelPool, clock: () => new Date() });
-  await openLocalShowcase(kernel.routes, async (input) => {
-    const authorization = await accessCommandAuthorization(
-      access,
-      actor,
-      'exposure:open',
-      PLATFORM_RESOURCE,
-      context,
-      () => new Error('Local public-read grant denied'),
-    );
-    await exposure.open({ ...context, actor }, { ...input, authorization });
-  });
+  await openLocalShowcase(
+    kernel.routes,
+    async (input) => {
+      const authorization = await accessCommandAuthorization(
+        access,
+        actor,
+        'exposure:open',
+        PLATFORM_RESOURCE,
+        context,
+        () => new Error('Local public-read grant denied'),
+      );
+      await exposure.open({ ...context, actor }, { ...input, authorization });
+    },
+    catalogueOnly,
+  );
   await privateFile(
     resolve(directory, 'seed.env'),
     Object.entries({
       REZICS_DEV_PERSONA_ACCOUNT_KEY: resolve(directory, 'importer.jwk'),
       REZICS_DEV_PERSONA_ACCOUNT: person.accountId,
       REZICS_DEV_PERSONA_CLIENT: personaClient,
-      REZICS_DEV_SHOWCASE_ACCOUNT_KEY: resolve(directory, 'importer.jwk'),
-      REZICS_DEV_SHOWCASE_CLIENT: showcaseClient,
+      ...(!catalogueOnly && {
+        REZICS_DEV_SHOWCASE_ACCOUNT_KEY: resolve(directory, 'importer.jwk'),
+        REZICS_DEV_SHOWCASE_CLIENT: showcaseClient,
+      }),
       AUTH_ORIGIN: process.env.REZICS_WALK_STACK_SLOT ? origins.native : origins.issuer,
       KERNEL_ORIGIN: origins.kernel,
     })
@@ -1636,7 +1652,8 @@ export async function runWalk(
   const task = walkAcceptanceId(process.env);
   if (!task)
     throw new Error('walk stacks are for a worker whose brief lists acceptance.requires native or browser');
-  if (command.length === 0) throw new Error('Usage: bun services/auth/scripts/dev-stack.ts walk -- <command...>');
+  if (command.length === 0)
+    throw new Error('Usage: bun services/auth/scripts/dev-stack.ts walk [--import-catalogue] -- <command...>');
   const controller = new AbortController();
   let current: ReturnType<typeof Bun.spawn> | undefined;
   let interrupted: keyof typeof SIGNAL_NUMBERS | undefined;
@@ -1699,9 +1716,11 @@ export async function runWalk(
       let stripe: { port: number; webhookSecret: string; stop(): void } | undefined;
       try {
         try {
-          const { startFakeStripe } = await import('../../kernel/test/commerce/support/fake-stripe.ts');
-          stripe = startFakeStripe();
-          Object.assign(env, walkCommerceProviderEnvironment(stripe.port, stripe.webhookSecret));
+          if (!importCatalogueWalk()) {
+            const { startFakeStripe } = await import('../../kernel/test/commerce/support/fake-stripe.ts');
+            stripe = startFakeStripe();
+            Object.assign(env, walkCommerceProviderEnvironment(stripe.port, stripe.webhookSecret));
+          }
           removeWalkStack(names); // an interrupted attempt of this slot may have left its stack behind
           for (const script of walkSetupScripts(env)) {
             // A setup step that fails once is retried: a busy host can time out a container start.
@@ -1823,6 +1842,10 @@ if (import.meta.main) {
     else if (action === 'start') await start();
     else if (action === 'walk') {
       const rest = process.argv.slice(3);
+      if (rest[0] === '--import-catalogue') {
+        process.env.REZICS_WALK_IMPORT_CATALOGUE = '1';
+        rest.shift();
+      }
       // The walk has settled its resources before returning the child status.
       process.exit(await runWalk(rest[0] === '--' ? rest.slice(1) : rest));
     } else throw new Error('Use setup, start, host, pages, web, persona or walk');

@@ -445,6 +445,16 @@ test('persona retries open mixed Search and POST facets alongside anonymous GET 
   expect(attempts.slice(4)).toEqual(attempts.slice(0, 4));
 });
 
+test('the Importer catalogue walk only opens the gate for source statistic writes', async () => {
+  const routes = ['selling', 'purchases', 'search', 'search_advanced'].map((group) => ({
+    method: 'GET',
+    hooks: { detail: { 'x-exposure': `gate:${group}`, security: [{}] } },
+  }));
+  const openings: string[] = [];
+  await openLocalShowcase(routes, async ({ group }) => openings.push(group), true);
+  expect(openings).toEqual(['personal_library']);
+});
+
 test('a failed native opening stops persona setup and names the group, cause and retry', async () => {
   const attempted: string[] = [];
   await expect(
