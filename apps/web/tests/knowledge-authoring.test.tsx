@@ -15,6 +15,7 @@ import type {
   KnowledgePrivatePageAddress,
 } from '../src/knowledge/private-page';
 import type { KnowledgeOutlinePage, KnowledgeOwnedNotebook } from '../src/knowledge/navigation.ts';
+import { m } from '../src/paraglide/messages.js';
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
@@ -304,6 +305,34 @@ test('new-notebook creation remains the default after leaving an existing placem
     await view.findText('The native notebook command was acknowledged. Its receipt is held for document creation.');
     await view.click(view.button('Create document'));
     await view.findText('New notebook note');
+  } finally {
+    await page.close();
+  }
+});
+
+test('the notebook title becomes editable on the admitted visit and is submitted from that visit', async () => {
+  const page = await harness();
+  const address = { kind: 'create', subjectId: knowledgeSubjectId } as const;
+  const operations = baseOperations({
+    createNotebook: async (intent) => {
+      expect(intent.title).toBe('Private Character notebook');
+      expect(intent.subjectId).toBe(knowledgeSubjectId);
+      return { state: 'acknowledged', receipt: { notebookId, structureRevisionId } };
+    },
+  });
+  try {
+    const pending = await page.mount(address, operations, { ...access, createNotebook: 'unknown' });
+    const pendingTitle = await pending.findInput('Notebook title');
+    expect(pendingTitle.disabled).toBe(true);
+    expect(pending.button('Create notebook').disabled).toBe(true);
+
+    const ready = await page.mount(address, operations);
+    const title = await ready.findInput('Notebook title');
+    expect(pendingTitle.isConnected).toBe(false);
+    expect(title.disabled).toBe(false);
+    await ready.setInput(title, 'Private Character notebook');
+    await ready.click(ready.button('Create notebook'));
+    await ready.findText(m.knowledge_private_notebook_acknowledged());
   } finally {
     await page.close();
   }
