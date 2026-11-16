@@ -160,6 +160,7 @@ function controlHostedReadingPort() {
             resolve(metadata);
           } catch (error) {
             reject(error);
+            throw error;
           } finally {
             active -= 1;
           }
@@ -177,12 +178,36 @@ function controlHostedReadingPort() {
     calls,
     active: () => active,
     maximumActive: () => maximumActive,
-    waitForCalls(count: number) {
-      if (calls.length >= count) return Promise.resolve();
-      return new Promise<void>((resolve) => waiters.push({ count, resolve }));
+    async waitForCalls(count: number, response: ReturnType<typeof mountedHostedReadingList>) {
+      if (calls.length >= count) return;
+      const arrived = Promise.withResolvers<void>();
+      const waiter = { count, resolve: arrived.resolve };
+      waiters.push(waiter);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          arrived.promise,
+          response.then(({ status, value }) => {
+            throw new Error(
+              `Hosted Reading responded ${status} ${value.code ?? ''} after ${calls.length}/${count} metadata calls`,
+            );
+          }),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error(`Hosted Reading reached ${calls.length}/${count} metadata calls`)),
+              8000,
+            );
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+        const index = waiters.indexOf(waiter);
+        if (index >= 0) waiters.splice(index, 1);
+      }
     },
     restore() {
       mutablePort.readMetadata = originalMetadata;
+      for (const call of calls) call.fail(new Error('Hosted Reading fixture released its hold'));
     },
   };
 }
@@ -372,10 +397,10 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
   try {
     listBodyReads.reset();
     const response = mountedHostedReadingList();
-    await orderedReads.waitForCalls(4);
+    await orderedReads.waitForCalls(4, response);
     expect(orderedReads.maximumActive()).toBe(4);
     await orderedReads.calls[2]!.finish();
-    await orderedReads.waitForCalls(5);
+    await orderedReads.waitForCalls(5, response);
     await orderedReads.calls[4]!.finish();
     await orderedReads.calls[0]!.finish();
     await orderedReads.calls[3]!.finish();
@@ -416,7 +441,7 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
   const dependencyReads = controlHostedReadingPort();
   try {
     const response = mountedHostedReadingList();
-    await dependencyReads.waitForCalls(4);
+    await dependencyReads.waitForCalls(4, response);
     dependencyReads.calls[1]!.fail(new Error('Content metadata dependency failed'));
     await dependencyReads.calls[3]!.finish();
     await dependencyReads.calls[0]!.finish();
@@ -434,7 +459,7 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
   try {
     const cancellation = new AbortController();
     const response = mountedHostedReadingList(cancellation.signal);
-    await cancellationReads.waitForCalls(4);
+    await cancellationReads.waitForCalls(4, response);
     cancellation.abort();
     await cancellationReads.calls[2]!.finish();
     await cancellationReads.calls[0]!.finish();
@@ -452,9 +477,9 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
   const revocationReads = controlHostedReadingPort();
   try {
     const response = mountedHostedReadingList();
-    await revocationReads.waitForCalls(4);
+    await revocationReads.waitForCalls(4, response);
     await revocationReads.calls[2]!.finish();
-    await revocationReads.waitForCalls(5);
+    await revocationReads.waitForCalls(5, response);
     await revocationReads.calls[0]!.finish();
     await revocationReads.calls[3]!.finish();
     await revocationReads.calls[1]!.finish();
@@ -479,7 +504,7 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
   }
   const clearedFive = await f.native.call(
     'POST',
-    '/v1/libraryHostedReading/$clear',
+    '/v1/libraryHostedReading:clear',
     { subjectId: subjectFive, expectedRevision: savedFive.value.revision },
     { other: true, key: 'hosted-reading-clear-five' },
   );
@@ -775,7 +800,7 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
   );
   const clearAKey = 'hosted-reading-clear-A';
   const clearAInput = { subjectId: subjectOne, expectedRevision: historicalSave.value.revision };
-  const clearA = await ownerCall('POST', '/v1/libraryHostedReading/$clear', clearAInput, clearAKey);
+  const clearA = await ownerCall('POST', '/v1/libraryHostedReading:clear', clearAInput, clearAKey);
 
   const saveBInput = {
     ...saveOne,
@@ -798,7 +823,7 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
   expect(staleUpdate.status).toBe(409);
   const staleClear = await ownerCall(
     'POST',
-    '/v1/libraryHostedReading/$clear',
+    '/v1/libraryHostedReading:clear',
     clearAInput,
     'hosted-reading-stale-clear-A',
   );
@@ -806,7 +831,7 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
 
   const replayedA = await ownerCall('PUT', '/v1/libraryHostedReading', saveOne, 'hosted-reading-save-one');
   expect(replayedA.value).toEqual(savedOne.value);
-  const replayedClearA = await ownerCall('POST', '/v1/libraryHostedReading/$clear', clearAInput, clearAKey);
+  const replayedClearA = await ownerCall('POST', '/v1/libraryHostedReading:clear', clearAInput, clearAKey);
   expect(replayedClearA.value).toEqual(clearA.value);
   const afterOldReplays = await ownerCall('GET', `/v1/libraryHostedReading?subjectId=${subjectOne}`, undefined);
   expect(afterOldReplays.value).toMatchObject({
@@ -886,21 +911,21 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
 
   const cleared = await f.native.call(
     'POST',
-    '/v1/libraryHostedReading/$clear',
+    '/v1/libraryHostedReading:clear',
     { subjectId: subjectTwo, expectedRevision: savedTwo.value.revision },
     { other: true, key: crypto.randomUUID() },
   );
   expect(cleared.status).toBe(200);
   const clearedThree = await f.native.call(
     'POST',
-    '/v1/libraryHostedReading/$clear',
+    '/v1/libraryHostedReading:clear',
     { subjectId: subjectThree, expectedRevision: savedThree.value.revision },
     { other: true, key: crypto.randomUUID() },
   );
   expect(clearedThree.status).toBe(200);
   const clearedFour = await f.native.call(
     'POST',
-    '/v1/libraryHostedReading/$clear',
+    '/v1/libraryHostedReading:clear',
     { subjectId: subjectFour, expectedRevision: savedFour.value.revision },
     { other: true, key: crypto.randomUUID() },
   );
@@ -960,7 +985,7 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
 
   const clearCurrent = await ownerCall(
     'POST',
-    '/v1/libraryHostedReading/$clear',
+    '/v1/libraryHostedReading:clear',
     { subjectId: subjectOne, expectedRevision: currentWrite.value.revision },
     'hosted-reading-current-fence-clear',
   );
@@ -1137,7 +1162,7 @@ test('checkpoint languages retain the exact published body and advance the exist
   expect(afterUpdate > afterSave).toBe(true);
   const cleared = await ownerCall(
     'POST',
-    '/v1/libraryHostedReading/$clear',
+    '/v1/libraryHostedReading:clear',
     {
       subjectId,
       expectedRevision: updated.value.revision,
