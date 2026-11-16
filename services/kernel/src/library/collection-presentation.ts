@@ -57,6 +57,7 @@ export async function preparePresentationSelection(
   deadline: number,
   reviewedReleaseDigest?: string,
 ): Promise<ProblemError | null> {
+  if (selection.presentationKind == null && selection.coverMediaId == null) return null;
   const domain = peekLibraryDomain();
   if (!domain) return new ProblemError('dependency_unavailable');
   if (selection.presentationKind != null) {
