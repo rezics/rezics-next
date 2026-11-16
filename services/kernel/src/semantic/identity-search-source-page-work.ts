@@ -13,6 +13,7 @@ import {
   searchNativeReceivingSqlCost,
 } from '../search/identity-receiving-native-work.ts';
 import projectionHeads from './public-filter-projection-head-page.sql';
+import projectionHeadUpsert from './public-filter-projection-head-upsert.sql';
 import mappingOwners from './identity-epoch-read-owners.sql';
 import mappingSources from './identity-epoch-read-sources.sql';
 import mappingPending from './identity-epoch-read-pending.sql';
@@ -60,6 +61,7 @@ const jobHome = (home: unknown, job: unknown) => {
 const maxId = 'ffffffff-ffff-7fff-bfff-ffffffffffff';
 const maxEpoch = '9223372036854775807';
 const maxHome = PARTITIONS - 1;
+const projectionHeadWriteLimit = 8;
 // Only the fixed kind and UUID columns cross the wire. The full persisted intent has no byte ceiling here.
 const transformBytes = Buffer.byteLength(
   JSON.stringify({
@@ -625,6 +627,49 @@ export function identitySearchSourcePageCosts(): readonly PageCost[] {
           emptySeeks: 1,
         });
       }),
+      declare(
+        projectionHeadUpsert.sql,
+        projectionHeadUpsert.params.map((key) =>
+          key === 'build_id'
+            ? maxId
+            : JSON.stringify(
+                Array.from({ length: projectionHeadWriteLimit }, (_, index) => ({
+                  partition_no: maxHome - index,
+                  owner_epoch: 2147483647,
+                  position: maxEpoch,
+                })),
+              ),
+        ),
+        (values) => {
+          const build = values[projectionHeadUpsert.params.indexOf('build_id')];
+          const encoded = values[projectionHeadUpsert.params.indexOf('heads')];
+          if (
+            values.length !== projectionHeadUpsert.params.length ||
+            !uuid(build) ||
+            typeof encoded !== 'string' ||
+            Buffer.byteLength(encoded) > 1024
+          )
+            return undefined;
+          let heads: unknown;
+          try {
+            heads = JSON.parse(encoded);
+          } catch {
+            return undefined;
+          }
+          if (!Array.isArray(heads) || heads.length < 1 || heads.length > projectionHeadWriteLimit) return undefined;
+          // A recordset entry can attempt at most one primary-key upsert, even if the SQL refuses it.
+          return Object.freeze({
+            candidateKeys: 0,
+            identityMetadataRows: 0,
+            nativeRows: heads.length,
+            nativePoints: heads.length,
+            witnessKeys: 0,
+            statements: 1,
+            bytes: 2048,
+            emptySeeks: 0,
+          });
+        },
+      ),
       declare(originals.sql, [maxId, maxId, 100, maxId, maxHome], (values) => {
         const [generation, after, limit, terminal, home] = values;
         return values.length === 5 &&

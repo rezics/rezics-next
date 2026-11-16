@@ -312,7 +312,9 @@ native delivery, current-xact and other-caller semantics. No maintenance-role co
 proves completeness.
 An owned Search step recorded outside the identity job home uses its own native step transaction for erasure
 capture. The receiving command binds the admitted job's roles in that transaction. The queue and deferred capture
-use the same local origin. Job-home steps retain their original admission origin.
+use the same local origin. Job-home writer admission and Source support checkpoints capture the original
+admission directly. Their native commit still proves the writer checkpoint. Projection head upserts charge each
+key in the bounded input before dispatch, including when the statement returns no rows.
 The [eight-axis capture ledger](../semantic/identity-epoch-contract.md#public-output-finite-work)
 includes immediate writes, FKs, both queues/sequences and complete nested/deferred effects, with retained
 failure/rollback and repeated charges from the same original frame. The actual default frame cannot fund its

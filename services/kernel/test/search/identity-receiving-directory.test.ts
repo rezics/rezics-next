@@ -175,7 +175,7 @@ beforeAll(() => {
 });
 
 const directoryScope = 'd'.repeat(64);
-const jobHome = 0x842;
+const foreignJobHome = 0x842;
 const firstHome = 0x841;
 const otherControlHome = 0x843;
 const prefix = 'directory-probe-';
@@ -203,6 +203,12 @@ test.each([
     mode: 'foreign-step-capture',
   },
   { label: 'seals one merge after retiring both originals', intent: 'merge', resumed: false, mode: 'complete-merge' },
+  {
+    label: 'prepares a visible merge original in its actor admission home',
+    intent: 'merge',
+    resumed: false,
+    mode: 'same-home-merge',
+  },
   {
     label: 'reindexes and retires a visible canonical unmerge original',
     intent: 'unmerge',
@@ -254,13 +260,15 @@ test.each([
   { label: 'refuses an unproved empty directory', intent: 'merge', resumed: false, mode: 'empty' },
   { label: 'refuses replacement of the checkpoint during sealing', intent: 'merge', resumed: true, mode: 'changed' },
 ])('installed Search directory $label', async ({ intent, resumed, mode }) => {
+  const sameHomeMerge = mode === 'same-home-merge';
+  const jobHome = sameHomeMerge ? firstHome : foreignJobHome;
   let writerHome = firstHome;
   const [previous, first, localTerminal] = Array.from({ length: 3 }, () => newId(writerHome << 4)).sort() as [
     string,
     string,
     string,
   ];
-  const completeMerge = mode === 'complete-merge';
+  const completeMerge = mode === 'complete-merge' || sameHomeMerge;
   const foreignCapture =
     completeMerge || mode === 'foreign-step-capture' || mode === 'canonical-terms' || mode === 'canonical-merge';
   const crossHome = completeMerge || mode === 'visible-cross-home' || mode === 'foreign-step-capture';
@@ -504,8 +512,10 @@ test.each([
   let copyLocator: unknown;
   let copySettlement: { partition: number; transactionId: string; epoch: number; position: string } | undefined;
   let reconciledCopy: string | undefined;
-  const nativePosition = () =>
-    dispatchRequest?.frontier.after[3] === SEARCH_IDENTITY_WRITER_DISPATCH
+  let controlPosition = 0;
+  const nativePosition = () => {
+    if (sameHomeMerge) return String(controlPosition);
+    return dispatchRequest?.frontier.after[3] === SEARCH_IDENTITY_WRITER_DISPATCH
       ? committedOperation?.state === 'applied'
         ? String(appliedPosition)
         : committedOperation?.state === 'visible'
@@ -518,6 +528,7 @@ test.each([
       : accepting
         ? '21'
         : '20';
+  };
   const publicationWrites: string[] = [];
 
   type Step = {
@@ -529,7 +540,6 @@ test.each([
   };
   let writing: Step | undefined;
   const committed: Step[] = [];
-  let controlPosition = 0;
   let scopeStart = 0;
   const scopeSteps = () => committed.slice(scopeStart);
   const retiredOriginals: { original: string; planId: string; application: string; release: string }[] = [];
@@ -1161,6 +1171,7 @@ test.each([
         predecessorReads++;
         rows = [{ plan_id: previousPlan }];
       } else if (sql === prepareSearchIdentityOriginalSql) {
+        const closePosition = sameHomeMerge ? String(controlPosition + 1) : '21';
         expect(values.slice(0, 9)).toEqual([
           writerHome,
           index,
@@ -1170,14 +1181,14 @@ test.each([
           jobId,
           '1',
           expect.any(String),
-          '21',
+          closePosition,
         ]);
         expect(values[11]).toBe(priorVisible ? previousClose : null);
         retainedAction = String(values[10]);
         expect(JSON.parse(retainedAction)).toEqual({
           op: canonicalTerms ? 'index' : 'delete',
           id: selected,
-          version: { nativeBigint: '21' },
+          version: { nativeBigint: closePosition },
           ...(canonicalTerms && { document: expect.objectContaining(canonicalDocument) }),
         });
         preparedWriter = {
@@ -1192,7 +1203,7 @@ test.each([
           closed_job: jobId,
           closed_epoch: '1',
           closed_transaction_id: String(values[7]),
-          closed_position: '21',
+          closed_position: closePosition,
         };
         rows = [{ original_id: selected }];
       } else if (sql === readSearchIdentityDispatchBasisSql) {
@@ -1666,7 +1677,11 @@ test.each([
           ...(completeMerge && values[0] === jobHome && { position: String(controlPosition + 1), work }),
         };
         if (foreignCapture) {
-          expect(captureNativeTransaction).toBe(writing.transactionId);
+          const sameHomeCheckpoint =
+            values[0] === writerHome &&
+            writerHome === jobHome &&
+            ['search-writer-admitted', 'search-writer-support'].includes(String(writing.frontier.after[0]));
+          expect(captureNativeTransaction).toBe(sameHomeCheckpoint ? null : writing.transactionId);
           captureQueue.push({
             store: 'identity_epoch_step',
             partition: Number(values[0]),
@@ -1722,12 +1737,13 @@ test.each([
         const event = captureQueue[cursor]!;
         const ordinal = String(cursor + 1);
         const admission = event.transactionId === admissionTransaction;
-        expect(values.slice(0, 5)).toEqual([ordinal, event.transactionId, captureNativeTransaction, 0, 1]);
+        const sources = captureRole ? 1 : 0;
+        expect(values.slice(0, 5)).toEqual([ordinal, event.transactionId, captureNativeTransaction, 0, sources]);
         expect(values.slice(5, 9)).toEqual([admission ? 2 : null, admission ? 0 : null, null, null]);
         const digest = createHash('sha256')
           .update(`${'0'.repeat(64)}|source|${captureNativeTransaction}|${actorId}|actor`)
           .digest('hex');
-        expect(values.slice(9)).toEqual(['0'.repeat(64), digest]);
+        expect(values.slice(9)).toEqual(['0'.repeat(64), sources ? digest : '0'.repeat(64)]);
         if (interruptApplicationCapture && captureQueue.length === 2 && cursor === 1)
           return { rows: [], rowCount: 0 };
         event.armed = true;
@@ -1930,6 +1946,7 @@ test.each([
       'visible-cross-home',
       'foreign-step-capture',
       'complete-merge',
+      'same-home-merge',
       'canonical-terms',
       'canonical-merge',
       'canonical-relation',
@@ -2138,7 +2155,11 @@ test.each([
           documentId: selected,
           disposition: priorVisible ? 'NEW' : mode === 'first' || canonicalTerms ? 'first-apply' : 'OLD',
           barrier: { kind: 'original', partition: writerHome },
-          originalFence: { position: '21', epoch: 1, partition: writerHome },
+          originalFence: {
+            position: sameHomeMerge ? String(controlPosition) : '21',
+            epoch: 1,
+            partition: writerHome,
+          },
         });
         expect(retainedPlan?.references).toMatchObject({
           definition: definitionId,
@@ -2156,6 +2177,18 @@ test.each([
         expect(engineReads).toBe(2);
         expect(normalizationCalls).toBe(Number(canonicalTerms));
         expect(scopeSteps().map((step) => step.engineRequests)).toEqual([0, 1, ...Array(scopeSteps().length - 2).fill(0)]);
+        if (sameHomeMerge) {
+          expect(capturedEvents).toEqual(
+            scopeSteps().map(() => ({
+              store: 'identity_epoch_step',
+              partition: jobHome,
+              transactionId: admissionTransaction,
+              armed: true,
+            })),
+          );
+          expect(bulkCalls).toBe(0);
+          return;
+        }
         if (canonicalTerms || bothVisible || ['dispatch', 'lost', 'handoff', 'changed-proof'].includes(mode)) {
           accepting = true;
           const acceptance = await directoryStep();
@@ -2457,7 +2490,7 @@ test.each([
   }
 
   await driveOriginal();
-  if (completeMerge) {
+  if (completeMerge && !sameHomeMerge) {
     const redirected = retiredOriginals[0]!;
     expect(redirected.original).toBe(first);
     expect(committed.at(-1)?.frontier.after).toEqual(['search-directory', first, 1]);
