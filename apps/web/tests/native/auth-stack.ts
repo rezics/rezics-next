@@ -6,6 +6,7 @@ import { type Browser, type BrowserContext, type Page, type Response as Playwrig
 import type { NativeWebStack } from './stack.ts';
 import { launchPrivateBrowser, type PrivateBrowser } from './private-browser.ts';
 import { traceWebModuleFailure } from './web-module-failure.ts';
+import { nativeViteEnvironment } from './vite-environment.ts';
 import {
   currentNativeLifecycle,
   settledWithin,
@@ -194,7 +195,7 @@ export async function startAuthStack(
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
-      ...process.env,
+      ...nativeViteEnvironment(process.env),
       REZICS_TEST_RUNTIME: '1',
       REZICS_TEST_PERSISTENCE_DIAGNOSTICS: '1',
       AUTH_ORIGIN: stack.authIssuer,

@@ -5,6 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { request as httpsRequest } from 'node:https';
 import { existsSync, mkdirSync, mkdtempSync } from 'node:fs';
 import { sampleNativeMemory, type NativeMemoryObservation } from './native-memory.ts';
+import { nativeViteEnvironment } from './vite-environment.ts';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -206,7 +207,7 @@ async function startWeb(
   onOwnedGroup: (child: ChildProcess, stateDirectory: string) => void,
 ): Promise<WebProcess> {
   const env: NodeJS.ProcessEnv = {
-    ...process.env,
+    ...nativeViteEnvironment(process.env),
     ...authEnvironment,
     KERNEL_ORIGIN: kernelOrigin,
     PUBLIC_ORIGIN: publicOrigin,
