@@ -165,12 +165,18 @@ async function saveChapterDraft(
     mediaId = result.media.id;
     const mediaPath = `/media/${mediaId}`;
     const polls: PlaywrightResponse[] = [];
-    const observePoll = (response: PlaywrightResponse) => {
-      if (response.request().method() !== 'GET' || new URL(response.url()).pathname !== mediaPath) return;
-      if (polls.length === 8) polls.shift();
-      polls.push(response);
+    let preview: { method: string; status: number } | undefined;
+    const observeCover = (response: PlaywrightResponse) => {
+      const method = response.request().method();
+      const pathname = new URL(response.url()).pathname;
+      if (method === 'GET' && pathname === mediaPath) {
+        if (polls.length === 3) polls.shift();
+        polls.push(response);
+      } else if ((method === 'GET' || method === 'HEAD') && pathname.startsWith(`${mediaPath}/`)) {
+        preview = { method, status: response.status() };
+      }
     };
-    page.on('response', observePoll);
+    page.on('response', observeCover);
     try {
       const upload = await uploadPromise;
       expect(new URL(upload.url()).pathname).toBe(mediaPath);
@@ -180,7 +186,7 @@ async function saveChapterDraft(
           .getByRole('img', { name: 'Original Lantern Ferry cover', exact: true })
           .waitFor({ state: 'visible' });
       } catch (cause) {
-        const selected = [upload, ...polls.slice(-3)];
+        const selected = [upload, ...polls];
         const states = await settledWithin(
           Promise.all(
             selected.map(async (response) => {
@@ -198,12 +204,12 @@ async function saveChapterDraft(
           1_000,
         ).catch(() => undefined);
         throw new Error(
-          `${errorText(cause)}; exact cover responses=${JSON.stringify(states ?? selected.map((response) => ({ method: response.request().method(), status: response.status() })))}`,
+          `${errorText(cause)}; exact cover responses=${JSON.stringify(states ?? selected.map((response) => ({ method: response.request().method(), status: response.status() })))}; preview response=${JSON.stringify(preview ?? null)}`,
           { cause },
         );
       }
     } finally {
-      page.off('response', observePoll);
+      page.off('response', observeCover);
     }
   }
 
