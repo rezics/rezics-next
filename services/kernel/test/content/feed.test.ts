@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { Pool } from 'pg';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -77,6 +78,28 @@ test('Default mixed feed composes real discovery, current Following and Continue
     )!.id;
     const entry = await driver.fixtures.send(viewer, 'PUT', `/v1/libraryEntries/${book}`, { state: active }, key());
     expect(entry.status, JSON.stringify(entry.body)).toBe(201);
+    // A Realm adoption publishes the Book itself to followers of the native Space.
+    await driver.grant('editor', ['space:create', 'realm:create']);
+    const space = await driver.request('editor', 'POST', '/v1/spaces', { title: 'Native mixed feed Space' }, key());
+    expect(space.status, JSON.stringify(space.body)).toBe(201);
+    const spaceId = (space.body.space as { spaceId: string }).spaceId;
+    const realm = await driver.request(
+      'editor',
+      'POST',
+      '/v1/realms',
+      { spaceId, title: 'Native mixed feed Realm', visibility: 'public', contextId: GLOBAL_CONTEXT },
+      key(),
+    );
+    expect(realm.status, JSON.stringify(realm.body)).toBe(201);
+    const realmId = (realm.body.realm as { realmId: string }).realmId;
+    const publication = await driver.request(
+      'editor',
+      'POST',
+      `/v1/realms/${realmId}/publications`,
+      { subjectId: book },
+      key(),
+    );
+    expect(publication.status, JSON.stringify(publication.body)).toBe(201);
     const collection = await driver.fixtures.send(
       curator,
       'POST',
@@ -104,6 +127,20 @@ test('Default mixed feed composes real discovery, current Following and Continue
     });
     worker = startOutcomeWorkerProcess(env);
     await worker.ready;
+    const config = readConfig(env);
+    // Following a Space with an already indexed adoption uses the native follow backfill.
+    const activityPool = new Pool({ connectionString: runtime.databaseUrl, max: 1 });
+    try {
+      const inventory = createFeedActivityStore({ pool: activityPool, clock: () => new Date(), tokens: config.tokens });
+      await eventually(async () => {
+        const page = await inventory.pageTargetActivity({ type: 'space', id: spaceId }, {}, Date.now() + 5_000);
+        return page.activities.some((activity) => activity.object.id === book) || undefined;
+      });
+    } finally {
+      await activityPool.end();
+    }
+    const followedSpace = await driver.fixtures.send(viewer, 'PUT', `/v1/follows/${spaceId}`, undefined, key());
+    expect(followedSpace.status, JSON.stringify(followedSpace.body)).toBe(200);
     // Use the registered canonical owner's actual work, never an alternate Continue provider.
     work = await createWorkClient(runtime.databaseUrl);
     const canonical = await work.enqueue(
@@ -118,7 +155,7 @@ test('Default mixed feed composes real discovery, current Following and Continue
       },
     );
     await canonical.getResult();
-    server = await startServer(readConfig(env)); // Its createKernel consumes the ordinary Search producer.
+    server = await startServer(config); // Its createKernel consumes the ordinary Search producer.
     async function page(account: typeof viewer | null, stream = 'home', cursor?: string) {
       const query = new URLSearchParams({ stream, limit: '20' });
       if (cursor) query.set('cursor', cursor);
