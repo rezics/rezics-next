@@ -2190,8 +2190,10 @@ It carries no permission, completion assertion, key list or caller frontier.
 Preparation adopts existing physical generation metadata and immutable native custody. Every adoption checks
 physical name/UUID, the discovery incarnation and registry, consumer/projection generation, meaning and native
 Source definition/configuration. Native Source key pages provide explicit completeness, epoch and position;
-Account pages preserve handleless rows. Each step advances one retained key frontier or at most 50 validation
-homes. Ordinary keys use the existing writer; mixed keys use `createDiscoveryProjection`, its permanent keyed
+Account pages preserve handleless rows. Each step advances one retained key frontier or a bounded set of validation
+homes. Mixed Discovery compares at most 50 homes per step. Subject compares up to 256 homes before fencing and can use
+the remaining preparation input allowance for exact home comparisons after rechecking the held fence and original
+Source completion. Ordinary keys use the existing writer; mixed keys use `createDiscoveryProjection`, its permanent keyed
 deletion high water and native copy inventory. `nativeGenerationActions` supplies native keyed expectations.
 A refreshed physical PIT/composite traversal also examines engine-only keys. Native `after_key`, rather than
 page length, proves engine traversal exhaustion. Keyed search-visible identities and exact external versions
