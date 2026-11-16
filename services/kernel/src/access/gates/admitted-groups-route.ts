@@ -6,6 +6,14 @@ import type { MountedRoute } from '../../http/request.ts';
 import type { definitionRoutes } from '../../semantic/http/definitions.ts';
 import { visibleOperations } from './visibility.ts';
 
+const standaloneOperations = new Set([
+  'commerce_sale.list',
+  'subject.create',
+  'realm.create',
+  'provider_review.list',
+  'knowledge_document.public_export',
+]);
+
 /** Capture the complete mounted catalogue on the first request, as the served OpenAPI route does. */
 export function admittedGroupsRoutes(
   app: ReturnType<typeof definitionRoutes>,
@@ -37,12 +45,16 @@ export function admittedGroupsRoutes(
         deadline: job.deadline,
         clock: dependencies.clock,
       });
-      const admitted = new Set(
-        visible.flatMap((operation) => (operation.exposure.startsWith('gate:') ? [operation.exposure.slice(5)] : [])),
-      );
-      // Fixed shell journeys require their mounted operation, independently of gate-group admission.
-      for (const id of ['commerce_sale.list', 'subject.create', 'realm.create', 'provider_review.list']) {
-        if (visible.some((operation) => operation.operationId === id)) admitted.add(id);
+      const admitted = new Set<string>();
+      // Knowledge controls use exact mounted Account operations. The target still requires native authorization.
+      for (const { operationId, action, exposure } of visible) {
+        if (exposure.startsWith('gate:')) admitted.add(exposure.slice(5));
+        const scopedKnowledgeOperation =
+          (operationId.startsWith('knowledge_document.') || operationId.startsWith('knowledge_notebook.')) &&
+          (action === 'account:read' || action === 'account:update') &&
+          actor.kind === 'account' &&
+          actor.scopes.includes(action);
+        if (standaloneOperations.has(operationId) || scopedKnowledgeOperation) admitted.add(operationId);
       }
       set.headers['cache-control'] = 'no-store';
       return { admitted: [...admitted].sort() };
