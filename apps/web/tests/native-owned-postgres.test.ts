@@ -1,10 +1,11 @@
 import { expect, test } from 'bun:test';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { connect, createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  createOwnedPostgresSocketDirectory,
   isolatedOwnedPostgresUrl,
   isolatedReyloPostgresUrl,
   listenOwnedPostgresSocketProxy,
@@ -49,6 +50,29 @@ test('an isolated socket URL uses the host directory instead of a TCP port', () 
   expect(isolatedOwnedPostgresUrl('/tmp/native-owned-pg-socket')).toBe(
     'postgres://rezics:rezics@localhost/rezics?host=/tmp/native-owned-pg-socket&sslmode=disable',
   );
+});
+
+test('an isolated PostgreSQL socket remains reachable from a deep temporary root', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'native-pg-test-'));
+  try {
+    const deep = join(root, 'nested'.repeat(24));
+    await mkdir(deep);
+    const directory = await createOwnedPostgresSocketDirectory(deep);
+    const listener = createServer();
+    try {
+      const socketPath = join(directory, '.s.PGSQL.5432');
+      await new Promise<void>((resolve, reject) => {
+        listener.once('error', reject);
+        listener.listen(socketPath, resolve);
+      });
+      expect((await lstat(socketPath)).isSocket()).toBe(true);
+    } finally {
+      if (listener.listening) await new Promise<void>((resolve) => listener.close(() => resolve()));
+      await rm(directory, { recursive: true, force: true });
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('Reylo analysis on an isolated socket uses loopback TCP instead of libpq host', () => {

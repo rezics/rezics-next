@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import {
+  createOwnedPostgresSocketDirectory,
   isolatedOwnedPostgresUrl,
   isolatedReyloPostgresUrl,
   listenOwnedPostgresSocketProxy,
@@ -530,25 +531,6 @@ async function waitForOwnedPostgres(container: string, databaseUrl: string, sock
   }
 }
 
-async function startOwnedPostgres(): Promise<{
-  container: string;
-  databaseUrl: string;
-  socketDirectory?: string;
-}> {
-  const { docker, startPostgresContainer } = await import('../../../../services/kernel/scripts/check.ts');
-  // Docker does not join ns:/proc/.../ns/net (it looks up that string as a
-  // named network). A published host port is also invisible on unshare --net
-  // loopback. The unix socket is a filesystem object, so it remains reachable.
-  const socketDirectory = ownedPostgresIsolated() ? await mkdtemp(join(tmpdir(), 'native-owned-pg-')) : undefined;
-  const container = socketDirectory ? startPostgresContainer(docker, { socketDirectory }) : startPostgresContainer();
-  const databaseUrl = socketDirectory ? isolatedOwnedPostgresUrl(socketDirectory) : publishedPostgresUrl(container);
-  reportStackProgress(
-    `Native web stack startup: PostgreSQL ${socketDirectory ? `unix socket ${socketDirectory}` : 'published host port'} at ${databaseUrl.replace(/:[^:@]+@/, ':***@')}`,
-  );
-  await waitForOwnedPostgres(container, databaseUrl, socketDirectory);
-  return socketDirectory ? { container, databaseUrl, socketDirectory } : { container, databaseUrl };
-}
-
 /** Published owned template: stable `/rezics` on dialable TCP, with no socket host. */
 function ownedTcpTemplateUrl(value: string): boolean {
   let url: URL;
@@ -804,17 +786,26 @@ async function startStack(): Promise<
     if (!process.env.DATABASE_URL) {
       reportStackProgress('Native web stack startup: starting PostgreSQL');
       const { migrate } = await import('../../../../services/kernel/scripts/database.ts');
-      const owned = await startOwnedPostgres();
-      postgresContainer = owned.container;
-      postgresSocketDirectory = owned.socketDirectory;
-      if (process.env.NATIVE_WEB_STACK_HOST === '1') {
-        process.send?.({ postgresContainer } satisfies HostReply);
-        if (owned.socketDirectory)
-          process.send?.({ postgresSocketDirectory: owned.socketDirectory } satisfies HostReply);
-      }
-      process.env.DATABASE_URL = owned.databaseUrl;
+      const { startPostgresContainer } = await import('../../../../services/kernel/scripts/check.ts');
+      const hosted = process.env.NATIVE_WEB_STACK_HOST === '1';
+      // A process in a private netns reaches the owned database through its filesystem socket.
+      postgresSocketDirectory = ownedPostgresIsolated() ? await createOwnedPostgresSocketDirectory() : undefined;
+      if (hosted && postgresSocketDirectory) process.send?.({ postgresSocketDirectory } satisfies HostReply);
+      postgresContainer = postgresSocketDirectory
+        ? startPostgresContainer(undefined, { socketDirectory: postgresSocketDirectory })
+        : startPostgresContainer();
+      if (hosted) process.send?.({ postgresContainer } satisfies HostReply);
+      const databaseUrl = postgresSocketDirectory
+        ? isolatedOwnedPostgresUrl(postgresSocketDirectory)
+        : publishedPostgresUrl(postgresContainer);
+      const transport = postgresSocketDirectory ? `unix socket ${postgresSocketDirectory}` : 'published host port';
+      reportStackProgress(
+        `Native web stack startup: PostgreSQL ${transport} at ${databaseUrl.replace(/:[^:@]+@/, ':***@')}`,
+      );
+      await waitForOwnedPostgres(postgresContainer, databaseUrl, postgresSocketDirectory);
+      process.env.DATABASE_URL = databaseUrl;
       reportStackProgress('Native web stack startup: PostgreSQL ready; migrating database');
-      migrate(owned.databaseUrl);
+      migrate(databaseUrl);
       reportStackProgress('Native web stack startup: PostgreSQL migration complete');
     }
     reportStackProgress('Native web stack startup: preparing SQL analysis');

@@ -1,8 +1,13 @@
 import { fork, type ChildProcess } from 'node:child_process';
 import { readFileSync, readlinkSync } from 'node:fs';
+import { mkdtemp } from 'node:fs/promises';
 import { connect as connectUnix, createServer, type Socket } from 'node:net';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+const postgresSocketName = '.s.PGSQL.5432';
+const postgresSocketDirectoryPrefix = 'native-owned-pg-';
 
 export type NativeOwnedPostgresIsolation = {
   pid: number;
@@ -20,6 +25,13 @@ export type OwnedPostgresSocketProxy = {
 export function nativeOwnedPostgresIsolated(input: NativeOwnedPostgresIsolation): boolean {
   if (input.interfaceNames.length > 0 && input.interfaceNames.every((name) => name === 'lo')) return true;
   return input.pid1Namespace === undefined || input.ownNamespace !== input.pid1Namespace;
+}
+
+export function createOwnedPostgresSocketDirectory(temporary = tmpdir()): Promise<string> {
+  // Linux sockaddr_un has room for 107 path bytes and a trailing NUL.
+  const socketPath = join(temporary, `${postgresSocketDirectoryPrefix}XXXXXX`, postgresSocketName);
+  const root = Buffer.byteLength(socketPath) <= 107 ? temporary : '/tmp';
+  return mkdtemp(join(root, postgresSocketDirectoryPrefix));
 }
 
 /** libpq treats a slash-prefixed host as the directory that holds `.s.PGSQL.5432`. */
@@ -41,7 +53,7 @@ export function isolatedReyloPostgresUrl(port: number, database: string): string
 function listenOwnedPostgresSocketProxyInProcess(socketDirectory: string): Promise<OwnedPostgresSocketProxy> {
   if (!socketDirectory.startsWith('/') || /[,\s]/.test(socketDirectory))
     throw new Error('PostgreSQL socket proxy requires an absolute socket directory');
-  const socketPath = join(socketDirectory, '.s.PGSQL.5432');
+  const socketPath = join(socketDirectory, postgresSocketName);
   const sockets = new Set<Socket>();
   const server = createServer((client) => {
     sockets.add(client);
