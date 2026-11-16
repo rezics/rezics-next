@@ -28,6 +28,7 @@ import {
 } from './identity-search-index-statements.ts';
 import { readIdentitySearchIndexTermsSql, SEARCH_INDEX_TERM_REPLAY_POINTS } from './identity-search-index-terms.ts';
 import { prepareSearchIdentityOriginalSql } from '../search/identity-search-writer-plan-sql.ts';
+import { bindSemanticProducerRolesSql } from './erasure-producer.ts';
 
 import {
   readBoundedSearchIdentityActionSql,
@@ -89,6 +90,35 @@ export function identitySearchSourcePageCosts(): readonly PageCost[] {
       return Object.freeze({ sql, work, footprint });
     };
     return Object.freeze([
+      declare(
+        bindSemanticProducerRolesSql,
+        [maxHome, maxId, Array(8).fill(maxId), Array(8).fill('acting-human')],
+        (values) => {
+          const [home, transaction, accounts, roles] = values;
+          if (
+            values.length !== 4 ||
+            !partition(home) ||
+            !uuid(transaction) ||
+            !Array.isArray(accounts) ||
+            !Array.isArray(roles) ||
+            accounts.length > 8 ||
+            accounts.length !== roles.length ||
+            !accounts.every(uuid) ||
+            !roles.every((role) => typeof role === 'string' && Buffer.byteLength(role) <= 12)
+          )
+            return undefined;
+          return Object.freeze({
+            candidateKeys: 0,
+            identityMetadataRows: 0,
+            nativeRows: accounts.length,
+            nativePoints: accounts.length,
+            witnessKeys: 0,
+            statements: 1,
+            bytes: 2048,
+            emptySeeks: 0,
+          });
+        },
+      ),
       declare(
         readCanonicalStatementsSql,
         [65535, maxId, SEARCH_INDEX_STATEMENT_KEYS, ['a'.repeat(16380)]],

@@ -28,7 +28,7 @@ import {
 import type { Pool, PoolClient } from 'pg';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS, type CommandTransaction } from '../command/command.ts';
-import { readPartition } from '../partition/partition.ts';
+import { readPartition, type Partition } from '../partition/partition.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readFences } from '../content/source-fences.ts';
@@ -107,6 +107,11 @@ type Prepared = {
   releases: Map<string, Release | null>;
   subjects: { subject: SourceSubject; properties: string[] }[];
 };
+type NativeRelationSnapshot = {
+  tx: CommandTransaction;
+  subjects: Map<string, SourceSubject | null>;
+  owners: Map<number, Partition>;
+};
 
 /** A raw key budget bounds rejects as well as published rows. No permission survives a call. */
 export function relationSource(pool: Pool, routeKey?: Uint8Array) {
@@ -116,7 +121,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
     expected: ReadonlyMap<string, SourceSubject>,
     observations?: Map<string, string>,
     reserveNative?: (operations: number, keys: number) => void,
-    snapshot?: CommandTransaction,
+    snapshot?: NativeRelationSnapshot,
   ): Promise<Map<string, { id: string; type: string }>> {
     const roots = [...new Set(ids)];
     const states = new Map<string, { visible: boolean; redirect: string | null; type: string }>();
@@ -151,14 +156,16 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
           const home = await readPartition(client, partition);
           if (snapshot && home?.writeState !== 'active') throw new AccessUnavailableError('contention');
           if (!home || home.writeState === 'moved') return [];
+          snapshot?.owners.set(partition, home);
           return snapshot
             ? ((await nativeSourceQuery(client, readSubjects, parameters)) as SourceSubject[])
             : readSubjects.run(client, parameters);
         };
-        const values = snapshot ? await readSubjectsAt(snapshot) : await inSearchSnapshot(pool, readSubjectsAt);
+        const values = snapshot ? await readSubjectsAt(snapshot.tx) : await inSearchSnapshot(pool, readSubjectsAt);
         const found = new Map(values.map((row) => [row.id, row]));
         for (const { id } of group) {
           const value = found.get(id);
+          snapshot?.subjects.set(id, value ?? null);
           observations?.set(`identity:${id}`, JSON.stringify(value ?? null));
           const before = expected.get(id);
           const stable =
@@ -208,7 +215,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
     expected: ReadonlyMap<string, SourceSubject>,
     observations?: Map<string, string>,
     reserveNative?: (operations: number, keys: number) => void,
-    snapshot?: CommandTransaction,
+    snapshot?: NativeRelationSnapshot,
   ): Promise<Set<string>> {
     return new Set((await canonicalPublicSubjects(ids, expected, observations, reserveNative, snapshot)).keys());
   }
@@ -220,7 +227,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
     runtime: Prepared['runtime'],
     observations?: Map<string, string>,
     reserveNative?: (operations: number, keys: number) => void,
-    snapshot?: CommandTransaction,
+    snapshot?: NativeRelationSnapshot,
   ): Promise<{ subject: string; statement: IndexedStatement }[]> {
     if (!routeKey || !runtime) return [];
     const facets = new Map<string, Set<string>>();
@@ -361,7 +368,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
           if (snapshot && home?.writeState !== 'active') throw new AccessUnavailableError('contention');
           return !home || home.writeState === 'moved' ? [] : readFences(client, page);
         };
-        const fences = snapshot ? await readFencesAt(snapshot) : await inSearchSnapshot(pool, readFencesAt);
+        const fences = snapshot ? await readFencesAt(snapshot.tx) : await inSearchSnapshot(pool, readFencesAt);
         for (const [index, tuple] of page.entries()) {
           const fence = fences[index];
           observations?.set(`tuple:${JSON.stringify(tuple)}`, JSON.stringify(fence ?? null));
@@ -762,15 +769,21 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
   const source = {
     readConceptStatements,
     async projectSelectedRelationsInSnapshot(
-      snapshot: CommandTransaction,
+      tx: CommandTransaction,
       subject: SourceSubject,
       rows: readonly SelectedStatement[],
       releases: ReadonlyMap<string, Release>,
       runtime: NonNullable<Prepared['runtime']>,
     ) {
       const expected = new Map([[subject.id, subject]]);
-      const statements = await disclosed(rows, releases, expected, runtime, undefined, undefined, snapshot);
-      return statements.map(({ statement }) => statement);
+      const subjects = new Map<string, SourceSubject | null>();
+      const owners = new Map<number, Partition>();
+      const statements = await disclosed(rows, releases, expected, runtime, undefined, undefined, {
+        tx,
+        subjects,
+        owners,
+      });
+      return { statements: statements.map(({ statement }) => statement), subjects, owners };
     },
     async prepare(
       client: PoolClient,

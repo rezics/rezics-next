@@ -8,9 +8,11 @@ import type { IndexedStatement } from '../search/source.ts';
 import { readRelease } from './definition-release-read.ts';
 import { withoutFencedEntries } from './fences.ts';
 import { indexedStatement } from './scope-leaf-selection.ts';
-import { relationSource, type SelectedStatement } from './search-relations.ts';
+import { relationSource } from './search-relations.ts';
 import type { WorkHeader } from './credit-search-cut.ts';
 import { GLOBAL_CONTEXT } from './contract/global-context.ts';
+import { projectSelectedCreditsInSnapshot } from './credit-search.ts';
+import { creditSearchProperties, type SelectedCredit } from './credit-search-selection.ts';
 
 export const SEARCH_INDEX_STATEMENT_KEYS = 4;
 export const SEARCH_INDEX_STATEMENT_BYTES = 65536;
@@ -54,7 +56,7 @@ export const readCanonicalStatementsSql = `WITH raw AS MATERIALIZED (
   AND (a.route,a.subject_id,a.context_id,a.candidate_id)=(s.route,s.subject_id,'${GLOBAL_CONTEXT}'::uuid,s.candidate_id)
   LIMIT 1) a ON true
 )
-SELECT route,subject_id::text,slot_id::text,candidate_id::text,property,rank,ordinal,release,revision,relation,ordinal_in_window,
+SELECT route,subject_id::text,slot_id::text,candidate_id::text,property,rank,ordinal,release,revision,relation,compact,ordinal_in_window,
  concealed,eligible,
  CASE WHEN ((NOT relation AND NOT concealed) OR eligible) AND octet_length(body::text)<=${SEARCH_INDEX_STATEMENT_BYTES}
   THEN body END AS body,
@@ -62,13 +64,13 @@ SELECT route,subject_id::text,slot_id::text,candidate_id::text,property,rank,ord
  (eligible AND COALESCE(octet_length(source::text),0)>${SEARCH_INDEX_PROVENANCE_BYTES}) AS oversized_source
 FROM evidence
 UNION ALL
-SELECT route,subject_id::text,slot_id::text,candidate_id::text,property,rank,ordinal,release,revision,relation,ordinal_in_window,
+SELECT route,subject_id::text,slot_id::text,candidate_id::text,property,rank,ordinal,release,revision,relation,compact,ordinal_in_window,
  true,false,NULL::jsonb,NULL::jsonb,false
 FROM selected WHERE ordinal_in_window>$3
 ORDER BY ordinal_in_window`;
 
 export type CanonicalStatementInput = Readonly<{ keys: number; digest: string; release: string }>;
-type Selected = SelectedStatement & {
+type Selected = SelectedCredit & {
   concealed: boolean;
   oversized_source: boolean;
 };
@@ -95,11 +97,13 @@ export async function readCanonicalIndexStatements(
   const relationProperties = facetProperties(runtime.release, [subject.type]).filter((property) =>
     relationFacetProperty(runtime.release, property),
   );
+  const creditProperties = new Set(creditSearchProperties(release, subject.type));
+  const relationOrCreditProperties = [...new Set([...relationProperties, ...creditProperties])];
   const { rows } = await tx.query<Selected>(readCanonicalStatementsSql, [
     subject.route,
     subject.id,
     keys,
-    relationProperties,
+    relationOrCreditProperties,
   ]);
   const relationRows = rows.filter((row) => row.eligible === true);
   const descriptiveRows = rows.filter((row) => !row.relation && !row.concealed);
@@ -110,7 +114,13 @@ export async function readCanonicalIndexStatements(
     descriptiveRows.some((row) => row.body === null)
   )
     return null;
-  const visible = await withoutFencedEntries(tx, routeKey, descriptiveRows, SEARCH_INDEX_PROVENANCE_BYTES);
+  const creditRows = rows.filter((row) => row.eligible === true && creditProperties.has(row.property));
+  const visible = await withoutFencedEntries(
+    tx,
+    routeKey,
+    rows.filter((row) => descriptiveRows.includes(row) || creditRows.includes(row)),
+    SEARCH_INDEX_PROVENANCE_BYTES,
+  );
   const releases = new Map<string, Release>([[subject.currentRelease, release]]);
   for (const digest of new Set([...visible, ...relationRows].map((row) => row.release))) {
     if (releases.has(digest)) continue;
@@ -119,7 +129,7 @@ export async function readCanonicalIndexStatements(
     releases.set(digest, rowRelease);
   }
   const properties = new Map<string, { ordinal: number; statement: IndexedStatement }[]>();
-  for (const row of visible) {
+  for (const row of visible.filter((row) => !row.relation && !row.concealed)) {
     const statement = indexedStatement(row, releases.get(row.release)!);
     if (!statement) continue;
     const values = properties.get(row.property) ?? [];
@@ -133,19 +143,29 @@ export async function readCanonicalIndexStatements(
       .sort((left, right) => left.ordinal - right.ordinal)
       .map(({ statement }) => statement),
   );
-  if (relationRows.length)
-    statements.push(
-      ...(await relationSource(pool, routeKey).projectSelectedRelationsInSnapshot(
+  const relations = relationRows.length
+    ? await relationSource(pool, routeKey).projectSelectedRelationsInSnapshot(
         tx,
         subject,
         relationRows,
         releases,
         runtime,
-      )),
-    );
+      )
+    : null;
+  if (relations) statements.push(...relations.statements);
+  const credit = rows.some((row) => creditProperties.has(row.property))
+    ? await projectSelectedCreditsInSnapshot(
+        pool,
+        { tx, ...(relations && { subjects: relations.subjects, owners: relations.owners }) },
+        subject,
+        visible.filter((row) => creditRows.includes(row)),
+        releases,
+      )
+    : undefined;
+  if (credit && credit.state !== 'complete') return null;
   return {
     statements,
-    properties: new Set(rows.map((row) => row.property)),
+    credit,
     proof: {
       keys,
       digest: createHash('sha256')
@@ -153,6 +173,7 @@ export async function readCanonicalIndexStatements(
           JSON.stringify([
             rows.map(({ slot_id, candidate_id, property }) => [slot_id, candidate_id, property]),
             statements,
+            ...(credit ? [credit.names] : []),
           ]),
         )
         .digest('hex'),

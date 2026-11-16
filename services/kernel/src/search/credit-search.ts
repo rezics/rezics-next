@@ -71,6 +71,9 @@ export type CreditSearchProjection =
       observation: string;
       names: readonly CreditSearchWitness[];
     }>;
+export type CreditSearchIndexProjection =
+  | Exclude<CreditSearchProjection, { state: 'complete' }>
+  | Readonly<{ state: 'complete'; names: readonly CreditSearchWitness[] }>;
 const encoder = new TextEncoder();
 const bytes = (value: unknown) => encoder.encode(JSON.stringify(value)).byteLength;
 const bounded = (value: string, max = 256) =>
@@ -95,6 +98,47 @@ function validEntry(entry: CreditSearchEntry, workId: string): boolean {
   );
 }
 
+function collectCreditNames(
+  workId: string,
+  entries: readonly CreditSearchEntry[],
+  collected: { statements: Set<string>; names: CreditSearchWitness[]; material: number },
+): 'incomplete' | 'unavailable' | null {
+  for (const entry of entries) {
+    if (
+      entry.names.length > CREDIT_SEARCH_LIMITS.namesPerCreator ||
+      entry.witness.qualifiers.length > CREDIT_SEARCH_LIMITS.qualifiersPerCredit
+    )
+      return 'incomplete';
+    if (!validEntry(entry, workId)) return 'unavailable';
+    if (!entry.namesComplete) return 'incomplete';
+    if (collected.statements.has(entry.witness.statementId)) return 'unavailable';
+    collected.statements.add(entry.witness.statementId);
+    const seen = new Set<string>();
+    for (const name of entry.names) {
+      const identity = JSON.stringify(name);
+      if (seen.has(identity)) continue;
+      seen.add(identity);
+      const witness = structuredClone({ ...entry.witness, name });
+      collected.material += bytes(witness);
+      if (collected.material > CREDIT_SEARCH_LIMITS.documentBytes) return 'incomplete';
+      collected.names.push(witness);
+    }
+  }
+  return null;
+}
+
+/** Project an already complete native selection and its creators from one owner snapshot. */
+export function creditSearchFromSnapshot(
+  workId: string,
+  entries: readonly CreditSearchEntry[],
+): CreditSearchIndexProjection {
+  if (entries.length > CREDIT_SEARCH_LIMITS.creditsPerPage || bytes(entries) > CREDIT_SEARCH_LIMITS.pageBytes)
+    return { state: 'incomplete' };
+  const collected = { statements: new Set<string>(), names: [] as CreditSearchWitness[], material: 0 };
+  const state = collectCreditNames(workId, entries, collected);
+  return state ? { state } : { state: 'complete', names: collected.names };
+}
+
 /** All-or-readiness: a prefix never becomes a definitive negative for a credited-name query. */
 export async function projectCreditSearch(
   source: CreditSearchSource | undefined,
@@ -104,9 +148,7 @@ export async function projectCreditSearch(
   let after: string | null = null;
   let observation: string | null = null;
   const cursors = new Set<string>();
-  const statements = new Set<string>();
-  const names: CreditSearchWitness[] = [];
-  let material = 0;
+  const collected = { statements: new Set<string>(), names: [] as CreditSearchWitness[], material: 0 };
   for (let pageNumber = 0; pageNumber < CREDIT_SEARCH_LIMITS.pages; pageNumber++) {
     const page = await source.page({ workId, after, observation, limits: CREDIT_SEARCH_LIMITS });
     if (page.state !== 'current') return { state: page.state };
@@ -115,30 +157,11 @@ export async function projectCreditSearch(
     if (page.workId !== workId || !bounded(page.observation, 1024)) return { state: 'unavailable' };
     if (observation !== null && observation !== page.observation) return { state: 'restart' };
     observation = page.observation;
-    for (const entry of page.entries) {
-      if (
-        entry.names.length > CREDIT_SEARCH_LIMITS.namesPerCreator ||
-        entry.witness.qualifiers.length > CREDIT_SEARCH_LIMITS.qualifiersPerCredit
-      )
-        return { state: 'incomplete' };
-      if (!validEntry(entry, workId)) return { state: 'unavailable' };
-      if (!entry.namesComplete) return { state: 'incomplete' };
-      if (statements.has(entry.witness.statementId)) return { state: 'unavailable' };
-      statements.add(entry.witness.statementId);
-      const seen = new Set<string>();
-      for (const name of entry.names) {
-        const identity = JSON.stringify(name);
-        if (seen.has(identity)) continue;
-        seen.add(identity);
-        const witness = structuredClone({ ...entry.witness, name });
-        material += bytes(witness);
-        if (material > CREDIT_SEARCH_LIMITS.documentBytes) return { state: 'incomplete' };
-        names.push(witness);
-      }
-    }
+    const failure = collectCreditNames(workId, page.entries, collected);
+    if (failure) return { state: failure };
     if (page.next === null) {
       if (!(await source.unchanged(workId, observation))) return { state: 'restart' };
-      return { state: 'complete', workId, observation, names };
+      return { state: 'complete', workId, observation, names: collected.names };
     }
     if (!bounded(page.next, 4096) || cursors.has(page.next)) return { state: 'unavailable' };
     cursors.add(page.next);

@@ -1,7 +1,17 @@
 import type { Pool } from 'pg';
+import type { CommandTransaction } from '../command/command.ts';
+import { AccessUnavailableError } from '../access/unavailable.ts';
+import { nativeSourceQuery } from '../database/native-source-query.ts';
+import type { Partition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { IdentityMapping } from './identity-adapters/identity-epoch-contract.ts';
 import { readIdentityMappings } from './identity-adapters/read.ts';
+import { readReleasedIdentityMappingsInSnapshot } from './identity-adapters/identity-epoch-read.ts';
+import {
+  indexTermTexts,
+  readIdentitySearchIndexTermSlots,
+  SEARCH_INDEX_TERM_REPLAY_POINTS,
+} from './identity-search-index-terms.ts';
 import { digestOf, encoder, type CreditSearchCeilings, type WorkHeader } from './credit-search-cut.ts';
 import { inSearchSnapshot, readPartition } from './search-source.ts';
 import readSubjects from './search-source-subjects.sql';
@@ -18,6 +28,7 @@ export type NameRow = {
   slot_id: string;
   log_seq: number;
 };
+type NameFact = Pick<NameRow, 'kind' | 'language' | 'operation' | 'body'>;
 
 export type PublicCreator = Readonly<{
   originalId: string;
@@ -33,6 +44,12 @@ export type CreatorResolution =
   | { state: 'unavailable' }
   | { state: 'current'; creators: Map<string, PublicCreator>; publicIds: ReadonlySet<string> };
 
+export type CreditCreatorSnapshot = Readonly<{
+  tx: CommandTransaction;
+  subjects?: ReadonlyMap<string, WorkHeader | null>;
+  owners?: ReadonlyMap<number, Partition>;
+}>;
+
 function groups(ids: readonly string[]) {
   const result = new Map<number, { route: number; id: string }[]>();
   for (const id of ids) {
@@ -46,21 +63,57 @@ function groups(ids: readonly string[]) {
   return result;
 }
 
-export async function loadSubjects(pool: Pool, ids: readonly string[]): Promise<Map<string, WorkHeader>> {
+export async function loadSubjects(
+  pool: Pool,
+  ids: readonly string[],
+  snapshot?: CommandTransaction,
+): Promise<Map<string, WorkHeader>> {
   const found = new Map<string, WorkHeader>();
   for (const [partition, group] of groups(ids)) {
-    const rows = await inSearchSnapshot(pool, async (client) => {
+    const read = async (client: CommandTransaction) => {
       const home = await readPartition(client, partition);
+      if (snapshot && home?.writeState !== 'active') throw new AccessUnavailableError('contention');
       if (!home || home.writeState === 'moved') return [];
-      return (await readSubjects.run(client, {
+      const parameters = {
         partition_no: partition,
         routes: group.map((entry) => entry.route),
         subject_ids: group.map((entry) => entry.id),
-      })) as WorkHeader[];
-    });
+      };
+      return (await (snapshot
+        ? nativeSourceQuery(client, readSubjects, parameters)
+        : readSubjects.run(client, parameters))) as WorkHeader[];
+    };
+    const rows = snapshot ? await read(snapshot) : await inSearchSnapshot(pool, read);
     for (const row of rows) found.set(row.id, row);
   }
   return found;
+}
+
+export const readCreatorTermBudgetSql = `SELECT current_facts FROM semantic.subject
+ WHERE (route,subject_id)=($1,$2)`;
+
+async function loadNativeNames(tx: CommandTransaction, ids: readonly string[]) {
+  const names = new Map<string, NameFact[]>();
+  for (const id of ids) {
+    const [creator] = (await tx.query<{ current_facts: number }>(readCreatorTermBudgetSql, [routeOf(id), id])).rows;
+    if (!creator || !Number.isSafeInteger(creator.current_facts) || creator.current_facts < 0) return null;
+    // Each current assertion can have a distinct slot. Reserve its head, slot and fact,
+    // plus the terminal head seek. Replayed history still has to fit this window.
+    const points = Math.min(1 + 3 * creator.current_facts, SEARCH_INDEX_TERM_REPLAY_POINTS);
+    const current = await readIdentitySearchIndexTermSlots(tx, id, points);
+    if (!current) return null;
+    const rows: NameFact[] = [];
+    for (const slot of current.slots) {
+      if (!slot.kind || !slot.language || !slot.slot_id || slot.state !== 'progress') return null;
+      if (slot.kind === 'description') continue;
+      const { kind, language } = slot;
+      for (const body of indexTermTexts(slot.terms)) {
+        rows.push({ kind, language, operation: 'assert', body });
+      }
+    }
+    names.set(id, rows);
+  }
+  return names;
 }
 
 export async function loadNames(
@@ -90,7 +143,7 @@ export async function loadNames(
   return names;
 }
 
-export function foldNames(rows: readonly NameRow[], nameBytes: number, namesPerCreator: number, fetchLimit: number) {
+export function foldNames(rows: readonly NameFact[], nameBytes: number, namesPerCreator: number, fetchLimit: number) {
   const labels = new Map<string, string>();
   const aliases = new Map<string, string[]>();
   let overflow = rows.length >= fetchLimit;
@@ -169,15 +222,16 @@ export async function canonicalCreators(
   originals: readonly string[],
   limits: CreditSearchCeilings,
   itemQualifierIds: readonly string[] = [],
+  snapshot?: CreditCreatorSnapshot,
 ): Promise<CreatorResolution> {
   const unique = [...new Set(originals)];
   const roots = [...new Set([...unique, ...itemQualifierIds])];
   if (!roots.length) return { state: 'current', creators: new Map(), publicIds: new Set() };
-  const states = new Map<string, WorkHeader | null>();
+  const states = new Map(snapshot?.subjects);
   let pending = roots;
   for (let depth = 0; pending.length && depth < 8; depth++) {
     const missing = pending.filter((id) => !states.has(id));
-    const loaded = await loadSubjects(pool, missing);
+    const loaded = await loadSubjects(pool, missing, snapshot?.tx);
     const next: string[] = [];
     for (const id of missing) {
       const row = loaded.get(id) ?? null;
@@ -186,7 +240,10 @@ export async function canonicalCreators(
     }
     pending = [...new Set(next)];
   }
-  const mappings = await identityOf(pool, roots);
+  if (snapshot && pending.some((id) => !states.has(id))) return { state: 'unavailable' };
+  const mappings = snapshot
+    ? (await readReleasedIdentityMappingsInSnapshot(snapshot.tx, roots, snapshot.owners)).mappings
+    : await identityOf(pool, roots);
   if (mappings.some((mapping) => mapping.state === 'pending')) return { state: 'preparing' };
   // Bootstrap, missing-owner and moved homes fail closed: a redirect chain never stands in for unknown identity.
   if (mappings.some((mapping) => mapping.state === 'unavailable')) return { state: 'unavailable' };
@@ -203,7 +260,7 @@ export async function canonicalCreators(
       }),
     ),
   ];
-  const loadedTerminals = await loadSubjects(pool, missingTerminals);
+  const loadedTerminals = await loadSubjects(pool, missingTerminals, snapshot?.tx);
   for (const id of missingTerminals) states.set(id, loadedTerminals.get(id) ?? null);
   const terminals = new Map<string, WorkHeader>();
   for (const original of roots) {
@@ -224,7 +281,11 @@ export async function canonicalCreators(
     const terminal = terminals.get(original);
     return terminal ? [terminal.id] : [];
   });
-  const nameRows = await loadNames(pool, [...new Set(creatorTerminals)], nameLimit);
+  const terminalIds = [...new Set(creatorTerminals)];
+  const nameRows = snapshot
+    ? await loadNativeNames(snapshot.tx, terminalIds)
+    : await loadNames(pool, terminalIds, nameLimit);
+  if (!nameRows) return { state: 'unavailable' };
   const creators = new Map<string, PublicCreator>();
   for (const original of unique) {
     const terminal = terminals.get(original);

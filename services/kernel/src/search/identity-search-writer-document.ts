@@ -2,11 +2,13 @@ import { facetProperties, relationFacetProperty } from '@rezics/filter';
 import type { CommandTransaction } from '../command/command.ts';
 import { nativeSourceQuery } from '../database/native-source-query.ts';
 import readListingCounts from '../library/listing-counts.sql';
-import { readPartition } from '../partition/partition.ts';
+import type { Partition } from '../partition/partition.ts';
 import { readNativeSearchPublicRating } from '../rating/public-rating-source.ts';
 import { routeOf } from '../route/route.ts';
 import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts';
-import { observationOf, type WorkHeader } from '../semantic/credit-search-cut.ts';
+import { identityErasureRoles } from '../semantic/erasure-producer.ts';
+import type { IdentityJobRef, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
+import type { WorkHeader } from '../semantic/credit-search-cut.ts';
 import { creditSearchProperties } from '../semantic/credit-search-selection.ts';
 import { activeRelease, readRelease } from '../semantic/definition-release-read.ts';
 import {
@@ -17,8 +19,7 @@ import {
 } from '../semantic/identity-search-index-statements.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import readSubjects from '../semantic/search-source-subjects.sql';
-import { readSearchCanonicalGeneration } from '../semantic/search-source.ts';
-import type { CreditSearchProjection } from './credit-search.ts';
+import type { CreditSearchIndexProjection } from './credit-search.ts';
 import { documentActions, type IndexAction, type SubjectDocument } from './document.ts';
 import type { SearchReceivingConfiguration } from './identity-receiving-native.ts';
 import { subjectPartition, type IndexedSubject } from './source.ts';
@@ -92,28 +93,27 @@ type Terms = Pick<IndexedSubject, 'labels' | 'aliases' | 'descriptions'>;
 export type PreparedIdentityIndexDocument = Readonly<{
   document: SubjectDocument;
   statementInput?: CanonicalStatementInput;
-  compare(tx: CommandTransaction): Promise<void>;
+  roles: Awaited<ReturnType<typeof identityErasureRoles>>;
+  compare(tx: CommandTransaction, close: IdentityNativeReceipt): Promise<void>;
 }>;
 
 export async function prepareCanonicalIdentityDocument(
   configuration: SearchReceivingConfiguration,
+  job: IdentityJobRef,
   subject: string,
-  loadTerms: (tx: CommandTransaction) => Promise<Terms | null>,
+  loadTerms: (tx: CommandTransaction) => Promise<Readonly<{ home: Partition; terms: Terms }> | null>,
   deadline: number,
   normalize: (actions: readonly IndexAction[]) => Promise<IndexAction[]>,
 ): Promise<PreparedIdentityIndexDocument | null> {
   const { pool } = configuration;
   const partition = subjectPartition(subject);
-  const route = routeOf(subject)!;
   const input = await withReadTransaction(
     pool,
     async (tx) => {
-      const home = await readPartition(tx, partition);
-      if (!home || home.writeState !== 'active') return null;
-      const terms = await loadTerms(tx);
-      if (!terms) return null;
-      const selectedExists = (await tx.query(readCanonicalStatementPresenceSql, [route, subject])).rowCount;
-      const statementKeys = selectedExists ? await readCanonicalStatementCount(tx, subject) : 0;
+      const captured = await loadTerms(tx);
+      if (!captured || captured.home.partitionNo !== partition) return null;
+      const { terms, home } = captured;
+      const statementKeys = await readCanonicalStatementCount(tx, subject);
       if (statementKeys === null) return null;
 
       const header = await currentSubject(tx, partition, subject);
@@ -130,19 +130,8 @@ export async function prepareCanonicalIdentityDocument(
       const publicRating = await readNativeSearchPublicRating(tx, partition, subject);
       const count = await collectionCount(tx, partition, subject);
       const creditProperties = creditSearchProperties(release, header.type);
-      if (selected && creditProperties.some((property) => selected.properties.has(property))) return null;
-      const credit: CreditSearchProjection = creditProperties.length
-        ? {
-            state: 'complete',
-            workId: subject,
-            names: [],
-            observation: observationOf({
-              work: header,
-              ready: true,
-              generation: await readSearchCanonicalGeneration(tx),
-            }),
-          }
-        : { state: 'unsupported' };
+      const credit: CreditSearchIndexProjection =
+        selected?.credit ?? (creditProperties.length ? { state: 'complete', names: [] } : { state: 'unsupported' });
       const indexed: IndexedSubject = {
         id: subject,
         type: header.type,
@@ -162,7 +151,8 @@ export async function prepareCanonicalIdentityDocument(
         [subject],
         new Map([[subject, count]]),
       );
-      return { epoch: home.epoch, position, runtime, actions, statementInput: selected?.proof };
+      const roles = await identityErasureRoles(pool, job.jobId);
+      return { epoch: home.epoch, position, runtime, actions, roles, statementInput: selected?.proof };
     },
     deadline,
   );
@@ -172,14 +162,14 @@ export async function prepareCanonicalIdentityDocument(
     throw new TypeError('Canonical Search projection lost its original');
   return {
     document: action.document,
+    roles: input.roles,
     ...(input.statementInput && { statementInput: input.statementInput }),
-    async compare(tx) {
-      const current = await readPartition(tx, partition);
+    async compare(tx, close) {
       const release = await activeRelease(tx, 'native');
       if (
-        current?.writeState !== 'active' ||
-        current.epoch !== input.epoch ||
-        current.position !== input.position ||
+        close.partition !== partition ||
+        close.epoch !== input.epoch ||
+        close.position !== input.position + 1n ||
         release?.digest !== input.runtime.digest ||
         release.head !== input.runtime.head
       )

@@ -68,6 +68,23 @@ FROM term_input WHERE ordinal>0 ORDER BY ordinal`;
 export const EMPTY_IDENTITY_SEARCH_TERMS_DIGEST = '0'.repeat(64);
 export const SEARCH_INDEX_TERM_REPLAY_POINTS = 64;
 
+type IndexTermSlot = {
+  kind: 'label' | 'description' | 'alias' | null;
+  language: string | null;
+  slot_id: string | null;
+  terms: unknown;
+  state: 'progress' | 'pending' | 'complete';
+  remaining: number;
+};
+
+/** Live, complete term head window. The caller supplies its native point reservation. */
+export async function readIdentitySearchIndexTermSlots(tx: CommandTransaction, subject: string, points: number) {
+  if (!Number.isSafeInteger(points) || points < 1 || points > SEARCH_INDEX_TERM_REPLAY_POINTS) return null;
+  const { rows } = await tx.query<IndexTermSlot>(readIdentitySearchIndexTermsSql, [routeOf(subject), subject, points]);
+  const end = rows.at(-1);
+  return end?.state === 'complete' ? { slots: rows.slice(0, -1), remaining: end.remaining } : null;
+}
+
 type TermRow = {
   prior_current: boolean;
   slot_id: string | null;
@@ -77,7 +94,7 @@ type TermRow = {
   fact_count: number;
 };
 
-function termTexts(values: unknown): string[] {
+export function indexTermTexts(values: unknown): string[] {
   if (
     !Array.isArray(values) ||
     values.length > 32 ||
@@ -107,7 +124,7 @@ export async function readIdentitySearchIndexTermSlot(
   if (first.slot_id === null) return { state: 'complete' as const, after, digest, points: 1 };
   if (first.kind === null || first.language_digest === null)
     throw new IdentityEpochStoreError('identity_epoch_unavailable', 'Search writer term key is unavailable');
-  const terms = termTexts(first.terms);
+  const terms = indexTermTexts(first.terms);
   if (!Number.isInteger(first.fact_count) || first.fact_count < terms.length || first.fact_count > 32)
     throw new IdentityEpochStoreError('identity_epoch_unavailable', 'Search writer term count is unavailable');
   return {
@@ -123,26 +140,17 @@ export async function readIdentitySearchIndexTerms(
   subject: string,
   completed: Readonly<{ points: number; digest: string }>,
 ) {
-  if (completed.points > SEARCH_INDEX_TERM_REPLAY_POINTS) return null;
-  const { rows } = await tx.query<{
-    kind: 'label' | 'description' | 'alias' | null;
-    language: string | null;
-    slot_id: string | null;
-    terms: unknown;
-    state: 'progress' | 'pending' | 'complete';
-    remaining: number;
-  }>(readIdentitySearchIndexTermsSql, [routeOf(subject), subject, completed.points]);
-  const end = rows.at(-1);
-  if (end?.state !== 'complete' || end.remaining !== 0) return null;
+  const current = await readIdentitySearchIndexTermSlots(tx, subject, completed.points);
+  if (current?.remaining !== 0) return null;
   let digest = EMPTY_IDENTITY_SEARCH_TERMS_DIGEST;
   const terms = {
     label: [] as { language: string; value: string }[],
     description: [] as { language: string; value: string }[],
     alias: [] as { language: string; value: string }[],
   };
-  for (const row of rows.slice(0, -1)) {
+  for (const row of current.slots) {
     if (row.kind === null || row.language === null || row.slot_id === null || row.state !== 'progress') return null;
-    const values = termTexts(row.terms);
+    const values = indexTermTexts(row.terms);
     const language = createHash('sha256').update(row.language).digest('hex');
     digest = appendDigest(digest, row.slot_id, row.kind, language, values);
     const current = row.kind === 'alias' ? [...new Set(values)] : values.slice(-1);

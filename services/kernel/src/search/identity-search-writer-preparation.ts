@@ -42,7 +42,10 @@ import {
   readSearchIdentityDirectoryOriginal,
   requireCurrentSearchIdentityDirectory,
 } from './identity-search-receiving-directory.ts';
-import { readSearchIdentityWriterAdmissionSql } from './identity-search-receiving-directory-sql.ts';
+import {
+  readSearchIdentityWriterAdmissionSql,
+  recheckSearchIdentityWriterAdmissionSql,
+} from './identity-search-receiving-directory-sql.ts';
 import { searchIdentityWorkContext, searchIdentityWorkUsed } from './identity-search-receiving-work.ts';
 import { readSearchIdentityOriginalPlan, searchIdentityWriterEffectKey } from './identity-search-receiving-source.ts';
 import { subjectPartition } from './source.ts';
@@ -215,6 +218,7 @@ export function createSearchIdentityWriterPreparation(
                   const canonical = support.canonical
                     ? await prepareCanonicalIdentityDocument(
                         configuration,
+                        job,
                         original,
                         support.canonical,
                         context.deadline,
@@ -233,7 +237,7 @@ export function createSearchIdentityWriterPreparation(
                     allocation.writeAlias !== admission.writeAlias
                   )
                     throw unavailable('Search writer allocation changed after retained admission');
-                  const roles = await identityErasureRoles(pool, job.jobId);
+                  const roles = canonical?.roles ?? (await identityErasureRoles(pool, job.jobId));
                   const locator = {
                     kind: 'search-canonical-index' as const,
                     version: 1 as const,
@@ -244,10 +248,30 @@ export function createSearchIdentityWriterPreparation(
                     pool,
                     { partition, deadline: context.deadline, clock: configuration.clock },
                     async (tx) => {
-                      if ((await admitted(tx))?.transactionId !== admission.transactionId)
-                        throw unavailable('Search writer lost its retained admission');
-                      await support.compare(tx);
-                      await canonical?.compare(tx);
+                      if (canonical) {
+                        const current = await tx.query(recheckSearchIdentityWriterAdmissionSql, [
+                          partition,
+                          admission.transactionId,
+                          job.jobId,
+                          String(job.epoch),
+                          directory.scope,
+                          json([
+                            'search-writer-admitted',
+                            native.transactionId,
+                            original,
+                            admission.incarnation,
+                            admission.writeAlias,
+                            String(admission.enrollmentGeneration),
+                            String(admission.fenceGeneration),
+                            admission.close,
+                          ]),
+                        ]);
+                        if (current.rowCount !== 1) throw unavailable('Search writer lost its retained admission');
+                      } else {
+                        if ((await admitted(tx))?.transactionId !== admission.transactionId)
+                          throw unavailable('Search writer lost its retained admission');
+                        await support.compare(tx);
+                      }
                       const retained = await writer.prepareIdentityAction(
                         tx,
                         job,
@@ -256,6 +280,7 @@ export function createSearchIdentityWriterPreparation(
                         admission,
                         canonical?.document,
                       );
+                      await canonical?.compare(tx, retained.close);
                       const disposition = redirected ? 'OLD' : retained.firstAbsence ? 'first-apply' : 'NEW';
                       const effectKey = searchIdentityWriterEffectKey(configuration.consumer, original, disposition);
                       const selection: SearchIdentityReceivingSelection = {

@@ -1,4 +1,5 @@
 import { identitySearchSourcePageCosts } from './identity-search-source-page-work.ts';
+import { readCreatorTermBudgetSql } from './credit-search-creators.ts';
 import structuralHomeGate from './identity-epoch-store-select-home-gate.sql';
 import { memoizedValue } from '../memoized.ts';
 import { receivingSqlKey } from './identity-search-receiving-work.ts';
@@ -103,6 +104,7 @@ function sourceStatementCosts(): readonly (readonly [string, Cost])[] {
         [readListingCounts.sql, [1, 1, 1, 1024, 1]],
         [readPublicFigures.sql, [1, 1, 1, 2048, 1]],
         [readCanonicalStatementPresenceSql, [1, 1, 1, 512, 1]],
+        [readCreatorTermBudgetSql, [1, 1, 1, 512, 1]],
         [
           readCanonicalStatementCountSql,
           [SEARCH_INDEX_STATEMENT_KEYS + 1, SEARCH_INDEX_STATEMENT_KEYS + 1, 1, 1024, 1],
@@ -369,11 +371,6 @@ export function searchReceivingCapturedStatementCosts(): SearchReceivingWorkDecl
   ])
     add(sql, [0, 0, 1, 0, 0]);
   add("SELECT set_config('semantic.erasure_native_transaction',$1,true)", [1, 0, 1, 128, 0]);
-  add(
-    `INSERT INTO semantic.erasure_source_role(partition_no,transaction_id,account_id,role)
-      SELECT $1,$2,account_id,role FROM unnest($3::uuid[],$4::text[]) AS input(account_id,role) ON CONFLICT DO NOTHING`,
-    [8, 8, 1, 2048, 0],
-  );
   add(
     `SELECT l.account_id::text,l.role FROM semantic.identity_epoch_job j
      JOIN semantic.erasure_locator l ON l.partition_no=j.partition_no AND l.store='identity_epoch_job' AND l.record_key=j.erasure_key

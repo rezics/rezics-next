@@ -70,6 +70,7 @@ import {
   readSearchIdentityOriginalPlanSql,
   searchIdentityOriginalPlanPresentSql,
   readSearchIdentityWriterAdmissionSql,
+  recheckSearchIdentityWriterAdmissionSql,
   readSearchIdentityWriterSupportSql,
 } from './identity-search-receiving-directory-sql.ts';
 
@@ -123,6 +124,7 @@ function searchIdentityParticipantStatementCosts(): SearchReceivingWorkDeclarati
     ...(
       [
         [readSearchIdentityWriterAdmissionSql, 3, 3, 4096],
+        [recheckSearchIdentityWriterAdmissionSql, 1, 1, 2048],
         [readSearchIdentityWriterSupportSql, 3, 3, 4096],
         [lockSearchIdentityOriginalSql, 1, 1, 2048],
         [readSearchIdentityPlanComponentSql, 1, 1, 512],
