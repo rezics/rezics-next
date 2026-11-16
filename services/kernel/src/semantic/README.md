@@ -943,9 +943,11 @@ without a native work receipt refuses before IO rather than manufacturing an Act
 
 ### Credited-name adapter
 
-Decision: credited-name observation is the work header plus `search_canonical_generation`, so paging stays stable
-without expanding omitted creators; creator names and identity are bound by `nameRevision`, exact `current` witness
-checks and whole-dependency `unchanged`, and an incomplete fourth page or name coverage keeps selection ready.
+Decision: credited-name paging binds the work header and `search_canonical_generation` without expanding omitted
+creators. Creator names and identity are bound by `nameRevision`, exact `current` witness checks and whole-dependency
+`unchanged`. When the first raw selection is empty, the observation binds the work header and home epoch.
+`unchanged` checks the public work and a one-row seek of its released credit selection in one native snapshot.
+An incomplete fourth page or name coverage keeps selection ready.
 
 The installed port is `createCreditSearchSource` from `semantic/credit-search.ts`, a public Semantic entry outside
 the barrel. Runtime defaults expose `createKernelCreditSearchSource` (re-exported by `server.ts`). Search composition

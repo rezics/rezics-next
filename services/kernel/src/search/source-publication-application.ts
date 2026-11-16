@@ -13,7 +13,7 @@ import type { SearchGenerationPublicationConfig } from './generation-publication
 type WriterOptions = Omit<Parameters<typeof createSearchWriterGuard>[0], 'pool' | 'search'>;
 export type SearchSourcePublicationInput = Omit<
   SearchGenerationPublicationConfig,
-  'binding' | 'readPublicationCompletion' | 'writerGuard'
+  'binding' | 'creditSearch' | 'readPublicationCompletion' | 'writerGuard'
 > &
   Readonly<{
     binding: SearchPublicFilterSourceBinding;
@@ -50,6 +50,7 @@ export function createSearchSourcePublicationApplication(
       const readPublicationCompletion: SearchNativePublicationCompletionReader = (request, context) =>
         port.readNativePublicFilterPublicationCompletion(binding, request, context);
       const writerGuard = createSearchWriterGuard({ pool, search, ...writer });
+      const { creditSearch } = writer.source;
       return createSearchGenerationPublication({
         ...generation,
         pool,
@@ -57,6 +58,8 @@ export function createSearchSourcePublicationApplication(
         binding,
         readPublicationCompletion,
         writerGuard,
+        // Source repair must derive the same credit cut as the writer used for reconciliation.
+        ...(creditSearch === undefined ? {} : { creditSearch }),
       });
     },
   });

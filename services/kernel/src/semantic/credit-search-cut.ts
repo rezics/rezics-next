@@ -32,6 +32,7 @@ export type WorkHeader = {
 export type WorkCut = Readonly<{
   work: WorkHeader;
   generation: string;
+  epoch: number;
   ready: boolean;
 }>;
 
@@ -59,9 +60,8 @@ export function digestOf(value: unknown): string {
     .digest('hex');
 }
 
-/** Work header plus search canonical generation. Creator names live in nameRevision; paging stays stable. */
-export function observationOf(cut: WorkCut): string {
-  return digestOf([
+function workObservation(cut: WorkCut) {
+  return [
     cut.work.id,
     cut.work.type,
     cut.work.visibility,
@@ -70,8 +70,18 @@ export function observationOf(cut: WorkCut): string {
     cut.work.currentRelease,
     cut.work.current_revision,
     cut.work.selection_ready,
-    cut.generation,
-  ]);
+  ];
+}
+
+/** Work header plus search canonical generation. Creator names live in nameRevision; paging stays stable. */
+export function observationOf(cut: WorkCut): string {
+  return digestOf([...workObservation(cut), cut.generation]);
+}
+
+export const EMPTY_CREDIT_OBSERVATION = 'empty:';
+
+export function emptyCreditObservationOf(cut: WorkCut): string {
+  return EMPTY_CREDIT_OBSERVATION + digestOf([...workObservation(cut), cut.epoch]);
 }
 
 export function selectedCursorOf(row: { property: string; slot_id: string; candidate_id: string }): string {
