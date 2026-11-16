@@ -2,7 +2,7 @@ import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import { libraryIdentityNativeOperationFootprint } from '../library/identity-native-bounds.ts';
 import { memoizedValue } from '../memoized.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/contract.ts';
-import { identityChangeTransformSQL } from './identity-epoch-store-change-transform.ts';
+import { identityChangeFirstInputsSQL, identityChangeTransformSQL } from './identity-epoch-store-change-transform.ts';
 import inputs from './identity-epoch-store-select-input.sql';
 import originals from './identity-epoch-store-select-original.sql';
 
@@ -72,6 +72,20 @@ export function identityChangePageCosts(): readonly ChangePageCost[] {
           emptySeeks: 1,
         });
       }),
+      declare(identityChangeFirstInputsSQL, [maxHome, maxId], (values) =>
+        values.length === 2 && jobHome(values[0], values[1])
+          ? Object.freeze({
+              candidateKeys: 0,
+              identityMetadataRows: 0,
+              nativeRows: 4,
+              nativePoints: 4,
+              witnessKeys: 0,
+              statements: 1,
+              bytes: 1024,
+              emptySeeks: 1,
+            })
+          : undefined,
+      ),
       declare(inputs.sql, [maxHome, maxId], (values) =>
         values.length === 2 && jobHome(values[0], values[1]) ? indexedRead(inputs.sql, values) : undefined,
       ),

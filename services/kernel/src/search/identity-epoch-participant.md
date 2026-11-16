@@ -98,8 +98,8 @@ actual admitted job, rejecting unknown, nonpending and mapping-incomplete locato
 For an existing accepted scope it fuses actual native operation application, the common effect and fixed Search
 `more` step in one transaction, then reconciles original custody. Each common Search plan enters the operational `identity_receiving_native_scope_pending` queue when it commits.
 The participant resumes at the last Search directory key retained in the committed native step. It reads one
-candidate from each admitted input generation and one from the materialized change keyset, then selects the
-earliest original. The plan and its common binding are exact key lookups. A control command verifies the same
+candidate from each admitted input generation at its retained control-home epoch and one from the materialized
+change keyset, then selects the earliest original. The plan and its common binding are exact key lookups. A control command verifies the same
 checkpoint again, retires the exact pending key after reconciliation and release, and records the next key and
 completed count in the same transaction. If the command fails, the same original remains selected. A previously
 retired scope replays through its exact committed application and release.
