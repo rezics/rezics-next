@@ -235,12 +235,15 @@ test.serial(
           WHERE account_id=$1 AND target_type='space' AND target_id=$2 AND state='following'`,
         [fixture.member.id, c.space.spaceId],
       );
+    const ownMembership = () => call('GET', `${realmPath(c.realm)}/members/me`, fixture.member);
+    expect((await ownMembership()).status).toBe(404);
     // This Realm has no independent read grant: only settled membership opens its reads.
     await hidden(c);
     await json(await add(c.realm, fixture.member), 202);
     await driver.settle();
     expect(await membership()).toEqual([{ role: 'member' }]);
     expect(await following()).toEqual([{ reason: 'membership' }]);
+    expect((await ownMembership()).status).toBe(200);
     for (const [path] of reads(c)) expect((await call('GET', path, fixture.member)).status).toBe(200);
 
     await worker.stop();
@@ -249,6 +252,7 @@ test.serial(
       expect(committed.workflowId).toEqual(expect.any(String));
       // Prove the ban's authorization barrier while the real removal is still queued.
       expect(await membership()).toEqual([{ role: 'member' }]);
+      expect((await ownMembership()).status).toBe(404);
       await hidden(c);
 
       const beforeJoin = await footprint();
@@ -272,12 +276,13 @@ test.serial(
     expect(await membership()).toEqual([]);
     expect(await following()).toEqual([]);
     await hidden(c);
+    expect((await ownMembership()).status).toBe(404);
 
     await json(await add(c.realm, fixture.member), 202);
     await driver.settle();
     expect(await membership()).toEqual([{ role: 'member' }]);
     expect(await following()).toEqual([{ reason: 'membership' }]);
-    expect((await call('GET', `${realmPath(c.realm)}/members/me`, fixture.member)).status).toBe(200);
+    expect((await ownMembership()).status).toBe(200);
     for (const [path] of reads(c)) expect((await call('GET', path, fixture.member)).status).toBe(200);
     const { space } = await json<{ space: { realmId: string | null } }>(
       await call('GET', `/v1/spaces/${c.space.spaceId}`, fixture.member),

@@ -213,6 +213,10 @@ isolated database and search node, with separate loopback application ports, bef
 Generated Auth signing, website, importer, and staging keys and the persona password live under
 `.temp/local-stack/` with private file permissions. Kernel `.env` retains separate session, receipt, write-rate, route and rating
 keys across restarts, and supplies the local Auth issuer, audience and JWKS URL to both API and worker. Native Auth and the worker share Kernel's purpose-separated reference seal ring.
+For durable Realm membership, the owned Kernel worker reads current initiator consent through its inherited
+Auth channel. Native Auth resolves the exact account and client through its current-consent reader at each
+publication attempt. A missing or unavailable consent still refuses the person-attributed step.
+
 `apps/web/.dev.vars` contains the local website client key and loopback bindings. All generated files are ignored.
 Generated bindings use literal dotenv quoting so the website JWK remains valid JSON.
 Local setup also supplies a 10-second pool connection allowance for parallel cold startup on busy hosts, preserving

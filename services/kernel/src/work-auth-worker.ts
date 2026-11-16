@@ -5,16 +5,19 @@ import {
   WORK_AUTH_MAX_PENDING,
   WORK_AUTH_STOP_MS,
   type WorkAuthMessage,
+  type WorkAuthRequest,
 } from './composition/work-auth-host.ts';
+import type { CurrentConsentReader } from './access/auth-consent.ts';
 import type { CommittedSessionRevocationWorkflow } from './access/session-revocation-work.ts';
 
 /** Dedicated process entry. The ordinary worker remains usable without a parent;
  * this entry requires the private handle created by the existing Auth host. */
 async function run() {
   if (!process.send || !process.connected) throw new Error('Trusted Auth worker channel is required');
+  type Reply = Extract<WorkAuthMessage, { type: 'result' | 'realm-consent-result' }>;
   const pending = new Map<
     number,
-    { resolve(): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }
+    { resolve(reply: Reply): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }
   >();
   let nextId = 0;
   let channelClosed = false;
@@ -43,28 +46,31 @@ async function run() {
       lost();
     }
   };
+  async function call(request: WorkAuthRequest): Promise<Reply> {
+    if (channelClosed || !process.connected) throw new Error('Trusted Auth worker channel is unavailable');
+    // Saturation fails the attempt. The channel retains no extra request queue.
+    if (pending.size >= WORK_AUTH_MAX_PENDING || nextId === Number.MAX_SAFE_INTEGER)
+      throw new Error('Trusted Auth worker channel capacity exceeded');
+    const message = { channel: WORK_AUTH_CHANNEL, id: ++nextId, ...request } as const;
+    if (!isWorkAuthMessage(message)) throw new Error('Invalid Auth worker input');
+    return new Promise<Reply>((resolve, reject) => {
+      const timer = setTimeout(lost, WORK_AUTH_CALL_MS);
+      pending.set(message.id, { resolve, reject, timer });
+      send(message);
+    });
+  }
   const sessionRevocation: CommittedSessionRevocationWorkflow = {
-    resumeCommittedSessionRevocation(input) {
-      if (channelClosed || !process.connected)
-        return Promise.reject(new Error('Trusted Auth worker channel is unavailable'));
-      // Saturation fails this durable attempt; DBOS owns its bounded retry. There
-      // is no additional queue, polling loop or unbounded IPC callback population.
-      if (pending.size >= WORK_AUTH_MAX_PENDING || nextId === Number.MAX_SAFE_INTEGER)
-        return Promise.reject(new Error('Trusted Auth worker channel capacity exceeded'));
-      const message: WorkAuthMessage = {
-        channel: WORK_AUTH_CHANNEL,
-        type: 'resume',
-        id: ++nextId,
-        accountId: input.accountId,
-        operationKey: input.operationKey,
-      };
-      if (!isWorkAuthMessage(message)) return Promise.reject(new Error('Invalid session revocation input'));
-      return new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(lost, WORK_AUTH_CALL_MS);
-        pending.set(message.id, { resolve, reject, timer });
-        send(message);
-      });
+    async resumeCommittedSessionRevocation(input) {
+      const reply = await call({ type: 'resume', accountId: input.accountId, operationKey: input.operationKey });
+      if (reply.type !== 'result' || !reply.ok) throw new Error('Original Auth session revocation did not complete');
     },
+  };
+  const realmConsent: CurrentConsentReader = async ({ actorAccountId, clientId, deadline }) => {
+    if (!Number.isFinite(deadline) || deadline <= Date.now()) throw new Error('Realm consent deadline expired');
+    const reply = await call({ type: 'realm-consent', actorAccountId, clientId });
+    if (reply.type !== 'realm-consent-result' || !reply.ok) throw new Error('Realm consent unavailable');
+    if (deadline <= Date.now()) throw new Error('Realm consent deadline expired');
+    return reply.scopes === null ? null : { actorAccountId, clientId, scopes: reply.scopes };
   };
   process.on('message', (value: unknown) => {
     if (!isWorkAuthMessage(value)) return lost();
@@ -72,13 +78,12 @@ async function run() {
       void stop(0);
       return;
     }
-    if (value.type !== 'result') return lost();
+    if (value.type !== 'result' && value.type !== 'realm-consent-result') return lost();
     const call = pending.get(value.id);
     if (!call) return lost();
     pending.delete(value.id);
     clearTimeout(call.timer);
-    if (value.ok) call.resolve();
-    else call.reject(new Error('Original Auth session revocation did not complete'));
+    call.resolve(value);
   });
   process.once('disconnect', lost);
   process.once('SIGINT', () => void stop(0));
@@ -110,7 +115,7 @@ async function run() {
     const { readWorkerConfig, startWorker } = await import('./worker.ts');
     if (stopping) return;
     return startWorker(
-      { ...readWorkerConfig(process.env), sessionRevocation, handleSignals: false },
+      { ...readWorkerConfig(process.env), sessionRevocation, realmConsent, handleSignals: false },
       undefined,
       process.env,
     );

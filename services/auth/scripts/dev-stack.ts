@@ -781,9 +781,13 @@ export async function assemble(options?: {
     const startWork = () => {
       if (stopping) return Promise.reject(new Error('Native Auth/Work host is stopped'));
       return (startingWork ??= (async () => {
-        const { startAuthBoundKernelWorker } = await import('../../kernel/src/composition/work-auth-host.ts');
+        const [{ startAuthBoundKernelWorker }, { createCurrentConsentReader }] = await Promise.all([
+          import('../../kernel/src/composition/work-auth-host.ts'),
+          import('../src/current-consent.ts'),
+        ]);
         return startAuthBoundKernelWorker({
           sessionRevocation: host.workflows,
+          readRealmConsent: createCurrentConsentReader({ database }).readCurrentConsent,
           env: { ...workEnvironment, DATABASE_URL: config.databaseUrl },
           signal: workAbort.signal,
         });
