@@ -16,9 +16,11 @@ import {
   readSearchIdentityOriginalPlanSql,
 } from '../../src/search/identity-search-receiving-directory-sql.ts';
 import { installIdentityAdapterRuntime } from '../../src/semantic/identity-adapter-runtime.ts';
-import { identityChangeTransformSQL } from '../../src/semantic/identity-epoch-store-change-transform.ts';
+import {
+  identityChangeFirstInputsSQL,
+  identityChangeTransformSQL,
+} from '../../src/semantic/identity-epoch-store-change-transform.ts';
 import ackRead from '../../src/semantic/identity-epoch-store-select-ack.sql';
-import inputs from '../../src/semantic/identity-epoch-store-select-input.sql';
 import jobRead from '../../src/semantic/identity-epoch-store-select-job.sql';
 import originals from '../../src/semantic/identity-epoch-store-select-original.sql';
 import { searchReceivingCaptureStatements } from '../../src/semantic/identity-search-receiving-capture.ts';
@@ -33,6 +35,7 @@ beforeAll(() => {
 const directoryScope = 'd'.repeat(64);
 const jobHome = 0x842;
 const writerHome = 0x841;
+const otherControlHome = 0x843;
 const prefix = 'directory-probe-';
 const index = prefix + 'subjects-g1';
 
@@ -41,6 +44,7 @@ test.each([
   { label: 'resumes unmerge from the checkpoint', intent: 'unmerge', resumed: true, mode: 'input' },
   { label: 'includes an older materialized key', intent: 'merge', resumed: true, mode: 'materialized' },
   { label: 'refuses a stale checkpoint', intent: 'merge', resumed: true, mode: 'stale' },
+  { label: 'refuses a moved input control home', intent: 'merge', resumed: true, mode: 'moved' },
   { label: 'refuses an unproved empty directory', intent: 'merge', resumed: false, mode: 'empty' },
   { label: 'refuses replacement of the checkpoint during sealing', intent: 'merge', resumed: true, mode: 'changed' },
 ])('installed Search directory $label', async ({ intent, resumed, mode }) => {
@@ -109,14 +113,23 @@ test.each([
         ];
       } else if (sql === identityChangeTransformSQL)
         rows = [{ kind: intent, original: second, survivor: second, remainder_terminal: first }];
-      else if (sql === inputs.sql) {
-        rows = [{ generation: rightGeneration, terminal: second, control_partition: jobHome }];
+      else if (sql === identityChangeFirstInputsSQL) {
+        rows = [{ generation: rightGeneration, terminal: second, control_partition: jobHome, owner_current: true }];
         if (intent === 'merge')
-          rows = [{ generation: leftGeneration, terminal: first, control_partition: jobHome }, ...rows];
+          rows = [
+            {
+              generation: leftGeneration,
+              terminal: first,
+              control_partition: otherControlHome,
+              owner_current: mode !== 'moved',
+            },
+            ...rows,
+          ];
       } else if (sql === originals.sql) {
         originalReads++;
         const original = values[0] === leftGeneration && mode !== 'materialized' ? first : second;
-        expect(values).toEqual([values[0], after, 1, values[0] === leftGeneration ? first : second, jobHome]);
+        const isLeft = values[0] === leftGeneration;
+        expect(values).toEqual([values[0], after, 1, isLeft ? first : second, isLeft ? otherControlHome : jobHome]);
         rows =
           mode === 'empty' || mode === 'changed' || (mode === 'materialized' && values[0] === leftGeneration)
             ? []
@@ -189,10 +202,12 @@ test.each([
       ? 'checkpoint changed'
       : mode === 'empty'
         ? 'no completed original'
-        : 'Driver reached the selected writer',
+        : mode === 'moved'
+          ? 'closure is not current'
+          : 'Driver reached the selected writer',
   );
   expect(directoryReads).toBe(mode === 'changed' ? 2 : 1);
-  expect(originalReads).toBe(mode === 'stale' ? 0 : intent === 'merge' ? 2 : 1);
+  expect(originalReads).toBe(mode === 'stale' || mode === 'moved' ? 0 : intent === 'merge' ? 2 : 1);
   expect(planReads).toBe(reachedWriter ? 1 : 0);
   expect(engineReads).toBe(reachedWriter ? 1 : 0);
 });
