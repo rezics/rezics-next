@@ -37,7 +37,7 @@ export function ArchiveEntryWorkspace({
   footer,
 }: ArchiveEntryWorkspaceProps) {
   return (
-    <main ref={mainRef} className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 [overflow-wrap:anywhere]">
+    <section ref={mainRef} className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 [overflow-wrap:anywhere]">
       <header className="space-y-3">{header}</header>
       {areaNavigation}
       {status}
@@ -57,7 +57,7 @@ export function ArchiveEntryWorkspace({
       </div>
       {afterBodyActions}
       {footer}
-    </main>
+    </section>
   );
 }
 

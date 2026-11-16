@@ -510,7 +510,7 @@ function PrivatePageFrame({
 }) {
   const options = localeOptions(locale);
   return (
-    <main
+    <div
       className="mx-auto w-full min-w-0 max-w-6xl px-4 py-6 text-foreground [overflow-wrap:anywhere] sm:px-6 sm:py-8"
       data-private-knowledge-visit
     >
@@ -537,7 +537,7 @@ function PrivatePageFrame({
       >
         <div className="min-w-0 space-y-8">{children}</div>
       </div>
-    </main>
+    </div>
   );
 }
 

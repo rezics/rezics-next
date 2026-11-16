@@ -77,7 +77,7 @@ export function ArchiveCollectionWorkspace({
   const currentStep = stepFor(stage);
 
   return (
-    <main className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-6">
+    <div className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-6">
       <header className="grid gap-5">
         {routeHeading}
         <nav aria-label={m.library_archive_recovery_steps()}>
@@ -128,6 +128,6 @@ export function ArchiveCollectionWorkspace({
           {children}
         </section>
       </div>
-    </main>
+    </div>
   );
 }

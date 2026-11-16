@@ -72,7 +72,7 @@ export function ArchiveEntryRecoveryPage() {
   }, [scope, connectionAttempt]);
   if (scope.current() && failed === scope)
     return (
-      <main className="space-y-4 p-6">
+      <div className="space-y-4 p-6">
         <PageHeading>{m.library_archive_title()}</PageHeading>
         <p role="status">{m.library_archive_unavailable()}</p>
         <Button
@@ -84,7 +84,7 @@ export function ArchiveEntryRecoveryPage() {
         >
           {m.library_archive_progress_retry()}
         </Button>
-      </main>
+      </div>
     );
   return <ArchiveEntryRecoveryView journey={scope.current() ? journey : null} />;
 }
