@@ -22,6 +22,11 @@ text, source identity or credential is logged. A stopped process leaves its last
 Unexpected errors retain their original identity and private cause; the existing CLI formatter adds registered
 phase metadata. Diagnostics add no journal state and never alter sealed keys, bodies or acknowledged work.
 
+The first seed record import reports selected release preparation, both provider runs, Bangumi Character fidelity,
+graph delivery and the subsequent current-read and assembly phases. Before Character vocabulary is bound, a
+generation with only proven pending Bangumi covers hands off its current reads so the vocabulary stage can proceed.
+The bound fidelity pass must complete its own generation even when its first call finishes the sealed cover run.
+
 Book subphases distinguish planning, record import, credit vocabulary, creator current reads and result assembly.
 An unsuccessful source generation registers only its local provider and run-status kind (including
 `mass-disappearance`); its diagnostic text stays private. These fields identify a pre-write generation refusal
