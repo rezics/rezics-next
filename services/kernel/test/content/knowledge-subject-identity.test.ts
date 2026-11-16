@@ -116,9 +116,23 @@ test('private Knowledge attachments stay on their originals through published me
         publicationId: publication.value.publicationId,
         canonicalBytes: Buffer.from(validateContentDocument(selectedBody).canonicalBytes).toString('base64'),
       };
-      const publicBefore = await call('GET', exactPath, undefined, null);
-      expect(publicBefore.status).toBe(200);
-      expect(publicBefore.value.document).toMatchObject(expectedPublicRevision);
+      async function expectPublicSelection(phase: string, erased = false) {
+        const expected = erased ? { ...expectedPublicRevision, authorId: null } : expectedPublicRevision;
+        for (const path of [publicPath, exactPath]) {
+          const read = await call('GET', path, undefined, null);
+          expect(read.status, `${phase} ${path} ${JSON.stringify(read.value)}`).toBe(200);
+          expect(read.value.document).toMatchObject(expected);
+          expect(read.value.document).not.toHaveProperty('notebookId');
+        }
+        const privateRevision = await call(
+          'GET',
+          `${publicPath}?revisionId=${unselected.value.revisionId}`,
+          undefined,
+          null,
+        );
+        expect(privateRevision.status, phase).toBe(404);
+      }
+      await expectPublicSelection('before identity publication');
       const privatePath = `${inventory}/${third.notebookId}/documents/${document.documentId}`;
       const privateBefore = await call('GET', privatePath);
       expect(privateBefore.status).toBe(200);
@@ -177,6 +191,7 @@ test('private Knowledge attachments stay on their originals through published me
       }
 
       const merged = await publish({ kind: 'merge', survivor, redirected: original, release: release.digest });
+      await expectPublicSelection('after merge publication');
       for (const id of [survivor, original]) {
         const { notebooks } = await listed(id);
         expect(notebooks).toHaveLength(3);
@@ -194,6 +209,7 @@ test('private Knowledge attachments stay on their originals through published me
       expect((await call('GET', continued(beforeUnmerge), undefined, outsider)).status).toBe(404);
 
       await publish({ kind: 'unmerge', original, undoJob: merged, verificationReceipt: null, release: release.digest });
+      await expectPublicSelection('after unmerge publication');
       expect(await call('GET', continued(beforeUnmerge))).toMatchObject({
         status: 409,
         value: { code: 'stale_cursor' },
@@ -226,13 +242,7 @@ test('private Knowledge attachments stay on their originals through published me
       expect(remainingRevisions.rows).toEqual([
         { document_id: selected.documentId, revision_id: selected.revisionId, author_account_id: null },
       ]);
-      const publicAfter = await call('GET', exactPath, undefined, null);
-      expect(publicAfter.status).toBe(200);
-      expect(publicAfter.value.document).toMatchObject({ ...expectedPublicRevision, authorId: null });
-      expect(publicAfter.value.document).not.toHaveProperty('notebookId');
-      expect(
-        (await call('GET', `${publicPath}?revisionId=${unselected.value.revisionId}`, undefined, null)).status,
-      ).toBe(404);
+      await expectPublicSelection('after content erasure acknowledgement', true);
       expect(await call('GET', privatePath)).toMatchObject({ status: 401, value: { code: 'invalid_credentials' } });
       expect((await call('GET', privatePath, undefined, outsider)).status).toBe(404);
     } finally {
