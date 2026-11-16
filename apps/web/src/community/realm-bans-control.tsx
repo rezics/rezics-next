@@ -65,7 +65,7 @@ export function RealmBanOutcome({
   const accountId = result.action === 'ban' ? result.ban.accountId : result.accountId;
   return (
     <ContentItemFrame
-      as="article"
+      as="div"
       role="status"
       id={boundaryId}
       tabIndex={boundaryId ? -1 : undefined}
@@ -1198,7 +1198,11 @@ function RealmBansVisit({
                   {m.realm_bans_ban()}
                 </Button>
                 {banConfirm && selected ? (
-                  <ManagementReview title={m.realm_bans_ban_confirm()} destructive aria-labelledby={`${id}-ban-confirm`}>
+                  <ManagementReview
+                    title={m.realm_bans_ban_confirm()}
+                    destructive
+                    aria-labelledby={`${id}-ban-confirm`}
+                  >
                     <ContentItemHeading
                       level={3}
                       id={`${id}-ban-confirm`}
