@@ -853,9 +853,20 @@ export async function reconcileIdentityReceivingEffect(
   if (!row.effect_transaction_id || row.effect_epoch === null || row.effect_position === null) throw stale();
   if (record.step === 'search-canonical-index') await reconcileSearchOriginal(pool, record);
   const native = receipt(effect.receipt.partition, row.effect_transaction_id, row.effect_epoch, row.effect_position);
-  // Source home was released before control. There is no reusable global job capability.
-  const home = identityJobPartition(effect.job);
   const roles = await identityErasureRoles(pool, effect.job.jobId);
+  const { custody } = await acknowledgeReceivingControl(pool, effect, record, native, roles);
+  await releaseReceivingCustody(pool, effect, record, native, custody, roles);
+  return native;
+}
+
+async function acknowledgeReceivingControl(
+  pool: Pool,
+  effect: IdentityReceivingEffect,
+  record: NativeIdentityReceivingRecord,
+  native: IdentityNativeReceipt,
+  roles: Awaited<ReturnType<typeof identityErasureRoles>>,
+) {
+  const home = identityJobPartition(effect.job);
   const acknowledged = await runCommand<IdentityNativeReceipt | null>(pool, { partition: home }, async (tx) => {
     const job = (await tx.query(receivingJob.sql, [home, effect.job.jobId, effect.job.epoch.toString()])).rows[0];
     if (!job || job.scope_digest !== record.scopeDigest) throw stale();
@@ -906,9 +917,22 @@ export async function reconcileIdentityReceivingEffect(
   const custody =
     acknowledged.value ??
     receipt(acknowledged.partition, acknowledged.transactionId, acknowledged.epoch, acknowledged.position);
+  return { custody, created: acknowledged.value === null };
+}
+
+async function releaseReceivingCustody(
+  pool: Pool,
+  effect: IdentityReceivingEffect,
+  record: NativeIdentityReceivingRecord,
+  native: IdentityNativeReceipt,
+  custody: IdentityNativeReceipt,
+  roles: Awaited<ReturnType<typeof identityErasureRoles>>,
+  retained?: SearchReceivingContinuation,
+) {
+  const home = identityJobPartition(effect.job);
   // Revalidate after the control COMMIT, before acquiring the receiving home. Settled/released
   // continuations are scheduling state; neither one conveys reusable release authority.
-  if (record.step === 'search-canonical-index') await revalidateSearchTerminal(pool, record);
+  if (record.step === 'search-canonical-index') await revalidateSearchTerminal(pool, record, retained);
   // The released control transaction above verified the exact native effect, plan and immutable binding.
   // Re-read that SAME effect at its own home before the owner's native release; no job-wide ACK substitutes.
   await runCommand(pool, { partition: record.source.receivingHome }, async (tx) => {
@@ -959,7 +983,6 @@ export async function reconcileIdentityReceivingEffect(
   });
   // Keep the gate until all SAME-job scopes at this owner/original have durable custody. Individual
   // scope reconciliation cannot clear it while a sibling OLD/NEW/first-apply obligation is outstanding.
-  return native;
 }
 
 /** Published control custody is monotonic. Release only this job's local gate, after releasing control.
@@ -1446,7 +1469,6 @@ async function searchContinuation(tx: CommandTransaction, record: SearchIdentity
  * at the accepted page boundary. A cursor is scheduling state and never replaces owner revalidation.
  */
 async function reconcileSearchOriginal(pool: Pool, record: SearchIdentityReceivingRecord) {
-  const work = searchContext(pool);
   const prior = (
     await runCommand(pool, { partition: record.receipt.partition }, async (tx) => {
       const local = (await localRecord(tx, effectOf(record))).record;
@@ -1456,6 +1478,16 @@ async function reconcileSearchOriginal(pool: Pool, record: SearchIdentityReceivi
     })
   ).value;
   if (prior.state !== 'progress') return;
+  const page = await advanceSearchOriginalPage(pool, record, prior);
+  if (page.state === 'progress') throw unavailable('Native Search reconcileOriginal: draining; continuation committed');
+}
+
+async function advanceSearchOriginalPage(
+  pool: Pool,
+  record: SearchIdentityReceivingRecord,
+  prior: SearchReceivingContinuation,
+) {
+  const work = searchContext(pool);
   const result = await work.invoke<Awaited<ReturnType<SearchIdentityReceivingNative['reconcileOriginal']>>>(
     'reconcileOriginal',
     (context) => installedSearch(pool).reconcileOriginal(record.source.locator, prior.after_key, context),
@@ -1469,7 +1501,7 @@ async function reconcileSearchOriginal(pool: Pool, record: SearchIdentityReceivi
     (next.state === 'progress' && (next.after === null || next.after === prior.after_key))
   )
     throw stale();
-  await runCommand(pool, { partition: record.receipt.partition }, async (tx) => {
+  const committed = await runCommand(pool, { partition: record.receipt.partition }, async (tx) => {
     const local = (await localRecord(tx, effectOf(record))).record;
     if (
       local.step !== 'search-canonical-index' ||
@@ -1491,27 +1523,63 @@ async function reconcileSearchOriginal(pool: Pool, record: SearchIdentityReceivi
     if (advanced.rowCount !== 1) throw stale();
     return { value: null, events: [wake(local)] };
   });
-  // This error occurs AFTER the released progress command commits. It cannot undo the page boundary.
-  if (next.state === 'progress') throw unavailable('Native Search reconcileOriginal: draining; continuation committed');
+  return { state: next.state, transactionId: committed.transactionId };
+}
+
+/** A committed page or control acknowledgement yields the next owned turn. */
+export async function advanceSearchIdentityReceivingReconciliation(pool: Pool, effect: IdentityReceivingEffect) {
+  const saved = await runCommand(pool, { partition: effect.receipt.partition }, async (tx) => {
+    const { record } = await localRecord(tx, effect);
+    if (record.step !== 'search-canonical-index' || record.source.barrier.kind !== 'original' || !record.applied)
+      throw stale();
+    return noEffect({ record, progress: await searchContinuation(tx, record) });
+  });
+  const { record, progress } = saved.value;
+  if (progress.state === 'released') return { state: 'prepared' } as const;
+  if (progress.state === 'progress') {
+    const page = await advanceSearchOriginalPage(pool, record, progress);
+    return { state: 'progress', transactionId: page.transactionId } as const;
+  }
+  const native = record.applied!.receipt;
+  const home = identityJobPartition(effect.job);
+  const retained = await withReadTransaction(
+    pool,
+    async (tx) =>
+      (await tx.query(receivingStatements.controlCustody, [home, effect.job.jobId, effect.effectKey])).rows[0],
+  );
+  const roles = await identityErasureRoles(pool, effect.job.jobId);
+  if (!retained) {
+    const { custody } = await acknowledgeReceivingControl(pool, effect, record, native, roles);
+    return { state: 'progress', transactionId: custody.transactionId } as const;
+  }
+  const custody = receipt(home, retained.transaction_id, retained.epoch, retained.position);
+  await releaseReceivingCustody(pool, effect, record, native, custody, roles, progress);
+  return { state: 'prepared' } as const;
 }
 
 /** Every release, including a lost-response or published-gate replay, obtains a new private native
  * observation after the matching control custody was committed and its connection was released.
  */
-async function revalidateSearchTerminal(pool: Pool, record: SearchIdentityReceivingRecord) {
+async function revalidateSearchTerminal(
+  pool: Pool,
+  record: SearchIdentityReceivingRecord,
+  retained?: SearchReceivingContinuation,
+) {
   const work = searchContext(pool);
-  const prior = (
-    await runCommand(pool, { partition: record.receipt.partition, deadline: work.deadline }, async (tx) => {
-      const local = (await localRecord(tx, effectOf(record))).record;
-      if (local.step !== 'search-canonical-index' || searchJSON(local.applied) !== searchJSON(record.applied))
-        throw stale();
-      return noEffect(await searchContinuation(tx, local));
-    })
-  ).value;
+  const prior =
+    retained ??
+    (
+      await runCommand(pool, { partition: record.receipt.partition, deadline: work.deadline }, async (tx) => {
+        const local = (await localRecord(tx, effectOf(record))).record;
+        if (local.step !== 'search-canonical-index' || searchJSON(local.applied) !== searchJSON(record.applied))
+          throw stale();
+        return noEffect(await searchContinuation(tx, local));
+      })
+    ).value;
   if (prior.state !== 'settled' && prior.state !== 'released') throw stale();
   const result = await work.invoke<Awaited<ReturnType<SearchIdentityReceivingNative['reconcileOriginal']>>>(
     'reconcileOriginal',
-    (context) => installedSearch(pool).reconcileOriginal(record.source.locator, prior.after_key, context),
+    (context) => installedSearch(pool).reconcileOriginal(record.source.locator, prior.after_key, context, record),
   );
   if (result.status !== 'ready') throw unavailable(`Native Search terminal revalidation: ${result.status}`);
   if (result.value.state !== 'settled' || result.value.after !== prior.after_key) throw stale();

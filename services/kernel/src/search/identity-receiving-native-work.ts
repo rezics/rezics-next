@@ -1,3 +1,4 @@
+import nativeApplied from './identity-receiving-native-applied.sql';
 import nativeOperation from './identity-receiving-native-operation.sql';
 import nativePlan from './identity-receiving-native-plan.sql';
 import type { NativeStepWork } from '../semantic/identity-epoch-contract.ts';
@@ -60,6 +61,10 @@ export const searchNativeReceivingSqlCost = Object.freeze({
   drainGate: [1, 1, 512],
 } satisfies Record<string, readonly [number, number, number]>);
 export type SearchNativeReceivingSql = keyof typeof searchNativeReceivingSqlCost;
+
+export function searchNativeReleaseAppliedSql(): string {
+  return nativeApplied.sql.trimEnd().replace(/;$/, '') + ' AND o.applied_transaction_id=$8 AND o.hold_id=$9';
+}
 
 export function searchNativeOriginalOperationSql(): string {
   return nativeOperation.sql.trimEnd().replace(/;$/, '') + ' AND o.writer_locator=$2::uuid::text';
