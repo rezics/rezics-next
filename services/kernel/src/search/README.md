@@ -2250,7 +2250,11 @@ native generation preparation/repair shares one maintenance meter whose point an
 examined input keys, as in Source's maintenance-step bound, rather than serving candidates. Serving retains
 its candidate-based bound. Both retain the 1000-input and 4 MiB ceilings without resetting between owners.
 Steps retain a scalar frontier. Subject reconciliation validates up to 256 saved native home heads in one
-statement snapshot per step, and mixed discovery also checks its Account-owner witnesses. Durable progress dispatches
+statement snapshot per step. After engine traversal, Search can refresh that pass's position witness for an
+empty home with the same active epoch and no retained writer row for this physical target. Each refresh uses
+the current Semantic visible count and one target/home writer lookup, with at most one witness write per
+compared home. Changed occupied homes, writer-bearing homes and changed epochs replay their native key work.
+Mixed discovery still checks its Account-owner witnesses. Durable progress dispatches
 the next preparation step immediately. A step waiting for a dependency or in-flight writer backs off. Source
 enumeration runs only in generation maintenance. Publication adopts an unfiltered full-population definition; a narrowed
 query observation cannot provide generation-wide Source coverage. Expired enumeration PITs restart their finite
