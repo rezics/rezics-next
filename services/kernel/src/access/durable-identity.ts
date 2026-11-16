@@ -15,7 +15,12 @@ import delegationRead from './durable-initiator-delegation.sql';
 import receiptRead from '../command/read-receipt.sql';
 import { within } from './deadline.ts';
 import { readAccount, type Account } from './account-data.ts';
-import type { DurableInitiatorRecord, InitiatorRestoreInput, InitiatorRestorerConfig } from './durable-initiator.ts';
+import type {
+  DurableInitiatorRecord,
+  InitiatorRestoreInput,
+  InitiatorRestoreStage,
+  InitiatorRestorerConfig,
+} from './durable-initiator.ts';
 import { accessRoot } from './derived-access.ts';
 
 // This bridge is deliberately separate from the expiring workflow approval
@@ -94,6 +99,7 @@ export async function restoreOperationIdentity(
   config: InitiatorRestorerConfig,
   input: InitiatorRestoreInput,
   time: AuthoritativeTime,
+  enter?: (stage: InitiatorRestoreStage, deadline: number) => void,
 ): Promise<AccountActor> {
   const { access, pool, readOperation, readConsent } = config;
   const bridge = bridges().get(accessRoot(access));
@@ -125,12 +131,14 @@ export async function restoreOperationIdentity(
   };
   // Copy the allowlisted result before releasing the module's reader. Subsequent
   // callback/JSON mutations can never change the verified receipt binding.
+  enter?.('read_operation', deadline);
+  const enterOperationReceipt = enter ? () => enter('read_operation_receipt', deadline) : undefined;
   const record: DurableInitiatorRecord | null = await withBoundedReadConnection(
     pool,
     deadline,
     async (client) => {
       const row = await accessEvidence(
-        () => readOperation(client, Object.freeze({ ...operation }), time),
+        () => readOperation(client, Object.freeze({ ...operation }), time, enterOperationReceipt),
         () => new DurableInitiatorUnavailableError(),
         deadline,
       );
@@ -196,6 +204,7 @@ export async function restoreOperationIdentity(
         originalDelegation.issuedValid.length > 256
   )
     throw new Error('Invalid original delegation');
+  enter?.('read_creation_receipt', deadline);
   const receipt = await withBoundedReadConnection(
     pool,
     deadline,
@@ -205,7 +214,12 @@ export async function restoreOperationIdentity(
         principal_kind: 'account',
         principal_id: actor.accountId,
         command_kind: creation.commandKind,
-        idempotency_keys: nativeReceiptKeyCandidates(pool, creation.commandKind, actor.accountId, creation.idempotencyKey),
+        idempotency_keys: nativeReceiptKeyCandidates(
+          pool,
+          creation.commandKind,
+          actor.accountId,
+          creation.idempotencyKey,
+        ),
       }),
     readOptions,
   );
@@ -220,6 +234,7 @@ export async function restoreOperationIdentity(
     throw new Error('Uncommitted operation evidence');
   // Auth owns this current tuple at its own home and clock; never infer it from
   // the recorded token epoch or an Access account observation.
+  enter?.('read_current_consent', deadline);
   const consent = await within(deadline, () =>
     readConsent({ actorAccountId: actor.accountId, clientId: actor.clientId, deadline }),
   );
@@ -230,6 +245,7 @@ export async function restoreOperationIdentity(
     !scopes(consent.scopes)
   )
     throw new Error('Current consent unavailable');
+  enter?.('read_current_account', deadline);
   const account = await withBoundedReadConnection(
     pool,
     deadline,
@@ -249,6 +265,7 @@ export async function restoreOperationIdentity(
   )
     throw new Error('Current identity unavailable');
   if (delegation && originalDelegation) {
+    enter?.('read_current_delegation', deadline);
     const current = await withBoundedReadConnection(
       pool,
       deadline,
@@ -269,6 +286,7 @@ export async function restoreOperationIdentity(
     )
       throw new Error('Current delegation unavailable');
   }
+  enter?.('restore_identity', deadline);
   const currentScopes = new Set(consent.scopes);
   const restored: AccountActor = Object.freeze({
     ...actor,
