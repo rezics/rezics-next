@@ -3051,6 +3051,16 @@ export function createNativePublicFilterSourceBinding(
           !isDeepStrictEqual(current.definition, cut.definition)
         )
           throw new BindingError('configuration_changed');
+        const closedHome =
+          record.input.phase === 'bridge' &&
+          record.input.bridge &&
+          record.input.bridge.position > record.input.bridge.through &&
+          record.next.phase === 'window' &&
+          record.next.partition === record.input.partition + 1
+            ? record.input.partition
+            : record.input.phase === 'window' && record.windowBatch && record.windowBatch.count > 0
+              ? record.windowBatch.from
+              : undefined;
         await retainPublicFilterRepairVerification(
           db,
           chain,
@@ -3061,15 +3071,11 @@ export function createNativePublicFilterSourceBinding(
             complete: row.complete,
             inputLimit: row.input_limit,
             digests: row.repair_locator_digests!,
-            ...(record.input.phase === 'bridge' &&
-            record.input.bridge &&
-            record.input.bridge.position > record.input.bridge.through &&
-            record.next.phase === 'window' &&
-            record.next.partition === record.input.partition + 1
-              ? { closedHome: record.input.partition }
-              : record.input.phase === 'window' && record.windowBatch && record.windowBatch.count > 0
-                ? { closedHome: record.windowBatch.from }
-                : {}),
+            closedHome,
+            alreadyVerified:
+              subjectPublication &&
+              row.verified_root !== null &&
+              (closedHome === undefined || row.verified_home === closedHome),
           },
           { deadline },
           (controls) => {

@@ -2700,6 +2700,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             },
             context,
             charge,
+            subjectPublication,
           );
           const body = encodeNative(intent);
           const saved = await repairPageSave.run(m.pool, {
@@ -2724,6 +2725,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             decodeNative<RetainedRepairPage>(page.intent),
             context,
             charge,
+            subjectPublication,
           ));
         // Foreign owner calls have ended. Reopen and compare immutable local custody before dispatch.
         const finalCustody = m.take(await custody.read({ queried: q, execution: work.execution }, context));
