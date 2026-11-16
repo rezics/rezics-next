@@ -312,17 +312,58 @@ function dateContent(command: BatchCommand) {
     : undefined;
 }
 
+test('selected VNDB seed rereads the canonical statistic and leaves an unchanged reseed effect-free', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'showcase-vndb-statistic-'));
+  try {
+    const tables = family({
+      vn: [
+        { id: 'v1', olang: 'ja', alias: null, c_votecount: '20', c_average: '735' },
+        { id: 'v2', olang: 'ja', alias: null },
+        { id: 'v3', olang: 'ja', alias: null },
+      ],
+    });
+    const created = new Map<string, string>();
+    const observations = sourceObservationFixture();
+    const writes: string[] = [];
+    const statisticPort: CrossMediaPort = {
+      ...port([], true, created),
+      async readSourceObservationHead({ subjectId }) {
+        return observations.read(subjectId);
+      },
+      async writeSourceStatistic({ subjectId, value }) {
+        expect(value.expectedObservation).toBeNull();
+        writes.push(subjectId);
+        observations.observe(subjectId, value);
+      },
+    };
+    const seed = () =>
+      seedShowcaseVndbReleases({
+        tables,
+        path: join(directory, 'state.sqlite'),
+        port: statisticPort,
+        extras: { ...extras(), sourceSnapshotAsOf: '2026-10-25' },
+      });
+    await seed();
+    const subjectId = created.get('source:v1')!;
+    expect(observations.read(subjectId)).toMatchObject({
+      state: 'published',
+      observation: {
+        payload: { sourceAlias: 'vndb_cross_media', sourceRecordId: 'v1', asOf: '2026-10-25', count: 20, mean: 7.35 },
+      },
+    });
+    await seed();
+    expect(writes).toEqual([subjectId]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 30_000);
+
 test('default seed without binding files rereads catalogue state and exposes selected dates', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'showcase-vndb-releases-'));
   const created = new Map<string, string>();
   let journal: ShowcaseJournal | undefined;
   try {
     const tables = family({
-      vn: [
-        { id: 'v1', olang: 'ja', alias: null, devstatus: 1, c_votecount: '20', c_average: '735' },
-        { id: 'v2', olang: 'ja', alias: null },
-        { id: 'v3', olang: 'ja', alias: null },
-      ],
       released: [
         { id: 'r1', released: '20200229', olang: 'ja', minage: 18, gtin: '1234567890123' },
         { id: 'r2', released: '99999999' },
@@ -354,25 +395,12 @@ test('default seed without binding files rereads catalogue state and exposes sel
     const firstCommands: BatchCommand[] = [];
     journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
     const basePort = localReviewPort(firstCommands, created);
-    const observations = sourceObservationFixture();
-    const statisticWrites: string[] = [];
-    const statisticPort = {
-      async readSourceObservationHead({ subjectId }: { subjectId: string }) {
-        return observations.read(subjectId);
-      },
-      async writeSourceStatistic({ subjectId, value }: Parameters<CrossMediaPort['writeSourceStatistic']>[0]) {
-        statisticWrites.push(subjectId);
-        observations.observe(subjectId, value);
-      },
-    };
-    const seedExtras = { ...extras(), sourceSnapshotAsOf: '2026-10-25' };
     const baseBatch = basePort.batch.bind(basePort);
     const attempted: BatchCommand[] = [];
     let loseFirstDelivery = true;
     const recoveryPort = captureShowcaseCommands(
       {
         ...basePort,
-        ...statisticPort,
         async batch(request) {
           if (request.commands.some((command) => command.op === 'create')) expect(request.commands).toHaveLength(1);
           attempted.push(...request.commands);
@@ -455,7 +483,7 @@ test('default seed without binding files rereads catalogue state and exposes sel
       port: reviewPort,
       bindings: classifications.bindings,
       groups: classifications.groups,
-      extras: seedExtras,
+      extras: extras(),
     });
     expect(first.converterRevision).toBe(converter_revision);
     expect(first.bindings.releaseDigest).toBe(bundledDigest);
@@ -603,24 +631,16 @@ test('default seed without binding files rereads catalogue state and exposes sel
     expect(JSON.stringify(proposed)).not.toContain('wdt:P1365');
     const workId = first.identities.find((row) => row.key === 'v1')?.subjectId;
     const releaseId = first.identities.find((row) => row.key === 'r1')?.subjectId;
-    expect(workId).toBeDefined();
-    expect(observations.read(workId!)).toMatchObject({
-      state: 'published',
-      observation: {
-        payload: { sourceAlias: 'vndb_cross_media', sourceRecordId: 'v1', asOf: '2026-10-25', count: 20, mean: 7.35 },
-      },
-    });
     const againCommands: BatchCommand[] = [];
     const again = await seedShowcaseVndbReleases({
       tables,
       plan,
       path: join(directory, 'state.sqlite'),
-      port: { ...port(againCommands, true, created), ...statisticPort },
-      extras: seedExtras,
+      port: port(againCommands, true, created),
+      extras: extras(),
     });
     expect(again.identities.find((row) => row.key === 'v1')?.subjectId).toBe(workId);
     expect(again.identities.find((row) => row.key === 'r1')?.subjectId).toBe(releaseId);
-    expect(statisticWrites).toEqual([workId]);
     expect(again.bindings.concepts.some((row) => row.id === statusId)).toBe(true);
   } finally {
     journal?.close();
