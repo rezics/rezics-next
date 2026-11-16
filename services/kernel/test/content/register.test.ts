@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import pg from 'pg';
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import type { Effect } from '../../src/events/effects.ts';
+import type { Effect, NativeEffect } from '../../src/events/effects.ts';
 import { createImageJob } from '../../src/content/image-job.ts';
 import {
   contentWorkDependencies,
@@ -138,6 +138,10 @@ async function composeRegistration(mode: 'empty' | 'full'): Promise<Registration
                 for (const effect of items) effects.push({ name: effect.name, types: [...effect.types] });
                 context.addEffects(items);
               },
+              addNativeEffects(items: NativeEffect[]) {
+                for (const effect of items) effects.push({ name: effect.name, types: [...effect.types] });
+                context.addNativeEffects!(items);
+              },
             });
           },
         },
@@ -165,6 +169,8 @@ if (process.argv.includes('--content-registration')) {
   try {
     const mode = process.env.CONTENT_REGISTRATION_MODE;
     if (mode !== 'empty' && mode !== 'full') throw new Error('CONTENT_REGISTRATION_MODE must be empty or full');
+    const { installNativeTestComposition } = await import('../support/native-history-composition.ts');
+    await installNativeTestComposition();
     const registration = await composeRegistration(mode);
     console.log(`CONTENT_REGISTRATION_JSON:${JSON.stringify(registration)}`);
     process.exit(0);

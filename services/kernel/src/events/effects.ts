@@ -30,6 +30,8 @@ export type NativeEffect = {
   types: string[];
   delivery: 'native';
   admit(client: PoolClient, event: CloudEvent): Promise<void>;
+  /** Handles durable generic deliveries queued before this consumer moved to native admission. */
+  run?: Effect['run'];
 };
 type RegisteredEffect = Effect | NativeEffect;
 
@@ -73,7 +75,7 @@ export function registerEffects(effects: RegisteredEffect[], pool?: Pool): Regis
   const runEffect = DBOS.registerStep(
     async (name: string, event: CloudEvent) => {
       const effect = byName.get(name);
-      if (!effect || effect.delivery === 'native') throw new Error('Unknown durable effect');
+      if (!effect?.run) throw new Error('Unknown durable effect');
       if (isIdentityOriginalEffect(effect, event)) {
         const selected = pool ?? compatibilityPool;
         if (!selected) throw new Error('Identity original requires the actual work Pool');

@@ -6,7 +6,8 @@ import { noEffect, runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
-import type { Effect } from '../events/effects.ts';
+import type { Effect, NativeEffect } from '../events/effects.ts';
+import { enqueueWorkIntent } from '../work/client.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { closeErasureFence } from './erasure-fence.ts';
 import { eraseAccountAuthoredPage, type AuthoredErasureCursor } from './account-erasure-authored.ts';
@@ -106,11 +107,25 @@ async function start(pool: Pool, accountId: string): Promise<Continuation> {
   return { phase: progress.phase, step: Number(progress.step) };
 }
 
+async function assertContentErasureProofReady(pool: Pool, accountId: string, erasedAt: Date): Promise<void> {
+  const home = route(accountId);
+  const ready = await withConnection(pool, async (client) => {
+    const { rows } = await client.query<{ ready: boolean }>(
+      `SELECT NOT EXISTS (
+         SELECT 1 FROM access.erasure_late_item
+         WHERE route=$1 AND account_id=$2 AND participant='content' AND resolved_at IS NULL
+       ) AS ready
+       FROM access.erasure
+       WHERE route=$1 AND account_id=$2 AND date_trunc('milliseconds',at)=$3::timestamptz`,
+      [home, accountId, erasedAt],
+    );
+    return rows[0]?.ready === true;
+  });
+  if (!ready) throw new Error('Content erasure proof requires its committed obligation and no open Content late item');
+}
+
 async function assertFinalProof(pool: Pool, storage: MediaStorage, accountId: string, cursor: unknown) {
   const home = route(accountId);
-  const status = await readErasureStatus(pool, accountId);
-  if (!status || status.outstanding.lateItems)
-    throw new Error('Content account erasure still has an open late locator item');
   const state = (cursor ?? { phase: 'media', after: null }) as { phase: 'media' | 'fields'; after: string | null };
   if (!['media', 'fields'].includes(state.phase) || (state.after !== null && routeOf(state.after) === null))
     throw new TypeError('Invalid content account-erasure proof cursor');
@@ -388,11 +403,10 @@ async function step(
       nextCursor = null;
     }
   } else if (currentPhase === 'proof') {
+    await assertContentErasureProofReady(pool, accountId, progress.erased_at);
     const proof = await assertFinalProof(pool, storage, accountId, progress.cursor);
     if (proof.done) {
-      const status = await readErasureStatus(pool, accountId);
-      if (!status || status.outstanding.lateItems)
-        throw new Error('Content account-erasure proof still has late locator work');
+      await assertContentErasureProofReady(pool, accountId, progress.erased_at);
       const latest = await readProgress(pool, accountId);
       statementsKeptUntil = latest?.statements_kept_until ?? statementsKeptUntil;
       if (statementsKeptUntil) {
@@ -460,7 +474,7 @@ async function step(
   return { phase: nextPhase, step: expectedStep + 1, ...(delayMs ? { delayMs } : {}) };
 }
 
-async function enqueue(context: WorkContext, accountId: string, next: Exclude<Continuation, null>) {
+async function enqueue(context: Pick<WorkContext, 'client'>, accountId: string, next: Exclude<Continuation, null>) {
   await context.client.enqueue(
     {
       workflowName: workflow,
@@ -473,27 +487,31 @@ async function enqueue(context: WorkContext, accountId: string, next: Exclude<Co
   );
 }
 
-/** The tombstone effect schedules the account's stable first durable step. Replaying
- * the event reuses that workflow id and cannot acknowledge the participant twice.
- */
-export function createAccountErasureEffect(context: Pick<WorkContext, 'client'>): Effect {
+function accountFromTombstone(event: CloudEvent): string {
+  const accountId = (event.data as { accountId?: unknown }).accountId;
+  if (typeof accountId !== 'string' || routeOf(accountId) === null)
+    throw new TypeError('Invalid content account-erasure tombstone event');
+  return accountId;
+}
+
+/** Transfer the tombstone to its stable governance workflow in the relay admission transaction. */
+export function createAccountErasureEffect(context: Pick<WorkContext, 'client'>): NativeEffect & Pick<Effect, 'run'> {
   return {
     name: 'content_account_erasure',
     types: ['com.rezics.access.account-tombstoned.v1'],
-    async run(event: CloudEvent) {
-      const accountId = (event.data as { accountId?: unknown }).accountId;
-      if (typeof accountId !== 'string' || routeOf(accountId) === null)
-        throw new TypeError('Invalid content account-erasure tombstone event');
-      await context.client.enqueue(
-        {
-          workflowName: workflow,
-          queueName: 'governance',
-          workflowID: workflowId(accountId, 'close', 0),
-          workflowIDReusePolicy: 'return-existing',
-        },
-        accountId,
-        0,
-      );
+    delivery: 'native',
+    async admit(tx, event) {
+      const accountId = accountFromTombstone(event);
+      await enqueueWorkIntent(context.client, tx, {
+        queue: 'governance',
+        workflowName: workflow,
+        workflowId: workflowId(accountId, 'close', 0),
+        input: { accounts: [accountId] },
+        arguments: [accountId, 0],
+      });
+    },
+    async run(event) {
+      await enqueue(context, accountFromTombstone(event), { phase: 'close', step: 0 });
     },
   };
 }
@@ -572,5 +590,6 @@ export function registerAccountErasureWork(context: WorkContext, storage: MediaS
     },
     { name: retentionWorkflow },
   );
-  context.addEffects([createAccountErasureEffect(context)]);
+  if (!context.addNativeEffects) throw new Error('Content account erasure requires native effects admission');
+  context.addNativeEffects([createAccountErasureEffect(context)]);
 }
