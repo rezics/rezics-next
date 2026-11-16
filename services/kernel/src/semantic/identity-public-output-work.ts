@@ -277,8 +277,8 @@ export function outputCaptureFootprint(
       !Array.isArray(events) ||
       events.length !== 1 ||
       events[0]?.type !== 'com.rezics.semantic.public-output.capture.v1' ||
-      values[3] != null ||
-      values[4] != null
+      (values[3] != null && values[3] !== 'null') ||
+      (values[4] != null && values[4] !== 'null')
     )
       return undefined;
   }

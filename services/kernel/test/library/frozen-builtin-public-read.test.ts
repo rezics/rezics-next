@@ -43,7 +43,12 @@ test('anonymous members retain the selected built-in generation after curator er
     const admitted = await f.json(owner, 'POST', `${path}:publish`, 202, { revision: 0, visibility: 'public' });
     const completed = await waitFor(
       'Built-in publication did not complete',
-      () => f.json(owner, 'GET', `/v1/collectionPublications/${admitted.id}`, 200),
+      async () => {
+        const status = await f.json(owner, 'GET', `/v1/collectionPublications/${admitted.id}`, 200);
+        if (status.phase !== 'complete' && (await f.client.getWorkflow(admitted.id))?.status === 'ERROR')
+          await f.client.retrieveWorkflow(admitted.id).getResult();
+        return status;
+      },
       (value) => {
         expect(value.phase).not.toBe('refused');
         return value.phase === 'complete';

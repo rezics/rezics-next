@@ -1835,7 +1835,7 @@ test('a merged canonical target invalidates the reviewed observation identity', 
       const store = identityEpochStore();
       const deadline = performance.now() + 90_000;
       let mapping = await store.readMapping(f.pool, redirected);
-      while (mapping.state !== 'mapped' && performance.now() < deadline) {
+      while ((mapping.state !== 'mapped' || mapping.terminal !== survivor) && performance.now() < deadline) {
         await Bun.sleep(100);
         mapping = await store.readMapping(f.pool, redirected);
       }
