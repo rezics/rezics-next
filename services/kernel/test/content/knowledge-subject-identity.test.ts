@@ -46,6 +46,7 @@ test('private Knowledge attachments stay on their originals through published me
         receiptKeys: testReceiptKeys(),
         requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
         access: (config) => real.access(config),
+        writeRate: real.writeRate,
       });
       const call = async (method: 'GET' | 'POST', path: string, body?: unknown, bearer = owner) => {
         const response = await kernel.handle(
