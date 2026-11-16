@@ -1450,7 +1450,7 @@ test('native checkpoints use body-free metadata for observation and CAS readback
     },
   });
   const put = requests.find((request) => request.method === 'PUT')!;
-  expect(put.headers.get('idempotency-key')).toBe('save-same-key');
+  expect(put.headers.get('idempotency-key')).toBe('"save-same-key"');
   expect(await put.json()).toEqual({ ...address, subjectId: ids.post, expectedRevision: '1' });
   expectMetadataReads(5);
   const cleared = await writeHostedCheckpoint(
@@ -1462,6 +1462,7 @@ test('native checkpoints use body-free metadata for observation and CAS readback
   );
   expect(cleared).toEqual({ state: 'ready', value: { state: 'none', subjectId: ids.post } });
   const clear = requests.find((request) => request.method === 'POST')!;
+  expect(clear.headers.get('idempotency-key')).toBe('"clear-key"');
   expect(await clear.json()).toEqual({ subjectId: ids.post, expectedRevision: '2' });
   expectMetadataReads(6);
   response = {

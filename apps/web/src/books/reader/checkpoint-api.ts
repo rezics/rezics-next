@@ -125,7 +125,7 @@ export async function writeHostedCheckpoint(
   signal: AbortSignal,
 ): Promise<CheckpointWrite> {
   const options = {
-    headers: { authorization, 'idempotency-key': key },
+    headers: { authorization, 'idempotency-key': JSON.stringify(key) },
     fetch: { signal, cache: 'no-store', redirect: 'manual' } as const,
   };
   const result =
