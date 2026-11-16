@@ -139,28 +139,35 @@ test('native admission settles partial work and closes its read transaction befo
   });
   expect(created.status).toBe(201);
   const id = (await created.json()).collection.id as string;
-  const result = await capture(db, async () => {
-    try {
-      await observe(
-        db.pool,
-        { route: routeOf(id)!, collectionId: id },
-        {
-          ...options(),
-          allowance: { ...allowance(), remaining: { ...allowance().remaining, nativePoints: 1 } },
-        },
-      );
-      throw new Error('Unaffordable native query dispatched');
-    } catch (error) {
-      expect(error).toHaveProperty('code', 'dependency_unavailable');
-      return (error as Error & { work: WorkReceipt }).work;
-    }
-  });
+  const result = await capture(
+    db,
+    async () => {
+      try {
+        await observe(
+          db.pool,
+          { route: routeOf(id)!, collectionId: id },
+          {
+            ...options(),
+            allowance: { ...allowance(), remaining: { ...allowance().remaining, nativePoints: 1 } },
+          },
+        );
+        throw new Error('Unaffordable native query dispatched');
+      } catch (error) {
+        expect(error).toHaveProperty('code', 'dependency_unavailable');
+        return (error as Error & { work: WorkReceipt }).work;
+      }
+    },
+    { includeBackends: true },
+  );
   expect(result.value.used.nativePoints).toBe(1);
   expect(result.value.used.nativeRows).toBe(0);
-  expect(result.value.used.statements).toBe(3); // BEGIN, the shared capture's session SET, ROLLBACK.
-  expect(result.capture.statements).toHaveLength(2);
-  expect(result.capture.statements[0]).toMatch(/^BEGIN/);
-  expect(result.capture.statements[1]).toBe('ROLLBACK');
+  // The capture's own auto_explain SET runs outside the application statement ledger.
+  expect(result.capture.statements).toEqual(['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'ROLLBACK']);
+  expect(result.value.used.statements).toBe(result.capture.statements.length);
+  expect(result.capture.statementErrors).toEqual([null, null]);
+  const backend = result.capture.statementBackends?.[0];
+  expect(backend).toBeGreaterThan(0);
+  expect(result.capture.statementBackends).toEqual([backend, backend]);
 });
 test('actual raw fact SQL limits the selected native driver before union and leaves unselected relations unread', async () => {
   for (const group of ['personal_library', 'reading_progress'])
@@ -179,9 +186,10 @@ test('actual raw fact SQL limits the selected native driver before union and lea
   for (let n = 0; n < 16; n++) {
     const copy = await native.send(owner.bearer, 'POST', '/v1/copies', {
       subjectId: subject,
+      kind: 'physical',
       status: 'owned',
     });
-    expect(copy.status).toBe(201);
+    expect(copy.status, await copy.clone().text()).toBe(201);
     expected.copy!.push((await copy.json()).copy.id);
     const session = await native.send(owner.bearer, 'POST', '/v1/progressSessions', {
       subjectId: subject,
@@ -191,8 +199,14 @@ test('actual raw fact SQL limits the selected native driver before union and lea
     expect(session.status).toBe(201);
     expected.session!.push((await session.json()).progressSession.id);
   }
-  const tables = { entry: 'entry', copy: 'copy', session: 'progress_session', label: 'label_assignment' };
-  for (const [driver, table] of Object.entries(tables)) {
+  expect(new Set(expected.copy).size).toBe(16);
+  const tables = {
+    entry: ['entry', 'entry_clear', 'entry_personal_fact', 'entry_source_observation'],
+    copy: ['copy'],
+    session: ['progress_session'],
+    label: ['label_assignment'],
+  };
+  for (const [driver, selectedTables] of Object.entries(tables)) {
     const values = {
       route: routeOf(owner.actor.accountId)!,
       account_id: owner.actor.accountId,
@@ -210,14 +224,18 @@ test('actual raw fact SQL limits the selected native driver before union and lea
       );
     const result = await capture(db, run, { includeBackends: true });
     expect(result.value.rows.map((row) => row.factId)).toEqual(expected[driver]!.sort().slice(0, 8));
-    expect(costOf(result.capture).rows).toBeLessThanOrEqual(72);
-    for (const other of Object.values(tables).filter((name) => name !== table))
-      expect(costOf(result.capture).relations[`library.${other}`]?.rows ?? 0).toBe(0);
+    const cost = costOf(result.capture);
+    expect(cost.rows).toBeLessThanOrEqual(72);
+    for (const other of Object.values(tables)
+      .flat()
+      .filter((name) => !selectedTables.includes(name)))
+      expect(cost.relations[`library.${other}`]?.rows ?? 0).toBe(0);
     const walk = (value: unknown): void => {
       if (!value || typeof value !== 'object') return;
       const node = value as Record<string, unknown>;
-      if (typeof node['Relation Name'] === 'string' && node['Relation Name'] !== table) {
-        expect(node['Actual Loops']).toBe(0);
+      const relation = node['Relation Name'];
+      if (typeof relation === 'string' && !(node.Schema === 'library' && selectedTables.includes(relation))) {
+        expect(node['Actual Loops'], `${driver} driver read ${node.Schema}.${relation}`).toBe(0);
         expect(node['Rows Removed by Filter'] ?? 0).toBe(0);
       }
       for (const child of Object.values(node))
