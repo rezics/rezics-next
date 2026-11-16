@@ -13,7 +13,12 @@ import type {
   ResumeIdentityEpochJob,
   WaitIdentityEpochPublished,
 } from './identity-epoch-contract.ts';
-import type { IdentityEpochParticipantPorts, IdentityStepReceiptLocator } from './contract/identity-epoch-ports.ts';
+import {
+  SEARCH_IDENTITY_WRITER_REQUEST,
+  type IdentityEpochParticipantPorts,
+  type IdentityStepReceiptLocator,
+} from './contract/identity-epoch-ports.ts';
+import type { SearchCurrentnessPort } from './contract/domain-ports.ts';
 import { createIdentityCoordination, type IdentityCoordination } from './application/identity-coordination.ts';
 import {
   identityEpochNext,
@@ -144,11 +149,12 @@ function installed(pool: Pool): Installation & { identity: IdentityCoordination<
 
 /** Trusted registration only. The composition root supplies the fixed participants; null leaves the coordinator
  * unavailable. There is no caller-selected participant list or mutable installation setter.
- * Produce runs inside the original Source maintenance frame; Search commits its own native plans there.
+ * Produce runs inside the original Source maintenance frame. The writer runs through a separate owned step.
  */
 export function registerIdentityEpochCoordinator(
   context: WorkContext,
   participants: IdentityEpochParticipantPorts<Pool> | null,
+  prepareCanonicalWriter?: SearchCurrentnessPort<Pool>['prepareCanonicalWriter'],
 ): void {
   if (installations.has(context.pool)) throw new Error('Identity epoch coordinator is already registered');
   const read = DBOS.registerStep(async (job: JobLocator) => readNext(context.pool, nativeJob(job)), {
@@ -177,11 +183,25 @@ export function registerIdentityEpochCoordinator(
         async () => {
           // The producer rereads its saved frontier and commits locally. Its home has been released on return.
           const progress = await dispatched.run(context.pool, ref);
-          return { receipt: receiptLocator(ref, step, progress), state: progress.state };
+          return {
+            receipt: receiptLocator(ref, step, progress),
+            state: progress.state,
+            writerRequested:
+              step === 'search-canonical-index' &&
+              progress.state === 'more' &&
+              progress.frontier.after[3] === SEARCH_IDENTITY_WRITER_REQUEST,
+          };
         },
       );
     },
     { name: `${workflowName}.produce`, ...COMMAND_STEP_RETRIES },
+  );
+  const prepareSearchWriter = DBOS.registerStep(
+    async (request: ReceiptLocator) => {
+      if (!prepareCanonicalWriter) throw unavailable('Canonical Search writer preparation is unavailable');
+      return prepareCanonicalWriter(context.pool, nativeReceipt(request));
+    },
+    { name: `${workflowName}.prepareSearchWriter`, ...COMMAND_STEP_RETRIES },
   );
   const reconcile = DBOS.registerStep(
     async (receipt: ReceiptLocator) => {
@@ -232,6 +252,8 @@ export function registerIdentityEpochCoordinator(
           const result = await produce(job, next);
           if (previous && JSON.stringify(previous) === JSON.stringify(result.receipt)) throw noProgress();
           previous = result.receipt;
+          if (result.writerRequested && (await prepareSearchWriter(result.receipt)) !== 'prepared')
+            throw unavailable('Canonical Search writer preparation has no committed plan for the requested original');
           if (result.state === 'complete') await reconcile(result.receipt);
         }
       }

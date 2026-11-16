@@ -9,6 +9,7 @@ import {
   createSearchIdentityEpochParticipant,
   searchIdentityReceivingComposition,
 } from '../search/identity-epoch-participant.ts';
+import { createSearchIdentityWriterPreparation } from '../search/identity-search-writer-preparation.ts';
 import { createSearchSourceBindingAdapter } from '../search/composition.ts';
 import { readSearchConfig } from '../search/config.ts';
 import { readAccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
@@ -57,10 +58,7 @@ let sourceBindingApplicationInstalled = false;
  * unavailable instead of defaulted. Reads only the worker environment, which every WorkContext carries.
  * When pool, clock and Access are present, Search also receives the same-Pool generation-1 receiving composition.
  */
-export function composeSemanticIdentityParticipants(
-  context: SemanticCompositionContext,
-  nativePorts?: SearchNativePorts,
-): IdentityEpochParticipantPorts<Pool> | null {
+function composeSemanticIdentityBindings(context: SemanticCompositionContext, nativePorts?: SearchNativePorts) {
   const config = readSearchConfig(context.env);
   const routeKey = config && context.env.KERNEL_ROUTE_KEY ? readMembershipRouteKey(context.env) : null;
   if (!config || !routeKey) return null;
@@ -80,7 +78,7 @@ export function composeSemanticIdentityParticipants(
           work: searchReceivingProductionDeclaration(),
         })
       : undefined;
-  return createIdentityEpochParticipants<Pool>({
+  const participants = createIdentityEpochParticipants<Pool>({
     version: 1,
     'search-canonical-index': createSearchIdentityEpochParticipant({
       search,
@@ -90,6 +88,14 @@ export function composeSemanticIdentityParticipants(
     }),
     'library-private-follow-counts': stepLibraryIdentityEpoch,
   });
+  return { participants, receiving };
+}
+
+export function composeSemanticIdentityParticipants(
+  context: SemanticCompositionContext,
+  nativePorts?: SearchNativePorts,
+): IdentityEpochParticipantPorts<Pool> | null {
+  return composeSemanticIdentityBindings(context, nativePorts)?.participants ?? null;
 }
 
 /** Native Content cover and tuple routing, bound even when identity participants are unavailable. */
@@ -146,8 +152,9 @@ export function composeSemanticDomain(
   searchNativePorts?: SearchNativePorts,
 ): NativeSemanticDomain | null {
   composeSemanticAdapters();
-  const participants = composeSemanticIdentityParticipants(context, searchNativePorts);
-  if (!participants) return null;
+  const bindings = composeSemanticIdentityBindings(context, searchNativePorts);
+  if (!bindings) return null;
+  const { participants, receiving } = bindings;
   return createNativeSemanticDomain(participants, {
     libraryCustody: Object.freeze({
       stepIdentityEpoch: participants['library-private-follow-counts'],
@@ -155,6 +162,7 @@ export function composeSemanticDomain(
     }),
     searchCurrentness: Object.freeze({
       stepCanonicalIndex: participants['search-canonical-index'],
+      ...(receiving && { prepareCanonicalWriter: createSearchIdentityWriterPreparation(receiving, context.env) }),
     }),
     ratingReview: nativeRatingReview(),
     contentLifecycle: nativeContentLifecycle(),

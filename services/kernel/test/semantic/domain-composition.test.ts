@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
+import type { Pool } from 'pg';
+import type { Access } from '../../src/request/access.ts';
 import { fileURLToPath } from 'node:url';
 import { composeSemanticDomain, composeSemanticIdentityParticipants } from '../../src/composition/semantic.ts';
 import { composeSearchNativePorts } from '../../src/composition/search-native.ts';
@@ -201,6 +203,35 @@ test('ordinary composition binds the real Search and Library participants and st
     'searchCurrentness',
     'version',
   ]);
+});
+
+test('ordinary composition binds the owned Search writer for the same Pool', async () => {
+  const forbidden = () => {
+    throw new Error('Composition must not open a connection or perform Access work');
+  };
+  const pool = { connect: forbidden, query: forbidden } as unknown as Pool;
+  const domain = composeSemanticDomain(
+    {
+      env: {
+        OPENSEARCH_URL: 'http://127.0.0.1:9200',
+        KERNEL_ROUTE_KEY: Buffer.alloc(32, 7).toString('base64url'),
+      },
+      pool,
+      clock: () => new Date(),
+      getAuthorization: () => ({ access: { authenticate: forbidden, authorize: forbidden } as unknown as Access }),
+    },
+    composeSearchNativePorts(),
+  );
+  const prepare = domain?.ports.searchCurrentness.prepareCanonicalWriter;
+  expect(prepare).toBeFunction();
+  await expect(
+    prepare!({} as Pool, {
+      job,
+      step: 'search-canonical-index',
+      version: 1,
+      native: { partition: 0, position: 1n, epoch: 1, transactionId: crypto.randomUUID() },
+    }),
+  ).rejects.toThrow('requires the separate owner turn');
 });
 
 test('inward subject and summary adapters do not value-import native Content lifecycle', () => {

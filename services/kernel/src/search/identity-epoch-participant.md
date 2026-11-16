@@ -92,9 +92,14 @@ declaration. Composition imports that declaration from the Semantic public entry
 inside Semantic's Source maintenance frame after composing the Library domain through `composeLibraryDomain`.
 Library cutover keeps Collection create on the owner account through own-account commands and JWT scopes,
 and keeps the verified Access actor for follow writes.
-The coordinator runs this callable inside the original live maintenance frame; the participant commits
-Source native `preparePlan` then enrolls common receiving there. It validates trusted deployment inputs and reads the
-actual admitted job, rejecting unknown, nonpending and mapping-incomplete locators before engine work.
+The coordinator runs the participant inside the original Source maintenance frame. The participant validates
+trusted deployment inputs and reads the admitted job. After selecting the current original, it commits a Search
+writer request at the same directory key when the original needs a plan. The default coordinator runs the
+configured Search writer step after the Source frame returns. That step revalidates the exact committed request
+and current original. It reads the physical allocation under the Search turn, then acquires the original's
+structural, publication-admission and generation gates to retain its admission. Same-request replay reuses the
+original admission at its current owner. Plan preparation and dispatch still require the writer's original
+support, action and hold binding.
 For an existing accepted scope it fuses actual native operation application, the common effect and fixed Search
 `more` step in one transaction, then reconciles original custody. Each common Search plan enters the operational `identity_receiving_native_scope_pending` queue when it commits.
 The participant resumes at the last Search directory key retained in the committed native step. It reads one

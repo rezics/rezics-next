@@ -4,6 +4,11 @@ export const lockPublicationFence = 'SELECT pg_advisory_xact_lock(hashtextextend
 export const readPublicationFence = `SELECT publication_fence FROM search.identity_writer_gate
   WHERE partition_no=0 AND physical_target=$1 AND publication_fence IS NOT NULL`;
 
+export const readWriterPublicationWitness =
+  'SELECT 1 FROM search.generation_publication_lock WHERE physical_target=$1 FOR SHARE';
+export const insertWriterPublicationWitness =
+  'INSERT INTO search.generation_publication_lock (physical_target) VALUES ($1) ON CONFLICT DO NOTHING';
+
 export async function lockWriterPublicationAdmission(
   tx: Pick<import('pg').PoolClient, 'query'>,
   physicalTarget: string,
@@ -12,15 +17,8 @@ export async function lockWriterPublicationAdmission(
   // A Serializable command may have taken its snapshot before waiting for the
   // advisory lock. A row lock detects a newer fence transition and retries the
   // command. The unique insert handles the first-absence case the same way.
-  const witness = await tx.query(
-    'SELECT 1 FROM search.generation_publication_lock WHERE physical_target=$1 FOR SHARE',
-    [physicalTarget],
-  );
-  if (!witness.rowCount)
-    await tx.query(
-      'INSERT INTO search.generation_publication_lock (physical_target) VALUES ($1) ON CONFLICT DO NOTHING',
-      [physicalTarget],
-    );
+  const witness = await tx.query(readWriterPublicationWitness, [physicalTarget]);
+  if (!witness.rowCount) await tx.query(insertWriterPublicationWitness, [physicalTarget]);
 }
 
 export async function advanceWriterPublicationAdmission(
