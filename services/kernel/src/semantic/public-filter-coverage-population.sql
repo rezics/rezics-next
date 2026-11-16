@@ -1,13 +1,19 @@
 /* semantic.privacy-role */
 WITH input AS MATERIALIZED (
   SELECT $5::bigint AS now,$9::text AS execution_id,$10::uuid AS start_id,$11::bigint AS deadline,$12::uuid AS page_id,
-    $13::uuid AS publication_job,$14::uuid AS publication_bootstrap,$15::uuid AS terminal_step,$16::text AS terminal_root
+    $13::uuid AS publication_job,$14::uuid AS publication_bootstrap,$15::uuid AS terminal_step,$16::text AS terminal_root,
+    $17::text[] AS catalogue_text_keys
 ),
 binding AS MATERIALIZED (
   SELECT o.partition_no,o.observation,o.registration,o.queried,o.covered,
-    r.consumer,r.definition,r.coverage_generation,
+    r.consumer,r.definition,coalesce(attached.generation,r.coverage_generation) AS coverage_generation,
     t.incarnation,b.bootstrap,b.read_definition,b.consumer AS bootstrap_consumer,
-    b.snapshot_kind,b.coverage_generation AS covered_generation,b.coverage_root,
+    b.snapshot_kind,b.coverage_generation AS covered_generation,coalesce(attached.coverage_root,b.coverage_root) AS coverage_root,
+    coalesce(attached.bootstrap,b.bootstrap) AS coverage_bootstrap,
+    coalesce(attached.registration,o.registration) AS coverage_registration,
+    d.coverage_keys || coalesce(attached.coverage_keys,'{}'::text[])
+      || CASE WHEN attached.job IS NOT NULL OR '["scope","catalogue-text"]'=ANY(d.coverage_keys)
+         THEN (SELECT catalogue_text_keys FROM input) ELSE '{}'::text[] END AS pending_keys,
     s.source_id,s.configuration,s.owner_epoch,s.route_digest,
     d.release_digest,d.capture,d.dependency_keys,d.coverage_keys,
     e.execution,e.consumer_window,st.id AS start_id,st.start_generation,st.deadline AS start_deadline,
@@ -22,8 +28,13 @@ binding AS MATERIALIZED (
   JOIN semantic.public_filter_source s ON (s.partition_no,s.source_id,s.configuration)=
     (d.partition_no,d.source_id,d.configuration)
   JOIN core.partition p ON p.partition_no=s.partition_no AND p.epoch=s.owner_epoch AND p.write_state='active'
+  LEFT JOIN LATERAL (
+    SELECT proof.* FROM semantic.public_filter_published_coverage(
+      r.physical_target,t.incarnation,b.read_definition,b.coverage_publication,(SELECT catalogue_text_keys FROM input)
+    ) proof WHERE b.coverage_publication IS NOT NULL
+  ) attached ON true
   JOIN search.public_filter_coverage_preparation c ON (c.partition_no,c.registration,c.bootstrap)=
-    (o.partition_no,o.registration,b.bootstrap)
+    (o.partition_no,coalesce(attached.registration,o.registration),coalesce(attached.bootstrap,b.bootstrap))
   JOIN search.public_filter_coverage_baseline last_home ON
     (last_home.partition_no,last_home.registration,last_home.bootstrap,last_home.source_home)=
     (c.partition_no,c.registration,c.bootstrap,4095) AND last_home.root=c.root
@@ -37,10 +48,16 @@ binding AS MATERIALIZED (
   WHERE (o.partition_no,o.observation)=($1::integer,$2::text) AND o.partition_no=0
     AND o.state='open' AND o.expires_at>(SELECT now FROM input) AND o.queried=$3::text
     AND r.state='active' AND r.consumer=$4::text AND r.physical_target=$6::text AND t.incarnation=$7::text
-    AND b.state='adopted' AND b.queried=o.observation AND b.owner_epoch=p.epoch AND b.account_after=4096 AND b.coverage_sealed
-    AND b.coverage_after=4096 AND b.coverage_generation IS NOT NULL
-    AND c.after_home=4096 AND c.population_protocol=1 AND c.root=b.coverage_root
-    AND c.generation=b.coverage_generation AND c.definition=d.read_definition AND c.consumer=r.consumer
+    AND b.state='adopted' AND b.queried=o.observation AND b.owner_epoch=p.epoch AND b.coverage_generation IS NOT NULL
+    AND c.after_home=4096 AND c.population_protocol=1
+    AND (
+      (b.coverage_publication IS NULL AND b.account_after=4096 AND b.coverage_sealed AND b.coverage_after=4096
+       AND c.root=b.coverage_root AND c.generation=b.coverage_generation AND c.definition=d.read_definition AND c.consumer=r.consumer)
+      OR (attached.job=b.coverage_publication AND attached.generation>=b.coverage_generation
+          AND b.coverage_generation>=attached.covered_generation
+          AND c.root=attached.coverage_root AND c.generation=attached.covered_generation
+          AND c.definition=attached.definition AND c.consumer=attached.consumer)
+    )
     AND s.route_digest=$8::text AND d.coverage_keys IS NOT NULL
     AND (EXISTS (SELECT 1 FROM semantic.definition_release WHERE route=0 AND digest=d.release_digest)
       OR EXISTS (SELECT 1 FROM semantic.release_composite WHERE digest=d.release_digest))
@@ -71,7 +88,7 @@ binding AS MATERIALIZED (
   -- The exact complete compiler closure is persisted by the original definition
   -- writer. LIMIT precedes every receiver-summary or own-row lookup.
   SELECT partition_no FROM semantic.public_filter_privacy_pending
-  WHERE live AND input_key=ANY((SELECT coverage_keys FROM binding)::text[]) LIMIT 1
+  WHERE live AND input_key=ANY((SELECT pending_keys FROM binding)::text[]) LIMIT 1
 ), fenced AS MATERIALIZED (
   SELECT partition_no FROM semantic.public_filter_privacy_head
   WHERE population_fenced AND NOT EXISTS(SELECT 1 FROM pending) LIMIT 1
@@ -79,14 +96,14 @@ binding AS MATERIALIZED (
   SELECT h.source_home,h.source_epoch FROM binding b
   CROSS JOIN LATERAL (
     SELECT source_home,source_epoch FROM search.public_filter_coverage_home h
-    WHERE (h.partition_no,h.registration)=(b.partition_no,b.registration) AND h.behind
+    WHERE (h.partition_no,h.registration)=(b.partition_no,b.coverage_registration) AND h.behind
     ORDER BY source_home LIMIT 1
   ) h WHERE NOT EXISTS(SELECT 1 FROM pending) AND NOT EXISTS(SELECT 1 FROM fenced)
 ), changed AS MATERIALIZED (
   SELECT h.source_home,h.source_epoch FROM binding b
   CROSS JOIN LATERAL (
     SELECT source_home,source_epoch FROM search.public_filter_coverage_home h
-    WHERE (h.partition_no,h.registration)=(b.partition_no,b.registration)
+    WHERE (h.partition_no,h.registration)=(b.partition_no,b.coverage_registration)
       AND h.last_change_generation>least(b.covered_generation,coalesce(b.start_generation,b.covered_generation))
     ORDER BY last_change_generation,source_home LIMIT 1
   ) h WHERE NOT EXISTS(SELECT 1 FROM pending) AND NOT EXISTS(SELECT 1 FROM fenced)
@@ -122,7 +139,7 @@ binding AS MATERIALIZED (
   -- Decode the entire retained window before admitting any keyed control. Repeats
   -- remain in execution/raw accounting; a native control at this ONE snapshot is
   -- read once per exact key, rather than twice for every repeated original.
-  SELECT k.id,b.bootstrap,b.partition_no,b.registration,
+  SELECT k.id,b.coverage_bootstrap AS bootstrap,b.partition_no,b.coverage_registration AS registration,
     coalesce((b.window_value->'raw'->(r.ordinality::integer-1)->'key'->>'owner')='accounts',false) AS account
   FROM decoded b CROSS JOIN LATERAL jsonb_array_elements(
     CASE WHEN jsonb_typeof(b.execution_value->'ownRows')='array' THEN b.execution_value->'ownRows' ELSE '[]'::jsonb END

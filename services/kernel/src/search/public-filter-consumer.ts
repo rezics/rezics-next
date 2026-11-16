@@ -1,5 +1,5 @@
 import { hasExactPublicFilterMeaning } from './public-filter-meaning.ts';
-import { publicFilterCaptureDependencies } from './public-filter-capture-dependencies.ts';
+import { publicFilterCaptureDependencies, validateCatalogueCoverage } from './public-filter-capture-dependencies.ts';
 import { publicFilterCatalogue } from './discovery-catalogue.ts';
 import { verifyPublicFilterRepairSourcePage, PublicFilterRepairSourceError } from './public-filter-custody-source.ts';
 import type {
@@ -176,6 +176,7 @@ export function compilePublicFilterConsumerCapture(
   if (!hasExactPublicFilterMeaning(meaning))
     throw new TypeError('Capture requires an exact accepted release');
   validateOrder(copied);
+  validateCatalogueCoverage(copied);
 
   let filterDocument;
   if (copied.filterDocument !== undefined) {
@@ -222,6 +223,7 @@ export function compilePublicFilterConsumerCapture(
     sort: copied.sort,
     size: copied.size,
     ...(copied.pageSize === undefined ? {} : { pageSize: copied.pageSize }),
+    ...(copied.catalogueCoverage === true ? { catalogueCoverage: true } : {}),
     // Engine DSL is optional equality evidence. Retained capture is the admitted tree;
     // attaching derived query/filter/boost makes the binder recompile and reject any
     // structural difference from that extra copy.
@@ -749,7 +751,13 @@ type ConsumerWork = {
   adopted: boolean;
 };
 function retainedBootstrap(bootstrap: PublicSourceBootstrap): Omit<PublicSourceBootstrap, 'definition'> {
-  return { id: bootstrap.id, consumer: bootstrap.consumer, snapshot: bootstrap.snapshot, covered: bootstrap.covered };
+  return {
+    id: bootstrap.id,
+    consumer: bootstrap.consumer,
+    snapshot: bootstrap.snapshot,
+    covered: bootstrap.covered,
+    ...(bootstrap.coveragePublication ? { coveragePublication: bootstrap.coveragePublication } : {}),
+  };
 }
 function locatorHome(locator: string): number {
   const matched = /^(0|[1-9][0-9]{0,3}):/.exec(locator);
@@ -1780,6 +1788,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     context: PublicFilterConsumerContext,
     page?: Page,
     publication?: PublicFilterConsumer,
+    inlinePublishedPreparation = false,
   ): Promise<PublicFilterConsumerCapture> {
     if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
     // Publication resumes its exact Source cut and this registration's Search materialization.
@@ -1842,10 +1851,15 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       encoded = await save(work, encoded, true, m);
     }
     if (work.materializing && !work.queried) {
-      // Serving capture cannot enumerate a preparation child before its closed
-      // page plan exists. The ordinary bounded preparation owner advances this
-      // retained frontier; a later capture can adopt only its actual result.
-      if (page) return { status: 'preparing', repair: job, cost: m.cost };
+      // A fresh attached cut may retain one small segment in this capture. It
+      // is still preparation under the original meter. The serving page starts
+      // only after the complete native build is available.
+      const direct = page && inlinePublishedPreparation && work.bootstrap.coveragePublication;
+      if (page && !direct) return { status: 'preparing', repair: job, cost: m.cost };
+      const plan = recovery.bootstrap.definition.capture;
+      const batchSize = direct && 'pageSize' in plan && plan.pageSize !== undefined
+        ? Math.min(PUBLIC_FILTER_PREPARATION_BATCH_SIZE, 2 * plan.pageSize + 2)
+        : PUBLIC_FILTER_PREPARATION_BATCH_SIZE;
       const legacy = Array.isArray(work.prepared) && Array.isArray(work.preparedRows);
       if (!legacy && (work.prepared !== undefined || work.preparedRows !== undefined))
         throw new ConsumerFailure('observation_lost');
@@ -1857,7 +1871,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           const result = await nativeBatch(
             q,
             recovery.bootstrap.definition.capture,
-            PUBLIC_FILTER_PREPARATION_BATCH_SIZE,
+            batchSize,
             work.after,
             acquired.use,
             m,
@@ -1956,7 +1970,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             const result = await nativeBatch(
               q,
               recovery.bootstrap.definition.capture,
-              PUBLIC_FILTER_PREPARATION_BATCH_SIZE,
+              batchSize,
               found.frontier.after,
               acquired.use,
               m,
@@ -2218,6 +2232,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         binding,
         {
           ...preparation,
+          ...(!publication && !('representation' in canonical) && !('purpose' in canonical) &&
+            canonical.catalogueCoverage !== true ? { usePublishedCoverage: true as const } : {}),
           inputLimit: Math.max(
             0,
             m.inputLimit - m.cost.inputKeys - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE,
@@ -2261,7 +2277,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           cost: m.cost,
         };
       }
-      return await advanceCapture(work, encoded, m, context, page, publication);
+      return await advanceCapture(work, encoded, m, context, page, publication, true);
     } catch (error) {
       return failure(error, m);
     }

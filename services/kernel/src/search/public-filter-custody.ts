@@ -2370,6 +2370,7 @@ export async function readGenerationPublicationCustody(
   sourceHome: number | undefined,
   context: PublicFilterConsumerContext,
   observation?: string,
+  recovery?: Readonly<{ bootstrap: { observation: string }; snapshot: 'pit' | 'prepared' }>,
 ): Promise<
   | Readonly<{
       definition: CustodyRetainedDefinition;
@@ -2394,11 +2395,21 @@ export async function readGenerationPublicationCustody(
          SELECT queried,expires_at FROM search.public_filter_observation
          WHERE (partition_no,registration)=(r.partition_no,r.id)
            AND (observation=$5::text OR $5::text IS NULL) AND state='open'
-         ORDER BY observation DESC LIMIT 1
+           AND ($6::text IS NULL OR
+             (md5(covered)=md5($6) AND covered=$6 AND prepared_build IS NOT DISTINCT FROM $7::text))
+         ORDER BY observation DESC LIMIT (CASE WHEN $6::text IS NULL THEN 1 ELSE 2 END)
        ) o ON true
        WHERE ($1::integer IS NULL OR r.partition_no=$1) AND r.physical_target=$2 AND md5(r.consumer)=md5($3)
          AND r.consumer=$3 AND r.state='active' AND t.incarnation=$4 LIMIT 2`,
-      [sourceHome, consumer.physicalTarget, encode(consumer), consumer.incarnation, observation ?? null],
+      [
+        sourceHome,
+        consumer.physicalTarget,
+        encode(consumer),
+        consumer.incarnation,
+        observation ?? null,
+        recovery ? encode(recovery.bootstrap) : null,
+        recovery?.snapshot === 'prepared' ? recovery.bootstrap.observation : null,
+      ],
     );
     const row = registered.rows[0];
     if (!row || registered.rows.length !== 1) throw new Failure('definition_missing');

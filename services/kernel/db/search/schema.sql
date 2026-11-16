@@ -2436,6 +2436,13 @@ CREATE INDEX generation_publication_home_frontier ON search.generation_publicati
 
 
 --
+-- Name: generation_publication_subject_coverage; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX generation_publication_subject_coverage ON search.generation_publication USING btree (partition_no, physical_target, native_incarnation) WHERE ((family = 'subjects'::text) AND (phase = 'active'::text));
+
+
+--
 -- Name: identity_receiving_native_copy_pending; Type: INDEX; Schema: search; Owner: -
 --
 
@@ -2538,6 +2545,13 @@ CREATE UNIQUE INDEX public_filter_execution_page ON search.public_filter_executi
 --
 
 CREATE UNIQUE INDEX public_filter_observation_bootstrap ON search.public_filter_observation USING btree (partition_no, consumer_bootstrap) WHERE (consumer_bootstrap IS NOT NULL);
+
+
+--
+-- Name: public_filter_observation_covered; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX public_filter_observation_covered ON search.public_filter_observation USING btree (partition_no, registration, md5(covered), prepared_build) WHERE (state = 'open'::text);
 
 
 --

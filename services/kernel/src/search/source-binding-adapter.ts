@@ -19,7 +19,7 @@ import { validateSearchAfter } from './query-payload.ts';
 import { validatePublicSuggestionInput } from './public-suggestion-input.ts';
 import { compileText } from './text.ts';
 import { hasExactPublicFilterMeaning } from './public-filter-meaning.ts';
-import { publicFilterCaptureDependencies } from './public-filter-capture-dependencies.ts';
+import { publicFilterCaptureDependencies, validateCatalogueCoverage } from './public-filter-capture-dependencies.ts';
 
 function captureKeys(
   meaning: PublicFilterProjectionMeaning,
@@ -45,6 +45,7 @@ function searchKeys(
     !['id', 'name', 'relevance', 'collections', 'rating'].includes(input.sort)
   )
     throw new TypeError('Complete capture input is required');
+  validateCatalogueCoverage(input);
   if (input.sort !== 'rating') validateSearchAfter(input);
   if (input.filterDocument !== undefined) {
     for (const node of walkFilter(input.filterDocument))

@@ -25,7 +25,7 @@ import readBootstrap from './public-filter-source-binding-bootstrap.sql';
 import adoptBootstrap from './public-filter-source-binding-adopt.sql';
 import abortBootstrap from './public-filter-source-binding-abort.sql';
 import accountPage from './public-filter-source-binding-account-page.sql';
-import { publicFilterCoverageKeys } from './public-filter-coverage-pending.ts';
+import { publicFilterCoverageKeys, PUBLIC_FILTER_CATALOGUE_TEXT_KEYS } from './public-filter-coverage-pending.ts';
 import { PUBLIC_FILTER_ACCOUNT_DOMAIN } from './public-filter-coverage-maintenance.ts';
 import {
   beginPublicFilterCoverageBaseline,
@@ -359,6 +359,8 @@ export type PublicSourceBootstrap = Readonly<{
   consumer: PublicFilterConsumer;
   snapshot: 'pit' | 'prepared';
   covered: PrivacyReductionStart;
+  /** An immutable parent job for this serving cut, resolved through native coverage. */
+  coveragePublication?: string;
 }>;
 export type PublicSourceBootstrapResult =
   | Readonly<{
@@ -578,7 +580,8 @@ export async function readNativePublicFilterPublicationCompletion(
 
 /** Internal native preparation handoff; the bootstrap remains the original persisted Source cut. */
 type NativePreparationInput =
-  | (Parameters<PublicFilterSourceBootstrapBinding['begin']>[0] & Readonly<{ inputLimit?: number }>)
+  | (Parameters<PublicFilterSourceBootstrapBinding['begin']>[0] &
+      Readonly<{ inputLimit?: number; usePublishedCoverage?: true }>)
   | Readonly<{ bootstrap: string; inputLimit?: number }>;
 export type NativePublicFilterPreparation =
   | PublicSourceBootstrapResult
@@ -942,6 +945,7 @@ export function createNativePublicFilterSourceBinding(
       consumer: decode<PublicFilterConsumer>(row.consumer),
       snapshot: row.snapshot_kind,
       covered: { observation: locator },
+      ...(row.coverage_publication ? { coveragePublication: row.coverage_publication } : {}),
     };
     return { row, definition, bootstrap };
   }
@@ -954,6 +958,25 @@ export function createNativePublicFilterSourceBinding(
       row.coverage_root === null
     )
       throw new BindingError('owner_unavailable');
+  }
+  async function requireServingCoverage(cut: Awaited<ReturnType<typeof loadBootstrap>>, db: Pool) {
+    const publication = cut.row.coverage_publication;
+    if (!publication) return requirePopulationBaseline(cut.row);
+    const consumer = cut.bootstrap.consumer;
+    const current = await db.query(
+      `/* semantic.native-keyed:15:20 */
+       SELECT 1 FROM semantic.public_filter_published_coverage($1,$2,$3,$4,$5::text[])
+       WHERE generation >= $6::bigint`,
+      [
+        consumer.physicalTarget,
+        consumer.incarnation,
+        cut.definition.readDefinition,
+        publication,
+        [...PUBLIC_FILTER_CATALOGUE_TEXT_KEYS],
+        cut.row.coverage_generation,
+      ],
+    );
+    if (current.rowCount !== 1) throw new BindingError('owner_unavailable');
   }
   type Joined = Extract<Awaited<ReturnType<PublicFilterSourceBinding['join']>>, { status: 'joined' }>;
   type RepairState = {
@@ -2084,7 +2107,7 @@ export function createNativePublicFilterSourceBinding(
         cut.row.state === 'aborted'
       )
         throw new BindingError('binding_mismatch');
-      if (!maintenance) requirePopulationBaseline(cut.row);
+      if (!maintenance) await requireServingCoverage(cut, db);
       if (retained.execution !== null) {
         const startLocator = retained.execution.start.observation;
         if (startLocator.startsWith('population:')) {
@@ -2125,7 +2148,7 @@ export function createNativePublicFilterSourceBinding(
             started.row.state === 'aborted'
           )
             throw new BindingError('binding_mismatch');
-          if (!maintenance) requirePopulationBaseline(started.row);
+          if (!maintenance) await requireServingCoverage(started, db);
         }
       }
       freeze(definition);
@@ -2186,7 +2209,7 @@ export function createNativePublicFilterSourceBinding(
             capture: encoded,
             dependency_keys: [...keys],
             coverage_keys: [
-              ...publicFilterCoverageKeys(keys),
+              ...publicFilterCoverageKeys(keys, 'catalogueCoverage' in capture && capture.catalogueCoverage === true),
               ...('representation' in capture ? [PUBLIC_FILTER_ACCOUNT_DOMAIN] : []),
             ].sort(),
           })
@@ -2204,6 +2227,7 @@ export function createNativePublicFilterSourceBinding(
     context: PublicFilterConsumerContext,
     existing?: Awaited<ReturnType<typeof loadBootstrap>>,
     inputLimit = preparationInputLimit,
+    usePublishedCoverage = false,
   ): Promise<NativePublicFilterPreparation> {
     const deadline = context.deadline;
     let capture: PublicSourceCaptureInput, consumer: PublicFilterConsumer;
@@ -2240,6 +2264,46 @@ export function createNativePublicFilterSourceBinding(
           (existing.row.state !== 'capturing' && existing.row.state !== 'begun'))
       )
         throw new BindingError('binding_mismatch');
+      if (usePublishedCoverage && !existing && !('representation' in capture) && !('purpose' in capture)) {
+        const attached = await db.query<{ bootstrap: string }>(
+          `/* semantic.native-keyed:18:24:1 */
+           WITH parent AS MATERIALIZED (
+             SELECT * FROM semantic.public_filter_published_coverage($1,$2,$3,NULL,$4::text[])
+           )
+           INSERT INTO semantic.public_filter_bootstrap
+             (partition_no,bootstrap,read_definition,request_key,consumer,snapshot_kind,native_snapshot,
+              owner_epoch,source_position,state,coverage_generation,coverage_publication)
+           SELECT 0,$5,$3,$6::text||':'||parent.job::text,$7,$8,pg_current_snapshot(),
+                  p.epoch,p.position,'begun',parent.generation,parent.job
+           FROM parent JOIN core.partition p ON p.partition_no=0 AND p.write_state='active' AND p.epoch=$9
+           WHERE NOT EXISTS (
+             SELECT 1 FROM search.public_filter_coverage_home h
+             WHERE (h.partition_no,h.registration)=(0,parent.registration) AND h.behind
+           ) AND NOT EXISTS (
+             SELECT 1 FROM semantic.public_filter_privacy_pending k
+             WHERE k.live AND k.input_key=ANY(parent.coverage_keys || $4::text[])
+           ) AND NOT EXISTS (
+             SELECT 1 FROM semantic.public_filter_privacy_head h WHERE h.population_fenced
+           )
+           ON CONFLICT(partition_no,request_key) WHERE state='begun' AND coverage_publication IS NOT NULL
+           DO UPDATE SET request_key=EXCLUDED.request_key RETURNING bootstrap::text`,
+          [
+            consumer.physicalTarget,
+            consumer.incarnation,
+            resolved.definition.readDefinition,
+            [...PUBLIC_FILTER_CATALOGUE_TEXT_KEYS],
+            randomUUID(),
+            hash(encode({ consumer, snapshot })),
+            encode(consumer),
+            snapshot,
+            resolved.definition.source.epoch,
+          ],
+        );
+        if (attached.rows[0]) {
+          const cut = await loadBootstrap('0:' + attached.rows[0].bootstrap, db, resolved.definition);
+          return { status: 'begun' as const, bootstrap: cut.bootstrap, cost };
+        }
+      }
       const inserted = existing
         ? { bootstrap: existing.row.bootstrap }
         : (
@@ -2263,7 +2327,10 @@ export function createNativePublicFilterSourceBinding(
           consumer: ports.search.encodeConsumer(consumer),
           accounts: 'representation' in capture,
         };
-        const keys = publicFilterCoverageKeys(resolved.definition.dependencyKeys);
+        const keys = publicFilterCoverageKeys(
+          resolved.definition.dependencyKeys,
+          'catalogueCoverage' in capture && capture.catalogueCoverage === true,
+        );
         const compilerKeys = baseline.accounts ? [...keys, PUBLIC_FILTER_ACCOUNT_DOMAIN].sort() : keys;
         if (cut.row.account_after !== cut.row.coverage_after) throw new BindingError('owner_unavailable');
         try {
@@ -3183,13 +3250,15 @@ export function createNativePublicFilterSourceBinding(
           0,
           { deadline },
           cut.row.queried ?? cut.row.publication_observation ?? undefined,
+          { bootstrap: cut.bootstrap.covered, snapshot: cut.bootstrap.snapshot },
         );
         addCost(cost, native.cost);
         if (!('definition' in native)) return { ...native, cost };
         requireSameDefinition(cut.definition, native.definition);
         if (native.queried === null) {
-          if (cut.row.state !== 'begun' || cut.row.queried !== null || !cut.row.coverage_sealed)
-            return { status: 'pending' as const, cost };
+          if (cut.row.state !== 'begun' || cut.row.queried !== null) return { status: 'pending' as const, cost };
+          if (cut.row.coverage_publication) await requireServingCoverage(cut, db);
+          else if (!cut.row.coverage_sealed) return { status: 'pending' as const, cost };
           return {
             status: 'begun' as const,
             bootstrap: cut.bootstrap,
@@ -3242,6 +3311,7 @@ export function createNativePublicFilterSourceBinding(
             !boundSubjectPublication(cut, input))
         )
           throw new BindingError('binding_mismatch');
+        if (cut.row.coverage_publication) throw new BindingError('owner_unavailable');
         return repairNative(cut.bootstrap, joined, input, db, cost, { deadline });
       });
     },
@@ -3346,7 +3416,8 @@ export function createNativePublicFilterSourceBinding(
     return result;
   });
   nativePreparations.set(bootstrapBinding, async (input, context) => {
-    if (!('bootstrap' in input)) return beginRetained(input, context, undefined, input.inputLimit);
+    if (!('bootstrap' in input))
+      return beginRetained(input, context, undefined, input.inputLimit, input.usePublishedCoverage === true);
     const retained = await run(context, async (cost, db) => {
       const cut = await loadBootstrap(input.bootstrap, db);
       if (cut.row.state !== 'capturing' && cut.row.state !== 'begun') throw new BindingError('observation_lost');
@@ -3354,6 +3425,13 @@ export function createNativePublicFilterSourceBinding(
     });
     if (retained.status !== 'retained') return retained;
     if (retained.cut.row.state === 'begun') {
+      if (retained.cut.row.coverage_publication) {
+        return run(context, async (cost, db) => {
+          addCost(cost, retained.cost);
+          await requireServingCoverage(retained.cut, db);
+          return { status: 'begun' as const, bootstrap: retained.cut.bootstrap, cost };
+        });
+      }
       if (!retained.cut.row.coverage_sealed || retained.cut.row.coverage_after !== 4096)
         return fail('owner_unavailable', retained.cost);
       return {

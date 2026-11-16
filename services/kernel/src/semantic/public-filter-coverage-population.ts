@@ -4,7 +4,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
 import { BoundedReadDeadlineError, withBoundedReadConnection } from '../database/pool.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
-import { publicFilterCoverageKeys } from './public-filter-coverage-pending.ts';
+import { publicFilterCoverageKeys, PUBLIC_FILTER_CATALOGUE_TEXT_KEYS } from './public-filter-coverage-pending.ts';
 import { hasPublicFilterMeaningShape } from './public-filter-source-contract.ts';
 import { PUBLIC_FILTER_ACCOUNT_DOMAIN } from './public-filter-coverage-maintenance.ts';
 import type { PublicCanonicalCaptureInput } from '../search/index.ts';
@@ -120,7 +120,10 @@ function validBindings(
   search.catalogue(q.consumer, 'representation' in capture);
   const covered = search.decodeState<{ observation: string }>(row.covered);
   const expectedKeys = [
-    ...publicFilterCoverageKeys(row.dependency_keys),
+    ...publicFilterCoverageKeys(
+      row.dependency_keys,
+      'catalogueCoverage' in capture && capture.catalogueCoverage === true,
+    ),
     ...('representation' in capture ? [PUBLIC_FILTER_ACCOUNT_DOMAIN] : []),
   ].sort();
   if (
@@ -371,6 +374,7 @@ export async function readPublicFilterPopulation(
       publication?.bootstrap ?? null,
       publication?.terminal.step ?? null,
       publication?.terminal.root ?? null,
+      [...PUBLIC_FILTER_CATALOGUE_TEXT_KEYS],
     ];
     cost.statements++;
     cost.bytes += Buffer.byteLength(sql) + Buffer.byteLength(search.encodeState(values));
