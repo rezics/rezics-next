@@ -16,9 +16,13 @@ beforeAll(async () => {
 }, 180_000);
 afterAll(async () => {
   try {
-    await growth?.close();
+    if (growth) {
+      console.info('Hosted serial teardown: starting growth database close');
+      await growth.close();
+      console.info('Hosted serial teardown: completed growth database close');
+    }
   } finally {
-    await f?.close();
+    await f?.close((phase, state) => console.info(`Hosted serial teardown: ${state} ${phase}`));
   }
 }, 180_000);
 
