@@ -445,6 +445,19 @@ test('native publication starts repair from the original adopted Source executio
         [original.bootstrap, original.observation, original.execution, acknowledged],
       );
       expect(receipts.rows[0]?.homes).toBe(acknowledged);
+      const binding = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
+      const exhausted = await readNativePublicFilterPublicationCompletion(binding, { job: job.job }, context(), {
+        inputKeys: 1000,
+        bytes: 0,
+      });
+      expect(exhausted).toMatchObject({ status: 'unavailable', reason: 'owner_unavailable', cost: { inputKeys: 0 } });
+      const frontier = await f.db.pool.query<{ ack_after: number }>(
+        `SELECT ack_after FROM semantic.public_filter_repair_step
+         WHERE (partition_no,bootstrap,execution)=(0,$1,$2) AND complete
+           AND verified_root IS NOT NULL AND verified_next IS NULL`,
+        [original.bootstrap, original.execution],
+      );
+      expect(frontier.rows).toEqual([{ ack_after: acknowledged }]);
       console.info(
         'Native original Source acknowledgement prefix',
         JSON.stringify({
