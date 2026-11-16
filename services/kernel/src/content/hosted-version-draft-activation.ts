@@ -55,7 +55,6 @@ import {
   type HostedVersionDraftActivationCommitResult,
   type HostedVersionDraftActivationCursor,
   type HostedVersionDraftActivationPageResult,
-  type HostedVersionDraftActivationPageWork,
   type HostedVersionDraftActivationPhase,
   type HostedVersionDraftActivationState,
   type HostedVersionDraftActivationStatus,
@@ -376,6 +375,10 @@ function assertLiveSource(fence: SourceFenceRow, sourceRevisionId: string, expec
       'Hosted version draft activation source is no longer the current catalogue head',
     );
   }
+  assertSourceCoverage(fence, expectedCount);
+}
+
+function assertSourceCoverage(fence: SourceFenceRow, expectedCount: string): void {
   if (fence.input_state === 'cancelled' || fence.input_state === 'expired' || fence.input_state === 'source_erased') {
     throw new HostedVersionDraftActivationError(
       'unavailable-source',
@@ -651,7 +654,6 @@ async function addParentSubtree(
 }
 
 function occurrenceValue(row: OccurrenceFactRow, subtree: SubtreeRow | null): HostedVersionDraftActivationValue {
-  const childSize = subtree === null ? 0n : BigInt(subtree.subtree_size);
   const childChapters = subtree === null ? 0n : BigInt(subtree.chapter_count);
   const childHeight = subtree === null ? -1 : subtree.subtree_height;
   const selfChapters = row.kind === 'chapter' ? 1n : 0n;
@@ -921,8 +923,13 @@ export async function applyHostedVersionDraftActivationPage(
   const row = await readActivation(tx, work, catalogueId, inputId, true);
   const state = stateFromRow(row);
   const fence = await readSourceFence(tx, work, row.route, catalogueId, inputId);
+  if (row.status === 'activated') {
+    assertSourceCoverage(fence, row.expected_placement_count);
+    const snapshot = await readActivatedSnapshot(tx, catalogueId, row);
+    return { replayed: true, state, snapshot, work: persistenceWork(work, { occurrences: 0, nodes: 0, roots: 0 }) };
+  }
   assertLiveSource(fence, row.source_revision_id, row.expected_placement_count);
-  if (row.status === 'complete' || row.status === 'activated') {
+  if (row.status === 'complete') {
     const snapshot = await readHostedVersionHead(tx, catalogueId, row.generation_id);
     return { replayed: true, state, snapshot, work: persistenceWork(work, { occurrences: 0, nodes: 0, roots: 0 }) };
   }
@@ -1082,6 +1089,27 @@ async function verifyCompleteCandidate(
   }
 }
 
+async function readActivatedSnapshot(
+  tx: CommandTransaction,
+  catalogueId: string,
+  row: ActivationRow,
+): Promise<HostedVersionSnapshot> {
+  const resolved = await resolveHostedVersionRevision(tx, catalogueId, row.revision_id);
+  if (
+    resolved.kind !== 'ordered' ||
+    resolved.snapshot.generationKind !== 'draft' ||
+    resolved.snapshot.generationId !== row.generation_id
+  ) {
+    throw new HostedVersionDraftActivationError(
+      'invalid-tree',
+      'Hosted version draft activation revision is missing its ordered descriptor',
+    );
+  }
+  const snapshot = await readHostedVersionSnapshot(tx, catalogueId, row.generation_id, resolved.snapshot.sequence);
+  if (!snapshot) throw new ContentNotFoundError();
+  return snapshot;
+}
+
 /** Record the immutable structure revision and CAS the draft head after verified coverage. */
 export async function commitHostedVersionDraftActivation(
   tx: CommandTransaction,
@@ -1092,6 +1120,11 @@ export async function commitHostedVersionDraftActivation(
   const work: SqlWork = { statements: 0, rowsReturned: 0, rowsAffected: 0 };
   const row = await readActivation(tx, work, catalogueId, inputId, true);
   const fence = await readSourceFence(tx, work, row.route, catalogueId, inputId);
+  if (row.status === 'activated') {
+    assertSourceCoverage(fence, row.expected_placement_count);
+    const snapshot = await readActivatedSnapshot(tx, catalogueId, row);
+    return { replayed: true, revisionId: row.revision_id, snapshot, state: stateFromRow(row) };
+  }
   assertLiveSource(fence, row.source_revision_id, row.expected_placement_count);
   const builder = await readSealedBuilder(tx, work, row.route, catalogueId, inputId);
   if (builder.source_revision_id !== row.source_revision_id) {
@@ -1113,23 +1146,6 @@ export async function commitHostedVersionDraftActivation(
   if (!currentHead) throw new ContentNotFoundError();
   const publicationId = fence.publication_id;
 
-  if (row.status === 'activated') {
-    const resolved = await resolveHostedVersionRevision(tx, catalogueId, row.revision_id);
-    if (resolved.kind !== 'ordered' || resolved.snapshot.generationKind !== 'draft') {
-      throw new HostedVersionDraftActivationError(
-        'invalid-tree',
-        'Hosted version draft activation revision is missing its ordered descriptor',
-      );
-    }
-    const snapshot = await readHostedVersionSnapshot(
-      tx,
-      catalogueId,
-      resolved.snapshot.generationId,
-      resolved.snapshot.sequence,
-    );
-    if (!snapshot) throw new ContentNotFoundError();
-    return { replayed: true, revisionId: row.revision_id, snapshot, state: stateFromRow(row) };
-  }
   if (row.status !== 'complete' || !row.coverage_complete || row.phase !== 'complete') {
     throw new HostedVersionDraftActivationError(
       'incomplete-source',
