@@ -135,6 +135,8 @@ export type DurableInitiatorReader = (
   client: AccessClient,
   operation: DurableOperationAnchor,
   time: AuthoritativeTime,
+  /** Optional diagnostic checkpoint before the owning module reads its creation receipt. */
+  enterOperationReceipt?: () => void,
 ) => Promise<DurableInitiatorRecord | null>;
 
 export type InitiatorRestoreInput = Readonly<{
@@ -156,8 +158,33 @@ export type InitiatorRestorerConfig = Readonly<{
   readConsent: CurrentConsentReader;
 }>;
 
+export type InitiatorRestoreStage =
+  | 'validate_input'
+  | 'read_operation'
+  | 'read_operation_receipt'
+  | 'read_creation_receipt'
+  | 'read_current_consent'
+  | 'read_current_account'
+  | 'read_current_delegation'
+  | 'restore_identity'
+  | 'prepare_permission'
+  | 'validate_resource'
+  | 'authorize_resource';
+
+export type InitiatorRestoreFailure = Readonly<{
+  initiatorStage: InitiatorRestoreStage;
+  initiatorElapsedMs: number;
+  initiatorStageElapsedMs: number;
+  requestRemainingMs?: number;
+  evidenceRemainingMs?: number;
+}>;
+
 export type InitiatorRestorer = Readonly<{
-  restoreInitiator(operation: InitiatorRestoreInput, time: AuthoritativeTime): Promise<AccountActor>;
+  restoreInitiator(
+    operation: InitiatorRestoreInput,
+    time: AuthoritativeTime,
+    onFailure?: (failure: InitiatorRestoreFailure) => void,
+  ): Promise<AccountActor>;
 }>;
 
 /** Restore inside CommandAuthorization.prepare, at the SAME live attempt T,
@@ -182,8 +209,20 @@ export type InitiatorRestorer = Readonly<{
  */
 export function createInitiatorRestorer(config: InitiatorRestorerConfig): InitiatorRestorer {
   return Object.freeze<InitiatorRestorer>({
-    async restoreInitiator(input, time) {
+    async restoreInitiator(input, time, onFailure) {
       let actor: AccountActor | undefined;
+      const started = onFailure ? performance.now() : 0;
+      let stageStarted = started;
+      let initiatorStage: InitiatorRestoreStage = 'validate_input';
+      let requestDeadline: number | undefined;
+      let stageDeadline: number | undefined;
+      const enter = onFailure
+        ? (stage: InitiatorRestoreStage, deadline?: number) => {
+            initiatorStage = stage;
+            stageStarted = performance.now();
+            stageDeadline = deadline;
+          }
+        : undefined;
       try {
         // Do not inspect caller inputs, pool or Access when the trusted Auth
         // current-consent port is missing. Getters cannot provide configuration.
@@ -204,7 +243,8 @@ export function createInitiatorRestorer(config: InitiatorRestorerConfig): Initia
           }),
           context: Object.freeze({ pool: input.context.pool, deadline: input.context.deadline }),
         });
-        actor = await restoreOperationIdentity(installed, step, time);
+        requestDeadline = step.context.deadline;
+        actor = await restoreOperationIdentity(installed, step, time, enter);
         const { access, pool } = installed;
         const resource = step.anchor.resource;
         const attempt = Object.freeze({
@@ -217,11 +257,13 @@ export function createInitiatorRestorer(config: InitiatorRestorerConfig): Initia
           }),
         });
         const context = commandAccessContext(step.context, attempt);
+        enter?.('prepare_permission');
         const evidence = await access.prepare?.(actor, step.action, resource, context);
         const evidenceDeadline = permissionEvidenceDeadline(evidence);
         if (evidenceDeadline === undefined) throw new DurableInitiatorUnavailableError();
         const deadline = Math.min(context.deadline, evidenceDeadline);
         const restored = actor;
+        enter?.('validate_resource', deadline);
         await withBoundedReadConnection(
           pool,
           deadline,
@@ -231,9 +273,11 @@ export function createInitiatorRestorer(config: InitiatorRestorerConfig): Initia
                 () => step.anchor.validate(client, time),
                 () => new DurableInitiatorUnavailableError(),
                 deadline,
-              )) ||
-              !(await access.authorize(client, restored, step.action, resource, evidence, time))
+              ))
             )
+              throw new DurableInitiatorUnavailableError();
+            enter?.('authorize_resource', deadline);
+            if (!(await access.authorize(client, restored, step.action, resource, evidence, time)))
               throw new DurableInitiatorUnavailableError();
           },
           {
@@ -251,6 +295,23 @@ export function createInitiatorRestorer(config: InitiatorRestorerConfig): Initia
         if (actor) {
           finishDurableRateIdentity(actor, false);
           discardDurableIdentity(config.access, actor);
+        }
+        if (onFailure) {
+          const now = Date.now();
+          const observed = performance.now();
+          try {
+            onFailure({
+              initiatorStage,
+              initiatorElapsedMs: Math.round(observed - started),
+              initiatorStageElapsedMs: Math.round(observed - stageStarted),
+              ...(requestDeadline !== undefined && Number.isFinite(requestDeadline)
+                ? { requestRemainingMs: Math.max(0, requestDeadline - now) }
+                : {}),
+              ...(stageDeadline !== undefined ? { evidenceRemainingMs: Math.max(0, stageDeadline - now) } : {}),
+            });
+          } catch {
+            // A diagnostic sink must preserve the original admission failure.
+          }
         }
         throwAccessUnavailable(error);
         throwEvidenceFailure(error);

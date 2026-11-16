@@ -30,6 +30,7 @@ import type {
   DurableInitiatorRecord,
   DurableOperationAnchor,
   InitiatorRestorer,
+  InitiatorRestoreFailure,
 } from '../access/durable-initiator.ts';
 import type { LifecycleRequest } from '../access/lifecycle.ts';
 import type { MembershipBootstrapStep, MembershipReservation } from '../access/membership-inverse.ts';
@@ -212,7 +213,11 @@ type LoadedOperation = Readonly<{
 /** The operation row is its own immutable source. Its creation receipt must commit
  * the whole record, so a copied row, source or transaction never reads back.
  */
-async function loadOperation(client: AccessClient, operation: DurableOperationAnchor): Promise<LoadedOperation | null> {
+async function loadOperation(
+  client: AccessClient,
+  operation: DurableOperationAnchor,
+  enterOperationReceipt?: () => void,
+): Promise<LoadedOperation | null> {
   const kind = (Object.keys(MEMBERSHIP_OPERATION_COMMANDS) as MembershipOperationKind[]).find(
     (candidate) => MEMBERSHIP_OPERATION_COMMANDS[candidate] === operation.kind,
   );
@@ -231,6 +236,7 @@ async function loadOperation(client: AccessClient, operation: DurableOperationAn
     routeOf(row.realm_id) !== operation.route
   )
     return null;
+  enterOperationReceipt?.();
   const receipt = await readOperationReceipt.run(client, {
     partition_no: partitionOf(operation.route),
     initiator_account_id: row.initiator_account_id,
@@ -300,8 +306,12 @@ async function loadOperation(client: AccessClient, operation: DurableOperationAn
 }
 
 /** Reads the committed operation and its creation receipt on the caller's connection. */
-export const readMembershipInitiator: DurableInitiatorReader = async (client, operation) =>
-  (await loadOperation(client, operation))?.record ?? null;
+export const readMembershipInitiator: DurableInitiatorReader = async (
+  client,
+  operation,
+  _time,
+  enterOperationReceipt,
+) => (await loadOperation(client, operation, enterOperationReceipt))?.record ?? null;
 
 /** A sealed step's operation. The initiator names the receipt; it supplies no authority. */
 type SealedOperation = Readonly<{
@@ -327,6 +337,8 @@ type PublicationOperation =
   | 'recheck_authority'
   | 'write_publication_proof'
   | 'commit_publication';
+
+type EnterPublication = (operation: PublicationOperation, failure?: InitiatorRestoreFailure) => void;
 
 /** Accounts owns the workflow. This adapter publishes and proves the Realm side. */
 export function createRealmMembership(config: RealmMembershipDependencies) {
@@ -623,7 +635,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     action: string,
     target: Readonly<{ route: number; id: string }>,
     deadline: number,
-    enter: (operation: PublicationOperation) => void,
+    enter: EnterPublication,
   ): AccessCommandAuthorization {
     type Prepared = { current: AccessCommandAuthorization; proof: unknown };
     const denied = () => new GrantDeniedError();
@@ -656,6 +668,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
             context: { pool, deadline },
           },
           attempt.time,
+          (failure) => enter('restore_initiator', failure),
         );
         enter('prepare_authority');
         const current = await accessCommandAuthorization(access, actor, action, target, { pool, deadline }, denied);
@@ -683,16 +696,23 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     key: string,
   ) {
     let operation: PublicationOperation = 'validate_request';
+    let initiatorFailure: InitiatorRestoreFailure | undefined;
     try {
-      return await publishMembership(request, input, reservation, key, (next) => {
+      return await publishMembership(request, input, reservation, key, (next, failure) => {
         operation = next;
+        initiatorFailure = failure;
       });
     } catch (error) {
       if (input.role === 'member' && operations.has(request)) {
         const reason =
           classifyUnavailability(error) ??
           (error instanceof DurableInitiatorUnavailableError ? 'initiator_unavailable' : undefined);
-        console.error({ code: 'realm_membership_publication_failed', operation, ...(reason ? { reason } : {}) });
+        console.error({
+          code: 'realm_membership_publication_failed',
+          operation,
+          ...(reason ? { reason } : {}),
+          ...initiatorFailure,
+        });
       }
       throw error;
     }
@@ -703,7 +723,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     input: MembershipInput,
     reservation: MembershipReservation,
     key: string,
-    enter: (operation: PublicationOperation) => void,
+    enter: EnterPublication,
   ) {
     if (input.role === 'owner') throw new RealmMembershipRoleError();
     if (input.role !== 'member' && input.role !== null) throw new GrantDeniedError();

@@ -17,6 +17,10 @@ import { deliverFollowCount } from './follow-count-target.ts';
 
 const PARTITION_WORK = 'library.followCountPartition';
 const DISCOVERY = 'library.followCountDiscovery';
+const SWEEP = 'library.followCountSweep';
+const HOME_PAGE_SIZE = 100;
+const BATCH_SIZE = 8;
+const BATCH_CONCURRENCY = 4;
 type Discovery = { root: string; after: number };
 type PartitionSegment = { partition: number; root: string; sequence: number };
 
@@ -93,65 +97,101 @@ export async function registerFollowCountWork(context: WorkContext) {
     },
     { name: 'library.followCountContinue', ...COMMAND_STEP_RETRIES },
   );
+  const maintain = (partition: number) =>
+    runFollowCountPartition(
+      {
+        targets: targetPage,
+        discover: discoveryPage,
+        owner: ownerPage,
+        accountKey,
+        accountPage,
+        pending,
+        deliver,
+        sample,
+      },
+      partition,
+    );
   DBOS.registerWorkflow(
     async (input: number | PartitionSegment) => {
       const segment = typeof input === 'number' ? { partition: input, root: DBOS.workflowID!, sequence: 0 } : input;
-      const { partition } = segment;
-      const more = await runFollowCountPartition(
-        {
-          targets: targetPage,
-          discover: discoveryPage,
-          owner: ownerPage,
-          accountKey,
-          accountPage,
-          pending,
-          deliver,
-          sample,
-        },
-        partition,
-      );
+      const more = await maintain(segment.partition);
       if (more) await continuation({ ...segment, sequence: segment.sequence + 1 });
     },
     { name: PARTITION_WORK },
   );
-  const dispatch = DBOS.registerStep(
-    async (input: Discovery) => {
-      const partitions = await withConnection(
-        pool,
-        async (tx) =>
-          (
-            await tx.query<{ partition_no: number }>(
-              'SELECT partition_no FROM library.follow_count_partition WHERE partition_no>$1 ORDER BY partition_no LIMIT 100',
-              [input.after],
-            )
-          ).rows,
-      );
-      for (const { partition_no: partition } of partitions)
-        await client.enqueue(
-          {
-            workflowName: PARTITION_WORK,
-            queueName: 'maintenance',
-            workflowID: `${input.root}:partition:${partition}`,
-            workflowIDReusePolicy: 'return-existing',
-          },
-          partition,
+  const homes = DBOS.registerStep(
+    (after: number) =>
+      withConnection(pool, async (tx) => {
+        const { rows } = await tx.query<{ partition_no: number }>(
+          'SELECT partition_no FROM library.follow_count_partition WHERE partition_no>$1 ORDER BY partition_no LIMIT $2',
+          [after, HOME_PAGE_SIZE],
         );
-      if (partitions.length === 100)
-        await client.enqueue(
-          {
-            workflowName: DISCOVERY,
-            queueName: 'maintenance',
-            workflowID: `${input.root}:after:${partitions.at(-1)!.partition_no}`,
-            workflowIDReusePolicy: 'return-existing',
-          },
-          { root: input.root, after: partitions.at(-1)!.partition_no },
-        );
-    },
-    { name: 'library.followCountDispatch', ...COMMAND_STEP_RETRIES },
+        return rows.map(({ partition_no }) => partition_no);
+      }),
+    { name: 'library.followCountHomes', ...COMMAND_STEP_RETRIES },
   );
-  DBOS.registerWorkflow(async (input?: Discovery) => dispatch(input ?? { root: DBOS.workflowID!, after: -1 }), {
-    name: DISCOVERY,
-  });
+  const batch = DBOS.registerWorkflow(
+    async (partitions: number[]) => {
+      let failure: { cause: unknown } | undefined;
+      for (const partition of partitions) {
+        try {
+          await maintain(partition);
+        } catch (cause) {
+          failure ??= { cause };
+        }
+      }
+      if (failure) throw failure.cause;
+    },
+    { name: 'library.followCountSweepBatch' },
+  );
+  DBOS.registerWorkflow(
+    async () => {
+      const root = DBOS.workflowID!;
+      let after = -1;
+      let failure: PromiseRejectedResult | undefined;
+      for (;;) {
+        const partitions = await homes(after);
+        // Direct children share the sweep's maintenance slot. Queuing every
+        // home separately makes the sweep wait thousands of queue polls.
+        for (let offset = 0; offset < partitions.length; offset += BATCH_CONCURRENCY * BATCH_SIZE) {
+          const groups = Array.from({ length: BATCH_CONCURRENCY }, (_, index) => {
+            const start = offset + index * BATCH_SIZE;
+            return partitions.slice(start, start + BATCH_SIZE);
+          }).filter((group) => group.length > 0);
+          const handles = await Promise.allSettled(
+            groups.map((group) => DBOS.startWorkflow(batch, { workflowID: `${root}:batch:${group[0]}` })(group)),
+          );
+          const finished = await Promise.allSettled(
+            handles.map((handle) => {
+              if (handle.status === 'rejected') return Promise.reject(handle.reason);
+              return handle.value.getResult();
+            }),
+          );
+          failure ??= finished.find((result) => result.status === 'rejected');
+        }
+        if (partitions.length < HOME_PAGE_SIZE) break;
+        after = partitions.at(-1)!;
+      }
+      if (failure) throw failure.reason;
+    },
+    { name: SWEEP },
+  );
+  const startSweep = DBOS.registerStep(
+    async (root: string) => {
+      await client.enqueue({
+        workflowName: SWEEP,
+        queueName: 'maintenance',
+        workflowID: `${root}:sweep`,
+        workflowIDReusePolicy: 'return-existing',
+        deduplicationID: SWEEP,
+        duplicationPolicy: 'return-existing',
+      });
+    },
+    { name: 'library.followCountStartSweep', ...COMMAND_STEP_RETRIES },
+  );
+  // The native scheduler supplies its fire time, never a discovery cursor.
+  // A retained discovery invocation can safely wake the same full sweep.
+  DBOS.registerWorkflow(async (_input?: Date | Discovery) => startSweep(DBOS.workflowID!), { name: DISCOVERY });
   await client.applySchedules([
     {
       scheduleName: 'library.followCounts.every-10-seconds',

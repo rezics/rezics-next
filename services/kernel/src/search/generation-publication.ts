@@ -91,6 +91,7 @@ export type SearchGenerationPublication = Readonly<{
     context: PublicFilterConsumerContext,
   ): Promise<
     | { status: 'activated'; consumer: PublicFilterConsumer; cost: SearchPublicFilterCost }
+    | { status: 'superseded'; consumer: PublicFilterConsumer; cost: SearchPublicFilterCost }
     | {
         status: 'preparing';
         job: GenerationPublicationJob;
@@ -592,11 +593,14 @@ export function createSearchGenerationPublication(
     input: GenerationPublicationJob,
     context: PublicFilterConsumerContext,
     meter: Meter,
-    work: (job: Job, client: PoolClient) => Promise<T>,
+    phase: 'step' | 'activate',
+    work: (job: Job, client: PoolClient, current: string | null) => Promise<T>,
   ): Promise<T> {
     const ref = structuredClone(input);
-    locator(ref.consumer);
+    const target = locator(ref.consumer);
     requireValue(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(ref.job));
+    // Separate Subject jobs can replace the same read alias. Serialize both their switch and rollback.
+    const lockKey = target.family === 'subjects' ? subjectAlias(target.prefix) : ref.job;
     // This is a maintenance session lock, not a command transaction. Native owners acquire their own
     // bounded snapshot connections; do not wrap them in withConnection's single-command checkout scope.
     let connection: PoolClient | undefined;
@@ -634,7 +638,7 @@ export function createSearchGenerationPublication(
             mayOwnLock = true;
             const lock = await client.query<{ locked: boolean }>(
               'SELECT pg_try_advisory_lock(hashtextextended($1,2)) AS locked',
-              [ref.job],
+              [lockKey],
             );
             mayOwnLock = lock.rows[0]?.locked !== false;
             if (lock.rows[0]?.locked !== true) throw new Pending('source_pending');
@@ -646,6 +650,11 @@ export function createSearchGenerationPublication(
                 [ref.job],
               );
               if (!job || !same(job.consumer, ref.consumer)) throw new Pending('registration_missing');
+              const current =
+                phase === 'activate' && (target.family === 'subjects' || job.phase === 'active')
+                  ? await aliasTarget(job, context, meter)
+                  : null;
+              if (job.phase !== 'active' && newerSubjectAlias(job, current)) throw new Pending('source_pending');
               if (job.phase === 'active') {
                 // Settled publication may still need idempotent fence release after a lost response.
                 // A later Source change must not strand the ordinary repair writer behind that old fence.
@@ -668,11 +677,11 @@ export function createSearchGenerationPublication(
                   throw error;
                 }
               }
-              return await work(job, client);
+              return await work(job, client, current);
             } finally {
               const unlocked = await client.query<{ unlocked: boolean }>(
                 'SELECT pg_advisory_unlock(hashtextextended($1,2)) AS unlocked',
-                [ref.job],
+                [lockKey],
               );
               if (unlocked.rows[0]?.unlocked !== true)
                 throw new Error('Generation publication session lock was not released');
@@ -1308,6 +1317,13 @@ export function createSearchGenerationPublication(
     if (identity.prefix !== job.prefix || identity.family !== job.family) throw new Pending('source_pending');
     return name;
   }
+  function newerSubjectAlias(job: Job, current: string | null) {
+    return (
+      job.family === 'subjects' &&
+      current !== null &&
+      locator({ ...job.consumer, physicalTarget: current }).generation > Number(job.generation)
+    );
+  }
   async function installFence(job: Job, client: PoolClient, context: PublicFilterConsumerContext, meter: Meter) {
     guardAvailable();
     // Persist invocation intent before the native gate can be installed. A lost fence response is
@@ -1449,7 +1465,7 @@ export function createSearchGenerationPublication(
     },
     step(input, context, options) {
       return run(context, (meter) =>
-        locked(input, context, meter, async (job, client) => {
+        locked(input, context, meter, 'step', async (job, client) => {
           const mayEnroll =
             options?.enrollSource === true &&
             !registry &&
@@ -1494,7 +1510,7 @@ export function createSearchGenerationPublication(
     },
     activate(input, context) {
       return run(context, (meter) =>
-        locked(input, context, meter, async (job, client) => {
+        locked(input, context, meter, 'activate', async (job, client, current) => {
           const preparing = (next: 'activate' | 'step', advanced = false, enrollmentAdvanced = false) => ({
             status: 'preparing' as const,
             job: reference(job),
@@ -1503,11 +1519,18 @@ export function createSearchGenerationPublication(
             ...(enrollmentAdvanced ? { enrollmentAdvanced } : {}),
             cost: meter,
           });
+          const superseded = newerSubjectAlias(job, current);
           if (job.phase === 'active') {
-            if ((await aliasTarget(job, context, meter)) !== job.physical_target) throw new Pending('source_pending');
-            await release(job, context, meter);
-            await save(client, job, meter);
-            return { status: 'activated' as const, consumer: job.consumer, cost: meter };
+            if (current !== job.physical_target && !superseded) throw new Pending('source_pending');
+            if (job.fence) {
+              await release(job, context, meter);
+              await save(client, job, meter);
+            }
+            return {
+              status: superseded ? ('superseded' as const) : ('activated' as const),
+              consumer: job.consumer,
+              cost: meter,
+            };
           }
           if (job.phase !== 'reconciled' && job.phase !== 'fencing' && job.phase !== 'intent')
             return preparing('step', true);
@@ -1543,8 +1566,10 @@ export function createSearchGenerationPublication(
               job.observation = queried.snapshot.observation;
               await save(client, job, meter);
             }
+            const previous = job.phase === 'intent' ? job.previous_target : await aliasTarget(job, context, meter);
+            if (newerSubjectAlias(job, previous)) throw new Pending('source_pending');
             if (job.phase !== 'intent') {
-              job.previous_target = await aliasTarget(job, context, meter);
+              job.previous_target = previous;
               job.previous_uuid = job.previous_target ? await discoveryIndexUuid(search, job.previous_target) : null;
               job.activated_at = config.clock().toISOString();
               job.phase = 'intent';
@@ -1553,6 +1578,7 @@ export function createSearchGenerationPublication(
             if (job.family === 'subjects')
               await publishSubjectActivationMetadata(search, job.physical_target, job.activated_at);
             const before = await aliasTarget(job, context, meter);
+            if (newerSubjectAlias(job, before)) throw new Pending('source_pending');
             if (before !== job.physical_target && before !== job.previous_target) throw new Pending('source_pending');
             if (before !== job.physical_target) {
               await held(job, context, meter);
