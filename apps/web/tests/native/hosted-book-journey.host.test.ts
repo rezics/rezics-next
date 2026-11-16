@@ -138,11 +138,23 @@ async function observeCoverWork(mediaId: string): Promise<string> {
   if (route === null) return 'unavailable';
   return observeContentFailure(
     `SELECT m.state,b.transaction_id IS NOT NULL AS upload_basis,
-       o.event_seq IS NOT NULL AS upload_event,s.status AS image_work
+       o.event_seq IS NOT NULL AS upload_event,
+       CASE WHEN o.event_seq IS NULL OR c.epoch IS NULL THEN NULL
+            WHEN c.epoch<>o.epoch THEN 'other-epoch'
+            WHEN c.position>=o.position THEN 'reached'
+            ELSE 'behind' END AS effects_checkpoint,
+       relay.status AS image_effect,s.status AS image_work,
+       (SELECT count(*)::int FROM (
+          SELECT 1 FROM content.media_variant v WHERE (v.route,v.media_id)=(m.route,m.media_id) LIMIT 13
+        ) variants) AS variant_count
      FROM content.media m
      LEFT JOIN editorial.write_basis b ON (b.partition_no,b.transaction_id)=($3,m.transaction_id)
      LEFT JOIN core.outbox o ON (o.partition_no,o.position,o.epoch)=(b.partition_no,b.position,b.epoch)
        AND o.type='com.rezics.content.media.uploaded.v1' AND o.subject=m.media_id::text
+     LEFT JOIN core.consumer_checkpoint c ON c.partition_no=o.partition_no AND c.consumer='effects'
+     LEFT JOIN dbos.workflow_status relay
+       ON relay.workflow_uuid=concat('fx:',o.epoch,':',o.partition_no,':',o.position,':',o.event_seq,':content_media_image')
+       AND o.event_seq IS NOT NULL
      LEFT JOIN dbos.workflow_status s
        ON s.workflow_uuid=concat('fx:',o.epoch,':',o.partition_no,':',o.position,':',o.event_seq,':content_image')
        AND o.event_seq IS NOT NULL
