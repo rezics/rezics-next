@@ -80,7 +80,7 @@ import releaseSQL from './definitions-read.sql';
 import ownersSQL from './identity-epoch-read-owners.sql';
 import sourcesSQL from './identity-epoch-read-sources.sql';
 import pendingSQL from './identity-epoch-read-pending.sql';
-import currentSQL from './identity-epoch-read-current.sql';
+import currentSQL from './identity-terminal-closure-current.sql';
 type Plan = readonly [
   metadata: number,
   rows: number,
@@ -237,12 +237,16 @@ export function outputCaptureFootprint(
     emptySeeks = n;
   }
   if (statement === currentSQL.sql) {
-    const n = (values[0] as unknown[]).length;
-    identityMetadataRows = n * 2;
+    const [partitions, terminals, originals] = values;
+    if (!Array.isArray(partitions) || !Array.isArray(terminals) || !Array.isArray(originals)) return undefined;
+    const n = partitions.length;
+    if (n > 100 || terminals.length !== n || originals.length !== n) return undefined;
+    // Each selected key has four bounded native probes and one closure row.
+    identityMetadataRows = n * 4;
     nativeRows = n * 16;
-    nativePoints = n * 2;
-    bytes = n * 256;
-    emptySeeks = n * 2;
+    nativePoints = n * 4;
+    bytes = n * 2048;
+    emptySeeks = n * 4;
   }
   if (statement === s16.sql) {
     const n = Number(values[3]);
