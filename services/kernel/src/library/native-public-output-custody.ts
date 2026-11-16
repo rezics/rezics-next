@@ -634,7 +634,10 @@ async function readNativeFrozenCollectionOutputSuccessor(
 ) {
   return frame(context, async (work) => {
     const selected = decodeBinding(json(binding));
-    const client = nativePublicOutputClient(snapshot, work, context.deadline, context.pool);
+    // Meter the borrowed queries through a private forwarder. The snapshot executor
+    // retains the original query method and its prepaid transaction cleanup.
+    const borrowed = { query: snapshot.query.bind(snapshot) };
+    const client = nativePublicOutputClient(borrowed, work, context.deadline, context.pool);
     if (!(await committedSuccessorBinding(client, selected))) return refusal(work);
     const { rows } = await client.query(frozenSuccessorReadSQL.sql, [selected.accepted.partition, selected.captureId]);
     return rows.length === 1 ? { status: 'current' as const, work: work.receipt() } : refusal(work, 'changed');
