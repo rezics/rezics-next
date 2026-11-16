@@ -283,6 +283,22 @@ function pageFrom(journey: { context: { pages(): Page[] } }): Page {
   return page;
 }
 
+async function readAnonymousControlPage(href: string, chapter: JourneyPost): Promise<string> {
+  const page = await (await auth.context('anonymous')).newPage();
+  try {
+    page.setDefaultTimeout(30_000);
+    await page.goto(href, { waitUntil: 'domcontentloaded' });
+    await hydrate(page);
+    await page.getByRole('heading', { name: 'Control chapter · Beside the harbor steps', exact: true }).waitFor({
+      state: 'visible',
+    });
+    await page.getByText(documentText(chapter.body), { exact: true }).waitFor({ state: 'visible' });
+    return page.url();
+  } finally {
+    await page.close();
+  }
+}
+
 function chapterStudioPath(draft: JourneyPost) {
   return `/en/studio?postId=${encodeURIComponent(draft.postId)}`;
 }
@@ -1627,8 +1643,15 @@ nativeTest(
     });
 
     const ownerJourney = await auth.signIn('alice', { returnTo: chapterStudioPath(control!.chapter) });
+    const ownerViewport = { width: 1440, height: 1000 };
+    const reopenOwnerPage = async () => {
+      const page = await ownerJourney.context.newPage();
+      page.setDefaultTimeout(30_000);
+      await page.setViewportSize(ownerViewport);
+      return page;
+    };
     const ownerPage = pageFrom(ownerJourney);
-    await ownerPage.setViewportSize({ width: 1440, height: 1000 });
+    await ownerPage.setViewportSize(ownerViewport);
     let pointRevision: Awaited<ReturnType<typeof readNativePost>> | undefined;
     const revisedText = 'A later saved version adds a westward tide mark to the harbor map.';
     const revised = await journal.run(
@@ -1832,6 +1855,8 @@ nativeTest(
       );
     }
 
+    await ownerPage.close();
+
     const discoveryPath = `/en/books/${encodeURIComponent(control!.subjectId)}/read?view=catalogues`;
     const memberJourney = await auth.signIn('bob', { returnTo: discoveryPath });
     const memberPage = pageFrom(memberJourney);
@@ -1934,26 +1959,21 @@ nativeTest(
       );
     }
 
+    await memberPage.close();
+
     if (discovery && exactReaderHref) {
       await journal.run('anonymous direct exact-reader address returns the selected control body', async () => {
-        const anonymous = await auth.context('anonymous');
-        const page = await anonymous.newPage();
-        page.setDefaultTimeout(30_000);
-        await page.goto(exactReaderHref!, { waitUntil: 'domcontentloaded' });
-        await hydrate(page);
-        await page.getByRole('heading', { name: 'Control chapter · Beside the harbor steps', exact: true }).waitFor({
-          state: 'visible',
-        });
-        await page.getByText(documentText(control!.chapter.body), { exact: true }).waitFor({ state: 'visible' });
-        return { value: page.url(), observation: `status=mounted visible-body=true exact-url=${page.url()}` };
+        const url = await readAnonymousControlPage(exactReaderHref!, control!.chapter);
+        return { value: url, observation: `status=mounted visible-body=true exact-url=${url}` };
       });
 
+      const movePage = await reopenOwnerPage();
       await journal.run(
         'move the control placement after publication through Book Studio',
         async () => {
-          await openBookStudio(ownerPage, control!.catalogueId);
-          await addPartInStudio(ownerPage, partTitle);
-          await movePlacementUnderPart(ownerPage, 'Control chapter · Beside the harbor steps', partTitle);
+          await openBookStudio(movePage, control!.catalogueId);
+          await addPartInStudio(movePage, partTitle);
+          await movePlacementUnderPart(movePage, 'Control chapter · Beside the harbor steps', partTitle);
           const current = await readStructure(control!.author, control!.catalogueId);
           const part = current.items.find((item) => item.kind === 'part' && item.title === partTitle);
           const moved = current.items.find((item) => item.occurrenceId === control!.occurrenceId);
@@ -1964,18 +1984,12 @@ nativeTest(
             observation: `occurrence=${moved.occurrenceId} parent=${moved.parentId} part=${part.occurrenceId}`,
           };
         },
-        () => pageObservation(ownerPage),
+        () => pageObservation(movePage),
       );
+      await movePage.close();
 
       await journal.run('the emitted old reader URL still serves its exact release after a later move', async () => {
-        const page = await (await auth.context('anonymous')).newPage();
-        page.setDefaultTimeout(30_000);
-        await page.goto(exactReaderHref!, { waitUntil: 'domcontentloaded' });
-        await hydrate(page);
-        await page.getByRole('heading', { name: 'Control chapter · Beside the harbor steps', exact: true }).waitFor({
-          state: 'visible',
-        });
-        await page.getByText(documentText(control!.chapter.body), { exact: true }).waitFor({ state: 'visible' });
+        await readAnonymousControlPage(exactReaderHref!, control!.chapter);
         const exact = await assertPublishedBody(
           control!.anonymous,
           control!.catalogueId,
@@ -1989,22 +2003,24 @@ nativeTest(
         };
       });
 
+      const withdrawalPage = await reopenOwnerPage();
+      let withdrawalObserved = false;
       await journal.run(
         'withdraw the control through Studio and preserve its old exact release',
         async () => {
-          await openBookStudio(ownerPage, control!.catalogueId);
-          await ownerPage.getByRole('button', { name: 'Review Book withdrawal…', exact: true }).click();
-          await ownerPage
+          await openBookStudio(withdrawalPage, control!.catalogueId);
+          await withdrawalPage.getByRole('button', { name: 'Review Book withdrawal…', exact: true }).click();
+          await withdrawalPage
             .getByRole('heading', { name: 'Review Book withdrawal', exact: true })
             .waitFor({ state: 'visible' });
-          await ownerPage
+          await withdrawalPage
             .getByRole('checkbox', {
               name: 'I want to withdraw this exact current release from discovery.',
               exact: true,
             })
             .click();
-          await ownerPage.getByRole('button', { name: 'Withdraw reviewed Book', exact: true }).click();
-          await ownerPage.getByText('The Book was withdrawn from current discovery.', { exact: true }).waitFor({
+          await withdrawalPage.getByRole('button', { name: 'Withdraw reviewed Book', exact: true }).click();
+          await withdrawalPage.getByText('The Book was withdrawn from current discovery.', { exact: true }).waitFor({
             state: 'visible',
             timeout: 90_000,
           });
@@ -2022,21 +2038,20 @@ nativeTest(
             control!.occurrenceId,
             control!.chapter,
           );
-          const page = await (await auth.context('anonymous')).newPage();
-          page.setDefaultTimeout(30_000);
-          await page.goto(exactReaderHref!, { waitUntil: 'domcontentloaded' });
-          await hydrate(page);
-          await page.getByRole('heading', { name: 'Control chapter · Beside the harbor steps', exact: true }).waitFor({
-            state: 'visible',
-          });
-          await page.getByText(documentText(control!.chapter.body), { exact: true }).waitFor({ state: 'visible' });
+          withdrawalObserved = true;
+          await withdrawalPage.close();
+          await readAnonymousControlPage(exactReaderHref!, control!.chapter);
           return {
             value: true,
             observation: `current-discovery=${discoveryPage.items.length} historical-occurrence=${control!.occurrenceId} sha256=${historical.document?.sha256} old-url=${exactReaderHref}`,
           };
         },
-        () => pageObservation(ownerPage),
+        () =>
+          withdrawalObserved
+            ? Promise.resolve(`Studio withdrawal and native readback completed; historical URL=${exactReaderHref}`)
+            : pageObservation(withdrawalPage),
       );
+      if (!withdrawalPage.isClosed()) await withdrawalPage.close();
     } else {
       for (const label of [
         'anonymous direct exact-reader address after a later move',
