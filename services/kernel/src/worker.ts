@@ -19,7 +19,7 @@ import { composeLibraryDomain } from './composition/library.ts';
 import { createKernelWorkModules } from './composition/work-modules.ts';
 import { installIdentityRatingRepairProducer } from './composition/identity-rating-repair.ts';
 import { composeWork, type WorkModule } from './work/registry.ts';
-import { effectsRelay } from './events/effects.ts';
+import { effectsRelay, type EffectsRelayProbe } from './events/effects.ts';
 import { relayConcurrencyForPool, startRelays } from './events/relays.ts';
 import { configureReceiptKeys, readReceiptKeyRing } from './command/receipt-key.ts';
 import type { KeyRing } from './tokens/seal.ts';
@@ -68,6 +68,8 @@ export type WorkerConfig = {
   clock?: KernelClock;
   /** Trusted composition only. The worker owns and ends the returned runtime pool. */
   kernelPool?: (url: string) => pg.Pool | Promise<pg.Pool>;
+  /** Trusted native diagnostics for one effects partition. */
+  effectsRelayProbe?: EffectsRelayProbe;
   /** Supplied by the existing Auth host, directly or through its private worker channel. */
   sessionRevocation?: CommittedSessionRevocationWorkflow;
   /** Native Realm work may read exact current consent through its trusted Auth host. */
@@ -248,7 +250,7 @@ export async function startWorker(
       }));
       work = await composeWork(tracedModules, { ...config, pool, client, env });
       await work.launch();
-      relays = startRelays(pool, [effectsRelay(pool, work.effects)], {
+      relays = startRelays(pool, [effectsRelay(pool, work.effects, config.effectsRelayProbe)], {
         concurrency: relayConcurrencyForPool(pool),
       });
     })();

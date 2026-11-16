@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import type { EffectsRelayProgress } from '../../../src/events/effects.ts';
 import type { WorkClient } from '../../../src/work/client.ts';
 import { WORK_QUEUES } from '../../../src/work/queues.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
@@ -149,19 +150,82 @@ export async function readLibraryErasureDispatch(pool: Pool, client: WorkClient,
   };
 }
 
+const RELAY_PROGRESS = 'Effects relay progress ';
+
+function observeEffectsRelay(partition: number) {
+  type Released = Extract<EffectsRelayProgress, { stage: 'released' }>;
+  type Failed = Extract<EffectsRelayProgress, { stage: 'failed' }>;
+  let last: Exclude<EffectsRelayProgress, Failed> | undefined;
+  let error: Failed | undefined;
+  let firstReleased: Released | undefined;
+  let lastReleased: Released | undefined;
+  let firstStop: string | undefined;
+  let firstFailure: { line: string; progress: typeof last; error: typeof error } | undefined;
+  let lastFailure: typeof firstFailure;
+  let scanFailed = false;
+  const stop = new RegExp(`^Relay effects stopped at partition ${partition} position \\d+: \\w+`);
+  const failure = new RegExp(`^Relay effects failed on partition ${partition}(?!\\d)`);
+  return {
+    read(line: string) {
+      if (line.startsWith(RELAY_PROGRESS)) {
+        let progress: EffectsRelayProgress;
+        try {
+          progress = JSON.parse(line.slice(RELAY_PROGRESS.length)) as EffectsRelayProgress;
+        } catch {
+          return;
+        }
+        if (progress.stage === 'failed') {
+          error = progress;
+          return;
+        }
+        error = undefined;
+        last = progress;
+        if (last.stage === 'released' && last.first) {
+          if (firstReleased?.checkpoint !== last.checkpoint) firstReleased = last;
+          lastReleased = last;
+        }
+      } else {
+        firstStop ??= stop.exec(line)?.[0];
+        const failed = failure.exec(line)?.[0];
+        if (failed) {
+          lastFailure = { line: failed, progress: last, error };
+          firstFailure ??= lastFailure;
+        }
+        scanFailed ||= line.startsWith('Relay partition scan failed');
+      }
+    },
+    snapshot: () => ({
+      partition,
+      last,
+      firstReleased,
+      lastReleased,
+      firstStop,
+      firstFailure,
+      lastFailure,
+      scanFailed,
+    }),
+  };
+}
+
 /** The fixture owns this child and its two pipes, never the Auth executor. */
 export async function startErasureWorker(
   url: string,
   client: WorkClient,
   environment: NodeJS.ProcessEnv = {},
+  effectsPartition?: number,
 ) {
   let output = '';
   let effectsQueueWarning: string | undefined;
+  const effectsRelay = effectsPartition === undefined ? undefined : observeEffectsRelay(effectsPartition);
   let ready!: () => void;
   const readiness = new Promise<void>((resolve) => {
     ready = resolve;
   });
-  const worker = Bun.spawn([process.execPath, new URL('../../../src/worker.ts', import.meta.url).pathname], {
+  const entry =
+    effectsPartition === undefined
+      ? [new URL('../../../src/worker.ts', import.meta.url).pathname]
+      : [import.meta.path, String(effectsPartition)];
+  const worker = Bun.spawn([process.execPath, ...entry], {
     env: workerTestEnv({
       ...process.env,
       DATABASE_URL: url,
@@ -174,15 +238,22 @@ export async function startErasureWorker(
     stdout: 'pipe',
     stderr: 'pipe',
   });
-  const read = async (stream: ReadableStream<Uint8Array>) => {
+  const read = async (stream: ReadableStream<Uint8Array>, inspectRelay = false) => {
     const decoder = new TextDecoder();
+    let fragment = '';
     for await (const chunk of stream) {
-      output = (output + decoder.decode(chunk, { stream: true })).slice(-4096);
+      const text = decoder.decode(chunk, { stream: true });
+      output = (output + text).slice(-4096);
       effectsQueueWarning ??= output.match(/Error getting startable workflows for queue effects: ([^\r\n]+)\r?\n/)?.[1];
       if (output.includes('Worker ready')) ready();
+      if (inspectRelay && effectsRelay) {
+        const lines = (fragment + text).split(/\r?\n/);
+        fragment = lines.pop()!.slice(-4096);
+        for (const line of lines) effectsRelay.read(line);
+      }
     }
   };
-  const reading = Promise.all([read(worker.stdout), read(worker.stderr)]);
+  const reading = Promise.all([read(worker.stdout), read(worker.stderr, true)]);
   try {
     await Promise.race([
       readiness,
@@ -204,6 +275,9 @@ export async function startErasureWorker(
     },
     get effectsQueueWarning() {
       return effectsQueueWarning;
+    },
+    get effectsRelayProgress() {
+      return effectsRelay?.snapshot();
     },
     async close() {
       // Pending erasure coordinators are deliberate long-running workflows. The
@@ -295,8 +369,11 @@ export async function createOwnedErasureFixture() {
     get effectsQueueWarning() {
       return worker?.effectsQueueWarning;
     },
-    async start(environment?: Record<string, string>) {
-      worker = await startErasureWorker(db.url, client, environment);
+    get effectsRelayProgress() {
+      return worker?.effectsRelayProgress;
+    },
+    async start(environment?: Record<string, string>, effectsPartition?: number) {
+      worker = await startErasureWorker(db.url, client, environment, effectsPartition);
     },
     async close() {
       await worker?.close();
@@ -305,4 +382,16 @@ export async function createOwnedErasureFixture() {
       await db.close();
     },
   };
+}
+
+if (import.meta.main) {
+  const { readWorkerConfig, startWorker } = await import('../../../src/worker.ts');
+  await startWorker({
+    ...readWorkerConfig(process.env),
+    effectsRelayProbe: {
+      partition: Number(process.argv[2]),
+      report: (progress) => console.error(RELAY_PROGRESS + JSON.stringify(progress)),
+    },
+  });
+  console.info('Worker ready');
 }

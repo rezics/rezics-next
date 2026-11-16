@@ -8,7 +8,11 @@ import {
   searchIdentityReceivingComposition,
 } from '../../../src/search/identity-epoch-participant.ts';
 import { createSearchIdentityWriterPreparation } from '../../../src/search/identity-search-writer-preparation.ts';
-import { SEARCH_IDENTITY_WRITER_REQUEST } from '../../../src/semantic/contract/identity-epoch-ports.ts';
+import {
+  SEARCH_IDENTITY_WRITER_ACCEPT,
+  SEARCH_IDENTITY_WRITER_DISPATCH,
+  SEARCH_IDENTITY_WRITER_REQUEST,
+} from '../../../src/semantic/contract/identity-epoch-ports.ts';
 import { IdentityEpochStoreError } from '../../../src/semantic/contract/identity-errors.ts';
 import type { OpenSearch } from '../../../src/search/opensearch.ts';
 import type { IdentityJobRef, IdentityStepProgress } from '../../../src/semantic/identity-epoch-contract.ts';
@@ -61,7 +65,9 @@ export async function runSearchIdentityReceivingStep(
   );
   if (
     progress.state === 'more' &&
-    progress.frontier.after[3] === SEARCH_IDENTITY_WRITER_REQUEST &&
+    (progress.frontier.after[3] === SEARCH_IDENTITY_WRITER_REQUEST ||
+      progress.frontier.after[3] === SEARCH_IDENTITY_WRITER_ACCEPT ||
+      progress.frontier.after[3] === SEARCH_IDENTITY_WRITER_DISPATCH) &&
     (await prepare(pool, progress.receipt)).state === 'pending'
   )
     throw new IdentityEpochStoreError('identity_epoch_unavailable', 'Search still needs a committed original plan');

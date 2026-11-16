@@ -168,6 +168,11 @@ Its generation-fence counter stays exact and its enrollment counter remains a fl
 The original close binds the planned document and version. A prior visible copy requires the original operation's
 strictly newer and verified replacement settlement. A successor uses the previous published and released plan.
 
+The dispatch continuation consumes the exact retained request and accepted hold. It commits the actual writer
+dispatch before OpenSearch, writes through the allocation alias with its external version and refresh, and records
+the original bulk receipt and visibility in the same settlement transaction. Replays reuse committed visibility.
+An uncertain dispatch retains its token and waits for original operation recovery.
+
 The existing writer owns enrollment, dispatch, settlement and retained copies. Its `SearchWriterBarrier` reports
 `firstApply: 'unavailable'` and `prepared: 'unavailable'`; no first-apply receiving preparation/dispatch hook is
 installed. The Source writer owner must receive the following disjoint native integration before readiness:

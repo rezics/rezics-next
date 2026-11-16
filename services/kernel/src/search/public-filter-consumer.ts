@@ -1773,13 +1773,15 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     publication?: PublicFilterConsumer,
   ): Promise<PublicFilterConsumerCapture> {
     if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
-    let recovery = m.take(await binding.recover({ bootstrap: work.bootstrap.id }, context));
+    // Publication resumes its exact Source cut and this registration's Search materialization.
+    // Source adopts the prepared observation after the original execution has been retained.
+    let recovery = publication ? null : m.take(await binding.recover({ bootstrap: work.bootstrap.id }, context));
     const consumer = work.bootstrap.consumer;
     const job: PublicFilterConsumerJob = {
       consumer,
       job: `${work.registration.partition}:bootstrap:${encodeURIComponent(work.bootstrap.id)}`,
     };
-    if (recovery.status === 'pending') {
+    if (recovery === null || recovery.status === 'pending') {
       const native = await advanceNativePublicFilterPreparation(
         binding,
         {
@@ -1917,7 +1919,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           )
         ).rows[0];
         if (!saved || saved.registration !== work.registration.id) return m.unavailable('observation_lost');
-        const q = decodeState<PublicFilterQueriedObservation>(saved.queried);
+        const q = decodeNative<PublicFilterQueriedObservation>(saved.queried);
         if (
           q.snapshot.kind !== 'pit' ||
           q.snapshot.observation !== work.materializing.snapshot.observation ||
@@ -3061,6 +3063,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
               {
                 bootstrap: work.bootstrap.id,
                 queried: q,
+                publicationJob: input.job,
               },
               context,
             );

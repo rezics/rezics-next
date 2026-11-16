@@ -9,6 +9,8 @@ import {
   PublicFilterSourceDefinitionError,
   publicFilterSource,
   readIdentitySourceProjection,
+  readRelease,
+  withReadTransaction,
   readPublicFilterSourceDefinition,
 } from './native-bindings.ts';
 import type { IdentitySourceSupportReaderFactory } from '../semantic/index.ts';
@@ -26,6 +28,7 @@ import {
   type SearchNativeReceivingReleaseObservation,
 } from './identity-receiving-native-store.ts';
 import type { SearchNativeReceivingPlan, SearchNativeReceivingStored } from './identity-receiving-native-internal.ts';
+import nativeDefinitionSql from './identity-receiving-native-definition.sql';
 import { SearchNativeReceivingError, SearchNativeReceivingWork } from './identity-receiving-native-work.ts';
 
 /** Derive the installed Source dependencies rather than maintaining a second configuration contract. */
@@ -211,6 +214,33 @@ export function createSearchIdentityReceivingNative(
     // Release loading and Source reads are additionally charged by the enclosing exact SQL inventory.
     return loaded.definition;
   }
+  async function resolveOriginalMeaning(plan: SearchNativeReceivingPlan, work: SearchNativeReceivingWork) {
+    const { deadline } = work.context;
+    const digest = plan.references.release;
+    work.readTransaction();
+    work.reserve({ rows: 3, points: 3, statements: 1, bytes: 2048, engineRequests: 0 });
+    return withReadTransaction(
+      config.pool,
+      async (tx) => {
+        const definition = (
+          await tx.query<{ release_digest: string; route_digest: string }>(nativeDefinitionSql.sql, [
+            plan.references.definition,
+          ])
+        ).rows[0];
+        if (
+          !definition ||
+          definition.release_digest !== digest ||
+          definition.route_digest !== createHash('sha256').update(config.routeKey).digest('hex')
+        )
+          work.fail('changed', 'Original Source definition or release changed');
+        const release = await readRelease(tx, digest);
+        if (!release) work.fail('unavailable', 'Original Source release is unavailable');
+        return { digest, release };
+      },
+      deadline,
+    );
+  }
+
   async function requireCompleteOriginalSource(
     plan: SearchNativeReceivingPlan,
     work: SearchNativeReceivingWork,
@@ -267,10 +297,13 @@ export function createSearchIdentityReceivingNative(
   const native = Object.freeze<SearchIdentityReceivingNative>({
     resolvePlanned(selection, context) {
       return perform(context, async (work: SearchNativeReceivingWork, call) => {
-        const plan = await call((c) => store.readPlan(selection.native, c));
+        const plan = await call((c) => store.readPlanPoint(selection.native, c));
         if (!isDeepStrictEqual(plan.selection, selection)) work.fail('changed', 'Exact native selection changed');
-        await call((c) => store.observeOriginalFence(plan, c));
-        const own = await definition(plan.references.definition, plan.references.release, work);
+        const originalBarrier = plan.source.barrier.kind === 'original';
+        if (!originalBarrier) await call((c) => store.observeOriginalFence(plan, c));
+        const meaning = originalBarrier
+          ? await resolveOriginalMeaning(plan, work)
+          : (await definition(plan.references.definition, plan.references.release, work)).meaning;
         for (const [original, frontier] of [
           [plan.source.original, plan.references.originalSupport],
           [plan.source.terminal, plan.references.terminalSupport],
@@ -279,7 +312,7 @@ export function createSearchIdentityReceivingNative(
             job: selection.job,
             original,
             terminal: plan.source.terminal,
-            meaning: own.meaning,
+            meaning,
             frontier,
             inputLimit: 1,
             context: { deadline: work.context.deadline },
@@ -298,8 +331,11 @@ export function createSearchIdentityReceivingNative(
         }
         // Source reads run on released homes. Reestablish the actual receiving owner's immutable
         // component after those reads rather than returning a plan captured before relocation.
-        const current = await call((c) => store.readPlan(selection.native, c));
-        if (!isDeepStrictEqual(current, plan)) work.fail('changed', 'Native plan changed during Source resolution');
+        if (originalBarrier) await call((c) => store.revalidateOriginalPlanFence(plan, c));
+        else {
+          const current = await call((c) => store.readPlan(selection.native, c));
+          if (!isDeepStrictEqual(current, plan)) work.fail('changed', 'Native plan changed during Source resolution');
+        }
         return plan.source;
       });
     },

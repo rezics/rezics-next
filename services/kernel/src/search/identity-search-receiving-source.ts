@@ -24,7 +24,10 @@ export async function readSearchIdentityOriginalPlan(
   change: Pick<IdentityChange, 'original' | 'terminal'>,
   configuration: SearchReceivingConfiguration,
   deadline: number,
-): Promise<SearchIdentityReceivingSelection | null> {
+): Promise<Readonly<{
+  selection: SearchIdentityReceivingSelection;
+  originalBarrier: boolean;
+}> | null> {
   const partition = subjectPartition(change.original);
   const keys = (['OLD', 'NEW', 'first-apply', 'handoff'] as const).map((disposition) =>
     searchIdentityWriterEffectKey(configuration.consumer, change.original, disposition),
@@ -56,13 +59,16 @@ export async function readSearchIdentityOriginalPlan(
   )
     throw unavailable('Retained Search plan changed for the selected original');
   return {
-    job,
-    original: source.original,
-    effectKey: plan.effect_key,
-    owner: source.owner,
-    sourceId: source.sourceId,
-    scope: source.scope,
-    disposition: source.disposition,
-    native: source.locator,
+    originalBarrier: source.barrier.kind === 'original',
+    selection: {
+      job,
+      original: source.original,
+      effectKey: plan.effect_key,
+      owner: source.owner,
+      sourceId: source.sourceId,
+      scope: source.scope,
+      disposition: source.disposition,
+      native: source.locator,
+    },
   };
 }

@@ -17,6 +17,7 @@ import type { IdentityFrontier, IdentityJobRef } from '../semantic/identity-epoc
 import { serializeIdentityValue as json } from '../semantic/identity-core/encoding.ts';
 import {
   installSearchIdentityReceivingNative,
+  advanceSearchIdentityReceivingAcceptance,
   type SearchReceivingWorkDeclaration,
 } from '../semantic/identity-receiving-effects.ts';
 import { subjectSource } from '../semantic/search-source.ts';
@@ -47,6 +48,7 @@ import { readSearchIdentityOriginalPlan, searchIdentityWriterEffectKey } from '.
 import { subjectPartition } from './source.ts';
 import { createSearchWriterGuard, type SearchIdentityWriterAdmission } from './writer-guard.ts';
 import { createSearchIdentityWriterSupport } from './identity-search-writer-support.ts';
+import { advanceSearchIdentityDispatch } from './identity-search-writer-dispatch.ts';
 
 const unavailable = (message: string) => new IdentityEpochStoreError('identity_epoch_unavailable', message);
 
@@ -154,6 +156,29 @@ export function createSearchIdentityWriterPreparation(
                 native.position !== change.native.position
               )
                 throw unavailable('Search writer request is no longer the retained current step');
+
+              if (change.plan) {
+                const plan = await readSearchIdentityOriginalPlan(pool, job, change, configuration, context.deadline);
+                if (!plan?.originalBarrier || plan.selection.native.planId !== change.plan.planId)
+                  throw unavailable('Search writer request lost its exact prepared original');
+                if (change.plan.holdId) {
+                  await advanceSearchIdentityDispatch(
+                    configuration,
+                    writer,
+                    store,
+                    job,
+                    plan.selection,
+                    { planId: change.plan.planId, holdId: change.plan.holdId },
+                    directory.scope,
+                    context,
+                    turn.search(configuration.search),
+                    outsideSource,
+                  );
+                } else {
+                  return advanceSearchIdentityReceivingAcceptance(pool, plan.selection);
+                }
+                return { state: 'prepared' } as const;
+              }
 
               const { original } = change;
               const partition = subjectPartition(original);
