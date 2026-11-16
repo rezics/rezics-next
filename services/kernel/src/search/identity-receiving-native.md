@@ -193,10 +193,11 @@ before adding the adopted values to the document. It stores the exact input coun
 Dispatch checks that digest against a fresh read and also checks the Source build, Rating, Library and relation
 roster. Larger selections, outgoing relation inputs and credited creator inputs still require staged assembly.
 
-With adopted descriptive inputs, the dispatch turn commits the validated original bulk response while the writer
-still owns the dispatch token. A later turn resolves that committed response, immutable action and exact physical
-allocation, then records visibility and the final writer receipt together. A lost allocation lookup leaves the
-response available for settlement. A dispatch without original response evidence remains pending.
+For indexing and removal, the dispatch turn commits the original validated bulk item while the writer retains the
+dispatch token. The retained item carries the fields required to validate the target, external version and shard
+completion. A later turn resolves that committed item, immutable action and exact physical allocation, then records
+visibility and the final writer receipt together. The original plan remains pending until native release. A lost
+allocation lookup leaves the item available for settlement. An unanswered dispatch stays pending for original evidence.
 
 ## Cost
 

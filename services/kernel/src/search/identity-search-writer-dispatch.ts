@@ -28,9 +28,8 @@ import { readSearchWriterPhysicalTarget } from './identity-epoch-participant-phy
 import type { OpenSearch } from './opensearch.ts';
 import { subjectPartition } from './source.ts';
 import { decodeSearchIdentityWriterAction, type SearchWriterNativeCustody } from './writer-guard.ts';
-import { validateIndexWriteReceipt, writeIndexActions } from './write-actions.ts';
+import { retainIndexWriteItem, validateIndexWriteReceipt, writeIndexActions } from './write-actions.ts';
 import { verifyCanonicalIdentityDocumentAtDispatch } from './identity-search-writer-document.ts';
-import type { IndexAction } from './document.ts';
 
 const unavailable = (message: string) => new IdentityEpochStoreError('identity_epoch_unavailable', message);
 
@@ -146,7 +145,7 @@ export async function advanceSearchIdentityDispatch(
         basis,
         roles:
           basis &&
-          (basis.state === null || (basis.state === 'dispatched' && basis.obligations.statementInput)) &&
+          basis.state === null &&
           basis.hold_id === request.holdId &&
           basis.source.consumer === configuration.consumer
             ? await identityErasureRoles(pool, job.jobId)
@@ -200,23 +199,7 @@ export async function advanceSearchIdentityDispatch(
       throw unavailable('Search writer lost the immutable action before dispatch');
     return decodeSearchIdentityWriterAction(retained.value, source);
   }
-  async function settle(
-    token: string,
-    dispatch: IdentityNativeReceipt,
-    operationId: string,
-    action: IndexAction,
-    bulk: unknown,
-  ) {
-    await outsideSource(allocation);
-    await runCommand(pool, command, async (tx) => {
-      const bytes = await writer.settleIdentityAction(tx, job, source, token, dispatch, action, bulk);
-      bindSemanticProducerRoles(tx, roles);
-      await store.recordVisible(tx, selection.native, request.holdId, operationId, remaining(), bytes);
-      return { value: null, events: searchIdentityWriterChanged() };
-    });
-    return { state: 'prepared' } as const;
-  }
-  if (basis.state === 'dispatched' && basis.obligations.statementInput) {
+  if (basis.state === 'dispatched') {
     const retained = await withReadTransaction(
       pool,
       async (tx) => {
@@ -233,23 +216,33 @@ export async function advanceSearchIdentityDispatch(
         if (!response) throw unavailable('Search writer awaits the original uncertain dispatch result');
         const action = await loadAction(tx);
         validateIndexWriteReceipt(response.bulk, index, [action]);
-        return { response, action };
+        return { response, action, roles: await identityErasureRoles(pool, job.jobId) };
       },
       deadline,
     );
     const { response, action } = retained;
-    return settle(
-      response.writer_token,
-      {
-        partition: source.receivingHome,
-        epoch: response.dispatch_epoch,
-        transactionId: response.dispatch_transaction_id,
-        position: BigInt(response.dispatch_position),
-      },
-      response.operation_id,
-      action,
-      response.bulk,
-    );
+    const dispatch: IdentityNativeReceipt = {
+      partition: source.receivingHome,
+      epoch: response.dispatch_epoch,
+      transactionId: response.dispatch_transaction_id,
+      position: BigInt(response.dispatch_position),
+    };
+    await outsideSource(allocation);
+    await runCommand(pool, command, async (tx) => {
+      const bytes = await writer.settleIdentityAction(
+        tx,
+        job,
+        source,
+        response.writer_token,
+        dispatch,
+        action,
+        response.bulk,
+      );
+      bindSemanticProducerRoles(tx, retained.roles);
+      await store.recordVisible(tx, selection.native, request.holdId, response.operation_id, remaining(), bytes);
+      return { value: null, events: searchIdentityWriterChanged() };
+    });
+    return { state: 'prepared' } as const;
   }
   if (basis.state !== null) throw unavailable('Search writer awaits the original uncertain dispatch result');
 
@@ -283,17 +276,10 @@ export async function advanceSearchIdentityDispatch(
         )))
     )
       throw unavailable('Canonical Search Source changed before dispatch');
-    const dispatch = await writer.dispatchIdentityAction(tx, job, source, token);
+    await writer.dispatchIdentityAction(tx, job, source, token);
     bindSemanticProducerRoles(tx, roles);
     await store.recordDispatch(tx, selection.native, basis.hold_id, operationId, remaining(), basis.action_bytes);
-    // Same-turn settlement stores and reads back a receipt containing this exact action.
-    if (
-      !basis.obligations.statementInput &&
-      remaining().allowance.bytes < 2 * searchIdentityWriterBodyBytes(basis.action_bytes)!
-    )
-      throw unavailable('Search writer lacks the retained body work needed for settlement');
-
-    return { value: { action, dispatch }, events: searchIdentityWriterChanged() };
+    return { value: action, events: searchIdentityWriterChanged() };
   });
 
   // A lost response leaves the committed dispatch uncertain. No readback can settle it.
@@ -307,11 +293,9 @@ export async function advanceSearchIdentityDispatch(
         return result;
       },
     };
-    await writeIndexActions(transport, index, [value.action], { rejectConflicts: true, writeAlias: source.writeAlias });
-    validateIndexWriteReceipt(response, index, [value.action]);
-    return response;
+    await writeIndexActions(transport, index, [value], { rejectConflicts: true, writeAlias: source.writeAlias });
+    return retainIndexWriteItem(response, index, value);
   });
-  if (!basis.obligations.statementInput) return settle(token, value.dispatch, operationId, value.action, bulk);
 
   const retained = await runCommand(pool, command, async (tx) => {
     const response = JSON.stringify({
