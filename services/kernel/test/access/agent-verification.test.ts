@@ -1,10 +1,10 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import type { TSchema } from 'typebox';
 import { Value } from 'typebox/value';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { createPool } from '../../src/database/pool.ts';
+import { createPool, withQueryAccounting } from '../../src/database/pool.ts';
 import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
 import { accountAgentId, AccountAgentVerificationError } from '../../src/semantic/agents.ts';
 import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
@@ -33,6 +33,7 @@ import { loadAccountIdentitySource } from '../../src/access/agent-verification-i
 import { ORIGINAL_IDENTITY_SOURCE_REQUIRED } from '../../src/access/agent-verification-identity-recovery.ts';
 import { nativeMinimization, nativeStoreBlocker } from '../../src/access/erasure-native-stores.ts';
 import { AccessUnavailableError } from '../../src/access/index.ts';
+import type { AccessClient } from '../../src/request/access.ts';
 
 const sourceUrl = process.env.DATABASE_URL;
 if (!sourceUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -70,51 +71,6 @@ let organizationCatalogue: string;
 
 function key(): string {
   return randomUUID();
-}
-
-function tracedPool(
-  source: Pool,
-  observe: (
-    connection: number,
-    text: string,
-    args: string,
-    run: (query?: unknown, values?: unknown[]) => Promise<unknown>,
-  ) => unknown,
-): Pool {
-  let nextConnection = 0;
-  return new Proxy(source, {
-    get(target, property) {
-      if (property === 'connect')
-        return async () => {
-          const connection = nextConnection++;
-          const client = await target.connect();
-          return new Proxy(client, {
-            get(current, key) {
-              if (key === 'query')
-                return (query: unknown, values?: unknown[]) => {
-                  const text =
-                    typeof query === 'string'
-                      ? query
-                      : typeof query === 'object' && query !== null && 'text' in query && typeof query.text === 'string'
-                        ? query.text
-                        : '';
-                  const run = (replacement = query, replacementValues = values) =>
-                    Reflect.apply(
-                      current.query,
-                      current,
-                      replacementValues === undefined ? [replacement] : [replacement, replacementValues],
-                    ) as Promise<unknown>;
-                  return observe(connection, text, JSON.stringify([query, values]) ?? '', run);
-                };
-              const value = Reflect.get(current, key, current);
-              return typeof value === 'function' ? value.bind(current) : value;
-            },
-          });
-        };
-      const value = Reflect.get(target, property, target);
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-  }) as Pool;
 }
 
 function transactionCommands(queries: readonly string[]): string[] {
@@ -730,29 +686,60 @@ test('private verification status projects request and withdraw advice across un
       scopes: [...actionCatalogue(kernel).keys(), 'account:manage', 'gate:any'],
     },
   );
-  const statusContext = { pool, actor: statusActor, deadline: Date.now() + 10_000 };
+  function readTracedStatus(queries: string[], deadline = Date.now() + 10_000) {
+    return withQueryAccounting(
+      {
+        query(sql, _operands, dispatch) {
+          queries.push(sql);
+          return dispatch();
+        },
+        connection: (dispatch) => dispatch(),
+      },
+      () => readAgentVerificationStatus(pool, access, { pool, actor: statusActor, deadline }, applicant.id),
+    );
+  }
+
+  async function readWithAdviceFault(queries: string[], inject: (client: AccessClient) => never | Promise<void>) {
+    // Native Access prepares the grant formula before checkout and rechecks Account state in the snapshot.
+    // Inject after the installed update decision, with the same authenticated pool and live read client.
+    const prepare = access.prepareReadDecisions!.bind(access);
+    const interception = spyOn(access, 'prepareReadDecisions').mockImplementation(async (input) => {
+      const decisions = await prepare(input);
+      return {
+        ...decisions,
+        async prepareAccountAuthority(ids) {
+          const authority = await decisions.prepareAccountAuthority!(ids);
+          return {
+            async decide(client, batch, time) {
+              const result = await authority.decide(client, batch, time);
+              if (batch.kind === 'verification' && batch.action === 'account:update' && batch.ids[0] === applicant.id)
+                await inject(client);
+              return result;
+            },
+          };
+        },
+      };
+    });
+    try {
+      return await readTracedStatus(queries);
+    } finally {
+      interception.mockRestore();
+    }
+  }
+
   const unavailableQueries: string[] = [];
   let adviceUnavailable = false;
-  const fallbackStatus = await readAgentVerificationStatus(
-    tracedPool(pool, (_connection, text, args, run) => {
-      unavailableQueries.push(text);
-      if (!adviceUnavailable && args.includes('account:update')) {
-        adviceUnavailable = true;
-        throw new AccessUnavailableError('overloaded');
-      }
-      return run();
-    }),
-    access,
-    statusContext,
-    applicant.id,
-  );
+  const fallbackStatus = await readWithAdviceFault(unavailableQueries, () => {
+    adviceUnavailable = true;
+    throw new AccessUnavailableError('overloaded');
+  });
   expect(adviceUnavailable).toBe(true);
   expect(fallbackStatus.verificationRequest).toMatchObject({
     id: pending.body.verificationRequest.id,
     state: 'pending',
   });
   expect(fallbackStatus.viewerActions).toEqual([]);
-  expect(transactionCommands(unavailableQueries).slice(0, 2)).toEqual(['BEGIN', 'ROLLBACK']);
+  expect(transactionCommands(unavailableQueries)).toEqual(['BEGIN', 'ROLLBACK', 'BEGIN', 'COMMIT']);
 
   for (const failureKind of ['binding', 'statement'] as const) {
     const failureQueries: string[] = [];
@@ -760,20 +747,11 @@ test('private verification status projects request and withdraw advice across un
     const bindingFailure = new RangeError('Invalid read decision binding');
     let failure: unknown;
     try {
-      await readAgentVerificationStatus(
-        tracedPool(pool, (_connection, text, args, run) => {
-          failureQueries.push(text);
-          if (!injected && args.includes('account:update')) {
-            injected = true;
-            if (failureKind === 'binding') throw bindingFailure;
-            return run('SELECT 1 / 0', []);
-          }
-          return run();
-        }),
-        access,
-        { ...statusContext, deadline: Date.now() + 10_000 },
-        applicant.id,
-      );
+      await readWithAdviceFault(failureQueries, async (client) => {
+        injected = true;
+        if (failureKind === 'binding') throw bindingFailure;
+        await client.query('SELECT 1 / 0');
+      });
     } catch (error) {
       failure = error;
     }
@@ -784,17 +762,7 @@ test('private verification status projects request and withdraw advice across un
   }
 
   const expiredQueries: string[] = [];
-  await expect(
-    readAgentVerificationStatus(
-      tracedPool(pool, (_connection, text, _args, run) => {
-        expiredQueries.push(text);
-        return run();
-      }),
-      access,
-      { ...statusContext, deadline: Date.now() - 1 },
-      applicant.id,
-    ),
-  ).rejects.toBeInstanceOf(AccessUnavailableError);
+  await expect(readTracedStatus(expiredQueries, Date.now() - 1)).rejects.toBeInstanceOf(AccessUnavailableError);
   expect(expiredQueries).toEqual([]);
 
   const managerBearer = await bearer(orgManager);
@@ -811,11 +779,12 @@ test('private verification status projects request and withdraw advice across un
   const reviewerBearer = await bearer(reviewer);
   const otherCreated = await request(reviewer, otherSubject, reviewerBearer);
   expect(otherCreated.response.status).toBe(201);
-  await pool.query(
-    `UPDATE access.agent_verification_request SET state = 'approving', updated_at = statement_timestamp()
-     WHERE request_id = $1`,
-    [otherCreated.body.verificationRequest.id],
+  const approval = await post(
+    `/v1/verification-requests/${otherCreated.body.verificationRequest.id}:approve`,
+    await bearer(staff),
+    {},
   );
+  expect(approval.response.status).toBe(200);
   const approving = await get(`/v1/accounts/${reviewer.id}/verification`, reviewerBearer);
   expect(approving.body.verificationRequest.state).toBe('approving');
   expect(approving.body.viewerActions).toEqual([]);
