@@ -307,18 +307,22 @@ async function expectConcealedRealmOnSpace(page: Page, realm: NativeRealmFixture
 }
 
 async function protectedSpaceRequestCount(page: Page, realm: NativeRealmFixture, scale: number): Promise<number> {
-  // The flush brackets only this served page. The boundary reads themselves are excluded below.
-  await stack.kernel('/v1/definitions/active');
+  await stack.refreshKernelRequests();
   const first = stack.kernelRequests().length;
   expect(await open(page, `/spaces/${realm.address}`)).toBe(200);
   await page.getByRole('heading', { level: 1, name: realm.spaceTitle, exact: true }).waitFor({ state: 'visible' });
   await page.getByRole('heading', { name: realm.realmTitle, exact: true }).waitFor({ state: 'visible' });
   await expectAttribute(page.getByRole('region', { name: 'Membership' }), 'data-member-state', 'member');
-  await stack.kernel('/v1/definitions/active');
+  // The membership can be visible while the page's lifecycle and shell requests are still running.
+  await page.waitForLoadState('networkidle');
+  await stack.refreshKernelRequests();
   const pageRequests = stack
     .kernelRequests()
     .slice(first)
-    .filter(({ url }) => /^\/v1\/(spaceAddresses|spaces|realms|subjects)(?:\/|:|\?|$)/.test(url));
+    .filter(
+      ({ url, fixtureRequest }) =>
+        !fixtureRequest && /^\/v1\/(spaceAddresses|spaces|realms|subjects)(?:\/|:|\?|$)/.test(url),
+    );
   console.info(`native-realms-spaces-growth: unrelated-subjects=${scale} page-kernel-requests=${pageRequests.length}`);
   return pageRequests.length;
 }
