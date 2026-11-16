@@ -40,6 +40,12 @@ export const readSearchIdentityOriginalPlanSql = `SELECT n.effect_key,n.source,(
  WHERE n.original_id=$5 AND n.physical_target=$6
  ORDER BY n.effect_key LIMIT 2`;
 
+/** Prove absence with one indexed point per candidate before loading any present plan. */
+export const searchIdentityOriginalPlanPresentSql = `SELECT 1 FROM unnest($4::text[]) k(effect_key)
+ JOIN LATERAL (SELECT original_id,physical_target FROM search.identity_receiving_native_plan
+  WHERE (partition_no,job_id,job_epoch,effect_key)=($1,$2,$3,k.effect_key) LIMIT 1) n ON true
+ WHERE n.original_id=$5 AND n.physical_target=$6 LIMIT 1`;
+
 /** Common plans survive retirement of the pending key. This read also supports exact old-scope replay. */
 export const readSearchIdentityCommonPlanSql = `SELECT p.binding,p.binding_digest,p.transaction_id AS plan_transaction_id,j.scope_digest
  FROM semantic.identity_epoch_receiving_plan p

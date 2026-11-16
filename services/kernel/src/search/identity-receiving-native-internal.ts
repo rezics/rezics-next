@@ -7,6 +7,8 @@ import type {
   SearchIdentityReceivingSource,
 } from './identity-receiving-native-contract.ts';
 
+import type { CanonicalStatementInput } from '../semantic/identity-search-index-statements.ts';
+
 /** Operational references, never a mirrored support body or an assertion of complete eligibility. */
 export type SearchNativeReceivingReferences = Readonly<{
   originalSupport: PublicFilterProjectionFrontier | null;
@@ -15,6 +17,7 @@ export type SearchNativeReceivingReferences = Readonly<{
   release: string;
   documentFence: IdentityNativeReceipt;
   predecessor: SearchIdentityReceivingLocator | null;
+  statementInput?: CanonicalStatementInput;
 }>;
 export type SearchNativeReceivingCopy = Readonly<{
   state: 'enrolled' | 'dispatched' | 'settled' | 'cancelled';

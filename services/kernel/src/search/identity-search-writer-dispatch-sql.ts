@@ -30,10 +30,44 @@ export const readSearchIdentityDispatchBasisSql = `SELECT h.hold_id::text,n.sour
   ($1,$2,$3,$4,$5,$6,$7) AND h.accepted_epoch=c.epoch AND h.accepted_position<=c.position`;
 
 export const dispatchSearchIdentityOriginalSql = `UPDATE search.identity_writer
- SET writer_token=$5,writer_transaction_id=$6,writer_position=$7,dispatch_state='dispatched'
+ SET writer_token=$5,writer_transaction_id=$6,writer_position=$7,dispatch_state='dispatched',repair_receipt=NULL
  WHERE (partition_no,physical_target,original_id,repair_locator)=($1,$2,$3,$4)
  AND writer_token IS NULL AND dispatch_state IN ('settled','cancelled')
  RETURNING original_id`;
+
+export const SEARCH_IDENTITY_BULK_RESPONSE_BYTES = 8192;
+
+/** Save the original response while dispatch still owns the writer. Visibility is a later command. */
+export const retainSearchIdentityBulkResponseSql = `UPDATE search.identity_writer w SET repair_receipt=$8
+ FROM search.identity_receiving_native_operation o
+ WHERE (w.partition_no,w.physical_target,w.original_id,w.repair_locator)=($1,$2,$3,$4::text)
+ AND w.writer_token=$7 AND w.dispatch_state='dispatched' AND w.repair_receipt IS NULL
+ AND (o.partition_no,o.plan_id,o.hold_id,o.operation_id)=(w.partition_no,$4::text::uuid,$5,$6)
+ AND o.state='dispatched' AND o.writer_token=w.writer_token
+ AND o.dispatch_epoch=w.owner_epoch
+ AND (o.writer_transaction_id,o.writer_position)=(w.writer_transaction_id,w.writer_position)
+ RETURNING w.original_id`;
+
+export const readSearchIdentityBulkResponseSql = `WITH retained AS MATERIALIZED (
+ SELECT w.partition_no,w.xmin,CASE WHEN octet_length(w.repair_receipt)<=${SEARCH_IDENTITY_BULK_RESPONSE_BYTES}
+   THEN w.repair_receipt::jsonb END AS response,
+   o.operation_id::text,o.writer_token::text,o.dispatch_transaction_id::text,o.dispatch_epoch,o.dispatch_position::text
+ FROM search.identity_writer w JOIN search.identity_receiving_native_operation o
+  ON (o.partition_no,o.plan_id)=(w.partition_no,$4::text::uuid) AND (o.hold_id,o.state)=($5,'dispatched')
+ WHERE (w.partition_no,w.physical_target,w.original_id,w.repair_locator)=($1,$2,$3,$4::text)
+ AND w.dispatch_state='dispatched' AND w.writer_token=o.writer_token
+ AND w.owner_epoch=o.dispatch_epoch
+ AND (w.writer_transaction_id,w.writer_position)=(o.writer_transaction_id,o.writer_position)
+)
+SELECT r.operation_id,r.writer_token,r.dispatch_transaction_id,r.dispatch_epoch,r.dispatch_position,
+ r.response->'bulk' AS bulk
+FROM retained r
+JOIN semantic.identity_epoch_native_commit c ON (c.partition_no,c.transaction_id)=(r.partition_no,(r.response->>'transaction')::uuid)
+ AND c.purpose='search-canonical-index' AND c.xmin=r.xmin
+ AND c.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid
+JOIN core.partition home ON home.partition_no=c.partition_no AND home.epoch=c.epoch
+ AND home.position>=c.position AND home.write_state='active'
+WHERE r.response->>'kind'='identity-original-bulk' AND c.epoch=r.dispatch_epoch AND c.position>r.dispatch_position::bigint`;
 
 export const retainSearchIdentityWriterReceiptSql = `UPDATE search.identity_writer SET repair_receipt=$5
  WHERE (partition_no,physical_target,original_id,repair_locator)=($1,$2,$3,$4)

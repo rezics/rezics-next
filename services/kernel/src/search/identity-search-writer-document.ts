@@ -9,6 +9,12 @@ import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts
 import { observationOf, type WorkHeader } from '../semantic/credit-search-cut.ts';
 import { creditSearchProperties } from '../semantic/credit-search-selection.ts';
 import { activeRelease, readRelease } from '../semantic/definition-release-read.ts';
+import {
+  readCanonicalIndexStatements,
+  readCanonicalStatementCount,
+  readCanonicalStatementPresenceSql,
+  type CanonicalStatementInput,
+} from '../semantic/identity-search-index-statements.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import readSubjects from '../semantic/search-source-subjects.sql';
 import { readSearchCanonicalGeneration } from '../semantic/search-source.ts';
@@ -16,10 +22,6 @@ import type { CreditSearchProjection } from './credit-search.ts';
 import { documentActions, type IndexAction, type SubjectDocument } from './document.ts';
 import type { SearchReceivingConfiguration } from './identity-receiving-native.ts';
 import { subjectPartition, type IndexedSubject } from './source.ts';
-
-// One seek over the active selection index proves whether statement assembly is required.
-export const readCanonicalStatementPresenceSql = `SELECT 1 FROM semantic.search_selected
- WHERE (route,subject_id)=($1,$2) AND active LIMIT 1`;
 
 type ListingCount = { subjectId: string; publicCollectionCount: number };
 
@@ -31,13 +33,29 @@ async function collectionCount(tx: CommandTransaction, partition: number, id: st
   return listing?.publicCollectionCount ?? 0;
 }
 
-export async function verifyCanonicalIdentityDocumentAtDispatch(tx: CommandTransaction, document: SubjectDocument) {
+export async function verifyCanonicalIdentityDocumentAtDispatch(
+  tx: CommandTransaction,
+  document: SubjectDocument,
+  routeKey: Uint8Array,
+  statementInput: CanonicalStatementInput | undefined,
+) {
   const { id, partition } = document;
-  if ((await tx.query(readCanonicalStatementPresenceSql, [routeOf(id), id])).rowCount) return false;
+  if (!statementInput && (await tx.query(readCanonicalStatementPresenceSql, [routeOf(id), id])).rowCount) return false;
   const rating = await readNativeSearchPublicRating(tx, partition, id);
   const count = await collectionCount(tx, partition, id);
   const runtime = await activeRelease(tx, 'native');
   if (!runtime) return false;
+  if (statementInput) {
+    const release =
+      runtime.digest === statementInput.release ? runtime.release : await readRelease(tx, statementInput.release);
+    if (!release) return false;
+    const current = await readCanonicalIndexStatements(tx, id, routeKey, statementInput.keys, {
+      type: document.type,
+      digest: statementInput.release,
+      release,
+    });
+    if (current?.proof.digest !== statementInput.digest) return false;
+  }
   const relations = facetProperties(runtime.release, [document.type]).filter((property) =>
     relationFacetProperty(runtime.release, property),
   );
@@ -52,6 +70,7 @@ export async function verifyCanonicalIdentityDocumentAtDispatch(tx: CommandTrans
 type Terms = Pick<IndexedSubject, 'labels' | 'aliases' | 'descriptions'>;
 export type PreparedIdentityIndexDocument = Readonly<{
   document: SubjectDocument;
+  statementInput?: CanonicalStatementInput;
   compare(tx: CommandTransaction): Promise<void>;
 }>;
 
@@ -72,7 +91,9 @@ export async function prepareCanonicalIdentityDocument(
       if (!home || home.writeState !== 'active') return null;
       const terms = await loadTerms(tx);
       if (!terms) return null;
-      if ((await tx.query(readCanonicalStatementPresenceSql, [route, subject])).rowCount) return null;
+      const selectedExists = (await tx.query(readCanonicalStatementPresenceSql, [route, subject])).rowCount;
+      const statementKeys = selectedExists ? await readCanonicalStatementCount(tx, subject) : 0;
+      if (statementKeys === null) return null;
 
       const [header] = (await nativeSourceQuery(tx, readSubjects, {
         partition_no: partition,
@@ -92,9 +113,19 @@ export async function prepareCanonicalIdentityDocument(
       const release =
         runtime.digest === header.currentRelease ? runtime.release : await readRelease(tx, header.currentRelease);
       if (!release) return null;
+      const selected = statementKeys
+        ? await readCanonicalIndexStatements(tx, subject, configuration.routeKey, statementKeys, {
+            type: header.type,
+            digest: header.currentRelease,
+            release,
+          })
+        : null;
+      if (statementKeys && !selected) return null;
       const publicRating = await readNativeSearchPublicRating(tx, partition, subject);
       const count = await collectionCount(tx, partition, subject);
-      const credit: CreditSearchProjection = creditSearchProperties(release, header.type).length
+      const creditProperties = creditSearchProperties(release, header.type);
+      if (selected && creditProperties.some((property) => selected.properties.has(property))) return null;
+      const credit: CreditSearchProjection = creditProperties.length
         ? {
             state: 'complete',
             workId: subject,
@@ -113,7 +144,7 @@ export async function prepareCanonicalIdentityDocument(
         redirect: null,
         securityRevision: Number(header.securityRevision),
         ...terms,
-        statements: [],
+        statements: selected?.statements ?? [],
         relationFacetOverflow: facetProperties(runtime.release, [header.type]).filter((property) =>
           relationFacetProperty(runtime.release, property),
         ),
@@ -125,7 +156,7 @@ export async function prepareCanonicalIdentityDocument(
         [subject],
         new Map([[subject, count]]),
       );
-      return { epoch: home.epoch, position, runtime, actions };
+      return { epoch: home.epoch, position, runtime, actions, statementInput: selected?.proof };
     },
     deadline,
   );
@@ -135,6 +166,7 @@ export async function prepareCanonicalIdentityDocument(
     throw new TypeError('Canonical Search projection lost its original');
   return {
     document: action.document,
+    ...(input.statementInput && { statementInput: input.statementInput }),
     async compare(tx) {
       const current = await readPartition(tx, partition);
       const release = await activeRelease(tx, 'native');
