@@ -3,7 +3,7 @@ import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { createKernelClient } from '@rezics/client';
 import { createAccountTokenProvider, IMPORTER_SCOPES } from '../../services/importer/src/credentials.ts';
-import { createImportTransport, ImportTransportError } from '../../services/importer/src/import-client.ts';
+import { createImportTransport } from '../../services/importer/src/import-client.ts';
 import {
   formatSeedFailure,
   mergeRemainingRequest,
@@ -33,7 +33,7 @@ import {
   releasedReviewedVocabulary,
 } from '../../services/importer/src/showcase-cross-media.ts';
 import { createSeedDenialDiagnostics } from '../../services/importer/src/showcase-denial-diagnostics.ts';
-import { formatSeedArtifactHandoff, formatSeedError } from '../../services/importer/src/seed-cli.ts';
+import { formatSeedArtifactHandoff, formatSeedError, seedTransportError } from '../../services/importer/src/seed-cli.ts';
 import { fetchCrossMediaDumps, type CrossMediaDumpPaths } from './fetch-dumps.ts';
 import { releaseWalkFileCache } from '../walk-memory.ts';
 import { ShowcaseJournal, type ShowcasePublicationResult } from '../../services/importer/src/showcase-publication.ts';
@@ -410,7 +410,8 @@ if (import.meta.main) {
     const directory = resolve(import.meta.dir, '../../.temp/cross-media-seed');
     const reviewed = error instanceof ReviewedCatalogueCommandError ? error.remaining : undefined;
     const journal = remainingRequestFromPreparedJournal(join(directory, 'showcase.sqlite'));
-    const transport = error instanceof ImportTransportError ? remainingRequestFromTransport(error) : undefined;
+    const requestFailure = seedTransportError(error);
+    const transport = requestFailure ? remainingRequestFromTransport(requestFailure) : undefined;
     const remaining =
       reviewed || journal || transport ? mergeRemainingRequest(reviewed ?? journal, transport) : undefined;
     if (remaining) await writeSeedRemainingRequest(directory, remaining);
