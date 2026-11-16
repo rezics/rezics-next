@@ -255,9 +255,11 @@ no index rows or pointer.
 
 Decision: each point operand pins the exact draft occurrence and target against both expected heads, explicitly selects draft-only ancestors, and resolves stable anchors only in the expected public snapshot; point admission uses Content's existing exact revision-disclosure observation for private openings beside retained public eligibility, then rechecks source currentness and consent in finalization. Native HTTP handlers join these retained checks to the ordered-version transaction; Book reads prove the selected published occurrence internally before using the exact source-consent gate.
 
-Point publication resolves the expected immutable candidate descriptor directly. The Content writer stages its
-bounded index delta and commits the revision descriptor, namespace selection and publication pointer under the
-ordinary native command and CAS. Technical mutable-draft and public-baseline conversion APIs are retired.
+Point publication resolves the expected immutable candidate descriptor directly. It captures the fixed native
+authority vector before observing the opening and changed targets, then locks only those sources' dependency homes
+on the writer's connection. The Content writer stages its bounded index delta and commits the revision descriptor,
+namespace selection and publication pointer under the ordinary native command and CAS.
+Technical mutable-draft and public-baseline conversion APIs are retired.
 
 Copy only the affected sibling, preorder and chapter index paths and at most H explicitly selected ancestors; create
 one small version root/count summary and atomically CAS the publication pointer with receipt/identity-only event.
