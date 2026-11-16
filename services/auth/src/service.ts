@@ -1554,6 +1554,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           }
         }
       },
+      verifyWebsiteSessionInvalidation(input) {
+        return website.verifySessionInvalidation(input);
+      },
       async stageCredentialEffect(input) {
         const human = await humanProof(input.headers);
         freshCredentialProof(human, input.subjectAccountId);

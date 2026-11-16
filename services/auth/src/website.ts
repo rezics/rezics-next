@@ -151,6 +151,7 @@ export function websiteRoutes(input: {
   const issuance = new AsyncLocalStorage<{ session: Session; scopes: string[] }>();
   const assertionAdmission = new AsyncLocalStorage<() => Promise<void>>();
   const logoutAdmission = new AsyncLocalStorage<boolean>();
+  const invalidationProof = new AsyncLocalStorage<{ input: unknown; live: boolean }>();
   async function nativeToken(
     request: Request,
     fields: URLSearchParams,
@@ -288,7 +289,31 @@ export function websiteRoutes(input: {
     const account = await options.trustedAccess.readAccount(session.userId);
     if (!account || account.accountId !== session.userId || account.authnEpoch < session.authnEpoch)
       deny('invalid_grant');
-    const receipt = await port({ accountId: session.userId, previousEpoch: session.authnEpoch, reason });
+    // A different command has already retired the JWTs from this session.
+    if (account.authnEpoch > session.authnEpoch) return;
+    const proof = {
+      input: Object.freeze({
+        accountId: session.userId,
+        previousEpoch: session.authnEpoch,
+        reason,
+        websiteSessionId: session.id,
+      }),
+      live: true,
+    };
+    const receipt = await invalidationProof
+      .run(proof, async () => {
+        try {
+          return await port(proof.input);
+        } finally {
+          proof.live = false;
+        }
+      })
+      .catch(async (error) => {
+        const current = await options.trustedAccess.readAccount(session.userId).catch(() => null);
+        if (current?.accountId === session.userId && current.authnEpoch > session.authnEpoch) return null;
+        throw error;
+      });
+    if (!receipt) return;
     if (
       receipt.accountId !== session.userId ||
       !receipt.receiptId ||
@@ -429,6 +454,10 @@ export function websiteRoutes(input: {
         };
       },
     } satisfies BetterAuthPlugin,
+    verifySessionInvalidation(input: unknown): boolean {
+      const proof = invalidationProof.getStore();
+      return proof?.live === true && proof.input === input;
+    },
     async beforeDeleteSession(deleted: { id: string }) {
       if (!logoutAdmission.getStore()) return;
       const session = await nativeSession(deleted.id);

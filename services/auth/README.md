@@ -2601,6 +2601,13 @@ keeps ten minutes of non-authenticating recent-session evidence so an expired
 `id_token_hint` for a recently ended session is still accepted, then ends the
 real Better Auth session and clears its cookie.
 
+The Website handler presents the exact native session only inside its live
+revocation, logout or refresh-replay callback. Access rechecks that binding and
+advances the current human's floor once, with a native command receipt. A newer
+floor already retires that session's bearer. Website invalidation keeps the
+account open to fresh authentication. Account-wide revocation uses the separate
+Access fence and recovery workflow.
+
 Limitations: only the authorization code and refresh token grants exist; there
 is no implicit, client credentials, token exchange or dynamic registration.
 `refreshTokenReuseInterval` is zero, so a refresh retried after a lost response

@@ -12,6 +12,7 @@ import { partitionOf, routeOf, newId } from '../route/route.ts';
 import { readAccount } from './account-data.ts';
 import credentialRead from './auth-barriers-credential-read.sql';
 import credentialAdvance from './auth-barriers-credential-advance.sql';
+import websiteAdvance from './auth-barriers-website-advance.sql';
 import type { BarrierProofPort, TrustedAccessPorts } from '@rezics/auth-contract';
 import type { AuthBindingCapabilities } from './auth-bindings.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';
@@ -169,6 +170,79 @@ export function createAuthBarrierCapabilities({
     },
   };
   return { ...capabilities, trustedAccess };
+}
+
+/** The Website protocol can retire its authenticated session's token floor.
+ * Consent, recovery and account-wide revocation retain their separate fences.
+ */
+export function createWebsiteSessionInvalidation(config: {
+  pool: Pool;
+  access: Access;
+  verify(input: unknown): boolean;
+}): NonNullable<TrustedAccessPorts['invalidateAccount']> {
+  return async (input) => {
+    const { accountId, previousEpoch, reason, websiteSessionId } = input;
+    const route = routeOf(accountId);
+    allowed(
+      route !== null &&
+        Number.isSafeInteger(previousEpoch) &&
+        previousEpoch > 0 &&
+        previousEpoch < 2147483647 &&
+        ['session-revocation', 'logout', 'refresh-replay'].includes(reason) &&
+        typeof websiteSessionId === 'string' &&
+        websiteSessionId.length > 0 &&
+        websiteSessionId.length <= 1024 &&
+        config.verify(input),
+    );
+    const digest = createHash('sha256')
+      .update(JSON.stringify(['website-session-floor-v1', accountId, websiteSessionId, previousEpoch]))
+      .digest();
+    const result = await runCommand(
+      config.pool,
+      {
+        partition: partitionOf(route),
+        clock: accessClock(config.access),
+        deadline: deadlineFor(AUTH_BARRIER_BUDGET_MS),
+        authorization: {
+          action: 'website-session-floor',
+          resource: { route, id: accountId },
+          denied: () => new AuthBindingDeniedError(),
+          prepare: async () => config.verify(input),
+          async authorize(tx, _attempt, verified) {
+            allowed(verified);
+            const account = await readAccount(tx, route, accountId);
+            allowed(account && account.kind === 'actor' && account.state === 'active');
+            allowed(account.operatorAccountId === null && !account.fenced);
+            const floor = account.minimumAuthnEpoch;
+            allowed(floor === BigInt(previousEpoch) || floor === BigInt(previousEpoch + 1));
+            return floor === BigInt(previousEpoch) ? 'execute' : 'receipt-only';
+          },
+        },
+        receipt: {
+          actorAccountId: accountId,
+          kind: 'access.website-session-floor',
+          key: `${route}:${digest.toString('hex')}`,
+          digest,
+        },
+      },
+      async (tx, command) => {
+        const [advanced] = await websiteAdvance.run(tx, {
+          route,
+          account_id: accountId,
+          previous_floor: previousEpoch,
+          transaction_id: command.transactionId,
+        });
+        allowed(advanced);
+        return {
+          value: { accountId, receiptId: newId(route), minimumAuthnEpoch: Number(advanced.minimumAuthnEpoch) },
+          events: [
+            { type: 'com.rezics.access.website-session-floor-advanced.v1', subject: accountId, data: { accountId } },
+          ],
+        };
+      },
+    );
+    return result.value;
+  };
 }
 
 /** Dedicated credential barrier. The trusted native reader rechecks the consumed

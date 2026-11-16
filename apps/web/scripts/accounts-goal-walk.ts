@@ -2230,6 +2230,7 @@ export async function originalJ10(stack: Origins, bindings: Record<string, strin
   const after = await kernel(stack, 'GET', `/v1/accounts/${granted.session.accountId}/profile`, {
     bearer: granted.bearer,
   });
-  if (after.status === 200) throw new Error('revoked website family still read the editable profile');
+  if (!isInvalidCredentials(after))
+    throw new Error(`revoked bearer read returned HTTP ${after.status}: ${summarize(after.value)}`);
   return `profile after revoke HTTP ${after.status}`;
 }

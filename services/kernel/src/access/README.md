@@ -1250,6 +1250,13 @@ The focused tests exercise Auth's real HTTP consent/recovery flows and concrete 
 PostgreSQL lifecycle commands. This establishes the barrier seam; provisioning and fence-clear evidence readers
 remain separately required host capabilities and are not supplied by this factory.
 
+### Website session floor
+
+For Website revocation, logout and refresh replay, the native Auth composition verifies the exact object
+bound by the live protocol callback. Access reads the active human in its own partition and compares the
+previous floor before a single account update, command receipt and subject event. Replaying the same session
+and floor reuses the receipt. The command leaves account fencing to the account-wide workflows.
+
 ## Write rate
 
 `WriteRateLimiter.spend` admits a person's request at the route stage before
