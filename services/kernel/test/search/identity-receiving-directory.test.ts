@@ -508,11 +508,19 @@ test.each([
   type Step = { transactionId: string; frontier: IdentityFrontier; engineRequests: number };
   let writing: Step | undefined;
   const committed: Step[] = [];
-  let captureStep: { transactionId: string; armed: boolean } | undefined;
+  type Capture = {
+    store: 'identity_epoch_step' | 'identity_epoch_receiving_effect';
+    transactionId: string;
+    armed: boolean;
+  };
+  const captureQueue: Capture[] = [];
   let captureRole: { account_id: string; role: string } | undefined;
   let captureNativeTransaction: string | null = null;
-  const capturedSteps: string[] = [];
-  const client = {
+  const capturedEvents: Capture[] = [];
+  let interruptApplicationCapture = false;
+  let discardedClients = 0;
+  let replaceClient = false;
+  const driver = {
     async query(input: string | QueryConfig, positional: unknown[] = []) {
       const sql = typeof input === 'string' ? input : input.text;
       const values = typeof input === 'string' ? positional : (input.values ?? []);
@@ -1389,9 +1397,18 @@ test.each([
         sql === receivingStatements.insertApplied ||
         sql === receivingStatements.sameCommandApplied ||
         sql === planSql.applied.sql
-      )
+      ) {
+        if (foreignCapture && sql === receivingStatements.insertApplied) {
+          expect(values[0]).toBe(writerHome);
+          expect(values[3]).toBe(captureNativeTransaction);
+          captureQueue.push({
+            store: 'identity_epoch_receiving_effect',
+            transactionId: String(values[3]),
+            armed: false,
+          });
+        }
         rows = [{}];
-      else if (sql === planSql.apply.sql) {
+      } else if (sql === planSql.apply.sql) {
         expect(values[2]).toBe(committedOperation?.operation_id);
         writingOperation = {
           ...committedOperation!,
@@ -1514,7 +1531,7 @@ test.each([
         };
         if (foreignCapture && values[0] === writerHome) {
           expect(captureNativeTransaction).toBe(writing.transactionId);
-          captureStep = { transactionId: writing.transactionId, armed: false };
+          captureQueue.push({ store: 'identity_epoch_step', transactionId: writing.transactionId, armed: false });
         }
         rows = [{ transaction_id: writing.transactionId }];
       } else if (foreignCapture && sql.startsWith("SELECT set_config('semantic.erasure_native_transaction'")) {
@@ -1526,45 +1543,52 @@ test.each([
           captureRole = { account_id: actorId!, role: 'actor' };
         }
         rows = [];
-      } else if (captureStep && sql === searchReceivingCaptureStatements.next) {
-        // The immediate trigger queues the writer row's local native transaction as its source.
-        rows = values[0] === '0'
+      } else if (captureQueue.length && sql === searchReceivingCaptureStatements.next) {
+        // Both immediate triggers queue the receiving command's native transaction.
+        const cursor = Number(values[0]);
+        const event = captureQueue[cursor];
+        rows = event
           ? [{
-              ordinal: '1',
+              ordinal: String(cursor + 1),
               partition_no: writerHome,
-              store: 'identity_epoch_step',
-              record_key: '1',
-              source_transaction_id: captureStep.transactionId,
+              store: event.store,
+              record_key: String(cursor + 1),
+              source_transaction_id: event.transactionId,
               native_transaction_id: captureNativeTransaction,
             }]
           : [];
-      } else if (captureStep && sql === searchReceivingCaptureStatements.copyFirst) {
-        expect(values).toEqual([writerHome, 'identity_epoch_step', '1', captureStep.transactionId]);
+      } else if (captureQueue.length && sql === searchReceivingCaptureStatements.copyFirst) {
+        const cursor = captureQueue.findIndex((event) => !event.armed);
+        expect(values).toEqual([writerHome, captureQueue[cursor]?.store, String(cursor + 1), captureNativeTransaction]);
         rows = [];
-      } else if (captureStep && sql === searchReceivingCaptureStatements.sourceFirst) {
-        expect(values).toEqual([writerHome, captureStep.transactionId]);
+      } else if (captureQueue.length && sql === searchReceivingCaptureStatements.sourceFirst) {
+        expect(values).toEqual([writerHome, captureNativeTransaction]);
         rows = captureRole ? [captureRole] : [];
-      } else if (captureStep && sql === searchReceivingCaptureStatements.sourceNext) {
-        expect(values).toEqual([writerHome, captureStep.transactionId, actorId, 'actor']);
+      } else if (captureQueue.length && sql === searchReceivingCaptureStatements.sourceNext) {
+        expect(values).toEqual([writerHome, captureNativeTransaction, actorId, 'actor']);
         rows = [];
-      } else if (captureStep && sql === searchReceivingCaptureStatements.basis) {
-        expect(values).toEqual([writerHome, captureStep.transactionId]);
+      } else if (captureQueue.length && sql === searchReceivingCaptureStatements.basis) {
+        expect(values).toEqual([writerHome, captureNativeTransaction]);
         rows = [];
-      } else if (captureStep && sql === searchReceivingCaptureStatements.arm) {
-        expect(values.slice(0, 9)).toEqual(['1', captureStep.transactionId, captureStep.transactionId, 0, 1, null, null, null, null]);
+      } else if (captureQueue.length && sql === searchReceivingCaptureStatements.arm) {
+        const cursor = captureQueue.findIndex((event) => !event.armed);
+        const event = captureQueue[cursor]!;
+        const ordinal = String(cursor + 1);
+        expect(values.slice(0, 9)).toEqual([
+          ordinal, event.transactionId, captureNativeTransaction, 0, 1, null, null, null, null,
+        ]);
         const digest = createHash('sha256')
-          .update(`${'0'.repeat(64)}|source|${captureStep.transactionId}|${actorId}|actor`)
+          .update(`${'0'.repeat(64)}|source|${event.transactionId}|${actorId}|actor`)
           .digest('hex');
         expect(values.slice(9)).toEqual(['0'.repeat(64), digest]);
-        captureStep.armed = true;
-        rows = [{ ordinal: '1' }];
+        if (interruptApplicationCapture && captureQueue.length === 2 && cursor === 1)
+          return { rows: [], rowCount: 0 };
+        event.armed = true;
+        rows = [{ ordinal }];
       } else if (sql === 'COMMIT') {
-        if (captureStep) {
-          expect(captureStep.armed).toBe(true);
-          capturedSteps.push(captureStep.transactionId);
-          captureStep = undefined;
-          captureRole = undefined;
-        }
+        for (const event of captureQueue) expect(event.armed).toBe(true);
+        capturedEvents.push(...captureQueue.splice(0));
+        captureRole = undefined;
         captureNativeTransaction = null;
         if (writing) committed.push(writing);
         if (stagingPlan) retainedPlan = stagingPlan;
@@ -1585,10 +1609,11 @@ test.each([
         writing = undefined;
         rows = [];
       } else if (sql === 'ROLLBACK' && foreignCapture) {
-        captureStep = undefined;
+        captureQueue.length = 0;
         captureRole = undefined;
         captureNativeTransaction = null;
         writing = undefined;
+        writingOperation = undefined;
         rows = [];
       } else if (sql === nativeCommit.sql) rows = [{}];
       else if (actorId && sql.startsWith('SELECT l.account_id::text,l.role FROM semantic.identity_epoch_job j'))
@@ -1619,11 +1644,25 @@ test.each([
       else throw new Error(`Unexpected driver query ${sql}`);
       return { rows, rowCount: rows.length };
     },
-    release() {
+    release(error?: Error) {
       checkedOut = false;
+      if (error) {
+        discardedClients++;
+        replaceClient = true;
+        captureQueue.length = 0;
+        captureRole = undefined;
+        captureNativeTransaction = null;
+        writing = undefined;
+        writingOperation = undefined;
+      }
     },
   };
+  let client = { ...driver };
   pool.connect = (async () => {
+    if (replaceClient) {
+      client = { ...driver };
+      replaceClient = false;
+    }
     checkedOut = true;
     pool.emit('acquire', client);
     return client;
@@ -2091,10 +2130,12 @@ test.each([
           await expect(prepare(pool, request)).rejects.toThrow('Synthetic allocation lookup lost');
           expect(bulkCalls).toBe(1);
           unavailableAllocation = false;
-          expect(await prepare(pool, request)).toEqual({ state: 'prepared' });
+          expect(await prepare(pool, request)).toEqual({
+            state: 'progress',
+            transactionId: committedOperation?.visible_transaction_id,
+          });
           expect(committedOperation?.state).toBe('visible');
           expect(receiptText).toContain('"kind":"bulk"');
-          expect(await prepare(pool, request)).toEqual({ state: 'prepared' });
           const expectedAllocationReads =
             5 +
             2 * Number(canonicalTerms) +
@@ -2103,14 +2144,32 @@ test.each([
             Number(creditedCreator) +
             Number(mode === 'dispatch');
           expect(engineReads).toBe(expectedAllocationReads);
-          const applied = await withIdentitySourceConsumerMaintenance(
+          const applicationRequest = await withIdentitySourceConsumerMaintenance(
             { pool, env: {} },
             { deadline: Date.now() + 5000 },
             () => step(pool, job),
           );
-          expect(applied.state).toBe('more');
-          expect(applied.frontier.after).toEqual([selected, retainedPlan?.effect_key]);
-          expect(applied.receipt.native.position).toBe(BigInt(applicationPosition));
+          expect(applicationRequest.receipt).toEqual(request);
+          expect(committedOperation?.state).toBe('visible');
+          const readsBeforeApplication = originalReads;
+          if (foreignCapture) {
+            const before = capturedEvents.length;
+            const beforeDiscard = discardedClients;
+            interruptApplicationCapture = true;
+            await expect(prepare(pool, applicationRequest.receipt)).rejects.toThrow(
+              'capture event was already armed or changed',
+            );
+            interruptApplicationCapture = false;
+            expect(committedOperation?.state).toBe('visible');
+            expect(capturedEvents).toHaveLength(before);
+            expect(discardedClients).toBe(beforeDiscard + 1);
+            expect(bulkCalls).toBe(1);
+          }
+          const applied = await prepare(pool, applicationRequest.receipt);
+          expect(applied).toEqual({ state: 'progress', transactionId: committedOperation?.applied_transaction_id });
+          expect(committed.at(-1)?.frontier.after).toEqual([selected, retainedPlan?.effect_key]);
+          expect(committedOperation?.applied_position).toBe(String(applicationPosition));
+          expect(originalReads).toBe(readsBeforeApplication);
           expect(committedOperation?.state).toBe('applied');
           expect(engineReads).toBe(expectedAllocationReads);
           for (const phase of priorVisible
@@ -2136,7 +2195,10 @@ test.each([
             releaseOwnerAdvanced = false;
             lateReleaseCheck = false;
           }
-          expect(await prepare(pool, request)).toEqual({ state: 'prepared' });
+          expect(await prepare(pool, request)).toEqual({
+            state: 'progress',
+            transactionId: receivingContinuation.released_transaction_id,
+          });
           expect(receivingContinuation.state).toBe('released');
           expect(hold?.released_transaction_id).toBe(receivingContinuation.released_transaction_id);
           const retired = await withIdentitySourceConsumerMaintenance(
@@ -2146,14 +2208,15 @@ test.each([
           );
           expect(retired.frontier.after).toEqual(['search-directory', selected, 1]);
           expect(retiredScope).toBe(true);
-          if (foreignCapture)
-            expect(capturedSteps).toEqual(
-              committed
-                .filter(({ frontier }) =>
-                  ['search-writer-admitted', 'search-writer-support', selected].includes(String(frontier.after[0])),
-                )
-                .map(({ transactionId }) => transactionId),
+          if (foreignCapture) {
+            const capturedTransactions = (store: Capture['store']) =>
+              capturedEvents.filter((event) => event.store === store).map(({ transactionId }) => transactionId);
+            const foreignSteps = committed.filter(({ frontier }) =>
+              ['search-writer-admitted', 'search-writer-support', selected].includes(String(frontier.after[0])),
             );
+            expect(capturedTransactions('identity_epoch_step')).toEqual(foreignSteps.map(({ transactionId }) => transactionId));
+            expect(capturedTransactions('identity_epoch_receiving_effect')).toEqual([committedOperation?.applied_transaction_id]);
+          }
           if (nativePermission) {
             expect(permissionTimes).toBeGreaterThan(0);
             expect(permissionFormulas).toBeGreaterThan(0);

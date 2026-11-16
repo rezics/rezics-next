@@ -8,7 +8,6 @@ import type { IdentitySourceSupportReaderFactory } from '../semantic/index.ts';
 import type {
   IdentityEpochStep,
   IdentityStepProgress,
-  IdentityFrontier,
   IdentityNativeReceipt,
 } from '../semantic/identity-epoch-contract.ts';
 import { bindSemanticProducerRoles, identityErasureRoles } from '../semantic/erasure-producer.ts';
@@ -18,8 +17,8 @@ import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts
 import { recordIdentityEpochNativeCommit } from '../semantic/identity-adapters/identity-epoch-binding.ts';
 import { serializeIdentityValue as json } from '../semantic/identity-core/encoding.ts';
 import {
-  applySearchIdentityReceivingEffect,
   installSearchIdentityReceivingNative,
+  lookupIdentityReceivingEffect,
   prepareSearchIdentityReceivingEffect,
   reconcileIdentityReceivingEffect,
   type SearchReceivingWorkDeclaration,
@@ -87,7 +86,11 @@ import {
   readSearchIdentityDispatchBasisSql,
   retainSearchIdentityBulkResponseSql,
 } from './identity-search-writer-dispatch-sql.ts';
-import { readSearchIdentityDispatchBasis, searchIdentityDispatchEffect } from './identity-search-writer-dispatch.ts';
+import {
+  applySearchIdentityWriterStep,
+  readSearchIdentityDispatchBasis,
+  searchIdentityDispatchEffect,
+} from './identity-search-writer-dispatch.ts';
 import { searchNativeOriginalOperationSql, searchNativeReleaseAppliedSql } from './identity-receiving-native-work.ts';
 export type { SearchReceivingConfiguration };
 
@@ -418,70 +421,40 @@ export function createSearchIdentityEpochParticipant(options: {
           if (!dispatch) return stageWriter({ planId: selection.native.planId });
           if (dispatch.effect_key !== selection.effectKey || dispatch.source.consumer !== configuration.consumer)
             throw unavailable('Retained dispatch differs from the selected original plan');
-          if (!dispatch.visible || (dispatch.state === 'applied' && !dispatch.released))
+          if (!dispatch.released)
             return stageWriter({ planId: selection.native.planId, holdId: dispatch.hold_id });
         }
         const effect = dispatch
           ? searchIdentityDispatchEffect(ref, selection, dispatch)
           : await prepareSearchIdentityReceivingEffect(pool, selection);
         const roles = await identityErasureRoles(pool, ref.jobId);
-        const application = await runCommand<{ frontier: IdentityFrontier; receipt: IdentityNativeReceipt | null }>(
-          pool,
-          { partition: effect.receipt.partition, deadline, clock: configured.configuration.clock },
-          async (tx) => {
-            // Actual dispatch/visibility belongs to the sole writer. This fused application refuses
-            // until that original operation is visibly settled; it never issues a second engine write.
-            const { scopeDigest, ...applied } = await applySearchIdentityReceivingEffect(
-              tx,
-              effect,
-              {
-                scopeDigest: directory.scope,
-                consumer: configuration.consumer,
-                physicalTarget: configuration.index,
-                planId: selection.native.planId,
-              },
-              roles,
-            );
-            if (applied.receipt) return noEffect(applied);
-            registerCommandCallback(tx, async (id) => {
-              const work = searchIdentityWorkUsed(pool, context);
-              const inserted = await tx.query(stepSql.sql, [
-                currentCommand(tx).partition,
-                id,
-                ref.jobId,
-                String(ref.epoch),
-                scopeDigest,
-                json(applied.frontier),
-                json(work),
-              ]);
-              if (inserted.rowCount !== 1) throw unavailable('Search application lost its same-transaction fixed step');
-            });
-            return { value: applied, events: searchIdentityWriterChanged() };
-          },
-        );
-        if (plan.originalBarrier && application.value.receipt === null) {
-          return {
-            job: ref,
-            frontier: application.value.frontier,
-            state: 'more',
-            receipt: {
-              job: ref,
-              step: 'search-canonical-index',
-              version: 1,
-              native: {
-                partition: application.partition,
-                epoch: application.epoch,
-                position: application.position,
-                transactionId: application.transactionId,
-              },
+        let applied: IdentityNativeReceipt;
+        if (dispatch) {
+          const observed = await runCommand(
+            pool,
+            { partition: effect.receipt.partition, deadline, clock: configuration.clock },
+            async (tx) => {
+              const record = await lookupIdentityReceivingEffect(tx, effect, 'search-canonical-index');
+              if (
+                !record?.applied || record.scopeDigest !== directory.scope ||
+                record.source.locator.planId !== selection.native.planId
+              )
+                throw unavailable('Released scope lost its applied receipt');
+              return noEffect(record.applied.receipt);
             },
-            work: searchIdentityWorkUsed(pool, context),
-          } satisfies IdentityStepProgress;
+          );
+          applied = observed.value;
+        } else {
+          await applySearchIdentityWriterStep(
+            configuration,
+            effect,
+            selection.native.planId,
+            directory.scope,
+            context,
+            roles,
+          );
+          applied = await reconcileIdentityReceivingEffect(pool, effect);
         }
-        const applied = dispatch?.released
-          ? application.value.receipt
-          : await reconcileIdentityReceivingEffect(pool, effect);
-        if (!applied) throw unavailable('Released scope lost its applied receipt');
         const row = await withReadTransaction(
           pool,
           async (tx) =>

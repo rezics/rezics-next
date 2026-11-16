@@ -971,7 +971,8 @@ async function releaseReceivingCustody(
   // continuations are scheduling state; neither one conveys reusable release authority.
   if (record.step === 'search-canonical-index') await revalidateSearchTerminal(pool, record, retained);
   // The released control transaction above verified the exact native effect, plan and immutable binding.
-  await runCommand(pool, { partition: record.source.receivingHome }, async (tx) => {
+  // The gate stays held until all same-job scopes at this owner/original have durable custody.
+  return runCommand(pool, { partition: record.source.receivingHome }, async (tx) => {
     // The original hold release fences this exact record against the live accepted
     // and applied rows. Reuse the record that authorized this owned turn.
     const local =
@@ -1026,8 +1027,6 @@ async function releaseReceivingCustody(
     bindSemanticProducerRoles(tx, roles);
     return { value: null, events: [wake(local)] };
   });
-  // Keep the gate until all SAME-job scopes at this owner/original have durable custody. Individual
-  // scope reconciliation cannot clear it while a sibling OLD/NEW/first-apply obligation is outstanding.
 }
 
 /** Published control custody is monotonic. Release only this job's local gate, after releasing control.
@@ -1597,8 +1596,8 @@ export async function advanceSearchIdentityReceivingReconciliation(pool: Pool, e
     return { state: 'progress', transactionId: custody.transactionId } as const;
   }
   const custody = receipt(home, retained.transaction_id, retained.epoch, retained.position);
-  await releaseReceivingCustody(pool, effect, record, native, custody, roles, progress);
-  return { state: 'prepared' } as const;
+  const released = await releaseReceivingCustody(pool, effect, record, native, custody, roles, progress);
+  return { state: 'progress', transactionId: released.transactionId } as const;
 }
 
 /** Every release, including a lost-response or published-gate replay, obtains a new private native
