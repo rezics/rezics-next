@@ -4,6 +4,7 @@ import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { notificationName } from '../settings/notifications';
 import { settingsPreferencePage } from '../kernel/fake/settings-notifications';
+import { readingAdviceFor } from '../settings/reading-preferences';
 import type {
   NotificationChange,
   NotificationPreferences,
@@ -54,7 +55,7 @@ function controlledPreferences() {
     signedIn: true as const,
     accountId: 'story-viewer',
     securityHref: null,
-    preferences: { ...preferences },
+    preferences: { ...preferences, advice: readingAdviceFor(preferences) },
     notifications: { ...notifications },
     page: settingsPreferencePage(notifications, preferences.version),
   });
@@ -76,7 +77,7 @@ function controlledPreferences() {
         suitability: input.suitability ?? preferences.suitability,
         version: preferences.version + 1,
       };
-      return { ok: true, preferences: { ...preferences } };
+      return { ok: true, preferences: { ...preferences, advice: readingAdviceFor(preferences) } };
     },
     saveNotifications: async (input, token) => {
       const { idempotencyKey, ...body } = input;
@@ -195,12 +196,8 @@ export const SharedVersionRecovery: Story = {
     const advanceReading = async (level: 0 | 1 | 2) => {
       await selectSettingsCategory(canvasElement, m.settings_reading_heading());
       const reading = within(canvas.getByRole('region', { name: m.settings_reading_heading() }));
-      const refresh = reading.getByRole('button', { name: m.settings_reload() });
-      const before = fixture.reads.length;
-      await userEvent.click(refresh);
-      await waitFor(() => expect(fixture.reads).toHaveLength(before + 1));
-      await waitFor(() => expect(refresh).toBeEnabled());
       const beforeWrite = fixture.readingCommands.length;
+      const version = fixture.current().preferences.version;
       await userEvent.click(
         reading.getByRole('radio', {
           name: ([m.settings_spoiler_0_title(), m.settings_spoiler_1_title(), m.settings_spoiler_2_title()] as const)[
@@ -208,17 +205,33 @@ export const SharedVersionRecovery: Story = {
           ],
         }),
       );
+      if (reading.queryByText(m.settings_conflict_title())) {
+        const beforeRead = fixture.reads.length;
+        await userEvent.click(reading.getByRole('button', { name: m.settings_reload() }));
+        const saveDraft = await reading.findByRole('button', { name: m.settings_reading_save_draft() });
+        await expect(fixture.reads).toHaveLength(beforeRead + 1);
+        await userEvent.click(saveDraft);
+      }
       await reading.findByText(m.settings_saved());
-      await expect(fixture.readingCommands).toHaveLength(beforeWrite + 1);
+      await expect(
+        fixture.readingCommands.slice(beforeWrite).filter((command) => command.expectedVersion === version),
+      ).toMatchObject([{ expectedVersion: version, spoilerLevel: level }]);
       await selectSettingsCategory(canvasElement, m.settings_notifications_heading());
     };
 
-    // A lost automatic save and a later local edit establish a real retained full review draft.
+    const reaffirm = async (choice: HTMLElement) => {
+      await userEvent.click(choice);
+      await userEvent.click(choice);
+    };
+
+    // Only choices made after dispatch can survive acknowledgement and rebase.
     await waitFor(() => expect(reply()).toHaveAttribute('data-slot', 'switch'));
     await userEvent.click(reply());
     await notices.findByText(m.settings_notifications_uncertain_title());
     const original = fixture.commands[0]!;
     await userEvent.click(mention());
+    await reaffirm(reply());
+    await reaffirm(digest());
     await userEvent.click(retry());
     await notices.findByText(m.settings_notifications_review_title());
     await expect(fixture.commands[1]!.input).toBe(original.input);
@@ -282,12 +295,16 @@ export const SharedVersionRecovery: Story = {
     await noCurrentClaim();
     await expect(notices.queryByRole('button', { name: m.settings_notifications_retry_original() })).toBeNull();
     await versionFields(receiptVersion);
+    const writesAfterReceipt = fixture.commands.length;
+    await reaffirm(digest());
     await userEvent.click(reload());
     await notices.findByText(m.settings_notifications_review_title());
+    await expect(digest()).toBeChecked();
     await userEvent.click(notices.getByRole('button', { name: m.settings_notifications_use_current() }));
+    await expect(fixture.commands).toHaveLength(writesAfterReceipt);
     await expect(digest()).not.toBeChecked();
 
-    // An uncertain original survives a newer shared floor and a stale replay read byte for byte.
+    // Retry sends the exact uncertain command. A stale read after acknowledgement can only be reloaded.
     fixture.loseNext();
     const uncertainBaseline = fixture.current().preferences.version;
     await userEvent.click(reply());
@@ -297,6 +314,8 @@ export const SharedVersionRecovery: Story = {
     await expect(Object.isFrozen(uncertain.input)).toBe(true);
     await expect(Object.isFrozen(uncertain.input.notifications)).toBe(true);
     await userEvent.click(mention());
+    await reaffirm(reply());
+    await reaffirm(digest());
     const releaseReplayRead = fixture.holdRead();
     await userEvent.click(retry());
     try {
@@ -306,7 +325,8 @@ export const SharedVersionRecovery: Story = {
       releaseReplayRead();
     }
     await notices.findByText(m.settings_notifications_read_failed());
-    await notices.findByText(m.settings_notifications_uncertain_title());
+    await expect(notices.queryByText(m.settings_notifications_uncertain_title())).toBeNull();
+    await expect(notices.queryByRole('button', { name: m.settings_notifications_retry_original() })).toBeNull();
     await noCurrentClaim();
     await versionFields(uncertainBaseline);
     await expect(fixture.commands).toHaveLength(beforeRetry + 1);
@@ -315,11 +335,9 @@ export const SharedVersionRecovery: Story = {
     await expect(notices.getByRole('button', { name: m.settings_notifications_restore() })).toBeDisabled();
     await expect(reply()).toBeChecked();
     await expect(mention()).toBeChecked();
-    await userEvent.click(retry());
+    await userEvent.click(reload());
     await notices.findByText(m.settings_notifications_review_title());
-    await expect(fixture.commands).toHaveLength(beforeRetry + 2);
-    await expect(fixture.commands.at(-1)!.input).toBe(uncertain.input);
-    await expect(fixture.commands.at(-1)).toEqual(uncertain);
+    await expect(fixture.commands).toHaveLength(beforeRetry + 1);
     const finalBaseline = fixture.current().preferences.version;
     await versionFields(finalBaseline);
     await userEvent.click(save());

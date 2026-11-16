@@ -4,6 +4,8 @@ import { m } from '../../paraglide/messages.js';
 import { PatternStory } from '../page';
 import { exampleAccountId, fullBanReason, RealmBansExample } from './example';
 
+const currentAccount = '01a1a000-0000-7000-8000-000000000082';
+
 const meta = {
   title: 'Community/Moderation/Realm Bans Workflow',
   id: 'patterns-community-realm-bans',
@@ -88,10 +90,12 @@ export const FullReason: Story = {
     await expect(timestamp).toHaveTextContent('2026-10-31 10:00:00 UTC');
     const row = canvas.getByRole('list', { name: m.realm_bans_current() }).querySelector('li');
     if (!row) throw new Error('The supplied ban must have its own list row.');
-    await expect(
-      within(row).getByRole('heading', { level: 4, name: m.realm_bans_details_banned_heading() }),
-    ).toBeVisible();
-    await expectDisclosedAccount(row, '01a1a000-0000-7000-8000-000000000082');
+    const accountHeading = within(row).getByRole('heading', {
+      level: 4,
+      name: `${m.realm_bans_details_account()} ${currentAccount}`,
+    });
+    await expect(accountHeading).toBeVisible();
+    await expect(accountHeading.closest('details')).toBeNull();
   },
 };
 
@@ -100,18 +104,21 @@ async function observeWrappingAndControls(context: Parameters<NonNullable<Story[
   const canvas = within(context.canvasElement);
   const list = canvas.getByRole('list', { name: m.realm_bans_current() });
   await expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth + 1);
-  await userEvent.click(canvas.getByRole('button', { name: m.realm_bans_unban() }));
+  const unban = canvas.getByRole('button', { name: m.realm_bans_unban() });
+  unban.focus();
+  await expect(unban).toHaveFocus();
+  await userEvent.keyboard('{Enter}');
   const confirmation = canvas.getByRole('group', { name: m.realm_bans_unban_confirm() });
-  await expectDisclosedAccount(confirmation, '01a1a000-0000-7000-8000-000000000082');
+  await expectDisclosedAccount(confirmation, currentAccount);
   const confirm = within(confirmation).getByRole('button', { name: m.realm_bans_confirm() });
   const cancel = within(confirmation).getByRole('button', { name: m.realm_bans_cancel() });
   await expect(confirm).not.toBe(cancel);
-  for (const control of context.canvasElement.querySelectorAll('button, input, textarea')) {
+  for (const control of canvas.getAllByRole('button')) {
     const bounds = control.getBoundingClientRect();
     await expect(bounds.height).toBeGreaterThanOrEqual(44);
     await expect(bounds.width).toBeGreaterThanOrEqual(44);
   }
-  confirm.focus();
+  await userEvent.tab();
   await expect(confirm).toHaveFocus();
   await userEvent.tab();
   await expect(cancel).toHaveFocus();

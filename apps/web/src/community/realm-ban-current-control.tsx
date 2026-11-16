@@ -5,6 +5,7 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../paraglide/messages.js';
 import { useAuthoringDeparture } from '../threads/authoring-departure';
 import {
+  realmBanActionClass,
   RealmBanEpisodeIdentity,
   RealmBanEpisodeView,
   RealmBanIdentity,
@@ -20,8 +21,6 @@ import {
   type RealmBanCurrentObservation,
   type RealmBanCurrentResult,
 } from './realm-ban-current';
-
-const actionClass = 'h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere';
 
 /** Selection leaves the frontier unchanged; explicit unban uses the existing writer. */
 export function RealmBanCurrentControl({
@@ -144,7 +143,7 @@ export function RealmBanCurrentControl({
         <Button
           type="button"
           variant="outline"
-          className={actionClass}
+          className={realmBanActionClass}
           disabled={disabled || pending || !currentBanAccountKey(draft)}
           onClick={(event) => {
             const key = currentBanAccountKey(draft);
@@ -157,7 +156,7 @@ export function RealmBanCurrentControl({
           <Button
             type="button"
             variant="ghost"
-            className={actionClass}
+            className={realmBanActionClass}
             disabled={disabled || pending}
             onClick={() => {
               if (!gate.current() || disabled || working.current) return;
@@ -203,7 +202,7 @@ export function RealmBanCurrentControl({
             ref={trigger}
             type="button"
             variant="outline"
-            className={actionClass}
+            className={realmBanActionClass}
             disabled={disabled || pending}
             onClick={() => {
               if (gate.current() && !disabled && !working.current) setConfirmation(result);
@@ -221,7 +220,7 @@ export function RealmBanCurrentControl({
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
-                  className={actionClass}
+                  className={realmBanActionClass}
                   disabled={disabled || pending}
                   onClick={(event) => {
                     if (!gate.current() || disabled || working.current || !trigger.current) return;
@@ -233,7 +232,7 @@ export function RealmBanCurrentControl({
                 <Button
                   type="button"
                   variant="ghost"
-                  className={actionClass}
+                  className={realmBanActionClass}
                   disabled={disabled || pending}
                   onClick={(event) => {
                     if (!gate.current() || disabled || working.current) return;

@@ -35,7 +35,7 @@ export function AccountRenameLink({
             {identity.handle ? `@${identity.handle}` : m.settings_account_rename_handleless()}
           </p>
           <details className="min-w-0 max-w-full text-sm text-muted-foreground">
-            <summary className="max-w-full cursor-pointer rounded-sm whitespace-normal focus-visible:outline-2 focus-visible:outline-ring">
+            <summary className="min-h-11 max-w-full cursor-pointer content-center rounded-sm whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-ring">
               {m.settings_account_reference_details()}
             </summary>
             <p className="max-w-full py-2 [overflow-wrap:anywhere]">
@@ -69,7 +69,7 @@ export function AccountRenameLink({
           aria-describedby={`${id}-identity ${id}-policy ${id}-confirmation`}
           className={cn(
             buttonVariants({ variant: 'outline' }),
-            'h-auto w-full min-w-0 max-w-full whitespace-normal text-center [overflow-wrap:anywhere] min-h-7',
+            'h-auto w-full min-w-0 max-w-full whitespace-normal text-center [overflow-wrap:anywhere] min-h-11',
           )}
         >
           {m.settings_account_rename_continue()}

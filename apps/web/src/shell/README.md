@@ -202,7 +202,8 @@ Account and unread queries retain their existing owners, private exposure and vi
 
 The rail and phone drawer consume the same essential leaves and followed destinations. Creation menus retain contributed creations. Long labels wrap with fixed-size icons;
 page content reserves the measured phone bar height, which already includes the safe-area inset. Query and fragment
-changes preserve the initiating control's focus; a new path focuses the page main without changing scroll position.
+changes preserve the initiating control's focus. A new path focuses the page main without changing scroll position
+when the destination has yet to place focus. An admitted Inbox return owns focus while it rereads the selected window.
 
 Selected source comparison: experiment `7c041ee376` supplied the phone session/return behavior and path-change focus
 behavior. Current Book navigation, Menu dismissal, account controls and unread ownership remain the implementation

@@ -1,5 +1,6 @@
 import type { ReadingPage } from '../../threads/thread-page';
 import type { FakeRoute } from '../fake-modules';
+import recordedThread from '../recorded/thread.json';
 
 /** Authored example of the installed DTO; unavailable owners are deliberately explicit. */
 export function authoredReadingPage(
@@ -33,6 +34,11 @@ export function authoredReadingPage(
 }
 
 export const routes: FakeRoute[] = [
+  {
+    method: 'GET',
+    path: `/v1/threads/${recordedThread.thread.id}/posts/${recordedThread.thread.firstPost.id}/location`,
+    story: () => ({ status: 200, cursor: null }),
+  },
   {
     method: 'GET',
     path: /^\/v1\/threads\/([^/]+)\/reading-page$/,
@@ -75,7 +81,7 @@ export const routes: FakeRoute[] = [
           })),
       );
       page.query.cursor = new URL(request.url).searchParams.get('cursor');
-      return { status: 200, ...page };
+      return { status: 200, __responseBody: page };
     },
   },
 ];

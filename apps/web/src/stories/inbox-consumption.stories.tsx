@@ -17,6 +17,7 @@ import { AppShell } from '../shell/shell';
 import { PageStory, PatternStory } from './page';
 import { inboxTriageStory, resetInboxTriageStory } from '../kernel/fake/notifications';
 import recordedWatch from '../kernel/recorded/notifications-inbox-thread-watch.json';
+import recordedThread from '../kernel/recorded/thread.json';
 
 const meta = {
   title: 'Account/Inbox/Inbox Consumption',
@@ -132,46 +133,34 @@ function nativeNotice(id: string, kind: InboxNotice['kind'], unread = true): Inb
   };
 }
 
-function ReturnPreview() {
-  const reads: InboxPageQuery[] = [];
-  const loadPage = useMemo(
-    () =>
-      async (query: InboxPageQuery): Promise<InboxPage> => {
-        reads.push(query);
-        const resolved = await resolveInboxItems(
-          nativeInboxEnvelope([nativeNotice('watch-origin', 'thread_watch')], 'watch-older', 'alice', query.selection),
-          inboxContent.threadHref,
-        );
-        return { signedIn: true, state: 'ready', ...resolved };
-      },
-    [],
-  );
-  return (
-    <PatternStory visitor="Signed In" path="/inbox">
-      <AppShell>
-        <InboxPageView
-          loadPage={loadPage}
-          content={inboxContent}
-          historyKey={reads.length > 1 ? 'returned-range' : 'original-range'}
-        />
-      </AppShell>
-    </PatternStory>
-  );
-}
-
-async function keyboardReturnPlay({ canvasElement }: { canvasElement: HTMLElement }) {
-  const view = within(canvasElement);
-  const list = await view.findByRole('list', { name: m.inbox_heading() });
-  const destination = within(list).getByRole('link', { name: 'A new post on a thread you watch' });
-  destination.focus();
-  await expect(destination).toHaveFocus();
-  await expect(destination).toHaveAttribute('href', watchHref);
-  await userEvent.keyboard('{Enter}');
-}
-
 export const KeyboardReturn: Story = {
-  render: () => <ReturnPreview />,
-  play: keyboardReturnPlay,
+  render: () => <InboxStory fixture="keyboard-return" />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    const watchLink = { name: /^A new post on a thread you watch\./ };
+    const { id, title, firstPost } = recordedThread.thread;
+    const href = inboxContent.threadHref(getLocale(), { id, title, postId: firstPost.id });
+    await userEvent.click(await view.findByRole('button', { name: m.inbox_triage_filter_unread() }));
+    const list = await view.findByRole('list', { name: m.inbox_heading() });
+    const destination = within(list).getByRole('link', watchLink);
+    destination.focus();
+    await expect(destination).toHaveFocus();
+    await expect(destination).toHaveAttribute('href', href);
+    await userEvent.keyboard('{Enter}');
+    await view.findByRole('heading', { level: 1, name: title });
+    await expect(canvasElement.querySelector(`#post-${firstPost.id}`)).toBeVisible();
+
+    window.history.back();
+    await view.findByText(m.inbox_return_notice_restored());
+    const returnedList = await view.findByRole('list', { name: m.inbox_heading() });
+    const row = within(returnedList).getByRole('listitem');
+    await expect(view.getByRole('button', { name: m.inbox_triage_filter_unread() })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(within(row).getByRole('link', watchLink)).toHaveAttribute('href', href);
+    await expect(within(row).getByRole('button', { name: m.inbox_notice_mark_seen() })).toHaveFocus();
+  },
 };
 
 function RecoveryPreview() {

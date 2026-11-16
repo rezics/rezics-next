@@ -29,7 +29,7 @@ import { PageHeading } from './page-heading';
 import { RouteState } from './route-state';
 import { ShellSearch } from '../search/header-search/shell-search';
 import { HeaderSearchFilterProvider } from '../search/header-search/filter-region';
-import { createInboxShellPort, InboxShellProvider } from '../inbox';
+import { createInboxShellPort, hasArrivedInboxReturn, InboxShellProvider } from '../inbox';
 import { createSettingsShellPort, SettingsShellProvider } from '../settings';
 import {
   Folders,
@@ -471,11 +471,7 @@ export function AccountMenu({
       closeOnNavigation
       trigger={
         trigger ?? (
-          <Button
-            className="h-auto min-h-7 max-w-48 whitespace-normal"
-            variant="ghost"
-            aria-label={m.account_menu()}
-          >
+          <Button className="h-auto min-h-7 max-w-48 whitespace-normal" variant="ghost" aria-label={m.account_menu()}>
             <LogIn aria-hidden="true" />
             <span className="sr-only min-w-0 wrap-anywhere whitespace-normal 2xl:not-sr-only">{m.account_menu()}</span>
           </Button>
@@ -550,8 +546,10 @@ function ShellContent({
     const unsub = router.subscribe('onResolved', () => {
       const current = router.state.location;
       // Query and fragment changes keep the initiating control's focus.
-      if (current.pathname !== previous && !current.hash)
-        document.getElementById('main-content')?.focus({ preventScroll: true });
+      if (current.pathname !== previous && !current.hash && !hasArrivedInboxReturn(router)) {
+        const main = document.getElementById('main-content');
+        if (main && !main.contains(document.activeElement)) main.focus({ preventScroll: true });
+      }
       previous = current.pathname;
     });
     return unsub;
