@@ -1190,6 +1190,7 @@ if (script.includes('/proc/loadavg')) {
 } else {
   log({ kind: 'cleanup', script, slotHeld: slotHeld() });
   const runId = script.match(/^run_id=([^\\r\\n]+)$/m)?.[1]?.replace(/^'|'$/g, '');
+  if (script.includes('original lease release remains unverified') && !config.verifyUnacknowledgedLease) process.exit(75);
   if (runId) console.log('CLEANED ' + runId);
 }
 `;
@@ -1333,6 +1334,7 @@ type HostConfig = {
   retainedPreparationAbort?: boolean;
   stallHeartbeats?: boolean;
   slotReleaseExit?: number;
+  verifyUnacknowledgedLease?: boolean;
   gitFetchExit?: number;
   available?: number;
   tmpBytes?: number;
@@ -8430,6 +8432,7 @@ sys.exit(child.wait())
       // Preserve paths to this fixture's checkout when the outer suite itself runs on a check host.
       .replaceAll(repository, '__FIXTURE_OUTER_CHECKOUT__')
       .replaceAll('/srv/rezics-check', directory)
+      .replaceAll('/sys/fs/cgroup', join(directory, 'cgroups'))
       .replaceAll('__FIXTURE_OUTER_CHECKOUT__', repository)
       .replaceAll(':/usr/local/bin:', ':');
     if (settings.program)
@@ -9868,6 +9871,9 @@ fcntl.flock(lock,fcntl.LOCK_UN)
       expect(receipt.command).toContain('python3');
       expect(JSON.stringify(receipt)).not.toContain('never-record-this-secret');
       expect(readFileSync(join(run.run, 'exit-status'), 'utf8')).toBe('124\n');
+      expect(
+        JSON.parse(readFileSync(join(fixture.directory, 'receipts', receipt.run, 'physical-run-status.json'), 'utf8')),
+      ).toEqual({ schema: 1, host: 'a', run: receipt.run, exitCode: 124 });
       const owned = readFileSync(join(run.run, 'command-pids'), 'utf8').trim().split('\n').map(Number);
       expect(owned).toHaveLength(3);
       expect(owned.every((pid) => !existsSync(`/proc/${pid}`))).toBe(true);
@@ -10821,22 +10827,27 @@ test('real caller cancellation uses exact remote stop before releasing its lease
 });
 
 
-test('lease cleanup uncertainty surfaces unknown settlement rather than a successful remote cleanup', async () => {
-  const fixture = scenario({ a: { available: 8e9, slotReleaseExit: 75 } });
+test.each([false, true])('lifetime settlement with lost lease acknowledgement and exact cleanup proof %s', async (verified) => {
+  const fixture = scenario({
+    a: { available: 8e9, exit: 124, lifetimeFailure: true, slotReleaseExit: 255, verifyUnacknowledgedLease: verified },
+  });
   const directory = workspace();
   const child = Bun.spawn([process.execPath, '--eval', `
     import { remoteCheck, readHosts } from ${JSON.stringify(remoteCheck)};
     try {
-      await remoteCheck({ hosts: readHosts(process.env.KERNEL_CHECK_REMOTE), workspace: ${JSON.stringify(directory)},
-        command: ['true'], settled: async value => console.log('SETTLED '+JSON.stringify(value)),
+      process.exitCode = await remoteCheck({ hosts: readHosts(process.env.KERNEL_CHECK_REMOTE), workspace: ${JSON.stringify(directory)},
+        command: ['true'], returns: ['artifact'], settled: async value => console.log('SETTLED '+JSON.stringify(value)),
       }, new AbortController().signal);
     } catch (error) { console.error(String(error)); process.exitCode=1; }
   `], { env: fixture.env, stdout: 'pipe', stderr: 'pipe' });
   const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
-  expect(code, stderr).toBe(1);
+  expect(code, stderr).toBe(verified ? 124 : 1);
   const settlement = JSON.parse(stdout.split('SETTLED ')[1]!.trim());
-  expect(settlement.native.exitCode).toBe(0);
-  expect(settlement.cleanup.status).toBe('unknown');
-  expect(settlement.cleanup.failures.join(' ')).toContain('slot lease release failed');
-  expect(stderr).toContain('slot lease cleanup');
+  expect(settlement.native).toMatchObject({ exitCode: 124, lifetimeFailure: { phase: 'run-lifetime' } });
+  expect(settlement.returns).toMatchObject({ status: 'missing', missing: ['artifact'] });
+  expect(settlement.transportChildReaped).toBe(true);
+  expect(settlement.cleanup.status).toBe(verified ? 'verified' : 'unknown');
+  if (verified) expect(settlement.cleanup.failures).toEqual([]);
+  else expect(settlement.cleanup.failures.join(' ')).toContain('slot lease release failed');
+  expect(fixture.events().filter(({ kind }) => kind === 'run')).toHaveLength(1);
 });

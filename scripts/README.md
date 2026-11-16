@@ -191,8 +191,9 @@ eight seconds. The bound also applies when a timeout or signal prevents the root
 `exit-status` only after the owned process tree is reaped. If owned processes remain after the bound, it retains any
 root result, writes `.owned-cleanup-incomplete.json`, leaves `exit-status` absent and keeps the active cgroup visible
 to admission. A disconnected caller sees `CLEANING` while `.command-result`, a lifetime receipt or incomplete-cleanup
-evidence exists without `exit-status`; only the terminal file exposes the root result. The run-lifetime receipt is
-durably published as deadline cleanup begins, so recovery retains the deadline cause without treating it as terminal.
+evidence exists without `exit-status`; only the terminal file exposes the root result to the reconnect status probe.
+The supervisor durably records the deadline cause as cleanup begins and writes the native verdict to
+`physical-run-status.json` after resolving the exit code. Reconciliation verifies physical cleanup separately.
 
 Compiler and Kernel check databases create a named data volume labeled with its process owner, exact create nonce and
 physical check-run ID, then mount that volume by source name. Host lifetime cleanup removes run-labeled containers and
@@ -376,10 +377,13 @@ physical host/run and receives cleanup through `acceptCheckRunPhysicalCleanup`. 
 original nonce and full binding; the host file must still match the retained hash and approve that same host. Cleanup
 uses controller-owned scratch and an empty return declaration, so it neither needs a mutable candidate/current producer
 closure nor probes or restores artifacts. Native results and immutable finals remain untouched. Incomplete or mismatched
-cleanup stays unknown; already verified physical cleanup is replayed without another remote operation. Frozen inputs
-stay retained, and a missing original transport identity stays unknown. `reconcileRegisteredCheckRun` exposes the same
-explicit mode through `{ cleanupOnly: true }`; ordinary reconciliation retains its existing result/restoration fences. A final
-record is replayed by `status`; `run-prepared` rejects its descriptor after the one claim and never starts a replacement.
+cleanup stays unknown; already verified physical cleanup is replayed without another remote operation. A missing
+original transport identity stays unknown. The caller can explicitly discard a failed snapshot after abandoning
+return recovery when the original final verifies source and a bound observation proves both remote cleanup and
+original transport terminality. Discard revalidates the frozen worktree and preserves the failed final and its returns.
+`reconcileRegisteredCheckRun` exposes the same explicit mode through `{ cleanupOnly: true }`; ordinary reconciliation
+retains its existing result/restoration fences. A final record is replayed by `status`; `run-prepared` rejects its descriptor
+after the one claim and never starts a replacement.
 For a preparation process lost before a registration record exists, use
 `bun scripts/check-run-settlement.ts reconcile --descriptor <absolute-private-json> [--state-dir <absolute-dir>]`.
 The private version 1 `.intent.json` sidecar names one invocation, descriptor, candidate and preallocated snapshot

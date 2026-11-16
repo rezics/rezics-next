@@ -1761,7 +1761,7 @@ def lease_note(message):
 def lease_record_path(root):
     return root.parent.parent/'receipts'/root.name/'lease-custody.json'
 
-def verified_lease(root,value=None):
+def lease_record(root,value=None):
     if root.parent.parent!=LEASE_ROOT or root.parent.name!='runs': raise ValueError('foreign lease root')
     record=value if value is not None else lease_json(lease_record_path(root))
     if (set(record)!={'schema','host','run','boot','holder','slots'} or record['schema']!=1 or
@@ -1769,10 +1769,9 @@ def verified_lease(root,value=None):
             not re.fullmatch('[a-z][a-z0-9-]{0,62}',record['host']) or
             record['boot']!=Path('/proc/sys/kernel/random/boot_id').read_text().strip()):
         raise ValueError('foreign lease identity')
-    holder=record['holder']; pid=holder['pid']; fields=lease_fields(pid)
-    if (type(pid) is not int or pid<=1 or fields[19]!=holder['start'] or fields[0] in ['Z','X'] or
-            int(fields[2])!=holder['group'] or (Path('/proc')/str(pid)).stat().st_uid!=holder['uid'] or
-            holder['uid']!=os.getuid()): raise ValueError('lease holder changed')
+    holder=record['holder']; pid=holder['pid']
+    if (type(pid) is not int or pid<=1 or not re.fullmatch('[0-9]+',holder['start']) or
+            holder['uid']!=os.getuid()): raise ValueError('invalid lease holder')
     slots=record['slots']
     if not isinstance(slots,list) or not 1<=len(slots)<=256: raise ValueError('invalid lease slot count')
     names=set();fds=set()
@@ -1781,7 +1780,18 @@ def verified_lease(root,value=None):
         if (not re.fullmatch('(?:express|[0-9]{1,5})',name) or name in names or type(fd) is not int or
                 fd<10 or fd in fds or type(item['bytes']) is not int or item['bytes']<=0):
             raise ValueError('invalid lease slot')
+        if any(type(item[key]) is not int or item[key]<0 for key in ['device','inode','memoryDevice','memoryInode']):
+            raise ValueError('invalid lease path identity')
         names.add(name);fds.add(fd)
+    return record
+
+def verified_lease(root,value=None):
+    record=lease_record(root,value)
+    holder=record['holder']; pid=holder['pid']; fields=lease_fields(pid)
+    if (fields[19]!=holder['start'] or fields[0] in ['Z','X'] or int(fields[2])!=holder['group'] or
+            (Path('/proc')/str(pid)).stat().st_uid!=holder['uid']): raise ValueError('lease holder changed')
+    for item in record['slots']:
+        name=item['name']; fd=item['fd']
         path=LEASE_ROOT/'slots'/(name+'.lock'); held=Path('/proc')/str(pid)/'fd'/str(fd)
         expected=(item['device'],item['inode'])
         if path.is_symlink() or (path.stat().st_dev,path.stat().st_ino)!=expected or (held.stat().st_dev,held.stat().st_ino)!=expected:
@@ -1846,6 +1856,28 @@ export function leaseCustodyCheckScript(directory: string): string {
 try: verified_lease(Path(sys.argv[1]))
 except (OSError,ValueError,KeyError,TypeError,AttributeError,IndexError): sys.exit(1)
 `)} ${directory}`;
+}
+
+function releasedLeaseCheckScript(directory: string, host: string): string {
+  return `python3 -c ${quote(leaseCustodyProgram + String.raw`
+try:
+    record=lease_record(Path(sys.argv[1]))
+    if record['host']!=sys.argv[2]: raise ValueError('foreign lease host')
+    holder=record['holder']
+    try: fields=lease_fields(holder['pid'])
+    except FileNotFoundError: pass
+    else:
+        if fields[19]==holder['start'] and fields[0] not in ['Z','X']:
+            raise ValueError('original lease holder remains live')
+    for slot in record['slots']:
+        memory=LEASE_ROOT/'slots'/(slot['name']+'.memory')
+        try: info=memory.lstat()
+        except FileNotFoundError: continue
+        if (info.st_dev,info.st_ino)==(slot['memoryDevice'],slot['memoryInode']):
+            raise ValueError('original byte reservation remains')
+except (OSError,ValueError,KeyError,TypeError,AttributeError,IndexError):
+    sys.exit(1)
+`)} ${directory} ${quote(host)}`;
 }
 
 /** Replaces the existing holder in place; inherited flock open descriptions never move or close. */
@@ -2617,8 +2649,18 @@ function stopOwnedCheckUnitShell(): string {
 }
 
 /** Both normal cleanup and the stale-directory sweep reconcile only Docker resources labelled for this run. */
-function cleanupCommands(removeDirectory = true, reason: 'lease-orphan' | 'stale-run' | 'controller-cleanup' = 'controller-cleanup', ownedHolder = false): string {
-  const reservationGuard = ownedHolder ? '' : `if ${leaseCustodyCheckScript('"$run_directory"')}; then echo 'cleanup: live reservation remains owned by its lease holder' >&2; exit 75; fi`;
+function cleanupCommands(
+  removeDirectory = true,
+  reason: 'lease-orphan' | 'stale-run' | 'controller-cleanup' = 'controller-cleanup',
+  ownedHolder = false,
+  unacknowledgedLeaseHost?: string,
+): string {
+  let reservationGuard = '';
+  if (unacknowledgedLeaseHost !== undefined) {
+    reservationGuard = `${releasedLeaseCheckScript('"$run_directory"', unacknowledgedLeaseHost)} || { echo 'cleanup: original lease release remains unverified' >&2; exit 75; }`;
+  } else if (!ownedHolder) {
+    reservationGuard = `if ${leaseCustodyCheckScript('"$run_directory"')}; then echo 'cleanup: live reservation remains owned by its lease holder' >&2; exit 75; fi`;
+  }
   const settleResources = `settle_owned_docker_resources() {
   attempt=0
   while [ "$attempt" -lt 3 ]; do
@@ -5068,6 +5110,10 @@ def lifetime():
                           else 'remote-check: infrastructure failure ') + contents)
     else:
         result_code = root_code
+    # The supervisor owns the verdict even if the command shell never reached its result write.
+    if (root_code is not None and (root / 'command-started').exists()) or reason in ['run-lifetime','host-pressure']:
+        durable(root.parent.parent / 'receipts' / run / 'physical-run-status.json',
+                json.dumps({'schema': 1, 'host': host, 'run': run, 'exitCode': result_code}) + '\n')
     if cleanup_incomplete:
         # Keep the native/root result and its evidence, but leave admission terminal state absent while owned work
         # remains. The next admission still sees the live cgroup and stale-run cleanup retains this run directory.
@@ -5374,21 +5420,6 @@ with temporary.open('x') as output:
     output.write(json.dumps(result,separators=(',',':'))+'\n'); output.flush(); os.fsync(output.fileno())
 os.replace(temporary,target)
 descriptor=os.open(target.parent,os.O_RDONLY|os.O_DIRECTORY)
-try: os.fsync(descriptor)
-finally: os.close(descriptor)
-`;
-
-const persistNativeTerminalProgram = String.raw`import json,os,sys
-from pathlib import Path
-root=Path('/srv/rezics-check/receipts')/sys.argv[1]
-root.mkdir(parents=True,exist_ok=True)
-target=root/'physical-run-status.json'
-value={'schema':1,'host':sys.argv[2],'run':sys.argv[1],'exitCode':int(sys.argv[3])}
-temporary=target.with_name(target.name+'.'+str(os.getpid())+'.pending')
-with temporary.open('x') as output:
-    output.write(json.dumps(value,separators=(',',':'))+'\n'); output.flush(); os.fsync(output.fileno())
-os.replace(temporary,target)
-descriptor=os.open(root,os.O_RDONLY|os.O_DIRECTORY)
 try: os.fsync(descriptor)
 finally: os.close(descriptor)
 `;
@@ -5748,7 +5779,6 @@ host=$REMOTE_CHECK_HOST
     terminal_status=${quote(statusFile)}
     if [ "\${REMOTE_CHECK_HOST_LIFETIME:-}" = 1 ]; then terminal_status=${quote(`${directory}/.command-result`)}; fi
     printf '%s\\n' "$code" > "$terminal_status"
-    python3 -c ${quote(persistNativeTerminalProgram)} ${quote(id)} ${quote(hostName)} "$code" || exit 70
     exit $code`;
   const script = `mkdir -p ${wrapperDirectory} && cat > ${wrapperDirectory}/docker <<'WRAPPER' && chmod +x ${wrapperDirectory}/docker || exit 1
 ${dockerWrapper}WRAPPER
@@ -5832,11 +5862,11 @@ export function remoteLaunch(script: string): { command: string; stdin: Blob } {
   };
 }
 
-export function cleanupScript(id: string, directory: string): string {
+export function cleanupScript(id: string, directory: string, unacknowledgedLeaseHost?: string): string {
   return `run_id=${quote(id)}
 run_slice=${runSlice(id)}
 run_directory=${quote(directory)}
-${cleanupCommands()}`;
+${cleanupCommands(true, 'controller-cleanup', false, unacknowledgedLeaseHost)}`;
 }
 
 export function stopRunScript(id: string): string {
@@ -8590,7 +8620,7 @@ async function uploadRun(
   }
 }
 
-async function cleanupPreparedRun(prepared: PreparedRun): Promise<RemoteCleanupReceipt> {
+async function cleanupPreparedRun(prepared: PreparedRun, unacknowledgedLease = false): Promise<RemoteCleanupReceipt> {
   let lastFailure: unknown;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -8599,7 +8629,7 @@ async function cleanupPreparedRun(prepared: PreparedRun): Promise<RemoteCleanupR
           sshExecutable(),
           ...sshOptions(prepared.host, prepared.connectionId),
           prepared.host.address,
-          cleanupScript(prepared.id, prepared.directory),
+          cleanupScript(prepared.id, prepared.directory, unacknowledgedLease ? prepared.host.name : undefined),
         ],
         { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', env: process.env },
       );
@@ -8952,6 +8982,8 @@ print(json.dumps({'native':read_json('physical-run-status.json'),'preparedInputs
         root.lifetimeFailure === null
           ? null
           : parseRunLifetimeFailure(`${RUN_LIFETIME_FAILURE_MARKER}${JSON.stringify(root.lifetimeFailure)}`);
+      if (root.lifetimeFailure !== null && !lifetimeFailure)
+        throw new Error('stored native lifetime evidence is invalid');
       native = parseRemotePhysicalRunReceipt({
         schema: 1,
         host: hostName,
@@ -9238,6 +9270,7 @@ async function runLeased(
   let liveExecutionStartUnavailableReason: string | undefined;
   let phaseChannelWarningPrinted = false;
   const cleanupFailures: string[] = [];
+  let leaseReleaseFailure: { error: unknown } | undefined;
   const settleRunTransport = async (): Promise<void> => {
     if (transportCleanupAttempted) return;
     transportCleanupAttempted = true;
@@ -9479,10 +9512,7 @@ async function runLeased(
     try {
       await releaseLease();
     } catch (error) {
-      cleanupFailures.push(
-        `slot lease release failed: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`,
-      );
-      primaryFailure ??= error;
+      leaseReleaseFailure = { error };
     }
     if (retainedAbortObserved) {
       const recovered = await reconcileRemoteRunOwned(
@@ -9580,9 +9610,7 @@ async function runLeased(
     try {
       await releaseLease();
     } catch (error) {
-      cleanupFailures.push(
-        `slot lease release failed: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`,
-      );
+      leaseReleaseFailure = { error };
     } finally {
       try {
         if (preserveRemoteRun) {
@@ -9592,7 +9620,7 @@ async function runLeased(
             failures: ['started remote run retained for stale-run cleanup after transport loss'],
           };
         } else {
-          cleanup = await cleanupPreparedRun(prepared);
+          cleanup = await cleanupPreparedRun(prepared, leaseReleaseFailure !== undefined);
         }
       } catch (error) {
         const reason = error instanceof Error ? error.message.slice(0, 512) : 'remote cleanup could not be verified';
@@ -9600,6 +9628,12 @@ async function runLeased(
         cleanup = { ...cleanup, status: 'unknown', failures: [...cleanup.failures, reason] };
       }
     }
+  }
+  if (leaseReleaseFailure && cleanup.status !== 'verified') {
+    const { error } = leaseReleaseFailure;
+    const reason = `slot lease release failed: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`;
+    cleanup = { ...cleanup, failures: [...cleanup.failures, reason] };
+    primaryFailure ??= error;
   }
   if (!transportChildReaped) {
     cleanupFailures.push('local SSH transport child terminality is unknown');

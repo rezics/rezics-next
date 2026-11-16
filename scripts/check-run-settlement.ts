@@ -3022,10 +3022,11 @@ export async function discardCheckRunFailedSnapshot(
       validateFinalCustodyIdentity(record, custody) !== ''
     )
       throw new Error('check-run-settlement: failed snapshot discard differs from the original binding or result');
+    const originalCleanupVerified = final.cleanup.remote === 'verified' && final.cleanup.transportChild === 'reaped';
+    // A separate exact observation can settle physical custody while the failed final remains immutable.
     if (
       final.cleanup.disposition !== 'unknown' ||
-      final.cleanup.remote !== 'verified' ||
-      final.cleanup.transportChild !== 'reaped' ||
+      (!originalCleanupVerified && !record.physicalCleanup?.transportChildReaped) ||
       final.cleanup.source !== 'verified' ||
       final.cleanup.localWorktree !== 'retained' ||
       !['delivered', 'received', 'reconciled', 'not-required'].includes(custody.delivery)
