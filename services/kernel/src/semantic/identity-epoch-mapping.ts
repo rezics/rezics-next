@@ -1213,14 +1213,15 @@ async function apply(
       await query(
         tx,
         measured,
-        `WITH page AS MATERIALIZED (SELECT * FROM semantic.identity_epoch_mapping_withdrawal
+        `WITH page AS MATERIALIZED (SELECT withdrawal.*,withdrawal.xmin AS source_xmin
+          FROM semantic.identity_epoch_mapping_withdrawal withdrawal
           WHERE partition_no=$1 AND job_id=$2 AND original=$3
             AND (property,target,statement,filter,context)>($5::text,$6::uuid,$7::uuid,$8::uuid,$9::uuid)
           ORDER BY property,target,statement,filter,context LIMIT 1)
         SELECT w.row,c.transaction_id custody FROM page w
         LEFT JOIN semantic.identity_epoch_mapping_effect e ON
           (e.partition_no,e.job_id,e.unit,e.transaction_id)=(w.partition_no,w.job_id,w.unit,w.transaction_id)
-          AND e.xmin=w.xmin AND e.job_epoch=$4
+          AND e.xmin=w.source_xmin AND e.job_epoch=$4
         LEFT JOIN semantic.identity_epoch_native_commit c ON
           (c.partition_no,c.transaction_id)=(e.partition_no,e.transaction_id) AND c.xmin=e.xmin AND c.purpose='mapping'
           AND c.epoch=$10 AND c.position<=$11`,
