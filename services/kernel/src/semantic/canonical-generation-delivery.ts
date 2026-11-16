@@ -15,6 +15,8 @@ import {
 } from './events.ts';
 
 export const CANONICAL_GENERATION_PAGE_SIZE = 200;
+const CANONICAL_GENERATION_SOURCE_BATCH_SIZE = 8;
+const contextDirectoryChanged = 'com.rezics.semantic.context-directory.changed.v1';
 export type CanonicalGenerationDelivery = Readonly<{ partition: number; generation: string }>;
 export type CanonicalGenerationPageRequest = Readonly<{ after: number | null; limit: number }>;
 export type CanonicalGenerationReceiver = (
@@ -102,7 +104,9 @@ export async function readCanonicalGenerationDeliveryPage(
  * supply it. The native log retains the keyset continuation, so there is no second cursor table.
  * Replays may coalesce to a newer generation, but never reset Rating's existing rebuild cursor.
  *
- * Literal page cost: one <=200-row inventory seek, <=200 single-home commands (one keyed
+ * The source emits at most eight native homes per turn before handing off the next page.
+ * This bounds how many relay homes a single recovery wake can place ahead of ordinary traffic.
+ * Literal page cost: one <=8-row inventory seek, <=8 single-home commands (one keyed
  * counter read each), and at most one continuation command. No Subject or Rating rows are read.
  */
 export async function resumeCanonicalGenerationDelivery(
@@ -110,9 +114,11 @@ export async function resumeCanonicalGenerationDelivery(
   input: CanonicalGenerationPageRequest = { after: null, limit: CANONICAL_GENERATION_PAGE_SIZE },
 ): Promise<void> {
   const request = copyPage(input);
-  const page = await readCanonicalGenerationDeliveryPage(pool, request, {
-    deadline: Date.now() + DEFAULT_REQUEST_DEADLINE_MS,
-  });
+  const page = await readCanonicalGenerationDeliveryPage(
+    pool,
+    { after: request.after, limit: Math.min(request.limit, CANONICAL_GENERATION_SOURCE_BATCH_SIZE) },
+    { deadline: Date.now() + DEFAULT_REQUEST_DEADLINE_MS },
+  );
   for (const home of page.homes) {
     await runCommand(pool, { partition: home.partition }, async (tx) => {
       const row = (await tx.query<{ generation: string; delivered: string }>(
@@ -190,6 +196,7 @@ export async function deliverCanonicalGenerationEvent(
 }
 
 /** Existing mutation events are wake hints, never evidence of complete canonical coverage.
+ * Context directory changes leave the canonical home counters alone.
  * Mechanical delivery/locator events are excluded to avoid a notification feedback loop.
  * Startup always revisits the retained counters, recovering missing or exhausted deliveries.
  */
@@ -197,6 +204,7 @@ export function createCanonicalGenerationWakeEffect(pool: Pool): Effect {
   const types = [
     CANONICAL_GENERATION_CONTINUATION,
     ...Object.keys(SEMANTIC_EVENTS).filter((type) =>
+      type !== contextDirectoryChanged &&
       !type.startsWith('com.rezics.semantic.canonical-generation.') &&
       !type.startsWith('com.rezics.semantic.erasure.locator-'),
     ),
@@ -209,6 +217,8 @@ export function createCanonicalGenerationWakeEffect(pool: Pool): Effect {
     types,
     async run(event) {
       nativeHome(event);
+      // Previously queued context wakes still need to complete their delivery.
+      if (event.type === contextDirectoryChanged) return;
       if (event.type === CANONICAL_GENERATION_CONTINUATION) {
         if (!Value.Check(SEMANTIC_EVENTS[CANONICAL_GENERATION_CONTINUATION], event.data))
           throw new TypeError('Invalid canonical generation continuation');
