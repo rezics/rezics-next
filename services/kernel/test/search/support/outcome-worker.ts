@@ -4,6 +4,7 @@ import { rebuildSubjects, RebuildError } from '../../../src/search/generations.t
 import { createOpenSearch } from '../../../src/search/opensearch.ts';
 import { readSearchConfig } from '../../../src/search/work.ts';
 import { subjectGenerations } from '../../../src/search/indices.ts';
+import { tree } from '../../../src/search/public-filter-codec.ts';
 import { PUBLIC_PREPARATION_WORKFLOW } from '../../../src/search/public-preparation-store.ts';
 import { createRatedSubjectSource } from '../../../src/search/rated-source.ts';
 import { discoveryConsumer, subjectConsumer } from '../../../src/search/consumer-name.ts';
@@ -49,22 +50,34 @@ type PublicationJobRow = {
   after_id: string | null;
   fenced: boolean;
   native_incarnation: string;
+  source_sealed: boolean;
 };
 
 /** Failure inspection only: current publication row, home witnesses, writer copies and relay checkpoints. */
 async function inspectPublication(pool: Pool, prefix: string): Promise<Record<string, unknown>> {
-  const jobs = (
-    await pool.query<PublicationJobRow>(
+  const nativeJobs = (
+    await pool.query<PublicationJobRow & { consumer: unknown }>(
       `SELECT job::text, phase, home, pass::text, fenced_pass, family, physical_target,
               generation::text, revision::text, after_id::text,
-              (fence IS NOT NULL) AS fenced, native_incarnation
-       FROM search.generation_publication
+              (fence IS NOT NULL) AS fenced, native_incarnation, j.consumer,
+              EXISTS (
+                SELECT 1 FROM semantic.public_filter_bootstrap b
+                JOIN semantic.public_filter_repair_step t
+                  ON (t.partition_no,t.bootstrap,t.execution)=(b.partition_no,b.bootstrap,b.publication_execution)
+                WHERE (b.partition_no,b.publication_job)=(j.partition_no,j.job)
+                  AND '0:' || b.bootstrap::text=j.bootstrap
+                  AND b.publication_observation=j.observation AND b.publication_execution=j.execution
+                  AND b.state='adopted' AND b.coverage_sealed AND b.coverage_after=4096
+                  AND t.complete AND t.verified_root IS NOT NULL AND t.verified_next IS NULL AND t.ack_after=4096
+              ) AS source_sealed
+       FROM search.generation_publication j
        WHERE partition_no=0 AND prefix=$1
        ORDER BY family, generation, job
        LIMIT 4`,
       [prefix],
     )
   ).rows;
+  const jobs = nativeJobs.map(({ consumer: _consumer, ...job }) => job);
   const locators = (
     await pool.query<{
       id: string;
@@ -75,13 +88,14 @@ async function inspectPublication(pool: Pool, prefix: string): Promise<Record<st
       publication: string | null;
       uuid: string | null;
       due_at: string;
+      lease_until: string;
     }>(
       `SELECT id::text, revision::text, kind,
               locator->>'phase' AS phase,
               NULLIF(locator->>'generation','')::integer AS generation,
               locator->>'publication' AS publication,
               locator->>'uuid' AS uuid,
-              due_at::text
+              due_at::text, lease_until::text
        FROM search.public_preparation
        WHERE partition_no=0 AND prefix=$1 AND kind='population'
        ORDER BY due_at, id
@@ -99,6 +113,68 @@ async function inspectPublication(pool: Pool, prefix: string): Promise<Record<st
        WHERE job=ANY($1::uuid[])
        GROUP BY job, pass`,
       [jobIds],
+    )
+  ).rows;
+  const sourceCuts = (
+    await pool.query(
+      `SELECT j.job::text, b.bootstrap::text, b.state, b.account_after, b.coverage_after, b.coverage_sealed,
+              b.publication_job::text, b.publication_observation, b.publication_execution,
+              preparation.after_home AS receiver_after,
+              prepared.observation AS native_prepared_observation, prepared.state AS native_prepared_state,
+              verified.verified_ordinal::text AS source_repair_ordinal, verified.verified_home AS source_repair_home,
+              verified.complete AS source_repair_complete, verified.ack_after AS source_repair_ack_after,
+              EXISTS (
+                SELECT 1 FROM search.public_filter_execution x
+                WHERE (x.partition_no,x.observation,x.id)=(j.source_home,prepared.observation,j.job::text)
+              ) AS native_execution_bound,
+              p.epoch AS next_epoch,
+              p.write_state AS next_write_state, p.position::text AS next_position,
+              e.owner_epoch AS next_enrollment_epoch, e.complete AS next_enrollment_complete,
+              (e.receipt IS NOT NULL) AS next_has_receipt, (e.key_after IS NOT NULL) AS next_has_key_cursor,
+              (a.partition_no IS NOT NULL) AS next_has_account_head, h.owner_epoch AS next_source_owner_epoch,
+              c.epoch AS next_pin_epoch, c.position::text AS next_pin_position
+       FROM search.generation_publication j
+       JOIN jsonb_to_recordset($2::jsonb) AS expected(job uuid, source_consumer text, search_consumer text)
+         ON expected.job=j.job
+       JOIN semantic.public_filter_bootstrap b
+         ON b.partition_no=j.source_home AND b.read_definition::text=j.binding->>'readDefinition'
+         AND b.consumer=expected.source_consumer AND (b.publication_job IS NULL OR b.publication_job=j.job)
+       LEFT JOIN search.public_filter_coverage_preparation preparation
+         ON (preparation.partition_no,preparation.bootstrap,preparation.definition)=(j.source_home,b.bootstrap,b.read_definition)
+       LEFT JOIN search.public_filter_registration registration
+         ON registration.partition_no=j.source_home AND registration.physical_target=j.physical_target
+         AND registration.consumer IN (expected.search_consumer,expected.source_consumer)
+         AND registration.state='active'
+       LEFT JOIN LATERAL (
+         SELECT o.observation,o.state FROM search.public_filter_observation o
+         WHERE (o.partition_no,o.registration)=(registration.partition_no,registration.id)
+         AND o.prepared_build='0:' || b.bootstrap::text
+         ORDER BY o.observation LIMIT 1
+       ) prepared ON true
+       LEFT JOIN LATERAL (
+         SELECT s.verified_ordinal,s.verified_home,s.complete,s.ack_after
+         FROM semantic.public_filter_repair_step s
+         WHERE (s.partition_no,s.bootstrap,s.execution)=(b.partition_no,b.bootstrap,b.publication_execution)
+         AND s.verified_root IS NOT NULL AND s.verified_next IS NULL LIMIT 1
+       ) verified ON true
+       LEFT JOIN core.partition p ON p.partition_no=b.account_after
+       LEFT JOIN semantic.public_filter_home_enrollment e ON (e.partition_no,e.bootstrap)=(b.account_after,b.bootstrap)
+       LEFT JOIN access.account_discovery_population a ON a.partition_no=b.account_after
+       LEFT JOIN semantic.public_filter_privacy_head h ON h.partition_no=b.account_after
+       LEFT JOIN core.consumer_checkpoint c ON (c.partition_no,c.consumer)=(e.partition_no,e.creation_consumer)
+       WHERE j.partition_no=0 AND j.job=ANY($1::uuid[])
+       ORDER BY j.job,b.bootstrap
+       LIMIT 4`,
+      [
+        jobIds,
+        JSON.stringify(
+          nativeJobs.map(({ job, consumer }) => ({
+            job,
+            source_consumer: JSON.stringify(tree(consumer, 'value')),
+            search_consumer: JSON.stringify(tree(consumer)),
+          })),
+        ),
+      ],
     )
   ).rows;
   const currentHomes = [...new Set(jobs.map((job) => job.home).filter((home) => home >= 0 && home < 4096))];
@@ -181,7 +257,7 @@ async function inspectPublication(pool: Pool, prefix: string): Promise<Record<st
             [consumers],
           )
         ).rows;
-  return { locators, jobs, homes, visible, writers, gates, checkpoints };
+  return { observedAt: Date.now(), locators, jobs, homes, sourceCuts, visible, writers, gates, checkpoints };
 }
 
 function phase(name: string) {
@@ -414,13 +490,42 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
     } catch (error) {
       workflows = { error: failure(error) };
     }
+    const maintenance = await Promise.all(
+      (['PENDING', 'ENQUEUED'] as const).map(async (status) => {
+        try {
+          const sample = await context.client.listWorkflows({
+            queueName: 'maintenance',
+            status,
+            limit: 4,
+            sortDesc: false,
+            loadInput: false,
+            loadOutput: false,
+          });
+          return {
+            status,
+            mayBeTruncated: sample.length === 4,
+            entries: sample.map((workflow) => ({
+              name: workflow.workflowName,
+              executorId: workflow.executorId,
+              version: workflow.applicationVersion,
+              priority: workflow.priority,
+              createdAt: workflow.createdAt,
+              dequeuedAt: workflow.dequeuedAt,
+              delayUntil: workflow.delayUntilEpochMS,
+            })),
+          };
+        } catch (error) {
+          return { status, error: failure(error) };
+        }
+      }),
+    );
     let publication: unknown;
     try {
       publication = await inspectPublication(context.pool, config.prefix);
     } catch (error) {
       publication = { error: failure(error) };
     }
-    return { prefix: config.prefix, runner, generations, workflows, publication };
+    return { prefix: config.prefix, runner, generations, workflows, maintenance, publication };
   }
 
   function control(method: string, params: unknown): unknown | Promise<unknown> {

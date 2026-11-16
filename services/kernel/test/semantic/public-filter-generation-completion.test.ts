@@ -343,3 +343,87 @@ test('an unfenced engine page completes after exact inline replay of an advanced
     }
   }
 }, 120_000);
+
+test('native publication starts repair from the original adopted Source execution', async () => {
+  const f = await fixture();
+  const search = createOpenSearch(process.env.OPENSEARCH_URL!);
+  const prefix = `source-repair-start-${crypto.randomUUID().slice(0, 8)}-`;
+  const target = subjectIndexName(prefix, 1);
+  const runtime = createDefaultPublicFilterRuntime({ ...f.config, search, prefix });
+  try {
+    const book = await f.create('schema:Book');
+    const partition = partitionOf(routeOf(book)!);
+    await createSubjectIndex(search, prefix, 1);
+    const writer = createSearchWriterGuard({
+      pool: f.db.pool,
+      search,
+      index: target,
+      consumer: subjectConsumer(prefix, 1),
+      source: createRatedSubjectSource(f.db.pool, f.config.routeKey).source,
+      listing: subjectListingSource(f.db.pool),
+    });
+    const position = await f.db.pool.query<{ position: string }>(
+      'SELECT position::text FROM core.partition WHERE partition_no=$1',
+      [partition],
+    );
+    await writer.write(partition, [book], BigInt(position.rows[0]!.position));
+    const deadline = Date.now() + 200_000;
+    const context = () => ({ deadline: Math.min(deadline, Date.now() + PUBLIC_PREPARATION_BUDGET_MS) });
+    const publication = await runtime.preparePublication(1, context());
+    if (publication.status !== 'preparing') throw new Error(publication.reason);
+    const { job } = publication;
+    const registration = await f.db.pool.query<{ definition: string }>(
+      'SELECT definition FROM search.public_filter_registration WHERE partition_no=0 AND physical_target=$1',
+      [target],
+    );
+    const retained = decodePublicFilterNativeState<{ data: { meaning: { release: unknown } } }>(
+      registration.rows[0]!.definition,
+    );
+    expect(retained.data.meaning.release).toEqual({ authority: 'semantic.readRelease', digest: f.meaning.digest });
+    let activate = false;
+    let boundAttempts = 0;
+    let last = 'registered';
+    for (let turn = 0; turn < 500 && Date.now() < deadline; turn++) {
+      if (!activate) {
+        const step = await runtime.publication.step(job, context(), { enrollSource: true });
+        last = 'reason' in step ? `${step.status} ${step.reason}` : step.status;
+        activate = step.status === 'reconciled';
+        continue;
+      }
+      const result = await runtime.publication.activate(job, context());
+      last = 'reason' in result ? `${result.status} ${result.reason}` : result.status;
+      if (result.status === 'preparing' && result.next === 'step') activate = false;
+      const source = await f.db.pool.query<{
+        state: string;
+        observation: string;
+        execution: string;
+        root: boolean;
+      }>(
+        `SELECT b.state, b.publication_observation AS observation, b.publication_execution AS execution,
+                EXISTS(SELECT 1 FROM semantic.public_filter_repair_step r
+                  WHERE (r.partition_no,r.bootstrap,r.execution)=(b.partition_no,b.bootstrap,b.publication_execution)
+                  AND r.predecessor IS NULL) AS root
+           FROM semantic.public_filter_bootstrap b
+          WHERE (b.partition_no,b.publication_job)=(0,$1::uuid)`,
+        [job.job],
+      );
+      const original = source.rows[0];
+      if (original?.state !== 'adopted') continue;
+      expect(original.execution).toBe(job.job);
+      expect(original.observation).toMatch(/^0:/);
+      if (original.root) return;
+      if (++boundAttempts === 8) break;
+    }
+    throw new Error(`Original Source repair root stayed absent after ${boundAttempts} bound turns, last result ${last}`);
+  } finally {
+    try {
+      await runtime.close();
+    } finally {
+      try {
+        await search.request('DELETE', `/${target}`);
+      } finally {
+        await f.close();
+      }
+    }
+  }
+}, 240_000);
