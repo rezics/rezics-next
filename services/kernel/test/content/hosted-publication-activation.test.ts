@@ -89,28 +89,23 @@ test('expired sealed Books refuse fresh activation work, retain the old edition 
       routeKey: f.native.system.routeKey,
       clock: () => at,
     };
+    const stageInput = (stageId: string) => ({
+      catalogueId,
+      stageId,
+      expectedHeadRevisionId: draft.revisionId,
+      expectedPublicationId: editionA.revisionId,
+      mode: 'whole' as const,
+    });
     async function prepare(expiresAt = expiry.toISOString()) {
       const stageId = f.newOccurrenceId();
       const stagePath = `${path}/publicationPreparations/${stageId}`;
-      await f.native.command(
-        `${path}:prepareRelease`,
-        {
-          stageId,
-          expectedRevisionId: draft.revisionId,
-          expectedPublicationId: editionA.revisionId,
-          mode: 'whole',
-        },
-        202,
-      );
-      const built = await f.native.command(`${stagePath}:advance`, { stepId: f.newOccurrenceId() }, 200);
-      expect(built.candidate.coverageComplete).toBe(true);
+      await f.beginExpiringStage(stageInput(stageId), expiresAt);
+      let progress = await f.native.command(`${stagePath}:advance`, { stepId: f.newOccurrenceId() }, 200);
+      for (let page = 1; page < 16 && !progress.candidate?.coverageComplete; page++) {
+        progress = await f.native.command(`${stagePath}:advance`, { stepId: f.newOccurrenceId() }, 200);
+      }
+      expect(progress.candidate?.coverageComplete).toBe(true);
       expect((await f.native.command(`${stagePath}:seal`, {}, 200)).candidateReady).toBe(true);
-      // Install the boundary directly; command time advances without a collector or a sleep.
-      await f.native.pool.query(
-        `UPDATE content.hosted_publication_staging SET expires_at=$4::timestamptz
-         WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
-        [route, catalogueId, stageId, expiresAt],
-      );
       return stageId;
     }
     const unstarted = await prepare();

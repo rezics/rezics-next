@@ -132,16 +132,19 @@ export async function hostedChaptersFixture() {
       threadOutsidePartition,
       projectSubjectThread,
       target,
-      /** Start a stage with a short immutable lease through the same native staging owner. */
-      beginExpiringStage(input: Omit<BeginHostedPublicationStaging, 'expiresAt'>, lifetimeSeconds: number) {
+      /** Start a native stage with the fixed deadline or a lease measured in PostgreSQL seconds. */
+      beginExpiringStage(input: Omit<BeginHostedPublicationStaging, 'expiresAt'>, expiry: number | Date | string) {
         return withConnection(native.pool, async (client) => {
           await client.query('BEGIN');
           try {
-            const { rows } = await client.query<{ expires_at: Date }>(
-              "SELECT clock_timestamp() + $1::integer * interval '1 second' AS expires_at",
-              [lifetimeSeconds],
-            );
-            const expiresAt = rows[0]!.expires_at;
+            let expiresAt = expiry;
+            if (typeof expiresAt === 'number') {
+              const { rows } = await client.query<{ expires_at: Date }>(
+                "SELECT clock_timestamp() + $1::integer * interval '1 second' AS expires_at",
+                [expiresAt],
+              );
+              expiresAt = rows[0]!.expires_at;
+            }
             await beginHostedPublicationStaging(client, native.author.actor, { ...input, expiresAt });
             await client.query('COMMIT');
             return expiresAt;
@@ -151,7 +154,7 @@ export async function hostedChaptersFixture() {
           }
         });
       },
-      async waitForStageExpiry(expiresAt: Date) {
+      async waitForStageExpiry(expiresAt: Date | string) {
         await native.pool.query('SELECT pg_sleep_until($1::timestamptz)', [expiresAt]);
       },
       async protectedChapter() {
