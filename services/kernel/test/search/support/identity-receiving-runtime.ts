@@ -62,7 +62,7 @@ export async function runSearchIdentityReceivingStep(
   if (
     progress.state === 'more' &&
     progress.frontier.after[3] === SEARCH_IDENTITY_WRITER_REQUEST &&
-    (await prepare(pool, progress.receipt)) !== 'prepared'
+    (await prepare(pool, progress.receipt)).state === 'pending'
   )
     throw new IdentityEpochStoreError('identity_epoch_unavailable', 'Search still needs a committed original plan');
   return progress;

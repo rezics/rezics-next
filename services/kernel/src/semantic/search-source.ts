@@ -32,6 +32,7 @@ import readStatements from './search-source-statements.sql';
 import readSubjects from './search-source-subjects.sql';
 import { accessCheck } from '../request/access.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS, mintReadTime } from '../command/command.ts';
+import { nativeSourceQuery } from '../database/native-source-query.ts';
 import { withBoundedReadConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { subjectReadEligibility } from './eligibility.ts';
@@ -43,6 +44,7 @@ import type {
   PublicFilterCost,
   PublicFilterProjectionPage,
   PublicFilterProjectionRequest,
+  PublicFilterProjectionRetirement,
   PublicFilterSource,
   PublicFilterSourceFactory,
 } from './public-filter-source-contract.ts';
@@ -409,7 +411,11 @@ export async function readIdentitySourceProjection(
       projection: Extract<PublicFilterProjectionPage, { status: 'progress' | 'complete' }> | null;
       cost: PublicFilterCost;
     }
-  | { status: 'changed' | 'unready' | 'unavailable'; cost: PublicFilterCost }
+  | {
+      status: 'changed' | 'unready' | 'unavailable';
+      cost: PublicFilterCost;
+      retirement?: PublicFilterProjectionRetirement;
+    }
 > {
   let cost: PublicFilterCost = {
     inputKeys: 0,
@@ -446,7 +452,7 @@ export async function readIdentitySourceProjection(
         const owner = await readPartition(tx, partitionOf(route));
         if (!owner || owner.writeState !== 'active') return 'unavailable' as const;
         charge('dependencyPoints');
-        const state = await readVisibility.run(tx, {
+        const state = await nativeSourceQuery(tx, readVisibility, {
           route,
           subject_id: request.original,
         });
@@ -454,7 +460,7 @@ export async function readIdentitySourceProjection(
         if (!state) return 'unavailable' as const;
         if (state.visibility !== 'visible') return 'withheld' as const;
         requireAccessDeadline(request.context.deadline);
-        const at = await mintReadTime(tx, config.clock);
+        const at = await mintReadTime(tx, config.clock, config.pool);
         return (await authorize(tx, at)) ? ('visible' as const) : ('withheld' as const);
       }),
     );
@@ -462,12 +468,16 @@ export async function readIdentitySourceProjection(
     if (visible === 'withheld') return { status: 'projected', projection: null, cost };
     return await withPublicStatementReader(() =>
       withIdentitySourceSupportJob(request.job, async () => {
-        charge('dependencyPoints');
-        const mapping = await readIdentityMapping(config.pool, request.original);
-        if (mapping.state === 'pending') return { status: 'unready', cost };
-        if (mapping.state !== 'mapped') return { status: 'unavailable', cost };
-        if (mapping.epoch !== request.job.epoch || mapping.terminal !== request.terminal)
-          return { status: 'changed', cost };
+        // A resumed cursor authenticates the retained build. A complete page still
+        // rechecks the live job mapping before it can support any writer action.
+        if (request.frontier === null) {
+          charge('dependencyPoints');
+          const mapping = await readIdentityMapping(config.pool, request.original);
+          if (mapping.state === 'pending') return { status: 'unready', cost };
+          if (mapping.state !== 'mapped') return { status: 'unavailable', cost };
+          if (mapping.epoch !== request.job.epoch || mapping.terminal !== request.terminal)
+            return { status: 'changed', cost };
+        }
         const page = await source.readPublicFilterProjectionPage({
           subject: request.original,
           meaning: request.meaning,
@@ -478,9 +488,15 @@ export async function readIdentitySourceProjection(
         cost = Object.fromEntries(
           Object.entries(cost).map(([key, value]) => [key, value + page.cost[key as keyof PublicFilterCost]]),
         ) as PublicFilterCost;
+        if (page.status === 'unready' && page.retirement)
+          return { status: page.status, cost, retirement: page.retirement };
         if (page.status !== 'progress' && page.status !== 'complete') return { status: page.status, cost };
         if (page.source.subject !== request.original || page.source.terminal !== request.terminal)
           return { status: 'changed', cost };
+        if (page.status === 'progress') {
+          requireAccessDeadline(request.context.deadline);
+          return { status: 'projected', projection: page, cost };
+        }
         charge('dependencyPoints');
         const current = await readIdentityMapping(config.pool, request.original);
         if (current.state !== 'mapped' || current.epoch !== request.job.epoch || current.terminal !== request.terminal)

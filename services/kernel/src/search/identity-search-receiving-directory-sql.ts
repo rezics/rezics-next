@@ -1,5 +1,5 @@
 /** Resolve only the newest directory checkpoint for this pending job on its current control home. */
-export const readSearchIdentityDirectorySql = `SELECT j.scope_digest,s.transaction_id::text,s.native_epoch,s.native_position::text,s.frontier,
+export const readSearchIdentityDirectorySql = `SELECT j.scope_digest,j.intent->>'release' AS release,s.transaction_id::text,s.native_epoch,s.native_position::text,s.frontier,
   (s.transaction_id IS NULL OR (c.transaction_id IS NOT NULL AND p.epoch=c.epoch AND p.position>=c.position)) AS proven
  FROM semantic.identity_epoch_job j
  JOIN core.partition p ON p.partition_no=j.partition_no AND p.write_state='active'
@@ -83,7 +83,7 @@ export const advanceSearchIdentityOriginalSql = `WITH settled AS MATERIALIZED (
 SELECT effect_key FROM settled`;
 
 /** One original-home admission can be retained for a committed control request. */
-export const readSearchIdentityWriterAdmissionSql = `SELECT
+export const readSearchIdentityWriterAdmissionSql = `SELECT s.transaction_id::text,
   (s.scope_digest=$5 AND s.frontier->'after'->>2=$6 AND o.partition_no IS NOT NULL) AS proven
  FROM semantic.identity_epoch_step s
  LEFT JOIN semantic.identity_epoch_native_commit c
@@ -95,3 +95,22 @@ export const readSearchIdentityWriterAdmissionSql = `SELECT
  WHERE (s.partition_no,s.job_id,s.job_epoch)=($1,$2,$3)
    AND s.step='search-canonical-index' AND s.state='more'
    AND s.frontier->'after'->>0='search-writer-admitted' AND s.frontier->'after'->>1=$4`;
+
+/** Read the latest committed Source support cursor for one phase of this exact writer request. */
+export const readSearchIdentityWriterSupportSql = `WITH latest AS MATERIALIZED (
+ SELECT partition_no,transaction_id,native_epoch,native_position,scope_digest,frontier,xmin
+ FROM semantic.identity_epoch_step
+ WHERE (partition_no,job_id,job_epoch)=($1,$2,$3)
+   AND step='search-canonical-index' AND state='more'
+   AND frontier->'after'->>0='search-writer-support'
+   AND frontier->'after'->>1=$4 AND frontier->'after'->>2=$5
+ ORDER BY native_position DESC,transaction_id DESC LIMIT 1
+)
+SELECT s.transaction_id::text,s.frontier,(s.scope_digest=$6 AND o.partition_no IS NOT NULL) AS proven
+FROM latest s
+LEFT JOIN semantic.identity_epoch_native_commit c
+ ON (c.partition_no,c.transaction_id,c.epoch,c.position)=(s.partition_no,s.transaction_id,s.native_epoch,s.native_position)
+ AND c.purpose='search-canonical-index' AND c.xmin=s.xmin
+ AND c.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid
+LEFT JOIN core.partition o ON o.partition_no=c.partition_no AND o.epoch=c.epoch
+ AND o.write_state='active' AND o.position>=c.position`;
