@@ -130,7 +130,7 @@ export interface CanonicalGroupProgress {
 
 export type CanonicalNotReady = {
   readonly state: 'not_ready';
-  readonly reason: 'source' | 'identity' | 'unbuilt' | 'incomplete' | 'stale' | 'allowance';
+  readonly reason: 'source' | 'identity' | 'unbuilt' | 'incomplete' | 'registration_pending' | 'stale' | 'allowance';
   readonly work: CanonicalWork;
 };
 export type CanonicalAuthorityRead =
@@ -967,7 +967,7 @@ export async function advanceCanonicalSourceCapture(pool: Pool, input: Canonical
     });
     takeScopeWork(l, registered.work);
     if (registered.status !== 'registered')
-      return notReady(l, registered.status === 'pending' ? 'incomplete' : 'identity');
+      return notReady(l, registered.status === 'pending' ? 'registration_pending' : 'identity');
     const observation = registered.observation;
     if (!observation) return notReady(l, 'identity');
     await mutate(pool, input, l, metadata, async (tx) => {
