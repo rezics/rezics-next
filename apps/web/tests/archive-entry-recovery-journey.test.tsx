@@ -480,7 +480,8 @@ test('Independent archive readers commit exact windows and keep choices and ackn
     expect(f.journey.snapshot().state!.results!.context.next).toBeNull();
     expect(f.journey.snapshot().state!.resultsNavigation.previous).toEqual([-1, 0]);
     expect(f.journey.snapshot().state!.pageNavigation.current).toBe(reviewedCoordinate);
-    expect(renderToStaticMarkup(<ArchiveEntryRecoveryView journey={f.journey} />)).toContain('Previous');
+    const markup = renderToStaticMarkup(<ArchiveEntryRecoveryView journey={f.journey} />);
+    expect(markup).toMatch(/<section(?=[^>]*id="archive-results")(?=[^>]*\shidden="")[^>]*>/);
     await f.journey.results('previous');
     expect(f.journey.snapshot().state!.resultsNavigation).toMatchObject({ current: 0, previous: [-1] });
     await f.journey.results('first');
@@ -749,10 +750,10 @@ test('reviewable provenance uses observation identity and preserve fields, never
     const html = renderToStaticMarkup(<ArchiveEntryRecoveryView journey={f.journey} />);
     expect(html).toContain('archive-observation-6');
     expect(html).toContain('name="revision"');
-    expect(html).toContain('name="privacy"');
-    expect(html).toContain('name="sourceCreated"');
-    expect(html).toContain('name="sourceUpdated"');
-    expect(html).toContain('value="preserve" selected');
+    for (const field of ['privacy', 'sourceCreated', 'sourceUpdated']) {
+      const input = html.match(new RegExp(`<input(?=[^>]*name="${field}")[^>]*>`))?.[0];
+      expect(input).toContain('value="preserve"');
+    }
     expect(html).not.toContain('value="assign"');
     expect(html).not.toContain('name="labelId"');
     expect(f.journey.snapshot().state!.choices).toEqual([]);
@@ -799,7 +800,8 @@ test('Working areas retain drafts and native confirmation, original retry, resul
     await act(async () => root.render(<ArchiveEntryRecoveryView journey={f.journey} />));
     expect(area('rows').hidden).toBe(false);
     expect(area('inventory').closest('details')!.open).toBe(false);
-    const drafts = [...area('rows').querySelectorAll<HTMLInputElement>('input:not([type="hidden"])')];
+    const drafts = [...area('rows').querySelectorAll<HTMLInputElement>('input:not([aria-hidden="true"])')]
+      .filter((input) => input.type === 'text');
     expect(drafts.length).toBeGreaterThan(6);
     drafts.forEach((input, index) => {
       input.value = `unsent-${index}`;
