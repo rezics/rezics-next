@@ -21,13 +21,14 @@ candidate AS (
 )
 SELECT candidate.target::text AS "subjectId",
        terminal.visibility = 'visible' AS "activeTerminal",
-       EXISTS (
-         SELECT 1
+       (
+         SELECT target_redirect.target
          FROM semantic.redirect AS target_redirect
          WHERE target_redirect.route = get_byte(uuid_send(candidate.target), 10) * 256
                                      + get_byte(uuid_send(candidate.target), 11)
            AND target_redirect.subject_id = candidate.target
-       ) AS "targetRedirecting"
+         ORDER BY target_redirect.sequence DESC LIMIT 1
+       ) IS NOT NULL AS "targetRedirecting"
 FROM candidate
 LEFT JOIN semantic.subject AS terminal
   ON terminal.route = get_byte(uuid_send(candidate.target), 10) * 256
