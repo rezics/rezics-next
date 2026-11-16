@@ -834,8 +834,9 @@ its hold. Semantic transfers the hold through its original applied disposition w
 Once the successor is committed, Semantic retires the exact private Collection Source registration and releases
 its hold through native custody. Each committed step returns the erasure workflow to the same Collection.
 Terminal cleanup detaches the curator and original account publication row once the required custody has cleared.
-The Source sweep can resume these steps after interruption. Subsequent member reads revalidate the committed
-successor, account-free retained generation and current identity scope. Other held or uncertain copies keep
+The Source sweep can resume these steps after interruption. Once attribution is cleared, each member seek reads
+the committed successor, account-free retained generation, current identity scope and seal in one read-only
+snapshot. The final seek rechecks that generation and seal after disclosure. Other held or uncertain copies keep
 de-identification pending. The same sweep can capture a retained built-in output whose original capture was
 missing or unfinished at T. It reads only the immutable frozen set under its actual activation, and resumes
 the original capture if one exists. A terminal freeze now retains the verified activation coordinates before

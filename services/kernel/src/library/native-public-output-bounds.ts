@@ -30,6 +30,7 @@ import retained from './native-public-output-retained.sql';
 import frozenOrigin from './native-public-output-frozen-origin.sql';
 import frozenOwnerLock from './native-public-output-frozen-owner-lock.sql';
 import frozenSuccessor from './native-public-output-frozen-successor.sql';
+import frozenSuccessorRead from './native-public-output-frozen-successor-read.sql';
 
 export const NATIVE_PUBLIC_OUTPUT_PAGE_LIMIT = 100;
 export const PUBLIC_OUTPUT_PARTITION_SIZE_SQL =
@@ -446,6 +447,21 @@ function frozenSuccessorStatement() {
     }),
   );
 }
+function frozenSuccessorReadStatement() {
+  return memoizedValue(frozenSuccessorReadStatement, () =>
+    statement(
+      'frozen-successor-read',
+      frozenSuccessorRead,
+      captureBinds,
+      { present: 1 },
+      {
+        nativeRows: 176,
+        nativePoints: 22,
+        relationBytes: 128,
+      },
+    ),
+  );
+}
 function bindStatement() {
   return memoizedValue(bindStatement, () =>
     statement(
@@ -723,6 +739,7 @@ function staticStatements() {
       frozenOriginStatement(),
       frozenOwnerLockStatement(),
       frozenSuccessorStatement(),
+      frozenSuccessorReadStatement(),
       bindStatement(),
       receivingStatement(),
       holdPredecessorStatement(),

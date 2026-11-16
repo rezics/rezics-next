@@ -23,6 +23,7 @@ import s7 from './identity-public-output-original.sql';
 import s8 from './identity-public-output-advance.sql';
 import s9 from './identity-public-output-scope-start.sql';
 import s10 from './identity-public-output-scope.sql';
+import scopeReadSQL from './identity-public-output-scope-read.sql';
 import s11 from './identity-public-output-scope-seal.sql';
 import s12 from './identity-public-output-seal.sql';
 import s13 from './identity-public-output-seal-insert.sql';
@@ -130,6 +131,7 @@ function plans() {
         [s8.sql, [1, 24, 3, 131072, 0, 0, 2, 2]],
         [s9.sql, [2, 32, 4, 32768, 0, 0, 3, 3]],
         [s10.sql, [1, 8, 1, 9216, 0, 0, 1]],
+        [scopeReadSQL.sql, [1, 8, 1, 9216, 0, 0, 1]],
         [s11.sql, [2, 32, 4, 32768, 0, 0, 3, 3]],
         [s12.sql, [4, 32, 4, 512, 0, 0, 1]],
         [s13.sql, [7, 88, 11, 131072, 0, 0, 6, 6]],

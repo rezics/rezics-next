@@ -93,12 +93,13 @@ export async function readPublicCollectionMembers(
     // The exact selected seal is resolved independently by seek, including an account-free frozen successor.
     if (metadata.sourceGeneration !== input.sourceGeneration)
       throw new ProblemError(position ? 'stale_cursor' : 'dependency_unavailable');
+    return metadata.curatorAccountId === null;
   };
-  const seek = async (after: PublicOutputOriginalKey | null, limit: number) => {
+  const seek = async (after: PublicOutputOriginalKey | null, limit: number, accountFree: boolean) => {
     const result = await work.compose((allowance) =>
       readSelectedPublicIdentityOutput(
         deps.pool,
-        { collectionId: input.collectionId, sourceGeneration: input.sourceGeneration, after, limit },
+        { collectionId: input.collectionId, sourceGeneration: input.sourceGeneration, after, limit, accountFree },
         { deadline: input.deadline, allowance },
         nativeOutput,
       ),
@@ -135,8 +136,8 @@ export async function readPublicCollectionMembers(
   let version: string;
   const rawLimit = Math.min(100, 2 * input.limit + 1);
   try {
-    await authorize(at);
-    first = await seek(after, rawLimit);
+    const accountFree = await authorize(at);
+    first = await seek(after, rawLimit, accountFree);
     version = versionOf(first);
     if (
       position &&
@@ -148,7 +149,7 @@ export async function readPublicCollectionMembers(
       throw new ProblemError('stale_cursor');
 
     for (let round = 0; round < refillRounds; round++) {
-      const page = round === 0 ? first : await seek(after, rawLimit);
+      const page = round === 0 ? first : await seek(after, rawLimit, accountFree);
       if (versionOf(page) !== version) throw new ProblemError('stale_cursor');
       if (page.more && page.rows.length === 0) throw new ProblemError('dependency_unavailable');
       const readable = await disclose(page.rows, at);
@@ -175,8 +176,9 @@ export async function readPublicCollectionMembers(
   const shown = members.slice(0, input.limit);
   const revalidate = async () => {
     const finalAt = await mintTime();
+    let accountFree: boolean;
     try {
-      await authorize(finalAt);
+      accountFree = await authorize(finalAt);
       for (const { rows, readable } of disclosed) {
         const current = await disclose(rows, finalAt);
         if (current.some((value, index) => value !== readable[index])) throw new ProblemError('semantic_not_ready');
@@ -184,7 +186,7 @@ export async function readPublicCollectionMembers(
     } finally {
       releaseOperationalTime(finalAt);
     }
-    if (versionOf(await seek(null, 0)) !== version) throw new ProblemError('stale_cursor');
+    if (versionOf(await seek(null, 0, accountFree)) !== version) throw new ProblemError('stale_cursor');
     await input.revalidate();
   };
   let result: readonly { kind: 'dynamic'; subjectId: string }[] = shown;
