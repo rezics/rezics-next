@@ -24,6 +24,7 @@ import {
   parseDiscoveryDocumentKey,
   secondScopeDiscoveryDocumentActions,
   type AnyDiscoveryIndexAction,
+  type DiscoveryDocumentKey,
   type SecondScopeDiscoveryIndexAction,
 } from './discovery-documents.ts';
 import { discoveryIndexName, discoveryPhysicalTargetMatches, requireDiscoveryIndexFormat } from './indices.ts';
@@ -389,12 +390,13 @@ export async function readDiscoveryWriterPhysicalTarget(pool: Pick<Pool, 'query'
   return { incarnation: row.index_uuid, allocation: row.incarnation, writeAlias: `${index}-write` };
 }
 
-export type DiscoveryRepairEffect = Readonly<{
-  key: DiscoveryKey;
-  action: DiscoveryIndexAction;
+type DiscoveryWriteEffect<Action extends AnyDiscoveryIndexAction, Key extends DiscoveryDocumentKey> = Readonly<{
+  key: Key;
+  action: Action;
   winner: unknown;
   evidence: Readonly<{ kind: 'bulk'; bulk: unknown }> | Readonly<{ kind: 'recovered'; refresh: unknown }>;
 }>;
+export type DiscoveryRepairEffect = DiscoveryWriteEffect<DiscoveryIndexAction, DiscoveryKey>;
 
 /** Search visibility belongs to the exact keyed winner; copy settlement is insufficient. */
 export async function readDiscoveryRepairWinner(search: OpenSearch, index: string, action: AnyDiscoveryIndexAction) {
@@ -603,10 +605,10 @@ export function createDiscoveryProjection(options: {
     // Both owner families use the same native ICU normalizer and normalized512/missing-last rule.
     return prepareBoundedSortKeys(search, discoveryIndexName(target.prefix, target.generation), actions);
   }
-  async function applyActions(
-    actions: readonly AnyDiscoveryIndexAction[],
+  async function applyActions<Action extends AnyDiscoveryIndexAction, Key extends DiscoveryDocumentKey>(
+    actions: readonly Action[],
     repair: boolean,
-    capture: boolean,
+    captureKey: ((id: string) => Key) | null,
     held?: HeldDiscoveryTarget,
   ) {
     const context = held?.context;
@@ -614,9 +616,9 @@ export function createDiscoveryProjection(options: {
     const live = () => {
       if (context) projectionRemaining(context);
     };
-    const effects: DiscoveryRepairEffect[] = [];
+    const effects: DiscoveryWriteEffect<Action, Key>[] = [];
     const apply = async (client: PoolClient, index: string) => {
-      const pending: AnyDiscoveryIndexAction[] = [];
+      const pending: Action[] = [];
       for (const action of actions) {
         live();
         const key = parseDiscoveryDocumentKey(registry, action.id),
@@ -645,7 +647,7 @@ export function createDiscoveryProjection(options: {
           old &&
           (BigInt(old.position) > action.version || (BigInt(old.position) === action.version && old.settled && !repair))
         )
-          if (capture || held) throw new Error('Discovery source version is behind its permanent copy high water');
+          if (captureKey || held) throw new Error('Discovery source version is behind its permanent copy high water');
           else continue;
         live();
         await client.query(
@@ -657,7 +659,7 @@ export function createDiscoveryProjection(options: {
         pending.push(action);
       }
       let bulk: unknown;
-      const writer: OpenSearch = capture
+      const writer: OpenSearch = captureKey
         ? {
             ...transport,
             async bulkRaw<T>(body: string, options?: Parameters<NonNullable<OpenSearch['bulkRaw']>>[1]) {
@@ -671,7 +673,7 @@ export function createDiscoveryProjection(options: {
       live();
       // Intent is durable before dispatch; an ambiguous or expired response never enters settlement below.
       await writeDiscoveryActions(writer, registry, index, pending);
-      if (capture && pending.length > 0) {
+      if (captureKey && pending.length > 0) {
         if (!record(bulk) || !Array.isArray(bulk.items) || bulk.items.length !== pending.length)
           throw new Error('Discovery repair has no exact native response');
         for (const [offset, action] of pending.entries()) {
@@ -691,8 +693,8 @@ export function createDiscoveryProjection(options: {
           }
           const winner = await readDiscoveryRepairWinner(transport, index, action);
           effects.push({
-            key: parseDiscoveryDocumentId(registry, action.id),
-            action: action as DiscoveryIndexAction,
+            key: captureKey(action.id),
+            action,
             evidence,
             winner,
           });
@@ -746,7 +748,7 @@ export function createDiscoveryProjection(options: {
       const limit = owner === 'accounts' ? 100 : 256;
       for (let offset = 0; offset < owned.length; offset += limit) {
         const actions = await prepareChunk(partition, owner, owned.slice(offset, offset + limit), atLeast);
-        await applyActions(actions, repair, false);
+        await applyActions(actions, repair, null);
       }
     }
   }
@@ -806,7 +808,7 @@ export function createDiscoveryProjection(options: {
   }
   async function applyRepair(actions: readonly DiscoveryIndexAction[]) {
     if (actions.length < 1 || actions.length > 100) throw new RangeError('Invalid retained mixed repair window');
-    return applyActions(actions, true, true);
+    return applyActions(actions, true, (id) => parseDiscoveryDocumentId(registry, id));
   }
   /** Translate the existing Content refresh; no alternate native read or eligibility owner. */
   async function prepareReviews(
@@ -877,7 +879,7 @@ export function createDiscoveryProjection(options: {
       })
     )
       throw new TypeError('Invalid review receiving actions');
-    await applyActions(actions, true, false, held);
+    await applyActions(actions, true, null, held);
   }
   async function applyNativeActions(actions: readonly AnyDiscoveryIndexAction[]) {
     if (actions.length > 100) throw new RangeError('Metadata discovery write exceeds its native batch bound');
@@ -885,7 +887,7 @@ export function createDiscoveryProjection(options: {
     const prepared = await prepareBoundedSortKeys(search, discoveryIndexName(target.prefix, target.generation), [
       ...actions,
     ]);
-    const result = await applyActions(prepared, false, true);
+    const result = await applyActions(prepared, false, (id) => parseDiscoveryDocumentKey(registry, id));
     await assertDiscoveryCapabilityBinding(pool, target, metadataProducers);
     return result;
   }
