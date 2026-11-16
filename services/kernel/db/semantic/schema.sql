@@ -12580,6 +12580,13 @@ CREATE INDEX identity_epoch_step_library_completion ON semantic.identity_epoch_s
 
 
 --
+-- Name: identity_epoch_step_search_directory; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_step_search_directory ON semantic.identity_epoch_step USING btree (partition_no, job_id, job_epoch, native_position, transaction_id) WHERE ((step = 'search-canonical-index'::text) AND (state = 'more'::text) AND (((frontier -> 'after'::text) ->> 0) = 'search-directory'::text));
+
+
+--
 -- Name: identity_epoch_topology_open_home; Type: INDEX; Schema: semantic; Owner: -
 --
 

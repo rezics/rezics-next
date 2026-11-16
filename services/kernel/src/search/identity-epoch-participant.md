@@ -96,22 +96,22 @@ The coordinator runs this callable inside the original live maintenance frame; t
 Source native `preparePlan` then enrolls common receiving there. It validates trusted deployment inputs and reads the
 actual admitted job, rejecting unknown, nonpending and mapping-incomplete locators before engine work.
 For an existing accepted scope it fuses actual native operation application, the common effect and fixed Search
-`more` step in one transaction, then reconciles original custody. The operational
-`identity_receiving_native_scope_pending` queue is inserted atomically with each common Search plan. Selection
-uses its partition/job/epoch/effect primary key, so a settled first scope cannot starve later scopes and a newly
-prepared lower-sorting effect cannot fall behind a scheduling cursor. After genuine common reconciliation and
-post-control native release, a control command retires exactly that plan transaction/binding/applied receipt
-and records the next fixed `more` step atomically. A crash before retirement preserves the key and resumes
-accepted/applied/released replay.
+`more` step in one transaction, then reconciles original custody. Each common Search plan enters the operational `identity_receiving_native_scope_pending` queue when it commits.
+The participant resumes at the last Search directory key retained in the committed native step. It reads one
+candidate from each admitted input generation at its retained control-home epoch and one from the materialized
+change keyset, then selects the earliest original. The plan and its common binding are exact key lookups. A control command verifies the same
+checkpoint again, retires the exact pending key after reconciliation and release, and records the next key and
+completed count in the same transaction. If the command fails, the same original remains selected. A previously
+retired scope replays through its exact committed application and release.
 
 A retained complete ACK is replayed only after resolving its original same-transaction native commit/step,
 exact job scope, current owner and indexed pending absence. The frontier comparison uses structural equality
 so PostgreSQL JSONB key order does not invalidate an original committed receipt. This replay does not mint
 completion, release a hold or reuse a private release observation.
 
-Complete ACK requires every mapping original to have a native Search plan, an empty pending queue, and matching
-directory counts. Empty queue without that witness still refuses. Cancellation and owner-handoff still require the
-original writer's disposition protocol. Existing `subject-coverage-v1` storage is never consumed as support or an ACK.
+Complete ACK requires a retained nonempty prefix, an exhausted mapping keyset checked in the same control
+command, and an empty pending queue. Cancellation and owner-handoff still require the original writer's
+disposition protocol. Existing `subject-coverage-v1` storage is never consumed as support or an ACK.
 
 ## Cost and proof boundary
 

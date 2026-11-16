@@ -35,7 +35,7 @@ import storeSelectMapping from '../identity-epoch-store-select-mapping.sql';
 import storeSelectBootstrapHome from '../identity-epoch-store-select-bootstrap-home.sql';
 import storeSelectGroup from '../identity-epoch-store-select-group.sql';
 import storeSelectControl2 from '../identity-epoch-store-select-control-2.sql';
-import { identityChangeTransformSQL } from '../identity-epoch-store-change-transform.ts';
+import { identityChangeFirstInputsSQL, identityChangeTransformSQL } from '../identity-epoch-store-change-transform.ts';
 import libraryTransform from '../identity-epoch-store-library-transform.sql';
 import storeSelectInput from '../identity-epoch-store-select-input.sql';
 import storeSelectOriginal from '../identity-epoch-store-select-original.sql';
@@ -534,7 +534,7 @@ export function createIdentityEpochStore(capabilities: NativeIdentityCapabilitie
       };
     },
     initializeSubject: createIdentitySubjectInitializer(capabilities),
-    async pageChanges(tx, job, after) {
+    async pageChanges(tx, job, after, first) {
       const partition = identityJobPartition(job);
       const owner = await readPartition(tx, partition);
       if (!owner || owner.writeState !== 'active') throw unavailable();
@@ -546,9 +546,21 @@ export function createIdentityEpochStore(capabilities: NativeIdentityCapabilitie
       else if (saved.kind === 'repoint' && saved.original && saved.terminal)
         transform = { kind: saved.kind, original: saved.original, terminal: saved.terminal };
       else throw unavailable();
-      const inputs = (await tx.query(storeSelectInput.sql, [partition, job.jobId])).rows;
+      const args = [partition, job.jobId];
+      const firstInputs =
+        first === 1
+          ? (
+              await tx.query<{ generation: string; terminal: string; control_partition: number; owner_current: boolean }>(
+                identityChangeFirstInputsSQL,
+                args,
+              )
+            ).rows
+          : null;
+      if (firstInputs && (!firstInputs.length || firstInputs.some((input) => !input.owner_current)))
+        throw unavailable();
+      const inputs = firstInputs ?? (await tx.query(storeSelectInput.sql, args)).rows;
       const pages: Array<{ original: string; terminal: string }[]> = [];
-      const allowance = inputs.length === 1 ? 100 : 50;
+      const allowance = first ?? (inputs.length === 1 ? 100 : 50);
       for (const input of inputs)
         pages.push(
           (
@@ -575,6 +587,7 @@ export function createIdentityEpochStore(capabilities: NativeIdentityCapabilitie
           previousTerminal: r.terminal,
           terminal: identityEpochChangeTerminal(transform, saved.remainder_terminal, r.original, r.terminal),
         }));
+      if (first === 1 && changes.length > 1) throw unavailable();
       return { changes, next: frontier ? changes.at(-1)!.original : null };
     },
     async admitHomeEffect(tx, effect) {
