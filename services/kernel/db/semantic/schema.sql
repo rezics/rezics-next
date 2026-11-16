@@ -307,6 +307,10 @@ DECLARE
   affected_transaction uuid;
   referenced boolean;
 BEGIN
+  IF coalesce(NEW.purpose, OLD.purpose) = 'identity-generation-reclaim' THEN
+    IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+    RETURN NEW;
+  END IF;
   IF TG_WHEN = 'BEFORE' THEN
     affected_home := OLD.partition_no;
     affected_transaction := OLD.transaction_id;
@@ -341,6 +345,14 @@ DECLARE
   old_home integer;
   new_home integer;
 BEGIN
+  IF TG_TABLE_NAME = 'identity_epoch_original' AND TG_OP = 'DELETE' THEN
+    -- The generation switch already changed the live title input.
+    IF EXISTS (
+      SELECT 1 FROM semantic.identity_epoch_prearm_directory d
+      WHERE (d.partition_no,d.generation)=(OLD.partition_no,OLD.generation)
+        AND d.reclaim_transaction_id IS NOT NULL
+    ) THEN RETURN OLD; END IF;
+  END IF;
   IF TG_OP <> 'INSERT' THEN
     old_home := (to_jsonb(OLD)->>TG_ARGV[0])::integer;
     PERFORM semantic.bump_title_input_home_revision(old_home);
@@ -1476,6 +1488,11 @@ CREATE FUNCTION semantic.capture_identity_prearm_erasure() RETURNS trigger
 DECLARE native_tx uuid;
 BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ -- Reclaim changes only the directory's physical deletion cursor and proof.
+ IF TG_TABLE_NAME='identity_epoch_prearm_directory' AND TG_OP='UPDATE'
+  AND to_jsonb(NEW)-ARRAY['reclaim_after','reclaim_transaction_id','reclaimed']
+      = to_jsonb(OLD)-ARRAY['reclaim_after','reclaim_transaction_id','reclaimed']
+ THEN RETURN NEW; END IF;
  native_tx:=coalesce((to_jsonb(NEW)->>'transaction_id')::uuid,
    nullif(current_setting('semantic.erasure_native_transaction',true),'')::uuid);
  PERFORM semantic.capture_erasure_roles(NEW.partition_no,TG_TABLE_NAME,NEW.erasure_key,native_tx);
@@ -2414,10 +2431,18 @@ BEGIN
  SELECT * INTO b FROM semantic.identity_epoch_prearm_bridge WHERE partition_no=h AND generation=g FOR UPDATE;
  IF FOUND AND b.job_id IS NOT NULL
  THEN RAISE EXCEPTION 'identity_epoch_unavailable'; END IF;
+ -- The bridge is also the fence for retired generation keysets.
+ IF FOUND AND TG_OP<>'DELETE' AND EXISTS(
+  SELECT 1 FROM semantic.identity_epoch_prearm_directory d
+  WHERE d.partition_no=h AND d.generation=g AND d.reclaim_transaction_id IS NOT NULL)
+ THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
  IF TG_OP='UPDATE' AND (NEW.partition_no,NEW.generation) IS DISTINCT FROM (OLD.partition_no,OLD.generation) THEN
   SELECT * INTO b FROM semantic.identity_epoch_prearm_bridge WHERE partition_no=OLD.partition_no AND generation=OLD.generation FOR UPDATE;
   IF FOUND AND b.job_id IS NOT NULL
   THEN RAISE EXCEPTION 'identity_epoch_unavailable'; END IF;
+  IF FOUND AND EXISTS(SELECT 1 FROM semantic.identity_epoch_prearm_directory d
+    WHERE d.partition_no=OLD.partition_no AND d.generation=OLD.generation AND d.reclaim_transaction_id IS NOT NULL)
+  THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
  END IF;
  IF TG_OP='DELETE' THEN RETURN OLD; END IF;
  RETURN NEW;
@@ -6700,7 +6725,7 @@ CREATE TABLE semantic.identity_epoch_native_commit (
     "position" bigint NOT NULL,
     purpose text NOT NULL,
     CONSTRAINT identity_epoch_native_commit_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
-    CONSTRAINT identity_epoch_native_commit_purpose_check CHECK (((purpose = ANY (ARRAY['bootstrap'::text, 'admission'::text, 'mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text, 'identity-receiving-plan'::text, 'identity-receiving-record'::text, 'identity-receiving-custody'::text, 'identity-prearm'::text, 'identity-prearm-cancel'::text, 'identity-scope-registration'::text, 'identity-scope-enrollment'::text, 'identity-scope-preparation'::text, 'identity-scope-cancellation'::text, 'identity-public-capture'::text, 'identity-scope-finish'::text, 'identity-scope-retirement'::text, 'identity-scope-directory-release'::text, 'identity-prearm-release'::text])) OR (purpose = 'identity-public-output-capture'::text) OR (purpose = ANY (ARRAY['identity-public-output-applied'::text, 'identity-public-output-cancelled'::text])) OR (purpose = 'identity-platform-native-inverse-removal'::text)))
+    CONSTRAINT identity_epoch_native_commit_purpose_check CHECK (((purpose = ANY (ARRAY['bootstrap'::text, 'admission'::text, 'mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text, 'identity-receiving-plan'::text, 'identity-receiving-record'::text, 'identity-receiving-custody'::text, 'identity-prearm'::text, 'identity-prearm-cancel'::text, 'identity-scope-registration'::text, 'identity-scope-enrollment'::text, 'identity-scope-preparation'::text, 'identity-scope-cancellation'::text, 'identity-public-capture'::text, 'identity-scope-finish'::text, 'identity-scope-retirement'::text, 'identity-scope-directory-release'::text, 'identity-prearm-release'::text])) OR (purpose = 'identity-public-output-capture'::text) OR (purpose = ANY (ARRAY['identity-public-output-applied'::text, 'identity-public-output-cancelled'::text])) OR (purpose = 'identity-platform-native-inverse-removal'::text) OR (purpose = 'identity-generation-reclaim'::text)))
 );
 
 
@@ -6828,7 +6853,11 @@ CREATE TABLE semantic.identity_epoch_prearm_directory (
     erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     cancel_sequence bigint DEFAULT 0 NOT NULL,
     cancelled_transaction_id uuid,
-    release_transaction_id uuid
+    release_transaction_id uuid,
+    reclaim_after uuid,
+    reclaim_transaction_id uuid,
+    reclaimed boolean DEFAULT false NOT NULL,
+    CONSTRAINT identity_epoch_prearm_directory_reclaim_check CHECK ((((reclaim_transaction_id IS NULL) AND (reclaim_after IS NULL) AND (NOT reclaimed)) OR ((reclaim_transaction_id IS NOT NULL) AND released AND (release_transaction_id IS NOT NULL))))
 );
 
 
@@ -12300,6 +12329,13 @@ CREATE UNIQUE INDEX identity_epoch_effect_receipt_erasure_key ON semantic.identi
 
 
 --
+-- Name: identity_epoch_group_generation; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_group_generation ON semantic.identity_epoch_group USING btree (partition_no, generation);
+
+
+--
 -- Name: identity_epoch_home_gate_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -12461,6 +12497,13 @@ CREATE UNIQUE INDEX identity_epoch_one_pending ON semantic.identity_epoch_job US
 
 
 --
+-- Name: identity_epoch_original_closure_hold; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_original_closure_hold ON semantic.identity_epoch_original USING btree (partition_no, generation, original) WHERE ((closure_reservation IS NOT NULL) OR (closure_claim IS NOT NULL) OR (closure_state = ANY (ARRAY['preparing'::text, 'withdrawn'::text])));
+
+
+--
 -- Name: identity_epoch_original_group; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -12479,6 +12522,13 @@ CREATE INDEX identity_epoch_original_source ON semantic.identity_epoch_original 
 --
 
 CREATE INDEX identity_epoch_prearm_bridge_held ON semantic.identity_epoch_prearm_bridge USING btree (partition_no, job_id, generation) WHERE (job_id IS NOT NULL);
+
+
+--
+-- Name: identity_epoch_prearm_directory_reclaim_generation; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX identity_epoch_prearm_directory_reclaim_generation ON semantic.identity_epoch_prearm_directory USING btree (partition_no, generation) WHERE (reclaim_transaction_id IS NOT NULL);
 
 
 --
@@ -16352,6 +16402,14 @@ ALTER TABLE ONLY semantic.identity_epoch_prearm_decision
 
 ALTER TABLE ONLY semantic.identity_epoch_prearm_directory
     ADD CONSTRAINT identity_epoch_prearm_directo_partition_no_attempt_transac_fkey FOREIGN KEY (partition_no, attempt_transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id);
+
+
+--
+-- Name: identity_epoch_prearm_directory identity_epoch_prearm_directory_reclaim_commit_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_directory
+    ADD CONSTRAINT identity_epoch_prearm_directory_reclaim_commit_fkey FOREIGN KEY (partition_no, reclaim_transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id);
 
 
 --

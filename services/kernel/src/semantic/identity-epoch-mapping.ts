@@ -9,6 +9,7 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { withReadTransaction } from './read.ts';
+import { identityGenerationCapacitySql } from './identity-generation-reclaim.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { IDENTITY_EPOCH_PROGRESS } from './events.ts';
@@ -917,17 +918,7 @@ async function reserveGeneration(
     ).rowCount
   )
     throw unavailable('Bootstrap export custody must be settled before allocating an output generation');
-  if (
-    !closure &&
-    (
-      await query(
-        tx,
-        measured,
-        `SELECT slot FROM semantic.identity_epoch_mapping_generation WHERE partition_no=$1 AND job_id IS DISTINCT FROM $2::uuid ORDER BY slot LIMIT 1`,
-        [home, job.jobId],
-      )
-    ).rowCount
-  )
+  if (!closure && (await query(tx, measured, identityGenerationCapacitySql, [home, job.jobId])).rowCount)
     throw unavailable('Prior native generation awaits minimizer and empty-range custody');
   const existing = (
     await query(

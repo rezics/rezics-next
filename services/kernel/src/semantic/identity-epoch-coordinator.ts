@@ -4,6 +4,7 @@ import { runCommand } from '../command/command.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { stepIdentityEpochAdmission } from './identity-epoch-admission.ts';
+import { hasIdentityGenerationToReclaim, stepIdentityGenerationReclaim } from './identity-generation-reclaim.ts';
 import { withIdentitySourceConsumerMaintenance } from './identity-source-consumer-maintenance.ts';
 import type {
   IdentityJobRef,
@@ -83,11 +84,19 @@ async function readWorkflowState(client: WorkContext['client'], id: string): Pro
 }
 
 /** Select the first absent segment, or append after the first terminal workflow failure. */
-async function recoverySegment(status: Installation['status'], job: JobLocator): Promise<number | null> {
+async function recoverySegment(
+  status: Installation['status'],
+  job: JobLocator,
+  published: boolean,
+): Promise<number | null> {
   for (let segment = 0; ; segment++) {
     const workflow = await status(identityEpochWorkflowId(job, segment));
     if (!workflow) return segment;
     if (workflow.status === 'SUCCESS') {
+      if (published && workflow.nextSegment === null) {
+        if (!(await status(identityEpochWorkflowId(job, segment + 1)))) return segment + 1;
+        continue;
+      }
       if (workflow.nextSegment !== segment + 1 || !Number.isSafeInteger(workflow.nextSegment)) throw noProgress();
       continue;
     }
@@ -174,6 +183,10 @@ export function registerIdentityEpochCoordinator(
     },
     { name: `${workflowName}.admission`, ...COMMAND_STEP_RETRIES },
   );
+  const reclaim = DBOS.registerStep((job: JobLocator) => stepIdentityGenerationReclaim(context.pool, nativeJob(job)), {
+    name: `${workflowName}.reclaim`,
+    ...COMMAND_STEP_RETRIES,
+  });
   const produce = DBOS.registerStep(
     async (job: JobLocator, step: IdentityStepName) => {
       const ref = nativeJob(job);
@@ -241,13 +254,18 @@ export function registerIdentityEpochCoordinator(
     async (job: JobLocator, segment: number = 0) => {
       let previous: ReceiptLocator | null = null;
       let previousWriter: string | null = null;
+      let released = false;
       for (let page = 0; page < IDENTITY_EPOCH_SEGMENT_PAGES; page++) {
         const next = await read(job);
         if (next === 'cancelled') return { nextSegment: null };
         if (next === 'published') {
           // Publication releases the reservation, bridges and Source holds through the owning admission path.
-          await admission(job);
-          return { nextSegment: null };
+          if (!released) {
+            await admission(job);
+            released = true;
+          }
+          if ((await reclaim(job)) === 'complete') return { nextSegment: null };
+          continue;
         }
         if (next === 'preparing' || next === 'cancelling') {
           await admission(job);
@@ -290,9 +308,9 @@ export function registerIdentityEpochCoordinator(
 export const resumeIdentityEpochJob: ResumeIdentityEpochJob = async (pool, job) => {
   const input = locator(job);
   const next = await readNext(pool, job);
-  if (next === 'published' || next === 'cancelled') return;
+  if (next === 'cancelled' || (next === 'published' && !(await hasIdentityGenerationToReclaim(pool, job)))) return;
   const binding = installed(pool);
-  const segment = await recoverySegment(binding.status, input);
+  const segment = await recoverySegment(binding.status, input, next === 'published');
   if (segment === null) return;
   const id = identityEpochWorkflowId(input, segment);
   const options = {

@@ -8,7 +8,9 @@ import { readPartition } from '../partition/partition.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
-import { identityEpochStore, identityJobPartition } from '../semantic/identity-adapters/index.ts';
+import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
+import { readPublishedIdentityMoveScopes } from '../semantic/identity-epoch-published-move.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import { IDENTITY_EPOCH_ADMITTED } from '../semantic/events.ts';
 import type { IdentityJobRef } from '../semantic/identity-epoch-contract.ts';
 import type { WorkContext } from '../work/registry.ts';
@@ -19,6 +21,7 @@ import upsert from './subject-offers-upsert.sql';
 import remove from './subject-offers-remove.sql';
 import advance from './subject-offers-advance.sql';
 import movePage from './subject-offers-move-page.sql';
+import moveTerminalPage from './subject-offers-move-terminal-page.sql';
 import reference from './subject-offers-reference.sql';
 
 const basis = {
@@ -162,15 +165,22 @@ export function advanceSubjectOfferBootstrap(pool: Pool, deadline: number): Prom
   });
 }
 
-/** Indexed moves consume Semantic's actual published input-generation pages, never all originals. */
-async function moveOriginal(pool: Pool, original: string, previous: string, after: string): Promise<string | null> {
+/** Move existing offer references from the exact published source scope. */
+async function moveOriginal(
+  pool: Pool,
+  original: string | null,
+  previous: string,
+  after: string,
+): Promise<string | null> {
   const deadline = Date.now() + 20_000;
   return withRequestDeadline(deadline, async () => {
     const route = routeOf(previous)!;
     const rows = await withConnection(pool, async (connection) => {
       const client = deadlineClient(connection, deadline);
       await available(client, partitionOf(route));
-      return movePage.run(client, { route, subject: previous, original, after });
+      return original === null
+        ? moveTerminalPage.run(client, { route, subject: previous, after })
+        : movePage.run(client, { route, subject: previous, original, after });
     });
     for (const row of rows) await projectSubjectOffer(pool, row.id, deadline, previous);
     return rows.length === 100 ? rows.at(-1)!.id : null;
@@ -180,19 +190,24 @@ async function moveOriginal(pool: Pool, original: string, previous: string, afte
 export function registerSubjectOfferWork(context: WorkContext): void {
   const retries = { retriesAllowed: true, maxAttempts: 10, intervalSeconds: 1, backoffRate: 2 };
   const changes = DBOS.registerStep(
-    async (jobId: string, epoch: string, after: string | null) => {
+    async (
+      jobId: string,
+      epoch: string,
+      _after: string | null,
+    ): Promise<{
+      changes: { original: string | null; previousTerminal: string }[];
+      next: string | null;
+    }> => {
       const job: IdentityJobRef = { jobId, epoch: BigInt(epoch) };
-      return withConnection(context.pool, async (tx) => {
-        await available(tx, identityJobPartition(job));
-        const native = await identityEpochStore().readJob(tx, job);
-        if (native?.state !== 'published') throw new CommandUnavailableError('fenced', identityJobPartition(job));
-        return identityEpochStore().pageChanges(tx, job, after);
-      });
+      const terminals = await withReadTransaction(context.pool, (tx) => readPublishedIdentityMoveScopes(tx, job));
+      // An older workflow can resume with an original cursor. Revisit this small
+      // scope from its own beginning using the existing idempotent projection.
+      return { changes: terminals.map((previousTerminal) => ({ original: null, previousTerminal })), next: null };
     },
     { name: 'commerce.subjectOffers.identityPage', ...retries },
   );
   const move = DBOS.registerStep(
-    (original: string, previous: string, after: string) => moveOriginal(context.pool, original, previous, after),
+    (original: string | null, previous: string, after: string) => moveOriginal(context.pool, original, previous, after),
     { name: 'commerce.subjectOffers.move', ...retries },
   );
   DBOS.registerWorkflow(
