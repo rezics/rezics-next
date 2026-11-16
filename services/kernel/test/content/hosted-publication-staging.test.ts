@@ -17,6 +17,7 @@ import {
 } from '../../src/content/hosted-publication-staging.ts';
 import {
   HOSTED_PUBLICATION_STAGING_BATCH_LIMIT,
+  HostedPublicationStagingConflictError,
   type HostedPublicationStagingLocator,
 } from '../../src/content/hosted-publication-staging-model.ts';
 import readChain from '../../src/content/read-chain.sql';
@@ -61,6 +62,7 @@ async function begin(
   expectedHeadRevisionId: string,
   expectedPublicationId: string | null,
   mode: 'whole' | 'selection',
+  expiresAt: Date | string = new Date(Date.now() + 60 * 60_000),
 ): Promise<HostedPublicationStagingLocator> {
   const locator = { catalogueId: f.catalogueId, stageId: f.newOccurrenceId() };
   await transaction((client) =>
@@ -69,7 +71,7 @@ async function begin(
       expectedHeadRevisionId,
       expectedPublicationId,
       mode,
-      expiresAt: new Date(Date.now() + 60 * 60_000),
+      expiresAt,
     }),
   );
   return locator;
@@ -105,7 +107,21 @@ test('prepared whole and selection pages reject changed state before storing can
     placements: [{ occurrenceId, parentId: null, position: 0, title: 'Prepared target', kind: 'chapter', target }],
   });
   const actor = f.native.author.actor;
-  const whole = await begin(created.revisionId as string, null, 'whole');
+  const expiry = new Date(Date.now() + 60 * 60_000).toISOString();
+  const preciseExpiry = `${expiry.slice(0, -1)}001Z`;
+  const whole = await begin(created.revisionId as string, null, 'whole', preciseExpiry);
+  const retry = (expiresAt: string) =>
+    transaction((client) =>
+      beginHostedPublicationStaging(client, actor, {
+        ...whole,
+        expectedHeadRevisionId: created.revisionId,
+        expectedPublicationId: null,
+        mode: 'whole',
+        expiresAt,
+      }),
+    );
+  expect((await retry(preciseExpiry)).replayed).toBe(true);
+  await expect(retry(expiry)).rejects.toBeInstanceOf(HostedPublicationStagingConflictError);
   const wholeStepId = f.newOccurrenceId();
   const wholePreparation = await prepareHostedPublicationStagingAdvance(
     dependencies(),
