@@ -123,6 +123,30 @@ function sourceIdentityProperty(record: ShowcaseRecord): string | null {
   return nameIdentified(record) ? 'schema:name' : null;
 }
 
+export function publishedShowcaseSourceKeys(
+  publication: ShowcasePublicationResult,
+  provider: ShowcaseRecord['provider'],
+): ReadonlySet<string> {
+  const records = new Map(
+    publication.manifest.records
+      .filter((record) => record.provider === provider)
+      .map((record) => [record.sourceKey, record]),
+  );
+  return new Set(
+    publication.published
+      .filter((row) => {
+        if (row.provider !== provider) return false;
+        const record = records.get(row.sourceKey);
+        if (!record || record.subjectId !== row.subjectId) return false;
+        const property = sourceIdentityProperty(record);
+        return row.assertions.some(
+          (assertion) => assertion.property === property && assertion.adoption.rank !== 'deprecated',
+        );
+      })
+      .map((row) => row.sourceKey),
+  );
+}
+
 function phase(record: ShowcaseRecord, property: string): number {
   if (record.kind === 'source-vocabulary' && record.nativeType === 'skos:ConceptScheme') return 0;
   if (record.kind === 'source-vocabulary' && record.nativeType === 'skos:Concept') return 1;
