@@ -3,6 +3,17 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { documentText, fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import { authoredProperties } from '../../src/features/catalogue/authored-properties.ts';
 import type { KernelClient } from '@rezics/client';
+import { Pool } from 'pg';
+import { withBoundedReadOnlyTransaction } from '../../../../services/kernel/src/database/pool.ts';
+import { subjectConsumer } from '../../../../services/kernel/src/search/consumer-name.ts';
+import {
+  readSubjectIndexUuid,
+  readSubjectSortFormat,
+  subjectGenerations,
+  subjectIndexName,
+} from '../../../../services/kernel/src/search/indices.ts';
+import { createOpenSearch } from '../../../../services/kernel/src/search/opensearch.ts';
+import { subjectPartition } from '../../../../services/kernel/src/search/source.ts';
 import { buildSearchImage, cgroupArgs, waitForSearch } from '../../../../services/kernel/scripts/search.ts';
 import { currentNativeLifecycle } from './lifecycle.ts';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
@@ -357,6 +368,126 @@ function searchSubjectMap(page: NativeSearchPage): Map<string, NativeSearchSubje
   return new Map(page.subjects.map((subject) => [subject.id, subject]));
 }
 
+async function readSearchFailureSnapshot(stack: NativeWebStack, expected: readonly BookCatalogueIdentity[]) {
+  const ownership = stack.searchWorker;
+  const url = process.env.OPENSEARCH_URL;
+  if (!ownership || !url) throw new Error('Catalogue Search ownership is unavailable');
+
+  // This isolated stack starts without a Subject generation. The ordinary worker allocates generation 1.
+  const generation = 1;
+  const { prefix, executorId } = ownership;
+  const target = subjectIndexName(prefix, generation);
+  const search = createOpenSearch(url, { timeoutMs: 1_500 });
+  const pool = new Pool({ connectionString: stack.databaseUrl, max: 1, connectionTimeoutMillis: 1_500 });
+  const deadline = Date.now() + 4_000;
+  try {
+    const [engine, database] = await Promise.allSettled([
+      subjectGenerations(search, prefix).then(async ({ active, generations }) => {
+        const [incarnation, sortFormat] = await Promise.all([
+          generations.includes(generation) ? readSubjectIndexUuid(search, prefix, generation) : null,
+          active === null ? null : readSubjectSortFormat(search, prefix, active),
+        ]);
+        return { active, generations, incarnation, sortFormat };
+      }),
+      withBoundedReadOnlyTransaction(pool, deadline, (client) =>
+        client.query(
+          `SELECT
+             p.locator->>'phase' AS preparation_phase, p.revision AS preparation_revision,
+             p.lease_until > extract(epoch FROM now()) * 1000 AS preparation_leased,
+             j.phase, j.home, j.pass, j.native_incarnation,
+             b.state AS source_state, b.owner_epoch AS source_epoch, b.publication_job IS NOT NULL AS source_pinned,
+             b.coverage_after, b.coverage_sealed, seal.ack_after,
+             g.publication_home AS writer_home, g.publication_fence IS NOT NULL AS writer_fenced,
+             g.publication_fence::text=j.fence AS writer_fence_matches,
+             (SELECT jsonb_agg(jsonb_build_object(
+                  'home', h.partition_no, 'epoch', h.epoch, 'position', h.position::text, 'state', h.write_state,
+                  'witnessPosition', v.position::text, 'relayPosition', c.position::text) ORDER BY h.partition_no)
+              FROM core.partition h
+              LEFT JOIN search.generation_publication_home v
+                ON v.partition_no=h.partition_no AND v.job=j.job AND v.pass=j.pass
+              LEFT JOIN core.consumer_checkpoint c ON c.partition_no=h.partition_no AND c.consumer=$8
+              WHERE h.partition_no=ANY($5) OR h.partition_no IN (j.home,j.source_home,g.publication_home))
+              AS homes,
+             (SELECT jsonb_agg(jsonb_build_object(
+                  'home', w.partition_no, 'state', w.dispatch_state, 'inFlight', w.writer_token IS NOT NULL,
+                  'sourcePosition', w.source_position::text, 'visiblePosition', w.visible_position::text))
+              FROM search.identity_writer w
+              WHERE w.physical_target=$2 AND w.incarnation=j.native_incarnation
+                AND w.partition_no=ANY($5) AND w.original_id=ANY($6)) AS fixture_writers,
+             delivery.status AS worker_status, delivery.queue_name AS worker_queue,
+             delivery.executor_id=$7 AS owned_executor
+           FROM (SELECT $1::text AS prefix) owner
+           LEFT JOIN search.public_preparation p ON p.partition_no=0 AND p.prefix=owner.prefix
+             AND p.kind='population' AND p.locator->>'key'=$3
+           LEFT JOIN LATERAL (
+             SELECT * FROM search.generation_publication j
+             WHERE j.partition_no=0 AND j.prefix=owner.prefix AND j.physical_target=$2
+               AND j.family='subjects' AND j.generation=$3::bigint AND j.consumer->>'meaningDigest'=$4
+               AND (p.locator->>'publication' IS NULL OR j.job::text=p.locator->>'publication')
+               AND (p.locator IS NULL OR j.native_incarnation=p.locator->>'uuid')
+             ORDER BY (j.fence IS NOT NULL) DESC, j.activated_at, j.job
+             LIMIT 1
+           ) j ON true
+           LEFT JOIN search.public_filter_registration r ON r.partition_no=j.source_home
+             AND r.physical_target=j.physical_target AND r.state='active'
+             AND r.consumer::jsonb=(
+               SELECT jsonb_build_array('object', jsonb_agg(
+                 jsonb_build_array(key, jsonb_build_array('scalar', value)) ORDER BY key COLLATE "C"
+               )) FROM jsonb_each(j.consumer)
+             )
+           LEFT JOIN LATERAL (
+             SELECT b.bootstrap,b.partition_no,b.state,b.owner_epoch,b.coverage_after,b.coverage_sealed,
+                    b.publication_job,b.publication_execution
+             FROM semantic.public_filter_bootstrap b
+             WHERE b.partition_no=j.source_home AND b.snapshot_kind='prepared'
+               AND b.read_definition::text=j.consumer->>'readDefinition'
+               AND (j.observation IS NULL OR b.publication_observation=j.observation)
+               AND (b.publication_job=j.job OR
+                 (b.publication_job IS NULL AND b.bootstrap::text=split_part(r.consumer_bootstrap, ':', 2)))
+             ORDER BY (b.publication_job IS NOT NULL) DESC LIMIT 1
+           ) b ON true
+           LEFT JOIN LATERAL (
+             SELECT ack_after FROM semantic.public_filter_repair_step t
+             WHERE t.partition_no=b.partition_no AND t.bootstrap=b.bootstrap
+               AND t.execution=b.publication_execution AND t.complete AND t.verified_next IS NULL
+             ORDER BY t.ack_after DESC LIMIT 1
+           ) seal ON true
+           LEFT JOIN search.identity_writer_gate g ON g.partition_no=0 AND g.physical_target=j.physical_target
+             AND g.incarnation=j.native_incarnation AND g.publication_job=j.job
+           LEFT JOIN LATERAL (
+             SELECT status, queue_name, executor_id FROM dbos.workflow_status w
+             WHERE w.name='search.publicPreparation'
+               AND (w.workflow_uuid='search.publicPreparation:' || p.id || ':' || p.revision || ':population'
+                 OR (w.executor_id=$7 AND w.queue_name='workflows' AND w.status='PENDING'
+                   AND w.workflow_uuid LIKE ('search.publicPreparation:' || p.id || ':%:population')))
+             ORDER BY (w.status='PENDING') DESC, w.started_at_epoch_ms DESC NULLS LAST LIMIT 1
+           ) delivery ON true`,
+          [
+            prefix,
+            target,
+            String(generation),
+            bundledDigest,
+            expected.map(({ id }) => subjectPartition(id)),
+            expected.map(({ id }) => id),
+            executorId,
+            subjectConsumer(prefix, generation),
+          ],
+        ),
+      ),
+    ]);
+    return JSON.stringify({
+      target,
+      engine: engine.status === 'fulfilled' ? engine.value : { error: engine.reason?.name ?? 'unavailable' },
+      database:
+        database.status === 'fulfilled'
+          ? database.value.rows[0]
+          : { error: database.reason?.code ?? database.reason?.name ?? 'unavailable' },
+    });
+  } finally {
+    await pool.end();
+  }
+}
+
 async function waitForNativeSearch(
   stack: NativeWebStack,
   marker: string,
@@ -393,21 +524,24 @@ async function waitForNativeSearch(
     }
     await Bun.sleep(250);
   }
-  let workerOutput: string;
+  let workerOutput = 'unavailable';
+  let readiness = 'unavailable';
   try {
     const lifecycle = currentNativeLifecycle();
     if (!lifecycle) throw new Error('Catalogue Search diagnostics require an active native lifecycle');
-    workerOutput = await lifecycle.run(
-      'read catalogue Search worker diagnostics',
+    const [worker, snapshot] = await lifecycle.run(
+      'read catalogue Search diagnostics',
       5_000,
-      () => stack.workerLogs(),
+      () => Promise.allSettled([stack.workerLogs(), readSearchFailureSnapshot(stack, expected)]),
       false,
     );
+    workerOutput = worker.status === 'fulfilled' ? worker.value : 'unavailable';
+    readiness = snapshot.status === 'fulfilled' ? snapshot.value : 'unavailable';
   } catch (error) {
     workerOutput = `Worker diagnostics unavailable: ${error instanceof Error ? error.message : String(error)}`;
   }
   throw new Error(
-    `POST /v1/subjects:search did not return every fixture identity through the installed default Search response within 90000ms; last response ${last}\nDurable Search worker output:\n${workerOutput}`,
+    `POST /v1/subjects:search did not return every fixture identity through the installed default Search response within 90000ms; last response ${last}\nSubject Search readiness: ${readiness}\nDurable Search worker output:\n${workerOutput}`,
   );
 }
 

@@ -90,6 +90,7 @@ export type NativeWebStack = {
   /** Read-only observation clients must use these owned database addresses. */
   databaseUrl: string;
   authDatabaseUrl: string;
+  searchWorker?: { prefix: string; executorId: string };
   kernelOrigin: string;
   authIssuer: string;
   /** The canonical issuer advertised by discovery, before the optional proxy listener. */
@@ -1149,6 +1150,7 @@ async function startStack(): Promise<
     const webOrigin = testWebsiteTls ? `https://${nativeWebsiteHost}:${webPort}` : `http://127.0.0.1:${webPort}`;
     const nativeMediaStorageToken = randomBytes(32).toString('base64url');
     const testWriteRateOverrides = process.env.NATIVE_WEB_STACK_WRITE_RATE_OVERRIDES;
+    const executorId = `native-web-${randomBytes(8).toString('hex')}`;
     const workerEnv = {
       ...workerTestEnv({
         ...consentServer.env,
@@ -1164,7 +1166,7 @@ async function startStack(): Promise<
         KERNEL_SEARCH_PREFIX: searchPrefix,
       }),
       DATABASE_URL: driver.fixtures.runtime.databaseUrl,
-      KERNEL_EXECUTOR_ID: `native-web-${randomBytes(8).toString('hex')}`,
+      KERNEL_EXECUTOR_ID: executorId,
       ...(process.env.REYLO_CONFIG ? { REYLO_CONFIG: process.env.REYLO_CONFIG } : {}),
     };
     reportStackProgress('Native web stack startup: starting durable-work worker');
@@ -1350,6 +1352,7 @@ async function startStack(): Promise<
 
     return {
       databaseUrl: driver.fixtures.runtime.databaseUrl,
+      ...(searchConfig && { searchWorker: { prefix: searchConfig.prefix, executorId } }),
       authDatabaseUrl: auth.database.options.connectionString!,
       kernelOrigin,
       authIssuer: authServer.url.origin,
@@ -1539,16 +1542,13 @@ type Observation = {
   memory: NativeMemoryObservation | null;
   webOutput: string;
 };
+type HostReady = Pick<
+  NativeWebStack,
+  'kernelOrigin' | 'authIssuer' | 'issuerOrigin' | 'web' | 'databaseUrl' | 'authDatabaseUrl' | 'searchWorker'
+>;
 type HostReply =
   | {
-      ready: {
-        kernelOrigin: string;
-        authIssuer: string;
-        issuerOrigin: string;
-        web: string;
-        databaseUrl: string;
-        authDatabaseUrl: string;
-      };
+      ready: HostReady;
       observation: Observation;
     }
   | { id: number; value?: unknown; error?: string; observation: Observation }
@@ -1827,23 +1827,9 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
   let pageBridgeRelease: (() => void) | undefined;
   let dead: Error | undefined;
   const pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
-  let ready!: (value: {
-    kernelOrigin: string;
-    authIssuer: string;
-    issuerOrigin: string;
-    web: string;
-    databaseUrl: string;
-    authDatabaseUrl: string;
-  }) => void;
+  let ready!: (value: HostReady) => void;
   let failed!: (error: Error) => void;
-  const startup = new Promise<{
-    kernelOrigin: string;
-    authIssuer: string;
-    issuerOrigin: string;
-    web: string;
-    databaseUrl: string;
-    authDatabaseUrl: string;
-  }>((resolve, reject) => {
+  const startup = new Promise<HostReady>((resolve, reject) => {
     ready = resolve;
     failed = reject;
   });
@@ -1913,7 +1899,8 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
     });
   };
   try {
-    const { kernelOrigin, authIssuer, issuerOrigin, web, databaseUrl, authDatabaseUrl } = await startup;
+    const owned = await startup;
+    const { kernelOrigin, web, databaseUrl } = owned;
     lifecycle.assertOpen('finish native web stack startup');
     // Retain the existing fixture's observable setup environment. The host has
     // its own environment, including Reylo config and pool timeout overrides.
@@ -1945,12 +1932,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
       return response;
     };
     const api: NativeWebStack = {
-      databaseUrl,
-      authDatabaseUrl,
-      kernelOrigin,
-      authIssuer,
-      issuerOrigin,
-      web,
+      ...owned,
       async credentials(persona) {
         lifecycle.assertOpen('read native account credentials');
         return credentials(persona);
@@ -2187,6 +2169,7 @@ if (process.env.NATIVE_WEB_STACK_HOST === '1' && process.send) {
         web: stack.web,
         databaseUrl: stack.databaseUrl,
         authDatabaseUrl: stack.authDatabaseUrl,
+        ...(stack.searchWorker && { searchWorker: stack.searchWorker }),
       },
       observation: observation(),
     } satisfies HostReply);
