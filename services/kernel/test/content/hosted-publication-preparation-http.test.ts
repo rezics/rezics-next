@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 import type { HostedPlacement } from '../../src/content/hosted-chapters-model.ts';
+import { HOSTED_PUBLICATION_STAGING_BATCH_LIMIT } from '../../src/content/hosted-publication-staging-model.ts';
 import { newId, ROUTES, routeOf } from '../../src/route/route.ts';
 
 setDefaultTimeout(240_000);
@@ -72,7 +73,19 @@ async function newBook(additionalRootChapters = 0) {
     },
     200,
   );
-  return { ...book, path, target, placements, rootPart, childPart, nestedChapter, publicChapter, created, published };
+  return {
+    ...book,
+    path,
+    target,
+    placements,
+    rootPart,
+    childPart,
+    nestedChapter,
+    nestedSelection: [rootPart, childPart, nestedChapter],
+    publicChapter,
+    created,
+    published,
+  };
 }
 
 async function selectedRelease(catalogueId: string): Promise<string | null> {
@@ -707,7 +720,7 @@ test('selection progress exposes only its pinned binding and rejects new batches
   const changedRelease = await f.native.call('POST', `${releaseBook.path}:publish`, {
     expectedRevisionId: releaseBook.created.revisionId,
     expectedPublicationId: releaseBook.published.revisionId,
-    occurrenceIds: [releaseBook.nestedChapter],
+    occurrenceIds: releaseBook.nestedSelection,
   });
   expect(changedRelease.status).toBe(200);
   const replayedReleaseBatch = await f.native.call('POST', `${releaseStage}:appendSelectionBatch`, releaseBatchBody, {
@@ -826,7 +839,7 @@ test('selection advance replays acknowledged steps and fences stale settlement a
   const changedRelease = await f.native.call('POST', `${closureBook.path}:publish`, {
     expectedRevisionId: closureBook.created.revisionId,
     expectedPublicationId: closureBook.published.revisionId,
-    occurrenceIds: [closureBook.nestedChapter],
+    occurrenceIds: closureBook.nestedSelection,
   });
   expect(changedRelease.status).toBe(200);
   const closingReplay = await f.native.call(
@@ -920,7 +933,7 @@ test('whole-source advance replays retained steps and rejects stale draft or pub
   const movedRelease = await f.native.call('POST', `${book.path}:publish`, {
     expectedRevisionId: revised.value.revisionId,
     expectedPublicationId: book.published.revisionId,
-    occurrenceIds: [book.nestedChapter],
+    occurrenceIds: book.nestedSelection,
   });
   expect(movedRelease.status).toBe(200);
   expect((await f.native.call('POST', `${secondStagePath}:advance`, { stepId: book.newId() })).status).toBe(412);
@@ -984,22 +997,19 @@ test('legacy advance receipts without checkpoints require progress recovery and 
 
 test('mounted boundary rejects malformed batches and non-authors; cancel and stale intents keep A selected', async () => {
   const book = await newBook();
-  const start = (mode: 'whole' | 'selection' = 'whole') =>
-    f.native.call('POST', `${book.path}:prepareRelease`, {
-      stageId: book.newId(),
-      expectedRevisionId: book.created.revisionId,
-      expectedPublicationId: book.published.revisionId,
-      mode,
-    });
-
-  const cancelledStart = await start();
+  const cancelledStart = await f.native.call('POST', `${book.path}:prepareRelease`, {
+    stageId: book.newId(),
+    expectedRevisionId: book.created.revisionId,
+    expectedPublicationId: book.published.revisionId,
+    mode: 'selection',
+  });
   expect(cancelledStart.status).toBe(202);
   const cancelledPath = prepPath(book.path, cancelledStart.value.stageId as string);
   const denied = await f.native.call('POST', `${cancelledPath}:progress`, {}, { other: true });
   expect(denied.status).toBe(403);
   const malformed = await f.native.call('POST', `${cancelledPath}:appendSelectionBatch`, {
     batchId: book.newId(),
-    occurrenceIds: Array.from({ length: 513 }, () => book.newId()),
+    occurrenceIds: Array.from({ length: HOSTED_PUBLICATION_STAGING_BATCH_LIMIT + 1 }, () => book.newId()),
   });
   expect(malformed.status).toBe(400);
   const cancelled = await f.native.call('POST', `${cancelledPath}:cancel`, {});
