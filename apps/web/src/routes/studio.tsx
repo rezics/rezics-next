@@ -27,10 +27,7 @@ const searchSchema = v.pipe(
       v.pipe(
         v.string(),
         v.regex(/^(0|[1-9][0-9]*)$/),
-        v.transform(Number),
-        v.integer(),
-        v.minValue(0),
-        v.maxValue(Number.MAX_SAFE_INTEGER),
+        v.check((value) => Number.isSafeInteger(Number(value))),
       ),
     ),
     cursor: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(4096))),
@@ -56,7 +53,7 @@ export const Route = createFileRoute('/studio')({
     catalogueId: search.catalogueId ?? null,
     expectedViewer:
       search.ownerAccount !== undefined && search.ownerEpoch !== undefined
-        ? { accountId: search.ownerAccount, authnEpoch: search.ownerEpoch }
+        ? { accountId: search.ownerAccount, authnEpoch: Number(search.ownerEpoch) }
         : undefined,
     postId: search.postId ?? null,
     books: search.books ?? null,
