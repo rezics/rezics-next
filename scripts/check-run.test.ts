@@ -3,7 +3,16 @@ import { createHash, randomUUID } from 'node:crypto';
 import { openDb, migrate } from '../tools/goal/src/db.ts';
 import { nativeUnitMigrations } from '../tools/goal/src/native-units.ts';
 import { recordNativeUnitSourceObservation } from '../tools/goal/src/native-unit-provenance.ts';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -824,8 +833,8 @@ test('terminal status and cleanup failures remain visible without replacing a na
           finish(options, 'b', 17);
           return 17;
         },
-        cleanupWorktree: (workspace, worktree, scratch) => {
-          git(workspace, 'worktree', 'remove', '--force', worktree);
+        cleanupWorktree: (worktree, scratch) => {
+          git(fixture.root, 'worktree', 'remove', '--force', worktree);
           rmSync(scratch, { recursive: true, force: true });
           throw new Error('mock cleanup failure');
         },
@@ -1109,6 +1118,62 @@ test('a final-only receiver restores row evidence from a long native check', asy
     expect(readFileSync(join(fixture.root, path), 'utf8')).toBe(row);
   } finally {
     if (retained) removeRetainedSnapshot(fixture, retained);
+  }
+});
+
+test('an archived borrowed candidate settles its frozen check only when no artifacts need restoration', async () => {
+  for (const returns of [[], ['.temp/check-result.txt']]) {
+    const fixture = candidate();
+    const borrowed = join(fixture.parent, 'borrowed');
+    const sibling = join(fixture.parent, 'sibling');
+    for (const worktree of [borrowed, sibling]) git(fixture.root, 'worktree', 'add', '--detach', worktree);
+    symlinkSync(join(fixture.root, 'node_modules'), join(borrowed, 'node_modules'));
+    const finals: string[] = [];
+    let frozen = '';
+    let retained: CandidateSnapshot | undefined;
+    try {
+      const result = await runCheck(argsFor({ ...fixture, root: borrowed }, ['bun', 'test'], returns), {
+        settlementWriter: (line) => finals.push(line),
+        stateDirectory: fixture.parent,
+        onRetainSnapshot: (snapshot) => (retained = snapshot),
+        transport: async (options) => {
+          frozen = options.workspace;
+          const native = receipt('a', 0);
+          await options.allocated?.({ host: native.host, run: native.run });
+          await options.completed?.(native);
+          const entries = returns.map((path) => {
+            const destination = join(frozen, path);
+            const bytes = Buffer.from('authenticated return\n');
+            mkdirSync(dirname(destination), { recursive: true });
+            writeFileSync(destination, bytes);
+            return { path, kind: 'file' as const, size: bytes.length, sha256: outputTreeDigest(bytes) };
+          });
+          await options.settled?.(
+            remoteSettlement(options, native, {
+              returns: { schema: 1, status: entries.length ? 'complete' : 'empty', entries, failures: [] },
+            }),
+          );
+          git(fixture.root, 'worktree', 'remove', '--force', borrowed);
+          return native.exitCode;
+        },
+      });
+      const final = JSON.parse(finals[0]!);
+      expect(final.native.exitCode).toBe(0);
+      expect(final.preparedInputs).toMatchObject({ status: 'verified', sourceSha256: final.binding.sourceSha256 });
+      expect(final.cleanup).toMatchObject({
+        remote: 'verified',
+        transportChild: 'reaped',
+        source: returns.length ? 'unknown' : 'verified',
+        localWorktree: returns.length ? 'retained' : 'removed',
+      });
+      expect(result).toBe(returns.length ? 75 : 0);
+      expect(final.returns.status).toBe(returns.length ? 'failed' : 'empty');
+      expect(existsSync(dirname(frozen))).toBe(returns.length > 0);
+      expect(existsSync(borrowed)).toBe(false);
+      expect(git(fixture.root, 'worktree', 'list', '--porcelain')).toContain(`worktree ${sibling}`);
+    } finally {
+      if (retained) removeRetainedSnapshot(fixture, retained);
+    }
   }
 });
 
