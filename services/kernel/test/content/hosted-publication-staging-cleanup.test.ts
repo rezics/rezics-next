@@ -155,7 +155,12 @@ async function cleanup(locator: HostedPublicationStagingLocator, stepId = f.newO
 }
 
 test('failed staging with 513 inputs reclaims private rows in bounded steps and replays receipts', async () => {
-  const { partId, chapterId, created, published } = await createPublishedDraft();
+  const { partId, chapterId, target, created, published } = await createPublishedDraft();
+  const publicPath = `/v1/hostedCatalogues/${f.catalogueId}/occurrences/${chapterId}?kind=publication&revisionId=${published.revisionId}`;
+  const publicBefore = await f.native.call('GET', publicPath, undefined, { anonymous: true });
+  expect(publicBefore.status).toBe(200);
+  expect(publicBefore.value.document.sha256).toBe(target.sha256);
+  expect(publicBefore.value.occurrence.target).toEqual(target);
 
   const unrelated = await begin(created.revisionId, published.revisionId, 'whole');
   await advanceTo(unrelated, 'ready');
@@ -220,23 +225,31 @@ test('failed staging with 513 inputs reclaims private rows in bounded steps and 
   const catalogueRoute = routeOf(f.catalogueId);
   if (catalogueRoute === null) throw new Error('Hosted fixture catalogue has no route');
   const preserved = await f.native.pool.query(
-    `SELECT c.publication_id,
-       (SELECT count(*) FROM content.hosted_placement p
-        WHERE p.route=c.route AND p.catalogue_id=c.catalogue_id AND p.revision_id=$3
-          AND p.occurrence_id=ANY($4::uuid[]))::text AS published_links,
-       (SELECT count(*) FROM content.hosted_placement p
-        WHERE p.route=c.route AND p.catalogue_id=c.catalogue_id AND p.revision_id=$5)::text AS source_placements,
+    `SELECT c.publication_id,published.placement_count::text AS published_placements,
+       draft.placement_count::text AS source_placements,
        (SELECT count(*) FROM content.hosted_occurrence o
         WHERE o.route=c.route AND o.catalogue_id=c.catalogue_id AND o.occurrence_id=ANY($4::uuid[]))::text AS source_occurrences
-     FROM content.hosted_catalogue c WHERE c.route=$1 AND c.catalogue_id=$2`,
+     FROM content.hosted_catalogue c
+     JOIN content.hosted_version_revision published_revision
+       ON published_revision.route=c.route AND published_revision.catalogue_id=c.catalogue_id AND published_revision.revision_id=$3
+     JOIN content.hosted_tree_snapshot_version published
+       ON (published.route,published.catalogue_id,published.generation_id,published.sequence)=
+          (published_revision.route,published_revision.catalogue_id,published_revision.generation_id,published_revision.sequence)
+     JOIN content.hosted_version_revision draft_revision
+       ON draft_revision.route=c.route AND draft_revision.catalogue_id=c.catalogue_id AND draft_revision.revision_id=$5
+     JOIN content.hosted_tree_snapshot_version draft
+       ON (draft.route,draft.catalogue_id,draft.generation_id,draft.sequence)=
+          (draft_revision.route,draft_revision.catalogue_id,draft_revision.generation_id,draft_revision.sequence)
+     WHERE c.route=$1 AND c.catalogue_id=$2`,
     [catalogueRoute, f.catalogueId, published.revisionId, [partId, chapterId], created.revisionId],
   );
   expect(preserved.rows[0]).toMatchObject({
     publication_id: published.revisionId,
-    published_links: '2',
+    published_placements: '2',
     source_placements: '2',
     source_occurrences: '2',
   });
+  expect(await f.native.call('GET', publicPath, undefined, { anonymous: true })).toEqual(publicBefore);
   expect(await counts(unrelated)).toMatchObject({ candidate_count: '2', target_count: '1' });
   let cancelledCleanup = await cleanup(unrelated);
   while (!cancelledCleanup.progress.completed) cancelledCleanup = await cleanup(unrelated);
