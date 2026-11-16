@@ -23,6 +23,7 @@ import proofWrite from './membership-proof-write.sql';
 import legacySource from './membership-legacy-source.sql';
 import proofExists from './membership-proof-exists.sql';
 import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import { classifyUnavailability } from '../access/unavailable.ts';
 import { resourceRoleHeld } from '../access/resource-role-held.ts';
 import type {
   DurableInitiatorReader,
@@ -687,8 +688,12 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
         operation = next;
       });
     } catch (error) {
-      if (input.role === 'member' && operations.has(request))
-        console.error({ code: 'realm_membership_publication_failed', operation });
+      if (input.role === 'member' && operations.has(request)) {
+        const reason =
+          classifyUnavailability(error) ??
+          (error instanceof DurableInitiatorUnavailableError ? 'initiator_unavailable' : undefined);
+        console.error({ code: 'realm_membership_publication_failed', operation, ...(reason ? { reason } : {}) });
+      }
       throw error;
     }
   }
