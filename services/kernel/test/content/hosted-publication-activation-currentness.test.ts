@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
+import { ACCESS_EVIDENCE_TTL_MS } from '../../src/access/evidence-deadline.ts';
 import { Pool, type PoolClient } from 'pg';
 import type { AccessClient, AccountActor } from '../../src/request/access.ts';
 import * as reads from '../../src/content/reads.ts';
@@ -380,6 +381,8 @@ test('21-target authority restarts after cross-home consent revoke and activates
     if (args[2].postId === victim.postId && !invalidated) {
       invalidated = true;
       await revokeDisclosure(dependencies(secondPool), f.native.author, { disclosureId: victimDisclosureId! });
+      // The write should prepare fresh Access after a retained foreign observation outlives its TTL.
+      await Bun.sleep(ACCESS_EVIDENCE_TTL_MS + 25);
     }
     return result;
   });
