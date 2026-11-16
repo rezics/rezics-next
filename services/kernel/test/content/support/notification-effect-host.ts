@@ -167,6 +167,7 @@ async function runWorker(): Promise<void> {
     { registerEffects, effectWorkflowId },
     { readBatch },
     { installNativeHistory },
+    { composeCommunityDomainPorts },
     { composeContentReading },
   ] = await Promise.all([
     import('@dbos-inc/dbos-sdk'),
@@ -178,6 +179,7 @@ async function runWorker(): Promise<void> {
     import('../../../src/events/effects.ts'),
     import('../../../src/events/log.ts'),
     import('../../../src/composition/history.ts'),
+    import('../../../src/composition/community-domain-ports.ts'),
     import('../../../src/composition/content.ts'),
   ]);
   // This child is a plain bun process, not `bun test`, so bunfig test preloads
@@ -191,6 +193,7 @@ async function runWorker(): Promise<void> {
   let stopped = false;
   try {
     configureReceiptKeys(pool, readReceiptKeyRing());
+    composeCommunityDomainPorts();
     composeContentReading();
     workClient = await createWorkClient(databaseUrl, pool);
     let effectTime = new Date();
