@@ -175,7 +175,7 @@ export const SharedVersionRecovery: Story = {
   ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const region = await canvas.findByRole('region', { name: m.settings_notifications_heading() });
+    const region = await canvas.findByRole('region', { name: m.inbox_notification_preferences() });
     const notices = within(region);
     const fixture = compositions.get(canvasElement.querySelector('[data-notification-version-story]')!)!;
     const reply = () => notices.getByRole('switch', { name: m.settings_notification_reply() });

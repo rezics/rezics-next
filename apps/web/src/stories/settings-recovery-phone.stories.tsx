@@ -260,7 +260,7 @@ export const UnavailableToSignedInRecovery: Story = {
 
     journey.showNotificationsUnavailable();
     await selectSettingsCategory(canvasElement, m.settings_notifications_heading());
-    const notifications = within(await main.findByRole('region', { name: m.settings_notifications_heading() }));
+    const notifications = within(await main.findByRole('region', { name: m.inbox_notification_preferences() }));
     const notificationsRetry = notifications.getByRole('button', { name: m.settings_retry() });
     const notificationsBounds = expectPhoneTarget(notificationsRetry, main.getByRole('article'));
     const notificationMessage = notifications.getByText(m.settings_unavailable_text());
