@@ -1,12 +1,24 @@
 import { Type, type Static } from 'typebox';
 import { Check } from 'typebox/schema';
 import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { ImportTransportError, type MediaVariantDecision, type ReviewedSubjectRead } from './import-client.ts';
 import { GLOBAL_CONTEXT } from './public-bulk-client.ts';
 import { observePersonIdentity, personIdentityForSource } from './showcase-person-identity.ts';
 import { sameStatementProvenance } from './statement-provenance.ts';
 import { showcaseDigest, showcaseLimits, type ShowcaseRecord, type ShowcaseReviewPort } from './showcase-contract.ts';
 import type { CandidateListingCheckpoint, ShowcaseJournal } from './showcase-journal.ts';
+import type { ShowcaseCreditSlot } from './showcase-publication-contract.ts';
+
+/** Credit reviews and replacements address the same target and qualifier slot as the native proposal. */
+export function creditSlot(statement: BatchStatement): ShowcaseCreditSlot | undefined {
+  const relation = bundledRelease.properties[statement.property.id]?.relation;
+  const target = statement.value.type === 'value' ? statement.value.content : undefined;
+  if (relation?.group !== 'credit' || typeof target !== 'string') return;
+  const qualifier = statement.qualifiers?.find(({ property }) => property.id === relation.slotKey);
+  const key = qualifier?.value.type === 'value' ? qualifier.value.content : undefined;
+  return { target, ...(typeof key === 'string' ? { key } : {}) };
+}
 
 export type CandidateRank = 'normal' | 'preferred' | 'deprecated';
 export type AdoptionMode = 'inherit' | 'replace' | 'suppress';
@@ -180,11 +192,12 @@ export async function readCurrentCandidatePages(
       'candidateListing' | 'saveCandidateListingPage' | 'saveCandidateListingRestart' | 'clearCandidateListing'
     >;
     intent?: string;
+    slot?: ShowcaseCreditSlot;
   } = {},
 ): Promise<CandidatePage> {
   const pageCount = Math.ceil(showcaseLimits.candidates / showcaseLimits.reviewPage);
   const listingKey = options.journal
-    ? showcaseDigest({ subjectId, property, intent: options.intent ?? 'current-candidate-list' })
+    ? showcaseDigest({ subjectId, property, ...options.slot, intent: options.intent ?? 'current-candidate-list' })
     : null;
   const journal = options.journal;
   let saved = listingKey ? journal!.candidateListing<CandidateRead>(listingKey) : null;
@@ -228,6 +241,7 @@ export async function readCurrentCandidatePages(
       pendingFirstPage = safeCandidatePage(
         await review.reviewedCandidates(subjectId, {
           property,
+          ...options.slot,
           context: GLOBAL_CONTEXT,
           limit: showcaseLimits.reviewPage,
         }),
@@ -278,6 +292,7 @@ export async function readCurrentCandidatePages(
           page = safeCandidatePage(
             await review.reviewedCandidates(subjectId, {
               property,
+              ...options.slot,
               context: GLOBAL_CONTEXT,
               limit: showcaseLimits.reviewPage,
               ...(cursor === undefined ? {} : { cursor }),

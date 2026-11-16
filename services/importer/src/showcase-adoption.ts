@@ -90,7 +90,15 @@ function sealedAdoptBody(value: unknown): AdoptBody | null {
     if (typeof item.candidate !== 'string' || (item.rank !== 'normal' && item.rank !== 'preferred')) return [];
     return [{ candidate: item.candidate, rank: item.rank as 'normal' | 'preferred' }];
   });
-  return { context: body.context, property: body.property, mode: 'replace', expected_head, selection };
+  return {
+    context: body.context,
+    property: body.property,
+    ...(typeof body.target === 'string' ? { target: body.target } : {}),
+    ...(typeof body.key === 'string' ? { key: body.key } : {}),
+    mode: 'replace',
+    expected_head,
+    selection,
+  };
 }
 
 function generationAdoptKey(subjectId: string, property: string, intent: string, generation: number): string {

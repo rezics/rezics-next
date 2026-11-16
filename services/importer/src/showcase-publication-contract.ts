@@ -4,7 +4,11 @@ import type { VndbWorkRelationOutcome } from './cross-media-seed.ts';
 
 export const showcaseAdoptInvocationBound = 32;
 
+export type ShowcaseCreditSlot = Readonly<{ target: string; key?: string }>;
+
 export type ShowcaseAdoptBody = {
+  target?: string;
+  key?: string;
   context: string;
   property: string;
   mode: 'replace';

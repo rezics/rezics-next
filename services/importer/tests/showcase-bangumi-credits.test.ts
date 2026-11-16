@@ -148,21 +148,35 @@ test('selected anime staff and cast use the default acknowledged role adapter an
     },
   } as unknown as CrossMediaPort;
   const port = captureShowcaseCommands(basePort, journal);
+  const slotKey = (id: string, slot: { property: string; target?: string; key?: string }) => {
+    const property = `${id}\0${slot.property}`;
+    return slot.target === undefined ? property : `${property}\0${slot.target}\0${slot.key ?? ''}`;
+  };
   const review: ShowcaseReviewPort = {
     fence: basePort.fence,
     readReviewedSubject: async (id) => read(id),
     async reviewedCandidates(id, query) {
       expect(query.context).toBe(globalContext);
-      const key = `${id}\0${query.property}`;
+      const key = slotKey(id, query);
       const current = adopted.get(key);
       const ranks = new Map(current?.selection.map((item) => [item.candidate, item.rank]));
       return {
         candidates: [...candidates.values()]
-          .filter(
-            (candidate) =>
-              candidate.source.external_id === subjects.get(id)?.sourceExternalId &&
-              candidate.statement.property.id === query.property,
-          )
+          .filter((candidate) => {
+            const statement = candidate.statement;
+            if (
+              candidate.source.external_id !== subjects.get(id)?.sourceExternalId ||
+              statement.property.id !== query.property
+            )
+              return false;
+            const director = query.property === 'schema:director';
+            const voice = query.property === 'wdt:P725';
+            const target = director || voice ? valueContent(statement) : undefined;
+            const character = voice
+              ? valueContent(statement.qualifiers?.find(({ property }) => property.id === 'wdt:P453'))
+              : undefined;
+            return query.target === target && query.key === character;
+          })
           .map((candidate) => ({
             ...candidate,
             decision: accepted.has(candidate.id) ? 'accepted' : null,
@@ -182,15 +196,22 @@ test('selected anime staff and cast use the default acknowledged role adapter an
     async adoptReviewedCandidates(id, body) {
       const action = body as {
         property: string;
+        target?: string;
+        key?: string;
         selection: { candidate: string; rank: 'normal' | 'preferred' }[];
       };
-      const key = `${id}\0${action.property}`;
+      const key = slotKey(id, action);
       const next = { head: (adopted.get(key)?.head ?? 0) + 1, selection: action.selection };
       adopted.set(key, next);
-      subjects.get(id)!.statements[action.property] = action.selection.map(({ candidate, rank }) => ({
-        ...candidates.get(candidate)!.statement,
-        rank,
-      }));
+      const propertyKey = slotKey(id, { property: action.property });
+      subjects.get(id)!.statements[action.property] = [...adopted]
+        .filter(([slot]) => slot === propertyKey || slot.startsWith(`${propertyKey}\0`))
+        .flatMap(([, { selection }]) =>
+          selection.map(({ candidate, rank }) => ({
+            ...candidates.get(candidate)!.statement,
+            rank,
+          })),
+        );
       return {
         adoption: { context: globalContext, property: action.property, mode: 'replace', ...next },
         revision: 1,

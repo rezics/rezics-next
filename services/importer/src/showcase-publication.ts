@@ -48,7 +48,11 @@ import type {
   VndbTagRatingSnapshot,
 } from './showcase-vndb-tag-ratings.ts';
 import { captureShowcaseCommands, type ShowcaseJournal } from './showcase-journal.ts';
-import type { ShowcaseAdoptBody as AdoptBody, ShowcasePublicationResult } from './showcase-publication-contract.ts';
+import type {
+  ShowcaseAdoptBody as AdoptBody,
+  ShowcaseCreditSlot,
+  ShowcasePublicationResult,
+} from './showcase-publication-contract.ts';
 import {
   errorCode,
   permanentReviewRefusal,
@@ -59,6 +63,7 @@ import {
 } from './showcase-adoption.ts';
 import {
   adoptionSnapshot,
+  creditSlot,
   currentSourceRead,
   publicHasCitation,
   publicHasValue,
@@ -88,8 +93,8 @@ export type { ShowcasePublicationResult } from './showcase-publication-contract.
 
 export type { ShowcaseReviewPort };
 
-function groupKey(subject: string, property: string): string {
-  return `${subject}\0${property}`;
+function groupKey(subject: string, property: string, slot?: ShowcaseCreditSlot): string {
+  return slot ? `${subject}\0${property}\0${slot.target}\0${slot.key ?? ''}` : `${subject}\0${property}`;
 }
 
 type CurrentEvidenceState = 'current' | 'retired' | 'unavailable';
@@ -655,15 +660,17 @@ async function candidatePage(
     review: Pick<ShowcaseReviewPort, 'reviewedCandidates'>;
     id: string;
     property: string;
+    slot?: ShowcaseCreditSlot | undefined;
     journal?: ShowcaseJournal;
   },
   cache: Map<string, CandidatePage>,
 ): Promise<CandidatePage> {
-  const key = groupKey(input.id, input.property);
+  const key = groupKey(input.id, input.property, input.slot);
   const cached = cache.get(key);
   if (cached) return cached;
   const page = await readCurrentCandidatePages(input.review, input.id, input.property, {
     ...(input.journal ? { journal: input.journal } : {}),
+    ...(input.slot ? { slot: input.slot } : {}),
     intent: 'showcase-publication-current-candidates-v1',
   });
   if (cache.size >= showcaseLimits.reviewPage) cache.delete(cache.keys().next().value!);
@@ -711,6 +718,7 @@ export async function replayMissingSelectedProposalCommands(input: {
         review: input.review,
         id: command.subject,
         property: command.statement.property.id,
+        slot: creditSlot(command.statement),
         journal: input.journal,
       },
       pageCache,
@@ -751,7 +759,13 @@ export async function preferCurrentCandidateAcknowledgements(
     ) {
       try {
         const page = await candidatePage(
-          { review, id: command.subject, property: command.statement.property.id, ...(journal ? { journal } : {}) },
+          {
+            review,
+            id: command.subject,
+            property: command.statement.property.id,
+            slot: creditSlot(command.statement),
+            ...(journal ? { journal } : {}),
+          },
           pageCache,
         );
         const current = page.candidates.find((candidate) => candidate.id === candidateId);
@@ -838,7 +852,10 @@ export async function resolveLegacyCandidates(input: {
       }
       visited += 1;
       const property = command.statement.property.id;
-      const page = await candidatePage({ review: input.review, id, property }, pageCache);
+      const page = await candidatePage(
+        { review: input.review, id, property, slot: creditSlot(command.statement) },
+        pageCache,
+      );
       const exact = page.candidates.filter(
         (candidate) =>
           showcaseSourceMatches(candidate.source, command.source) &&
@@ -1167,7 +1184,7 @@ async function publishShowcasePhases(
   const validationGroups = new Map<string, { selected: Set<string>; completeRows?: Map<string, CandidateRead> }>();
   for (const { record, assertion } of assertions) {
     if (!record.subjectId) continue;
-    const key = groupKey(record.subjectId, assertion.property);
+    const key = groupKey(record.subjectId, assertion.property, creditSlot(assertion.statement));
     let group = validationGroups.get(key);
     if (!group) {
       group = { selected: new Set() };
@@ -1496,13 +1513,14 @@ async function publishShowcasePhases(
     }
     let candidate: CandidateRead | undefined;
     try {
-      const group = validationGroups.get(groupKey(id, assertion.property))!;
+      const slot = creditSlot(assertion.statement);
+      const group = validationGroups.get(groupKey(id, assertion.property, slot))!;
       candidate = group.completeRows?.get(assertion.candidateId);
       if (!candidate) {
         // A missing row, partial listing, or failed read keeps the ordinary lookup and retry behavior.
         delete group.completeRows;
         const page = await candidatePage(
-          { review: input.review, id, property: assertion.property, journal: input.journal },
+          { review: input.review, id, property: assertion.property, slot, journal: input.journal },
           pageCache,
         );
         candidate = page.candidates.find((entry) => entry.id === assertion.candidateId);
@@ -1648,17 +1666,19 @@ async function publishShowcasePhases(
     refreshDependencies?: () => Promise<string | null>,
   ): Promise<string | null> => {
     const id = record.subjectId!;
+    const slot = creditSlot(assertion.statement);
+    const listingKey = groupKey(id, assertion.property, slot);
     const key = actionKey('accept', assertion.candidateId, assertion.candidateDigest);
     let candidate = validated.get(assertion.candidateId)!;
     const original = input.journal.action(key);
     let refresh = original?.state === 'refused' && staleReviewHead(original.error_code);
     for (let attempt = 0; attempt < 3; attempt += 1) {
       if (refresh) {
-        pageCache.delete(groupKey(id, assertion.property));
+        pageCache.delete(listingKey);
         let page: CandidatePage;
         try {
           page = await candidatePage(
-            { review: input.review, id, property: assertion.property, journal: input.journal },
+            { review: input.review, id, property: assertion.property, slot, journal: input.journal },
             pageCache,
           );
         } catch {
@@ -1700,7 +1720,7 @@ async function publishShowcasePhases(
             input.review.acceptReviewedCandidate(id, assertion.candidateId, sealedBody as typeof body, sealedKey),
         });
         if (sent.status === 'acknowledged') return null;
-        pageCache.delete(groupKey(id, assertion.property));
+        pageCache.delete(listingKey);
         if (sent.status === 'sent') return null;
         if (sent.status === 'refused') return sent.code;
         // Do not resend a known-refused request when the current native head has not advanced.
@@ -1760,7 +1780,7 @@ async function publishShowcasePhases(
   }
 
   progress.enter('tag-parent-publication');
-  type AdoptionGroup = { record: ShowcaseRecord; property: string; ids: Set<string> };
+  type AdoptionGroup = { record: ShowcaseRecord; property: string; slot?: ShowcaseCreditSlot; ids: Set<string> };
   const grouped = new Map<string, AdoptionGroup>();
   for (const { record, assertion } of assertions) {
     const id = record.subjectId;
@@ -1772,8 +1792,14 @@ async function publishShowcasePhases(
       blockedCoverCandidates.has(assertion.candidateId)
     )
       continue;
-    const key = groupKey(id, assertion.property);
-    const group = grouped.get(key) ?? { record, property: assertion.property, ids: new Set<string>() };
+    const slot = creditSlot(assertion.statement);
+    const key = groupKey(id, assertion.property, slot);
+    const group = grouped.get(key) ?? {
+      record,
+      property: assertion.property,
+      ...(slot ? { slot } : {}),
+      ids: new Set<string>(),
+    };
     group.ids.add(assertion.candidateId);
     grouped.set(key, group);
   }
@@ -2368,7 +2394,7 @@ async function publishShowcasePhases(
   const assertionsByGroup = new Map<string, typeof assertions>();
   for (const entry of assertions) {
     if (!entry.record.subjectId) continue;
-    const key = groupKey(entry.record.subjectId, entry.assertion.property);
+    const key = groupKey(entry.record.subjectId, entry.assertion.property, creditSlot(entry.assertion.statement));
     const entries = assertionsByGroup.get(key) ?? [];
     entries.push(entry);
     assertionsByGroup.set(key, entries);
@@ -2393,15 +2419,14 @@ async function publishShowcasePhases(
     if (
       !id ||
       (group.property === 'schema:genre' && blockedTagSubjects.has(id)) ||
-      ((stoppedSubjects.has(id) || stoppedGroups.has(groupKey(id, group.property))) &&
-        !(refreshWeights && group.ids.size === 0))
+      ((stoppedSubjects.has(id) || stoppedGroups.has(key)) && !(refreshWeights && group.ids.size === 0))
     )
       return;
     const adopted = await sendDurableAdopt({
       journal: input.journal,
       review: input.review,
       subjectId: id,
-      intent: manifest.digest,
+      intent: group.slot ? showcaseDigest({ manifest: manifest.digest, ...group.slot }) : manifest.digest,
       property: group.property,
       plan: async (recheck) => {
         adoptionSnapshots.delete(key);
@@ -2428,7 +2453,7 @@ async function publishShowcasePhases(
         let page: CandidatePage;
         try {
           page = await candidatePage(
-            { review: input.review, id, property: group.property, journal: input.journal },
+            { review: input.review, id, property: group.property, slot: group.slot, journal: input.journal },
             pageCache,
           );
         } catch {
@@ -2437,7 +2462,7 @@ async function publishShowcasePhases(
             sourceKey: group.record.sourceKey,
             code: 'adoption-current-read-unavailable',
           });
-          if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
+          if (group.property !== 'schema:image') stoppedGroups.add(key);
           return null;
         }
         if (!page.complete) {
@@ -2446,7 +2471,7 @@ async function publishShowcasePhases(
             sourceKey: group.record.sourceKey,
             code: 'adoption-selection-bounded',
           });
-          if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
+          if (group.property !== 'schema:image') stoppedGroups.add(key);
           return null;
         }
         const previous = page.adoption;
@@ -2456,7 +2481,7 @@ async function publishShowcasePhases(
             sourceKey: group.record.sourceKey,
             code: 'adoption-selection-unavailable',
           });
-          if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
+          if (group.property !== 'schema:image') stoppedGroups.add(key);
           return null;
         }
         const currentAdoption = adoptionSnapshot(previous);
@@ -2617,7 +2642,7 @@ async function publishShowcasePhases(
             sourceKey: group.record.sourceKey,
             code: 'adoption-selection-bounded',
           });
-          if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
+          if (group.property !== 'schema:image') stoppedGroups.add(key);
           return null;
         }
         const identityProperty = group.property === sourceIdentityProperty(group.record);
@@ -2640,6 +2665,7 @@ async function publishShowcasePhases(
         const body: AdoptBody = {
           context: GLOBAL_CONTEXT,
           property: group.property,
+          ...group.slot,
           mode: 'replace',
           expected_head: previous?.head ?? null,
           selection: [...selections]
@@ -2656,12 +2682,12 @@ async function publishShowcasePhases(
         sourceKey: group.record.sourceKey,
         code: adopted.status === 'bound' ? 'adoption-generation-bound' : adopted.code,
       });
-      if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
+      if (group.property !== 'schema:image') stoppedGroups.add(key);
       return;
     }
     if (adopted.snapshot) {
       adoptionSnapshots.set(key, adopted.snapshot);
-      pageCache.delete(groupKey(id, group.property));
+      pageCache.delete(key);
       publicSubjects.delete(id);
       publicVocabularyEvidenceCache.delete(id);
     }
@@ -2871,7 +2897,9 @@ async function publishShowcasePhases(
         omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'graph-relation-not-public' });
       }
       if (!readback) return false;
-      const adoption = adoptionSnapshots.get(groupKey(record.subjectId!, assertion.property));
+      const adoption = adoptionSnapshots.get(
+        groupKey(record.subjectId!, assertion.property, creditSlot(assertion.statement)),
+      );
       const selected = adoption?.selection.find((selection) => selection.candidate === assertion.candidateId);
       if (!adoption || !selected) {
         omissions.push({

@@ -1137,6 +1137,7 @@ export function createImportTransport(options: ImportTransportOptions) {
     query: {
       property: string;
       target?: string;
+      key?: string;
       sameAs?: string;
       context: string;
       limit: number;
@@ -1150,6 +1151,7 @@ export function createImportTransport(options: ImportTransportOptions) {
       context: query.context,
       limit: query.limit,
       ...(query.target !== undefined ? { target: query.target } : {}),
+      ...(query.key !== undefined ? { key: query.key } : {}),
       ...(query.sameAs !== undefined ? { sameAs: query.sameAs } : {}),
       ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
     };
