@@ -58,8 +58,9 @@ test('Every locale mounts native file admission and explains the supported branc
         m.library_archive_entry_replace_help(),
       ])
         expect(label.length).toBeGreaterThan(0);
-      expect(html).toMatch(/<input[^>]*type="file"/);
-      expect(html).not.toMatch(/<input[^>]*type="file"[^>]*\sdisabled=""/);
+      const fileInput = html.match(/<input(?=[^>]*type="file")[^>]*>/)?.[0];
+      expect(fileInput).toBeDefined();
+      expect(fileInput).not.toContain(' disabled=""');
       expect(html).toContain('aria-describedby="archive-file-help"');
       expect(html).toContain('aria-current="step"');
       expect(html).toContain('<details open=""');
@@ -95,7 +96,8 @@ test('Uncertain upload keeps its original retry primary and disables replacement
     const html = renderToStaticMarkup(<ArchiveEntryRecoveryView journey={journey} />);
     expect(html).toContain('<details open=""');
     expect(html).toContain(m.library_archive_recovery_retry_original());
-    expect(html).toMatch(/<input[^>]*type="file"[^>]*\sdisabled=""/);
+    const fileInput = html.match(/<input(?=[^>]*type="file")[^>]*>/)?.[0];
+    expect(fileInput).toContain(' disabled=""');
     expect(html).not.toContain('PRIVATE ARCHIVE BYTES');
     await journey.retryUpload();
     expect(calls).toHaveLength(2);
