@@ -1823,7 +1823,8 @@ if (import.meta.main) {
     else if (action === 'start') await start();
     else if (action === 'walk') {
       const rest = process.argv.slice(3);
-      process.exitCode = await runWalk(rest[0] === '--' ? rest.slice(1) : rest);
+      // The walk has settled its resources before returning the child status.
+      process.exit(await runWalk(rest[0] === '--' ? rest.slice(1) : rest));
     } else throw new Error('Use setup, start, host, pages, web, persona or walk');
   } catch (error) {
     console.error(error);
