@@ -3,13 +3,13 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import type { TSchema } from 'typebox';
 import { Value } from 'typebox/value';
-import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
 import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
 import { accountAgentId, AccountAgentVerificationError } from '../../src/semantic/agents.ts';
 import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { createSubject } from '../../src/semantic/subject.ts';
+import { GLOBAL_CONTEXT_RESOURCE } from '../../src/semantic/contract/global-context.ts';
 import {
   clearPendingAgentVerification,
   completeAgentVerification,
@@ -37,7 +37,6 @@ import { AccessUnavailableError } from '../../src/access/index.ts';
 const sourceUrl = process.env.DATABASE_URL;
 if (!sourceUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const accountRoute = 0x5234;
-const catalogueRoute = 0x6543;
 const routeKey = new Uint8Array(32).fill(31);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(32)]]) };
 const clock = () => new Date();
@@ -203,32 +202,13 @@ async function post(path: string, token: string | undefined, body?: unknown, ide
 }
 
 async function catalogueSubject(type: 'schema:Person' | 'schema:Organization', label: string): Promise<string> {
-  const id = newId(catalogueRoute);
-  const resource = { route: catalogueRoute, id };
-  await createSubject(pool, {
-    actor: {
-      kind: 'account',
-      accountId: staff.id,
-      clientId: 'fixture',
-      requestedBy: null,
-      scopes: ['subject:create'],
-      authnEpoch: 1,
-    },
-    target: resource,
-    idempotencyKey: key(),
-    digest: createHash('sha256').update(key()).digest(),
-    item: { type, labels: { en: label } },
-    release: { digest: bundledDigest, release: bundledRelease },
-    authorization: {
-      action: 'subject:create',
-      resource,
-      denied: () => new Error('Fixture subject authorization denied'),
-      async authorize() {
-        return 'execute';
-      },
-    },
+  const { response, body } = await post('/v1/subjects', await bearer(staff, ['subject:create']), {
+    type,
+    labels: { en: label },
   });
-  return id;
+  if (response.status !== 201)
+    throw new Error(`Fixture subject creation returned HTTP ${response.status}: ${JSON.stringify(body)}`);
+  return body.subject.id;
 }
 
 async function accountState(id: string) {
@@ -323,6 +303,11 @@ async function setupFixture() {
     );
 
   await fixturePhase('catalogue', async () => {
+    await pool.query(
+      `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
+       VALUES ($1, $2, $3, 'subject:create', '(,)', $3)`,
+      [GLOBAL_CONTEXT_RESOURCE.route, GLOBAL_CONTEXT_RESOURCE.id, staff.id],
+    );
     personCatalogue = await catalogueSubject('schema:Person', 'Catalogue Person');
     organizationCatalogue = await catalogueSubject('schema:Organization', 'Catalogue Organization');
   });
