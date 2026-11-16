@@ -1593,12 +1593,13 @@ test.each([
           frontier: JSON.parse(String(values[5])),
           engineRequests: work.engineRequests,
         };
-        if (foreignCapture && values[0] === writerHome) {
+        const initialRequest = writing.frontier.after[3] === SEARCH_IDENTITY_WRITER_REQUEST;
+        if (foreignCapture && (values[0] === writerHome || initialRequest)) {
           expect(captureNativeTransaction).toBe(writing.transactionId);
           captureQueue.push({
             store: 'identity_epoch_step',
-            partition: writerHome,
-            transactionId: writing.transactionId,
+            partition: Number(values[0]),
+            transactionId: initialRequest ? admissionTransaction : writing.transactionId,
             armed: false,
           });
         }
@@ -1851,8 +1852,8 @@ test.each([
           ? 'no completed original'
           : 'closure is not current',
     );
-    expect(directoryReads).toBe(mode === 'changed' ? 2 : 1);
-    expect(originalReads).toBe(mode === 'stale' || mode === 'moved' ? 0 : 2);
+    expect(directoryReads).toBe(mode === 'stale' ? 1 : 2);
+    expect(originalReads).toBe(mode === 'empty' ? 2 : 0);
     expect(planReads).toBe(0);
     expect(committed).toEqual([]);
   } else {
@@ -1863,8 +1864,13 @@ test.each([
     expect(progress.work.engineRequests).toBe(0);
     expect(committed.map((step) => step.engineRequests)).toEqual([0]);
     expect(directoryReads).toBe(2);
-    expect(originalReads).toBe(intent === 'merge' ? 4 : 2);
-    expect(planReads).toBe(1);
+    expect(originalReads).toBe(intent === 'merge' ? 2 : 1);
+    expect(planReads).toBe(0);
+    if (foreignCapture) {
+      expect(capturedEvents).toEqual([
+        { store: 'identity_epoch_step', partition: jobHome, transactionId: admissionTransaction, armed: true },
+      ]);
+    }
     if (!resumed) {
       const prepare = createSearchIdentityWriterPreparation(receiving, {});
       await expect(
@@ -2296,12 +2302,16 @@ test.each([
           expect(retired.frontier.after).toEqual(['search-directory', selected, 1]);
           expect(retiredScope).toBe(true);
           if (foreignCapture) {
-            const capturedTransactions = (store: Capture['store']) =>
-              capturedEvents.filter((event) => event.store === store).map(({ transactionId }) => transactionId);
+            const capturedTransactions = (store: Capture['store'], partition?: number) =>
+              capturedEvents
+                .filter((event) => event.store === store && (partition === undefined || event.partition === partition))
+                .map(({ transactionId }) => transactionId);
             const foreignSteps = committed.filter(({ frontier }) =>
               ['search-writer-admitted', 'search-writer-support', selected].includes(String(frontier.after[0])),
             );
-            expect(capturedTransactions('identity_epoch_step')).toEqual(foreignSteps.map(({ transactionId }) => transactionId));
+            expect(capturedTransactions('identity_epoch_step', writerHome)).toEqual(
+              foreignSteps.map(({ transactionId }) => transactionId),
+            );
             expect(capturedTransactions('identity_epoch_receiving_effect')).toEqual([committedOperation?.applied_transaction_id]);
             expect(capturedTransactions('identity_epoch_effect_receipt')).toEqual([
               admissionTransaction,
