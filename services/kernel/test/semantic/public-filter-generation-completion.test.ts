@@ -384,16 +384,16 @@ test('native publication starts repair from the original adopted Source executio
     let activate = false;
     let boundAttempts = 0;
     let acknowledged = 0;
-    let last = 'registered';
+    let last: { status: string; reason?: string; cost?: unknown } = { status: 'registered' };
     for (let turn = 0; turn < 500 && Date.now() < deadline; turn++) {
       if (!activate) {
         const step = await runtime.publication.step(job, context(), { enrollSource: true });
-        last = 'reason' in step ? `${step.status} ${step.reason}` : step.status;
+        last = { status: step.status, ...('reason' in step && { reason: step.reason }), cost: step.cost };
         activate = step.status === 'reconciled';
         continue;
       }
       const result = await runtime.publication.activate(job, context());
-      last = 'reason' in result ? `${result.status} ${result.reason}` : result.status;
+      last = { status: result.status, ...('reason' in result && { reason: result.reason }), cost: result.cost };
       if (result.status === 'preparing' && result.next === 'step') activate = false;
       const source = await f.db.pool.query<{
         state: string;
@@ -470,8 +470,38 @@ test('native publication starts repair from the original adopted Source executio
       );
       return;
     }
+    const terminal = await f.db.pool.query<{
+      phase: string;
+      source_state: string | null;
+      source_ordinal: string | null;
+      source_complete: boolean | null;
+      ack_after: number | null;
+      repair_settlement: string | null;
+    }>(
+      `SELECT j.phase,b.state AS source_state,t.verified_ordinal::text AS source_ordinal,
+              t.complete AS source_complete,t.ack_after,e.repair_settlement
+       FROM search.generation_publication j
+       LEFT JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.publication_job)=(0,j.job)
+       LEFT JOIN semantic.public_filter_repair_step t
+         ON (t.partition_no,t.bootstrap,t.execution)=(b.partition_no,b.bootstrap,b.publication_execution)
+         AND t.verified_root IS NOT NULL AND t.verified_next IS NULL
+       LEFT JOIN search.public_filter_execution e
+         ON (e.partition_no,e.observation,e.id)=(0,b.publication_observation,b.publication_execution)
+       WHERE (j.partition_no,j.job)=(0,$1)`,
+      [job.job],
+    );
+    const { repair_settlement, ...source } = terminal.rows[0] ?? {};
+    const settlement = repair_settlement
+      ? decodePublicFilterNativeState<{ pages: number; closed: boolean }>(repair_settlement)
+      : undefined;
     throw new Error(
-      `Original Source repair did not acknowledge a batch, ${acknowledged} homes acknowledged, last result ${last}`,
+      `Original Source repair did not acknowledge a batch: ${JSON.stringify({
+        job: job.job,
+        acknowledged,
+        last,
+        source,
+        searchSettlement: settlement && { pages: settlement.pages, closed: settlement.closed },
+      })}`,
     );
   } finally {
     try {
