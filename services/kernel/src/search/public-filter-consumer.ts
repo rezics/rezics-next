@@ -2701,12 +2701,12 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             charge,
           );
           const body = encodeNative(intent);
-          await repairPageSave.run(m.pool, {
+          const [saved] = await repairPageSave.run(m.pool, {
             ...keys,
             has_repairs: intent.repairs.length > 0 || intent.account !== undefined,
             intent: body,
           });
-          page = await repairPageSql.run(m.pool, keys);
+          page = saved ?? (await repairPageSql.run(m.pool, keys));
           if (!page || page.intent !== body) return m.unavailable('source_pending');
           verifiedIntent = intent;
         }
@@ -2736,7 +2736,13 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         await physical(q, m, context);
         if (intent.predecessor !== state.frontier || (intent.complete ? intent.frontier !== null : !intent.frontier))
           return m.unavailable('source_pending');
-        if (!work.repairPage) {
+        if (work.repairPage) {
+          if (
+            !isDeepStrictEqual(work.repairPage.repairs, intent.repairs) ||
+            !isDeepStrictEqual(work.repairPage.account, intent.account)
+          )
+            return m.unavailable('source_pending');
+        } else if (intent.repairs.length || intent.account) {
           work.repairPage = {
             repairs: intent.repairs,
             ...(intent.account ? { account: intent.account, accountDone: false } : {}),
@@ -2745,12 +2751,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             complete: intent.complete,
           };
           encoded = await save(work, encoded, false, m);
-        } else if (
-          !isDeepStrictEqual(work.repairPage.repairs, intent.repairs) ||
-          !isDeepStrictEqual(work.repairPage.account, intent.account)
-        )
-          return m.unavailable('source_pending');
-        if (intent.account && !work.repairPage.accountDone) {
+        }
+        // An empty page has no dispatch to stage. Its verified intent and the
+        // coupled observation/execution CAS also cover concurrent or lost replies.
+        if (intent.account && work.repairPage && !work.repairPage.accountDone) {
           if (intent.repairs.length || work.repair || work.projectionSource || work.records.length)
             return m.unavailable('source_pending');
           const guard = await mixedRepairWriter(q, m);
@@ -2781,7 +2785,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           work.repairPage.accountDone = true;
           encoded = await save(work, encoded, false, m);
         }
-        while (work.repairPage.next < work.repairPage.repairs.length) {
+        while (work.repairPage && work.repairPage.next < work.repairPage.repairs.length) {
           const repair = work.repair ?? work.repairPage.repairs[work.repairPage.next]!;
           encoded = await applyRepair(repair, work, state.pages, encoded, m, context);
         }
