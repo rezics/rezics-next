@@ -130,6 +130,33 @@ export function validateIndexWriteReceipt(response: unknown, target: string, act
   if (validateBulkResponse(response, target, actions)) throw new IndexWriteError([response]);
 }
 
+/** Retain the original evidence fields used by the validator, including the actual shard totals. */
+export function retainIndexWriteItem(response: unknown, target: string, action: IndexAction) {
+  validateIndexWriteReceipt(response, target, [action]);
+  const { errors, items } = response as { errors: boolean; items: [Record<typeof action.op, BulkItem>] };
+  const { _index, _id, _version, _seq_no, _primary_term, _shards, status, result, forced_refresh } =
+    items[0][action.op];
+  const { total, successful, failed, failures } = _shards as BulkItem;
+  return {
+    errors,
+    items: [
+      {
+        [action.op]: {
+          _index,
+          _id,
+          _version,
+          _seq_no,
+          _primary_term,
+          status,
+          result,
+          _shards: { total, successful, failed, ...(failures !== undefined && { failures }) },
+          ...(forced_refresh !== undefined && { forced_refresh }),
+        },
+      },
+    ],
+  };
+}
+
 /** Revalidate an actual mixed bulk item response with exact signed-bigint versions. */
 export function validateDiscoveryWriteReceipt(
   response: unknown,

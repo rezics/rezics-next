@@ -245,6 +245,7 @@ test.each([
   let activeCollectionCount = '2';
   let normalizationCalls = 0;
   let unavailableAllocation = false;
+  let corruptReceipt = false;
   const canonicalDocument = {
     id: second,
     partition: writerHome,
@@ -370,7 +371,7 @@ test.each([
   let controlApplied: unknown[] | undefined;
   let writingHoldRelease: string | undefined;
   let releasePosition: string | undefined;
-  const applicationPosition = adoptedName ? 34 : 33;
+  const applicationPosition = 34;
   let appliedPosition = applicationPosition;
   let retiredScope = false;
   let copyLocator: unknown;
@@ -381,9 +382,7 @@ test.each([
       ? committedOperation?.state === 'applied'
         ? String(appliedPosition)
         : committedOperation?.state === 'visible'
-          ? adoptedName
-            ? '33'
-            : '32'
+          ? '33'
           : committedOperation
             ? retainedBulk
               ? '32'
@@ -922,7 +921,10 @@ test.each([
         rows = [{}];
       } else if (sql === readSearchIdentityBulkResponseSql) {
         expect(values).toEqual([writerHome, index, selected, retainedPlan?.source.locator.planId, hold?.hold_id]);
-        rows = retainedBulk ? [{ ...committedOperation, bulk: retainedBulk.bulk }] : [];
+        const bulk = corruptReceipt
+          ? { errors: false, items: [{ delete: { _index: index, _id: selected, _version: 22, status: 200 } }] }
+          : retainedBulk?.bulk;
+        rows = retainedBulk ? [{ ...committedOperation, bulk }] : [];
       } else if (sql === planSql.visible.sql) {
         expect(values[2]).toBe(committedOperation?.operation_id);
         expect(values[5]).toBe(createHash('sha256').update(receiptText!).digest('hex'));
@@ -964,7 +966,7 @@ test.each([
         expect(copySettlement).toEqual({
           partition: writerHome,
           epoch: 1,
-          position: '32',
+          position: '33',
           transactionId: committedOperation?.visible_transaction_id,
         });
         reconciledCopy = String(values[3]);
@@ -1281,6 +1283,7 @@ test.each([
       if (mode === 'lost') throw new Error('Synthetic transport response lost');
       return {
         errors: false,
+        ...(mode === 'dispatch' && { diagnostics: 'extra transport data'.repeat(1000) }),
         items: [
           {
             [op]: {
@@ -1290,8 +1293,8 @@ test.each([
               _shards: { total: 1, successful: 1, failed: 0 },
               _seq_no: 1,
               _primary_term: 1,
-              status: canonicalTerms ? 201 : 200,
-              result: canonicalTerms ? 'created' : 'deleted',
+              status: canonicalTerms ? 201 : mode === 'visible' ? 404 : 200,
+              result: canonicalTerms ? 'created' : mode === 'visible' ? 'not_found' : 'deleted',
             },
           },
         ],
@@ -1574,6 +1577,7 @@ test.each([
           await expect(prepare(pool, request)).rejects.toThrow('awaits the original uncertain dispatch result');
           expect(committedOperation?.state).toBe('dispatched');
           expect(receiptText).toBeUndefined();
+          expect(retainedBulk).toBeUndefined();
           expect(engineReads).toBe(3);
         } else {
           if (canonicalTerms) {
@@ -1599,27 +1603,62 @@ test.each([
             expect(committedOperation).toBeUndefined();
             expect(bulkCalls).toBe(0);
             nameFenced = false;
-            const captured = await prepare(pool, request);
-            expect(captured).toEqual({ state: 'progress', transactionId: retainedBulk?.transaction });
-            expect(committedOperation?.state).toBe('dispatched');
-            expect(receiptText).toBeUndefined();
-            const resumed = await withIdentitySourceConsumerMaintenance(
-              { pool, env: {} },
-              { deadline: Date.now() + 5000 },
-              () => step(pool, job),
-            );
-            expect(resumed.receipt).toEqual(request);
-            expect(resumed.frontier).toEqual(staged.frontier);
-            unavailableAllocation = true;
-            await expect(prepare(pool, request)).rejects.toThrow('Synthetic allocation lookup lost');
-            expect(bulkCalls).toBe(1);
-            unavailableAllocation = false;
           }
+          const captured = await prepare(pool, request);
+          expect(captured).toEqual({ state: 'progress', transactionId: retainedBulk?.transaction });
+          expect(committedOperation?.state).toBe('dispatched');
+          expect(receiptText).toBeUndefined();
+          expect(retainedBulk?.bulk).toEqual({
+            errors: false,
+            items: [
+              expect.objectContaining({
+                [canonicalTerms ? 'index' : 'delete']: expect.objectContaining({
+                  _index: index,
+                  _id: selected,
+                  _version: 21,
+                  _seq_no: 1,
+                  _primary_term: 1,
+                  _shards: { total: 1, successful: 1, failed: 0 },
+                }),
+              }),
+            ],
+          });
+          const resumed = await withIdentitySourceConsumerMaintenance(
+            { pool, env: {} },
+            { deadline: Date.now() + 5000 },
+            () => step(pool, job),
+          );
+          expect(resumed.receipt).toEqual(request);
+          expect(resumed.frontier).toEqual(staged.frontier);
+          if (mode === 'dispatch') {
+            const guard = createSearchWriterGuard({
+              ...receiving.configuration,
+              source: { read: forbidden } as never,
+              listing: { read: forbidden },
+            });
+            await expect(withCompiledCommandControls(pool, () => guard.closeGeneration(writerHome))).rejects.toThrow(
+              'Pending Search identity plans still hold the generation open',
+            );
+            expect(committedOperation?.state).toBe('dispatched');
+            corruptReceipt = true;
+            const readsBeforeCorruptReceipt = engineReads;
+            await expect(prepare(pool, request)).rejects.toThrow('One or more search index bulk items failed');
+            expect(engineReads).toBe(readsBeforeCorruptReceipt);
+            expect(committedOperation?.state).toBe('dispatched');
+            expect(bulkCalls).toBe(1);
+            corruptReceipt = false;
+          }
+          unavailableAllocation = true;
+          await expect(prepare(pool, request)).rejects.toThrow('Synthetic allocation lookup lost');
+          expect(bulkCalls).toBe(1);
+          unavailableAllocation = false;
           expect(await prepare(pool, request)).toEqual({ state: 'prepared' });
           expect(committedOperation?.state).toBe('visible');
           expect(receiptText).toContain('"kind":"bulk"');
           expect(await prepare(pool, request)).toEqual({ state: 'prepared' });
-          expect(engineReads).toBe(adoptedName ? 9 : canonicalTerms ? 6 : 4);
+          const expectedAllocationReads =
+            5 + 2 * Number(canonicalTerms) + 2 * Number(adoptedName) + Number(mode === 'dispatch');
+          expect(engineReads).toBe(expectedAllocationReads);
           const applied = await withIdentitySourceConsumerMaintenance(
             { pool, env: {} },
             { deadline: Date.now() + 5000 },
@@ -1629,7 +1668,7 @@ test.each([
           expect(applied.frontier.after).toEqual([selected, retainedPlan?.effect_key]);
           expect(applied.receipt.native.position).toBe(BigInt(applicationPosition));
           expect(committedOperation?.state).toBe('applied');
-          expect(engineReads).toBe(adoptedName ? 9 : canonicalTerms ? 6 : 4);
+          expect(engineReads).toBe(expectedAllocationReads);
           for (const phase of priorVisible
             ? [null, 'original', null]
             : canonicalTerms
@@ -1655,7 +1694,7 @@ test.each([
           );
           expect(retired.frontier.after).toEqual(['search-directory', selected, 1]);
           expect(retiredScope).toBe(true);
-          expect(engineReads).toBe(adoptedName ? 9 : canonicalTerms ? 6 : 4);
+          expect(engineReads).toBe(expectedAllocationReads);
         }
         expect(bulkCalls).toBe(1);
       }
