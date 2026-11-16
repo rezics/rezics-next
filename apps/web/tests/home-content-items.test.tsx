@@ -105,18 +105,18 @@ test('Home composes ordered ContentItems and keeps bounded filters accessible in
     const page = mixed.state === 'ready' ? mixed.page : undefined;
     expect(page).toBeDefined();
     const rows = [...host.querySelectorAll<HTMLLIElement>('ol > li[data-feed-id]')];
-    const resultsRegion = host.querySelector('section[aria-label]');
+    const resultsRegion = host.querySelector('section[data-feed-result-state]');
     expect(host.querySelectorAll('main')).toHaveLength(1);
-    expect(resultsRegion?.getAttribute('aria-label')).toBe(m.nav_home());
+    expect(resultsRegion?.getAttribute('aria-label')).toBe(m.home_feed_discovery());
     expect(resultsRegion?.querySelector('main')).toBeNull();
-    expect(resultsRegion?.querySelector('ol')?.getAttribute('aria-label')).toBe(m.nav_home());
+    expect(resultsRegion?.querySelector('ol')?.getAttribute('aria-label')).toBe(m.home_feed_discovery());
     expect(rows.map((row) => row.getAttribute('data-feed-id'))).toEqual(page!.feedItems.map((item) => item.id));
     expect(rows.length).toBeLessThanOrEqual(20);
     expect(host.querySelectorAll('h1')).toHaveLength(1);
     for (const [index, item] of page!.feedItems.entries()) {
       const row = rows[index]!;
-      expect(row.querySelectorAll('h2')).toHaveLength(1);
-      expect(row.querySelector('h2')?.textContent).toBe(homeFeedTitle(item, 'en'));
+      expect(row.querySelectorAll('h3')).toHaveLength(1);
+      expect(row.querySelector('h3')?.textContent).toBe(homeFeedTitle(item, 'en'));
       expect(row.querySelector('article')).toBeNull();
       expect(row.querySelector('a a, a button, button a')).toBeNull();
       const destination = homeFeedDestination(item, 'en');
