@@ -8,7 +8,6 @@ export type CollectionPublicationFrontier = Readonly<{
   after: string | null;
   pending: Readonly<{
     subject: string;
-    originalSubjectId?: string;
     coveredThrough: string;
     lastInPage: boolean;
     sourceExhausted: boolean;
@@ -47,7 +46,6 @@ export function enterCataloguePublicationMembers(
     exhausted: false,
     pending: {
       subject: candidate,
-      originalSubjectId: candidate,
       coveredThrough: subjects.at(-1)!,
       lastInPage: subjects.length === 1,
       sourceExhausted: exhausted,
@@ -78,14 +76,11 @@ export function enterCollectionPublicationPrefix(
   const candidate = page.candidates[0];
   if (!candidate) return { after: page.coveredThrough ?? frontier.after, pending: null, exhausted: page.exhausted };
   if (page.coveredThrough === null) throw unavailable();
-  const originalSubjectId = candidate.evidence.originalSubjectId;
-  if (!originalSubjectId || !uuid(originalSubjectId)) throw unavailable();
   return {
     after: frontier.after,
     exhausted: false,
     pending: {
       subject: candidate.subjectId,
-      originalSubjectId,
       coveredThrough: page.coveredThrough,
       lastInPage: page.candidates.length === 1,
       sourceExhausted: page.exhausted,

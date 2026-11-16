@@ -821,12 +821,6 @@ data. The mounted service uses the real begin/status/initiator readers; the sing
 registers locator-only staging and final activation. After native activation, the built-in publication workflow binds the same COMPLETE output to Semantic's public
 capture and resumes its stored eight-key continuation until it can seal. The public members reader uses that
 selected seal, checks live original and terminal disclosure, and binds cursors to the generation and manifest.
-Whole-query staging stores the native positive Source original beside each canonical output key (the winning
-state original for a state built-in, or the exact catalogue Subject for a catalogue-only candidate). Membership
-and seek order stay keyed by the canonical output key. The read joins each sealed key to its immutable member
-row and checks the retained Source original and the sealed terminal. Explicit selected sets continue to use
-their stored output keys. Earlier whole-query rows that lack the original are unavailable when examined:
-the canonical key alone cannot establish the missing Source operand. Empty generations still read normally.
 A pending capture keeps members unavailable, including when a publication declares zero members. The existing
 Source sweep resumes COMPLETE built-in publications with missing seals. It advances cancellation of a superseded
 capture from the newer monotone Collection source generation and preserves the generation selected for terminal

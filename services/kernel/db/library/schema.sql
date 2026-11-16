@@ -4124,8 +4124,7 @@ CREATE TABLE library.collection_source_output_member (
     route integer NOT NULL,
     collection_id uuid NOT NULL,
     generation uuid NOT NULL,
-    subject_id uuid NOT NULL,
-    original_subject_id uuid
+    subject_id uuid NOT NULL
 );
 
 

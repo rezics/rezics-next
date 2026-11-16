@@ -973,7 +973,7 @@ export async function readNativeCollectionStateGroup(
   pool: Pool,
   metadata: NativeCollectionMetadata,
   input: Options & { originals: readonly string[] },
-): Promise<({ result: true; originalSubjectId: string } | { result: false | 'not_proven' }) & { work: WorkReceipt }> {
+): Promise<{ result: boolean | 'not_proven'; work: WorkReceipt }> {
   if (
     input.originals.length > 100 ||
     new Set(input.originals).size !== input.originals.length ||
@@ -1010,16 +1010,14 @@ export async function readNativeCollectionStateGroup(
       }
       const winner = newestEntryState(facts);
       if (winner === 'not_proven') return { result: 'not_proven' as const };
-      if (winner === null || winner.state === null) return { result: false as const };
+      if (winner === null || winner.state === null) return { result: false };
       if (
         winner.pin?.provenance !== 'profile' ||
         winner.pin.releaseDigest !== current.releaseDigest ||
         winner.pin.profileId !== current.profileId
       )
         return { result: 'not_proven' as const };
-      return winner.state === current.stateId
-        ? { result: true as const, originalSubjectId: winner.subjectId }
-        : { result: false as const };
+      return { result: winner.state === current.stateId };
     }),
   );
 }
