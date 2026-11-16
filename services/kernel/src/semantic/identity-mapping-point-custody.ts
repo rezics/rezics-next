@@ -146,13 +146,13 @@ function committedProof(row: object): IdentityMappingPointControlProof {
   });
 }
 
-/** Control-home mapping command. Returns only a proof re-read after that command has committed. */
-export async function recordIdentityMappingPointControlProof(
+/** A foreign member has either a re-read committed proof or no terminal closure enrollment. */
+async function recordIdentityMappingPointControlProof(
   pool: Pool,
   measured: Work,
   input: ProofName,
   roles: readonly SemanticCopyRole[],
-): Promise<IdentityMappingPointControlProof> {
+): Promise<IdentityMappingPointControlProof | null> {
   const pin = names(input);
   const outcome = await runCommand(pool, { partition: input.controlPartition, deadline: Date.now() + 5000 }, async (tx, { transactionId }) => {
     const command = currentCommand(tx);
@@ -160,7 +160,13 @@ export async function recordIdentityMappingPointControlProof(
       throw unavailable('Control proof requires its own mechanical command');
     const result = await measuredQuery(tx, measured, proof.sql, [...pin, transactionId]);
     const row = result.rows[0];
-    if (result.rows.length !== 1 || row === undefined || typeof row.inserted !== 'boolean')
+    if (
+      result.rows.length === 1 &&
+      row?.kind === 'unregistered' &&
+      row.transaction_id === null &&
+      row.inserted === null
+    ) return noEffect(null);
+    if (result.rows.length !== 1 || row?.kind !== 'registered' || typeof row.inserted !== 'boolean')
       throw unavailable('Control-home point proof is not current');
     const stored = uuid(row.transaction_id, 'transaction');
     if (row.inserted) {
@@ -175,6 +181,7 @@ export async function recordIdentityMappingPointControlProof(
     if (stored === transactionId) throw unavailable('Control-home point proof is not current');
     return noEffect(stored);
   });
+  if (outcome.value === null) return null;
   const stored = typeof outcome.value === 'string' ? outcome.value : '';
   const visible = await withReadTransaction(pool, async (tx) => {
     const result = await measuredQuery(tx, measured, proofRead.sql, pin);
@@ -253,7 +260,7 @@ async function depositIdentityMappingPointCustody(
     throw unavailable('Committed source deposit is not visible');
 }
 
-/** Private mapping-step path. Same-home inputs return before any custody command. */
+/** Checks foreign control custody and reports when the member has never been enrolled. */
 export async function bindForeignMappingPointCustody(
   pool: Pool,
   measured: Work,
@@ -265,14 +272,14 @@ export async function bindForeignMappingPointCustody(
     inputs: readonly AdmittedInput[];
   }>,
   roles: readonly SemanticCopyRole[],
-): Promise<void> {
+): Promise<boolean> {
   if (input.inputs.length < 1 || input.inputs.length > 2) throw new TypeError('Invalid native point custody inputs');
   const named = input.inputs.filter((basis) => basis.terminal === input.previousTerminal);
   if (named.length > 1) throw unavailable('Point custody has no single admitted input');
   const basis = named[0];
   const route = routeOf(input.original);
   if (route === null) throw new TypeError('Invalid native point custody original');
-  if (basis === undefined || partitionOf(route) === basis.controlPartition) return;
+  if (basis === undefined || partitionOf(route) === basis.controlPartition) return false;
   const committed = await recordIdentityMappingPointControlProof(pool, measured, {
     job: input.job,
     scopeDigest: input.scopeDigest,
@@ -283,5 +290,7 @@ export async function bindForeignMappingPointCustody(
     controlPartition: basis.controlPartition,
     ownerEpoch: basis.ownerEpoch,
   }, roles);
+  if (committed === null) return true;
   await depositIdentityMappingPointCustody(pool, measured, committed, roles);
+  return false;
 }

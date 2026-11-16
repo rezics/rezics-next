@@ -115,7 +115,7 @@ type RetainedPoint = {
   scope_digest: string;
 };
 type PublishedPoints = Partial<Record<RetainedPoint['kind'], RetainedPoint>>;
-type MappingSourceFrame = { targets: Set<string>; unit: number; planDigest: string };
+type MappingSourceFrame = { targets: Set<string>; unit: number; planDigest: string; foreignUnregistered: boolean };
 const mappingSourceFrames = new WeakMap<CommandTransaction, MappingSourceFrame>();
 const unavailable = (detail = 'Native mapping source, admission or receipt custody is unavailable') =>
   new IdentityEpochStoreError('identity_epoch_unavailable', detail);
@@ -681,9 +681,10 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
   if (point && homeOf(point.destination) !== proposed.home) throw stale();
   const previous = await readUnit(pool, job, proposed.home, head.unit + 1, digest, measured, point);
   let local = previous.effect;
+  let foreignUnregistered = false;
   if (!local && (proposed.action === 'source' || proposed.action === 'mapping')) {
     if (!head.change) throw stale();
-    await bindForeignMappingPointCustody(
+    foreignUnregistered = await bindForeignMappingPointCustody(
       pool,
       measured,
       {
@@ -725,7 +726,7 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
         [proposed.home, job.jobId, head.unit + 1, job.epoch.toString(), saved.scope_digest, digest, transactionId],
       );
       const sources = new Set<string>();
-      mappingSourceFrames.set(tx, { targets: sources, unit: head.unit + 1, planDigest: digest });
+      mappingSourceFrames.set(tx, { targets: sources, unit: head.unit + 1, planDigest: digest, foreignUnregistered });
       let result: Plan;
       try {
         result = await apply(tx, job, saved, head, proposed, point, published, measured, transactionId);
@@ -980,6 +981,7 @@ async function withdrawMappingSourcePoint(
       scopeDigest: saved.scope_digest,
       planDigest: frame.planDigest,
       original,
+      foreignUnregistered: frame.foreignUnregistered,
       inputs: saved.inputs.map((input) => ({
         terminal: input.terminal,
         generation: input.generation,

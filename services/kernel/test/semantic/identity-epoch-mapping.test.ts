@@ -204,3 +204,35 @@ test('account-agent verify mapping refuses a changed acquired pin on an active f
     await f.close();
   }
 }, 180_000);
+
+test('foreign point custody refuses a legacy directory label that retains a native registration', async () => {
+  const f = await createIdentityMappingFixture({ poolMax: 1 });
+  try {
+    const { job, agent, control } = await f.admitAccountAgentVerify(async (agent) => {
+      const native = await f.nativeSource(agent);
+      expect(native.closure_state).toBe('active');
+      expect(native.source_home).not.toBe(native.control_partition);
+      const changed = await f.admin.query(
+        `UPDATE semantic.identity_epoch_original SET closure_state='legacy'
+         WHERE partition_no=$1 AND original=$2 AND closure_registration_transaction=$3 AND closure_state='installed'`,
+        [native.control_partition, agent, native.registration],
+      );
+      expect(changed.rowCount).toBe(1);
+    });
+    const before = await f.nativeSource(agent);
+    await expect(f.drainMapping(job, 512)).rejects.toThrow('Control-home point proof is not current');
+    expect(await f.nativeSource(agent)).toEqual(before);
+    expect(await f.nativeDirectRedirect(agent)).toBe(control);
+    expect((await f.nativeRows(job)).effects.filter((row) => row.partition_no === before.source_home)).toEqual([]);
+    expect(
+      (
+        await f.admin.query(
+          'SELECT 1 FROM semantic.identity_epoch_mapping_point_custody WHERE partition_no=$1 AND job_id=$2 AND original=$3',
+          [partitionOf(routeOf(control)!), job.jobId, agent],
+        )
+      ).rows,
+    ).toEqual([]);
+  } finally {
+    await f.close();
+  }
+}, 180_000);

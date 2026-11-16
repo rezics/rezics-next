@@ -93,7 +93,7 @@ export async function createIdentityMappingFixture(options: { poolMax: number; p
       },
       /** Admission only: mapping drain proves the Accounts job without Search/Library resume.
        * Native appendEdge enrolls the Access merge original (the account agent) under foreign control 0x9e10; ordinary bootstrap then ACKs. */
-      async admitAccountAgentVerify() {
+      async admitAccountAgentVerify(beforeAdmission?: (agent: string) => Promise<void>) {
         const catalogue = (await f.create('Accounts mapping catalogue', 0x9d10)).subject.id;
         const control = (await f.create('Accounts mapping control', 0x9e10)).subject.id;
         const approved = await approvedVerification(f, catalogue);
@@ -110,6 +110,7 @@ export async function createIdentityMappingFixture(options: { poolMax: number; p
         await appendEdge(terminalWriter, control, control);
         await appendEdge(terminalWriter, redirected, control);
         await this.bootstrapHomes([catalogue, control, redirected]);
+        await beforeAdmission?.(redirected);
         const receipt = {
           kind: 'account-agent.verify' as const,
           account: approved.account,
