@@ -1,9 +1,162 @@
+import type { Pool } from 'pg';
 import type { WorkClient } from '../../../src/work/client.ts';
+import { WORK_QUEUES } from '../../../src/work/queues.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
 
+/** DBOS reports retried failures as a list. Surface the original native step stack when present. */
+export async function readLibraryWorkerResult(client: WorkClient, workflowId: string) {
+  try {
+    return await client.retrieveWorkflow(workflowId).getResult();
+  } catch (error) {
+    if (!(error instanceof Error) || !('errors' in error) || !Array.isArray(error.errors)) throw error;
+    const [first] = error.errors;
+    if (!first || typeof first.stack !== 'string') throw error;
+    throw new Error(`${error.message}\n${first.stack}`, { cause: error });
+  }
+}
+
+async function readEnqueuedEffect(
+  client: WorkClient,
+  effect: NonNullable<Awaited<ReturnType<WorkClient['getWorkflow']>>>,
+) {
+  const queueName = effect.queueName;
+  if (effect.status !== 'ENQUEUED' || !queueName) return undefined;
+  const observed = { queueName, loadInput: false, loadOutput: false, sortDesc: true };
+  const [queues, pending, [lastCompleted]] = await Promise.all([
+    client.listQueues(),
+    client.listWorkflows({ ...observed, status: 'PENDING', limit: WORK_QUEUES.effects.workerConcurrency + 1 }),
+    client.listWorkflows({ ...observed, status: 'SUCCESS', limit: 1 }),
+  ]);
+  const queue = queues.find(({ name }) => name === queueName);
+  return {
+    queue: {
+      name: queueName,
+      application: queue?.applicationName,
+      workerConcurrency: queue?.workerConcurrency,
+      partitionConcurrency: queue?.partitionConcurrency,
+    },
+    application: effect.applicationName,
+    version: effect.applicationVersion,
+    partition: effect.queuePartitionKey,
+    dequeuedAt: effect.dequeuedAt,
+    pending: pending.map((item) => ({
+      workflow: item.workflowID,
+      partition: item.queuePartitionKey,
+      executor: item.executorId,
+      version: item.applicationVersion,
+    })),
+    lastCompleted: lastCompleted && {
+      executor: lastCompleted.executorId,
+      version: lastCompleted.applicationVersion,
+      dequeuedAt: lastCompleted.dequeuedAt,
+    },
+  };
+}
+
+/** Read only the admitted job and its exact outbox position before the fixture tears down. */
+export async function readLibraryMergeDispatch(pool: Pool, client: WorkClient, jobId: string, queueWarning?: string) {
+  const { partitionOf, routeOf } = await import('../../../src/route/route.ts');
+  const { identityEpochStore } = await import('../../../src/semantic/identity-adapters/index.ts');
+  const { identityEpochWorkflowId } = await import('../../../src/semantic/core/identity-epoch-sequence.ts');
+  const { IDENTITY_EPOCH_ADMITTED } = await import('../../../src/semantic/events.ts');
+  const home = partitionOf(routeOf(jobId)!);
+  const [admission] = (
+    await pool.query<{ epoch: string; workflowId: string | null }>(
+      `SELECT j.epoch::text,c.position::text AS "admissionPosition",e.type AS event,
+              ck.position::text AS "checkpointPosition",d.state AS delivery,d.workflow_id AS "workflowId"
+       FROM semantic.identity_epoch_job j
+       LEFT JOIN semantic.identity_epoch_native_commit c
+         ON (c.partition_no,c.transaction_id)=(j.partition_no,j.recorded_transaction_id) AND c.purpose='admission'
+       LEFT JOIN core.outbox e
+         ON (e.partition_no,e.position)=(c.partition_no,c.position) AND e.type=$3
+       LEFT JOIN core.consumer_checkpoint ck ON ck.partition_no=j.partition_no AND ck.consumer='effects'
+       LEFT JOIN core.history_event_consumer d
+         ON (d.partition_no,d.position,d.event_seq)=(e.partition_no,e.position,e.event_seq)
+         AND d.consumer='identity_epoch_admission'
+       WHERE j.partition_no=$1 AND j.job_id=$2`,
+      [home, jobId, IDENTITY_EPOCH_ADMITTED],
+    )
+  ).rows;
+  if (!admission) throw new Error('Admitted Subject merge has no persisted identity job');
+  const job = await identityEpochStore().readJob(pool, { jobId, epoch: BigInt(admission.epoch) });
+  const effect = admission.workflowId ? await client.getWorkflow(admission.workflowId) : null;
+  const [workflow] = await client.listWorkflows({
+    workflow_id_prefix: identityEpochWorkflowId({ jobId, epoch: admission.epoch }),
+    limit: 1,
+    sortDesc: true,
+    loadInput: false,
+    loadOutput: false,
+  });
+  for (const current of [effect, workflow])
+    if (current?.status === 'ERROR') await readLibraryWorkerResult(client, current.workflowID);
+  return {
+    admission,
+    job: job?.state ?? 'unreadable',
+    mapping: job?.mapping?.state,
+    participants: Object.fromEntries(
+      Object.entries(job?.participants ?? {}).map(([name, evidence]) => [name, evidence?.state]),
+    ),
+    effect: effect?.status ?? 'absent',
+    enqueuedEffect: effect ? await readEnqueuedEffect(client, effect) : undefined,
+    queueWarning,
+    workflow: workflow?.status ?? 'absent',
+  };
+}
+
+/** Trace the ordinary tombstone through the Library effect and the owned terminal work it starts. */
+export async function readLibraryErasureDispatch(pool: Pool, client: WorkClient, accountId: string) {
+  const { partitionOf, routeOf } = await import('../../../src/route/route.ts');
+  const { libraryErasureWorkflowId } = await import('../../../src/library/erasure-workflow-id.ts');
+  const route = routeOf(accountId)!;
+  const [tombstone] = (
+    await pool.query<{ workflowId: string | null }>(
+      `SELECT e.at::text AS "erasureAt", b.position::text AS "tombstonePosition",
+              o.id::text AS "eventId", ck.position::text AS "checkpointPosition",
+              d.state AS delivery, d.workflow_id AS "workflowId"
+       FROM access.erasure e
+       LEFT JOIN access.lifecycle_fence_receipt f
+         ON (f.route,f.account_id)=(e.route,e.account_id) AND f.kind='tombstone'
+       LEFT JOIN editorial.write_basis b ON b.partition_no=$3 AND b.transaction_id=f.transaction_id
+       LEFT JOIN core.outbox o
+         ON (o.partition_no,o.epoch,o.position)=(b.partition_no,b.epoch,b.position)
+         AND o.type='com.rezics.access.account-tombstoned.v1' AND o.subject=e.account_id::text
+       LEFT JOIN core.consumer_checkpoint ck ON ck.partition_no=$3 AND ck.consumer='effects'
+       LEFT JOIN core.history_event_consumer d
+         ON (d.partition_no,d.position,d.event_seq)=(o.partition_no,o.position,o.event_seq)
+         AND d.consumer='library_account_erasure'
+       WHERE e.route=$1 AND e.account_id=$2`,
+      [route, accountId, partitionOf(route)],
+    )
+  ).rows;
+  const effect = tombstone?.workflowId ? await client.getWorkflow(tombstone.workflowId) : null;
+  const [workflow] = await client.listWorkflows({
+    workflow_id_prefix: libraryErasureWorkflowId(accountId),
+    limit: 1,
+    sortDesc: true,
+    loadInput: false,
+    loadOutput: true,
+  });
+  for (const current of [effect, workflow])
+    if (current?.status === 'ERROR') await readLibraryWorkerResult(client, current.workflowID);
+  const steps = workflow && (await client.listWorkflowSteps(workflow.workflowID, { limit: 100 }));
+  return {
+    tombstone,
+    effect: effect?.status ?? 'absent',
+    enqueuedEffect: effect ? await readEnqueuedEffect(client, effect) : undefined,
+    workflow: workflow?.status ?? 'absent',
+    lastStep: steps?.at(-1)?.name,
+    terminalResult: workflow?.status === 'SUCCESS' ? workflow.output : undefined,
+  };
+}
+
 /** The fixture owns this child and its two pipes, never the Auth executor. */
-export async function startErasureWorker(url: string, client: WorkClient) {
+export async function startErasureWorker(
+  url: string,
+  client: WorkClient,
+  environment: NodeJS.ProcessEnv = {},
+) {
   let output = '';
+  let effectsQueueWarning: string | undefined;
   let ready!: () => void;
   const readiness = new Promise<void>((resolve) => {
     ready = resolve;
@@ -16,6 +169,7 @@ export async function startErasureWorker(url: string, client: WorkClient) {
       STRIPE_MANAGED_PAYMENTS: 'false',
       CHECKOUT_SUCCESS_URL: 'https://web.example.test/success',
       CHECKOUT_CANCEL_URL: 'https://web.example.test/cancel',
+      ...environment,
     }),
     stdout: 'pipe',
     stderr: 'pipe',
@@ -24,6 +178,7 @@ export async function startErasureWorker(url: string, client: WorkClient) {
     const decoder = new TextDecoder();
     for await (const chunk of stream) {
       output = (output + decoder.decode(chunk, { stream: true })).slice(-4096);
+      effectsQueueWarning ??= output.match(/Error getting startable workflows for queue effects: ([^\r\n]+)\r?\n/)?.[1];
       if (output.includes('Worker ready')) ready();
     }
   };
@@ -46,6 +201,9 @@ export async function startErasureWorker(url: string, client: WorkClient) {
   return {
     get output() {
       return output;
+    },
+    get effectsQueueWarning() {
+      return effectsQueueWarning;
     },
     async close() {
       // Pending erasure coordinators are deliberate long-running workflows. The
@@ -134,8 +292,11 @@ export async function createOwnedErasureFixture() {
     request,
     json,
     subject,
-    async start() {
-      worker = await startErasureWorker(db.url, client);
+    get effectsQueueWarning() {
+      return worker?.effectsQueueWarning;
+    },
+    async start(environment?: Record<string, string>) {
+      worker = await startErasureWorker(db.url, client, environment);
     },
     async close() {
       await worker?.close();
