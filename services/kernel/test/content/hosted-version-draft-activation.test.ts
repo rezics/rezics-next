@@ -1,5 +1,6 @@
 import { retainedHostedData } from './support/hosted-retained-data.ts';
 import { expect, setDefaultTimeout, test } from 'bun:test';
+import { fromPlainText } from '@rezics/document';
 import { insertHostedDraftPoint, type HostedCommandDependencies } from '../../src/content/hosted-chapters-commands.ts';
 import {
   advanceHostedMigrationInput,
@@ -206,6 +207,7 @@ test('activates a 513-entry sealed builder and accepts the first ordered point w
     );
     expect(replayedCommit.replayed).toBe(true);
     expect(replayedCommit.revisionId).toBe(committed.revisionId);
+    expect(replayedCommit.snapshot).toEqual(committed.snapshot);
 
     const after = await pointers(fixture);
     expect(after.head_revision_id).toBe(committed.revisionId);
@@ -244,31 +246,49 @@ test('activates a 513-entry sealed builder and accepts the first ordered point w
       expect(next.snapshot.generationId).toBe(committed.snapshot.generationId);
       expect(next.snapshot.sequence).toBe(committed.snapshot.sequence + 1n);
     }
-    expect((await pointers(fixture)).publication_id).toBeNull();
+    const replayedPage = await transaction(fixture, (tx) =>
+      applyHostedVersionDraftActivationPage(tx, fixture.catalogueId, captured.inputId),
+    );
+    expect(replayedPage.replayed).toBe(true);
+    expect(replayedPage.snapshot).toEqual(committed.snapshot);
+    expect(replayedPage.work.occurrencesWritten).toBe(0);
+    expect(replayedPage.work.nodesWritten).toBe(0);
+    expect(replayedPage.work.siblingRootsWritten).toBe(0);
+    expect(await pointers(fixture)).toEqual({ head_revision_id: inserted.value.revisionId, publication_id: null });
   } finally {
     await fixture.close();
   }
 });
 
-test('keeps subtree counts, withholds redacted titles, and inserts under the ordered successor', async () => {
+test('keeps subtree counts, withholds a private target and its title, and inserts under the ordered successor', async () => {
   const fixture = await hostedChaptersFixture();
   try {
     const target = fixture.target(await fixture.native.thread());
+    const privateTarget = await fixture.native.call(
+      'POST',
+      '/v1/threads',
+      {
+        title: 'Private opening',
+        body: fromPlainText('Other author private opening'),
+        licence: 'MIT',
+        subjectIds: [],
+        boardId: fixture.native.board.id,
+        visibility: 'draft',
+      },
+      { other: true },
+    );
+    expect(privateTarget.status).toBe(201);
+    const withheld = fixture.target(privateTarget.value.thread);
     const partId = fixture.newOccurrenceId();
     const childA = fixture.newOccurrenceId();
     const childB = fixture.newOccurrenceId();
-    const secret = 'Secret redacted title';
+    const secret = 'Secret private title';
     const baseRevisionId = await createStructure(fixture, [
       { occurrenceId: partId, parentId: null, position: 0, title: 'Part', kind: 'part' },
-      { occurrenceId: childA, parentId: partId, position: 0, title: secret, kind: 'chapter', target },
+      { occurrenceId: childA, parentId: partId, position: 0, title: secret, kind: 'chapter', target: withheld },
       { occurrenceId: childB, parentId: partId, position: 1, title: 'Visible', kind: 'chapter', target },
     ]);
     const captured = await sealBuilder(fixture, baseRevisionId);
-    await fixture.native.pool.query(
-      `UPDATE content.hosted_version_builder_point SET title=NULL
-       WHERE route=$1 AND catalogue_id=$2 AND input_id=$3 AND occurrence_id=$4`,
-      [routeOf(fixture.catalogueId), fixture.catalogueId, captured.inputId, childA],
-    );
     await transaction(fixture, (tx) => beginHostedVersionDraftActivation(tx, fixture.catalogueId, captured.inputId));
     await activatePages(fixture, captured.inputId);
     const committed = await transaction(fixture, (tx) =>
@@ -291,7 +311,7 @@ test('keeps subtree counts, withholds redacted titles, and inserts under the ord
     );
     expect(hidden?.value.title).toBeNull();
     expect(JSON.stringify(hidden?.value)).not.toContain(secret);
-    expect(hidden?.value.target).toMatchObject(target);
+    expect(hidden?.value.target).toBeNull();
 
     const nested = await insertHostedDraftPoint(
       dependencies(fixture),
