@@ -123,6 +123,8 @@ Run the twelve paths on integrated dev and record the exact revision and seed. A
 visible path and its applicable native current reads. Record the first causal failure, its owner and observed elapsed
 time. Preserve completed observations after infrastructure termination; leave an interrupted row's duration unknown
 and reject an inventory with an unobserved inactive row. Report passing/12 and the slowest measured failure.
+Record completed mounted visits as they finish. Each mounted row requires its own current reads and all of its
+phone and desktop visits. A later shared browser failure preserves completed rows and is recorded separately.
 
 | Path | Scope row and assigned user-visible journey                                                                                                        | Current dev result and evidence                                                                                                                                                                                              |
 | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
