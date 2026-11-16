@@ -51,8 +51,7 @@ export function robotsResponse(request: Request, { origin, locales }: RobotsOpti
     return new Response(null, { status: 405, headers: { allow: 'GET, HEAD' } });
   let base: string;
   try {
-    // Accept the existing root-slash spelling, then use the same origin contract as page heads.
-    base = validatePublicOrigin(origin?.endsWith('/') ? origin.slice(0, -1) : origin);
+    base = validatePublicOrigin(origin);
   } catch {
     return new Response(request.method === 'HEAD' ? null : 'Robots unavailable', {
       status: 503,
