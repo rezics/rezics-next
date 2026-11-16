@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import { runCommand } from '../command/command.ts';
+import { currentCommand, runCommand, type CommandTransaction } from '../command/command.ts';
 import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts';
+import { recordIdentityEpochNativeCommit } from '../semantic/identity-adapters/identity-epoch-binding.ts';
 import { bindSemanticProducerRoles, identityErasureRoles } from '../semantic/erasure-producer.ts';
-import type { IdentityJobRef } from '../semantic/identity-epoch-contract.ts';
+import type { IdentityJobRef, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import { identitySourceConsumerNativeWork } from '../semantic/identity-source-consumer-maintenance.ts';
 import { advanceSearchIdentityReceivingReconciliation } from '../semantic/identity-receiving-effects.ts';
 import type { IdentityReceivingEffect } from '../semantic/identity-receiving-effects-types.ts';
@@ -15,7 +16,10 @@ import type { SearchReceivingConfiguration } from './identity-receiving-native.t
 import { createSearchIdentityReceivingNativeStore } from './identity-receiving-native-store.ts';
 import {
   readBoundedSearchIdentityActionSql,
+  readSearchIdentityBulkResponseSql,
   readSearchIdentityDispatchBasisSql,
+  retainSearchIdentityBulkResponseSql,
+  SEARCH_IDENTITY_BULK_RESPONSE_BYTES,
   searchIdentityWriterBodyBytes,
 } from './identity-search-writer-dispatch-sql.ts';
 import type { searchIdentityWorkContext } from './identity-search-receiving-work.ts';
@@ -26,6 +30,7 @@ import { subjectPartition } from './source.ts';
 import { decodeSearchIdentityWriterAction, type SearchWriterNativeCustody } from './writer-guard.ts';
 import { validateIndexWriteReceipt, writeIndexActions } from './write-actions.ts';
 import { verifyCanonicalIdentityDocumentAtDispatch } from './identity-search-writer-document.ts';
+import type { IndexAction } from './document.ts';
 
 const unavailable = (message: string) => new IdentityEpochStoreError('identity_epoch_unavailable', message);
 
@@ -140,7 +145,10 @@ export async function advanceSearchIdentityDispatch(
       return {
         basis,
         roles:
-          basis?.state === null && basis.hold_id === request.holdId && basis.source.consumer === configuration.consumer
+          basis &&
+          (basis.state === null || (basis.state === 'dispatched' && basis.obligations.statementInput)) &&
+          basis.hold_id === request.holdId &&
+          basis.source.consumer === configuration.consumer
             ? await identityErasureRoles(pool, job.jobId)
             : [],
       };
@@ -149,7 +157,7 @@ export async function advanceSearchIdentityDispatch(
   );
   if (!basis || basis.hold_id !== request.holdId || basis.source.consumer !== configuration.consumer)
     throw unavailable('Search writer dispatch request no longer names the accepted hold');
-  const source = basis.source;
+  const { source, action_digest: actionDigest, action_bytes: actionBytes } = basis;
   const selection: SearchIdentityReceivingSelection = {
     job,
     original: source.original,
@@ -163,9 +171,89 @@ export async function advanceSearchIdentityDispatch(
   if (basis.state === 'applied' && !basis.released)
     return advanceSearchIdentityReceivingReconciliation(pool, searchIdentityDispatchEffect(job, selection, basis));
   if (basis.visible) return { state: 'prepared' } as const;
+  const allocation = async () => {
+    const actual = await readSearchWriterPhysicalTarget(engine, index);
+    if (actual.incarnation !== source.incarnation || actual.writeAlias !== source.writeAlias)
+      throw unavailable('Search physical allocation changed during identity dispatch');
+  };
+  const command = { partition: source.receivingHome, deadline, clock };
+  const remaining = () => {
+    const allowance = identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline);
+    if (!allowance) throw unavailable('Search writer lost its admitted Source work');
+    return { allowance, deadline };
+  };
+  const bulkKey = [source.receivingHome, index, source.documentId, source.locator.planId, basis.hold_id] as const;
+  async function loadAction(tx: CommandTransaction) {
+    const retained = (
+      await tx.query<{ value: string | null; repair_locator: string }>(readBoundedSearchIdentityActionSql, [
+        source.receivingHome,
+        index,
+        source.documentId,
+        actionBytes,
+      ])
+    ).rows[0];
+    if (
+      !retained?.value ||
+      retained.repair_locator !== source.locator.planId ||
+      createHash('sha256').update(retained.value).digest('hex') !== actionDigest
+    )
+      throw unavailable('Search writer lost the immutable action before dispatch');
+    return decodeSearchIdentityWriterAction(retained.value, source);
+  }
+  async function settle(
+    token: string,
+    dispatch: IdentityNativeReceipt,
+    operationId: string,
+    action: IndexAction,
+    bulk: unknown,
+  ) {
+    await outsideSource(allocation);
+    await runCommand(pool, command, async (tx) => {
+      const bytes = await writer.settleIdentityAction(tx, job, source, token, dispatch, action, bulk);
+      bindSemanticProducerRoles(tx, roles);
+      await store.recordVisible(tx, selection.native, request.holdId, operationId, remaining(), bytes);
+      return { value: null, events: searchIdentityWriterChanged() };
+    });
+    return { state: 'prepared' } as const;
+  }
+  if (basis.state === 'dispatched' && basis.obligations.statementInput) {
+    const retained = await withReadTransaction(
+      pool,
+      async (tx) => {
+        const [response] = (
+          await tx.query<{
+            operation_id: string;
+            writer_token: string;
+            dispatch_transaction_id: string;
+            dispatch_epoch: number;
+            dispatch_position: string;
+            bulk: unknown;
+          }>(readSearchIdentityBulkResponseSql, [...bulkKey])
+        ).rows;
+        if (!response) throw unavailable('Search writer awaits the original uncertain dispatch result');
+        const action = await loadAction(tx);
+        validateIndexWriteReceipt(response.bulk, index, [action]);
+        return { response, action };
+      },
+      deadline,
+    );
+    const { response, action } = retained;
+    return settle(
+      response.writer_token,
+      {
+        partition: source.receivingHome,
+        epoch: response.dispatch_epoch,
+        transactionId: response.dispatch_transaction_id,
+        position: BigInt(response.dispatch_position),
+      },
+      response.operation_id,
+      action,
+      response.bulk,
+    );
+  }
   if (basis.state !== null) throw unavailable('Search writer awaits the original uncertain dispatch result');
 
-  const originalSupport = source.original === source.terminal ? basis.obligations?.originalSupport : null;
+  const originalSupport = source.original === source.terminal ? basis.obligations.originalSupport : null;
   const support = originalSupport && { ...originalSupport, generation: BigInt(originalSupport.generation) };
   const verify =
     support &&
@@ -178,47 +266,31 @@ export async function advanceSearchIdentityDispatch(
       terminalSupport: support,
       deadline,
     }));
-
-  const allocation = async () => {
-    const actual = await readSearchWriterPhysicalTarget(engine, index);
-    if (actual.incarnation !== source.incarnation || actual.writeAlias !== source.writeAlias)
-      throw unavailable('Search physical allocation changed during identity dispatch');
-  };
   const token = crypto.randomUUID();
   const operationId = crypto.randomUUID();
-  const command = { partition: source.receivingHome, deadline, clock };
-  const remaining = () => {
-    const allowance = identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline);
-    if (!allowance) throw unavailable('Search writer lost its admitted Source work');
-    return { allowance, deadline };
-  };
   await outsideSource(allocation);
   const { value } = await runCommand(pool, command, async (tx) => {
-    const retained = (
-      await tx.query<{ value: string | null; repair_locator: string }>(readBoundedSearchIdentityActionSql, [
-        source.receivingHome,
-        index,
-        source.documentId,
-        basis.action_bytes,
-      ])
-    ).rows[0];
-    if (
-      !retained?.value ||
-      retained.repair_locator !== source.locator.planId ||
-      createHash('sha256').update(retained.value).digest('hex') !== basis.action_digest
-    )
-      throw unavailable('Search writer lost the immutable action before dispatch');
-    const action = decodeSearchIdentityWriterAction(retained.value, source);
+    const action = await loadAction(tx);
     if (
       action.op === 'index' &&
-      (!verify || !(await verify(tx)) || !(await verifyCanonicalIdentityDocumentAtDispatch(tx, action.document)))
+      (!verify ||
+        !(await verify(tx)) ||
+        !(await verifyCanonicalIdentityDocumentAtDispatch(
+          tx,
+          action.document,
+          configuration.routeKey,
+          basis.obligations.statementInput,
+        )))
     )
       throw unavailable('Canonical Search Source changed before dispatch');
     const dispatch = await writer.dispatchIdentityAction(tx, job, source, token);
     bindSemanticProducerRoles(tx, roles);
     await store.recordDispatch(tx, selection.native, basis.hold_id, operationId, remaining(), basis.action_bytes);
-    // Settlement stores and reads back a receipt containing this exact action.
-    if (remaining().allowance.bytes < 2 * searchIdentityWriterBodyBytes(basis.action_bytes)!)
+    // Same-turn settlement stores and reads back a receipt containing this exact action.
+    if (
+      !basis.obligations.statementInput &&
+      remaining().allowance.bytes < 2 * searchIdentityWriterBodyBytes(basis.action_bytes)!
+    )
       throw unavailable('Search writer lacks the retained body work needed for settlement');
 
     return { value: { action, dispatch }, events: searchIdentityWriterChanged() };
@@ -237,14 +309,22 @@ export async function advanceSearchIdentityDispatch(
     };
     await writeIndexActions(transport, index, [value.action], { rejectConflicts: true, writeAlias: source.writeAlias });
     validateIndexWriteReceipt(response, index, [value.action]);
-    await allocation();
     return response;
   });
-  await runCommand(pool, command, async (tx) => {
-    const bytes = await writer.settleIdentityAction(tx, job, source, token, value.dispatch, value.action, bulk);
-    bindSemanticProducerRoles(tx, roles);
-    await store.recordVisible(tx, selection.native, basis.hold_id, operationId, remaining(), bytes);
+  if (!basis.obligations.statementInput) return settle(token, value.dispatch, operationId, value.action, bulk);
+
+  const retained = await runCommand(pool, command, async (tx) => {
+    const response = JSON.stringify({
+      kind: 'identity-original-bulk',
+      transaction: currentCommand(tx).transactionId,
+      bulk,
+    });
+    if (Buffer.byteLength(response) > SEARCH_IDENTITY_BULK_RESPONSE_BYTES)
+      throw unavailable('Original Search bulk response exceeds retained custody');
+    const written = await tx.query(retainSearchIdentityBulkResponseSql, [...bulkKey, operationId, token, response]);
+    if (written.rowCount !== 1) throw unavailable('Search writer lost its original bulk response');
+    recordIdentityEpochNativeCommit(tx, 'search-canonical-index');
     return { value: null, events: searchIdentityWriterChanged() };
   });
-  return { state: 'prepared' } as const;
+  return { state: 'progress', transactionId: retained.transactionId } as const;
 }

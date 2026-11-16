@@ -202,7 +202,14 @@ export function createSearchIdentityWriterPreparation(
                   context.deadline,
                 );
                 if (support.state === 'ready') {
-                  const plan = await readSearchIdentityOriginalPlan(pool, job, change, configuration, context.deadline);
+                  const plan = await readSearchIdentityOriginalPlan(
+                    pool,
+                    job,
+                    change,
+                    configuration,
+                    context.deadline,
+                    'preparation',
+                  );
                   if (plan) return { state: 'prepared' } as const;
                   const redirected = original !== change.terminal;
                   const canonical = support.canonical
@@ -302,6 +309,7 @@ export function createSearchIdentityWriterPreparation(
                             release: support.release,
                             documentFence: retained.close,
                             predecessor: retained.previousPlan ? { ...locator, planId: retained.previousPlan } : null,
+                            ...(canonical?.statementInput && { statementInput: canonical.statementInput }),
                           },
                           actionDigest: retained.actionDigest,
                           copies: retained.previousVisible

@@ -6,7 +6,10 @@ import { withReadTransaction } from '../semantic/read.ts';
 import type { SearchNativeReceivingPreparation } from './identity-receiving-native-internal.ts';
 import type { SearchReceivingConfiguration } from './identity-receiving-native.ts';
 import { subjectPartition } from './source.ts';
-import { readSearchIdentityOriginalPlanSql } from './identity-search-receiving-directory-sql.ts';
+import {
+  readSearchIdentityOriginalPlanSql,
+  searchIdentityOriginalPlanPresentSql,
+} from './identity-search-receiving-directory-sql.ts';
 
 const unavailable = (detail: string) => new IdentityEpochStoreError('identity_epoch_unavailable', detail);
 
@@ -24,6 +27,7 @@ export async function readSearchIdentityOriginalPlan(
   change: Pick<IdentityChange, 'original' | 'terminal'>,
   configuration: SearchReceivingConfiguration,
   deadline: number,
+  mode?: 'preparation',
 ): Promise<Readonly<{
   selection: SearchIdentityReceivingSelection;
   originalBarrier: boolean;
@@ -32,15 +36,18 @@ export async function readSearchIdentityOriginalPlan(
   const keys = (['OLD', 'NEW', 'first-apply', 'handoff'] as const).map((disposition) =>
     searchIdentityWriterEffectKey(configuration.consumer, change.original, disposition),
   );
+  const binds = [partition, job.jobId, String(job.epoch), keys, change.original, configuration.index];
   const plans = await withReadTransaction(
     pool,
-    async (tx) =>
-      (
+    async (tx) => {
+      if (mode === 'preparation' && !(await tx.query(searchIdentityOriginalPlanPresentSql, binds)).rowCount) return [];
+      return (
         await tx.query<{ effect_key: string; source: SearchNativeReceivingPreparation['source']; proven: boolean }>(
           readSearchIdentityOriginalPlanSql,
-          [partition, job.jobId, String(job.epoch), keys, change.original, configuration.index],
+          binds,
         )
-      ).rows,
+      ).rows;
+    },
     deadline,
   );
   const plan = plans[0];

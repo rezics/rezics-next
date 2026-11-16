@@ -68,6 +68,7 @@ import {
   readSearchIdentityDirectorySql,
   readSearchIdentityMaterializedOriginalSql,
   readSearchIdentityOriginalPlanSql,
+  searchIdentityOriginalPlanPresentSql,
   readSearchIdentityWriterAdmissionSql,
   readSearchIdentityWriterSupportSql,
 } from './identity-search-receiving-directory-sql.ts';
@@ -81,8 +82,10 @@ import {
 
 import {
   dispatchSearchIdentityOriginalSql,
+  readSearchIdentityBulkResponseSql,
   readSearchIdentityPlanBodySizeSql,
   readSearchIdentityDispatchBasisSql,
+  retainSearchIdentityBulkResponseSql,
 } from './identity-search-writer-dispatch-sql.ts';
 import { readSearchIdentityDispatchBasis, searchIdentityDispatchEffect } from './identity-search-writer-dispatch.ts';
 import { searchNativeOriginalOperationSql, searchNativeReleaseAppliedSql } from './identity-receiving-native-work.ts';
@@ -113,6 +116,7 @@ function searchIdentityParticipantStatementCosts(): SearchReceivingWorkDeclarati
     Object.freeze({ sql: readSearchIdentityDirectorySql, work: participantStatementWork(4, 4, 1, 4096, 1) }),
     Object.freeze({ sql: readSearchIdentityMaterializedOriginalSql, work: participantStatementWork(1, 1, 1, 1024, 1) }),
     Object.freeze({ sql: readSearchIdentityOriginalPlanSql, work: participantStatementWork(16, 12, 1, 20480, 1) }),
+    Object.freeze({ sql: searchIdentityOriginalPlanPresentSql, work: participantStatementWork(4, 4, 1, 1024, 4) }),
     Object.freeze({ sql: readSearchIdentityCommonPlanSql, work: participantStatementWork(4, 4, 1, 16384, 1) }),
     Object.freeze({ sql: advanceSearchIdentityOriginalSql, work: participantStatementWork(9, 9, 1, 16384, 1) }),
     Object.freeze({ sql: readRetainedWriterCopySql, work: participantStatementWork(3, 3, 1, 1024, 1) }),
@@ -128,6 +132,8 @@ function searchIdentityParticipantStatementCosts(): SearchReceivingWorkDeclarati
         [readSearchIdentityPredecessorSql, 6, 6, 4096],
         [readSearchIdentityDispatchBasisSql, 9, 9, 20480],
         [dispatchSearchIdentityOriginalSql, 1, 1, 1024],
+        [retainSearchIdentityBulkResponseSql, 2, 2, 12288],
+        [readSearchIdentityBulkResponseSql, 4, 4, 12288],
         [readSearchIdentityPlanBodySizeSql, 1, 1, 512],
         [searchIdentityWriterSettlementSql(), 1, 1, 2048],
         [lockPublicationAdmission, 1, 1, 512],

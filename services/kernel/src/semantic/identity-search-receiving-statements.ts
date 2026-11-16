@@ -42,7 +42,11 @@ import releaseRead from './definitions-read.sql';
 import activeReleaseRead from './definitions-active.sql';
 import readListingCounts from '../library/listing-counts.sql';
 import readPublicFigures from '../rating/public-figures-read.sql';
-import { readCanonicalStatementPresenceSql } from '../search/identity-search-writer-document.ts';
+import {
+  readCanonicalStatementCountSql,
+  readCanonicalStatementPresenceSql,
+  SEARCH_INDEX_STATEMENT_KEYS,
+} from './identity-search-index-statements.ts';
 import { readSearchCanonicalGenerationSql } from './search-source.ts';
 import composedReleaseRead from './composite-read.sql';
 import contextOwnerRead from './context-read-creator.sql';
@@ -66,7 +70,6 @@ import projectionBuildStart from './public-filter-projection-build-start.sql';
 import projectionPageRead from './public-filter-projection-page.sql';
 import projectionHeadsWrite from './public-filter-projection-head-upsert.sql';
 import projectionCurrentHead from './public-filter-projection-head-current.sql';
-import sourceFencesRead from '../content/read-source-fences.sql';
 import { permissionCheckStatements } from '../access/permission.ts';
 
 type Cost = readonly [rows: number, points: number, statements: number, bytes: number, emptySeeks: number];
@@ -100,6 +103,10 @@ function sourceStatementCosts(): readonly (readonly [string, Cost])[] {
         [readListingCounts.sql, [1, 1, 1, 1024, 1]],
         [readPublicFigures.sql, [1, 1, 1, 2048, 1]],
         [readCanonicalStatementPresenceSql, [1, 1, 1, 512, 1]],
+        [
+          readCanonicalStatementCountSql,
+          [SEARCH_INDEX_STATEMENT_KEYS + 1, SEARCH_INDEX_STATEMENT_KEYS + 1, 1, 1024, 1],
+        ],
         [readSearchCanonicalGenerationSql, [1, 1, 1, 512, 1]],
         [composedReleaseRead.sql, [1, 1, 1, 1024, 1]],
         [contextOwnerRead.sql, [1, 1, 1, 512, 1]],
@@ -121,7 +128,6 @@ function sourceStatementCosts(): readonly (readonly [string, Cost])[] {
         [projectionPageRead.sql, [1, 1, 1, 131072, 1]],
         [projectionHeadsWrite.sql, [8, 8, 1, 2048, 0]],
         [projectionCurrentHead.sql, [2, 2, 1, 1024, 1]],
-        [sourceFencesRead.sql, [100, 100, 1, 131072, 1]],
         [permissionCheckStatements.time, [1, 1, 1, 512, 1]],
         [permissionCheckStatements.formula, [16, 16, 1, 32768, 1]],
         [
