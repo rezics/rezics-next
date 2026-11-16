@@ -1,4 +1,5 @@
 import { SeedFinalization, finalizeSeedResult, seedImportRunFailure } from './seed-cli.ts';
+import { recordSeedBatchFailure } from './seed-remaining-request.ts';
 import { createHash } from 'node:crypto';
 import { showcaseFranchiseSelection } from './showcase-franchise.ts';
 import type { DevelopmentShowcaseContext, DevelopmentShowcaseResult } from './showcase-persona.ts';
@@ -2867,7 +2868,6 @@ export async function seedCrossMedia(
       runs.bangumiCharacterFidelity = fidelity.run;
     }
     progress?.enter('graph-delivery');
-    const graph = new CrossMediaGraph(importer.session.store.database);
     const graphEdges = vndbCredits?.deliveryEdges(plan.edges) ?? plan.edges;
     const releaseSupersessionDrafts = graphEdges.filter(
       (draft) =>
@@ -2875,7 +2875,13 @@ export async function seedCrossMedia(
         draft.table === 'releases_supersedes' &&
         draft.property === 'rezics:releaseSupersedes',
     );
-    graph.remember(graphEdges);
+    let graph: CrossMediaGraph;
+    try {
+      graph = new CrossMediaGraph(importer.session.store.database);
+      graph.remember(graphEdges);
+    } catch (error) {
+      throw recordSeedBatchFailure(error, 'graph-retain', 'local-failure');
+    }
     const delivered = await graph.deliver({
       claim: (owner) => importer.session.bindings.claim(owner),
       nativeType: (externalId, alias) => nativeTypes.get(`${alias ?? crossMediaAliases.bangumi}\u0000${externalId}`),

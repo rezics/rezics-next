@@ -1,8 +1,32 @@
 import { Database } from 'bun:sqlite';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
+import { reviewedCatalogueProblem } from './http.ts';
 import type { ImportTransportError } from './import-client.ts';
 import { formatSeedError, seedTransportError } from './seed-cli.ts';
+
+const batchTransitions = [
+  'graph-retain',
+  'graph-prepare',
+  'retraction-prepare',
+  'batch-validate',
+  'batch-send',
+  'batch-receipt',
+  'graph-acknowledge',
+  'showcase-prepare',
+  'showcase-acknowledge',
+] as const;
+type BatchTransition = (typeof batchTransitions)[number];
+const batchReasons = [
+  'local-failure',
+  'invalid-envelope',
+  'request-failed',
+  'command-refused',
+  'missing-receipt',
+  'invalid-receipt',
+] as const;
+type BatchReason = (typeof batchReasons)[number];
 
 /** Safe remaining seed request: method, path, source tuple and native type. No bodies or credentials. */
 export type SeedRemainingRequest = {
@@ -24,8 +48,12 @@ export type SeedRemainingRequest = {
   failurePhase?: string;
   networkCode?: string;
   correlationId?: string;
+  transition?: BatchTransition;
+  reason?: BatchReason;
+  transactionPhase?: string;
 };
 
+const BATCH_ROUTE = '/v1/subjects:batchWrite';
 const SOURCE_ID = /^[a-z][a-z0-9_-]{0,31}$/;
 const EXTERNAL_ID = /^[\x20-\x7e]{1,255}$/;
 const CONVERTER = /^[\x20-\x7e]{1,64}$/;
@@ -47,6 +75,9 @@ const remainingFields = {
   failurePhase: /^(network|token|deadline|http|response|integrity)$/,
   networkCode: /^(?:E[A-Z0-9_]{1,64}|ERR_[A-Z0-9_]{1,64}|UND_ERR_[A-Z0-9_]{1,64})$/,
   correlationId: /^[A-Za-z0-9._:-]{1,128}$/,
+  transition: new RegExp(`^(?:${batchTransitions.join('|')})$`),
+  reason: new RegExp(`^(?:${batchReasons.join('|')})$`),
+  transactionPhase: /^[a-z_]{1,32}$/,
 } as const;
 
 function admit(value: unknown, pattern: RegExp): string | undefined {
@@ -54,14 +85,16 @@ function admit(value: unknown, pattern: RegExp): string | undefined {
 }
 
 /** One allowlist for in-memory diagnostics and private artifact reads/writes; never serialize a cause or body. */
-function safeRemainingRequest(value: Partial<SeedRemainingRequest>): SeedRemainingRequest {
+function safeRemainingRequest(value: {
+  [Key in keyof SeedRemainingRequest]?: SeedRemainingRequest[Key] | undefined;
+}): SeedRemainingRequest {
   const remaining: SeedRemainingRequest = {
     method: admit(value.method, METHOD) ?? 'unknown',
     path: admit(value.path, PATH) ?? 'unknown',
   };
   for (const key of Object.keys(remainingFields) as (keyof typeof remainingFields)[]) {
     const field = admit(value[key], remainingFields[key]);
-    if (field !== undefined) remaining[key] = field;
+    if (field !== undefined) Object.assign(remaining, { [key]: field });
   }
   if (Number.isInteger(value.status) && value.status! >= 100 && value.status! <= 599) remaining.status = value.status!;
   if (typeof value.retryable === 'boolean') remaining.retryable = value.retryable;
@@ -84,29 +117,68 @@ export function remainingRequestFromTransport(error: ImportTransportError): Seed
   });
 }
 
-export function remainingRequestFromPreparedCommand(command: {
+type CommandIdentity = {
   op: string;
   source: { source: string; external_id: string; converter_revision: string };
   subject: string | { type?: string };
-}): SeedRemainingRequest {
-  const nativeType = admit(
-    command.subject && typeof command.subject === 'object' ? command.subject.type : undefined,
-    NATIVE_TYPE,
-  );
-  const op = admit(command.op, OP);
-  const source = admit(command.source.source, SOURCE_ID);
-  const externalId = admit(command.source.external_id, EXTERNAL_ID);
-  const converter = admit(command.source.converter_revision, CONVERTER);
-  return {
+};
+
+function commandRequest(command?: CommandIdentity): SeedRemainingRequest {
+  return safeRemainingRequest({
     method: 'POST',
-    path: '/v1/subjects:batchWrite',
-    ...(op !== undefined ? { op } : {}),
-    ...(source !== undefined ? { source } : {}),
-    ...(externalId !== undefined ? { externalId } : {}),
-    ...(nativeType !== undefined ? { nativeType } : {}),
-    ...(converter !== undefined ? { converter } : {}),
-    journalState: 'prepared',
-  };
+    path: BATCH_ROUTE,
+    op: command?.op,
+    source: command?.source.source,
+    externalId: command?.source.external_id,
+    nativeType: command?.subject && typeof command.subject === 'object' ? command.subject.type : undefined,
+    converter: command?.source.converter_revision,
+  });
+}
+
+export function remainingRequestFromPreparedCommand(command: CommandIdentity): SeedRemainingRequest {
+  return { ...commandRequest(command), journalState: 'prepared' };
+}
+
+const batchFailures = new WeakMap<Error, SeedRemainingRequest>();
+
+/** Keep request-local failure metadata, including the exact command only when its identity is known. */
+export function recordSeedBatchFailure(
+  error: unknown,
+  transition: BatchTransition,
+  reason: BatchReason,
+  command?: BatchCommand,
+  receipt?: BatchWriteResult['results'][number],
+): Error {
+  const failure = error instanceof Error ? error : new Error('Seed batch delivery failed', { cause: error });
+  if (batchFailures.has(failure)) return failure;
+  const transport = seedTransportError(failure);
+  const remote = receipt && 'problem' in receipt ? receipt.problem : undefined;
+  const problem = reviewedCatalogueProblem(remote);
+  const request = commandRequest(command);
+  const failurePhase = receipt
+    ? 'response'
+    : (transport?.failurePhase ??
+      (failure instanceof DOMException && failure.name === 'TimeoutError' ? 'deadline' : undefined));
+  batchFailures.set(
+    failure,
+    safeRemainingRequest({
+      ...mergeRemainingRequest(request, transport && remainingRequestFromTransport(transport)),
+      transition,
+      reason,
+      ...(receipt === undefined ? {} : { status: receipt.status }),
+      failurePhase,
+      type: problem.type ?? (remote?.type === 'about:blank' ? 'about:blank' : transport?.type),
+      code: problem.code ?? transport?.code,
+      retryable: problem.retryable ?? transport?.retryable,
+      correlationId: problem.request_id ?? transport?.correlationId,
+      transactionPhase: problem.phase,
+    }),
+  );
+  return failure;
+}
+
+export function seedBatchRemainingRequest(error: unknown): SeedRemainingRequest | undefined {
+  return error instanceof Error ? batchFailures.get(error) : undefined;
 }
 
 export function remainingRequestFromPreparedJournal(path: string): SeedRemainingRequest | undefined {
@@ -171,10 +243,13 @@ export function formatSeedRemainingRequest(remaining: SeedRemainingRequest): str
   const tuple = [safe.op, safe.source, safe.externalId, safe.nativeType]
     .map((part) => (part === undefined ? 'unknown' : /\s|["\\]/.test(part) ? JSON.stringify(part) : part))
     .join(' ');
-  let line = `status=${safe.status ?? 'none'} type=${safe.type ?? 'none'} problem=${safe.code ?? 'none'} phase=${safe.failurePhase ?? 'unknown'} pending=${tuple}`;
+  const transition = safe.transition ? ` transition=${safe.transition} reason=${safe.reason ?? 'unknown'}` : '';
+  const type = safe.transition ? '' : ` type=${safe.type ?? 'none'}`;
+  let line = `status=${safe.status ?? 'none'}${type} problem=${safe.code ?? 'none'} phase=${safe.failurePhase ?? 'unknown'}${transition} pending=${tuple}`;
   // Required fields have their own admission bounds and are never sliced. Spend the remaining 240-character
   // budget on whole optional fields, so a long target cannot erase either the cause or the pending identity.
   const optional = [
+    safe.transactionPhase && `transaction_phase=${safe.transactionPhase}`,
     safe.phase && `classification=${safe.phase}`,
     safe.networkCode && `network=${safe.networkCode}`,
     safe.correlationId && `correlation=${safe.correlationId}`,
@@ -183,12 +258,15 @@ export function formatSeedRemainingRequest(remaining: SeedRemainingRequest): str
     `target=${safe.origin ?? ''}${safe.path}`,
     safe.converter && `converter=${JSON.stringify(safe.converter)}`,
     safe.journalState && `journal=${safe.journalState}`,
+    safe.transition && safe.type && `type=${safe.type}`,
   ];
   for (const field of optional) if (field && line.length + field.length + 1 <= 240) line += ` ${field}`;
   return line;
 }
 
 export function formatSeedFailure(error: unknown, remaining?: SeedRemainingRequest): string {
+  const batch = seedBatchRemainingRequest(error) ?? (remaining?.transition ? remaining : undefined);
+  if (batch) return formatSeedRemainingRequest(batch);
   const transport = seedTransportError(error);
   if (transport)
     return formatSeedRemainingRequest(mergeRemainingRequest(remaining, remainingRequestFromTransport(transport)));
