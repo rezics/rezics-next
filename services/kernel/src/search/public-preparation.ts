@@ -13,12 +13,7 @@ import type { GenerationPublicationJob } from './generation-publication.ts';
 import type { DefaultPublicFilterRuntime } from './public-runtime.ts';
 import type { OpenSearch } from './opensearch.ts';
 import { SearchUnavailableError } from './opensearch.ts';
-import {
-  createSubjectIndex,
-  markSubjectCalendarReady,
-  subjectIndexName,
-  subjectGenerations,
-} from './indices.ts';
+import { createSubjectIndex, subjectIndexName, subjectGenerations } from './indices.ts';
 import type { SubjectListingSource, SubjectSource } from './source.ts';
 import {
   createPublicPreparationStore,
@@ -213,7 +208,6 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
         ready,
       );
     }
-    await markSubjectCalendarReady(search, options.prefix, state.generation);
     const activated = await options.runtime.publication.activate(job, context);
     if (activated.status === 'unavailable') reportUnavailable('activate', state.generation, activated);
     else unavailable.delete('activate');

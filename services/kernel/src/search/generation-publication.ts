@@ -61,6 +61,7 @@ import { discoveryAlias } from './indices.ts';
 import {
   discoveryIndexName,
   discoveryIndexUuid,
+  markSubjectCalendarReady,
   subjectAlias,
   subjectIndexName,
   subjectGenerations,
@@ -369,6 +370,7 @@ export function createSearchGenerationPublication(
     if ((await discoveryIndexUuid(search, consumer.physicalTarget)) !== consumer.incarnation)
       throw new Pending('incarnation_changed');
     let incarnation = consumer.incarnation;
+    let activeSubjectGeneration: number | null = null;
     if (target.family === 'discovery') {
       const generations = await discoveryGenerations(pool, target.prefix);
       const row = generations.find((row) => row.generation === target.generation);
@@ -392,6 +394,7 @@ export function createSearchGenerationPublication(
       incarnation = row.incarnation;
     } else {
       const generations = await subjectGenerations(search, target.prefix);
+      activeSubjectGeneration = generations.active;
       if (
         !generations.generations.includes(target.generation) ||
         (await readSubjectSortFormat(search, target.prefix, target.generation)) !== SUBJECT_SORT_FORMAT
@@ -399,7 +402,7 @@ export function createSearchGenerationPublication(
         throw new Pending('registration_missing');
     }
     check(context);
-    return { ...target, incarnation };
+    return { ...target, incarnation, activeSubjectGeneration };
   }
   function publicationCapture(
     capture: PublicCanonicalCaptureInput,
@@ -426,10 +429,13 @@ export function createSearchGenerationPublication(
     job: Job,
     context: PublicFilterConsumerContext,
     meter: Meter,
-    needObservation = false,
-    heldSource?: GenerationPublicationPin,
+    options: {
+      confirmSource?: boolean;
+      heldSource?: GenerationPublicationPin | undefined;
+      physical?: Awaited<ReturnType<typeof native>> | undefined;
+    } = {},
   ) {
-    const current = await native(job.consumer, context);
+    const current = options.physical ?? (await native(job.consumer, context));
     if (
       current.incarnation !== job.native_incarnation ||
       !same(
@@ -465,8 +471,8 @@ export function createSearchGenerationPublication(
       !same(resolved.definition.dependencyKeys, custody.definition.dependencyKeys)
     )
       throw new Pending('source_pending');
-    if (!needObservation) return;
-    let pin = heldSource;
+    if (!options.confirmSource) return;
+    let pin = options.heldSource;
     if (!pin) {
       const completion = await readPublicationCompletion({ job: job.job }, context);
       add(meter, completion.cost);
@@ -580,7 +586,7 @@ export function createSearchGenerationPublication(
     return nativeSourceForHeldPublication(result);
   }
   async function adoptHeld(job: Job, context: PublicFilterConsumerContext, meter: Meter) {
-    return adopt(job, context, meter, true, await held(job, context, meter));
+    return adopt(job, context, meter, { confirmSource: true, heldSource: await held(job, context, meter) });
   }
   async function save(client: PoolClient, job: Job, meter: Meter) {
     const result = await client.query(
@@ -674,8 +680,14 @@ export function createSearchGenerationPublication(
                 [ref.job],
               );
               if (!job || !same(job.consumer, ref.consumer)) throw new Pending('registration_missing');
+              const physical =
+                phase === 'activate' && target.family === 'subjects' && job.phase !== 'active'
+                  ? await native(job.consumer, context)
+                  : undefined;
+              // The native inventory already proves absence during cold preparation. An existing
+              // alias still needs exact options and target readback, as does every switch or rollback.
               const current =
-                phase === 'activate' && (target.family === 'subjects' || job.phase === 'active')
+                phase === 'activate' && (job.phase === 'active' || (physical?.activeSubjectGeneration ?? null) !== null)
                   ? await aliasTarget(job, context, meter)
                   : null;
               if (job.phase !== 'active' && newerSubjectAlias(job, current)) throw new Pending('source_pending');
@@ -685,7 +697,7 @@ export function createSearchGenerationPublication(
                 await native(job.consumer, context);
               } else {
                 try {
-                  await adopt(job, context, meter);
+                  await adopt(job, context, meter, { physical });
                 } catch (error) {
                   if (
                     error instanceof Pending &&
@@ -1635,13 +1647,24 @@ export function createSearchGenerationPublication(
               return preparing('activate', true);
             }
             if (newerSubjectAlias(job, job.previous_target)) throw new Pending('source_pending');
-            if (job.family === 'subjects')
-              await publishSubjectActivationMetadata(search, job.physical_target, job.activated_at);
             const before = await aliasTarget(job, context, meter);
             if (newerSubjectAlias(job, before)) throw new Pending('source_pending');
             if (before !== job.physical_target && before !== job.previous_target) throw new Pending('source_pending');
+            if (before !== job.physical_target || job.family === 'subjects') await adoptHeld(job, context, meter);
+            if (job.family === 'subjects') {
+              const activationSearch: OpenSearch = {
+                ...search,
+                request: (method, path, body) => engine(context, meter, method, path, body),
+              };
+              await markSubjectCalendarReady(
+                activationSearch,
+                job.prefix,
+                Number(job.generation),
+                job.native_incarnation,
+              );
+              await publishSubjectActivationMetadata(activationSearch, job.physical_target, job.activated_at);
+            }
             if (before !== job.physical_target) {
-              await adoptHeld(job, context, meter);
               await observedWrite(
                 () =>
                   search.request('POST', '/_aliases', {

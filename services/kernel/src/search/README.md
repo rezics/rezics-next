@@ -2218,15 +2218,14 @@ maintenance completion. Missing custody, routing, Source or native
 barrier evidence returns typed unready; no observation readiness is minted here. Old PIT/prepared observations
 remain bound to their own exact physical target and definition.
 
-Publication persists native fencing invocation intent before requesting the gate, and alias intent, including
-the previous physical target/UUID, before the native alias switch.
-The alias intent resumes on a fresh publication turn. Each fence check uses its own verified Source proof
-for the exact publication pin, and the swap and its readback still have separate current checks. A lost fence response resolves through the
-same producer/job. A Source change during adoption safely recovers outstanding intent before returning unready.
-Only exact native alias readback settles a lost response. Source and writer/copy custody are revalidated through
-the critical section, before generation metadata becomes active; release occurs afterwards. A safe abort restores
-only this exact alias intent while the fence remains held. Retained intent recovers a lost response or interrupted
-metadata update. Existing generation allocation, live-three-generation quota and activation expiry remain owned
+Publication persists fencing intent before requesting the gate and alias intent with the prior target and UUID
+before switching. Alias intent resumes on a fresh turn. The held Subject intent sets calendar readiness for the
+exact physical UUID. Cold alias absence comes from the native generation inventory. Existing aliases and switches
+or rollbacks require exact alias readback. Each fence check revalidates the original Source proof. Separate current
+checks bracket the switch. A lost fence response resumes the same producer/job, and only exact readback settles
+a lost alias response. A Source change during adoption recovers outstanding intent. Active metadata commits
+before fence release. Abort restores only the exact retained intent under that fence.
+Existing generation allocation, live-three-generation quota and activation expiry remain owned
 by the native generation implementations; this port neither allocates a parallel registry nor launches a worker.
 Discovery allocation obtains the historical high water with the primary key's descending full-key LIMIT 1 and the live set through `discovery_generation_live` with LIMIT 4; a fourth live row or unsafe integer exhaustion is unavailable before inserts.
 
