@@ -464,13 +464,10 @@ export function buildShowcaseManifest(input: {
     tagWeightObservations,
   );
   for (const acknowledgement of acknowledgements) {
+    const source = acknowledgement.command.source;
+    if (source.converter_revision !== vndbStaffCreditConverterRevision) continue;
     const assertion = candidateAssertion(acknowledgement);
-    if (
-      assertion &&
-      acknowledgement.command.source.converter_revision === vndbStaffCreditConverterRevision &&
-      vndbCreditCandidateDigests.has(assertion.candidateDigest)
-    )
-      allowedSources.add(envelopeKey(acknowledgement.command.source));
+    if (assertion && vndbCreditCandidateDigests.has(assertion.candidateDigest)) allowedSources.add(envelopeKey(source));
   }
   const selectedBySourceKey = new Map(selected.map((row) => [`${row.source}\0${row.key}`, row]));
   const acknowledgementsByKey = new Map(acknowledgements.map((ack) => [ack.command.key, ack]));
@@ -602,13 +599,10 @@ export function buildShowcaseManifest(input: {
     let candidateOverflow = false;
     for (const ack of acknowledgements) {
       const source = ack.command.source;
-      const assertion = candidateAssertion(ack);
       if (
         source.source !== alias ||
         (source.external_id !== row.key && appearanceOwners.get(envelopeKey(source)) !== row.key) ||
         !allowedSources.has(envelopeKey(source)) ||
-        (source.converter_revision === vndbStaffCreditConverterRevision &&
-          (!assertion || !vndbCreditCandidateDigests.has(assertion.candidateDigest))) ||
         (graphEnvelopeKeys.has(envelopeKey(source)) && !eligibleGraphCommandKeys.has(ack.command.key)) ||
         (subject && ack.command.op === 'propose' && ack.command.subject !== subject.id)
       )
@@ -629,7 +623,13 @@ export function buildShowcaseManifest(input: {
         !currentBangumiGameGenreCandidateIds.has(ack.candidateId ?? '')
       )
         continue;
-      if (!assertion) continue;
+      const assertion = candidateAssertion(ack);
+      if (
+        !assertion ||
+        (source.converter_revision === vndbStaffCreditConverterRevision &&
+          !vndbCreditCandidateDigests.has(assertion.candidateDigest))
+      )
+        continue;
       // Work relations require the graph owner's current acknowledged result and both selected endpoints.
       if (franchise.envelopes.has(envelopeKey(source)) && !franchise.targets.has(ack.command.key)) continue;
       if (provider === 'vndb' && !currentTagWeight(row, alias, assertion, tagWeightObservations)) continue;
