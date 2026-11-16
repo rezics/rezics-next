@@ -4,6 +4,9 @@ import { fromPlainText } from '@rezics/document';
 import type { CommandTransaction } from '../../src/command/command.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { semanticRetention } from '../../src/semantic/retention.ts';
+import { registerRecordRetentionWork } from '../../src/semantic/retention-work.ts';
+import { createWorkClient } from '../../src/work/client.ts';
+import { composeWork } from '../../src/work/registry.ts';
 import {
   lockRecordPurgeAuthoritySource,
   type RecordPurgeAuthority,
@@ -14,6 +17,42 @@ const f = await createDeletionFixture();
 beforeAll(f.setup);
 afterAll(f.close);
 const day = 86_400_000;
+
+test('the native record retention schedule commits its cursor without emitting a domain event', async () => {
+  const databaseUrl = process.env.DATABASE_URL!;
+  const client = await createWorkClient(databaseUrl, f.pool);
+  let work: Awaited<ReturnType<typeof composeWork>> | undefined;
+  const home = 4095;
+  const cursor = () =>
+    f.pool
+      .query(
+        'SELECT s.after_home,p.position::text FROM semantic.record_retention_schedule s JOIN core.partition p USING(partition_no)',
+      )
+      .then(({ rows }) => rows[0]);
+  try {
+    const before = await cursor();
+    await f.admin.query('INSERT INTO semantic.record_retention_home (partition_no) VALUES ($1)', [home]);
+    work = await composeWork([{ name: 'record-retention', register: registerRecordRetentionWork }], {
+      databaseUrl,
+      pool: f.pool,
+      client,
+      clock: f.clock,
+    });
+    await client.pauseSchedule('semantic.recordRetention.every-10-minutes');
+    await work.launch();
+    const handle = await client.enqueue({
+      workflowName: 'semantic.recordRetention',
+      workflowID: randomUUID(),
+      queueName: 'maintenance',
+    });
+    await handle.getResult();
+    expect(await cursor()).toEqual({ ...before, after_home: home });
+  } finally {
+    await work?.shutdown();
+    await client.close();
+    await f.admin.query('DELETE FROM semantic.record_retention_home WHERE partition_no=$1', [home]);
+  }
+}, 30_000);
 
 test('structural or serialized objects cannot authorize native record purge', async () => {
   let queries = 0;
