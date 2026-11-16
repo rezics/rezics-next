@@ -35,7 +35,7 @@ import storeSelectMapping from '../identity-epoch-store-select-mapping.sql';
 import storeSelectBootstrapHome from '../identity-epoch-store-select-bootstrap-home.sql';
 import storeSelectGroup from '../identity-epoch-store-select-group.sql';
 import storeSelectControl2 from '../identity-epoch-store-select-control-2.sql';
-import storeSelectJob4 from '../identity-epoch-store-select-job-4.sql';
+import { identityChangeTransformSQL } from '../identity-epoch-store-change-transform.ts';
 import libraryTransform from '../identity-epoch-store-library-transform.sql';
 import storeSelectInput from '../identity-epoch-store-select-input.sql';
 import storeSelectOriginal from '../identity-epoch-store-select-original.sql';
@@ -538,8 +538,14 @@ export function createIdentityEpochStore(capabilities: NativeIdentityCapabilitie
       const partition = identityJobPartition(job);
       const owner = await readPartition(tx, partition);
       if (!owner || owner.writeState !== 'active') throw unavailable();
-      const saved = (await tx.query(storeSelectJob4.sql, [partition, job.jobId, job.epoch.toString()])).rows[0];
+      const saved = (await tx.query(identityChangeTransformSQL, [partition, job.jobId, job.epoch.toString()])).rows[0];
       if (!saved) throw new TypeError('Unknown native identity job');
+      let transform: IdentityEpochLibraryTransform;
+      if (saved.kind === 'merge' && saved.survivor) transform = { kind: saved.kind, survivor: saved.survivor };
+      else if (saved.kind === 'unmerge' && saved.original) transform = { kind: saved.kind, original: saved.original };
+      else if (saved.kind === 'repoint' && saved.original && saved.terminal)
+        transform = { kind: saved.kind, original: saved.original, terminal: saved.terminal };
+      else throw unavailable();
       const inputs = (await tx.query(storeSelectInput.sql, [partition, job.jobId])).rows;
       const pages: Array<{ original: string; terminal: string }[]> = [];
       const allowance = inputs.length === 1 ? 100 : 50;
@@ -560,7 +566,6 @@ export function createIdentityEpochStore(capabilities: NativeIdentityCapabilitie
         .map((p) => p.at(-1)!.original)
         .sort();
       const frontier = fences[0];
-      const intent = saved.intent as IdentityIntent;
       const changes: IdentityChange[] = pages
         .flat()
         .filter((r) => !frontier || r.original <= frontier)
@@ -568,7 +573,7 @@ export function createIdentityEpochStore(capabilities: NativeIdentityCapabilitie
         .map((r) => ({
           original: r.original,
           previousTerminal: r.terminal,
-          terminal: identityEpochChangeTerminal(intent, saved.remainder_terminal, r.original, r.terminal),
+          terminal: identityEpochChangeTerminal(transform, saved.remainder_terminal, r.original, r.terminal),
         }));
       return { changes, next: frontier ? changes.at(-1)!.original : null };
     },

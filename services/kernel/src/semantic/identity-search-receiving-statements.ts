@@ -1,3 +1,4 @@
+import { identityChangePageCosts } from './identity-change-page-work.ts';
 import { memoizedValue } from '../memoized.ts';
 import { receivingSqlKey } from './identity-search-receiving-work.ts';
 import receivingJob from './identity-epoch-store-receiving-job.sql';
@@ -212,6 +213,7 @@ export function commonSearchReceivingStatements(): readonly string[] {
           participantReplay.sql,
           participantJob.sql,
           participantAck.sql,
+          ...identityChangePageCosts().map(({ sql }) => sql),
           nativeDefinition.sql,
           ...sourceStatementCosts().map(([sql]) => sql),
           'BEGIN ISOLATION LEVEL SERIALIZABLE',
@@ -301,6 +303,7 @@ const receivingCost: Partial<Record<keyof typeof receivingStatements, Cost>> = {
 export function searchReceivingCapturedStatementCosts(): SearchReceivingWorkDeclaration['statements'] {
   const costs = new Map<string, Readonly<{ sql: string; work: WorkDimensions }>>();
   const add = (sql: string, cost: Cost) => costs.set(receivingSqlKey(sql), Object.freeze({ sql, work: work(cost) }));
+  for (const { sql, work } of identityChangePageCosts()) costs.set(receivingSqlKey(sql), Object.freeze({ sql, work }));
   for (const entry of searchReceivingCaptureStatementCosts) costs.set(receivingSqlKey(entry.sql), entry);
   for (const [name, sql] of Object.entries(receivingStatements)) {
     const cost = receivingCost[name as keyof typeof receivingStatements];
