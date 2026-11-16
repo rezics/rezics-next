@@ -1175,10 +1175,10 @@ async function readSelectionAdvancePlan(client: AccessClient, stage: StageRow): 
   const first = BigInt(stage.input_frontier);
   const inputs = (
     await client.query<InputRow>(
-      `SELECT input_position::text,occurrence_id
-       FROM content.hosted_publication_staging_input
-       WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 AND input_position>$4
-       ORDER BY input_position LIMIT $5`,
+      `SELECT i.input_position::text,i.occurrence_id
+       FROM content.hosted_publication_staging_input i
+       WHERE i.route=$1 AND i.catalogue_id=$2 AND i.stage_id=$3 AND i.input_position>$4
+       ORDER BY i.input_position LIMIT $5`,
       [stage.route, stage.catalogue_id, stage.stage_id, first.toString(), HOSTED_PUBLICATION_STAGING_STEP_LIMIT + 1],
     )
   ).rows.slice(0, HOSTED_PUBLICATION_STAGING_STEP_LIMIT);
@@ -1981,10 +1981,10 @@ async function advanceClosure(client: AccessClient, stage: StageRow): Promise<Ho
   const limit = HOSTED_PUBLICATION_STAGING_STEP_LIMIT;
   const rows = (
     await client.query<QueryResultRow & { source_order: string; occurrence_id: string; parent_id: string | null }>(
-      `SELECT source_order::text,occurrence_id,parent_id
-       FROM content.hosted_publication_staging_candidate
-       WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 AND source_order>$4
-       ORDER BY source_order LIMIT $5`,
+      `SELECT c.source_order::text,c.occurrence_id,c.parent_id
+       FROM content.hosted_publication_staging_candidate c
+       WHERE c.route=$1 AND c.catalogue_id=$2 AND c.stage_id=$3 AND c.source_order>$4
+       ORDER BY c.source_order LIMIT $5`,
       [stage.route, stage.catalogue_id, stage.stage_id, after.toString(), limit + 1],
     )
   ).rows;
