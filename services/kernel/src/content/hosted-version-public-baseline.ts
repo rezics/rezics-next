@@ -483,11 +483,11 @@ async function readOccurrencePage(
       tx,
       work,
       'read',
-      `SELECT source_ordinal::text,occurrence_id,parent_id,kind,title,target_thread_id,target_post_id,
-              target_revision_id,encode(target_sha256,'hex') AS target_sha256
-       FROM content.hosted_version_builder_point
-       WHERE route=$1 AND catalogue_id=$2 AND input_id=$3 AND source_ordinal < $4::bigint
-       ORDER BY source_ordinal DESC LIMIT $5`,
+      `SELECT p.source_ordinal::text,p.occurrence_id,p.parent_id,p.kind,p.title,p.target_thread_id,p.target_post_id,
+              p.target_revision_id,encode(p.target_sha256,'hex') AS target_sha256
+       FROM content.hosted_version_builder_point p
+       WHERE p.route=$1 AND p.catalogue_id=$2 AND p.input_id=$3 AND p.source_ordinal < $4::bigint
+       ORDER BY p.source_ordinal DESC LIMIT $5`,
       [
         routeFor(state.catalogueId, state.buildId),
         state.catalogueId,

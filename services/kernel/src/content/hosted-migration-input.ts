@@ -319,17 +319,17 @@ export async function captureHostedMigrationInput(
       } else {
         const lastPlacement = (
           await tx.query<{ ordinal: string }>(
-            `SELECT ordinal::text FROM content.hosted_placement
-             WHERE route=$1 AND catalogue_id=$2 AND revision_id=$3
-             ORDER BY ordinal DESC LIMIT 1`,
+            `SELECT p.ordinal::text FROM content.hosted_placement p
+             WHERE p.route=$1 AND p.catalogue_id=$2 AND p.revision_id=$3
+             ORDER BY p.ordinal DESC LIMIT 1`,
             [route, input.catalogueId, input.expectedRevisionId],
           )
         ).rows[0];
         const lastRoot = (
           await tx.query<{ position: string }>(
-            `SELECT position::text FROM content.hosted_placement
-             WHERE route=$1 AND catalogue_id=$2 AND revision_id=$3 AND parent_id IS NULL
-             ORDER BY position DESC LIMIT 1`,
+            `SELECT p.position::text FROM content.hosted_placement p
+             WHERE p.route=$1 AND p.catalogue_id=$2 AND p.revision_id=$3 AND p.parent_id IS NULL
+             ORDER BY p.position DESC LIMIT 1`,
             [route, input.catalogueId, input.expectedRevisionId],
           )
         ).rows[0];
