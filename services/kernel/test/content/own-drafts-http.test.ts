@@ -171,10 +171,22 @@ test('private inventory denies anonymous and unrelated actors and never widens p
 });
 
 test('pending locators are preparing, bounded repair returns the draft, and late creation cannot resurrect an erase', async () => {
-  const thread = await f.thread('draft');
+  const body = fromPlainText('Private draft before locator acknowledgement');
+  const thread = await f.thread('draft', body);
+  const post = thread.firstPost;
+  const resume = `${home()}/${post.id}?threadId=${thread.id}`;
   const before = await f.call('GET', home());
   expect(before.status).toBe(200);
   expect(before.value.state).toBe('preparing');
+  expect(before.value.drafts.some((item: { id: string }) => item.id === post.id)).toBe(false);
+
+  const selected = await f.call('GET', resume);
+  expect(selected.status).toBe(200);
+  expect(selected.value.post).toMatchObject({ id: post.id, threadId: thread.id, revisionId: post.revisionId, body });
+  expect((await f.call('GET', resume, undefined, { anonymous: true })).status).toBe(401);
+  expect((await f.call('GET', resume, undefined, { other: true })).status).toBe(404);
+  expect((await f.call('GET', `${home()}/${post.id}?threadId=${post.id}`)).status).toBe(404);
+
   let complete = false;
   for (let page = 0; page < 20 && !complete; page++) {
     const repaired = await repairOwnDraftPage(f.pool);
@@ -184,19 +196,25 @@ test('pending locators are preparing, bounded repair returns the draft, and late
   expect(complete).toBe(true);
   const repaired = await f.call('GET', home());
   expect(repaired.value.state).toBe('ready');
-  expect(repaired.value.drafts.some((item: any) => item.id === thread.firstPost.id)).toBe(true);
-  const events = await deliver(thread.firstPost.id);
+  expect(repaired.value.drafts.find((item: { id: string }) => item.id === post.id)).toMatchObject({
+    threadId: thread.id,
+    revisionId: post.revisionId,
+    actions: { resume },
+  });
+  expect(await f.call('GET', resume)).toEqual(selected);
+  const events = await deliver(post.id);
   const erased = await f.system.kernel.handle(
-    new Request(`https://content.test/v1/posts/${thread.firstPost.id}`, {
+    new Request(`https://content.test/v1/posts/${post.id}`, {
       method: 'DELETE',
       headers: { authorization: `Bearer ${f.author.bearer}`, 'idempotency-key': JSON.stringify(crypto.randomUUID()) },
     }),
   );
   expect(erased.status).toBe(204);
-  await deliver(thread.firstPost.id);
+  await deliver(post.id);
   const effect = createAuthorItemEffect(f.pool);
   for (const event of events) await effect.run(event);
-  expect((await f.call('GET', home())).value.drafts.some((item: any) => item.id === thread.firstPost.id)).toBe(false);
+  expect((await f.call('GET', home())).value.drafts.some((item: { id: string }) => item.id === post.id)).toBe(false);
+  expect((await f.call('GET', resume)).status).toBe(404);
 });
 
 test('missing locator coverage is unavailable and an exact cursor retry remains usable', async () => {
