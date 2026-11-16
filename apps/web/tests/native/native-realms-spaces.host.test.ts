@@ -2,6 +2,7 @@ import { afterAll, expect, setDefaultTimeout } from 'bun:test';
 import type { Locator, Page } from 'playwright';
 import { mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+import type { MyRealmsNativeItem } from '../../src/community/my-realms-native';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
 import { startNativeWebStack, type NativeKernelRequest, type NativeWebStack } from './stack.ts';
@@ -109,6 +110,7 @@ async function waitForKernelRequest(
 ): Promise<NativeKernelRequest> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    await stack.refreshKernelRequests();
     const request = stack.kernelRequests().slice(after).find(matches);
     if (request) return request;
     await Bun.sleep(50);
@@ -242,10 +244,66 @@ async function screenshot(page: Page, name: string): Promise<void> {
   await page.screenshot({ path: resolve(screenshotDirectory, `${name}.png`), fullPage: true });
 }
 
-async function readOwnRealms(actor: string): Promise<{ realmId: string; name: string; role: string }[]> {
+async function readOwnRealms(actor: string): Promise<MyRealmsNativeItem[]> {
   const result = await communityRequest(actor, 'GET', '/v1/me/realms');
   expect(result.response.status, JSON.stringify(result.data)).toBe(200);
-  return result.data.items as { realmId: string; name: string; role: string }[];
+  return result.data.items;
+}
+
+async function expectOwnRealmEntry(
+  page: Page,
+  inventory: MyRealmsNativeItem[],
+  realm: NativeRealmFixture,
+): Promise<Locator> {
+  const member = inventory.find(({ realmId }) => realmId === realm.realmId);
+  expect(member).toMatchObject({
+    name: realm.realmTitle,
+    role: 'member',
+    current: {
+      destination: { kind: 'realm', realmId: realm.realmId },
+      spaceId: realm.spaceId,
+      viewer: { readability: 'allowed', membership: { state: 'member' } },
+      actions: {
+        state: 'current',
+        enter: {
+          state: 'available',
+          method: 'GET',
+          path: `/v1/realms/${realm.realmId}`,
+          body: null,
+          expectedStatus: 200,
+        },
+      },
+    },
+  });
+  const row = page.getByRole('article', { name: realm.realmTitle, exact: true });
+  const entry = row
+    .getByRole('navigation', { name: realm.realmTitle, exact: true })
+    .getByRole('link', { name: 'Open Realm', exact: true });
+  await expectVisible(entry);
+  expect(await entry.getAttribute('href')).toBe(`/en/realms/${realm.realmId}`);
+  return entry;
+}
+
+async function expectConcealedRealmOnSpace(page: Page, realm: NativeRealmFixture, after: number): Promise<void> {
+  await waitForKernelRequest(
+    after,
+    ({ method, url, authorization, fixtureRequest, responseStatus }) =>
+      method === 'GET' &&
+      url === `/v1/spaces/${realm.spaceId}` &&
+      authorization !== null &&
+      fixtureRequest === false &&
+      responseStatus === 200,
+  );
+  await expectVisible(page.getByRole('heading', { level: 1, name: realm.spaceTitle, exact: true }));
+  await expectCount(page.getByRole('heading', { name: realm.realmTitle, exact: true }), 0);
+  expect(await page.locator('body').innerText()).not.toContain(realm.boardTitle);
+  await stack.refreshKernelRequests();
+  const realmPath = `/v1/realms/${realm.realmId}`;
+  const realmReads = stack
+    .kernelRequests()
+    .slice(after)
+    .filter(({ url }) => url === realmPath || url.startsWith(`${realmPath}/`));
+  expect(realmReads.map(({ method, url }) => ({ method, url }))).toEqual([]);
 }
 
 async function protectedSpaceRequestCount(page: Page, realm: NativeRealmFixture, scale: number): Promise<number> {
@@ -405,11 +463,9 @@ async function runNativeRealmsSpacesJourney() {
   await expectCount(alice.getByRole('dialog'), 0);
   expect(await alice.locator('meta[name="robots"]').getAttribute('content')).toBe('noindex, nofollow');
   const ownRealmsAfterJoin = await readOwnRealms('alice');
-  expect(ownRealmsAfterJoin.map(({ realmId }) => realmId)).toContain(fixture.publicRealm.realmId);
   expect(ownRealmsAfterJoin.map(({ realmId }) => realmId)).not.toContain(fixture.protectedRealm.realmId);
   expect(ownRealmsAfterJoin.map(({ realmId }) => realmId)).not.toContain(fixture.emptyRealm.realmId);
-  const publicRealmMemberLink = alice.getByRole('link', { name: fixture.publicRealm.realmTitle, exact: true });
-  expect(await publicRealmMemberLink.getAttribute('href')).toBe(`/en/realms/${fixture.publicRealm.realmId}`);
+  const publicRealmMemberLink = await expectOwnRealmEntry(alice, ownRealmsAfterJoin, fixture.publicRealm);
   await publicRealmMemberLink.click();
   await alice.waitForURL((url) => url.pathname === `/en/spaces/${fixture.publicRealm.address}`);
   await expectVisible(alice.getByRole('heading', { level: 1, name: fixture.publicRealm.spaceTitle }));
@@ -455,25 +511,8 @@ async function runNativeRealmsSpacesJourney() {
   expect(withoutRequestId(hiddenJoin.data)).toEqual(withoutRequestId(missingJoin.data));
 
   const protectedPageReadStart = stack.kernelRequests().length;
-  await open(alice, `/spaces/${fixture.protectedRealm.address}`);
-  await waitForKernelRequest(
-    protectedPageReadStart,
-    ({ method, url, authorization }) =>
-      method === 'GET' && url === `/v1/realms/${fixture.protectedRealm.realmId}` && authorization !== null,
-  );
-  await expectVisible(alice.getByRole('heading', { level: 1, name: fixture.protectedRealm.spaceTitle }));
-  await expectCount(alice.getByRole('heading', { name: fixture.protectedRealm.realmTitle }), 0);
-  const protectedPageReads = stack.kernelRequests().slice(protectedPageReadStart);
-  expect(
-    protectedPageReads.some(
-      ({ method, url, authorization }) =>
-        method === 'GET' && url === `/v1/realms/${fixture.protectedRealm.realmId}` && authorization !== null,
-    ),
-  ).toBe(true);
-  expect(
-    protectedPageReads.some(({ url }) => url.startsWith(`/v1/realms/${fixture.protectedRealm.realmId}/boards`)),
-  ).toBe(false);
-  expect(await alice.locator('body').innerText()).not.toContain(fixture.protectedRealm.boardTitle);
+  expect(await open(alice, `/spaces/${fixture.protectedRealm.address}`)).toBe(200);
+  await expectConcealedRealmOnSpace(alice, fixture.protectedRealm, protectedPageReadStart);
   const invite = await requestNativeCommunity(
     stack,
     'native-community-owner',
@@ -526,26 +565,19 @@ async function runNativeRealmsSpacesJourney() {
   expect(nextProtectedRead.response.status).toBe(404);
   expect(withoutRequestId(nextProtectedRead.data)).toEqual(withoutRequestId(missingBoard.data));
   const ownAfterLeave = await readOwnRealms('alice');
-  expect(ownAfterLeave.map(({ realmId }) => realmId)).toContain(fixture.publicRealm.realmId);
   expect(ownAfterLeave.map(({ realmId }) => realmId)).not.toContain(fixture.protectedRealm.realmId);
   const deniedReloadStart = stack.kernelRequests().length;
   await alice.reload({ waitUntil: 'domcontentloaded' });
   await hydrated(alice);
-  await waitForKernelRequest(
-    deniedReloadStart,
-    ({ method, url, authorization }) =>
-      method === 'GET' && url === `/v1/realms/${fixture.protectedRealm.realmId}` && authorization !== null,
-  );
-  await expectVisible(alice.getByRole('heading', { level: 1, name: fixture.protectedRealm.spaceTitle }));
-  await expectCount(alice.getByRole('heading', { name: fixture.protectedRealm.realmTitle }), 0);
-  await alice.getByRole('button', { name: 'Account' }).focus();
+  await expectConcealedRealmOnSpace(alice, fixture.protectedRealm, deniedReloadStart);
+  await alice.getByRole('button', { name: 'Account', exact: true }).focus();
   await alice.keyboard.press('Enter');
   await alice.getByRole('link', { name: 'Your Realms', exact: true }).focus();
   await alice.keyboard.press('Enter');
   await alice.waitForURL((url) => url.pathname === '/en/realms');
   await hydrated(alice);
-  await expectVisible(alice.getByRole('link', { name: fixture.publicRealm.realmTitle, exact: true }));
-  await expectCount(alice.getByRole('link', { name: fixture.protectedRealm.realmTitle, exact: true }), 0);
+  await expectOwnRealmEntry(alice, ownAfterLeave, fixture.publicRealm);
+  await expectCount(alice.getByRole('article', { name: fixture.protectedRealm.realmTitle, exact: true }), 0);
 
   const directGrant = await requestNativeCommunity(stack, 'native-community-owner', 'POST', '/v1/grants', {
     resource: { route: nativeRouteOf(fixture.protectedRealm.realmId), id: fixture.protectedRealm.realmId },
@@ -571,7 +603,7 @@ async function runNativeRealmsSpacesJourney() {
   const ban = await requestNativeCommunity(stack, 'native-community-owner', 'PUT', banPath, {
     reason: 'Native web ban boundary',
   });
-  expect([200, 202]).toContain(ban.status);
+  expect(ban.status).toBe(200);
   const bannedRealm = await communityRequest('alice', 'GET', `/v1/realms/${fixture.protectedRealm.realmId}`);
   const hiddenRealm = await communityRequest('alice', 'GET', `/v1/realms/${unknownRealm}`);
   expect(bannedRealm.response.status).toBe(404);
@@ -582,10 +614,13 @@ async function runNativeRealmsSpacesJourney() {
   expect(
     (await communityRequest('alice', 'GET', `/v1/spaces/${fixture.protectedRealm.spaceId}`)).data.space.realmId,
   ).toBe(null);
-  expect(
-    (await communityRequest('alice', 'POST', `/v1/realms/${fixture.protectedRealm.realmId}/membership`)).response
-      .status,
-  ).toBe(403);
+  const bannedProtectedJoin = await communityRequest(
+    'alice',
+    'POST',
+    `/v1/realms/${fixture.protectedRealm.realmId}/membership`,
+  );
+  expect(bannedProtectedJoin.response.status).toBe(404);
+  expect(withoutRequestId(bannedProtectedJoin.data)).toEqual(withoutRequestId(missingJoin.data));
   expect(await readOwnRealms('alice').then((rows) => rows.map(({ realmId }) => realmId))).not.toContain(
     fixture.protectedRealm.realmId,
   );
@@ -597,10 +632,22 @@ async function runNativeRealmsSpacesJourney() {
     `/v1/realms/${fixture.publicRealm.realmId}/bans/${fixture.aliceId}`,
     { reason: 'Native web public ban boundary' },
   );
-  expect([200, 202]).toContain(publicBan.status);
-  await waitForRealmMembership(stack, fixture.publicRealm.realmId, 'alice', 'banned');
+  expect(publicBan.status).toBe(200);
+  const bannedPublicJoin = await communityRequest(
+    'alice',
+    'POST',
+    `/v1/realms/${fixture.publicRealm.realmId}/membership`,
+  );
+  expect(bannedPublicJoin.response.status).toBe(403);
+  expect(bannedPublicJoin.data).toMatchObject({ effect_status: 'not_applied' });
+  expect(await waitForRealmMembership(stack, fixture.publicRealm.realmId, 'alice', 'none')).toMatchObject({
+    state: 'none',
+    since: null,
+  });
   await open(alice, `/spaces/${fixture.publicRealm.address}`);
-  await expectAttribute(alice.getByRole('region', { name: 'Membership' }), 'data-member-state', 'banned');
+  const bannedMembership = alice.getByRole('region', { name: 'Membership', exact: true });
+  await expectAttribute(bannedMembership, 'data-native-advice', 'denied');
+  await expectAttribute(bannedMembership, 'data-member-state', 'none');
   await expectCount(alice.getByRole('button', { name: 'Join', exact: true }), 0);
   expect((await communityRequest('alice', 'GET', `/v1/realms/${fixture.publicRealm.realmId}`)).response.status).toBe(
     200,
