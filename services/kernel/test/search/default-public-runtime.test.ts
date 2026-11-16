@@ -124,7 +124,16 @@ test('default Subject Search activates and returns an authored Book', async () =
     }
     expect(prepared?.generations).toMatchObject({ active: 1 });
     const witness = subjectWitness();
-    expect(witness).toMatchObject({ phase: 'active', source_sealed: true });
+    expect(witness).toMatchObject({
+      phase: 'active',
+      source_sealed: true,
+      source_bootstrap: expect.any(String),
+      source_observation: expect.stringMatching(/^0:/),
+      source_execution: expect.any(String),
+      source_repair_step: expect.any(String),
+      source_repair_root: expect.stringMatching(/^[a-f0-9]{64}$/),
+      source_ack_after: 4096,
+    });
     console.info('Anonymous Search HTTP 200 and original Source seal', JSON.stringify(witness));
   } catch (error) {
     const output = await client.inspect({ preparation: true }).then(

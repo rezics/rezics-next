@@ -51,6 +51,12 @@ type PublicationJobRow = {
   fenced: boolean;
   native_incarnation: string;
   source_sealed: boolean;
+  source_bootstrap: string | null;
+  source_observation: string | null;
+  source_execution: string | null;
+  source_repair_step: string | null;
+  source_repair_root: string | null;
+  source_ack_after: number | null;
 };
 
 /** Failure inspection only: current publication row, home witnesses, writer copies and relay checkpoints. */
@@ -60,19 +66,23 @@ async function inspectPublication(pool: Pool, prefix: string): Promise<Record<st
       `SELECT job::text, phase, home, pass::text, fenced_pass, family, physical_target,
               generation::text, revision::text, after_id::text,
               (fence IS NOT NULL) AS fenced, native_incarnation, j.consumer,
-              EXISTS (
-                SELECT 1 FROM semantic.public_filter_bootstrap b
-                JOIN semantic.public_filter_repair_step t
-                  ON (t.partition_no,t.bootstrap,t.execution)=(b.partition_no,b.bootstrap,b.publication_execution)
-                WHERE (b.partition_no,b.publication_job)=(j.partition_no,j.job)
-                  AND '0:' || b.bootstrap::text=j.bootstrap
-                  AND b.publication_observation=j.observation AND b.publication_execution=j.execution
-                  AND b.state='adopted' AND b.coverage_sealed AND b.coverage_after=4096
-                  AND t.complete AND t.verified_root IS NOT NULL AND t.verified_next IS NULL AND t.ack_after=4096
-              ) AS source_sealed
+              seal.source_repair_root IS NOT NULL AS source_sealed, seal.*
        FROM search.generation_publication j
-       WHERE partition_no=0 AND prefix=$1
-       ORDER BY family, generation, job
+       LEFT JOIN LATERAL (
+         SELECT b.bootstrap::text AS source_bootstrap, b.publication_observation AS source_observation,
+                b.publication_execution AS source_execution, t.step::text AS source_repair_step,
+                t.verified_root AS source_repair_root, t.ack_after AS source_ack_after
+         FROM semantic.public_filter_bootstrap b
+         JOIN semantic.public_filter_repair_step t
+           ON (t.partition_no,t.bootstrap,t.execution)=(b.partition_no,b.bootstrap,b.publication_execution)
+         WHERE (b.partition_no,b.publication_job)=(j.partition_no,j.job)
+           AND '0:' || b.bootstrap::text=j.bootstrap
+           AND b.publication_observation=j.observation AND b.publication_execution=j.execution
+           AND b.state='adopted' AND b.coverage_sealed AND b.coverage_after=4096
+           AND t.complete AND t.verified_root IS NOT NULL AND t.verified_next IS NULL AND t.ack_after=4096
+       ) seal ON true
+       WHERE j.partition_no=0 AND j.prefix=$1
+       ORDER BY j.family, j.generation, j.job
        LIMIT 4`,
       [prefix],
     )
