@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
 import { createKernelClient, type KernelClient } from '@rezics/client';
 import { fromPlainText, type DocumentSnapshot, serializeDocument } from '@rezics/document';
+import { hostedOccurrenceId } from '../../src/studio/hosted-structure.ts';
 import type { NativeWebStack } from './stack.ts';
 import { createPublishAttachmentWorkBoard } from './publish-attachment-reply-fixture.ts';
 
@@ -228,7 +229,8 @@ export async function createPrepublishedReaderControl(stack: NativeWebStack): Pr
     'Prepublished reader control · Chapter draft',
     'A separate reader control keeps its own lantern beside the harbor steps.',
   );
-  const occurrenceId = randomUUID();
+  const creationKey = randomUUID();
+  const occurrenceId = await hostedOccurrenceId(opening.postId, creationKey);
   const created = await base.author.hostedCatalogues.post(
     {
       postId: opening.postId,
@@ -249,7 +251,7 @@ export async function createPrepublishedReaderControl(stack: NativeWebStack): Pr
         },
       ],
     },
-    { headers: { 'idempotency-key': JSON.stringify(randomUUID()) } },
+    { headers: { 'idempotency-key': JSON.stringify(creationKey) } },
   );
   const structure = admitted(created, 201, 'Generated one-chapter control outline creation') as {
     catalogueId: string;
