@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 import type { HostedPlacement } from '../../src/content/hosted-chapters-model.ts';
+import { beginHostedPublicationStaging } from '../../src/content/hosted-publication-staging.ts';
 import { HOSTED_PUBLICATION_STAGING_BATCH_LIMIT } from '../../src/content/hosted-publication-staging-model.ts';
+import { withConnection } from '../../src/database/pool.ts';
 import { newId, ROUTES, routeOf } from '../../src/route/route.ts';
 
 setDefaultTimeout(240_000);
@@ -100,6 +102,34 @@ async function selectedRelease(catalogueId: string): Promise<string | null> {
 
 function prepPath(path: string, stageId: string): string {
   return `${path}/publicationPreparations/${stageId}`;
+}
+
+async function prepareStageAndWaitForExpiry(book: Awaited<ReturnType<typeof newBook>>): Promise<string> {
+  const stageId = book.newId();
+  const expiresAt = await withConnection(f.native.pool, async (client) => {
+    await client.query('BEGIN');
+    try {
+      const { rows } = await client.query<{ expires_at: Date }>(
+        "SELECT clock_timestamp() + interval '5 seconds' AS expires_at",
+      );
+      const deadline = rows[0]!.expires_at;
+      await beginHostedPublicationStaging(client, f.native.author.actor, {
+        catalogueId: book.catalogueId,
+        stageId,
+        expectedHeadRevisionId: book.created.revisionId,
+        expectedPublicationId: book.published.revisionId,
+        mode: 'whole',
+        expiresAt: deadline,
+      });
+      await client.query('COMMIT');
+      return deadline;
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    }
+  });
+  await f.native.pool.query('SELECT pg_sleep_until($1::timestamptz)', [expiresAt]);
+  return prepPath(book.path, stageId);
 }
 
 async function preparationEventCount(catalogueId: string): Promise<number> {
@@ -231,19 +261,15 @@ test('progress emits only for a persisted expiry transition and authorized recei
   expect(liveReplay.value).toEqual(liveProgress.value);
   expect(await preparationEventCount(book.catalogueId)).toBe(eventsBeforeProgress);
 
-  await f.native.pool.query(
-    `UPDATE content.hosted_publication_staging SET expires_at=clock_timestamp()-interval '1 second'
-     WHERE catalogue_id=$1 AND stage_id=$2`,
-    [book.catalogueId, stageId],
-  );
+  const expiryPath = await prepareStageAndWaitForExpiry(book);
   const expiryKey = crypto.randomUUID(),
-    expired = await f.native.call('POST', `${stagePath}:progress`, {}, { key: expiryKey });
+    expired = await f.native.call('POST', `${expiryPath}:progress`, {}, { key: expiryKey });
   expect(expired.status).toBe(200);
   expect(expired.value.stage.state).toBe('expired');
   expect(await preparationEventCount(book.catalogueId)).toBe(eventsBeforeProgress + 1);
-  expect((await f.native.call('POST', `${stagePath}:progress`, {}, { key: expiryKey })).value).toEqual(expired.value);
+  expect((await f.native.call('POST', `${expiryPath}:progress`, {}, { key: expiryKey })).value).toEqual(expired.value);
   expect(
-    (await f.native.call('POST', `${stagePath}:progress`, {}, { key: crypto.randomUUID() })).value.stage.state,
+    (await f.native.call('POST', `${expiryPath}:progress`, {}, { key: crypto.randomUUID() })).value.stage.state,
   ).toBe('expired');
   expect(await preparationEventCount(book.catalogueId)).toBe(eventsBeforeProgress + 1);
 });
@@ -627,20 +653,12 @@ test('mounted whole and nested selection builds complete private candidates with
 
 test('Advance emits when its locked observation persists stage expiry', async () => {
   const book = await newBook();
-  const start = await f.native.call('POST', `${book.path}:prepareRelease`, {
-    stageId: book.newId(),
-    expectedRevisionId: book.created.revisionId,
-    expectedPublicationId: book.published.revisionId,
-    mode: 'whole',
-  });
-  await f.native.pool.query(
-    `UPDATE content.hosted_publication_staging SET expires_at=clock_timestamp()-interval '1 hour' WHERE catalogue_id=$1 AND stage_id=$2`,
-    [book.catalogueId, start.value.stageId],
-  );
+  const expiryPath = await prepareStageAndWaitForExpiry(book);
   const before = await preparationEventCount(book.catalogueId);
-  const expired = await f.native.call('POST', `${prepPath(book.path, start.value.stageId as string)}:advance`, {
+  const expired = await f.native.call('POST', `${expiryPath}:advance`, {
     stepId: book.newId(),
   });
+  expect(expired.status).toBe(200);
   expect(expired.value.stage.state).toBe('expired');
   expect(await preparationEventCount(book.catalogueId)).toBe(before + 1);
 });
@@ -1099,18 +1117,11 @@ test('Cancel emits only for a persisted transition and preserves the selected ed
   expect(repeatedCancel.value.stage.state).toBe('cancelled');
   expect(await preparationEventCount(book.catalogueId)).toBe(beforeCancel + 1);
 
-  const expiryStart = await start(book.newId());
-  expect(expiryStart.status).toBe(202);
-  const expiryStageId = expiryStart.value.stageId as string;
-  const expiryPath = prepPath(book.path, expiryStageId);
-  await f.native.pool.query(
-    `UPDATE content.hosted_publication_staging SET expires_at=clock_timestamp()-interval '1 second'
-     WHERE catalogue_id=$1 AND stage_id=$2`,
-    [book.catalogueId, expiryStageId],
-  );
+  const expiryPath = await prepareStageAndWaitForExpiry(book);
   const beforeExpiry = await preparationEventCount(book.catalogueId);
   const expiryKey = crypto.randomUUID();
   const expired = await f.native.call('POST', `${expiryPath}:cancel`, {}, { key: expiryKey });
+  expect(expired.status).toBe(200);
   expect(expired.value.stage.state).toBe('expired');
   expect(await preparationEventCount(book.catalogueId)).toBe(beforeExpiry + 1);
   const expiryReplay = await f.native.call('POST', `${expiryPath}:cancel`, {}, { key: expiryKey });
