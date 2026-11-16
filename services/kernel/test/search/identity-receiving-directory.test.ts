@@ -174,7 +174,6 @@ beforeAll(() => {
   installIdentityAdapterRuntime();
 });
 
-const directoryScope = 'd'.repeat(64);
 const foreignJobHome = 0x842;
 const firstHome = 0x841;
 const otherControlHome = 0x843;
@@ -202,7 +201,12 @@ test.each([
     resumed: false,
     mode: 'foreign-step-capture',
   },
-  { label: 'seals one merge after retiring both originals', intent: 'merge', resumed: false, mode: 'complete-merge' },
+  {
+    label: 'seals a merge and restores its original from the retained writer custody',
+    intent: 'merge',
+    resumed: false,
+    mode: 'complete-merge',
+  },
   {
     label: 'prepares a visible merge original in its actor admission home',
     intent: 'merge',
@@ -259,7 +263,9 @@ test.each([
   { label: 'refuses a moved input control home', intent: 'merge', resumed: true, mode: 'moved' },
   { label: 'refuses an unproved empty directory', intent: 'merge', resumed: false, mode: 'empty' },
   { label: 'refuses replacement of the checkpoint during sealing', intent: 'merge', resumed: true, mode: 'changed' },
-])('installed Search directory $label', async ({ intent, resumed, mode }) => {
+])('installed Search directory $label', async ({ intent: initialIntent, resumed, mode }) => {
+  let intent = initialIntent;
+  let directoryScope = 'd'.repeat(64);
   const sameHomeMerge = mode === 'same-home-merge';
   const jobHome = sameHomeMerge ? firstHome : foreignJobHome;
   let writerHome = firstHome;
@@ -272,11 +278,18 @@ test.each([
   const foreignCapture =
     completeMerge || mode === 'foreign-step-capture' || mode === 'canonical-terms' || mode === 'canonical-merge';
   const crossHome = completeMerge || mode === 'visible-cross-home' || mode === 'foreign-step-capture';
-  const terminalHome = crossHome ? otherControlHome : writerHome;
+  let terminalHome = crossHome ? otherControlHome : writerHome;
   const second = crossHome ? newId(terminalHome << 4) : localTerminal;
-  const jobId = newId(jobHome << 4);
-  const job = { jobId, epoch: 1n };
-  const savedJob = { jobId, epoch: '1' };
+  let terminal = second;
+  const visibleSubjects = () => (terminal === first ? [first] : [first, terminal]);
+  let jobId = newId(jobHome << 4);
+  let job = { jobId, epoch: 1n };
+  const mergeJob = job;
+  const mergedGeneration = crypto.randomUUID();
+  let savedJob = { jobId, epoch: '1' };
+  let restoring = false;
+  let originOffset = 0;
+  const originPosition = (position: number) => String(originOffset + position);
   const creditedCreator = mode === 'canonical-credit';
   const bothVisible = mode === 'visible' || crossHome;
   const nativePermission = mode === 'canonical-terms' || mode === 'canonical-merge' || bothVisible;
@@ -288,7 +301,7 @@ test.each([
   const actorId = creditedCreator || nativePermission ? newId(jobHome << 4) : null;
   const adoptedRelation = mode === 'canonical-relation' || creditedCreator;
   let canonicalTerms = mode === 'canonical-terms' || mode === 'canonical-merge' || adoptedRelation;
-  const priorVisible = mode === 'handoff' || mode === 'canonical-terms';
+  let priorVisible = mode === 'handoff' || mode === 'canonical-terms';
   const visible = canonicalTerms || bothVisible || ['changed-proof', 'retire', 'superseded'].includes(mode);
   const languageDigest = createHash('sha256').update('en').digest('hex');
   const termSlots = [
@@ -358,8 +371,8 @@ test.each([
   let corruptReceipt = false;
   let releaseOwnerAdvanced = false;
   let lateReleaseCheck = false;
-  const canonicalDocument = {
-    id: second,
+  const canonicalDocument = () => ({
+    id: terminal,
     partition: completeMerge ? terminalHome : writerHome,
     type: subjectType,
     security_revision: 1,
@@ -393,7 +406,7 @@ test.each([
         ]
       : [],
     ...(adoptedRelation && { relation_facet_overflow: relationRoster }),
-  };
+  });
   let oldBuild = crypto.randomUUID();
   const oldHeads = mode === 'retire' ? [0, writerHome] : [];
   let oldMeaning = bundledDigest;
@@ -462,12 +475,13 @@ test.each([
   ];
   const observedLocks: string[] = [];
   const planSql = searchNativeReceivingStatements();
-  const previousPlan = crypto.randomUUID();
-  const previousJob = newId(jobHome << 4);
-  const previousClose = crypto.randomUUID();
+  let previousPlan = crypto.randomUUID();
+  let previousJob = newId(jobHome << 4);
+  let previousClose = crypto.randomUUID();
   type NativeWriter = Record<string, string | number | boolean | null>;
   let retainedAction: string | undefined;
   let preparedWriter: NativeWriter | undefined;
+  let predecessorWriter: NativeWriter | undefined;
   type DriverPlan = { effect_key: string; source: StoredSource; references: StoredReferences; proven: true };
   let stagingPlan: DriverPlan | undefined;
   let retainedPlan: DriverPlan | undefined;
@@ -485,7 +499,7 @@ test.each([
   let acceptedRecorded = false;
   let accepting = false;
   let changedBindingProof = false;
-  const admissionTransaction = crypto.randomUUID();
+  let admissionTransaction = crypto.randomUUID();
   let dispatchRequestPosition = '1';
   type Progress = {
     revision: string;
@@ -506,8 +520,8 @@ test.each([
   let controlApplied: unknown[] | undefined;
   let writingHoldRelease: string | undefined;
   let releasePosition: string | undefined;
-  const applicationPosition = 34;
-  let appliedPosition = applicationPosition;
+  const applicationPosition = () => originOffset + 34;
+  let appliedPosition = applicationPosition();
   let retiredScope = false;
   let copyLocator: unknown;
   let copySettlement: { partition: number; transactionId: string; epoch: number; position: string } | undefined;
@@ -519,15 +533,15 @@ test.each([
       ? committedOperation?.state === 'applied'
         ? String(appliedPosition)
         : committedOperation?.state === 'visible'
-          ? '33'
+          ? originPosition(33)
           : committedOperation
             ? retainedBulk
-              ? '32'
-              : '31'
-            : '30'
+              ? originPosition(32)
+              : originPosition(31)
+            : originPosition(30)
       : accepting
-        ? '21'
-        : '20';
+        ? originPosition(21)
+        : originPosition(20);
   };
   const publicationWrites: string[] = [];
 
@@ -537,16 +551,26 @@ test.each([
     engineRequests: number;
     position?: string;
     work?: IdentityStepProgress['work'];
+    jobId?: string;
   };
   let writing: Step | undefined;
   const committed: Step[] = [];
   let scopeStart = 0;
   const scopeSteps = () => committed.slice(scopeStart);
-  const retiredOriginals: { original: string; planId: string; application: string; release: string }[] = [];
+  const retiredOriginals: {
+    jobId: string;
+    original: string;
+    planId: string;
+    application: string;
+    release: string;
+    writer: NativeWriter;
+    build: NonNullable<StoredReferences['originalSupport']> | null;
+  }[] = [];
+  let publishedMerge = false;
   const submitted: { id: string; operation: string }[] = [];
   let firstMergeRequest: IdentityStepReceipt | undefined;
   let writingSearchAck: unknown;
-  let searchAck: unknown;
+  const searchAcks = new Map<string, unknown>();
   let searchAckWrites = 0;
   type Capture = {
     store:
@@ -591,14 +615,22 @@ test.each([
         rows = [
           {
             state: 'pending',
-            intent: {
-              kind: intent,
-              original: second,
-              redirected: first,
-              survivor: second,
-              undoJob: savedJob,
-              release: bundledDigest,
-            },
+            intent: restoring
+              ? {
+                  kind: 'unmerge',
+                  original: first,
+                  undoJob: { jobId: mergeJob.jobId, epoch: String(mergeJob.epoch) },
+                  verificationReceipt: null,
+                  release: bundledDigest,
+                }
+              : {
+                  kind: intent,
+                  original: terminal,
+                  redirected: first,
+                  survivor: terminal,
+                  undoJob: savedJob,
+                  release: bundledDigest,
+                },
             receipt: { kind: 'subject.merge', command: { digest: 'AA==' } },
           },
         ];
@@ -608,23 +640,25 @@ test.each([
             step: 'mapping',
             progress: { state: 'complete', job: savedJob, receipt: { job: savedJob, native: { position: '1' } } },
           },
-          ...(searchAck ? [{ step: 'search-canonical-index', progress: searchAck }] : []),
+          ...(searchAcks.has(jobId) ? [{ step: 'search-canonical-index', progress: searchAcks.get(jobId) }] : []),
         ];
       else if (completeMerge && (sql === stepRead.sql || sql === replaySql.sql)) {
         const saved = committed.find((item) => item.transactionId === values[1]);
         expect(saved?.frontier.after).toEqual(['directory', 2]);
-        expect(values.slice(0, 6)).toEqual([jobHome, saved?.transactionId, 1, saved?.position, jobId, '1']);
+        expect(values.slice(0, 6)).toEqual([jobHome, saved?.transactionId, 1, saved?.position, jobId, savedJob.epoch]);
         rows = [{ scope_digest: directoryScope, state: 'complete', frontier: saved!.frontier, work: saved!.work }];
       } else if (completeMerge && sql === ackJob.sql) {
-        expect(values).toEqual([jobId, '1', jobHome]);
+        expect(values).toEqual([jobId, savedJob.epoch, jobHome]);
         rows = [{ scope_digest: directoryScope }];
       } else if (completeMerge && sql === missingEffect.sql) {
         expect(values).toEqual([jobId, 'search-canonical-index', jobHome]);
-        expect(retiredOriginals.map(({ original }) => original)).toEqual([first, second]);
+        expect(retiredOriginals.filter((item) => item.jobId === jobId).map(({ original }) => original)).toEqual(
+          [first, second],
+        );
         rows = [];
       } else if (completeMerge && sql === ackReplay.sql) {
         expect(values).toEqual([jobId, 'search-canonical-index', jobHome]);
-        rows = searchAck ? [{ progress: searchAck }] : [];
+        rows = searchAcks.has(jobId) ? [{ progress: searchAcks.get(jobId) }] : [];
       } else if (completeMerge && sql === ackInsert.sql) {
         const sealed = committed.at(-1);
         expect(values.slice(0, 4)).toEqual([jobHome, jobId, 'search-canonical-index', directoryScope]);
@@ -632,10 +666,10 @@ test.each([
         writingSearchAck = JSON.parse(String(values[4]));
         rows = [{}];
       } else if (sql === readSearchIdentityDirectorySql) {
-        expect(values).toEqual([jobHome, jobId, '1']);
+        expect(values).toEqual([jobHome, jobId, savedJob.epoch]);
         directoryReads++;
         const saved = completeMerge
-          ? committed.findLast((step) => step.frontier.after[0] === 'search-directory')
+          ? committed.findLast((step) => step.jobId === jobId && step.frontier.after[0] === 'search-directory')
           : retiredScope
             ? committed.at(-1)
             : (dispatchRequest ?? committed.find((step) => step.frontier.after[0] === 'search-directory'));
@@ -653,9 +687,16 @@ test.each([
           },
         ];
       } else if (sql === identityChangeTransformSQL)
-        rows = [{ kind: intent, original: second, survivor: second, remainder_terminal: first }];
+        rows = restoring
+          ? [{ kind: 'unmerge', original: first, survivor: null, remainder_terminal: second }]
+          : [{ kind: intent, original: terminal, survivor: terminal, remainder_terminal: first }];
       else if (sql === identityChangeFirstInputsSQL) {
-        rows = [{ generation: rightGeneration, terminal: second, control_partition: jobHome, owner_current: true }];
+        rows = [{
+          generation: restoring ? mergedGeneration : rightGeneration,
+          terminal: restoring ? second : terminal,
+          control_partition: jobHome,
+          owner_current: true,
+        }];
         if (intent === 'merge')
           rows = [
             {
@@ -668,20 +709,26 @@ test.each([
           ];
       } else if (sql === originals.sql) {
         originalReads++;
-        const original = values[0] === leftGeneration && mode !== 'materialized' ? first : second;
-        const isLeft = values[0] === leftGeneration;
         const cursor = retiredScope ? selected : after;
-        expect(values).toEqual([values[0], cursor, 1, isLeft ? first : second, isLeft ? otherControlHome : jobHome]);
-        rows =
-          mode === 'empty' ||
-          mode === 'changed' ||
-          (cursor !== null && original <= cursor) ||
-          ((mode === 'materialized' || (canonicalTerms && !completeMerge)) && values[0] === leftGeneration)
-            ? []
-            : [{ original, terminal: original }];
+        if (restoring) {
+          expect(values).toEqual([mergedGeneration, cursor, 1, second, jobHome]);
+          const next = [first, second].find((id) => cursor === null || id > cursor);
+          rows = next ? [{ original: next, terminal: second }] : [];
+        } else {
+          const isLeft = values[0] === leftGeneration;
+          const original = isLeft && mode !== 'materialized' ? first : terminal;
+          expect(values).toEqual([values[0], cursor, 1, isLeft ? first : terminal, isLeft ? otherControlHome : jobHome]);
+          rows =
+            mode === 'empty' ||
+            mode === 'changed' ||
+            (cursor !== null && original <= cursor) ||
+            ((mode === 'materialized' || (canonicalTerms && !completeMerge)) && isLeft)
+              ? []
+              : [{ original, terminal: original }];
+        }
       } else if (sql === readSearchIdentityMaterializedOriginalSql) {
         expect(values).toEqual([jobHome, jobId, retiredScope ? selected : after]);
-        rows = mode === 'materialized' ? [{ original: first, previous_terminal: first, terminal: second }] : [];
+        rows = mode === 'materialized' ? [{ original: first, previous_terminal: first, terminal: terminal }] : [];
       } else if (sql === searchIdentityOriginalPlanPresentSql) {
         rows = retainedPlan ? [{}] : [];
       } else if (sql === locateSearchIdentityOriginalPlanSql) {
@@ -690,7 +737,7 @@ test.each([
         expect(values).toEqual([
           writerHome,
           jobId,
-          '1',
+          savedJob.epoch,
           ['OLD', 'NEW', 'first-apply', 'handoff'].map(
             (disposition) => `search_directory_probe_subjects_g1:${selected}:${disposition}`,
           ),
@@ -700,7 +747,9 @@ test.each([
         planReads++;
         rows = retainedPlan ? [retainedPlan] : [];
       } else if (sql === readSearchIdentityWriterAdmissionSql) {
-        expect(values).toEqual([writerHome, jobId, '1', scopeSteps()[0]?.transactionId, directoryScope, selected]);
+        expect(values).toEqual([
+          writerHome, jobId, savedJob.epoch, scopeSteps()[0]?.transactionId, directoryScope, selected,
+        ]);
         const step = scopeSteps().find((step) => step.frontier.after[0] === 'search-writer-admitted');
         rows = step ? [{ transaction_id: step.transactionId, frontier: step.frontier, proven: true }] : [];
       } else if (sql === recheckSearchIdentityWriterAdmissionSql) {
@@ -709,14 +758,14 @@ test.each([
           writerHome,
           step?.transactionId,
           jobId,
-          '1',
+          savedJob.epoch,
           directoryScope,
           JSON.stringify(step?.frontier.after),
         ]);
         rows = step ? [{}] : [];
       } else if (sql === readSearchIdentityWriterSupportSql) {
         const requestId = values[4] === 'binding' ? dispatchRequest?.transactionId : scopeSteps()[0]?.transactionId;
-        expect(values.slice(0, 4)).toEqual([writerHome, jobId, '1', requestId]);
+        expect(values.slice(0, 4)).toEqual([writerHome, jobId, savedJob.epoch, requestId]);
         const step = committed.findLast(
           (step) => step.frontier.after[0] === 'search-writer-support' && step.frontier.after[1] === requestId && step.frontier.after[2] === values[4],
         );
@@ -748,27 +797,27 @@ test.each([
         rows = typeof input !== 'string' && input.rowMode === 'array' ? [[at, at]] : [{ at, databaseAt: at }];
       } else if (nativePermission && sql === subjectEligibility.sql) {
         expect(values[0]).toBe((values[1] === first ? writerHome : terminalHome) << 4);
-        expect([first, second]).toContain(values[1]);
-        rows = [{ visibility: values[1] === second || bothVisible ? 'visible' : 'hidden', security_revision: '1' }];
+        expect([first, terminal]).toContain(values[1]);
+        rows = [{ visibility: values[1] === terminal || bothVisible ? 'visible' : 'hidden', security_revision: '1' }];
       } else if (nativePermission && sql === relatedVisibility.sql) {
         expect(bothVisible).toBe(true);
         visibilityFloorReads++;
-        const ids = [first, second].filter((id) => String(values[2]).includes(id));
+        const ids = [first, terminal].filter((id) => String(values[2]).includes(id));
         const home = Number(values[0]);
-        expect(ids).toEqual([first, second].filter((id) => (id === first ? writerHome : terminalHome) === home));
+        expect(ids).toEqual([first, terminal].filter((id) => (id === first ? writerHome : terminalHome) === home));
         expect(ids.length).toBeGreaterThan(0);
         rows = ids.map((id) => [id, 'visible']);
       } else if (nativePermission && sql === permissionFormula['~standard'].query.text) {
         permissionFormulas++;
         const ids = String(values[permissionFormula.params.indexOf('resource_ids')]);
-        const resources = [first, second].filter((id) => ids.includes(id));
+        const resources = visibleSubjects().filter((id) => ids.includes(id));
         expect(resources.length).toBeGreaterThan(0);
         if (permissionFormulas === 1) {
           expect(anonymousSubjectFormulaBound(values)?.points).toBe(1);
           for (const [name, argument] of [
             ['include_global', 't'],
-            ['actor_id', second],
-            ['assignment_request_id', second],
+            ['actor_id', terminal],
+            ['assignment_request_id', terminal],
             ['roles', '[{}]'],
           ] as const) {
             const wider = [...values];
@@ -780,7 +829,7 @@ test.each([
         const batch = values[permissionFormula.params.indexOf('batch')] === 't';
         if (batch) {
           permissionBatches++;
-          expect(resources).toEqual([first, second]);
+          expect(resources).toEqual([first, terminal]);
           expect(anonymousSubjectFormulaBound(values)?.points).toBe(1);
         }
         const decisions = resources.map((resourceId) => ({
@@ -837,7 +886,7 @@ test.each([
               )
             : decisions;
       } else if (sql === visibilityRead.sql || sql === visibilityRead['~standard'].query.text) {
-        rows = [[visible && (values[1] === second || bothVisible) ? 'visible' : 'hidden', '1', subjectType]];
+        rows = [[visible && (values[1] === terminal || bothVisible) ? 'visible' : 'hidden', '1', subjectType]];
       } else if (visible && sql === mappingOwners.sql)
         rows = (values[0] as number[]).map((partition_no) => ({
           partition_no,
@@ -848,15 +897,15 @@ test.each([
       else if (visible && sql === mappingSources.sql) {
         rows = (values[0] as string[]).map((id) => {
           const creator = creditedCreator && id === relationTarget;
-          expect(creator || id === second || (bothVisible && id === first)).toBe(true);
+          expect(creator || id === terminal || (bothVisible && id === first)).toBe(true);
           return {
             subject_id: id,
             original: id,
             control_partition: creator ? otherControlHome : jobHome,
-            control_group: creator ? relationTarget : second,
-            terminal: creator ? relationTarget : second,
-            current_target: id === first ? second : null,
-            epoch: '1',
+            control_group: creator ? relationTarget : terminal,
+            terminal: creator ? relationTarget : terminal,
+            current_target: id === first && !restoring ? terminal : null,
+            epoch: savedJob.epoch,
             owner_epoch: 1,
             dirty_revision: '0',
             captured_revision: '0',
@@ -867,7 +916,7 @@ test.each([
         rows =
           creditedCreator && (values[1] as string[])[0] === relationTarget
             ? []
-            : [{ partition_no: jobHome, terminal: second, pending_job: jobId, pending_epoch: '1' }];
+            : [{ partition_no: jobHome, terminal, pending_job: jobId, pending_epoch: savedJob.epoch }];
       else if (visible && sql === mappingCurrent.sql)
         rows =
           creditedCreator && (values[1] as string[])[0] === relationTarget
@@ -884,41 +933,41 @@ test.each([
               ]
             : (values[2] as string[]).map((original) => ({
                 partition_no: jobHome,
-                terminal: second,
+                terminal,
                 requested_original: original,
                 owner_epoch: 1,
                 closure_state: 'open',
                 redirected: false,
               }));
       else if (sql === verifyCompletedPublicFilterProjectionSql) {
-        const original = values[2] === first && bothVisible;
+        const original = values[2] === first && bothVisible && !restoring;
         const home = original ? writerHome : terminalHome;
         const build = original ? retainedOriginalBuild : retainedBuild;
         expect(values).toEqual([
           home,
           home << 4,
-          original ? first : second,
+          original ? first : terminal,
           build,
           newGeneration,
           1,
           bundledDigest,
-          second,
+          terminal,
           (crossHome ? projectionDependencyHomes.get(build!) : dependencyHomes)?.at(-1),
         ]);
         rows = mode === 'changed-proof' || !canonicalBuildCurrent || (!original && !terminalBuildCurrent) ? [] : [{}];
       } else if (canonicalTerms && sql === readIdentitySearchIndexTermSlotShapeSql) {
-        const prior = committed.findLast((step) => step.frontier.after[2] === 'terms')?.frontier.after[6] ?? null;
-        expect(values).toEqual([writerHome << 4, second, prior]);
+        const prior = scopeSteps().findLast((step) => step.frontier.after[2] === 'terms')?.frontier.after[6] ?? null;
+        expect(values).toEqual([writerHome << 4, terminal, prior]);
         termReads.push(prior);
         const next = termSlots[termReads.length - 1];
         rows = [{ prior_current: true, slot_id: next?.slot_id ?? null, fact_limit: next?.terms.length ?? 0 }];
       } else if (canonicalTerms && sql === readIdentitySearchIndexTermSlotSql) {
         const next = termSlots[termReads.length - 1];
-        expect(values).toEqual([writerHome << 4, second, termReads.at(-1), next?.terms.length]);
+        expect(values).toEqual([writerHome << 4, terminal, termReads.at(-1), next?.terms.length]);
         rows = [{ prior_current: true, slot_id: null, ...next, fact_count: next?.terms.length ?? 0 }];
       } else if (canonicalTerms && sql === readIdentitySearchIndexTermsSql) {
         const creator = creditedCreator && values[1] === relationTarget;
-        expect(values).toEqual(creator ? [otherControlHome << 4, relationTarget, 4] : [writerHome << 4, second, 8]);
+        expect(values).toEqual(creator ? [otherControlHome << 4, relationTarget, 4] : [writerHome << 4, terminal, 8]);
         rows = creator
           ? creatorNamesOpen
             ? [{ state: 'pending', remaining: 0 }]
@@ -945,19 +994,19 @@ test.each([
         expect(values).toEqual([otherControlHome << 4, relationTarget]);
         rows = [{ current_facts: 1 }];
       } else if (canonicalTerms && sql === readCanonicalStatementPresenceSql) {
-        expect(values).toEqual([writerHome << 4, second]);
+        expect(values).toEqual([writerHome << 4, terminal]);
         rows = adoptedName || adoptedRelation || selectionOverflow ? [{}] : [];
       } else if (canonicalTerms && sql === readCanonicalStatementCountSql) {
-        expect(values).toEqual([writerHome << 4, second]);
+        expect(values).toEqual([writerHome << 4, terminal]);
         rows = [
           { count: selectionOverflow ? SEARCH_INDEX_STATEMENT_KEYS + 1 : Number(adoptedName || adoptedRelation) },
         ];
       } else if ((adoptedName || adoptedRelation) && sql === readCanonicalStatementsSql) {
-        expect(values).toEqual([writerHome << 4, second, 1, adoptedRelation ? relationRoster : []]);
+        expect(values).toEqual([writerHome << 4, terminal, 1, adoptedRelation ? relationRoster : []]);
         rows = [
           {
             route: writerHome << 4,
-            subject_id: second,
+            subject_id: terminal,
             slot_id: nameSlot,
             candidate_id: nameCandidate,
             property: selectedProperty,
@@ -977,7 +1026,7 @@ test.each([
       } else if ((adoptedName || creditedCreator) && sql === candidateProvenance.sql) {
         const args = {
           routes: [writerHome << 4],
-          subjects: [second],
+          subjects: [terminal],
           candidates: [nameCandidate],
           slots: [nameSlot],
           max_bytes: SEARCH_INDEX_PROVENANCE_BYTES,
@@ -985,7 +1034,7 @@ test.each([
         expect(values).toEqual(candidateProvenance.params.map((key) => args[key as keyof typeof args]));
         rows = [
           {
-            subject_id: second,
+            subject_id: terminal,
             id: nameCandidate,
             source: creditedCreator ? null : importedName,
             source_bytes: creditedCreator ? 0 : Buffer.byteLength(JSON.stringify(importedName)),
@@ -1007,7 +1056,7 @@ test.each([
           [
             STANDARD_QUESTION_ID,
             GLOBAL_CONTEXT_RESOURCE.id,
-            second,
+            terminal,
             '5',
             '0.8',
             '0.7',
@@ -1021,7 +1070,7 @@ test.each([
         ];
       } else if (canonicalTerms && sql === listingCounts.sql) {
         expect(values[0]).toBe(String(writerHome));
-        rows = [[second, activeCollectionCount]];
+        rows = [[terminal, activeCollectionCount]];
       } else if (visible && sql === projectionRelease.sql) rows = [[bundledDigest, JSON.stringify(bundledRelease)]];
       else if (sql === projectionSubjects.sql) {
         if (adoptedRelation && String(values[2]).includes(relationTarget))
@@ -1042,12 +1091,12 @@ test.each([
           rows = [
             [String(jobHome << 4), relationTerminal, 'skos:Concept', 'hidden', '1', bundledDigest, null, 't', '1'],
           ];
-        else if (String(values[2]).includes(first)) {
+        else if (!restoring && String(values[2]).includes(first)) {
           const visibility = bothVisible ? 'visible' : 'hidden';
-          rows = [[String(writerHome << 4), first, subjectType, visibility, '1', bundledDigest, second, 't', '1']];
+          rows = [[String(writerHome << 4), first, subjectType, visibility, '1', bundledDigest, terminal, 't', '1']];
         } else {
           const visibility = visible ? 'visible' : 'hidden';
-          rows = [[String(terminalHome << 4), second, subjectType, visibility, '1', bundledDigest, null, 't', '1']];
+          rows = [[String(terminalHome << 4), terminal, subjectType, visibility, '1', bundledDigest, null, 't', '1']];
         }
       } else if (visible && sql === projectionPrivacy.sql) rows = [['0']];
       else if (visible && sql === projectionPage.sql) {
@@ -1056,7 +1105,7 @@ test.each([
             ? [
                 [
                   String(writerHome << 4),
-                  second,
+                  terminal,
                   nameSlot,
                   nameCandidate,
                   selectedProperty,
@@ -1073,7 +1122,7 @@ test.each([
               ]
             : [];
       } else if (visible && sql === lockProjectionBuildForRetirementSql)
-        rows = mode === 'retire' || (completeMerge && canonicalTerms && values[1] === second && oldHeads.length)
+        rows = mode === 'retire' || (completeMerge && canonicalTerms && values[1] === terminal && oldHeads.length)
           ? [{ build_id: oldBuild, generation: oldGeneration, meaning_digest: oldMeaning }] : [];
       else if (visible && sql === retireProjectionHeadSql) {
         expect(values).toEqual([oldBuild]);
@@ -1090,19 +1139,19 @@ test.each([
         rows = [{}];
       } else if (visible && sql === projectionStart.sql) {
         const build = String(values[4]);
-        const original = bothVisible && values[projectionStart.params.indexOf('subject_id')] === first;
+        const original = bothVisible && !restoring && values[projectionStart.params.indexOf('subject_id')] === first;
         if (original) retainedOriginalBuild = build;
         else retainedBuild = build;
         rows = [[build, newGeneration, String((original ? writerHome : terminalHome) << 4)]];
       } else if (visible && sql === projectionBuild.sql) {
         readBuilds++;
-        const original = bothVisible && values[projectionBuild.params.indexOf('subject_id')] === first;
+        const original = bothVisible && !restoring && values[projectionBuild.params.indexOf('subject_id')] === first;
         const build = original ? retainedOriginalBuild : retainedBuild;
         const route = String((original ? writerHome : terminalHome) << 4);
         rows =
           mode === 'superseded' && readBuilds === 3
             ? []
-            : [[build, newGeneration, route, '1', '0', '0', second, '1', '1', bundledDigest]];
+            : [[build, newGeneration, route, '1', '0', '0', terminal, '1', '1', bundledDigest]];
       } else if (visible && sql === projectionHeads.sql) {
         const heads = JSON.parse(String(values[projectionHeads.params.indexOf('heads')])) as { partition_no: number }[];
         if (crossHome) {
@@ -1140,7 +1189,7 @@ test.each([
                 },
               ]
             : priorVisible
-              ? [
+              ? restoring ? [predecessorWriter!] : [
                   {
                     incarnation: 'allocation',
                     owner_epoch: 1,
@@ -1169,9 +1218,18 @@ test.each([
           1,
         ]);
         predecessorReads++;
-        rows = [{ plan_id: previousPlan }];
+        if (restoring) {
+          const prior = retiredOriginals.find(({ original, planId, writer }) =>
+            original === values[2] && planId === values[3] &&
+            writer.closed_job === values[4] && writer.closed_epoch === values[5] &&
+            writer.closed_transaction_id === values[6],
+          );
+          expect(prior?.release).toEqual(expect.any(String));
+          expect(prior?.application).toEqual(expect.any(String));
+          rows = publishedMerge && prior ? [{ plan_id: prior.planId }] : [];
+        } else rows = [{ plan_id: previousPlan }];
       } else if (sql === prepareSearchIdentityOriginalSql) {
-        const closePosition = sameHomeMerge ? String(controlPosition + 1) : '21';
+        const closePosition = sameHomeMerge ? String(controlPosition + 1) : originPosition(21);
         expect(values.slice(0, 9)).toEqual([
           writerHome,
           index,
@@ -1179,7 +1237,7 @@ test.each([
           'allocation',
           1,
           jobId,
-          '1',
+          savedJob.epoch,
           expect.any(String),
           closePosition,
         ]);
@@ -1189,7 +1247,7 @@ test.each([
           op: canonicalTerms ? 'index' : 'delete',
           id: selected,
           version: { nativeBigint: closePosition },
-          ...(canonicalTerms && { document: expect.objectContaining(canonicalDocument) }),
+          ...(canonicalTerms && { document: expect.objectContaining(canonicalDocument()) }),
         });
         preparedWriter = {
           consumer: 'search_directory_probe_subjects_g1',
@@ -1201,9 +1259,10 @@ test.each([
           closed_token: null,
           writer_token: null,
           closed_job: jobId,
-          closed_epoch: '1',
+          closed_epoch: savedJob.epoch,
           closed_transaction_id: String(values[7]),
           closed_position: closePosition,
+          repair_locator: String(values[9]),
         };
         rows = [{ original_id: selected }];
       } else if (sql === readSearchIdentityDispatchBasisSql) {
@@ -1211,7 +1270,7 @@ test.each([
           writerHome,
           retainedPlan?.source.locator.planId,
           jobId,
-          '1',
+          savedJob.epoch,
           index,
           selected,
           directoryScope,
@@ -1268,19 +1327,19 @@ test.each([
             scope_digest: directoryScope,
             action_digest: createHash('sha256').update(retainedAction!).digest('hex'),
             job_id: jobId,
-            job_epoch: '1',
+            job_epoch: savedJob.epoch,
             effect_key: plan.effect_key,
             transaction_id: plan.source.plan.transactionId,
-            initial_copy_count: 0,
+            initial_copy_count: priorVisible ? 1 : 0,
             native_epoch: 1,
-            native_position: '21',
+            native_position: originPosition(21),
           },
         ];
       } else if (sql === planSql.hold.sql || sql === planSql.peekHold.sql) rows = hold ? [{ ...hold }] : [];
       else if (sql === planSql.accepted.sql) {
         expect(values[6]).toBe(hold?.accepted_transaction_id);
         expect(acceptedRecorded).toBe(true);
-        rows = [{ epoch: 1, position: '22' }];
+        rows = [{ epoch: 1, position: originPosition(22) }];
       } else if (sql === planSql.operation.sql || sql === searchNativeOriginalOperationSql())
         rows = committedOperation ? [committedOperation] : [];
       else if (sql === planSql.dispatch.sql) {
@@ -1295,7 +1354,7 @@ test.each([
           writer_position: String(values[6]),
           dispatch_transaction_id: String(values[7]),
           dispatch_epoch: 1,
-          dispatch_position: '31',
+          dispatch_position: originPosition(31),
           visible_transaction_id: null,
           visible_position: null,
           writer_evidence_digest: null,
@@ -1309,10 +1368,10 @@ test.each([
         expect(values.slice(4, 8)).toEqual([
           committedOperation?.writer_token,
           committedOperation?.dispatch_transaction_id,
-          '31',
+          originPosition(31),
           [selected],
         ]);
-        expect(values[10]).toBe('21');
+        expect(values[10]).toBe(originPosition(21));
         Object.assign(preparedWriter!, {
           writer_token: null,
           dispatch_state: 'settled',
@@ -1387,7 +1446,7 @@ test.each([
         expect(copySettlement).toEqual({
           partition: writerHome,
           epoch: 1,
-          position: '33',
+          position: originPosition(33),
           transactionId: committedOperation?.visible_transaction_id,
         });
         reconciledCopy = String(values[3]);
@@ -1415,7 +1474,7 @@ test.each([
         expect(values.slice(4)).toEqual([
           writerHome,
           1,
-          String(applicationPosition),
+          String(applicationPosition()),
           committedOperation?.applied_transaction_id,
         ]);
         if (foreignCapture) {
@@ -1450,7 +1509,7 @@ test.each([
         rows = [{}];
       } else if (sql === searchNativeReleaseAppliedSql()) {
         expect(values.slice(-2)).toEqual([committedOperation?.applied_transaction_id, hold?.hold_id]);
-        rows = lateReleaseCheck ? [] : [{ epoch: 1, position: String(applicationPosition) }];
+        rows = lateReleaseCheck ? [] : [{ epoch: 1, position: String(applicationPosition()) }];
       } else if (sql === planSql.release.sql) {
         expect(controlCustody).toBeDefined();
         expect(values[2]).toBe(hold?.hold_id);
@@ -1480,7 +1539,7 @@ test.each([
         expect(values.slice(8, 12)).toEqual([
           writerHome,
           1,
-          String(applicationPosition),
+          String(applicationPosition()),
           committedOperation?.applied_transaction_id,
         ]);
         retiredScope = true;
@@ -1508,7 +1567,7 @@ test.each([
             frontier: committedOperation?.frontier,
           },
         ];
-      else if (sql === receivingStatements.lookupGate) rows = [{ pending_job: jobId, pending_epoch: '1' }];
+      else if (sql === receivingStatements.lookupGate) rows = [{ pending_job: jobId, pending_epoch: savedJob.epoch }];
       else if (
         sql === receivingStatements.insertApplied ||
         sql === receivingStatements.sameCommandApplied ||
@@ -1532,7 +1591,7 @@ test.each([
           state: 'applied',
           applied_transaction_id: String(values[3]),
           frontier: JSON.parse(String(values[4])),
-          applied_position: String(applicationPosition),
+          applied_position: String(applicationPosition()),
         };
         rows = [{ operation_id: writingOperation.operation_id }];
       } else if (sql === receivingJob.sql) {
@@ -1576,7 +1635,7 @@ test.each([
           binding: JSON.parse(String(values[4])),
           binding_digest: String(values[5]),
           transaction_id: String(values[6]),
-          native_position: completeMerge ? String(controlPosition + 1) : '22',
+          native_position: completeMerge ? String(controlPosition + 1) : originPosition(22),
         };
         rows = [{}];
       } else if (sql === receivingPlan.sql)
@@ -1639,7 +1698,11 @@ test.each([
                   original: selected,
                   state: 'settled',
                   enrollment: null,
-                  visible: expect.objectContaining({ partition: writerHome, epoch: 1, position: '10' }),
+                  visible: expect.objectContaining({
+                    partition: writerHome,
+                    epoch: 1,
+                    position: restoring ? predecessorWriter?.visible_position : '10',
+                  }),
                 }),
               ]
             : [],
@@ -1658,14 +1721,15 @@ test.each([
         rows = [{ plan_id: values[1] }];
       } else if (locks.includes(sql)) {
         observedLocks.push(sql);
-        if (sql === structuralGate.sql) rows = [{ pending_job: jobId, pending_epoch: '1' }];
+        if (sql === structuralGate.sql) rows = [{ pending_job: jobId, pending_epoch: savedJob.epoch }];
         else if (sql === readWriterPublicationWitness && (mode === 'existing' || mode === 'fenced' || engineReads > 1))
           rows = [{}];
         else if (sql === readPublicationFence && mode === 'fenced') rows = [{ publication_fence: crypto.randomUUID() }];
         else if (sql === writerSql.insertGate || (sql === writerSql.gate && (mode === 'existing' || engineReads > 1)))
           rows = [{ enrollment_generation: '0', fence_generation: '0', closed_token: null }];
         else if (sql === writerSql.original && priorVisible) {
-          rows = [{ incarnation: 'allocation', owner_epoch: 1, closed_transaction_id: previousClose }];
+          rows = restoring ? [predecessorWriter!]
+            : [{ incarnation: 'allocation', owner_epoch: 1, closed_transaction_id: previousClose }];
         } else rows = [];
       } else if (sql === stepSql.sql || sql === completeSql.sql) {
         if (sql === completeSql.sql) expect(retiredScope).toBe(true);
@@ -1674,7 +1738,7 @@ test.each([
           transactionId: String(values[1]),
           frontier: JSON.parse(String(values[5])),
           engineRequests: work.engineRequests,
-          ...(completeMerge && values[0] === jobHome && { position: String(controlPosition + 1), work }),
+          ...(completeMerge && values[0] === jobHome && { position: String(controlPosition + 1), work, jobId }),
         };
         if (foreignCapture) {
           const sameHomeCheckpoint =
@@ -1754,7 +1818,7 @@ test.each([
         captureRole = undefined;
         captureNativeTransaction = null;
         if (writingSearchAck) {
-          searchAck = writingSearchAck;
+          searchAcks.set(jobId, writingSearchAck);
           searchAckWrites++;
           writingSearchAck = undefined;
         }
@@ -1877,9 +1941,9 @@ test.each([
       expect(committedOperation?.state).toBe('dispatched');
       const op = canonicalTerms ? 'index' : 'delete';
       submitted.push({ id: selected, operation: op });
-      const target = { _index: alias, _id: selected, version: 21, version_type: 'external' };
+      const target = { _index: alias, _id: selected, version: Number(originPosition(21)), version_type: 'external' };
       expect(lines).toEqual(
-        canonicalTerms ? [{ index: target }, expect.objectContaining(canonicalDocument)] : [{ delete: target }],
+        canonicalTerms ? [{ index: target }, expect.objectContaining(canonicalDocument())] : [{ delete: target }],
       );
       expect(options?.query).toMatchObject({ require_alias: true, refresh: 'wait_for' });
       bulkCalls++;
@@ -1892,7 +1956,7 @@ test.each([
             [op]: {
               _index: index,
               _id: selected,
-              _version: 21,
+              _version: Number(originPosition(21)),
               _shards: { total: 1, successful: 1, failed: 0 },
               _seq_no: 1,
               _primary_term: 1,
@@ -1934,6 +1998,7 @@ test.each([
   };
   async function driveOriginal() {
     const captureStart = capturedEvents.length;
+    const rejectsUnpublishedHandoff = restoring && !publishedMerge;
     const result = directoryStep();
     const requestsWriter = [
       'input',
@@ -1987,7 +2052,7 @@ test.each([
       }
       if (!resumed) {
         const prepare = createSearchIdentityWriterPreparation(receiving, {});
-        if (completeMerge) {
+        if (completeMerge && !restoring) {
           if (firstMergeRequest) {
             await expect(prepare(pool, firstMergeRequest)).rejects.toThrow('no longer the retained current step');
             expect(engineReads).toBe(0);
@@ -2050,6 +2115,7 @@ test.each([
           definitionId,
           bundledDigest,
         ]);
+        const retiringHomes = [...oldHeads];
         expect(await prepare(pool, progress.receipt)).toEqual({
           state: 'progress',
           transactionId: scopeSteps()[3]?.transactionId,
@@ -2064,7 +2130,9 @@ test.each([
         };
         if (canonicalTerms) {
           if (completeMerge) {
-            expect(scopeSteps()[3]?.frontier.after.slice(2)).toEqual(['original', 'retiring', oldBuild, '2', terminalHome]);
+            const retiring = ['original', 'retiring', oldBuild, String(Number(newGeneration) - 1)];
+            expect(scopeSteps()[3]?.frontier.after.slice(2)).toEqual([...retiring, retiringHomes[0]]);
+            for (const home of retiringHomes.slice(1)) await nextSupport([...retiring, home]);
             await nextSupport(['original', 'progress']);
             expect(retainedBuild).not.toBe(oldBuild);
             expect(committed.at(-1)?.frontier.after.slice(4, 6)).toEqual([retainedBuild, newGeneration]);
@@ -2149,6 +2217,12 @@ test.each([
           expect(engineReads).toBe(2);
           return;
         }
+        if (rejectsUnpublishedHandoff) {
+          await expect(prepare(pool, progress.receipt)).rejects.toThrow('no published and released writer handoff');
+          expect(retainedPlan).toBeUndefined();
+          expect(preparedWriter).toBeUndefined();
+          publishedMerge = true;
+        }
         expect(await prepare(pool, progress.receipt)).toEqual({ state: 'prepared' });
         expect(retainedPlan?.source).toMatchObject({
           original: selected,
@@ -2156,7 +2230,7 @@ test.each([
           disposition: priorVisible ? 'NEW' : mode === 'first' || canonicalTerms ? 'first-apply' : 'OLD',
           barrier: { kind: 'original', partition: writerHome },
           originalFence: {
-            position: sameHomeMerge ? String(controlPosition) : '21',
+            position: sameHomeMerge ? String(controlPosition) : originPosition(21),
             epoch: 1,
             partition: writerHome,
           },
@@ -2171,11 +2245,15 @@ test.each([
           terminalSupport: visible ? { build: retainedBuild, generation: newGeneration } : null,
           predecessor: priorVisible ? { planId: previousPlan } : null,
         });
-        expect(predecessorReads).toBe(priorVisible ? 1 : 0);
-        expect(publicationWrites).toEqual([lockPublicationFence, advanceWriterPublicationAdmissionSql]);
+        expect(predecessorReads).toBe(Number(priorVisible) + Number(rejectsUnpublishedHandoff));
+        const publicationAdmission = [lockPublicationFence, advanceWriterPublicationAdmissionSql];
+        expect(publicationWrites).toEqual(
+          rejectsUnpublishedHandoff ? [...publicationAdmission, ...publicationAdmission] : publicationAdmission,
+        );
         expect(await prepare(pool, progress.receipt)).toEqual({ state: 'prepared' });
-        expect(engineReads).toBe(2);
-        expect(normalizationCalls).toBe(Number(canonicalTerms));
+        const preparationReads = 2 + Number(rejectsUnpublishedHandoff);
+        expect(engineReads).toBe(preparationReads);
+        expect(normalizationCalls).toBe(Number(canonicalTerms) + Number(rejectsUnpublishedHandoff));
         expect(scopeSteps().map((step) => step.engineRequests)).toEqual([0, 1, ...Array(scopeSteps().length - 2).fill(0)]);
         if (sameHomeMerge) {
           expect(capturedEvents).toEqual(
@@ -2196,7 +2274,7 @@ test.each([
           expect(acceptance.frontier.after.slice(3)).toEqual([
             SEARCH_IDENTITY_WRITER_ACCEPT,
             selected,
-            second,
+            terminal,
             retainedPlan!.source.locator.planId,
           ]);
           dispatchRequest = {
@@ -2210,7 +2288,7 @@ test.each([
             await expect(prepare(pool, acceptance.receipt)).rejects.toThrow('Native Search resolvePlanned: changed');
             expect(commonPlan).toBeUndefined();
             expect(hold).toBeUndefined();
-            expect(engineReads).toBe(2);
+            expect(engineReads).toBe(preparationReads);
             expect(bulkCalls).toBe(0);
             if (!crossHome) return;
             terminalBuildCurrent = true;
@@ -2232,7 +2310,7 @@ test.each([
             transactionId: commonPlan?.transaction_id,
           });
           expect(await prepare(pool, acceptance.receipt)).toEqual({ state: 'prepared' });
-          expect(engineReads).toBe(2);
+          expect(engineReads).toBe(preparationReads);
           const staged = await directoryStep();
           expect(staged.state).toBe('more');
           expect(identityEpochReceiptLocator(job, 'search-canonical-index', staged).ok).toBe(true);
@@ -2243,7 +2321,7 @@ test.each([
             keep[2],
             SEARCH_IDENTITY_WRITER_DISPATCH,
             selected,
-            second,
+            terminal,
             retainedPlan!.source.locator.planId,
             hold?.hold_id,
           ]);
@@ -2319,7 +2397,7 @@ test.each([
                   [canonicalTerms ? 'index' : 'delete']: expect.objectContaining({
                     _index: index,
                     _id: selected,
-                    _version: 21,
+                    _version: Number(originPosition(21)),
                     _seq_no: 1,
                     _primary_term: 1,
                     _shards: { total: 1, successful: 1, failed: 0 },
@@ -2359,7 +2437,7 @@ test.each([
             expect(committedOperation?.state).toBe('visible');
             expect(receiptText).toContain('"kind":"bulk"');
             const expectedAllocationReads =
-              5 +
+              preparationReads + 3 +
               2 * Number(canonicalTerms) +
               2 * Number(adoptedName) +
               3 * Number(adoptedRelation) +
@@ -2386,7 +2464,7 @@ test.each([
             const applied = await prepare(pool, applicationRequest.receipt);
             expect(applied).toEqual({ state: 'progress', transactionId: committedOperation?.applied_transaction_id });
             expect(committed.at(-1)?.frontier.after).toEqual([selected, retainedPlan?.effect_key]);
-            expect(committedOperation?.applied_position).toBe(String(applicationPosition));
+            expect(committedOperation?.applied_position).toBe(String(applicationPosition()));
             expect(originalReads).toBe(readsBeforeApplication);
             expect(committedOperation?.state).toBe('applied');
             expect(engineReads).toBe(expectedAllocationReads);
@@ -2420,16 +2498,20 @@ test.each([
             expect(receivingContinuation.state).toBe('released');
             expect(hold?.released_transaction_id).toBe(receivingContinuation.released_transaction_id);
             const retired = await directoryStep();
-            expect(retired.frontier.after).toEqual(['search-directory', selected, retiredOriginals.length + 1]);
+            const processed = retiredOriginals.filter((item) => item.jobId === jobId).length;
+            expect(retired.frontier.after).toEqual(['search-directory', selected, processed + 1]);
             expect(identityEpochReceiptLocator(job, 'search-canonical-index', retired).ok).toBe(true);
             expect(retiredScope).toBe(true);
             retiredOriginals.push({
+              jobId,
               original: selected,
               planId: retainedPlan!.source.locator.planId,
               application: committedOperation!.applied_transaction_id!,
               release: hold!.released_transaction_id!,
+              writer: { ...preparedWriter! },
+              build: retainedPlan!.references.originalSupport ?? null,
             });
-            if (foreignCapture && intent === 'unmerge') {
+            if (foreignCapture && intent === 'unmerge' && !restoring) {
               const complete = await directoryStep();
               expect(complete.state).toBe('complete');
               expect(complete.frontier.after).toEqual(['directory', 1]);
@@ -2446,7 +2528,7 @@ test.each([
               expect(capturedTransactions('identity_epoch_step', writerHome)).toEqual(
                 foreignSteps.map(({ transactionId }) => transactionId),
               );
-              const controlSteps = intent === 'unmerge' ? 5 : 4;
+              const controlSteps = intent === 'unmerge' && !restoring ? 5 : 4;
               expect(capturedTransactions('identity_epoch_step', jobHome)).toEqual(
                 Array(controlSteps).fill(admissionTransaction),
               );
@@ -2489,23 +2571,8 @@ test.each([
     expect(engineReads).toBe(0);
   }
 
-  await driveOriginal();
-  if (completeMerge && !sameHomeMerge) {
-    const redirected = retiredOriginals[0]!;
-    expect(redirected.original).toBe(first);
-    expect(committed.at(-1)?.frontier.after).toEqual(['search-directory', first, 1]);
-
-    // The next original has its own receiving home and rows. Keep the job, pool,
-    // committed directory, retired scope, captured roles, and terminal build.
-    after = redirected.original;
-    selected = second;
-    writerHome = terminalHome;
-    canonicalTerms = true;
+  function resetOriginal() {
     scopeStart = committed.length;
-    oldBuild = retainedBuild!;
-    oldGeneration = newGeneration;
-    oldHeads.push(...projectionDependencyHomes.get(oldBuild)!);
-    newGeneration = String(Number(oldGeneration) + 2);
     directoryReads = 0;
     originalReads = 0;
     planReads = 0;
@@ -2529,8 +2596,34 @@ test.each([
     controlCustody = undefined;
     controlApplied = undefined;
     receivingContinuation = { revision: '0', after_key: null, state: 'progress', applied_transaction_id: null };
-    appliedPosition = applicationPosition;
+    appliedPosition = applicationPosition();
     retiredScope = false;
+
+    predecessorReads = 0;
+    termReads.length = 0;
+    normalizationCalls = 0;
+    copyLocator = undefined;
+    copySettlement = undefined;
+    reconciledCopy = undefined;
+  }
+
+  await driveOriginal();
+  if (completeMerge && !sameHomeMerge) {
+    const redirected = retiredOriginals[0]!;
+    expect(redirected.original).toBe(first);
+    expect(committed.at(-1)?.frontier.after).toEqual(['search-directory', first, 1]);
+
+    // The next original has its own receiving home and rows. Keep the job, pool,
+    // committed directory, retired scope, captured roles, and terminal build.
+    after = redirected.original;
+    selected = second;
+    writerHome = terminalHome;
+    canonicalTerms = true;
+    oldBuild = retainedBuild!;
+    oldGeneration = newGeneration;
+    oldHeads.push(...projectionDependencyHomes.get(oldBuild)!);
+    newGeneration = String(Number(oldGeneration) + 2);
+    resetOriginal();
 
     await driveOriginal();
     const sealed = await directoryStep();
@@ -2545,15 +2638,81 @@ test.each([
     expect(new Set(retiredOriginals.map(({ planId }) => planId)).size).toBe(2);
     expect(new Set(retiredOriginals.map(({ application }) => application)).size).toBe(2);
     expect(new Set(retiredOriginals.map(({ release }) => release)).size).toBe(2);
-    const acknowledge = () =>
-      withCompiledCommandControls(pool, () => identityEpochStore().reconcileStepReceipt(pool, sealed.receipt));
-    const acknowledged = await acknowledge();
-    expect(acknowledged.receipt).toEqual(sealed.receipt);
-    expect(await acknowledge()).toEqual(acknowledged);
+    async function acknowledgeSeal(completed: IdentityStepProgress) {
+      const acknowledge = () =>
+        withCompiledCommandControls(pool, () => identityEpochStore().reconcileStepReceipt(pool, completed.receipt));
+      const acknowledged = await acknowledge();
+      expect(acknowledged.receipt).toEqual(completed.receipt);
+      expect(await acknowledge()).toEqual(acknowledged);
+      const replay = await directoryStep();
+      expect(replay.receipt).toEqual(completed.receipt);
+      expect(replay.frontier).toEqual(completed.frontier);
+    }
+    await acknowledgeSeal(sealed);
     expect(searchAckWrites).toBe(1);
-    const replay = await directoryStep();
-    expect(replay.receipt).toEqual(sealed.receipt);
-    expect(replay.frontier).toEqual(sealed.frontier);
     expect(submitted).toEqual([{ id: first, operation: 'delete' }, { id: second, operation: 'index' }]);
+
+    // Begin the native unmerge with the same Pool and the completed merge's old writer row.
+    // Search owns the acknowledged receipt; the predecessor lookup models job publication.
+    restoring = true;
+    intent = 'unmerge';
+    after = null;
+    jobId = newId(jobHome << 4);
+    job = { jobId, epoch: 2n };
+    savedJob = { jobId, epoch: '2' };
+    directoryScope = 'e'.repeat(64);
+    admissionTransaction = crypto.randomUUID();
+    originOffset = 64;
+    priorVisible = true;
+    previousJob = mergeJob.jobId;
+
+    const mergedOriginals = [...retiredOriginals];
+    for (const previous of mergedOriginals) {
+      selected = previous.original;
+      terminal = selected;
+      terminalHome = selected === first ? firstHome : otherControlHome;
+      writerHome = terminalHome;
+      predecessorWriter = previous.writer;
+      previousPlan = previous.planId;
+      previousClose = previous.writer.closed_transaction_id!;
+      oldBuild = previous.build!.build;
+      const heads = projectionDependencyHomes.get(oldBuild)!;
+      expect(heads).toEqual(selected === first ? [firstHome, otherControlHome] : [otherControlHome]);
+      oldHeads.push(...heads);
+      oldGeneration = String(previous.build!.generation);
+      oldMeaning = bundledDigest;
+      newGeneration = String(Number(oldGeneration) + 2);
+      resetOriginal();
+
+      await driveOriginal();
+      expect(retainedPlan?.references.predecessor).toMatchObject({
+        partition: writerHome,
+        planId: previous.planId,
+      });
+      const previousVisibility = BigInt(previous.writer.visible_position!);
+      expect(BigInt(retainedPlan!.source.originalFence.position)).toBeGreaterThan(previousVisibility);
+      expect(BigInt(copySettlement!.position)).toBeGreaterThan(previousVisibility);
+      expect(copyLocator).toMatchObject({
+        state: 'settled',
+        visible: {
+          partition: writerHome,
+          transactionId: previous.writer.visible_transaction_id,
+          position: previous.writer.visible_position,
+        },
+      });
+      after = selected;
+    }
+    const restored = await directoryStep();
+    expect(restored.state).toBe('complete');
+    expect(restored.frontier.after).toEqual(['directory', 2]);
+    await acknowledgeSeal(restored);
+    expect(searchAckWrites).toBe(2);
+    expect(new Set(retiredOriginals.map(({ release }) => release)).size).toBe(4);
+    expect(submitted).toEqual([
+      { id: first, operation: 'delete' },
+      { id: second, operation: 'index' },
+      { id: first, operation: 'index' },
+      { id: second, operation: 'index' },
+    ]);
   }
 });
