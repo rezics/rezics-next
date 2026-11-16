@@ -236,7 +236,7 @@ type PublicationOptions = {
 function publicationRecord(workspace: string, ref: string): string {
   return join(resolve(workspace), '.temp/check-git-publications', `${ref.slice('refs/checks/'.length)}.json`);
 }
-function originIdentity(workspace: string, timeoutMs = 2000): string | null {
+function originPushUrl(workspace: string, timeoutMs = 2000): string | null {
   if (timeoutMs <= 0) return null;
   try {
     const result = Bun.spawnSync(['git', 'remote', 'get-url', '--push', 'origin'], {
@@ -246,11 +246,20 @@ function originIdentity(workspace: string, timeoutMs = 2000): string | null {
       stderr: 'ignore',
       timeout: Math.min(2000, timeoutMs),
     });
-    return result.exitCode === 0 ? createHash('sha256').update(result.stdout.toString().trim()).digest('hex') : null;
+    return result.exitCode === 0 ? result.stdout.toString().trim() : null;
   } catch {
     return null;
   }
 }
+function originIdentity(url: string | null): string | null {
+  return url === null ? null : createHash('sha256').update(url).digest('hex');
+}
+
+function httpsExcludedByGitPolicy(): boolean {
+  const allowed = process.env.GIT_ALLOW_PROTOCOL;
+  return allowed !== undefined && !allowed.split(':').includes('https');
+}
+
 function savePublication(path: string, record: OwnedPublication): void {
   const temporary = `${path}.${process.pid}.pending`;
   writeFileSync(temporary, `${JSON.stringify(record)}\n`, { mode: 0o600 });
@@ -307,7 +316,7 @@ export async function releaseCheckGit(
       record.remote.commit !== manifest.remote.commit ||
       !validObjectId(record.remote.commit, record.objectFormat) ||
       record.ownership.origin === null ||
-      record.ownership.origin !== originIdentity(workspace, deadlineMs - Date.now())
+      record.ownership.origin !== originIdentity(originPushUrl(workspace, deadlineMs - Date.now()))
     )
       return;
     if (record.ownership.state === 'retained' && !options.settled) return;
@@ -384,6 +393,8 @@ export async function sweepCheckGit(
   try {
     const info = lstatSync(directory);
     if (!info.isDirectory() || info.isSymbolicLink()) return { visited, remaining: true };
+    if (httpsExcludedByGitPolicy() && originPushUrl(workspace, deadlineMs - Date.now())?.startsWith('https://'))
+      return { visited, remaining: readdirSync(directory).some((name) => pattern.test(name)) };
     lease = acquireDirectoryLease(join(directory, '.sweep.lease'));
     const names = readdirSync(directory)
       .filter((name) => pattern.test(name))
@@ -879,13 +890,16 @@ export async function stageCheckGit(
       let firstFailure: string | undefined;
       let intentRecorded = false;
       try {
+        const origin = originPushUrl(source);
+        if (origin?.startsWith('https://') && httpsExcludedByGitPolicy())
+          throw new Error('check-git: Git protocol policy excludes the HTTPS origin');
         mkdirSync(dirname(recordPath), { recursive: true, mode: 0o700 });
         if (!isDirectory(join(source, '.temp')) || !isDirectory(dirname(recordPath)))
           throw new Error('check-git: publication journal directory is unsafe');
         const record: OwnedPublication = {
           ...manifest,
           ownership: {
-            origin: originIdentity(source),
+            origin: originIdentity(origin),
             createdAt: now(),
             state: publication.retain ? 'retained' : 'active',
           },

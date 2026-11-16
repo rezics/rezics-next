@@ -509,6 +509,42 @@ test('an unavailable ownership journal falls back without publishing or releasin
   await releaseCheckGit(source, owned);
 }, 30000);
 
+test('an HTTPS-excluded runner packs locally and leaves existing ref custody for an authorized sweep', async () => {
+  const root = sandbox();
+  const { source } = repository(root);
+  const origin = publicOrigin(root, source);
+  await stageCheckGit(source, join(root, 'owned'), { ref: 'refs/checks/pending' });
+  const directory = join(source, '.temp/check-git-publications');
+  const pending = join(directory, 'pending.json');
+  const record = JSON.parse(readFileSync(pending, 'utf8'));
+  record.ownership.state = 'releasable';
+  record.ownership.createdAt = 0;
+  writeFileSync(pending, JSON.stringify(record));
+
+  git(source, 'remote', 'set-url', 'origin', 'https://unreachable.example.test/check.git');
+  const child = Bun.spawnSync(
+    [
+      process.execPath,
+      '--eval',
+      `import { stageCheckGit, sweepCheckGit } from ${JSON.stringify(join(import.meta.dir, 'check-git.ts'))};
+       await stageCheckGit(process.cwd(), ${JSON.stringify(join(root, 'fallback'))}, { ref: 'refs/checks/local-pack' });
+       console.log(JSON.stringify(await sweepCheckGit(process.cwd())));`,
+    ],
+    { cwd: source, env: { ...process.env, GIT_ALLOW_PROTOCOL: 'file' }, stdout: 'pipe', stderr: 'pipe' },
+  );
+  expect(child.exitCode, child.stderr.toString()).toBe(0);
+  expect(existsSync(join(root, 'fallback', 'snapshot.pack'))).toBe(true);
+  expect(JSON.parse(child.stdout.toString())).toEqual({ visited: 0, remaining: true });
+  expect(readdirSync(directory)).toEqual(['pending.json']);
+  expect(readFileSync(pending, 'utf8')).toBe(JSON.stringify(record));
+  expect(child.stderr.toString()).toContain('Git protocol policy excludes the HTTPS origin');
+  expect(child.stderr.toString()).not.toContain('publication attempt');
+
+  git(source, 'remote', 'set-url', 'origin', origin);
+  expect(await sweepCheckGit(source)).toEqual({ visited: 1, remaining: false });
+  expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/')).toBe('');
+}, 15000);
+
 function storeHas(store: string, oid: string) {
   return (
     Bun.spawnSync(['git', '--git-dir', store, 'cat-file', '-e', oid], {
