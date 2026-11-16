@@ -19,7 +19,8 @@ afterAll(async () => {
 test('a growing serial keeps exact public releases and advances preparation in bounded pages', async () => {
   const { native } = f;
   const path = `/v1/hostedCatalogues/${f.catalogueId}`;
-  const source = await native.thread();
+  const originalBody = fromPlainText('Opening');
+  const source = await native.thread('published', originalBody);
   const target = f.target(source);
   const root = f.newOccurrenceId();
   const part = f.newOccurrenceId();
@@ -231,7 +232,7 @@ test('a growing serial keeps exact public releases and advances preparation in b
   const original = await exact(originalPublicationId);
   expect(original.status).toBe(200);
   expect(original.value.occurrence.target).toEqual(target);
-  expect(original.value.document.canonicalBytes).toBe(bytes(fromPlainText('Opening')));
+  expect(original.value.document.canonicalBytes).toBe(bytes(originalBody));
 
   for (const size of [512, 513]) await publishLast(size);
   for (const size of [1_000, 10_000]) {

@@ -101,10 +101,12 @@ test('private Knowledge attachments stay on their originals through published me
       const beforeMerge = (await listed(survivor, 1)).next;
       expect(beforeMerge).toEqual(expect.any(String));
 
-      const actor = nativeOperator(system).actor;
       async function publish(intent: IdentityIntent) {
         const key = randomUUID();
-        const deadline = Date.now() + 20_000;
+        const deadline = Date.now() + 5_000;
+        const actor = await system.access.authenticate(nativeOperator(system).bearer, { pool, deadline });
+        if (actor.kind !== 'account')
+          throw new Error('Native Subject identity needs the authenticated governance actor');
         const job = await identityEpochStore().prepareAdmission(
           pool,
           {
