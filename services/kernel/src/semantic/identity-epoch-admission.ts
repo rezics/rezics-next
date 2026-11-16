@@ -22,6 +22,7 @@ import {
 import type { NativeIdentityAdmission, NativeIdentityCapabilities } from './identity-adapter-port.ts';
 import { assertIdentityTerminalGroupsOpen } from './identity-terminal-closure.ts';
 import sourcePoints from './identity-epoch-read-sources.sql';
+import publishedSource from './identity-epoch-admission-published-source.sql';
 import handoff from './identity-epoch-admission-handoff.sql';
 import inputs from './identity-epoch-admission-inputs.sql';
 import holdSource from './identity-epoch-admission-hold-source.sql';
@@ -187,24 +188,37 @@ export function createIdentityAdmissionOperations(
         if (!group || group.closure_state !== 'open') throw unavailable();
         if (group.pending_job)
           throw new IdentityEpochStoreError('identity_epoch_busy', 'An input group is already claimed');
-        // Active mappings already passed current source/owner/dirty validation above.
-        // A legacy mapping retains the startup fast path only with exact native birth custody.
-        const nativeCustody = point.closure_state === 'active' ||
-          (await capabilities.read.withReadTransaction(pool, (tx) =>
-            currentNativeIdentityBirths(tx, point.route >> 4, [{
-              route: point.route,
-              original: point.original,
-              source_revision: String(point.source_revision),
-              present: true,
-            }]),
-          )).has(point.original);
-        if (!group.ready || !nativeCustody) {
-          const ready = await capabilities.read.withReadTransaction(
-            pool,
-            async (tx) =>
+        // Active mappings already passed the source, owner and dirty-head checks.
+        if (!group.ready || point.closure_state !== 'active') {
+          const sourceHome = partitionOf(point.route);
+          const ready = await capabilities.read.withReadTransaction(pool, async (tx) => {
+            if (group.ready && point.origin === 'creation') {
+              const births = await currentNativeIdentityBirths(tx, sourceHome, [
+                {
+                  route: point.route,
+                  original: point.original,
+                  source_revision: String(point.source_revision),
+                  present: true,
+                },
+              ]);
+              if (births.has(point.original)) return true;
+            }
+            if (group.ready && point.closure_state === 'legacy' && point.origin === 'published') {
+              const published = await tx.query(publishedSource.sql, [
+                point.route,
+                point.original,
+                point.recorded_transaction_id,
+                group.partition_no,
+                group.terminal,
+                group.generation,
+              ]);
+              if (published.rowCount === 1) return true;
+            }
+            return (
               (await readIdentityEpochCutover(tx)).state === 'ready' &&
-              !!(await tx.query(bootstrapHome.sql, [point.route >> 4])).rows[0]?.sealed_generation,
-          );
+              !!(await tx.query(bootstrapHome.sql, [sourceHome])).rows[0]?.sealed_generation
+            );
+          });
           if (!ready) throw unavailable();
         }
         result.push({

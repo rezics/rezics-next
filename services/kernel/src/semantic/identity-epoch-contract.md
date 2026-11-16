@@ -1714,8 +1714,10 @@ Decision: bootstrap excludes an unchanged native birth only through the same rev
 self-gate, native transaction and XID proof used by installation, with its actual settled source head.
 The creation mapping records that dirty head in the creation transaction; a default revision is not custody.
 The proof does not depend on mutable PREPARE or pending-job bookkeeping. Admission preserves an already
-validated active native mapping; other legacy input requires that birth proof or the existing installed-cutover
-and sealed-source-home barrier. The bounded source cursor advances over the complete raw page before filtering.
+validated active native mapping. Under a valid native absence installation, a mapping still in legacy closure
+can also use its exact source mapping commit and the same published job's current ready output generation.
+Other legacy input requires the birth proof or the installed-cutover and sealed-source-home barrier. The bounded
+source cursor advances over the complete raw page before filtering.
 A retained unchanged birth may use its existing exact-head path before conversion; this does not authorize
 discarding a converted or changed source.
 
