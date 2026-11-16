@@ -1833,6 +1833,16 @@ test('a merged canonical target invalidates the reviewed observation identity', 
   expect(
     await personal.readSourceObservation(identityOwner.actor, survivor, 'archive-fixture', 'source-visible-row'),
   ).toBeNull();
+  expect(
+    (
+      await f.pool.query(
+        `SELECT 1 FROM library.entry_source_observation
+         WHERE route=$1 AND account_id=$2 AND subject_id=ANY($3::uuid[])
+           AND provider='archive-fixture' AND record_id='source-visible-row'`,
+        [routeOf(identityOwner.actor.accountId), identityOwner.actor.accountId, [survivor, redirected]],
+      )
+    ).rows,
+  ).toEqual([]);
 });
 
 test('unsupported archived observation tokens stay private evidence with a field reason', async () => {

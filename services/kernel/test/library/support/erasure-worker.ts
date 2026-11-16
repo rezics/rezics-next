@@ -2,7 +2,11 @@ import type { WorkClient } from '../../../src/work/client.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
 
 /** The fixture owns this child and its two pipes, never the Auth executor. */
-export async function startErasureWorker(url: string, client: WorkClient) {
+export async function startErasureWorker(
+  url: string,
+  client: WorkClient,
+  environment: Record<string, string> = {},
+) {
   let output = '';
   let ready!: () => void;
   const readiness = new Promise<void>((resolve) => {
@@ -16,6 +20,7 @@ export async function startErasureWorker(url: string, client: WorkClient) {
       STRIPE_MANAGED_PAYMENTS: 'false',
       CHECKOUT_SUCCESS_URL: 'https://web.example.test/success',
       CHECKOUT_CANCEL_URL: 'https://web.example.test/cancel',
+      ...environment,
     }),
     stdout: 'pipe',
     stderr: 'pipe',
@@ -134,8 +139,8 @@ export async function createOwnedErasureFixture() {
     request,
     json,
     subject,
-    async start() {
-      worker = await startErasureWorker(db.url, client);
+    async start(environment?: Record<string, string>) {
+      worker = await startErasureWorker(db.url, client, environment);
     },
     async close() {
       await worker?.close();
