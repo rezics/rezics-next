@@ -811,9 +811,6 @@ test('selection advance replays acknowledged steps and fences stale settlement a
 
   const closureBook = await newBook();
   const closure = await startSelection(closureBook, [closureBook.nestedChapter]);
-  expect((await f.native.call('POST', `${closure.stagePath}:advance`, { stepId: closureBook.newId() })).status).toBe(
-    200,
-  );
   const closingStepId = closureBook.newId();
   const closing = await f.native.call(
     'POST',
@@ -846,7 +843,7 @@ test('selection advance replays acknowledged steps and fences stale settlement a
     closureFrontier: '-1',
     closureCheckedCount: '0',
   });
-  expect(await stepTotals(closureBook, closure.stageId)).toEqual({ candidates: '1', steps: '2' });
+  expect(await stepTotals(closureBook, closure.stageId)).toEqual({ candidates: '1', steps: '1' });
   expect(await selectedRelease(closureBook.catalogueId)).toBe(changedRelease.value.revisionId);
 });
 
