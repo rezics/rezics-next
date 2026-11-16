@@ -192,7 +192,7 @@ export function outputCaptureFootprint(
 ): WorkDimensions | undefined {
   // Reylo appends this source comment before the final semicolon of dispatched statements.
   // Recognize the original literal and continue charging the full dispatched text below.
-  const statement = sql.replace(/ \/\*file='(?:[^'\\]|\\')*'\*\/(?=;?\s*$)/, '');
+  const statement = sql.replace(/[ \n]\/\*file='(?:[\w.%!()*~-]|\\')*'\*\/(?=;?$)/, '');
   const control = controls.has(statement) || /^SET LOCAL statement_timeout = '[1-9][0-9]*ms'$/.test(statement);
   let plan = plans().get(statement);
   if (!plan && !control) return undefined;
