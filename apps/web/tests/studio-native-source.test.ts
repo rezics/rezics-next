@@ -13,25 +13,26 @@ mock.module('@tanstack/react-start', () => ({
   ...start,
   createServerFn({ method }: { method: string }) {
     const chain = start.createServerFn();
-    return {
+    const serverFn = {
       validator(validate: (input: unknown) => unknown) {
         chain.validator(validate);
-        return {
-          handler(handle: (context: never) => unknown) {
-            const dispatch = chain.handler(handle);
-            return (input: { data: unknown; headers?: HeadersInit }) =>
-              requests.run(new Request('https://site.test/studio', { method, headers: input.headers }), () =>
-                dispatch(input as never),
-              );
-          },
-        };
+        return serverFn;
+      },
+      handler(handle: (context: never) => unknown) {
+        const dispatch = chain.handler(handle);
+        return (input?: { data?: unknown; headers?: HeadersInit }) =>
+          requests.run(new Request('https://site.test/studio', { method, headers: input?.headers }), () =>
+            dispatch(input as never),
+          );
       },
     };
+    return serverFn;
   },
 }));
 mock.module('@tanstack/react-start/server', () => ({
   getRequest: () => requests.getStore()!,
   setResponseHeader: () => {},
+  setResponseStatus: () => {},
 }));
 
 const id = (value: number) => `00000000-0000-8000-8000-${String(value).padStart(12, '0')}`;
