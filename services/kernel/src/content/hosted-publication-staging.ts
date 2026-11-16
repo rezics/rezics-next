@@ -247,7 +247,10 @@ function assertActorBinding(row: StageRow, actorInput: Actor): AccountActor {
 function canonicalExpiry(value: Date | string): string {
   const expiry = value instanceof Date ? value : new Date(value);
   if (!Number.isFinite(expiry.getTime())) throw stagingConflict('Invalid staging expiry');
-  return expiry.toISOString();
+  // Keep the precision of the stored PostgreSQL UTC timestamp when native callers pass text.
+  const fraction = typeof value === 'string' ? /:\d{2}\.(\d+)/u.exec(value)?.[1] : undefined;
+  const submillisecond = fraction?.slice(3, 6).padEnd(3, '0') ?? '000';
+  return `${expiry.toISOString().slice(0, -1)}${submillisecond}Z`;
 }
 function checkpoint(row: StageRow): HostedPublicationStagingCheckpoint {
   return {
@@ -271,9 +274,6 @@ function checkpoint(row: StageRow): HostedPublicationStagingCheckpoint {
 }
 function sameOptional(left: string | null, right: string | null): boolean {
   return left === right;
-}
-function sameExpiry(left: string, right: string): boolean {
-  return new Date(left).getTime() === new Date(right).getTime();
 }
 function bytes(value: Buffer | Uint8Array | string): Buffer {
   return Buffer.isBuffer(value) ? value : typeof value === 'string' ? Buffer.from(value, 'hex') : Buffer.from(value);
@@ -492,7 +492,7 @@ export async function beginHostedPublicationStaging(
       existing.source_revision_id !== input.expectedHeadRevisionId ||
       !sameOptional(existing.expected_publication_id, input.expectedPublicationId) ||
       existing.mode !== input.mode ||
-      !sameExpiry(expiry, existing.expires_at)
+      expiry !== existing.expires_at
     )
       throw stagingConflict('Staging ID was already used for different source inputs');
     return { replayed: true, progress: checkpoint(existing) };
@@ -567,7 +567,7 @@ export async function beginHostedPublicationStaging(
     row.source_revision_id !== input.expectedHeadRevisionId ||
     !sameOptional(row.expected_publication_id, input.expectedPublicationId) ||
     row.mode !== input.mode ||
-    !sameExpiry(expiry, row.expires_at)
+    expiry !== row.expires_at
   )
     throw stagingConflict('Staging ID was already used for different source inputs');
   return { replayed: true, progress: checkpoint(row) };
