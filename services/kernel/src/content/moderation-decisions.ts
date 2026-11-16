@@ -184,7 +184,7 @@ export async function readModerationDecisionForAuthor(
     (current.value.appeal?.resolvedAt ?? null) !== (expected.appeal?.resolvedAt ?? null)
   )
     return null;
-  return { value: expected, anchor: after.anchor };
+  return { value: expected, threadId: after.value.thread_id, anchor: after.anchor };
 }
 
 async function writeOnRoute<T>(
