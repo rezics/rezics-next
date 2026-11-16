@@ -52,9 +52,9 @@ Contract leaves are literal-only so core and facades may read those values at lo
 
 `WorkIntent` forwards `queuePartitionKey`, `deduplicationID`, `priority` and `delaySeconds` to the installed
 `DBOSClient.enqueueInTransaction` on the source transaction. The effects, locator-effects, media and import queues
-set `partitionConcurrency: 1`. Their worker-wide limits are eight, eight, two and two respectively. Producers identify
-the source partition with `queuePartitionKey`. The media queue runs both the upload event effect and its image job
-so unrelated effects cannot consume image processing capacity.
+set `partitionConcurrency: 1` and worker limits of eight, eight, two and two. Locator effects poll at a 250 ms minimum
+interval. Producers identify the source partition with `queuePartitionKey`. Media isolates both the upload effect
+and its image job from unrelated effects.
 Priority and delay use the SDK's normal admission, execution-owner and recovery paths.
 
 Decision: keep installed queue-wide deduplication with rejection on collision; partition keys do not scope a

@@ -21,6 +21,7 @@ export type WorkQueueName = (typeof WORK_QUEUE_NAMES)[number];
 export type WorkQueueOptions = Readonly<{
   workerConcurrency?: number;
   partitionConcurrency?: number;
+  minPollingIntervalMs?: number;
 }>;
 
 export type WorkPool = object;
