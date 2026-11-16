@@ -163,8 +163,8 @@ import {
 import type { ReviewedCataloguePort } from './reviewed-catalogue.ts';
 import {
   combineBangumiCreditBindings,
+  createBangumiCreditPreparation,
   currentBangumiCreatorCreditBindings,
-  prepareBangumiCreatorCreditBindings,
   type BangumiCreditRoleBinding,
   type BangumiCreditVocabularyResolution,
 } from './showcase-bangumi-credits.ts';
@@ -3716,6 +3716,7 @@ export async function runCrossMediaSeedCli(
   };
   let selectedReleaseContext: ReturnType<typeof composeShowcaseVndbReleaseContext> | undefined;
   let creditResolution: BangumiCreditVocabularyResolution | undefined;
+  const creditPreparation = createBangumiCreditPreparation(priorShowcase);
   const finalization = new SeedFinalization('seed');
   let recordImportProgress: SeedFinalization<'record-import'> | undefined;
   let releasePublicationProgress: SeedFinalization<'release-publication'> | undefined;
@@ -3856,7 +3857,7 @@ export async function runCrossMediaSeedCli(
         ? {
             readPublicSubject: (subjectId: string) => publicClient.readSubject(subjectId),
             prepareBangumiCreatorCreditBindings: async ({ result: baseResult, drafts, read }) => {
-              const prepared = await prepareBangumiCreatorCreditBindings({
+              creditResolution = await creditPreparation.prepare({
                 plan,
                 result: baseResult,
                 drafts,
@@ -3864,12 +3865,10 @@ export async function runCrossMediaSeedCli(
                 journal,
                 review: importPort,
                 publicClient,
-                ...(priorShowcase ? { prior: priorShowcase } : {}),
                 subjectTypes: [2, 4],
                 read,
               });
-              creditResolution = prepared;
-              return prepared;
+              return creditResolution;
             },
           }
         : {}),
@@ -4469,11 +4468,7 @@ export async function runCrossMediaSeedCli(
                 journal,
                 review: importPort,
                 publicClient,
-                ...(creditResolution?.publication
-                  ? { prior: creditResolution.publication }
-                  : priorShowcase
-                    ? { prior: priorShowcase }
-                    : {}),
+                ...(creditPreparation.publication ? { prior: creditPreparation.publication } : {}),
                 readPublicSubject: (subjectId: string) => publicClient.readSubject(subjectId),
               }
             : {}),

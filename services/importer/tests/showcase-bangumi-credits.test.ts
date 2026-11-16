@@ -14,6 +14,7 @@ import {
 } from '../src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../src/public-bulk-client.ts';
 import {
+  createBangumiCreditPreparation,
   currentBangumiCreatorCreditBindings,
   prepareBangumiCreatorCreditBindings,
   writeBangumiStaffVocabularyCommands,
@@ -228,6 +229,7 @@ test('selected anime staff and cast use the default acknowledged role adapter an
   let resolution: BangumiCreditVocabularyResolution | undefined;
   try {
     const plan = await planCrossMediaSeed(tables);
+    const preparation = createBangumiCreditPreparation();
     const result = await seedCrossMedia(
       plan,
       join(directory, 'import.sqlite'),
@@ -245,7 +247,7 @@ test('selected anime staff and cast use the default acknowledged role adapter an
               reason: 'Current source identity association is unknown',
             }),
           );
-          resolution = await prepareBangumiCreatorCreditBindings({
+          resolution = await preparation.prepare({
             plan,
             result: baseResult,
             drafts,
@@ -389,6 +391,20 @@ test('selected anime staff and cast use the default acknowledged role adapter an
 
     setRoleEvidence({ 'schema:url': 'deprecated', 'schema:sameAs': 'deprecated', 'skos:inScheme': 'deprecated' });
     expect(roleCodes(await readBindings())).toEqual(['41']);
+    const acknowledged = journal.acknowledgedCommands();
+    const withheld = await preparation.prepare({
+      plan,
+      result,
+      drafts: plan.credits,
+      port,
+      journal,
+      review,
+      publicClient,
+      read: async (id) => publicClient.readSubject(id),
+    });
+    expect(roleCodes(withheld)).toEqual(['41']);
+    expect(withheld.publication).toBe(resolution!.publication);
+    expect(journal.acknowledgedCommands()).toEqual(acknowledged);
 
     setRoleEvidence({ 'schema:url': 'normal', 'schema:sameAs': 'preferred', 'skos:inScheme': 'normal' }, true);
     expect(roleCodes(await readBindings())).toEqual(['2', '41']);
@@ -401,7 +417,7 @@ test('selected anime staff and cast use the default acknowledged role adapter an
     const acknowledgementCount = journal.acknowledgedCommands().length;
     journal.close();
     journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
-    const reopened = await prepareBangumiCreatorCreditBindings({
+    const reopened = await createBangumiCreditPreparation(prior).prepare({
       plan,
       result,
       drafts: plan.credits,
@@ -409,7 +425,6 @@ test('selected anime staff and cast use the default acknowledged role adapter an
       journal,
       review,
       publicClient,
-      prior,
       subjectTypes: [2],
       read: async (id) => publicClient.readSubject(id),
     });

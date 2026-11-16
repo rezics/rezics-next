@@ -456,8 +456,7 @@ function creditEndpointsPublished(
   );
 }
 
-/** Derive only source roles needed by selected work credits and publish through the common local reviewer. */
-export async function prepareBangumiCreatorCreditBindings(input: {
+type BangumiCreditPreparation = {
   plan: CrossMediaPlan;
   result: CrossMediaSeedResult;
   drafts: readonly BangumiCreatorCreditDraft[];
@@ -468,7 +467,31 @@ export async function prepareBangumiCreatorCreditBindings(input: {
   prior?: BangumiCreditPriorPublication;
   subjectTypes?: readonly BangumiStaffWorkType[];
   read(subjectId: string): Promise<ReviewedSubjectRead | null>;
-}): Promise<BangumiCreditVocabularyResolution> {
+};
+
+/** Carry vocabulary evidence between record imports, each with its own current reads. */
+export function createBangumiCreditPreparation(prior?: BangumiCreditPriorPublication) {
+  let publication = prior;
+  return {
+    get publication() {
+      return publication;
+    },
+    async prepare(input: Omit<BangumiCreditPreparation, 'prior'>) {
+      const evidence = prior ?? publication;
+      const current = await prepareBangumiCreatorCreditBindings({
+        ...input,
+        ...(evidence ? { prior: evidence } : {}),
+      });
+      publication = current.publication ?? publication;
+      return current;
+    },
+  };
+}
+
+/** Derive only source roles needed by selected work credits and publish through the common local reviewer. */
+export async function prepareBangumiCreatorCreditBindings(
+  input: BangumiCreditPreparation,
+): Promise<BangumiCreditVocabularyResolution> {
   const roles = needsFor({ drafts: input.drafts, plan: input.plan, subjectTypes: input.subjectTypes ?? [2] });
   if (!roles.length)
     return { bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] }, requirements: [], roles: [] };
