@@ -197,13 +197,36 @@ test('private Knowledge attachments stay on their originals through published me
           const workflows = [0, 1, 2, 3].map((segment) => identityEpochWorkflowId(locator, segment));
           const observed = await withBoundedReadConnection(pool, Date.now() + 3_000, (client) =>
             client.query(
-              `SELECT j.state,j.prearm_phase,
-               (SELECT jsonb_agg(h ORDER BY h.resource_home) FROM (
+              `WITH job_homes AS MATERIALIZED (
                  SELECT resource_home,prepared_transaction_id IS NOT NULL AS prepared,
                    acquired_transaction_id IS NOT NULL AS acquired
                  FROM semantic.identity_epoch_admission_plan
-                 WHERE partition_no=j.partition_no AND job_id=j.job_id ORDER BY resource_home LIMIT 2
-               ) h) AS homes,
+                 WHERE partition_no=$1 AND job_id=$2 ORDER BY resource_home LIMIT 2
+               )
+               SELECT j.state,j.prearm_phase,
+               (SELECT jsonb_agg(h ORDER BY h.resource_home) FROM job_homes h) AS homes,
+               (SELECT jsonb_agg(r ORDER BY r.resource_home,r.revision,r.phase) FROM (
+                 SELECT h.resource_home,p.revision::text AS revision,p.state,
+                   p.applied_transaction_id IS NOT NULL AS application_recorded,
+                   CASE
+                     WHEN p.after_key IS NULL THEN 'initial'
+                     WHEN p.after_key IS JSON OBJECT THEN CASE
+                       WHEN p.after_key::jsonb->>'phase'='original' THEN 'original-source'
+                       WHEN p.after_key::jsonb->>'phase'='terminal' THEN 'terminal-source'
+                       WHEN p.after_key::jsonb->'terminal'='true'::jsonb THEN 'terminal'
+                       WHEN p.after_key::jsonb ? 'support' THEN 'source-directory'
+                       WHEN p.after_key::jsonb ? 'copy' THEN 'copy'
+                       ELSE 'unknown'
+                     END
+                     ELSE 'unknown'
+                   END AS phase
+                 FROM job_homes h
+                 CROSS JOIN LATERAL (
+                   SELECT revision,state,applied_transaction_id,after_key
+                   FROM semantic.identity_epoch_receiving_search_progress
+                   WHERE partition_no=h.resource_home AND job_id=j.job_id ORDER BY effect_key LIMIT 2
+                 ) p
+               ) r) AS reconciliation,
                (SELECT count(*)::int FROM semantic.identity_epoch_admission_source s
                 WHERE s.partition_no=j.partition_no AND s.job_id=j.job_id) AS sources,
                (SELECT count(*)::int FROM semantic.identity_epoch_admission_validation v
