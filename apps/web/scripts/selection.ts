@@ -8,6 +8,7 @@ const globCharacters = /[*?{}[\]]/u;
 const hostTestFile = /\.host\.test\.[cm]?[jt]sx?$/u;
 
 const bunValueOptions = new Set([
+  '--config',
   '--coverage-reporter',
   '--coverage-dir',
   '--env-file',
@@ -20,6 +21,7 @@ const bunValueOptions = new Set([
   '--seed',
   '--test-name-pattern',
   '--timeout',
+  '-c',
   '-t',
 ]);
 
@@ -339,18 +341,25 @@ export function isWebHostTestFile(file: string): boolean {
   return hostTestFile.test(file);
 }
 
-export function hasWebHostTestSelector(command: string[]): boolean {
-  return testSelectorArgumentIndices(command).some((index) => isWebHostTestFile(command[index]!));
-}
-
-/** Explicit host selectors override bunfig's ordinary host-file exclusion. */
+/** Pure host runs use the shim preload. Mixed runs retain the component preload. */
 export function admitWebHostTestCommand(command: string[]): string[] {
-  if (!isBunTest(command) || !hasWebHostTestSelector(command)) return command;
+  if (!isBunTest(command)) return command;
+  const files = selectedWebTestFiles(command);
+  if (!files.some(isWebHostTestFile)) return command;
+
+  const separator = command.indexOf('--');
+  const options = command.slice(2, separator < 0 ? undefined : separator);
+  const defaults: string[] = [];
   if (
-    command.some((argument) => argument === '--path-ignore-patterns' || argument.startsWith('--path-ignore-patterns='))
+    !options.some((argument) => argument === '--path-ignore-patterns' || argument.startsWith('--path-ignore-patterns='))
   )
-    return command;
-  return ['bun', 'test', '--path-ignore-patterns=node_modules/**', ...command.slice(2)];
+    defaults.push('--path-ignore-patterns=node_modules/**');
+  if (
+    files.every(isWebHostTestFile) &&
+    !options.some((argument) => argument === '-c' || argument === '--config' || argument.startsWith('--config='))
+  )
+    defaults.push('--config=./bunfig.host.toml');
+  return ['bun', 'test', ...defaults, ...command.slice(2)];
 }
 
 /** Insert discovered tests before the `--` test-program argument boundary. */

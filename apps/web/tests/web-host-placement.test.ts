@@ -256,14 +256,20 @@ test('selected host files retain repository or Web argv through placement and Bu
     writeFileSync(
       join(tests, name),
       `import { appendFileSync } from 'node:fs';
-import { test } from 'bun:test';
-test(${JSON.stringify(name)}, () => appendFileSync(${JSON.stringify(marker)}, ${JSON.stringify(`${name}\n`)}));
+import { expect, test } from 'bun:test';
+import { env } from 'cloudflare:workers';
+import { semanticRenderPort } from '../../../../src/features/pages/subject-page-application';
+test(${JSON.stringify(name)}, () => {
+  expect(env).toEqual({});
+  expect(semanticRenderPort).toThrow('Subject page Semantic render port is not installed');
+  appendFileSync(${JSON.stringify(marker)}, ${JSON.stringify(`${name}\n`)});
+});
 `,
     );
   }
 
   const observed: Array<{ cwd: string; argv: string[]; files: string[]; source: string; invocationCwd: string }> = [];
-  const executeSelection = async (selector: string, invocationDirectory: string) => {
+  const executeSelection = async (selector: string, invocationDirectory: string, runChild = false) => {
     await main(['--host', selector], {
       invocationDirectory,
       route: async (run, env) => {
@@ -281,13 +287,20 @@ test(${JSON.stringify(name)}, () => appendFileSync(${JSON.stringify(marker)}, ${
         return null;
       },
       hostTests: {
-        runNative: async (_files, env, execution) => {
-          expect(execution?.cwd).toBe(app);
-          expect(execution?.command.slice(0, 3)).toEqual(['bun', 'test', '--path-ignore-patterns=node_modules/**']);
+        runNative: async (files, env, execution) => {
+          expect(execution.cwd).toBe(app);
+          expect(execution.command).toEqual([
+            'bun',
+            'test',
+            '--path-ignore-patterns=node_modules/**',
+            '--config=./bunfig.host.toml',
+            ...files.map((file) => `./${file}`),
+          ]);
+          if (!runChild) return;
           const childEnvironment = { ...env };
           delete childEnvironment.REZICS_WEB_TEST_SELECTION_CONTEXT;
-          const result = Bun.spawnSync([process.execPath, ...execution!.command.slice(1)], {
-            cwd: execution!.cwd,
+          const result = Bun.spawnSync([process.execPath, ...execution.command.slice(1)], {
+            cwd: execution.cwd,
             env: childEnvironment,
             stdout: 'pipe',
             stderr: 'pipe',
@@ -307,7 +320,7 @@ test(${JSON.stringify(name)}, () => appendFileSync(${JSON.stringify(marker)}, ${
     await executeSelection(relativeToRoot, root);
     await executeSelection(relativeToWeb, app);
     await executeSelection(absolute, app);
-    await executeSelection(quotedGlob, root);
+    await executeSelection(quotedGlob, root, true);
     await executeSelection(absoluteGlob, app);
 
     expect(observed.map(({ cwd }) => cwd)).toEqual([app, app, app, app, app]);
@@ -329,12 +342,7 @@ test(${JSON.stringify(name)}, () => appendFileSync(${JSON.stringify(marker)}, ${
     ]);
     expect(readFileSync(marker, 'utf8').trim().split('\n').sort()).toEqual([
       'glob-one.host.test.ts',
-      'glob-one.host.test.ts',
       'glob-two.host.test.ts',
-      'glob-two.host.test.ts',
-      'selected.host.test.ts',
-      'selected.host.test.ts',
-      'selected.host.test.ts',
     ]);
   } finally {
     rmSync(selectionDirectory, { recursive: true, force: true });
