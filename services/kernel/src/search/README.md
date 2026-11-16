@@ -2191,8 +2191,9 @@ page length, proves engine traversal exhaustion. Keyed search-visible identities
 must match native observations. Ordinary expectations use the actual writer's supplied native Source/listing,
 including foreign fences, ratings and counts, and the native retained copy's settled external version.
 Both ordinary and mixed comparisons check the complete projected body. Source census and query totals cannot
-certify reconciliation. A native repair invalidates the affected home's witness before replay. Interrupted
-pages repeat their actual work before committing the frontier. An owner move or pending identity invalidates
+certify reconciliation. A native repair invalidates the affected home's witness before replay. An ordinary
+Subject engine page interrupted by a changed home re-enumerates that home's native keys from the beginning
+and resumes the retained engine page. Interrupted pages repeat their actual work before committing the frontier. An owner move or pending identity invalidates
 the affected home, and physical recreation invalidates the entire old job.
 
 Activation first obtains the ordinary producer's durable publication fence and advances its native all-enrolled

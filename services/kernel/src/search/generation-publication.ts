@@ -758,7 +758,10 @@ export function createSearchGenerationPublication(
       FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2 AND pass=$3`,
       [before.partition, job.job, job.pass],
     );
-    if (old && !same(old, before)) {
+    const changed = old && !same(old, before);
+    // With no cursor, the ordinary Subject scan is already about to replay this home from its first key.
+    const startsSubjectHome = job.family === 'subjects' && job.phase === 'subject' && !job.after_id && !job.fenced_pass;
+    if (changed && !startsSubjectHome) {
       console.warn('Search publication trace', { gate: 'remember', home: before.partition, old, before });
       await client.query('DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2', [
         before.partition,
@@ -770,7 +773,7 @@ export function createSearchGenerationPublication(
       job.after_id = null;
       throw new Pending('source_pending');
     }
-    if (!old)
+    if (!old || changed)
       await client.query(
         `INSERT INTO search.generation_publication_home
       (partition_no,job,epoch,position,account_revision,claim_revision,pass) VALUES($1,$2,$3,$4,$5,$6,$7)
@@ -895,6 +898,8 @@ export function createSearchGenerationPublication(
     if (job.phase === 'reconciled' || job.phase === 'fencing' || job.phase === 'intent' || job.phase === 'active')
       return;
     if (job.phase === 'subject' || job.phase === 'account') {
+      // A retained PIT marks an engine page interrupted by a changed Subject home.
+      const resumesSubjectEngine = job.family === 'subjects' && job.pit !== null;
       let emptySeeks = 0;
       for (;;) {
         if (job.home === 4096) {
@@ -946,6 +951,7 @@ export function createSearchGenerationPublication(
           if (
             !registry &&
             job.family === 'subjects' &&
+            !resumesSubjectEngine &&
             complete &&
             ids.length === 0 &&
             after === null
@@ -985,7 +991,10 @@ export function createSearchGenerationPublication(
           job.after_route = null;
           job.after_id = null;
           if (job.phase === 'subject' && job.family === 'discovery') job.phase = 'account';
-          else {
+          else if (resumesSubjectEngine) {
+            job.phase = 'engine';
+            job.home = 0;
+          } else {
             job.phase = 'subject';
             job.home++;
           }
