@@ -195,6 +195,10 @@ acceptance, gate and native plan and commits the applied effect and fixed step t
 application and hold release each yield their committed transaction before the next owner turn. Directory retirement
 still rechecks the committed control plan after release.
 
+The job-home command selects the next original and commits its initial writer request in one snapshot, including
+capture. The writer discovers or replays the native plan after that request commits. If the directory has no further
+original, the same control command verifies exhaustion and seals completion.
+
 Before acceptance, the writer records the checked binding digest against the exact retained request and native plan.
 The next turn uses that proof to fund both control captures and returns the commit receipt directly. It observes the
 pending job without a row lock and locks the job when writing the control plan. The receiving hold still verifies its
