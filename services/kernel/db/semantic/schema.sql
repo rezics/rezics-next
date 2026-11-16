@@ -348,7 +348,7 @@ BEGIN
   IF TG_TABLE_NAME = 'identity_epoch_original' AND TG_OP = 'DELETE' THEN
     -- The generation switch already changed the live title input.
     IF EXISTS (
-      SELECT 1 FROM semantic.identity_epoch_prearm_directory d
+      SELECT 1 FROM semantic.identity_epoch_prearm_bridge d
       WHERE (d.partition_no,d.generation)=(OLD.partition_no,OLD.generation)
         AND d.reclaim_transaction_id IS NOT NULL
     ) THEN RETURN OLD; END IF;
@@ -1493,6 +1493,9 @@ BEGIN
   AND to_jsonb(NEW)-ARRAY['reclaim_after','reclaim_transaction_id','reclaimed']
       = to_jsonb(OLD)-ARRAY['reclaim_after','reclaim_transaction_id','reclaimed']
  THEN RETURN NEW; END IF;
+ IF TG_TABLE_NAME='identity_epoch_prearm_bridge' AND TG_OP='UPDATE'
+  AND to_jsonb(NEW)-'reclaim_transaction_id'=to_jsonb(OLD)-'reclaim_transaction_id'
+ THEN RETURN NEW; END IF;
  native_tx:=coalesce((to_jsonb(NEW)->>'transaction_id')::uuid,
    nullif(current_setting('semantic.erasure_native_transaction',true),'')::uuid);
  PERFORM semantic.capture_erasure_roles(NEW.partition_no,TG_TABLE_NAME,NEW.erasure_key,native_tx);
@@ -2432,16 +2435,12 @@ BEGIN
  IF FOUND AND b.job_id IS NOT NULL
  THEN RAISE EXCEPTION 'identity_epoch_unavailable'; END IF;
  -- The bridge is also the fence for retired generation keysets.
- IF FOUND AND TG_OP<>'DELETE' AND EXISTS(
-  SELECT 1 FROM semantic.identity_epoch_prearm_directory d
-  WHERE d.partition_no=h AND d.generation=g AND d.reclaim_transaction_id IS NOT NULL)
- THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
+ IF FOUND AND TG_OP<>'DELETE' AND b.reclaim_transaction_id IS NOT NULL THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
  IF TG_OP='UPDATE' AND (NEW.partition_no,NEW.generation) IS DISTINCT FROM (OLD.partition_no,OLD.generation) THEN
   SELECT * INTO b FROM semantic.identity_epoch_prearm_bridge WHERE partition_no=OLD.partition_no AND generation=OLD.generation FOR UPDATE;
   IF FOUND AND b.job_id IS NOT NULL
   THEN RAISE EXCEPTION 'identity_epoch_unavailable'; END IF;
-  IF FOUND AND EXISTS(SELECT 1 FROM semantic.identity_epoch_prearm_directory d
-    WHERE d.partition_no=OLD.partition_no AND d.generation=OLD.generation AND d.reclaim_transaction_id IS NOT NULL)
+  IF FOUND AND b.reclaim_transaction_id IS NOT NULL
   THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
  END IF;
  IF TG_OP='DELETE' THEN RETURN OLD; END IF;
@@ -6866,6 +6865,8 @@ CREATE TABLE semantic.identity_epoch_prearm_bridge (
     job_epoch bigint,
     scope_digest text,
     erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    reclaim_transaction_id uuid,
+    CONSTRAINT identity_epoch_prearm_bridge_reclaim_unclaimed CHECK (((reclaim_transaction_id IS NULL) OR (job_id IS NULL))),
     CONSTRAINT identity_epoch_prearm_bridge_check CHECK (((job_id IS NULL) = (job_epoch IS NULL)))
 );
 
@@ -12618,13 +12619,6 @@ CREATE INDEX identity_epoch_prearm_bridge_held ON semantic.identity_epoch_prearm
 
 
 --
--- Name: identity_epoch_prearm_directory_reclaim_generation; Type: INDEX; Schema: semantic; Owner: -
---
-
-CREATE UNIQUE INDEX identity_epoch_prearm_directory_reclaim_generation ON semantic.identity_epoch_prearm_directory USING btree (partition_no, generation) WHERE (reclaim_transaction_id IS NOT NULL);
-
-
---
 -- Name: identity_epoch_prearm_directory_unsealed; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -16501,6 +16495,14 @@ ALTER TABLE ONLY semantic.identity_epoch_prearm_custody
 
 ALTER TABLE ONLY semantic.identity_epoch_prearm_decision
     ADD CONSTRAINT identity_epoch_prearm_decision_partition_no_transaction_id_fkey FOREIGN KEY (partition_no, transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id);
+
+
+--
+-- Name: identity_epoch_prearm_bridge identity_epoch_prearm_bridge_reclaim_commit_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_bridge
+    ADD CONSTRAINT identity_epoch_prearm_bridge_reclaim_commit_fkey FOREIGN KEY (partition_no, reclaim_transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id);
 
 
 --
