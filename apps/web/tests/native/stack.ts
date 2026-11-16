@@ -32,6 +32,9 @@ import type { WorkClient } from '../../../../services/kernel/src/work/client.ts'
 import type { OpenSearch } from '../../../../services/kernel/src/search/opensearch.ts';
 import type { ReyloAnalysisPreparation } from '../../../../services/kernel/scripts/reylo-cache.ts';
 
+// Match the private browser bridge's request budget for forwarded Auth pages and assets.
+const NATIVE_AUTH_PAGE_IDLE_SECONDS = 120;
+
 export type NativeCredentials = { authorization: string; cookie?: string };
 export type NativeKernelRequest = {
   method: string;
@@ -903,6 +906,17 @@ async function startStack(): Promise<
       '/account/delete',
       '/organizations/new',
     ]);
+    function routesToAuthPage(method: string, path: string): boolean {
+      // The development app serves its source modules at Vite's standard paths.
+      // Production bundles instead use only /auth-assets/.
+      return (
+        (['GET', 'HEAD'].includes(method) && pagePaths.has(path)) ||
+        ['/auth-assets/', '/@vite/', '/@id/', '/@fs/', '/src/', '/node_modules/', '/_serverFn/'].some((prefix) =>
+          path.startsWith(prefix),
+        ) ||
+        path === '/@react-refresh'
+      );
+    }
     const installAuthPageBridge = () => {
       auth.service.handler = async (request) => {
         const serviceRequest = testIssuer
@@ -914,13 +928,7 @@ async function startStack(): Promise<
             `window.turnstile={ready:function(callback){callback()},render:function(node,options){queueMicrotask(function(){options.callback('native-test-token')});return 'native-widget'},reset:function(){},remove:function(){}};`,
             { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } },
           );
-        // The development app serves its source modules at Vite's standard paths.
-        // Production bundles instead use only /auth-assets/.
-        const asset =
-          ['/auth-assets/', '/@vite/', '/@id/', '/@fs/', '/src/', '/node_modules/', '/_serverFn/'].some((prefix) =>
-            url.pathname.startsWith(prefix),
-          ) || url.pathname === '/@react-refresh';
-        if (pageOrigin && ((['GET', 'HEAD'].includes(serviceRequest.method) && pagePaths.has(url.pathname)) || asset)) {
+        if (pageOrigin && routesToAuthPage(serviceRequest.method, url.pathname)) {
           const target = new URL(url.pathname + url.search, pageOrigin);
           const forwarded = new Request(target, serviceRequest);
           forwarded.headers.set('x-native-auth-url', serviceRequest.url);
@@ -1120,7 +1128,11 @@ async function startStack(): Promise<
     authServer = Bun.serve({
       hostname: '127.0.0.1',
       port: 0,
-      fetch: (request) => auth.service.handler(request),
+      fetch(request, server) {
+        if (pageOrigin && routesToAuthPage(request.method, new URL(request.url).pathname))
+          server.timeout(request, NATIVE_AUTH_PAGE_IDLE_SECONDS);
+        return auth.service.handler(request);
+      },
     });
     const { createCurrentConsentReader } = await import('../../../../services/auth/src/current-consent.ts');
     const { startConsentServer } = await import('../../../../services/kernel/test/community/membership-fixture.ts');
@@ -1928,6 +1940,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
           ? Bun.serve({
               hostname: '127.0.0.1',
               port: 0,
+              idleTimeout: NATIVE_AUTH_PAGE_IDLE_SECONDS,
               fetch(request) {
                 const url = request.headers.get('x-native-auth-url');
                 if (!url) return new Response('Missing issuer URL', { status: 400 });
