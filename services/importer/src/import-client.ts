@@ -643,11 +643,21 @@ export function createImportTransport(options: ImportTransportOptions) {
           200,
           controller.signal,
         );
-        ensure(checkResult(reply.body).length === 0);
+        const invalidReceipt = () => {
+          const correlationId = safeDiagnosticField(reply.headers.get('x-request-id'), /^[A-Za-z0-9._:-]+$/u, 128);
+          return new ImportTransportError(reply.status, undefined, 'invalid_batch_receipt', false, undefined, undefined, {
+            method: 'POST',
+            origin: origin.origin,
+            path: '/v1/subjects:batchWrite',
+            phase: 'integrity',
+            ...(correlationId === undefined ? {} : { correlationId }),
+          });
+        };
+        if (checkResult(reply.body).length) throw invalidReceipt();
         const result = reply.body as BatchWriteResult;
-        ensure(result.results.length === request.commands.length);
+        if (result.results.length !== request.commands.length) throw invalidReceipt();
         result.results.forEach((item, index) => {
-          ensure(item.key === request.commands[index]!.key);
+          if (item.key !== request.commands[index]!.key) throw invalidReceipt();
           results[indices[index]!] = item;
         });
         indices = indices.filter((index) => {

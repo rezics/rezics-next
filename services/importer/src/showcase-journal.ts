@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import { chmodSync } from 'node:fs';
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import { safeSourceUrl } from '@rezics/conversion/support';
+import { recordSeedBatchFailure } from './seed-remaining-request.ts';
 import {
   showcaseDigest,
   showcaseLimits,
@@ -747,14 +748,24 @@ export function captureShowcaseCommands<Port extends CrossMediaPort>(port: Port,
     ...port,
     async batch(request: BatchWriteRequest): Promise<BatchWriteResult> {
       for (const command of request.commands) {
-        if (command.op === 'create' || command.op === 'propose') journal.prepareCommand(command);
+        if (command.op !== 'create' && command.op !== 'propose') continue;
+        try {
+          journal.prepareCommand(command);
+        } catch (error) {
+          throw recordSeedBatchFailure(error, 'showcase-prepare', 'local-failure', command);
+        }
       }
       const result = await port.batch(request);
       const byKey = new Map(result.results.map((row) => [row.key, row]));
       for (const command of request.commands) {
         if (command.op !== 'create' && command.op !== 'propose') continue;
         const acknowledgement = byKey.get(command.key);
-        if (acknowledgement && successResult(acknowledgement)) journal.acknowledgeCommand(command, acknowledgement);
+        if (!acknowledgement || !successResult(acknowledgement)) continue;
+        try {
+          journal.acknowledgeCommand(command, acknowledgement);
+        } catch (error) {
+          throw recordSeedBatchFailure(error, 'showcase-acknowledge', 'local-failure', command, acknowledgement);
+        }
       }
       return result;
     },
