@@ -1,5 +1,5 @@
 import { expect, expectTypeOf, test } from 'bun:test';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import {
   createInitiatorRestorer,
   DurableInitiatorUnavailableError,
@@ -9,10 +9,21 @@ import {
   type InitiatorRestoreInput,
   type InitiatorRestorerConfig,
   type InitiatorRestorer,
+  type InitiatorRestoreFailure,
 } from '../../src/access/durable-initiator.ts';
 import type { CurrentConsentReader } from '../../src/access/auth-consent.ts';
 import type { AuthorizationAnchor } from '../../src/access/resource-authorization.ts';
-import type { AuthoritativeTime, CommandAuthorization } from '../../src/command/command.ts';
+import { mintReadTime, type AuthoritativeTime, type CommandAuthorization } from '../../src/command/command.ts';
+import { bindReceiptKeys } from '../../src/command/receipt-key.ts';
+import { installDurableIdentityBridge } from '../../src/access/durable-identity.ts';
+import { durableInitiatorCommitment } from '../../src/access/durable-initiator-capture.ts';
+import { newId } from '../../src/route/route.ts';
+import { composeCommunityDomainPorts } from '../../src/composition/community-domain-ports.ts';
+import {
+  MEMBERSHIP_OPERATION_COMMANDS,
+  membershipSourceDigest,
+  readMembershipInitiator,
+} from '../../src/community/membership.ts';
 import type { Access, AccessClient, AccessContext, AccountActor } from '../../src/request/access.ts';
 
 test('durable initiator contract accepts an anchored nonsecret committed tuple reader and live command time', () => {
@@ -41,6 +52,7 @@ test('durable initiator contract accepts an anchored nonsecret committed tuple r
       client: AccessClient,
       operation: DurableOperationAnchor,
       time: AuthoritativeTime,
+      enterOperationReceipt?: () => void,
     ) => Promise<DurableInitiatorRecord | null>
   >();
   expectTypeOf<InitiatorRestoreInput>().toEqualTypeOf<
@@ -50,7 +62,13 @@ test('durable initiator contract accepts an anchored nonsecret committed tuple r
     Readonly<{ pool: Pool; access: Access; readOperation: DurableInitiatorReader; readConsent: CurrentConsentReader }>
   >();
   expectTypeOf<InitiatorRestorer>().toEqualTypeOf<
-    Readonly<{ restoreInitiator(operation: InitiatorRestoreInput, time: AuthoritativeTime): Promise<AccountActor> }>
+    Readonly<{
+      restoreInitiator(
+        operation: InitiatorRestoreInput,
+        time: AuthoritativeTime,
+        onFailure?: (failure: InitiatorRestoreFailure) => void,
+      ): Promise<AccountActor>;
+    }>
   >();
   expectTypeOf<typeof createInitiatorRestorer>().toEqualTypeOf<
     (config: InitiatorRestorerConfig) => InitiatorRestorer
@@ -134,3 +152,168 @@ test('missing trusted current-consent configuration denies with zero I/O or call
   expect(error).toBeInstanceOf(Error);
   expect(error.name).toBe('DurableInitiatorUnavailableError');
 });
+
+test.each(['read_operation_receipt', 'read_current_consent'] as const)(
+  'attributes a Realm initiator deadline to %s and denies before resource access',
+  async (stall) => {
+    composeCommunityDomainPorts();
+    const route = 4;
+    const realmId = newId(route);
+    const accountId = newId(route);
+    const memberId = newId(route);
+    const operationId = newId(route);
+    const spaceId = newId(route);
+    const target = { route, id: realmId };
+    const operation = { route, id: operationId, kind: MEMBERSHIP_OPERATION_COMMANDS.join, sourceId: operationId };
+    const facts = { realmId, spaceId, memberAccountId: memberId, reservationId: null, banId: null };
+    const record: DurableInitiatorRecord = {
+      operation,
+      initiatorAccountId: accountId,
+      actor: {
+        kind: 'account',
+        accountId,
+        clientId: 'test-client',
+        scopes: ['realm:manage'],
+        requestedBy: null,
+        authnEpoch: 1,
+      },
+      recordedTransactionId: newId(route),
+      sourceDigest: membershipSourceDigest(operation, target, facts),
+      originalAccount: { minimumAuthnEpoch: '1', operatorAccountId: null },
+      originalDelegation: null,
+      creation: { commandKind: operation.kind, idempotencyKey: 'test-key', requestDigest: 'a'.repeat(64), target },
+    };
+    const commitment = durableInitiatorCommitment(record);
+    const client = {
+      release() {},
+      async query(query: string | { text: string }) {
+        const text = typeof query === 'string' ? query : query.text;
+        // The fake service grants no catalog access. Reylo can proceed after a settled refusal.
+        if (text.includes('AS fresh_table'))
+          throw Object.assign(new Error('test catalog unavailable'), { code: '42501', severity: 'ERROR' });
+        if (text.includes('transaction_timestamp()')) return { rows: [{ at: new Date().toISOString() }] };
+        if (text.includes('community.realm_membership_operation'))
+          return {
+            rows: [
+              {
+                route,
+                operation_id: operationId,
+                kind: 'join',
+                realm_id: realmId,
+                space_id: spaceId,
+                member_account_id: memberId,
+                reservation_id: null,
+                ban_id: null,
+                initiator_account_id: accountId,
+                actor_client_id: record.actor.clientId,
+                actor_scopes: record.actor.scopes,
+                actor_requested_by: null,
+                actor_authn_epoch: '1',
+                recorded_transaction_id: record.recordedTransactionId,
+                source_digest: record.sourceDigest,
+                original_minimum_authn_epoch: '1',
+                original_operator_account_id: null,
+                original_delegation_transaction_id: null,
+                original_delegation_issued_valid: null,
+                creation_command_kind: operation.kind,
+                creation_idempotency_key: record.creation.idempotencyKey,
+                creation_request_digest: record.creation.requestDigest,
+                creation_target_route: route,
+                creation_target_id: realmId,
+              },
+            ],
+          };
+        if (text.includes('receipt_commitment')) {
+          if (stall === 'read_operation_receipt')
+            throw Object.assign(new Error('test query cancelled'), { code: '57014', severity: 'ERROR' });
+          return {
+            rows: [
+              {
+                receipt_transaction_id: record.recordedTransactionId,
+                receipt_request_digest: record.creation.requestDigest,
+                receipt_commitment: commitment,
+              },
+            ],
+          };
+        }
+        if (text.includes('core.receipt'))
+          return {
+            rows: [
+              {
+                requestDigest: Buffer.from(record.creation.requestDigest, 'hex'),
+                epoch: '1',
+                position: '1',
+                transactionId: record.recordedTransactionId,
+                response: { durableInitiator: commitment },
+                payloadState: 'retained',
+              },
+            ],
+          };
+        throw new Error('Unexpected SQL after the deadline');
+      },
+    } as unknown as PoolClient;
+    const pool = { connect: async () => client } as unknown as Pool;
+    const keys = { current: 1, keys: new Map([[1, Buffer.alloc(32, 1)]]) };
+    bindReceiptKeys(pool, keys);
+    bindReceiptKeys(client, keys);
+    const access = {} as Access;
+    const identity = {
+      restore: async () => {
+        throw new Error('Unexpected identity mint');
+      },
+      discard() {},
+      scope: {},
+    };
+    installDurableIdentityBridge(access, identity);
+    let finishConsent: ((value: null) => void) | undefined;
+    let resourceReads = 0;
+    let failure: InitiatorRestoreFailure | undefined;
+    const restorer = createInitiatorRestorer({
+      pool,
+      access,
+      readOperation: readMembershipInitiator,
+      async readConsent(input) {
+        expect(input).toMatchObject({ actorAccountId: accountId, clientId: record.actor.clientId });
+        return new Promise<null>((resolve) => {
+          finishConsent = resolve;
+        });
+      },
+    });
+    const time = await mintReadTime(client);
+    const deadline = Date.now() + 30_000;
+    try {
+      await expect(
+        restorer.restoreInitiator(
+          {
+            operation,
+            action: 'realm:manage',
+            anchor: {
+              resource: target,
+              async validate() {
+                resourceReads++;
+                return true;
+              },
+            },
+            context: { pool, deadline },
+          },
+          time,
+          (value) => {
+            failure = value;
+          },
+        ),
+      ).rejects.toMatchObject({ name: 'AccessUnavailableError', reason: 'deadline' });
+    } finally {
+      finishConsent?.(null);
+    }
+    expect(failure).toMatchObject({
+      initiatorStage: stall,
+      requestRemainingMs: expect.any(Number),
+      evidenceRemainingMs: expect.any(Number),
+    });
+    expect(failure!.requestRemainingMs).toBeGreaterThan(20_000);
+    expect(failure!.initiatorStageElapsedMs).toBeLessThanOrEqual(failure!.initiatorElapsedMs);
+    if (stall === 'read_current_consent') expect(failure!.evidenceRemainingMs).toBe(0);
+    expect(finishConsent !== undefined).toBe(stall === 'read_current_consent');
+    expect(resourceReads).toBe(0);
+  },
+);
