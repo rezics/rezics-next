@@ -247,7 +247,7 @@ export function followMembershipRemovalPlan(input: Input<typeof removeMembership
     input,
     { keys: 1, rows: 9, points: 4, seeks: 1, output: 1, width: size({ changed: true }) },
     followSourceHookWork({ ...input, target_type: 'space', state: 'unfollowed', time }),
-    (rows) => rows[0]?.changed === true,
+    (row) => row?.changed === true,
   );
 }
 export function followMembershipReservationPlan(input: Input<typeof reservation>) {

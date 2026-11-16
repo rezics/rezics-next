@@ -514,7 +514,7 @@ nativeTest(
         await journal.run(
           'compare the original and current saved chapter revisions in Studio',
           async () => {
-            await page.getByRole('button', { name: 'Versions', exact: true }).click();
+            await page.getByRole('button', { name: 'Version history', exact: true }).click();
             const versions = page.getByRole('region', { name: 'Document versions', exact: true });
             await versions.getByRole('button', { name: 'Load saved versions', exact: true }).click();
             const original = versions.locator('li').filter({ hasText: seed!.chapterOne.revisionId });

@@ -2407,6 +2407,7 @@ export type CrossMediaSeedExtras = {
   episodeCatalogueSubjects?: Readonly<Record<string, string>>;
   entitiesFirst?: boolean;
   recordConcurrency?: ImporterOptions['recordConcurrency'];
+  recordImportProgress?: SeedFinalization<'record-import'>;
   sourceVocabulary?: SourceVocabularyBindings;
   vndbCreditReferences?: VndbCreditVocabularyReferences;
   vndbCharacterProfileBindings?: SourceVocabularyBindings;
@@ -2438,6 +2439,8 @@ export async function seedCrossMedia(
   extras?: CrossMediaSeedExtras,
   characterBindings?: SourceVocabularyBindings,
 ) {
+  const progress = extras?.recordImportProgress;
+  progress?.enter('record-admission');
   const providers = extras?.providers ?? (['bangumi', 'vndb'] as const);
   const vndbCredits = providers.includes('vndb')
     ? await prepareShowcaseVndbCredits(plan, port, extras?.vndbCreditReferences, extras?.readPublicSubject)
@@ -2768,8 +2771,10 @@ export async function seedCrossMedia(
       }
       return pending;
     };
+    let pendingBangumiCoverRun: string | undefined;
     for (const provider of providers) {
       if (!plan.records[provider].length && !plan.entities[provider].length) continue;
+      progress?.enter(provider === 'bangumi' ? 'bangumi-records' : 'vndb-records');
       const created = bindSourceRegistration(selectedFamilyAdmission(provider), {
         source: crossMediaAliases[provider],
         converterRevision: provider === 'bangumi' ? crossMediaBangumiRevision : entityRevision,
@@ -2814,8 +2819,11 @@ export async function seedCrossMedia(
         }
       }
       const run = await importer.runRecords(registration, records());
-      if (run.status !== 'committed' && !onlyPendingBangumiCovers(provider, run))
-        throw seedImportRunFailure(provider, run);
+      if (run.status !== 'committed') {
+        if (!onlyPendingBangumiCovers(provider, run)) throw seedImportRunFailure(provider, run);
+        pendingBangumiCoverRun = run.runId;
+        progress?.enter('bangumi-cover-handoff');
+      }
       runs[provider] = run;
     }
     const bangumiFidelityRecords = [...plan.records.bangumi, ...plan.entities.bangumi];
@@ -2826,21 +2834,39 @@ export async function seedCrossMedia(
     const hasBangumiFidelityInput =
       bangumiCharacterAppearances.length > 0 ||
       bangumiFidelityRecords.some((record) => record.key.startsWith('character:'));
-    const fidelity =
-      providers.includes('bangumi') && hasBangumiFidelityInput
-        ? await runBangumiCharacterFidelity({
-            importer,
-            port,
-            sourceAlias: crossMediaAliases.bangumi,
-            records: bangumiFidelityRecords,
-            appearances: bangumiCharacterAppearances,
-            ...(characterBindings === undefined ? {} : { bindings: characterBindings }),
-          })
-        : undefined;
-    if (fidelity) {
-      ensure(fidelity.run.status === 'committed', `Bangumi character fidelity import failed: ${fidelity.run.status}`);
+    let fidelity: Awaited<ReturnType<typeof runBangumiCharacterFidelity>> | undefined;
+    // Without Character bindings, the baseline can hand off its current reads while a cover-only
+    // generation stays sealed. The vocabulary stage reseeds with current bindings.
+    if (
+      providers.includes('bangumi') &&
+      hasBangumiFidelityInput &&
+      (pendingBangumiCoverRun === undefined || characterBindings !== undefined)
+    ) {
+      progress?.enter('bangumi-character-fidelity');
+      const runFidelity = () =>
+        runBangumiCharacterFidelity({
+          importer,
+          port,
+          sourceAlias: crossMediaAliases.bangumi,
+          records: bangumiFidelityRecords,
+          appearances: bangumiCharacterAppearances,
+          ...(characterBindings === undefined ? {} : { bindings: characterBindings }),
+        });
+      fidelity = await runFidelity();
+      // Completing the old sealed run consumes that call. Start the fidelity generation with
+      // fresh current reads once the baseline has finished.
+      if (
+        pendingBangumiCoverRun !== undefined &&
+        fidelity.run.status === 'committed' &&
+        fidelity.run.runId === pendingBangumiCoverRun
+      ) {
+        runs.bangumi = fidelity.run;
+        fidelity = await runFidelity();
+      }
+      if (fidelity.run.status !== 'committed') throw seedImportRunFailure('bangumi', fidelity.run);
       runs.bangumiCharacterFidelity = fidelity.run;
     }
+    progress?.enter('graph-delivery');
     const graph = new CrossMediaGraph(importer.session.store.database);
     const graphEdges = vndbCredits?.deliveryEdges(plan.edges) ?? plan.edges;
     const releaseSupersessionDrafts = graphEdges.filter(
@@ -2932,6 +2958,7 @@ export async function seedCrossMedia(
           : []),
       ],
     });
+    progress?.enter('current-reads');
     const keys = [...plan.records.bangumi, ...plan.entities.bangumi, ...plan.records.vndb, ...plan.entities.vndb];
     const sourceIdentityGaps: CrossMediaGap[] = [];
     const personReviewSources: PersonReviewSource[] = [];
@@ -3139,6 +3166,7 @@ export async function seedCrossMedia(
       releaseSupersessions: graph.evidence(releaseSupersessionDrafts),
       workRelations: graph.evidence(graphEdges.filter((edge) => edge.table === 'subject-relations')),
     };
+    progress?.enter('creator-credits');
     const vocabulary = extras?.prepareBangumiCreatorCreditBindings
       ? await extras.prepareBangumiCreatorCreditBindings({
           plan,
@@ -3197,6 +3225,7 @@ export async function seedCrossMedia(
       if (current) currentWorkReads.set(key, current);
     }
     const workLinks = resolveShowcaseWorkLinkHandoffs(plan.workLinks, currentWorkReads);
+    progress?.enter('genre-readback');
     const bangumiGenrePublication =
       genreAdapter && providers.includes('bangumi')
         ? await prepareShowcaseBangumiGenres({
@@ -3219,6 +3248,7 @@ export async function seedCrossMedia(
             lookupDiagnostics: gameGenreAdapter.diagnostics(),
           })
         : undefined;
+    progress?.enter('cover-readback');
     type MediaResolveInput = Parameters<NonNullable<ImporterOptions['mediaResolver']>['resolve']>[0];
     /** Resume a selected cover whose sealed media journal is not final; see resumeSelectedCover. */
     const resumeSelectedMedia = async (
@@ -3681,6 +3711,7 @@ export async function runCrossMediaSeedCli(
   let selectedReleaseContext: ReturnType<typeof composeShowcaseVndbReleaseContext> | undefined;
   let creditResolution: BangumiCreditVocabularyResolution | undefined;
   const finalization = new SeedFinalization('seed');
+  let recordImportProgress: SeedFinalization<'record-import'> | undefined;
   try {
     finalization.enter('vocabulary-preparation');
     const { planShowcaseBooks, prepareShowcaseBookGeneration, importShowcaseBooks, showcaseBooksToCrossMediaPlan } =
@@ -3837,6 +3868,8 @@ export async function runCrossMediaSeedCli(
         : {}),
     });
     finalization.enter('record-import');
+    recordImportProgress = new SeedFinalization('record-import');
+    recordImportProgress.enter('plan-copy');
     let publicationPlan = structuredClone(plan);
     let result = await seedShowcaseVndbReleases({
       seed: seedCrossMedia,
@@ -3850,9 +3883,11 @@ export async function runCrossMediaSeedCli(
       ...(vndbReleaseStateBindings?.groups.length || releaseClassificationPreparation.groups.length
         ? { groups: [...(vndbReleaseStateBindings?.groups ?? []), ...releaseClassificationPreparation.groups] }
         : {}),
-      extras: seedExtras(),
+      extras: { ...seedExtras(), recordImportProgress },
       ...(characterBindings === undefined ? {} : { characterBindings }),
     });
+    recordImportProgress.complete();
+    recordImportProgress = undefined;
     finalization.enter('release-publication');
     let releaseClassificationRequirements = releaseClassificationPreparation.requirements;
     if (journal && publicClient) {
@@ -4654,6 +4689,7 @@ export async function runCrossMediaSeedCli(
     });
     return report;
   } catch (error) {
+    recordImportProgress?.failed(error);
     finalization.failed(error);
     throw error;
   } finally {

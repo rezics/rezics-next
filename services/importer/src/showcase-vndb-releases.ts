@@ -995,6 +995,7 @@ export async function seedShowcaseVndbReleases(input: {
   plan: CrossMediaPlan;
 }): Promise<ShowcaseVndbReleaseResult> {
   const plan = input.plan;
+  input.extras?.recordImportProgress?.enter('release-preparation');
   const catalogueSubjects = input.catalogueSubjects ?? input.extras?.episodeCatalogueSubjects;
   const prepared = await prepareShowcaseVndbReleases({
     tables: input.tables,
@@ -1028,6 +1029,7 @@ export async function seedShowcaseVndbReleases(input: {
     extras,
     input.characterBindings,
   );
+  input.extras?.recordImportProgress?.enter('release-result');
   return {
     ...result,
     converterRevision: entityRevision,

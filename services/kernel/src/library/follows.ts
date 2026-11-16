@@ -115,7 +115,7 @@ export async function removeMembershipFollow(
   const command = currentCommand(tx);
   if (route === null || command.partition !== partitionOf(route) || routeOf(spaceId) === null)
     throw new GrantDeniedError();
-  const [removed] = await followMembershipRemovalPlan(
+  const removed = await followMembershipRemovalPlan(
     { route, account_id: accountId, target_id: spaceId },
     authoritativeTimeValue(command.time),
   ).run(tx);
