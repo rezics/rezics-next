@@ -2,6 +2,7 @@ import { expect, setDefaultTimeout } from 'bun:test';
 import type { Page, Response as PlaywrightResponse } from 'playwright';
 import { documentText, serializeDocument } from '@rezics/document';
 import type { KernelClient } from '@rezics/client';
+import { partitionOf, routeOf } from '../../../../services/kernel/src/route/route.ts';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
 import {
   createHostedBookJourneySeed,
@@ -112,6 +113,60 @@ async function pageObservation(page: Page): Promise<string> {
   return `url=${page.url()} alerts=${JSON.stringify(alerts.slice(-4))} statuses=${JSON.stringify(statuses.slice(-6))}`;
 }
 
+async function observeContentFailure(statement: string, parameters: readonly (string | number)[]): Promise<string> {
+  const { Pool } = await import('pg');
+  const pool = new Pool({
+    connectionString: stack.databaseUrl,
+    connectionTimeoutMillis: 750,
+    statement_timeout: 750,
+    query_timeout: 1_000,
+    options: '-c default_transaction_read_only=on',
+    max: 1,
+  });
+  try {
+    const result = await pool.query(statement, [...parameters]);
+    return JSON.stringify(result.rows[0] ?? null);
+  } catch {
+    return 'unavailable';
+  } finally {
+    await pool.end();
+  }
+}
+
+async function observeCoverWork(mediaId: string): Promise<string> {
+  const route = routeOf(mediaId);
+  if (route === null) return 'unavailable';
+  return observeContentFailure(
+    `SELECT m.state,b.transaction_id IS NOT NULL AS upload_basis,
+       o.event_seq IS NOT NULL AS upload_event,s.status AS image_work
+     FROM content.media m
+     LEFT JOIN editorial.write_basis b ON (b.partition_no,b.transaction_id)=($3,m.transaction_id)
+     LEFT JOIN core.outbox o ON (o.partition_no,o.position,o.epoch)=(b.partition_no,b.position,b.epoch)
+       AND o.type='com.rezics.content.media.uploaded.v1' AND o.subject=m.media_id::text
+     LEFT JOIN dbos.workflow_status s
+       ON s.workflow_uuid=concat('fx:',o.epoch,':',o.partition_no,':',o.position,':',o.event_seq,':content_image')
+       AND o.event_seq IS NOT NULL
+     WHERE (m.route,m.media_id)=($1,$2) LIMIT 1`,
+    [route, mediaId, partitionOf(route)],
+  );
+}
+
+async function observeDraftReadiness(authorId: string, postId: string): Promise<string> {
+  const authorRoute = routeOf(authorId);
+  const postRoute = routeOf(postId);
+  if (authorRoute === null || postRoute === null) return 'unavailable';
+  return observeContentFailure(
+    `SELECT p.draft_locator_pending,a.draft_state,
+       a.draft_revision_id=p.head_revision_id AS exact_head_projected,
+       g.complete AS coverage_complete
+     FROM content.post p
+     LEFT JOIN content.author_item a ON (a.route,a.author_account_id,a.item_kind,a.item_id)=($1,$2,'post',$4)
+     LEFT JOIN content.own_draft_progress g ON g.singleton=0
+     WHERE (p.route,p.post_id,p.author_account_id)=($3,$4,$2)`,
+    [authorRoute, authorId, postRoute, postId],
+  );
+}
+
 async function hydrate(page: Page) {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
   await page.getByRole('main').waitFor({ state: 'attached' });
@@ -187,24 +242,27 @@ async function saveChapterDraft(
           .waitFor({ state: 'visible' });
       } catch (cause) {
         const selected = [upload, ...polls];
-        const states = await settledWithin(
-          Promise.all(
-            selected.map(async (response) => {
-              const body = (await response.json().catch(() => null)) as { media?: { state?: unknown } } | null;
-              const state = body?.media?.state;
-              const knownState =
-                state === 'reserved' || state === 'uploaded' || state === 'available' || state === 'rejected';
-              return {
-                method: response.request().method(),
-                status: response.status(),
-                state: knownState ? state : null,
-              };
-            }),
-          ),
-          1_000,
-        ).catch(() => undefined);
+        const [work, states] = await Promise.all([
+          observeCoverWork(mediaId),
+          settledWithin(
+            Promise.all(
+              selected.map(async (response) => {
+                const body = (await response.json().catch(() => null)) as { media?: { state?: unknown } } | null;
+                const state = body?.media?.state;
+                const knownState =
+                  state === 'reserved' || state === 'uploaded' || state === 'available' || state === 'rejected';
+                return {
+                  method: response.request().method(),
+                  status: response.status(),
+                  state: knownState ? state : null,
+                };
+              }),
+            ),
+            1_000,
+          ).catch(() => undefined),
+        ]);
         throw new Error(
-          `${errorText(cause)}; exact cover responses=${JSON.stringify(states ?? selected.map((response) => ({ method: response.request().method(), status: response.status() })))}; preview response=${JSON.stringify(preview ?? null)}`,
+          `${errorText(cause)}; exact cover responses=${JSON.stringify(states ?? selected.map((response) => ({ method: response.request().method(), status: response.status() })))}; preview response=${JSON.stringify(preview ?? null)}; exact image work=${work}`,
           { cause },
         );
       }
@@ -774,7 +832,13 @@ nativeTest(
                 placement.target?.revisionId,
             };
           },
-          () => pageObservation(page),
+          async () => {
+            const [browser, draft] = await Promise.all([
+              pageObservation(page),
+              observeDraftReadiness(seed!.authorAccountId, chapterTwo!.id),
+            ]);
+            return `${browser}; exact draft readiness=${draft}`;
+          },
         );
       } else {
         journal.unreached('mounted Root Append', 'Book start or chapter two saved-version readback failed');
