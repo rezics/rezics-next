@@ -13,29 +13,72 @@ import {
   type IdentityJobRef,
   type NativeStepWork,
 } from '../semantic/identity-adapters/index.ts';
-import { identityJobPartition } from '../semantic/identity-adapters/identity-epoch-contract.ts';
 import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts';
 import { serializeIdentityValue as json } from '../semantic/identity-core/encoding.ts';
 import { withReadTransaction } from '../semantic/read.ts';
-import {
-  prepareSearchIdentityReceivingEffect,
-  type SearchIdentityReceivingSelection,
-} from '../semantic/identity-receiving-effects.ts';
+import { type SearchIdentityReceivingSelection } from '../semantic/identity-receiving-effects.ts';
 import { createSearchIdentityReceivingNativeStore } from './identity-receiving-native-store.ts';
 import type { SearchNativeReceivingPreparation } from './identity-receiving-native-internal.ts';
 import { searchIdentityWriterChanged } from './identity-epoch-participant-events.ts';
 import type { SearchReceivingConfiguration } from './identity-receiving-native.ts';
 import { subjectPartition } from './source.ts';
-import { createSearchWriterGuard, SEARCH_IDENTITY_WRITER_CHUNK } from './writer-guard.ts';
-import existingPlansSql from './identity-search-receiving-existing-plans.sql';
-import jobScopeSql from './identity-epoch-participant-job-scope.sql';
-import enrollSql from './identity-search-receiving-enroll.sql';
+import { createSearchWriterGuard } from './writer-guard.ts';
+import { readSearchIdentityOriginalPlanSql } from './identity-search-receiving-directory-sql.ts';
 
 const unavailable = (detail: string) => new IdentityEpochStoreError('identity_epoch_unavailable', detail);
 const digest = (value: unknown) => createHash('sha256').update(json(value)).digest('hex');
 
-function planned(original: string, existing: ReadonlySet<string>) {
-  return existing.has(original);
+function effectKey(consumer: string, original: string, disposition: SearchIdentityReceivingSelection['disposition']) {
+  return `${consumer}:${original}:${disposition}`;
+}
+
+export async function readSearchIdentityOriginalPlan(
+  pool: Pool,
+  job: IdentityJobRef,
+  change: IdentityChange,
+  configuration: SearchReceivingConfiguration,
+  deadline: number,
+): Promise<SearchIdentityReceivingSelection | null> {
+  const partition = subjectPartition(change.original);
+  const keys = (['OLD', 'NEW', 'first-apply', 'handoff'] as const).map((disposition) =>
+    effectKey(configuration.consumer, change.original, disposition),
+  );
+  const plans = await withReadTransaction(
+    pool,
+    async (tx) =>
+      (
+        await tx.query<{ effect_key: string; source: SearchNativeReceivingPreparation['source']; proven: boolean }>(
+          readSearchIdentityOriginalPlanSql,
+          [partition, job.jobId, String(job.epoch), keys, change.original, configuration.index],
+        )
+      ).rows,
+    deadline,
+  );
+  const plan = plans[0];
+  if (!plan) return null;
+  const { source } = plan;
+  if (
+    plans.length !== 1 ||
+    !plan.proven ||
+    source.receivingHome !== partition ||
+    source.locator.partition !== partition ||
+    source.original !== change.original ||
+    source.terminal !== change.terminal ||
+    source.consumer !== configuration.consumer ||
+    source.physicalTarget !== configuration.index ||
+    plan.effect_key !== effectKey(source.consumer, source.original, source.disposition)
+  )
+    throw unavailable('Retained Search plan changed for the selected original');
+  return {
+    job,
+    original: source.original,
+    effectKey: plan.effect_key,
+    owner: source.owner,
+    sourceId: source.sourceId,
+    scope: source.scope,
+    disposition: source.disposition,
+    native: source.locator,
+  };
 }
 
 function receivingDisposition(
@@ -67,45 +110,17 @@ async function publishedSourceDefinition(
   return resolved.definition;
 }
 
-/** Source-owned Search native plans and common receiving enrollment for one bounded home page.
- * Writer close happens after every original in that home is enrolled, never between them.
- */
-export async function commitSearchIdentityReceivingPlans(
+/** Prepare the exact next original selected from the retained control directory. */
+export async function commitSearchIdentityReceivingPlan(
   pool: Pool,
   job: IdentityJobRef,
+  change: IdentityChange,
+  scopeDigest: string,
+  releaseDigest: string,
   configuration: SearchReceivingConfiguration,
   context: Readonly<{ deadline: number; allowance: NativeStepWork }>,
-): Promise<'prepared' | 'exhausted'> {
-  const home = identityJobPartition(job);
-  const saved = await withReadTransaction(pool, (tx) => identityEpochStore().readJob(tx, job), context.deadline);
-  if (!saved || saved.mapping?.state !== 'complete')
-    throw unavailable('Search receiving plans require authoritative mapping custody');
-  const existing = await withReadTransaction(
-    pool,
-    async (tx) =>
-      new Set(
-        (await tx.query<{ original: string }>(existingPlansSql.sql, [job.jobId, job.epoch.toString()])).rows.map(
-          (row) => row.original,
-        ),
-      ),
-    context.deadline,
-  );
-  const changes: IdentityChange[] = [];
-  let after: string | null = null;
-  for (;;) {
-    const page = await withReadTransaction(
-      pool,
-      (tx) => identityEpochStore().pageChanges(tx, job, after),
-      context.deadline,
-    );
-    changes.push(...page.changes);
-    if (!page.next) break;
-    after = page.next;
-  }
-  const pending = changes.filter((change) => !planned(change.original, existing));
-  if (!pending.length) return 'exhausted';
-  const partition = subjectPartition(pending[0]!.original);
-  const cohort = pending.filter((change) => subjectPartition(change.original) === partition);
+): Promise<SearchIdentityReceivingSelection> {
+  const partition = subjectPartition(change.original);
   const guard = createSearchWriterGuard({
     pool,
     search: configuration.search,
@@ -114,156 +129,104 @@ export async function commitSearchIdentityReceivingPlans(
     source: subjectSource(pool, configuration.routeKey),
     listing: subjectListingSource(pool),
   });
-  const ids = [...new Set(cohort.map((change) => change.original))];
   try {
-    for (let offset = 0; offset < ids.length; offset += SEARCH_IDENTITY_WRITER_CHUNK) {
-      await guard.write(partition, ids.slice(offset, offset + SEARCH_IDENTITY_WRITER_CHUNK), 0n);
-    }
+    await guard.write(partition, [change.original], 0n);
   } catch (error) {
     if (!(error instanceof IdentityEpochStoreError) || !error.message.includes('closed to writer enrollment'))
       throw error;
   }
-  const fences = new Map<string, Awaited<ReturnType<typeof guard.fenceOriginal>>>();
-  for (const original of ids) fences.set(original, await guard.fenceOriginal(job, original));
+  const fence = await guard.fenceOriginal(job, change.original);
   const barrier = await guard.closeGeneration(partition);
   const store = createSearchIdentityReceivingNativeStore({
     pool,
     index: configuration.index,
     consumer: configuration.consumer,
   });
-  const scopeDigest = await withReadTransaction(
-    pool,
-    async (tx) =>
-      (await tx.query<{ scope_digest: string }>(jobScopeSql.sql, [home, job.jobId, job.epoch.toString()])).rows[0]
-        ?.scope_digest,
-    context.deadline,
-  );
-  if (!scopeDigest) throw unavailable('Search receiving plans lost the admitted job scope');
-  const definition = await publishedSourceDefinition(pool, configuration, saved.intent.release, context.deadline);
-  for (const change of cohort) {
-    const fence = fences.get(change.original);
-    if (!fence) throw unavailable('Search receiving original fence is missing');
-    const mapping = await identityEpochStore().readMapping(pool, change.original);
-    if (mapping.state !== 'mapped')
-      throw unavailable('Search receiving original has no published mapping; absence is not a self binding');
-    if (mapping.terminal !== change.terminal)
-      throw unavailable('Search receiving mapping disagrees with the change page');
-    const copy = await guard.readRetainedCopy(barrier.locator, change.original, context.deadline);
-    const retained = copy ? [copy] : [];
-    const disposition = receivingDisposition(change, retained);
-    const documentId = disposition === 'OLD' ? change.original : change.terminal;
-    const ownerRoute = routeOf(documentId);
-    if (ownerRoute === null || partitionOf(ownerRoute) !== partition)
-      throw unavailable('Search receiving document is outside the enrolled home');
-    const locator = {
-      kind: 'search-canonical-index' as const,
-      version: 1 as const,
-      partition,
-      planId: randomUUID(),
-    };
-    const scope = `${configuration.consumer}:${change.original}:${disposition}`;
-    const selection: SearchIdentityReceivingSelection = {
-      job,
+  const definition = await publishedSourceDefinition(pool, configuration, releaseDigest, context.deadline);
+  const mapping = await identityEpochStore().readMapping(pool, change.original);
+  if (mapping.state !== 'mapped')
+    throw unavailable('Search receiving original has no published mapping; absence is not a self binding');
+  if (mapping.terminal !== change.terminal)
+    throw unavailable('Search receiving mapping disagrees with the change page');
+  const copy = await guard.readRetainedCopy(barrier.locator, change.original, context.deadline);
+  const retained = copy ? [copy] : [];
+  const disposition = receivingDisposition(change, retained);
+  const documentId = disposition === 'OLD' ? change.original : change.terminal;
+  const ownerRoute = routeOf(documentId);
+  if (ownerRoute === null || partitionOf(ownerRoute) !== partition)
+    throw unavailable('Search receiving document is outside the enrolled home');
+  const locator = {
+    kind: 'search-canonical-index' as const,
+    version: 1 as const,
+    partition,
+    planId: randomUUID(),
+  };
+  const scope = effectKey(configuration.consumer, change.original, disposition);
+  const selection: SearchIdentityReceivingSelection = {
+    job,
+    original: change.original,
+    effectKey: scope,
+    owner: documentId,
+    sourceId: documentId,
+    scope,
+    disposition,
+    native: locator,
+  };
+  const input: SearchNativeReceivingPreparation = {
+    selection,
+    source: {
+      locator,
       original: change.original,
-      effectKey: scope,
+      terminal: change.terminal,
+      documentId,
       owner: documentId,
       sourceId: documentId,
       scope,
       disposition,
-      native: locator,
-    };
-    const input: SearchNativeReceivingPreparation = {
-      selection,
-      source: {
-        locator,
-        original: change.original,
-        terminal: change.terminal,
-        documentId,
-        owner: documentId,
-        sourceId: documentId,
-        scope,
-        disposition,
-        receivingHome: partition,
-        receivingEpoch: barrier.native.epoch,
-        consumer: configuration.consumer,
-        physicalTarget: configuration.index,
-        incarnation: barrier.incarnation,
-        writeAlias: barrier.writeAlias,
-        physicalGeneration: barrier.physicalGeneration,
-        enrollmentGeneration: barrier.enrollmentGeneration,
-        fenceGeneration: barrier.fenceGeneration,
-        barrier: barrier.locator,
-        originalFence: fence.gate,
-      },
-      scopeDigest,
-      references: {
-        originalSupport: null,
-        terminalSupport: null,
-        definition: definition.readDefinition,
-        release: definition.meaning.digest,
-        documentFence: fence.gate,
-        predecessor: null,
-      },
-      actionDigest: digest({ original: change.original, disposition, job, index: configuration.index }),
-      copies: retained.map((copy) => ({
-        home: partition,
-        consumer: configuration.consumer,
-        physicalTarget: configuration.index,
-        incarnation: barrier.incarnation,
-        writeAlias: barrier.writeAlias,
-        original: copy.original,
-        close: fence.gate,
-        enrollment: copy.enrollment,
-        visible: copy.visible,
-        state: copy.state,
-      })),
-    };
-    await runCommand(pool, { partition, deadline: context.deadline, clock: configuration.clock }, async (tx) => {
-      const prepared = await store.preparePlan(tx, input, context);
-      if (prepared.value.selection.native.planId !== locator.planId)
-        return noEffect(prepared.value.selection.native.planId);
-      return { value: locator.planId, events: searchIdentityWriterChanged() };
-    });
-  }
-  return 'prepared';
-}
-
-/** Common receiving enrollment for a native plan already committed by Source. */
-export async function enrollSearchIdentityReceivingPlans(
-  pool: Pool,
-  job: IdentityJobRef,
-): Promise<'enrolled' | 'ready'> {
-  const home = identityJobPartition(job);
-  const row = await withReadTransaction(
+      receivingHome: partition,
+      receivingEpoch: barrier.native.epoch,
+      consumer: configuration.consumer,
+      physicalTarget: configuration.index,
+      incarnation: barrier.incarnation,
+      writeAlias: barrier.writeAlias,
+      physicalGeneration: barrier.physicalGeneration,
+      enrollmentGeneration: barrier.enrollmentGeneration,
+      fenceGeneration: barrier.fenceGeneration,
+      barrier: barrier.locator,
+      originalFence: fence.gate,
+    },
+    scopeDigest,
+    references: {
+      originalSupport: null,
+      terminalSupport: null,
+      definition: definition.readDefinition,
+      release: definition.meaning.digest,
+      documentFence: fence.gate,
+      predecessor: null,
+    },
+    actionDigest: digest({ original: change.original, disposition, job, index: configuration.index }),
+    copies: retained.map((copy) => ({
+      home: partition,
+      consumer: configuration.consumer,
+      physicalTarget: configuration.index,
+      incarnation: barrier.incarnation,
+      writeAlias: barrier.writeAlias,
+      original: copy.original,
+      close: fence.gate,
+      enrollment: copy.enrollment,
+      visible: copy.visible,
+      state: copy.state,
+    })),
+  };
+  const saved = await runCommand(
     pool,
-    async (tx) =>
-      (
-        await tx.query<{
-          plan_id: string;
-          original_id: string;
-          document_id: string;
-          effect_key: string;
-          source: {
-            scope: string;
-            disposition: SearchIdentityReceivingSelection['disposition'];
-            locator: SearchIdentityReceivingSelection['native'];
-            owner: string;
-            sourceId: string;
-          };
-        }>(enrollSql.sql, [job.jobId, job.epoch.toString(), home])
-      ).rows[0],
+    { partition, deadline: context.deadline, clock: configuration.clock },
+    async (tx) => {
+      const prepared = await store.preparePlan(tx, input, context);
+      const selected = prepared.value.selection;
+      if (selected.native.planId !== locator.planId) return noEffect(selected);
+      return { value: selected, events: searchIdentityWriterChanged() };
+    },
   );
-  if (!row) return 'ready';
-  const source = row.source;
-  await prepareSearchIdentityReceivingEffect(pool, {
-    job,
-    original: row.original_id,
-    owner: source.owner,
-    sourceId: source.sourceId,
-    effectKey: row.effect_key,
-    scope: source.scope,
-    disposition: source.disposition,
-    native: source.locator,
-  });
-  return 'enrolled';
+  return saved.value;
 }

@@ -19,9 +19,7 @@ import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import type { SearchReceivingWorkDeclaration } from './identity-search-receiving-work.ts';
 import { searchNativeReceivingStatements } from '../search/identity-receiving-native-store.ts';
 import { searchNativeReceivingSqlCost } from '../search/identity-receiving-native-work.ts';
-import participantNext from '../search/identity-epoch-participant-next.sql';
 import participantStep from '../search/identity-epoch-participant-step.sql';
-import participantAdvance from '../search/identity-epoch-participant-advance.sql';
 import participantReplay from '../search/identity-epoch-participant-replay.sql';
 import participantJob from './identity-epoch-store-select-job.sql';
 import participantAck from './identity-epoch-store-select-ack.sql';
@@ -214,9 +212,7 @@ export function commonSearchReceivingStatements(): readonly string[] {
           nativeCommit.sql,
           partitionRead.sql,
           ...commandStatementCosts().map(([sql]) => sql),
-          participantNext.sql,
           participantStep.sql,
-          participantAdvance.sql,
           participantReplay.sql,
           participantJob.sql,
           participantAck.sql,
@@ -329,9 +325,7 @@ export function searchReceivingCapturedStatementCosts(): SearchReceivingWorkDecl
     [nativeCommit.sql, [2, 2, 1, 128, 0]],
     [partitionRead.sql, [1, 1, 1, 512, 1]],
     ...commandStatementCosts(),
-    [participantNext.sql, [6, 6, 1, 16384, 1]],
     [participantStep.sql, [6, 6, 6, 4096, 0]],
-    [participantAdvance.sql, [7, 7, 1, 16384, 1]],
     [participantReplay.sql, [5, 5, 1, 4096, 1]],
     [participantJob.sql, [1, 1, 1, 4096, 1]],
     [participantAck.sql, [3, 1, 1, 8192, 1]],

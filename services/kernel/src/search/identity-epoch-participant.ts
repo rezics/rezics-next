@@ -40,21 +40,31 @@ import { subjectConsumer } from './consumer-name.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { SearchReceivingConfiguration } from './identity-receiving-native.ts';
 import { searchIdentityWriterChanged } from './identity-epoch-participant-events.ts';
-import nextSql from './identity-epoch-participant-next.sql';
 import stepSql from './identity-epoch-participant-step.sql';
-import advanceSql from './identity-epoch-participant-advance.sql';
 import replaySql from './identity-epoch-participant-replay.sql';
 import completeSql from './identity-epoch-participant-complete.sql';
-import directorySql from './identity-epoch-participant-directory.sql';
-import jobScopeSql from './identity-epoch-participant-job-scope.sql';
-import enrollSql from './identity-search-receiving-enroll.sql';
-import existingPlansSql from './identity-search-receiving-existing-plans.sql';
-import { validSearchIdentityReceivingFrontier } from './identity-receiving-native-contract.ts';
+import {
+  type SearchIdentityReceivingBinding,
+  validSearchIdentityReceivingFrontier,
+} from './identity-receiving-native-contract.ts';
 import { readRetainedWriterCopySql } from './writer-guard.ts';
 import {
-  commitSearchIdentityReceivingPlans,
-  enrollSearchIdentityReceivingPlans,
+  commitSearchIdentityReceivingPlan,
+  readSearchIdentityOriginalPlan,
 } from './identity-search-receiving-source.ts';
+import {
+  advanceSearchIdentityDirectory,
+  readSearchIdentityDirectory,
+  readSearchIdentityDirectoryOriginal,
+  requireCurrentSearchIdentityDirectory,
+} from './identity-search-receiving-directory.ts';
+import {
+  advanceSearchIdentityOriginalSql,
+  readSearchIdentityCommonPlanSql,
+  readSearchIdentityDirectorySql,
+  readSearchIdentityMaterializedOriginalSql,
+  readSearchIdentityOriginalPlanSql,
+} from './identity-search-receiving-directory-sql.ts';
 
 export type { SearchReceivingConfiguration };
 
@@ -79,11 +89,12 @@ const participantStatementWork = (
 function searchIdentityParticipantStatementCosts(): SearchReceivingWorkDeclaration['statements'] {
   return Object.freeze([
     Object.freeze({ sql: completeSql.sql, work: participantStatementWork(6, 6, 6, 4096, 0) }),
-    Object.freeze({ sql: directorySql.sql, work: participantStatementWork(8, 8, 1, 16384, 1) }),
-    Object.freeze({ sql: existingPlansSql.sql, work: participantStatementWork(100, 2, 1, 8192, 1) }),
+    Object.freeze({ sql: readSearchIdentityDirectorySql, work: participantStatementWork(4, 4, 1, 4096, 1) }),
+    Object.freeze({ sql: readSearchIdentityMaterializedOriginalSql, work: participantStatementWork(1, 1, 1, 1024, 1) }),
+    Object.freeze({ sql: readSearchIdentityOriginalPlanSql, work: participantStatementWork(16, 12, 1, 20480, 1) }),
+    Object.freeze({ sql: readSearchIdentityCommonPlanSql, work: participantStatementWork(4, 4, 1, 16384, 1) }),
+    Object.freeze({ sql: advanceSearchIdentityOriginalSql, work: participantStatementWork(9, 9, 1, 16384, 1) }),
     Object.freeze({ sql: readRetainedWriterCopySql, work: participantStatementWork(3, 3, 1, 1024, 1) }),
-    Object.freeze({ sql: jobScopeSql.sql, work: participantStatementWork(1, 1, 1, 256, 1) }),
-    Object.freeze({ sql: enrollSql.sql, work: participantStatementWork(8, 8, 1, 16384, 1) }),
   ]);
 }
 
@@ -235,56 +246,26 @@ export function createSearchIdentityEpochParticipant(options: {
           throw unavailable('Unfinished Search cancellation requires the original Source writer disposition');
         if (saved.mapping?.state !== 'complete')
           throw unavailable('Search requires authoritative native mapping custody');
-        await commitSearchIdentityReceivingPlans(pool, ref, configured.configuration, { deadline, allowance });
-        const enrolled = await enrollSearchIdentityReceivingPlans(pool, ref);
-        const row = await withReadTransaction(
+        const { directory, change } = await withReadTransaction(
           pool,
-          async (tx) =>
-            (await tx.query(nextSql.sql, [identityJobPartition(ref), ref.jobId, String(ref.epoch)])).rows[0],
+          async (tx) => {
+            const directory = await readSearchIdentityDirectory(tx, ref);
+            const change = await readSearchIdentityDirectoryOriginal(tx, ref, directory);
+            return { directory, change };
+          },
           deadline,
         );
-        if (!row) {
-          const directory = await withReadTransaction(
-            pool,
-            async (tx) =>
-              (
-                await tx.query<{ pending: number; originals: number; plans: number }>(directorySql.sql, [
-                  identityJobPartition(ref),
-                  ref.jobId,
-                  String(ref.epoch),
-                ])
-              ).rows[0],
-            deadline,
-          );
-          if (
-            !directory ||
-            directory.pending !== 0 ||
-            directory.originals < 1 ||
-            directory.plans !== directory.originals ||
-            enrolled !== 'ready'
-          )
-            throw unavailable(
-              'Complete Source receiving-plan discovery and its sealed original/copy directory are not installed',
-            );
+        if (!change) {
+          if (directory.count < 1) throw unavailable('Search receiving has no completed original to seal');
           const roles = await identityErasureRoles(pool, ref.jobId);
-          const frontier = { after: ['directory', directory.originals], segment: 0 };
-          const scope = await withReadTransaction(
-            pool,
-            async (tx) =>
-              (
-                await tx.query<{ scope_digest: string }>(jobScopeSql.sql, [
-                  identityJobPartition(ref),
-                  ref.jobId,
-                  String(ref.epoch),
-                ])
-              ).rows[0]?.scope_digest,
-            deadline,
-          );
-          if (!scope) throw unavailable('Search completion lost the admitted job scope');
+          const frontier = { after: ['directory', directory.count], segment: 0 };
           const sealed = await runCommand(
             pool,
             { partition: identityJobPartition(ref), deadline, clock: configured.configuration.clock },
             async (tx) => {
+              await requireCurrentSearchIdentityDirectory(tx, ref, directory);
+              if (await readSearchIdentityDirectoryOriginal(tx, ref, directory))
+                throw unavailable('Search receiving directory still has an original to process');
               bindSemanticProducerRoles(tx, roles);
               recordIdentityEpochNativeCommit(tx, 'search-canonical-index');
               registerCommandCallback(tx, async (id) => {
@@ -293,7 +274,7 @@ export function createSearchIdentityEpochParticipant(options: {
                   id,
                   ref.jobId,
                   String(ref.epoch),
-                  scope,
+                  directory.scope,
                   json(frontier),
                   json(used(allowance, identitySourceConsumerNativeWork(pool, token, deadline))),
                 ]);
@@ -320,28 +301,51 @@ export function createSearchIdentityEpochParticipant(options: {
             work: used(allowance, identitySourceConsumerNativeWork(pool, token, deadline)),
           };
         }
-        const b = row.binding;
-        const s = b?.source;
+        const configuration = configured.configuration;
+        const selection =
+          (await readSearchIdentityOriginalPlan(pool, ref, change, configuration, deadline)) ??
+          (await commitSearchIdentityReceivingPlan(
+            pool,
+            ref,
+            change,
+            directory.scope,
+            saved.intent.release,
+            configuration,
+            { deadline, allowance },
+          ));
+        const effect = await prepareSearchIdentityReceivingEffect(pool, selection);
+        const row = await withReadTransaction(
+          pool,
+          async (tx) =>
+            (
+              await tx.query<{
+                binding: SearchIdentityReceivingBinding;
+                binding_digest: string;
+                plan_transaction_id: string;
+                scope_digest: string;
+              }>(readSearchIdentityCommonPlanSql, [
+                identityJobPartition(ref),
+                ref.jobId,
+                String(ref.epoch),
+                selection.effectKey,
+              ])
+            ).rows[0],
+          deadline,
+        );
+        const binding = row?.binding;
         if (
-          b?.step !== 'search-canonical-index' ||
-          !s ||
-          b.scopeDigest !== row.scope_digest ||
-          s.consumer !== configured.configuration.consumer ||
-          s.physicalTarget !== configured.configuration.index
+          !row ||
+          binding?.step !== 'search-canonical-index' ||
+          binding.original !== change.original ||
+          binding.effectKey !== selection.effectKey ||
+          binding.scopeDigest !== directory.scope ||
+          row.scope_digest !== directory.scope ||
+          binding.source.consumer !== configuration.consumer ||
+          binding.source.physicalTarget !== configuration.index
         )
           throw unavailable('Prepared scope differs from its configured native Search owner');
-        const effect = await prepareSearchIdentityReceivingEffect(pool, {
-          job: ref,
-          original: b.original,
-          owner: b.owner,
-          effectKey: b.effectKey,
-          sourceId: s.sourceId,
-          scope: s.scope,
-          disposition: s.disposition,
-          native: s.locator,
-        });
         const roles = await identityErasureRoles(pool, ref.jobId);
-        const native = await runCommand<{ frontier: IdentityFrontier; receipt: IdentityNativeReceipt | null }>(
+        await runCommand<{ frontier: IdentityFrontier; receipt: IdentityNativeReceipt | null }>(
           pool,
           { partition: effect.receipt.partition, deadline, clock: configured.configuration.clock },
           async (tx) => {
@@ -370,19 +374,19 @@ export function createSearchIdentityEpochParticipant(options: {
           },
         );
         const applied = await reconcileIdentityReceivingEffect(pool, effect);
-        const frontier = native.value.frontier;
-        // Only a successful common reconcile (including fresh post-control native release) may
-        // retire this operational key. A crash before this command leaves the exact scope queued
-        // for accepted/applied/released replay. No cursor can skip a later lower-sorting plan.
+        const frontier = advanceSearchIdentityDirectory(directory, change.original);
+        // Releasing custody and retiring its pending key comes before moving past this original.
+        // A lost response reuses the still-selected original or reads the committed checkpoint.
         const progress = await runCommand(
           pool,
           { partition: identityJobPartition(ref), deadline, clock: configured.configuration.clock },
           async (tx) => {
-            const retired = await tx.query(advanceSql.sql, [
+            await requireCurrentSearchIdentityDirectory(tx, ref, directory);
+            const retired = await tx.query(advanceSearchIdentityOriginalSql, [
               identityJobPartition(ref),
               ref.jobId,
               String(ref.epoch),
-              b.effectKey,
+              selection.effectKey,
               row.plan_transaction_id,
               row.binding_digest,
               applied.partition,
