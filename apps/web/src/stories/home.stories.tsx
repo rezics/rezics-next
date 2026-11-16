@@ -107,11 +107,12 @@ export const PartialSources: Story = {
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
-    await expect(await canvas.findByText(m.home_presentation_partial())).toBeVisible();
-    await waitFor(() => expect(canvas.getAllByRole('status')).toHaveLength(1));
+    const partial = await canvas.findByText(m.home_presentation_partial());
+    await expect(partial).toHaveAttribute('role', 'status');
     const results = canvas.getByRole('region', { name: m.home_feed_discovery() });
     await expect(results.querySelector('[data-feed-source="discovery"]')).toBeVisible();
-    const retry = within(results).getByRole('button', { name: m.library_follow_retry(), exact: true });
+    const actions = partial.nextElementSibling as HTMLElement;
+    const retry = within(actions).getByRole('button', { name: m.library_follow_retry(), exact: true });
     await expect(retry).toBeEnabled();
   },
 };
@@ -122,11 +123,12 @@ export const PartialSourcesRetryInteraction: Story = {
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
-    await expect(await canvas.findByText(m.home_presentation_partial())).toBeVisible();
-    await waitFor(() => expect(canvas.getAllByRole('status')).toHaveLength(1));
+    const partial = await canvas.findByText(m.home_presentation_partial());
+    await expect(partial).toHaveAttribute('role', 'status');
     const results = canvas.getByRole('region', { name: m.home_feed_discovery() });
     await expect(results.querySelector('[data-feed-source="discovery"]')).toBeVisible();
-    const retry = within(results).getByRole('button', { name: m.library_follow_retry(), exact: true });
+    const actions = partial.nextElementSibling as HTMLElement;
+    const retry = within(actions).getByRole('button', { name: m.library_follow_retry(), exact: true });
     await expect(retry).toBeEnabled();
     await userEvent.click(retry);
     await expect(results.querySelector('[data-feed-source="discovery"]')).toBeVisible();
