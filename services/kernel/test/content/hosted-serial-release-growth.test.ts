@@ -5,19 +5,63 @@ import { HOSTED_PAGE_LIMIT } from '../../src/content/hosted-chapters-limits.ts';
 import type { HostedPlacement } from '../../src/content/hosted-chapters-model.ts';
 import { HOSTED_PUBLICATION_STAGING_STEP_LIMIT } from '../../src/content/hosted-publication-staging-model.ts';
 import { HOSTED_VERSION_RELEASE_CANDIDATE_PAGE_MAX } from '../../src/content/hosted-version-release-candidate-model.ts';
+import { captureWithFoldedCost, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
-import { observeSql } from './support/sql-observer.ts';
 
 let f: Awaited<ReturnType<typeof hostedChaptersFixture>>;
+let growth: GrowthDatabase;
 beforeAll(async () => {
   f = await hostedChaptersFixture();
+  growth = await openGrowthDatabase(f.native.pool.options.connectionString);
 }, 180_000);
 afterAll(async () => {
-  await f?.close();
+  try {
+    await growth?.close();
+  } finally {
+    await f?.close();
+  }
 }, 180_000);
 
 test('a growing serial keeps exact public releases and advances preparation in bounded pages', async () => {
   const { native } = f;
+  const access = native.system.createFreshAccess(undefined, growth.pool);
+  const kernel = native.system.createKernelForPool(growth.pool, access);
+  const measuredScales = {
+    'first preparation page': [] as number[],
+    'later preparation page': [] as number[],
+    'point publication': [] as number[],
+  };
+  async function measuredCommand(operation: keyof typeof measuredScales, scale: number, path: string, input: unknown) {
+    const { value, capture } = await captureWithFoldedCost(growth, () => native.call('POST', path, input, { kernel }));
+    expect({ status: value.status, error: value.status === 200 ? null : value.value }).toEqual({
+      status: 200,
+      error: null,
+    });
+    const { rows, blocks, statements, plans, requestBytes, responseBytes, limitations } = capture.cost;
+    expect(plans).toBeGreaterThan(0);
+    measuredScales[operation].push(scale);
+    const hostedRelations = Object.fromEntries(
+      Object.entries(capture.cost.relations).filter(
+        ([name, relation]) => relation.identity?.name.startsWith('hosted_') || name.startsWith('content.hosted_'),
+      ),
+    );
+    expect(Object.keys(hostedRelations).length).toBeGreaterThan(0);
+    console.info(
+      'Hosted native physical growth',
+      JSON.stringify({
+        operation,
+        scale,
+        rows,
+        blocks,
+        statements,
+        requestBytes,
+        responseBytes,
+        limitations,
+        hostedRelations,
+      }),
+    );
+    return { result: value.value, statements: capture.statements };
+  }
   const path = `/v1/hostedCatalogues/${f.catalogueId}`;
   const originalBody = fromPlainText('Opening');
   const source = await native.thread('published', originalBody);
@@ -147,11 +191,23 @@ test('a growing serial keeps exact public releases and advances preparation in b
     );
     let steps = 0;
     const maxSteps = Math.ceil((size + 2) / HOSTED_PUBLICATION_STAGING_STEP_LIMIT) * 2 + 10;
+    const laterStep = Math.floor((size + 2) / (2 * HOSTED_PUBLICATION_STAGING_STEP_LIMIT));
     const firstStep = { stepId: f.newOccurrenceId() };
     while (!progress.candidate?.coverageComplete) {
       expect(++steps).toBeLessThanOrEqual(maxSteps);
       const input = steps === 1 ? firstStep : { stepId: f.newOccurrenceId() };
-      const next = await native.command(`${stagePath}:advance`, input, 200);
+      const advance = `${stagePath}:advance`;
+      const next =
+        steps === 1 || steps === laterStep
+          ? (
+              await measuredCommand(
+                steps === 1 ? 'first preparation page' : 'later preparation page',
+                size,
+                advance,
+                input,
+              )
+            ).result
+          : await native.command(advance, input, 200);
       expect(Number(next.stage.candidateCount) - Number(progress.stage.candidateCount)).toBeLessThanOrEqual(
         HOSTED_PUBLICATION_STAGING_STEP_LIMIT,
       );
@@ -195,32 +251,24 @@ test('a growing serial keeps exact public releases and advances preparation in b
     await grow(size);
     await expectCurrent(previous);
     expect((await read(`/occurrences/${lastChapter}?kind=publication&revisionId=${previous}`)).status).toBe(404);
-    const observer = observeSql(native.pool);
-    try {
-      const published = await native.command(
-        `${path}:publishChapter`,
-        {
-          expectedRevisionId: head,
-          expectedPublicationId: previous,
-          occurrenceId: lastChapter,
-          target,
-          parentId: null,
-          beforeOccurrenceId: null,
-          selectedAncestors: [],
-        },
-        200,
-      );
-      current = published.revisionId;
-      expect(observer.records.length).toBeGreaterThan(0);
-      expect(
-        observer.records.some(({ statement }) =>
-          /(?:INSERT INTO|UPDATE) content\.hosted_(?:placement|append)\b/i.test(statement),
-        ),
-      ).toBe(false);
-      console.info('Hosted serial point publication growth', { chapters: size, statements: observer.records.length });
-    } finally {
-      await observer.close();
-    }
+    const { result: published, statements } = await measuredCommand(
+      'point publication',
+      size,
+      `${path}:publishChapter`,
+      {
+        expectedRevisionId: head,
+        expectedPublicationId: previous,
+        occurrenceId: lastChapter,
+        target,
+        parentId: null,
+        beforeOccurrenceId: null,
+        selectedAncestors: [],
+      },
+    );
+    current = published.revisionId;
+    expect(
+      statements.some((statement) => /(?:INSERT INTO|UPDATE) content\.hosted_(?:placement|append)\b/i.test(statement)),
+    ).toBe(false);
     await expectCurrent(current);
     const chapter = await read(`/occurrences/${lastChapter}?kind=publication&revisionId=${current}`);
     expect(chapter.status).toBe(200);
@@ -275,4 +323,8 @@ test('a growing serial keeps exact public releases and advances preparation in b
   expect(
     (await native.call('GET', `${path}/occurrences/${lastChapter}?kind=structure&revisionId=${head}`)).status,
   ).toBe(200);
+
+  expect(measuredScales['first preparation page']).toEqual([511, 1_000, 10_000]);
+  expect(measuredScales['later preparation page']).toEqual([511, 1_000, 10_000]);
+  expect(measuredScales['point publication']).toEqual([512, 513, 1_001, 10_001]);
 }, 480_000);

@@ -207,34 +207,28 @@ async function createNativeContentSystemWithOptions(
     let nativeAuth: AuthService;
     let composedAccess: ReturnType<typeof createAccess> | undefined;
     let composedActions: ReturnType<typeof actionCatalogue> | undefined;
-    const createFreshAccess: ContentSystem['createFreshAccess'] = (observeJwks) => {
+    const createFreshAccess: ContentSystem['createFreshAccess'] = (observeJwks, accessPool = pool) => {
       let fresh: ReturnType<typeof createAccess>;
       let realmMembership: ReturnType<typeof createRealmMembership> | undefined;
+      const membership = () =>
+        (realmMembership ??= createRealmMembership({
+          deadlineNow: () => Date.now(),
+          pool: accessPool,
+          access: fresh,
+          clock,
+        }));
       const realmRoleReader: AccessRealmRoleReader = Object.assign(
-        (client: Parameters<AccessRealmRoleReader>[0], input: Parameters<AccessRealmRoleReader>[1]) => {
-          realmMembership ??= createRealmMembership({ deadlineNow: () => Date.now(), pool, access: fresh, clock });
-          return realmMembership.roleReader(client, input);
-        },
+        (client: Parameters<AccessRealmRoleReader>[0], input: Parameters<AccessRealmRoleReader>[1]) =>
+          membership().roleReader(client, input),
         {
-          batch: ((client, input) => {
-            realmMembership ??= createRealmMembership({ deadlineNow: () => Date.now(), pool, access: fresh, clock });
-            return realmMembership.roleReader.batch!(client, input);
-          }) as NonNullable<AccessRealmRoleReader['batch']>,
+          batch: ((client, input) => membership().roleReader.batch!(client, input)) as NonNullable<
+            AccessRealmRoleReader['batch']
+          >,
         },
       );
       Object.defineProperties(realmRoleReader, {
-        work: {
-          get: () => {
-            realmMembership ??= createRealmMembership({ deadlineNow: () => Date.now(), pool, access: fresh, clock });
-            return realmMembership.roleReader.work;
-          },
-        },
-        batchWork: {
-          get: () => {
-            realmMembership ??= createRealmMembership({ deadlineNow: () => Date.now(), pool, access: fresh, clock });
-            return realmMembership.roleReader.batchWork;
-          },
-        },
+        work: { get: () => membership().roleReader.work },
+        batchWork: { get: () => membership().roleReader.batchWork },
       });
       // The production resolver mounts Commerce's native current buyer-fact
       // reader. A prebuilt Access passed to Kernel must already contain it.
@@ -243,7 +237,7 @@ async function createNativeContentSystemWithOptions(
       // or from the finished composition for a later cold verifier.
       if (composedActions === undefined) throw new NativeContentSystemUnfinishedError();
       fresh = createKernelAccessResolver({
-        pool,
+        pool: accessPool,
         tokens: tokenKeys,
         clock,
         deadlineNow: () => Date.now(),

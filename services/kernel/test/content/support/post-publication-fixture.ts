@@ -5,6 +5,7 @@ import { fromPlainText, normalizeDocument } from '@rezics/document';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { createNativeContentSystemWithWriteRateOverrides } from './native-system.ts';
+import type { ContentSystem } from './system.ts';
 
 export type PublicationPost = {
   id: string;
@@ -49,9 +50,10 @@ export async function postPublicationFixture() {
       anonymous?: boolean;
       key?: string;
       head?: string;
+      kernel?: ContentSystem['kernel'];
     } = {},
   ) {
-    const response = await system.kernel.handle(
+    const response = await (options.kernel ?? system.kernel).handle(
       new Request(`https://content.test${path}`, {
         method,
         headers: {

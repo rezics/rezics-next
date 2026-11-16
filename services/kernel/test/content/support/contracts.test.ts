@@ -81,7 +81,10 @@ function fixtureContracts(): void {
           refresh(input: { readonly refreshToken: string }): Promise<ContentCredential>;
         };
         readonly access: Access;
-        readonly createFreshAccess: (observeJwks?: (request: Request, response: Response) => Promise<void>) => Access;
+        readonly createFreshAccess: (
+          observeJwks?: (request: Request, response: Response) => Promise<void>,
+          pool?: Pool,
+        ) => Access;
         readonly createKernelForPool: (pool: Pool, access: Access) => Kernel;
         readonly actions: ActionCatalogue;
         readonly clock: {
