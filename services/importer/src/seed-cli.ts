@@ -45,6 +45,14 @@ const finalizationPhases = {
     'cover-readback',
     'release-result',
   ],
+  'release-publication': [
+    'scheme-publication',
+    'concept-preparation',
+    'requirements-publication',
+    'binding-refresh',
+    'binding-comparison',
+    'seed-rerun',
+  ],
   publication: [
     'cover-current-reads',
     'target-current-reads',
@@ -62,7 +70,13 @@ const finalizationPhases = {
 } as const;
 
 type FinalizationScope = keyof typeof finalizationPhases;
-type FinalizationDiagnostic = { scope: FinalizationScope; phase: string; remaining: readonly string[] };
+type FinalizationObservation = Readonly<{ requirements?: number; bindingsChanged?: boolean }>;
+type FinalizationDiagnostic = {
+  scope: FinalizationScope;
+  phase: string;
+  remaining: readonly string[];
+  observation?: FinalizationObservation;
+};
 const finalizationFailures = new WeakMap<object, readonly FinalizationDiagnostic[]>();
 const importRunFailures = new WeakMap<object, { provider: 'bangumi' | 'vndb'; kind: ImportRunResult['status'] }>();
 
@@ -76,7 +90,11 @@ export function seedImportRunFailure(provider: 'bangumi' | 'vndb', result: Impor
 }
 
 function finalizationDetail(value: FinalizationDiagnostic): string {
-  return `scope=${value.scope} phase=${value.phase} remaining=${value.remaining.join(',') || 'none'}`;
+  const { requirements, bindingsChanged } = value.observation ?? {};
+  let detail = `scope=${value.scope} phase=${value.phase} remaining=${value.remaining.join(',') || 'none'}`;
+  if (requirements !== undefined) detail += ` requirements=${requirements}`;
+  if (bindingsChanged !== undefined) detail += ` bindingsChanged=${bindingsChanged}`;
+  return detail;
 }
 
 /** One line per phase transition, with no polling, per-record output or new replay state. */
@@ -96,9 +114,14 @@ export class SeedFinalization<Scope extends FinalizationScope> {
     this.#current = { scope, phase: finalizationPhases[scope][0], remaining: finalizationPhases[scope] };
   }
 
-  enter(phase: (typeof finalizationPhases)[Scope][number]): void {
+  enter(phase: (typeof finalizationPhases)[Scope][number], observation?: FinalizationObservation): void {
     const phases: readonly string[] = finalizationPhases[this.#scope];
-    this.#current = { scope: this.#scope, phase, remaining: phases.slice(phases.indexOf(phase)) };
+    this.#current = {
+      scope: this.#scope,
+      phase,
+      remaining: phases.slice(phases.indexOf(phase)),
+      ...(observation === undefined ? {} : { observation }),
+    };
     this.#write(`Cross-media seed finalization state=started ${finalizationDetail(this.#current)}`);
   }
 

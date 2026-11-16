@@ -437,12 +437,17 @@ export async function prepareShowcaseVndbReleaseClassifications(input: {
     journal: input.journal,
     commands: schemeProposals,
   });
-  let groups = releaseClassificationGroups(needs, input.journal);
-  let bindings = await readVndbReleaseBindings(input.port, groups);
-  if (input.stage === 'schemes' || !needs.concepts.length)
-    return { requirements: schemeRequirements, bindings, groups };
+  const stageConcepts = input.stage === 'concepts' && needs.concepts.length > 0;
+  // Only current Schemes inform Concept proposals. Check exact Concept bindings after staging.
+  const prerequisiteGroups = releaseClassificationGroups(
+    stageConcepts ? { schemes: needs.schemes, concepts: [] } : needs,
+    input.journal,
+  );
+  const prerequisiteBindings = await readVndbReleaseBindings(input.port, prerequisiteGroups);
+  if (!stageConcepts)
+    return { requirements: schemeRequirements, bindings: prerequisiteBindings, groups: prerequisiteGroups };
 
-  const currentSchemes = new Map(bindings.schemes.map((scheme) => [scheme.taxonomy, scheme.id]));
+  const currentSchemes = new Map(prerequisiteBindings.schemes.map((scheme) => [scheme.taxonomy, scheme.id]));
   const conceptNeeds = needs.concepts.filter((need) => currentSchemes.has(need.taxonomy));
   const limit = Math.min(
     sourceVocabularyLimits.concepts,
@@ -496,8 +501,8 @@ export async function prepareShowcaseVndbReleaseClassifications(input: {
         ]
       : [];
   });
-  groups = releaseClassificationGroups(needs, input.journal);
-  bindings = await readVndbReleaseBindings(input.port, groups);
+  const groups = releaseClassificationGroups(needs, input.journal);
+  const bindings = await readVndbReleaseBindings(input.port, groups);
   return { requirements: [...schemeRequirements, ...conceptRequirements], bindings, groups };
 }
 

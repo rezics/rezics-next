@@ -3718,6 +3718,7 @@ export async function runCrossMediaSeedCli(
   let creditResolution: BangumiCreditVocabularyResolution | undefined;
   const finalization = new SeedFinalization('seed');
   let recordImportProgress: SeedFinalization<'record-import'> | undefined;
+  let releasePublicationProgress: SeedFinalization<'release-publication'> | undefined;
   try {
     finalization.enter('vocabulary-preparation');
     const { planShowcaseBooks, prepareShowcaseBookGeneration, importShowcaseBooks, showcaseBooksToCrossMediaPlan } =
@@ -3897,6 +3898,10 @@ export async function runCrossMediaSeedCli(
     finalization.enter('release-publication');
     let releaseClassificationRequirements = releaseClassificationPreparation.requirements;
     if (journal && publicClient) {
+      releasePublicationProgress = new SeedFinalization('release-publication');
+      releasePublicationProgress.enter('scheme-publication', {
+        requirements: releaseClassificationRequirements.length,
+      });
       if (releaseClassificationRequirements.length)
         await publishShowcaseVocabulary({
           plan: publicationPlan,
@@ -3907,6 +3912,7 @@ export async function runCrossMediaSeedCli(
           publicClient,
           vocabularyRequirements: releaseClassificationRequirements,
         });
+      releasePublicationProgress.enter('concept-preparation');
       releaseClassificationPreparation = await prepareShowcaseVndbReleaseClassifications({
         plan: publicationPlan,
         port,
@@ -3914,6 +3920,9 @@ export async function runCrossMediaSeedCli(
         stage: 'concepts',
       });
       releaseClassificationRequirements = releaseClassificationPreparation.requirements;
+      releasePublicationProgress.enter('requirements-publication', {
+        requirements: releaseClassificationRequirements.length,
+      });
       if (releaseClassificationRequirements.length)
         await publishShowcaseVocabulary({
           plan: publicationPlan,
@@ -3924,6 +3933,7 @@ export async function runCrossMediaSeedCli(
           publicClient,
           vocabularyRequirements: releaseClassificationRequirements,
         });
+      releasePublicationProgress.enter('binding-refresh');
       const currentReleaseClassifications = await prepareShowcaseVndbReleaseClassifications({
         plan: publicationPlan,
         port,
@@ -3934,15 +3944,19 @@ export async function runCrossMediaSeedCli(
         result.bindings,
         currentReleaseClassifications.bindings,
       );
+      releasePublicationProgress.enter('binding-comparison', { bindingsChanged: !sameBindings });
       releaseClassificationPreparation = currentReleaseClassifications;
       releaseClassificationRequirements = currentReleaseClassifications.requirements;
       if (!sameBindings) {
+        releasePublicationProgress.enter('seed-rerun');
         const releaseContext = composeShowcaseVndbReleaseContext({
           bindings: currentReleaseClassifications.bindings,
           preservedBindings: result.bindings,
           groups: currentReleaseClassifications.groups,
           ...(vndbReleaseStateBindings ? { configuredGroups: vndbReleaseStateBindings.groups } : {}),
         });
+        recordImportProgress = new SeedFinalization('record-import');
+        recordImportProgress.enter('plan-copy');
         publicationPlan = structuredClone(plan);
         result = await seedShowcaseVndbReleases({
           seed: seedCrossMedia,
@@ -3954,15 +3968,19 @@ export async function runCrossMediaSeedCli(
           bindings: releaseContext.bindings,
           destination: { origin: api },
           ...(releaseContext.groups.length ? { groups: releaseContext.groups } : {}),
-          extras: seedExtras(),
+          extras: { ...seedExtras(), recordImportProgress },
           ...(characterBindings === undefined ? {} : { characterBindings }),
         });
+        recordImportProgress.complete();
+        recordImportProgress = undefined;
       }
       selectedReleaseContext = composeShowcaseVndbReleaseContext({
         bindings: result.bindings,
         groups: releaseClassificationPreparation.groups,
         ...(vndbReleaseStateBindings ? { configuredGroups: vndbReleaseStateBindings.groups } : {}),
       });
+      releasePublicationProgress.complete();
+      releasePublicationProgress = undefined;
     }
     finalization.enter('tag-publication');
     let publicTags: Awaited<ReturnType<typeof importShowcaseTags>> | Awaited<ReturnType<typeof prepareShowcaseTags>>;
@@ -4696,6 +4714,7 @@ export async function runCrossMediaSeedCli(
     return report;
   } catch (error) {
     recordImportProgress?.failed(error);
+    releasePublicationProgress?.failed(error);
     finalization.failed(error);
     throw error;
   } finally {
