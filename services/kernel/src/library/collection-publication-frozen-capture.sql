@@ -1,6 +1,7 @@
--- A frozen recovery job receives only public output and definition locators.
+-- Frozen work resolves the retained publication and its terminal cleanup locator.
 SELECT f.generation::text AS generation,f.transaction_id::text AS "transactionId",
  origin.activation_position::text AS position,f.source_generation::text AS "sourceGeneration",
+ c.curator_account_id::text AS "accountId",origin.incarnation,origin.epoch,
  COALESCE(c.builtin_release_digest,(
    SELECT digest FROM semantic.definition_activation WHERE route=0 ORDER BY head DESC LIMIT 1
  )) AS "releaseDigest",
@@ -22,4 +23,5 @@ LEFT JOIN LATERAL (
    AND library.may_deidentify_frozen_output(f.route,f.collection_id,f.generation)
 ) cleanup ON true
 WHERE f.route=$1 AND f.collection_id=$2
- AND (b.capture_id IS NULL OR h.hold_id IS NOT NULL OR cleanup.account_id IS NOT NULL);
+ AND (b.capture_id IS NULL OR h.hold_id IS NOT NULL OR cleanup.account_id IS NOT NULL
+      OR ($3::uuid IS NOT NULL AND c.curator_account_id IS NULL));

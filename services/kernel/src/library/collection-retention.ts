@@ -239,7 +239,11 @@ export async function purgeTerminalCollectionPage(
     purge_after: null,
     time,
   });
-  if (!parent || (input.retainedGeneration !== undefined && parent.accountId !== input.accountId))
+  if (
+    !parent ||
+    parent.accountId === null ||
+    (input.retainedGeneration !== undefined && parent.accountId !== input.accountId)
+  )
     return { status: 'stale', removed: 0 };
   if (parent.accountId !== input.accountId) throw new Error('Foreign terminal Collection owner');
   if (

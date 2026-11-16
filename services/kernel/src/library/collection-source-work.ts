@@ -19,6 +19,7 @@ import {
   activeIdentitySourceConsumerMaintenance,
   withIdentitySourceConsumerMaintenance,
 } from '../semantic/identity-source-consumer-maintenance.ts';
+import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
 import {
   bindCanonicalSourceWork,
   advanceCanonicalSourceCapture,
@@ -38,7 +39,11 @@ import { collectionPublicationOutputProducer } from './collection-publication-ou
 import { reclaimSupersededCollectionOutput } from './collection-publication-reclaim.ts';
 import { reinspectFrozenCollection } from './collection-retention.ts';
 import frozenCaptureSQL from './collection-publication-frozen-capture.sql';
-import { publicOutputFreezeWork, publicOutputFrozenCaptureWork, publicOutputRetireWork } from '../semantic/identity-public-output-work.ts';
+import {
+  publicOutputFreezeWork,
+  publicOutputFrozenCaptureWork,
+  publicOutputRetireWork,
+} from '../semantic/identity-public-output-work.ts';
 import { withCollectionReadConnection } from './collection-read-connection.ts';
 import { workStepDeadline } from './collection-command-work.ts';
 
@@ -108,10 +113,12 @@ async function advanceSourceStep(
   });
   return published.state === 'published' ? 'ready' : 'unavailable';
 }
-async function retainFrozenPublication(
+/** Advance one committed custody or cleanup step for the retained generation. */
+export async function advanceFrozenCollection(
   context: WorkContext,
   row: { route: number; collection: string },
-): Promise<boolean> {
+  terminalAccountId?: string,
+): Promise<'progress' | 'purged' | 'waiting'> {
   const deadline = workStepDeadline();
   const capture = await withCollectionReadConnection(
     context.pool,
@@ -123,20 +130,37 @@ async function retainFrozenPublication(
           transactionId: string;
           position: string;
           sourceGeneration: string;
+          accountId: string | null;
+          incarnation: string;
+          epoch: number;
           releaseDigest: string | null;
           sealedBindingDigest: string | null;
           cleanupAccountId: string | null;
-        }>(frozenCaptureSQL.sql, [row.route, row.collection])
+        }>(frozenCaptureSQL.sql, [row.route, row.collection, terminalAccountId ?? null])
       ).rows[0],
   );
-  if (!capture) return false;
+  if (!capture) return 'waiting';
+  // A committed cleanup may have won the race with the graph page or its DBOS checkpoint.
+  if (capture.accountId === null) return terminalAccountId === undefined ? 'waiting' : 'purged';
+  if (terminalAccountId !== undefined && capture.accountId !== terminalAccountId) return 'waiting';
   if (capture.cleanupAccountId) {
+    const advanced = await createIdentityScopedObservations(context.pool).advanceFrozenLibrarySourceRetirement({
+      route: row.route,
+      collectionId: row.collection,
+      generation: capture.generation,
+      accountId: capture.cleanupAccountId,
+      incarnation: capture.incarnation,
+      ownerEpoch: capture.epoch,
+      deadline,
+    });
+    if (advanced) return 'progress';
     const page = await reinspectFrozenCollection(
       context.pool,
       { accountId: capture.cleanupAccountId, collectionId: row.collection, retainedGeneration: capture.generation },
       deadline,
     );
-    return page.status === 'progress' || page.status === 'purged';
+    if (page.status === 'stale') return terminalAccountId === undefined ? 'waiting' : 'purged';
+    return page.status === 'purged' || page.status === 'progress' ? page.status : 'waiting';
   }
   const producer = collectionPublicationOutputProducer(context);
   if (capture.sealedBindingDigest) {
@@ -149,7 +173,7 @@ async function retainFrozenPublication(
       },
       { deadline, allowance: { reservationId: capture.generation, remaining: publicOutputFreezeWork() } },
     );
-    return result.status === 'applied';
+    return result.status === 'applied' ? 'progress' : 'waiting';
   }
   const { generation, transactionId, position, sourceGeneration } = capture;
   const result = await producer.advanceFrozenPublication(
@@ -162,7 +186,7 @@ async function retainFrozenPublication(
     capture.releaseDigest,
     { deadline, allowance: { reservationId: generation, remaining: publicOutputFrozenCaptureWork() } },
   );
-  return result.status === 'more' || result.status === 'sealed';
+  return result.status === 'more' || result.status === 'sealed' ? 'progress' : 'waiting';
 }
 
 async function retireSupersededPublication(context: WorkContext, row: { route: number; collection: string }) {
@@ -243,7 +267,7 @@ export async function registerCollectionSourceWork(context: WorkContext): Promis
       if (row.builtin === 'everything' || row.builtin === 'state') {
         if (row.owner) await recoverCollectionPublication(context, { ...row, owner: row.owner }, input.root);
         // Revisit after capture, transfer or terminal cleanup progresses.
-        if (await retainFrozenPublication(context, row)) return input;
+        if ((await advanceFrozenCollection(context, row)) !== 'waiting') return input;
         await retireSupersededPublication(context, row);
       }
       if (row.owner) await page({ accounts: [row.owner], collectionId: row.collection });

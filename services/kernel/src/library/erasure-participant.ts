@@ -16,6 +16,7 @@ import scope from './erasure-scope.sql';
 import probe from './erasure-probe.sql';
 import { purgeOwnedGraphPage } from './erasure-owned-graph.ts';
 import { initialGraphCheckpoint, runOwnedGraphSegment, type GraphCheckpoint } from './erasure-owned-work.ts';
+import { advanceFrozenCollection } from './collection-source-work.ts';
 
 import type { ShelfMaintenanceOps } from './shelf-maintenance-ops-contract.ts';
 
@@ -41,10 +42,8 @@ const BLOCKERS = Object.freeze([
  * Shared/foreign custody still has no complete-proof path; this module cannot ACK.
  * See erasure-participant.md for every remaining producer and cleanup obligation.
  */
-export function registerLibraryErasure(
-  { pool, client, addEffects }: WorkContext,
-  maintenance?: ShelfMaintenanceOps,
-): void {
+export function registerLibraryErasure(context: WorkContext, maintenance?: ShelfMaintenanceOps): void {
+  const { pool, client, addEffects } = context;
   const inspect = DBOS.registerStep(
     async (accountId: string) => {
       const route = requireRoute(accountId);
@@ -100,7 +99,19 @@ export function registerLibraryErasure(
     { name: 'library.purgeErasurePublicationPage', ...COMMAND_STEP_RETRIES },
   );
   const graphPage = DBOS.registerStep(
-    async (input: Parameters<typeof purgeOwnedGraphPage>[1]) => purgeOwnedGraphPage(pool, input),
+    async (input: Parameters<typeof purgeOwnedGraphPage>[1]) => {
+      const page = await purgeOwnedGraphPage(pool, input);
+      if (input.kind === 'collectionLocal' && page.blocked && page.parent !== null) {
+        const frozen = await advanceFrozenCollection(
+          context,
+          { route: requireRoute(page.parent), collection: page.parent },
+          input.accountId,
+        );
+        if (frozen === 'progress') return { ...page, retryCollection: true };
+        if (frozen === 'purged') return { ...page, blocked: false, collectionDone: true };
+      }
+      return page;
+    },
     { name: 'library.purgeErasureOwnedPage', ...COMMAND_STEP_RETRIES },
   );
   type Continuation = {

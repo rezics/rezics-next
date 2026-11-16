@@ -24,7 +24,7 @@ export async function runOwnedGraphSegment(
   accountId: string,
   segment: number,
   start: GraphCheckpoint,
-  page: (input: OwnedGraphInput) => Promise<OwnedGraphPage>,
+  page: (input: OwnedGraphInput) => Promise<OwnedGraphPage & { retryCollection?: boolean }>,
 ) {
   const cursor = { ...start };
   const stats = { pages: 0, removed: 0 };
@@ -63,6 +63,7 @@ export async function runOwnedGraphSegment(
       continue;
     }
     if (kind === 'collectionLocal') {
+      if (result.retryCollection) continue;
       if (result.blocked) cursor.blockedCollection ??= cursor.parent;
       if (result.blocked || result.collectionDone) {
         cursor.after = cursor.parent;
