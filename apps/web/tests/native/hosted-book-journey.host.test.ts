@@ -355,10 +355,15 @@ async function assertPublishedLanguage(
   return value;
 }
 
+async function openBookPlacementForm(page: Page) {
+  const outline = page.getByRole('region', { name: 'Book table of contents', exact: true });
+  await outline.getByRole('button', { name: 'Add part or chapter', exact: true }).click();
+  return page.getByRole('form', { name: 'Add part or chapter', exact: true });
+}
+
 async function addChapterFromPicker(page: Page, title: string, draftTitle: string) {
   await pickDraft(page, draftTitle);
-  const form = page.locator('details.studio-placement-form');
-  await form.locator('summary').click();
+  const form = await openBookPlacementForm(page);
   await form.getByLabel('Placement title', { exact: true }).fill(title);
   await form.getByRole('button', { name: 'Add chapter', exact: true }).click();
   await page.getByRole('button', { name: title, exact: true }).waitFor({ state: 'visible' });
@@ -366,9 +371,7 @@ async function addChapterFromPicker(page: Page, title: string, draftTitle: strin
 
 async function addPartInStudio(page: Page, title: string) {
   const organizer = page.getByRole('region', { name: 'Book table of contents', exact: true });
-  await organizer.waitFor({ state: 'visible' });
-  const form = organizer.locator('details.studio-placement-form');
-  await form.locator('summary').click();
+  const form = await openBookPlacementForm(page);
   await form.getByRole('combobox', { name: 'Add', exact: true }).click();
   await page.getByRole('option', { name: 'Part', exact: true }).click();
   await form.getByLabel('Placement title', { exact: true }).fill(title);
@@ -379,17 +382,18 @@ async function addPartInStudio(page: Page, title: string) {
 async function movePlacementUnderPart(page: Page, placementTitle: string, partTitle: string) {
   const organizer = page.getByRole('region', { name: 'Book table of contents', exact: true });
   await organizer.getByRole('button', { name: `Organize ${placementTitle}`, exact: true }).click();
-  await organizer.getByRole('button', { name: 'Move to…', exact: true }).click();
-  await organizer.getByRole('combobox', { name: 'Destination', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Move to…', exact: true }).click();
+  const form = page.getByRole('form', { name: 'Move to…', exact: true });
+  await form.getByRole('combobox', { name: 'Destination', exact: true }).click();
   await page.getByRole('option', { name: new RegExp(partTitle) }).click();
-  await organizer.getByRole('button', { name: 'Move placement', exact: true }).click();
+  await form.getByRole('button', { name: 'Move placement', exact: true }).click();
   await organizer.getByText(partTitle, { exact: true }).waitFor({ state: 'visible' });
 }
 
 async function movePlacementUp(page: Page, placementTitle: string) {
   const organizer = page.getByRole('region', { name: 'Book table of contents', exact: true });
   await organizer.getByRole('button', { name: `Organize ${placementTitle}`, exact: true }).click();
-  await organizer.getByRole('button', { name: `Move up ${placementTitle}`, exact: true }).click();
+  await page.getByRole('menuitem', { name: `Move up ${placementTitle}`, exact: true }).click();
 }
 
 async function openBookStudio(page: Page, catalogueId: string) {
