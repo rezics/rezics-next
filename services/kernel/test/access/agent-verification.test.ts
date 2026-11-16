@@ -25,7 +25,6 @@ import { newId } from '../../src/route/route.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { EVENT_TYPES } from '../../src/events/log.ts';
-import { migrate } from '../../scripts/database.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { accountToken, admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
@@ -53,10 +52,12 @@ const eventNames = [
 ] as const;
 
 type Seeded = { id: string; handle: string; kind: 'actor' | 'organization'; displayName: string };
-let admin: Pool;
-let databaseName: string;
-let databaseUrl: string;
+let admin: Pool | undefined;
+const databaseName = `agent_verification_${process.pid}_${randomUUID().replaceAll('-', '')}`;
 let pool: ReturnType<typeof createPool>;
+let pendingSetup: Promise<void> | undefined;
+let stoppingSetup = false;
+const setupStopped = new Error('Agent verification fixture teardown started during setup');
 let access: ReturnType<typeof admittedAccess>;
 let kernel: ReturnType<typeof createKernel>;
 let staff: Seeded;
@@ -240,18 +241,19 @@ async function accountState(id: string) {
   return rows[0];
 }
 
-beforeAll(async () => {
-  const source = new URL(sourceUrl!);
-  admin = new Pool({ connectionString: sourceUrl, max: 1 });
-  databaseName = `agent_verification_${process.pid}_${randomUUID().replaceAll('-', '')}`;
-  const target = new URL(source);
-  target.pathname = `/${databaseName}`;
-  databaseUrl = target.toString();
-  await admin.query(`CREATE DATABASE "${databaseName}"`);
-  migrate(databaseUrl);
-  pool = createPool(databaseUrl);
-  await bootstrapRelease(pool, bundledRelease);
+async function fixturePhase<T>(name: string, work: () => T | Promise<T>): Promise<T> {
+  if (stoppingSetup) throw setupStopped;
+  const started = performance.now();
+  process.stdout.write(`Agent verification fixture phase: ${name}\n`);
+  try {
+    return await work();
+  } finally {
+    const seconds = (performance.now() - started) / 1000;
+    process.stdout.write(`REZICS_KERNEL_FIXTURE_PHASES=${JSON.stringify({ [name]: seconds })}\n`);
+  }
+}
 
+function mountFixtureKernels() {
   const receiptKeys = testReceiptKeys();
   const catalogueKernel = createKernel({
     pool,
@@ -280,6 +282,9 @@ beforeAll(async () => {
       },
     },
   });
+}
+
+async function seedFixtureAccounts() {
   staff = await seedAccount('verification_staff');
   person = await seedAccount('verification_person');
   manager = await seedAccount('verification_manager');
@@ -291,41 +296,91 @@ beforeAll(async () => {
      VALUES ($1, $2, $3, 'account:manage', '(,)', $3)`,
     [accountRoute, organization.id, manager.id],
   );
-  await bootstrapGovernance(pool, staff.id);
+}
 
-  for (const [account, kind] of [
-    [person, 'person'],
-    [organization, 'organization'],
-    [automated, 'person'],
-    [otherAccount, 'person'],
+async function setupFixture() {
+  const source = new URL(sourceUrl!);
+  const template = decodeURIComponent(source.pathname.slice(1));
+  if (!/^[a-zA-Z0-9_]+$/.test(template)) throw new Error('DATABASE_URL must name a migrated kernel template');
+  const databaseUrl = await fixturePhase('databaseClone', async () => {
+    // The check runner already migrated the per-file database. Clone it without connecting to the template.
+    const maintenance = new URL(source);
+    maintenance.pathname = '/postgres';
+    admin = new Pool({ connectionString: maintenance.href, max: 1 });
+    await admin.query(`CREATE DATABASE "${databaseName}" TEMPLATE "${template}"`);
+    source.pathname = `/${databaseName}`;
+    return source.href;
+  });
+  await fixturePhase('definitions', () => {
+    pool = createPool(databaseUrl);
+    return bootstrapRelease(pool, bundledRelease);
+  });
+
+  await fixturePhase('kernelComposition', mountFixtureKernels);
+  await fixturePhase('seedAccounts', seedFixtureAccounts);
+  await fixturePhase('governance', () => bootstrapGovernance(pool, staff.id));
+
+  for (const [phase, account, kind] of [
+    ['personAgent', person, 'person'],
+    ['organizationAgent', organization, 'organization'],
+    ['automatedAgent', automated, 'person'],
+    ['otherAgent', otherAccount, 'person'],
   ] as const)
-    await ensureAccountAgent(pool, {
-      account: account.id,
-      kind,
-      name: account.displayName,
-      language: 'en',
-    });
+    await fixturePhase(phase, () =>
+      ensureAccountAgent(pool, {
+        account: account.id,
+        kind,
+        name: account.displayName,
+        language: 'en',
+      }),
+    );
 
-  personCatalogue = await catalogueSubject('schema:Person', 'Catalogue Person');
-  organizationCatalogue = await catalogueSubject('schema:Organization', 'Catalogue Organization');
-  const handleRoute = createHash('sha256').update(person.handle).digest().readUInt16BE(0);
-  await pool.query(
-    `INSERT INTO access.handle_claim(route, normalized_handle, account_id, state, transaction_id)
-     VALUES ($1, $2, $3, 'active', $3)`,
-    [handleRoute, person.handle, person.id],
-  );
+  await fixturePhase('catalogue', async () => {
+    personCatalogue = await catalogueSubject('schema:Person', 'Catalogue Person');
+    organizationCatalogue = await catalogueSubject('schema:Organization', 'Catalogue Organization');
+  });
+  await fixturePhase('handleClaim', async () => {
+    const handleRoute = createHash('sha256').update(person.handle).digest().readUInt16BE(0);
+    await pool.query(
+      `INSERT INTO access.handle_claim(route, normalized_handle, account_id, state, transaction_id)
+       VALUES ($1, $2, $3, 'active', $3)`,
+      [handleRoute, person.handle, person.id],
+    );
+  });
+}
+
+beforeAll(async () => {
+  pendingSetup = setupFixture();
+  try {
+    await pendingSetup;
+  } catch (error) {
+    // Once teardown has started, its join reports the late failure.
+    if (!stoppingSetup) throw error;
+  } finally {
+    pendingSetup = undefined;
+  }
 }, 60_000);
 
 afterAll(async () => {
-  try {
-    await pool?.end();
-  } finally {
+  // Bun can time out the hook while the current phase still owns the pools.
+  stoppingSetup = true;
+  const failures: unknown[] = [];
+  async function settle(work: () => Promise<unknown> | undefined) {
     try {
-      if (databaseName) await dropTestDatabase(admin, databaseName);
-    } finally {
-      await admin?.end();
+      await work();
+    } catch (error) {
+      if (error !== setupStopped) failures.push(error);
     }
   }
+  await settle(() => pendingSetup);
+  await settle(() => pool?.end());
+  const maintenance = admin;
+  if (maintenance) {
+    await settle(() => dropTestDatabase(maintenance, databaseName));
+    await settle(() => maintenance.end());
+  }
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) throw new AggregateError(failures, 'Agent verification fixture teardown failed');
 }, 30_000);
 
 test('all six verification routes are gated while the public handle identity read remains open', async () => {
