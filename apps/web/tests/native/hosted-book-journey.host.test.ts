@@ -1,5 +1,5 @@
 import { expect, setDefaultTimeout } from 'bun:test';
-import type { Page } from 'playwright';
+import type { Page, Response as PlaywrightResponse } from 'playwright';
 import { documentText, serializeDocument } from '@rezics/document';
 import type { KernelClient } from '@rezics/client';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
@@ -12,7 +12,7 @@ import {
   type HostedReaderControl,
   type JourneyPost,
 } from './hosted-book-journey-fixture.ts';
-import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
+import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest, settledWithin } from './lifecycle.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 
 setDefaultTimeout(900_000);
@@ -163,10 +163,48 @@ async function saveChapterDraft(
     expect(reservation.status(), 'the native editor reserves the deterministic cover').toBe(201);
     const result = (await reservation.json()) as { media: { id: string } };
     mediaId = result.media.id;
-    const upload = await uploadPromise;
-    expect(new URL(upload.url()).pathname).toBe(`/media/${mediaId}`);
-    expect(upload.status(), 'the browser uploads the original cover bytes').toBe(200);
-    await page.getByRole('img', { name: 'Original Lantern Ferry cover', exact: true }).waitFor({ state: 'visible' });
+    const mediaPath = `/media/${mediaId}`;
+    const polls: PlaywrightResponse[] = [];
+    const observePoll = (response: PlaywrightResponse) => {
+      if (response.request().method() !== 'GET' || new URL(response.url()).pathname !== mediaPath) return;
+      if (polls.length === 8) polls.shift();
+      polls.push(response);
+    };
+    page.on('response', observePoll);
+    try {
+      const upload = await uploadPromise;
+      expect(new URL(upload.url()).pathname).toBe(mediaPath);
+      expect(upload.status(), 'the browser uploads the original cover bytes').toBe(200);
+      try {
+        await page
+          .getByRole('img', { name: 'Original Lantern Ferry cover', exact: true })
+          .waitFor({ state: 'visible' });
+      } catch (cause) {
+        const selected = [upload, ...polls.slice(-3)];
+        const states = await settledWithin(
+          Promise.all(
+            selected.map(async (response) => {
+              const body = (await response.json().catch(() => null)) as { media?: { state?: unknown } } | null;
+              const state = body?.media?.state;
+              const knownState =
+                state === 'reserved' || state === 'uploaded' || state === 'available' || state === 'rejected';
+              return {
+                method: response.request().method(),
+                status: response.status(),
+                state: knownState ? state : null,
+              };
+            }),
+          ),
+          1_000,
+        ).catch(() => undefined);
+        throw new Error(
+          `${errorText(cause)}; exact cover responses=${JSON.stringify(states ?? selected.map((response) => ({ method: response.request().method(), status: response.status() })))}`,
+          { cause },
+        );
+      }
+    } finally {
+      page.off('response', observePoll);
+    }
   }
 
   const save = page.getByRole('button', { name: 'Save draft', exact: true });
