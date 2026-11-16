@@ -85,6 +85,7 @@ import {
   readCanonicalStatementPresenceSql,
   readCanonicalStatementsSql,
   SEARCH_INDEX_PROVENANCE_BYTES,
+  SEARCH_INDEX_STATEMENT_KEYS,
 } from '../../src/semantic/identity-search-index-statements.ts';
 import candidateProvenance from '../../src/semantic/scope-leaf-selection-provenance.sql';
 import sourceFences from '../../src/content/read-source-fences.sql';
@@ -186,6 +187,12 @@ test.each([
     mode: 'canonical-merge',
   },
   {
+    label: 'indexes a visible canonical original with an outgoing relation',
+    intent: 'merge',
+    resumed: false,
+    mode: 'canonical-relation',
+  },
+  {
     label: 'refuses a changed completed build before acceptance',
     intent: 'merge',
     resumed: false,
@@ -220,7 +227,8 @@ test.each([
   const jobId = newId(jobHome << 4);
   const job = { jobId, epoch: 1n };
   const savedJob = { jobId, epoch: '1' };
-  const canonicalTerms = mode === 'canonical-terms' || mode === 'canonical-merge';
+  const adoptedRelation = mode === 'canonical-relation';
+  const canonicalTerms = mode === 'canonical-terms' || mode === 'canonical-merge' || adoptedRelation;
   const priorVisible = mode === 'handoff' || mode === 'canonical-terms';
   const visible = canonicalTerms || ['visible', 'changed-proof', 'retire', 'superseded'].includes(mode);
   const languageDigest = createHash('sha256').update('en').digest('hex');
@@ -237,11 +245,29 @@ test.each([
   let canonicalBuildCurrent = true;
   let changedTermReplay = false;
   const adoptedName = mode === 'canonical-merge';
-  let blockedRelation = false;
+  let selectionOverflow = false;
   let nameDisclosed = true;
   let nameFenced = false;
+  let relationHidden = false;
+  let relationOwnerMoved = false;
   const nameSlot = crypto.randomUUID();
   const nameCandidate = crypto.randomUUID();
+  const relationTarget = newId(otherControlHome << 4);
+  const relationTerminal = newId(jobHome << 4);
+  let targetRedirect: string | null = null;
+  const subjectType = adoptedRelation ? 'schema:Recipe' : 'schema:Person';
+  const selectedProperty = adoptedRelation ? 'schema:suitableForDiet' : 'schema:name';
+  const relationRoster = ['schema:author', 'schema:keywords', 'schema:suitableForDiet'];
+  const dependencyHomes = adoptedRelation ? [writerHome, otherControlHome] : [writerHome];
+  const selectedBody = {
+    value: {
+      type: 'value',
+      content: adoptedRelation ? relationTarget : { language: 'en', text: 'Adopted public name' },
+    },
+    rank: 'normal',
+    qualifiers: [],
+    references: [],
+  };
   let activeCollectionCount = '2';
   let normalizationCalls = 0;
   let unavailableAllocation = false;
@@ -249,18 +275,23 @@ test.each([
   const canonicalDocument = {
     id: second,
     partition: writerHome,
-    type: 'schema:Person',
+    type: subjectType,
     security_revision: 1,
     names: ['Canonical name', 'Native alias', 'Alternate alias', ...(adoptedName ? ['Adopted public name'] : [])],
     descriptions: [],
     name_sort: 'canonical name',
-    statements: adoptedName ? ['schema:name=Adopted public name'] : [],
-    facts: [],
+    statements: adoptedName
+      ? ['schema:name=Adopted public name']
+      : adoptedRelation
+        ? [`${selectedProperty}=${relationTarget}`]
+        : [],
+    facts: adoptedRelation ? [{ property: selectedProperty, value: relationTarget, qualifiers: [] }] : [],
     public_collection_count: 2,
     rating_score: 0.7,
     rating_prior_epoch: 3,
     credit_search_complete: false,
     credited_names: [],
+    ...(adoptedRelation && { relation_facet_overflow: relationRoster }),
   };
   const oldBuild = crypto.randomUUID();
   const oldHeads = mode === 'retire' ? [0, writerHome] : [];
@@ -406,8 +437,8 @@ test.each([
           [
             String(values[0]),
             'b',
-            'active',
-            null,
+            relationOwnerMoved && values[0] === String(otherControlHome) ? 'moved' : 'active',
+            relationOwnerMoved && values[0] === String(otherControlHome) ? 'other' : null,
             '1',
             (canonicalTerms || engineReads > 1) && values[0] === String(writerHome) ? nativePosition() : '0',
           ],
@@ -526,7 +557,7 @@ test.each([
         ];
       } else if (sql === visibilityRead.sql || sql === visibilityRead['~standard'].query.text) {
         projectedSubjects.push(String(values[1]));
-        rows = [[visible && values[1] === second ? 'visible' : 'hidden', '1', 'schema:Person']];
+        rows = [[visible && values[1] === second ? 'visible' : 'hidden', '1', subjectType]];
       } else if (visible && sql === mappingOwners.sql)
         rows = (values[0] as number[]).map((partition_no) => ({
           partition_no,
@@ -574,7 +605,7 @@ test.each([
           1,
           bundledDigest,
           second,
-          writerHome,
+          dependencyHomes.at(-1),
         ]);
         rows = mode === 'changed-proof' || !canonicalBuildCurrent ? [] : [{}];
       } else if (canonicalTerms && sql === readIdentitySearchIndexTermSlotSql) {
@@ -596,27 +627,30 @@ test.each([
         ];
       } else if (canonicalTerms && sql === readCanonicalStatementPresenceSql) {
         expect(values).toEqual([writerHome << 4, second]);
-        rows = adoptedName || blockedRelation ? [{}] : [];
+        rows = adoptedName || adoptedRelation || selectionOverflow ? [{}] : [];
       } else if (canonicalTerms && sql === readCanonicalStatementCountSql) {
         expect(values).toEqual([writerHome << 4, second]);
-        rows = [{ count: Number(adoptedName || blockedRelation), relations: blockedRelation }];
-      } else if (adoptedName && sql === readCanonicalStatementsSql) {
-        expect(values).toEqual([writerHome << 4, second, 1]);
+        rows = [
+          { count: selectionOverflow ? SEARCH_INDEX_STATEMENT_KEYS + 1 : Number(adoptedName || adoptedRelation) },
+        ];
+      } else if ((adoptedName || adoptedRelation) && sql === readCanonicalStatementsSql) {
+        expect(values).toEqual([writerHome << 4, second, 1, adoptedRelation ? relationRoster : []]);
         rows = [
           {
             route: writerHome << 4,
             subject_id: second,
             slot_id: nameSlot,
             candidate_id: nameCandidate,
-            property: 'schema:name',
+            property: selectedProperty,
             rank: 'preferred',
             ordinal: 1,
             release: bundledDigest,
-            relation: false,
+            relation: adoptedRelation,
+            eligible: adoptedRelation,
+            source: null,
+            oversized_source: false,
             concealed: !nameDisclosed,
-            body: nameDisclosed
-              ? { value: { type: 'value', content: { language: 'en', text: 'Adopted public name' } } }
-              : null,
+            body: nameDisclosed ? selectedBody : null,
           },
         ];
       } else if (adoptedName && sql === candidateProvenance.sql) {
@@ -668,11 +702,50 @@ test.each([
         expect(values[0]).toBe(String(writerHome));
         rows = [[second, activeCollectionCount]];
       } else if (visible && sql === projectionRelease.sql) rows = [[bundledDigest, JSON.stringify(bundledRelease)]];
-      else if (visible && sql === projectionSubjects.sql)
-        rows = [[String(writerHome << 4), second, 'schema:Person', 'visible', '1', bundledDigest, null, 't', '1']];
-      else if (visible && sql === projectionPrivacy.sql) rows = [['0']];
-      else if (visible && sql === projectionPage.sql) rows = [];
-      else if (visible && sql === lockProjectionBuildForRetirementSql)
+      else if (visible && sql === projectionSubjects.sql) {
+        if (adoptedRelation && String(values[2]).includes(relationTarget))
+          rows = [
+            [
+              String(otherControlHome << 4),
+              relationTarget,
+              'skos:Concept',
+              relationHidden ? 'hidden' : 'visible',
+              '1',
+              bundledDigest,
+              targetRedirect,
+              't',
+              '1',
+            ],
+          ];
+        else if (adoptedRelation && String(values[2]).includes(relationTerminal))
+          rows = [
+            [String(jobHome << 4), relationTerminal, 'skos:Concept', 'hidden', '1', bundledDigest, null, 't', '1'],
+          ];
+        else rows = [[String(writerHome << 4), second, subjectType, 'visible', '1', bundledDigest, null, 't', '1']];
+      } else if (visible && sql === projectionPrivacy.sql) rows = [['0']];
+      else if (visible && sql === projectionPage.sql) {
+        rows =
+          adoptedRelation && values[projectionPage.params.indexOf('after_property')] === ''
+            ? [
+                [
+                  String(writerHome << 4),
+                  second,
+                  nameSlot,
+                  nameCandidate,
+                  selectedProperty,
+                  'normal',
+                  '1',
+                  '1',
+                  JSON.stringify(selectedBody),
+                  bundledDigest,
+                  null,
+                  't',
+                  null,
+                  't',
+                ],
+              ]
+            : [];
+      } else if (visible && sql === lockProjectionBuildForRetirementSql)
         rows = mode === 'retire' ? [{ build_id: oldBuild, generation: oldGeneration, meaning_digest: oldMeaning }] : [];
       else if (visible && sql === retireProjectionHeadSql) {
         expect(values).toEqual([oldBuild]);
@@ -695,11 +768,14 @@ test.each([
           mode === 'superseded' && readBuilds === 3
             ? []
             : [[retainedBuild, newGeneration, String(writerHome << 4), '1', '0', '0', second, '1', '1', bundledDigest]];
-      } else if (visible && sql === projectionHeads.sql) rows = [[String(writerHome)]];
-      else if (visible && sql === projectionHeadPage.sql) {
+      } else if (visible && sql === projectionHeads.sql) {
+        const heads = JSON.parse(String(values[projectionHeads.params.indexOf('heads')])) as { partition_no: number }[];
+        rows = heads.map(({ partition_no }) => [String(partition_no)]);
+      } else if (visible && sql === projectionHeadPage.sql) {
         expect(values[2]).toBe('1');
         projectionHeadCursors.push(String(values[1]));
-        rows = Number(values[1]) < writerHome ? [[String(writerHome), '1', '0']] : [];
+        const next = dependencyHomes.find((home) => Number(values[1]) < home);
+        rows = next ? [[String(next), '1', '0']] : [];
       } else if (visible && sql === projectionCurrentHead.sql) rows = [['0', '1', 'active']];
       else if (sql === readSearchIdentityHomePendingSql) {
         expect(values).toEqual([writerHome, index]);
@@ -1328,6 +1404,7 @@ test.each([
     'visible',
     'canonical-terms',
     'canonical-merge',
+    'canonical-relation',
     'changed-proof',
     'retire',
     'superseded',
@@ -1435,6 +1512,10 @@ test.each([
       if (canonicalTerms) {
         expect(committed[3]?.frontier.after.slice(2, 4)).toEqual(['original', 'progress']);
         await nextSupport(['original', 'progress', retainedBuild, newGeneration]);
+        if (adoptedRelation) {
+          await nextSupport(['original', 'progress', retainedBuild, newGeneration]);
+          await nextSupport(['original', 'progress', retainedBuild, newGeneration]);
+        }
         await nextSupport(['original', 'complete', retainedBuild, newGeneration]);
         let digest = EMPTY_IDENTITY_SEARCH_TERMS_DIGEST;
         for (const [i, slot] of termSlots.entries()) {
@@ -1460,11 +1541,11 @@ test.each([
         expect(await prepare(pool, progress.receipt)).toEqual({ state: 'pending' });
         expect(normalizationCalls).toBe(0);
         changedTermReplay = false;
-        blockedRelation = true;
+        selectionOverflow = true;
         expect(await prepare(pool, progress.receipt)).toEqual({ state: 'pending' });
         expect(normalizationCalls).toBe(0);
         expect(retainedPlan).toBeUndefined();
-        blockedRelation = false;
+        selectionOverflow = false;
       } else {
         if (mode === 'retire') {
           await nextSupport(['terminal', 'retiring', oldBuild, '5', 0]);
@@ -1604,6 +1685,23 @@ test.each([
             expect(bulkCalls).toBe(0);
             nameFenced = false;
           }
+          if (adoptedRelation) {
+            relationHidden = true;
+            await expect(prepare(pool, request)).rejects.toThrow('Canonical Search Source changed before dispatch');
+            expect(committedOperation).toBeUndefined();
+            expect(bulkCalls).toBe(0);
+            relationHidden = false;
+            targetRedirect = relationTerminal;
+            await expect(prepare(pool, request)).rejects.toThrow('Canonical Search Source changed before dispatch');
+            expect(committedOperation).toBeUndefined();
+            expect(bulkCalls).toBe(0);
+            targetRedirect = null;
+            relationOwnerMoved = true;
+            await expect(prepare(pool, request)).rejects.toThrow(`Command unavailable for partition ${writerHome}: contention`);
+            expect(committedOperation).toBeUndefined();
+            expect(bulkCalls).toBe(0);
+            relationOwnerMoved = false;
+          }
           const captured = await prepare(pool, request);
           expect(captured).toEqual({ state: 'progress', transactionId: retainedBulk?.transaction });
           expect(committedOperation?.state).toBe('dispatched');
@@ -1657,7 +1755,11 @@ test.each([
           expect(receiptText).toContain('"kind":"bulk"');
           expect(await prepare(pool, request)).toEqual({ state: 'prepared' });
           const expectedAllocationReads =
-            5 + 2 * Number(canonicalTerms) + 2 * Number(adoptedName) + Number(mode === 'dispatch');
+            5 +
+            2 * Number(canonicalTerms) +
+            2 * Number(adoptedName) +
+            3 * Number(adoptedRelation) +
+            Number(mode === 'dispatch');
           expect(engineReads).toBe(expectedAllocationReads);
           const applied = await withIdentitySourceConsumerMaintenance(
             { pool, env: {} },
