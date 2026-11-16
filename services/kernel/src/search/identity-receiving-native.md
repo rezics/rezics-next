@@ -80,8 +80,9 @@ rolls back; acquiring a native hold never registers a conflicting Search purpose
 
 `recordDispatch` records only a same-T update of the actual writer's dispatched enrollment, retained repair locator
 and exact action digest. `recordVisible` requires that original enrollment's same-T actual writer settlement and
-retained native bulk/recovery evidence. It validates the existing writer's receipt and exact physical/action/native
-identities. No method sends engine requests. `recordApplied` advances the committed visible native operation and
+retained native bulk evidence. A current matching hit with refresh leaves an uncertain original dispatch pending.
+Validation binds the writer receipt to the exact physical allocation, action and native operation. No method sends
+engine requests. `recordApplied` advances the committed visible native operation and
 frontier; a late callback requires the common effect and fixed Search scope step with the same T, native component,
 frontier and transaction provenance. Missing registration rolls back the operation mutation. Applied replay
 resolves the original committed effect rather than remutating.

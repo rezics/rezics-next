@@ -3124,7 +3124,7 @@ export function createNativePublicFilterSourceBinding(
     return result;
   });
   nativePreparations.set(bootstrapBinding, async (input, context) => {
-    if (!('bootstrap' in input)) return beginRetained(input, context, undefined, undefined, input.inputLimit);
+    if (!('bootstrap' in input)) return beginRetained(input, context, undefined, input.inputLimit);
     const retained = await run(context, async (cost, db) => {
       const cut = await loadBootstrap(input.bootstrap, db);
       if (cut.row.state !== 'capturing' && cut.row.state !== 'begun') throw new BindingError('observation_lost');

@@ -310,6 +310,23 @@ type SealedOperation = Readonly<{
   initiator: Readonly<{ accountId: string; clientId: string; requestedBy: string | null }>;
 }>;
 
+type PublicationOperation =
+  | 'validate_request'
+  | 'read_open_transition'
+  | 'open_command'
+  | 'restore_initiator'
+  | 'prepare_authority'
+  | 'authorize_command'
+  | 'read_publication_receipt'
+  | 'check_realm'
+  | 'check_transition'
+  | 'check_ban'
+  | 'write_membership'
+  | 'ensure_member_grant'
+  | 'recheck_authority'
+  | 'write_publication_proof'
+  | 'commit_publication';
+
 /** Accounts owns the workflow. This adapter publishes and proves the Realm side. */
 export function createRealmMembership(config: RealmMembershipDependencies) {
   const { pool, access } = config;
@@ -605,6 +622,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     action: string,
     target: Readonly<{ route: number; id: string }>,
     deadline: number,
+    enter: (operation: PublicationOperation) => void,
   ): AccessCommandAuthorization {
     type Prepared = { current: AccessCommandAuthorization; proof: unknown };
     const denied = () => new GrantDeniedError();
@@ -615,6 +633,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
       denied,
       async prepare(attempt) {
         active = undefined;
+        enter('restore_initiator');
         if (!config.restorer) throw new DurableInitiatorUnavailableError();
         const actor = await config.restorer.restoreInitiator(
           {
@@ -637,14 +656,20 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
           },
           attempt.time,
         );
+        enter('prepare_authority');
         const current = await accessCommandAuthorization(access, actor, action, target, { pool, deadline }, denied);
-        return { current, proof: await current.prepare!(attempt) } satisfies Prepared;
+        const proof = await current.prepare!(attempt);
+        enter('open_command');
+        return { current, proof } satisfies Prepared;
       },
       async authorize(tx, attempt, evidence) {
+        enter('authorize_command');
         const prepared = evidence as Prepared | undefined;
         if (!prepared) throw denied();
         active = prepared.current;
-        return prepared.current.authorize(tx, attempt, prepared.proof);
+        const mode = await prepared.current.authorize(tx, attempt, prepared.proof);
+        enter('read_publication_receipt');
+        return mode;
       },
     };
     return { ...authorization, check: async (client, time) => (active ? active.check(client, time) : false) };
@@ -655,6 +680,25 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     input: MembershipInput,
     reservation: MembershipReservation,
     key: string,
+  ) {
+    let operation: PublicationOperation = 'validate_request';
+    try {
+      return await publishMembership(request, input, reservation, key, (next) => {
+        operation = next;
+      });
+    } catch (error) {
+      if (input.role === 'member' && operations.has(request))
+        console.error({ code: 'realm_membership_publication_failed', operation });
+      throw error;
+    }
+  }
+
+  async function publishMembership(
+    request: LifecycleRequest,
+    input: MembershipInput,
+    reservation: MembershipReservation,
+    key: string,
+    enter: (operation: PublicationOperation) => void,
   ) {
     if (input.role === 'owner') throw new RealmMembershipRoleError();
     if (input.role !== 'member' && input.role !== null) throw new GrantDeniedError();
@@ -670,10 +714,12 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     denyUnless(Number.isFinite(request.deadline) && config.deadlineNow() < request.deadline);
     // This checkout ends before Realm admission. The source's immutable proof
     // slot makes a stale preflight incapable of doing another foreign effect.
+    enter('read_open_transition');
     const openTransition =
       role === 'member' && reservation.transition
         ? await isRealmTransitionOpen(pool, reservation as RealmMembershipTransition, request.deadline)
         : false;
+    enter('validate_request');
     const target = { route, id: realmId };
     const operation = operations.get(request);
     let identity: PrincipalCommandIdentity;
@@ -691,7 +737,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
         principal: Object.freeze({ kind: 'account' as const, id: operation.initiator.accountId }),
         basis: Object.freeze({ clientId: operation.initiator.clientId, requestedBy: operation.initiator.requestedBy }),
       });
-      authorization = restoredAuthorization(operation, action, target, request.deadline);
+      authorization = restoredAuthorization(operation, action, target, request.deadline, enter);
     } else {
       // The authenticator's own actor, never a copy: Access knows no other object.
       const actor = request.actor;
@@ -713,6 +759,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
       reservationId: reservation.reservationId,
       role,
     };
+    enter('open_command');
     return runCommand(
       pool,
       {
@@ -724,7 +771,9 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
         authorization,
       },
       async (tx, command) => {
+        enter('recheck_authority');
         denyUnless(await authorization.check(tx));
+        enter('check_realm');
         const at = authoritativeTimeValue(command.time);
         const active = await readOne(realmActive.run(tx, { route, id: realmId, at }));
         denyUnless(text(active, 'realmId') === realmId);
@@ -746,6 +795,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
             await assertRealmOwnerMayLeave(tx, ownership);
         }
         if (role === 'member') {
+          enter('check_transition');
           denyUnless(openTransition && reservation.transition);
           denyUnless(
             !first(
@@ -758,11 +808,13 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
             ),
           );
         }
+        enter('check_ban');
         if (
           role === 'member' &&
           (await currentBan.run(tx, { route, realm_id: realmId, account_id: input.memberAccountId, at }))
         )
           throw new GrantDeniedError();
+        enter('write_membership');
         const written = await writeMembership(tx, {
           route,
           realmId,
@@ -780,7 +832,9 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
           );
           denyUnless(current?.reservationId === reservation.reservationId);
         } else denyUnless(written);
+        enter('ensure_member_grant');
         if (role === 'member') await ensureRealmMemberGrant(tx, { realmId });
+        enter('recheck_authority');
         denyUnless(await authorization.check(tx));
         const value = {
           realmId,
@@ -796,6 +850,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
               }
             : {}),
         };
+        enter('write_publication_proof');
         if (role === 'member')
           await proofWrite.run(tx, {
             ...transitionParameters(reservation as RealmMembershipTransition),
@@ -808,6 +863,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
             command_key: currentCommandReceipt(tx).storageKey,
             at,
           });
+        enter('commit_publication');
         // Every positive Realm operation records its fresh generation proof.
         // An already-open exact membership needs no duplicate membership event.
         return written

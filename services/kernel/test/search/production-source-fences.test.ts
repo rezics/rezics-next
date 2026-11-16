@@ -5,6 +5,7 @@ import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { subjectGenerations, subjectIndexName, subjectAlias } from '../../src/search/indices.ts';
 import { readConfig, startServer } from '../../src/server.ts';
 import { createSearchWorkModule } from '../../src/search/work.ts';
+import { collectionPublicationScopeRuntime } from '../../src/search/scope-runtime.ts';
 import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
 import { createKernelRuntimeDefaults } from '../../src/composition/runtime-defaults.ts';
 import { composeSearchNativeAccess, composeSearchNativePorts } from '../../src/composition/search-native.ts';
@@ -136,6 +137,7 @@ test('production Search API and default Search module use their real configured 
       if ('pause' in service && typeof service.pause === 'function') worker = service as SearchRunner;
     }
     if (!worker) throw new Error('Configured Search WorkContext did not start its indexing runner');
+    expect(collectionPublicationScopeRuntime({ pool })).toMatchObject({ pool, prefix, library: expect.any(Object) });
     await eventually(async () => (await subjectGenerations(search, prefix)).active === 1);
 
     async function post(path: string, body: unknown, bearer = observer) {

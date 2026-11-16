@@ -147,7 +147,11 @@ export async function readSearchRepairWinner(search: OpenSearch, index: string, 
 }
 
 /** Validate only a native record loaded by custody; this is not a settlement producer. */
-export function validateSearchRepairWriterEvidence(index: string, receipt: SearchRepairWriterReceipt): void {
+export function validateSearchRepairWriterEvidence(
+  index: string,
+  receipt: SearchRepairWriterReceipt,
+  { allowReadbackRecovery = true }: { allowReadbackRecovery?: boolean } = {},
+): void {
   const fail = () => {
     throw unavailable('Native repair receipt or final writer fence changed');
   };
@@ -178,7 +182,7 @@ export function validateSearchRepairWriterEvidence(index: string, receipt: Searc
   };
   const evidence = nativeEvidence?.evidence;
   if (evidence?.kind === 'bulk') validateIndexWriteReceipt(evidence.bulk, index, [receipt.action]);
-  else if (evidence?.kind === 'recovered' && receipt.action.op === 'index') {
+  else if (allowReadbackRecovery && evidence?.kind === 'recovered' && receipt.action.op === 'index') {
     validateRefreshResponse(200, evidence.refresh);
     if (
       evidence.current?._id !== receipt.subject ||
@@ -730,6 +734,12 @@ export type SearchWriterNativeCustody = SearchWriterGuard &
         next: string | null;
       }>
     >;
+    /** Reads the copy for exactly one original in the retained generation barrier. */
+    readRetainedCopy(
+      locator: SearchWriterBarrierLocator,
+      original: string,
+      deadline: number,
+    ): Promise<SearchRetainedCopy | null>;
     /** Revokes at most 100 undispatched enrollments. Dispatched uncertainty remains a drain barrier. */
     recoverInterrupted(
       locator: SearchWriterBarrierLocator,
@@ -836,6 +846,16 @@ type CopyRow = {
   writer_position: string | null;
 };
 
+// Each join uses its native primary key. Preserve a missing copy separately from a missing or moved barrier.
+export const readRetainedWriterCopySql = `SELECT g.incarnation AS gate_incarnation,g.owner_epoch AS gate_epoch,
+  w.original_id::text,w.source_position,w.visible_transaction_id,w.visible_position,
+  w.writer_transaction_id,w.writer_position,w.writer_token,w.dispatch_state,w.owner_epoch,w.incarnation
+ FROM core.partition p
+ JOIN search.identity_writer_gate g ON g.partition_no=p.partition_no AND g.physical_target=$2
+ LEFT JOIN search.identity_writer w ON (w.partition_no,w.physical_target,w.original_id)=(g.partition_no,g.physical_target,$5)
+ WHERE p.partition_no=$1 AND p.write_state='active' AND p.epoch=g.owner_epoch AND p.position>=g.closed_position
+  AND g.closed_token=$3 AND g.consumer=$4`;
+
 /** Ordinary writer custody, independent of the fixed participant and privacy-reduction continuation.
  * A submitted request with uncertain outcome retains its enrollment indefinitely until native reconciliation.
  * Time, retries, a refreshed 409 or a later physical UUID cannot release that request.
@@ -867,6 +887,20 @@ export function createSearchWriterGuard(options: {
     )
       throw new TypeError('Invalid native Search barrier locator');
     if (after !== null && subjectPartition(after) !== value.partition) throw new TypeError('Invalid copy frontier');
+  }
+  function decodeCopy(partition: number, row: CopyRow, target: { owner_epoch: number; incarnation: string }) {
+    if (row.owner_epoch !== target.owner_epoch || row.incarnation !== target.incarnation)
+      throw unavailable('Retained Search copy requires native handoff custody');
+    return {
+      original: row.original_id,
+      state: row.dispatch_state,
+      sourcePosition: row.source_position === null ? null : BigInt(row.source_position),
+      visible: point(partition, row.owner_epoch, row.visible_transaction_id, row.visible_position),
+      enrollment:
+        row.writer_token === null
+          ? null
+          : point(partition, row.owner_epoch, row.writer_transaction_id, row.writer_position),
+    };
   }
   async function gate(tx: CommandTransaction, receipt: IdentityNativeReceipt, incarnation: string, writeAlias: string) {
     const parameters = [receipt.partition, options.index, options.consumer, incarnation, receipt.epoch, writeAlias];
@@ -1434,22 +1468,29 @@ export function createSearchWriterGuard(options: {
             parameters,
           )
         ).rows;
-        if (rows.some((row) => row.owner_epoch !== target.owner_epoch || row.incarnation !== target.incarnation))
-          throw unavailable('Retained Search copy requires native handoff custody');
         return {
-          copies: rows.map((row) => ({
-            original: row.original_id,
-            state: row.dispatch_state,
-            sourcePosition: row.source_position === null ? null : BigInt(row.source_position),
-            visible: point(value.partition, row.owner_epoch, row.visible_transaction_id, row.visible_position),
-            enrollment:
-              row.writer_token === null
-                ? null
-                : point(value.partition, row.owner_epoch, row.writer_transaction_id, row.writer_position),
-          })),
+          copies: rows.map((row) => decodeCopy(value.partition, row, target)),
           next: rows.length === 100 ? rows.at(-1)!.original_id : null,
         };
       });
+    },
+    async readRetainedCopy(value, original, deadline) {
+      locator(value, original);
+      return withReadTransaction(
+        options.pool,
+        async (tx) => {
+          const row = (
+            await tx.query<{ gate_incarnation: string; gate_epoch: number } & (CopyRow | { original_id: null })>(
+              readRetainedWriterCopySql,
+              [value.partition, options.index, value.token, options.consumer, original],
+            )
+          ).rows[0];
+          if (!row) throw unavailable('Search publication barrier is missing, moved or foreign');
+          if (row.original_id === null) return null;
+          return decodeCopy(value.partition, row, { owner_epoch: row.gate_epoch, incarnation: row.gate_incarnation });
+        },
+        deadline,
+      );
     },
     async recoverInterrupted(value, after) {
       locator(value, after);

@@ -2197,7 +2197,9 @@ and resumes the retained engine page. An unfenced turn can finish that replay in
 Source home page matches the engine group exactly and the settled writer versions and bodies are visible.
 That check uses one lookahead key and charges the existing page meter. Interrupted pages repeat their actual
 work before committing the frontier. An owner move or pending identity invalidates the affected home, and
-physical recreation invalidates the entire old job.
+physical recreation invalidates the entire old job. An unfenced Subject reconciliation turn can advance that
+candidate's retained Source enrollment with the remaining input budget. It records only native home receipts.
+Physical observation, materialization, and original repair still begin after reconciliation in activation.
 
 Activation first obtains the ordinary producer's durable publication fence and advances its native all-enrolled
 writer/uncertain-first-apply/retained-copy drain. A second finite pass compares under that continuously held
