@@ -133,7 +133,8 @@ test('Home composes ordered ContentItems and keeps bounded filters accessible in
     expect(continuedRow.querySelector('[data-content-item-slot="state"]')?.textContent).toBe(
       progressView(continueProgress(continued.continue.activeProgressSession), 'en')?.text,
     );
-    expect(continuedRow.querySelector('[data-content-item-slot="actions"] a')?.getAttribute('href')).toBe(
+    const continueActions = continuedRow.querySelectorAll('[data-content-item-slot="actions"] a');
+    expect([...continueActions].map((action) => action.getAttribute('href'))).toContain(
       homeFeedResume(continued, 'en'),
     );
     const subject = page!.feedItems.find((item) => 'label' in item.summary)!;

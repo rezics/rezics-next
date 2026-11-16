@@ -31,7 +31,7 @@ async function advanceHome(canvasElement: HTMLElement) {
     await waitFor(() => expect(held.requests).toHaveLength(1));
     await expect(next).toBeDisabled();
     await expect(next).toHaveTextContent(m.home_feed_loading());
-    await expect(canvasElement.querySelector('main')).toHaveAttribute('aria-busy', 'true');
+    await expect(canvasElement.querySelector('[data-home-feed-state]')).toHaveAttribute('aria-busy', 'true');
     await expect(
       [...canvasElement.querySelectorAll('[data-feed-id]')].map((row) => row.getAttribute('data-feed-id')),
     ).toEqual(previous);

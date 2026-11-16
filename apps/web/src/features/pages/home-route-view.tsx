@@ -72,6 +72,7 @@ export function Home() {
   );
   return (
     <HomeFeedConsumer
+      as="div"
       key={`${locale}:${viewer?.scope ?? 'public'}`}
       initial={loaded.feed}
       catalogue={
