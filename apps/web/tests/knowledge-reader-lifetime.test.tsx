@@ -1,4 +1,4 @@
-import { afterAll, expect, mock, test } from 'bun:test';
+import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { act, StrictMode, type ReactElement } from 'react';
 import * as start from '../.storybook/react-start';
 import { installPostReadingDom } from './post-reading-dom';
@@ -21,10 +21,14 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 const dom = installPostReadingDom();
 const { QueryClient, QueryClientProvider, notifyManager } = await import('@tanstack/react-query');
 const { createRoot } = await import('react-dom/client');
+const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
+  await import('@tanstack/react-router');
 const { KnowledgeDocumentCaller, openKnowledgeDocumentVisit } = await import('../src/knowledge/route');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 const { readerSessionSource } = await import('../src/reader/lifetime');
+const { sessionQuery } = await import('../src/session/query');
+const sessionState = await import('../src/session/state');
 
 afterAll(async () => {
   notifyManager.setScheduler((callback) => setTimeout(callback, 0));
@@ -36,11 +40,17 @@ function visitOf(request: KnowledgeReadRequest, page: KnowledgeReadState, sessio
   return { request: { ...request }, sessionRevision, page };
 }
 
-async function mount(visit: KnowledgeDocumentVisit, request: KnowledgeReadRequest, loading = false) {
+async function mount(
+  visit: KnowledgeDocumentVisit,
+  request: KnowledgeReadRequest,
+  { loading = false, seedSession = true } = {},
+) {
   setLocale('en', { reload: false });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  client.setQueryData(['session'], { state: 'signed-out', subject: null, csrfToken: null });
+  if (seedSession) client.setQueryData(['session'], { state: 'signed-out', subject: null, csrfToken: null });
   notifyManager.setScheduler((callback) => callback());
+  const router = createRouter({ routeTree: createRootRoute(), history: createMemoryHistory() });
+  await router.load();
   const retries: KnowledgeReadRequest[] = [];
   const host = dom.window.document.createElement('main') as unknown as HTMLElement;
   dom.window.document.body.append(host);
@@ -48,14 +58,16 @@ async function mount(visit: KnowledgeDocumentVisit, request: KnowledgeReadReques
   const render = (nextVisit: KnowledgeDocumentVisit, nextRequest: KnowledgeReadRequest, nextLoading = loading) => (
     <StrictMode>
       <QueryClientProvider client={client}>
-        <KnowledgeDocumentCaller
-          visit={nextVisit}
-          request={nextRequest}
-          loading={nextLoading}
-          onRetry={() => {
-            retries.push({ ...nextRequest });
-          }}
-        />
+        <RouterContextProvider router={router}>
+          <KnowledgeDocumentCaller
+            visit={nextVisit}
+            request={nextRequest}
+            loading={nextLoading}
+            onRetry={() => {
+              retries.push({ ...nextRequest });
+            }}
+          />
+        </RouterContextProvider>
       </QueryClientProvider>
     </StrictMode>
   );
@@ -136,6 +148,28 @@ test('retry keeps its exact operands and a failed reading leaves no former publi
     expect(mounted.host.textContent).not.toContain(knowledgePublicationText);
     expect(mounted.host.textContent).not.toContain(knowledgeTitle);
   } finally {
+    await mounted.dispose();
+  }
+});
+
+test('initial browser session discovery keeps an independently admitted public reading', async () => {
+  const session = spyOn(sessionState, 'readSessionState').mockResolvedValue({ state: 'signed-out', csrfToken: null });
+  const mounted = await mount(visitOf(knowledgeLiveRequest, knowledgeReady), knowledgeLiveRequest, {
+    seedSession: false,
+  });
+  try {
+    await act(async () => {
+      await mounted.client.ensureQueryData(sessionQuery);
+    });
+    expect(session).toHaveBeenCalledTimes(1);
+    expect(mounted.host.textContent).toContain(knowledgePublicationText);
+    await act(async () => {
+      await mounted.client.invalidateQueries({ queryKey: ['session'], refetchType: 'none' });
+    });
+    expect(mounted.host.textContent).toContain(m.knowledge_unavailable());
+    expect(mounted.host.textContent).not.toContain(knowledgePublicationText);
+  } finally {
+    session.mockRestore();
     await mounted.dispose();
   }
 });

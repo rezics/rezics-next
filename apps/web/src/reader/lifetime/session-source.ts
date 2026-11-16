@@ -5,6 +5,8 @@ import { normalizeSessionObservation, sessionQueryKey, type BrowserSession } fro
 export type ReaderSessionSource = {
   read: () => BrowserSession | undefined;
   snapshot: () => number;
+  /** A first successful session lookup is not a replacement of a public reader's authority. */
+  publicReadSnapshot: () => number;
   serverSnapshot: () => 0;
   subscribe: (notify: () => void) => () => void;
 };
@@ -12,6 +14,7 @@ export type ReaderSessionSource = {
 const absent: ReaderSessionSource = {
   read: () => undefined,
   snapshot: () => 0,
+  publicReadSnapshot: () => 0,
   serverSnapshot: () => 0,
   subscribe: () => () => {},
 };
@@ -23,6 +26,8 @@ export function readerSessionSource(client: QueryClient | undefined): ReaderSess
   const existing = sources.get(client);
   if (existing) return existing;
   let revision = 0;
+  let publicReadRevision = 0;
+  let observingInitialSession = true;
   const listeners = new Set<() => void>();
   let stop: (() => void) | undefined;
   const source: ReaderSessionSource = {
@@ -33,22 +38,31 @@ export function readerSessionSource(client: QueryClient | undefined): ReaderSess
         : undefined;
     },
     snapshot: () => revision,
+    publicReadSnapshot: () => publicReadRevision,
     serverSnapshot: () => 0,
     subscribe(listener) {
       listeners.add(listener);
-      stop ??= browserObservation(client).subscribeCache((event) => {
-        if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== sessionQueryKey[0]) return;
-        if (
-          event.type !== 'removed' &&
-          !(
-            event.type === 'updated' &&
-            ['success', 'error', 'invalidate', 'fetch', 'setState'].includes(event.action.type)
+      if (!stop) {
+        const state = client.getQueryState(sessionQueryKey);
+        if (state && state.status !== 'pending') observingInitialSession = false;
+        stop = browserObservation(client).subscribeCache((event) => {
+          if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== sessionQueryKey[0]) return;
+          const action = event.type === 'updated' ? event.action : undefined;
+          if (
+            event.type !== 'removed' &&
+            !(action && ['success', 'error', 'invalidate', 'fetch', 'setState'].includes(action.type))
           )
-        )
-          return;
-        revision += 1;
-        for (const notify of [...listeners]) notify();
-      });
+            return;
+
+          revision += 1;
+          const initialFetch = observingInitialSession && action?.type === 'fetch';
+          const initialRead = observingInitialSession && action?.type === 'success' && !action.manual;
+          const session = initialRead ? source.read()?.state : undefined;
+          if (!initialFetch && session !== 'signed-in' && session !== 'signed-out') publicReadRevision += 1;
+          if (!initialFetch) observingInitialSession = false;
+          for (const notify of [...listeners]) notify();
+        });
+      }
       return () => {
         listeners.delete(listener);
         if (!listeners.size) {

@@ -49,7 +49,7 @@ export async function loadKnowledgeDocumentVisit(
   queryClient: QueryClient,
   request: KnowledgeReadRequest,
 ): Promise<KnowledgeDocumentVisit> {
-  return openKnowledgeDocumentVisit(readerSessionSource(queryClient).snapshot(), request, (current) =>
+  return openKnowledgeDocumentVisit(readerSessionSource(queryClient).publicReadSnapshot(), request, (current) =>
     readKnowledgeDocument({ data: current }),
   );
 }
@@ -118,7 +118,7 @@ export function KnowledgeDocumentCaller({
 }) {
   const queryClient = useQueryClient();
   const source = readerSessionSource(queryClient);
-  const sessionRevision = useSyncExternalStore(source.subscribe, source.snapshot, source.serverSnapshot);
+  const sessionRevision = useSyncExternalStore(source.subscribe, source.publicReadSnapshot, source.serverSnapshot);
   const owner = useRef<object | null>(null);
   owner.current ??= {};
   const active = useRef<{ visit: KnowledgeDocumentVisit; request: KnowledgeReadRequest } | null>(null);
@@ -134,7 +134,7 @@ export function KnowledgeDocumentCaller({
   useLayoutEffect(() => {
     const current = ++connection.current;
     const stop = source.subscribe(() => {
-      if (source.snapshot() !== visit.sessionRevision) retireVisit(visit);
+      if (source.publicReadSnapshot() !== visit.sessionRevision) retireVisit(visit);
     });
     return () => {
       stop();
@@ -153,7 +153,7 @@ export function KnowledgeDocumentCaller({
       current?.visit !== visit ||
       !sameKnowledgeRequest(current.request, request) ||
       loading ||
-      source.snapshot() !== sessionRevision
+      source.publicReadSnapshot() !== sessionRevision
     )
       return;
     retireVisit(visit);
