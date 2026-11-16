@@ -336,35 +336,35 @@ function isReleaseReference(
 ): release is CustodyReleaseReference {
   return 'authority' in release && release.authority === 'semantic.readRelease';
 }
-async function requireReleaseAuthority(pool: Queryable, meter: Meter, digest: string) {
-  // Use the existing immutable owner lookups. Charge their actual SQL and returned metadata too.
-  // Neither lookup loads a release body, joins homes, nor consults/caches permission.
+async function hasReleaseAuthority(pool: Queryable, meter: Meter, digest: string) {
   const db = { query: (query: string, values?: unknown[]) => sql(pool, meter, query, values) } as Queryable;
-  if (await releaseExists.run(db, { route: 0, digest })) return;
-  if (await compositeReference.run(db, { digest })) return;
-  throw new Failure('definition_missing');
+  return Boolean((await releaseExists.run(db, { route: 0, digest })) || (await compositeReference.run(db, { digest })));
+}
+async function requireReleaseAuthority(pool: Queryable, meter: Meter, digest: string) {
+  if (!(await hasReleaseAuthority(pool, meter, digest))) throw new Failure('definition_missing');
 }
 async function retainedDefinition(
   pool: Queryable,
   meter: Meter,
   definition: CustodyDefinition<PublicCanonicalCaptureInput>,
 ) {
-  let retained: CustodyRetainedDefinition = definition;
-  let encoded = encode({ digest: digest(retained), data: retained });
-  if (Buffer.byteLength(encoded) > 1048576) {
-    await requireReleaseAuthority(pool, meter, definition.meaning.digest);
-    retained = {
-      ...definition,
-      meaning: {
-        digest: definition.meaning.digest,
-        release: { authority: 'semantic.readRelease', digest: definition.meaning.digest },
-      },
-    };
-    encoded = encode({ digest: digest(retained), data: retained });
+  const embedded = encode({ digest: digest(definition), data: definition });
+  const embedsWithinLimit = Buffer.byteLength(embedded) <= 1_048_576;
+  if (!(await hasReleaseAuthority(pool, meter, definition.meaning.digest))) {
+    if (!embedsWithinLimit) throw new Failure('definition_missing');
+    return { encoded: embedded, previous: null };
   }
-  // The original storage ceiling applies to all retained capture/key metadata as well.
-  requireValue(Buffer.byteLength(encoded) <= 1048576);
-  return encoded;
+  // Installed releases share the same immutable owner reference at every size.
+  const retained: CustodyRetainedDefinition = {
+    ...definition,
+    meaning: {
+      digest: definition.meaning.digest,
+      release: { authority: 'semantic.readRelease', digest: definition.meaning.digest },
+    },
+  };
+  const encoded = encode({ digest: digest(retained), data: retained });
+  requireValue(Buffer.byteLength(encoded) <= 1_048_576);
+  return { encoded, previous: embedsWithinLimit ? embedded : null };
 }
 async function engine<T>(
   search: OpenSearch,
@@ -1138,18 +1138,24 @@ export function createPublicFilterCustody(
         };
         const retained = await retainedDefinition(pool, meter, definition);
         await transaction(meter, async (client) => {
+          const encodedConsumer = encode(consumer);
           if ((await lockCopyAdmission(client, meter, consumer.physicalTarget)).rowCount) {
             // An exact registration replay needs no new target or copy and cannot change incarnation.
-            const existing = await sql(
-              client,
-              meter,
-              `SELECT 1 FROM search.public_filter_registration r
-               JOIN search.public_filter_target t USING (partition_no,physical_target)
-               WHERE (r.partition_no,r.id,r.physical_target) = ($1,$2,$3)
-                 AND t.incarnation=$4 AND r.consumer=$5 AND r.definition=$6 AND r.state='active'`,
-              [identity.partition, identity.id, consumer.physicalTarget, incarnation, encode(consumer), retained],
-            );
-            if (!existing.rowCount) throw new Failure('binding_mismatch');
+            const replay = (encoded: string) =>
+              sql(
+                client,
+                meter,
+                `SELECT 1 FROM search.public_filter_registration r
+                 JOIN search.public_filter_target t USING (partition_no,physical_target)
+                 WHERE (r.partition_no,r.id,r.physical_target) = ($1,$2,$3)
+                   AND t.incarnation=$4 AND r.consumer=$5 AND r.definition=$6 AND r.state='active'`,
+                [identity.partition, identity.id, consumer.physicalTarget, incarnation, encodedConsumer, encoded],
+              );
+            if (
+              !(await replay(retained.encoded)).rowCount &&
+              (!retained.previous || !(await replay(retained.previous)).rowCount)
+            )
+              throw new Failure('binding_mismatch');
             return;
           }
           await sql(
@@ -1163,9 +1169,20 @@ export function createPublicFilterCustody(
             meter,
             `INSERT INTO search.public_filter_registration VALUES ($1,$2,$3,$4,$5,'active')
             ON CONFLICT (partition_no,id) DO UPDATE SET id=EXCLUDED.id WHERE public_filter_registration.consumer=EXCLUDED.consumer AND public_filter_registration.definition=EXCLUDED.definition AND public_filter_registration.state='active' RETURNING id`,
-            [identity.partition, identity.id, consumer.physicalTarget, encode(consumer), retained],
+            [identity.partition, identity.id, consumer.physicalTarget, encodedConsumer, retained.encoded],
           );
-          if (!result.rowCount) throw new Failure('binding_mismatch');
+          if (result.rowCount) return;
+          if (!retained.previous) throw new Failure('binding_mismatch');
+          // Convert an exact embedded definition under the same registration and writer admission lock.
+          const upgraded = await sql(
+            client,
+            meter,
+            `UPDATE search.public_filter_registration SET definition=$6
+             WHERE (partition_no,id,physical_target)=($1,$2,$3)
+               AND consumer=$4 AND definition=$5 AND state='active' RETURNING id`,
+            [identity.partition, identity.id, consumer.physicalTarget, encodedConsumer, retained.previous, retained.encoded],
+          );
+          if (!upgraded.rowCount) throw new Failure('binding_mismatch');
         });
         return { status: 'registered' as const, registration: identity, consumer, cost: meter };
       });
