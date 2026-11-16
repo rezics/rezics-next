@@ -63,8 +63,8 @@ function record(value: unknown): value is Record<string, unknown> {
 // with enough remaining input allowance for producer and independent replay reads.
 const PUBLIC_FILTER_REPAIR_INPUT_LIMIT = 64;
 const PUBLIC_FILTER_REPAIR_INPUT_RESERVE = 768;
-const PUBLIC_FILTER_PREPARATION_INPUT_LIMIT = 1000;
-const PUBLIC_FILTER_PREPARATION_INPUT_RESERVE = 128;
+export const PUBLIC_FILTER_PREPARATION_INPUT_LIMIT = 1000;
+export const PUBLIC_FILTER_PREPARATION_INPUT_RESERVE = 128;
 
 function freeze<T>(value: T): T {
   if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
@@ -757,6 +757,7 @@ type NativeGenerationInput = Readonly<{
   consumer: PublicFilterConsumer;
   capture: PublicFilterConsumerCaptureInput;
   observation?: string;
+  enrollmentInputLimit?: number;
 }>;
 type NativeGenerationOutcome = (NativePublicFilterPublicationCompletion | PublicFilterConsumerUnavailable) &
   Readonly<{ advanced?: boolean; enrollmentAdvanced?: boolean }>;
@@ -808,8 +809,12 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     void operation.finally(() => pending.delete(operation)).catch(() => {});
     return operation;
   };
-  function meter(context: PublicFilterConsumerContext, maintenance = false) {
+  function meter(context: PublicFilterConsumerContext, maintenance = false, enrollmentInputLimit?: number) {
     context = { deadline: context.deadline };
+    const inputLimit = Math.min(
+      enrollmentInputLimit ?? PUBLIC_FILTER_PREPARATION_INPUT_LIMIT,
+      PUBLIC_FILTER_PREPARATION_INPUT_LIMIT,
+    );
     const cost: ConsumerMeter = emptyConsumerCost();
     let preparationInputKeys = 0;
     const add = (next: PublicFilterCost) => {
@@ -824,7 +829,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         throw new ConsumerFailure('deadline');
       const inputs = Math.max(maintenance ? cost.inputKeys : cost.candidates, preparationInputKeys);
       if (
-        cost.inputKeys > 1000 ||
+        cost.inputKeys > inputLimit ||
         cost.accessPoints + cost.dependencyPoints > 16 + 8 * Math.max(inputs, 1) ||
         cost.bytes > 4 * 1024 * 1024 ||
         cost.rows > 64 + 16 * Math.max(inputs, 1)
@@ -1100,7 +1105,20 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         return typeof value === 'function' ? value.bind(db) : value;
       },
     });
-    return { cost, add, check, sql, unavailable, take, takePreparation, native, pool, enrollmentAdvanced: false };
+    return {
+      cost,
+      add,
+      check,
+      sql,
+      unavailable,
+      take,
+      takePreparation,
+      native,
+      pool,
+      inputLimit,
+      enrollmentOnly: enrollmentInputLimit !== undefined,
+      enrollmentAdvanced: false,
+    };
   }
   type Meter = ReturnType<typeof meter>;
   function own(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext, m: Meter) {
@@ -1768,7 +1786,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           bootstrap: work.bootstrap.id,
           inputLimit: Math.max(
             0,
-            PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - m.cost.inputKeys - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE,
+            m.inputLimit - m.cost.inputKeys - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE,
           ),
         },
         context,
@@ -1787,6 +1805,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     if (recovery.status !== 'begun' && recovery.status !== 'adopted') return m.unavailable('source_pending');
     if (!isDeepStrictEqual(retainedBootstrap(recovery.bootstrap), work.bootstrap))
       return m.unavailable('observation_lost');
+    // Reconciliation may advance only the retained enrollment. The real physical
+    // observation, adoption and repair still belong to the activation turn.
+    if (m.enrollmentOnly) return { status: 'preparing', repair: job, cost: m.cost };
     // Recover the original committed physical adoption, never open a replacement PIT.
     if (recovery.status === 'adopted') {
       if (work.queried !== null && !isDeepStrictEqual(work.queried, recovery.queried))
@@ -2188,7 +2209,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           ...preparation,
           inputLimit: Math.max(
             0,
-            PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - m.cost.inputKeys - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE,
+            m.inputLimit - m.cost.inputKeys - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE,
           ),
         },
         context,
@@ -2218,8 +2239,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         adopted: false,
       };
       const encoded = await save(work, null, true, m);
-      if (begun.status === 'preparing') {
-        m.enrollmentAdvanced = begun.enrollmentAdvanced;
+      if (begun.status === 'preparing' || m.enrollmentOnly) {
+        m.enrollmentAdvanced = begun.status === 'preparing' && begun.enrollmentAdvanced;
         return {
           status: 'preparing',
           repair: {
@@ -2963,24 +2984,26 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     },
   };
   generationSources.set(operations, async (input, context) => {
-    const m = meter(context, true);
+    const m = meter(context, true, input.enrollmentInputLimit);
     try {
-      const original = await readNativePublicFilterPublicationCompletion(binding, { job: input.job }, context);
-      m.add(original.cost);
-      if ('publication' in original) {
-        if (original.status === 'pending') {
-          const repair = await repairStep(
-            { consumer: input.consumer, job: original.publication.queried.snapshot.observation },
-            context,
-            m,
-          );
-          return { ...original, advanced: repair.status === 'progress' || repair.status === 'settled', cost: m.cost };
-        } else if (original.publication.queried.snapshot.kind === 'prepared') {
-          const q = original.publication.queried;
-          const loaded = await load({ consumer: input.consumer, job: q.snapshot.observation }, m);
-          if (!(await finishPreparationBuild(loaded.work, q, m, context, true))) return m.unavailable('source_pending');
+      if (!m.enrollmentOnly) {
+        const original = await readNativePublicFilterPublicationCompletion(binding, { job: input.job }, context);
+        m.add(original.cost);
+        if ('publication' in original) {
+          if (original.status === 'pending') {
+            const repair = await repairStep(
+              { consumer: input.consumer, job: original.publication.queried.snapshot.observation },
+              context,
+              m,
+            );
+            return { ...original, advanced: repair.status === 'progress' || repair.status === 'settled', cost: m.cost };
+          } else if (original.publication.queried.snapshot.kind === 'prepared') {
+            const q = original.publication.queried;
+            const loaded = await load({ consumer: input.consumer, job: q.snapshot.observation }, m);
+            if (!(await finishPreparationBuild(loaded.work, q, m, context, true))) return m.unavailable('source_pending');
+          }
+          return { ...original, cost: m.cost };
         }
-        return { ...original, cost: m.cost };
       }
       const { readGenerationPublicationCustody } = await import('./public-filter-custody.ts');
       const retained = m.take(
@@ -3019,6 +3042,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           };
         q = capture.queried;
       }
+      if (m.enrollmentOnly) return m.unavailable('source_pending');
       const job = { consumer: input.consumer, job: q.snapshot.observation };
       const loaded = await load(job, m);
       const work = loaded.work;

@@ -534,7 +534,7 @@ export function createIdentityEpochStore(capabilities: NativeIdentityCapabilitie
       };
     },
     initializeSubject: createIdentitySubjectInitializer(capabilities),
-    async pageChanges(tx, job, after) {
+    async pageChanges(tx, job, after, first) {
       const partition = identityJobPartition(job);
       const owner = await readPartition(tx, partition);
       if (!owner || owner.writeState !== 'active') throw unavailable();
@@ -547,8 +547,10 @@ export function createIdentityEpochStore(capabilities: NativeIdentityCapabilitie
         transform = { kind: saved.kind, original: saved.original, terminal: saved.terminal };
       else throw unavailable();
       const inputs = (await tx.query(storeSelectInput.sql, [partition, job.jobId])).rows;
+      if (first === 1 && (inputs.length < 1 || inputs.some((input) => input.control_partition !== partition)))
+        throw unavailable();
       const pages: Array<{ original: string; terminal: string }[]> = [];
-      const allowance = inputs.length === 1 ? 100 : 50;
+      const allowance = first ?? (inputs.length === 1 ? 100 : 50);
       for (const input of inputs)
         pages.push(
           (
@@ -575,6 +577,7 @@ export function createIdentityEpochStore(capabilities: NativeIdentityCapabilitie
           previousTerminal: r.terminal,
           terminal: identityEpochChangeTerminal(transform, saved.remainder_terminal, r.original, r.terminal),
         }));
+      if (first === 1 && changes.length > 1) throw unavailable();
       return { changes, next: frontier ? changes.at(-1)!.original : null };
     },
     async admitHomeEffect(tx, effect) {

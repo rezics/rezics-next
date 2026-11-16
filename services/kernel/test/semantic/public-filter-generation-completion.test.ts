@@ -14,6 +14,7 @@ import { createRatedSubjectSource } from '../../src/search/rated-source.ts';
 import { subjectListingSource } from '../../src/library/listing-counts.ts';
 import { subjectConsumer } from '../../src/search/runner.ts';
 import { createDefaultPublicFilterRuntime } from '../../src/search/public-runtime.ts';
+import { PUBLIC_PREPARATION_BUDGET_MS } from '../../src/search/public-preparation-store.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 
 // Actual generation, original Source, ordinary writer and engine: no home/ACK/phase setters.
@@ -276,6 +277,34 @@ test('an unfenced engine page completes after exact inline replay of an advanced
     const admitted = await runtime.preparePublication(1, readContext());
     if (admitted.status !== 'preparing') throw new Error(admitted.reason);
     const { job } = admitted;
+    const enrollmentStep = await runtime.publication.step(
+      job,
+      { deadline: Date.now() + PUBLIC_PREPARATION_BUDGET_MS },
+      { enrollSource: true },
+    );
+    if (enrollmentStep.status !== 'progress')
+      throw new Error(`Native enrollment step: ${JSON.stringify(enrollmentStep)}`);
+    const {
+      rows: [enrollment],
+    } = await f.db.pool.query<{
+      state: string;
+      coverage_after: number;
+      opened_observation: boolean;
+    }>(
+      `SELECT b.state,b.coverage_after,EXISTS (
+         SELECT FROM search.public_filter_observation o
+         JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)
+         WHERE r.physical_target=j.physical_target
+       ) AS opened_observation
+       FROM search.generation_publication j
+       JOIN semantic.public_filter_bootstrap b
+         ON b.partition_no=j.source_home AND b.read_definition::text=j.binding->>'readDefinition'
+       WHERE j.partition_no=0 AND j.job=$1`,
+      [job.job],
+    );
+    expect(enrollment).toMatchObject({ state: 'capturing', opened_observation: false });
+    expect(enrollment!.coverage_after).toBeGreaterThan(0);
+    expect(await subjectGenerations(search, prefix)).toMatchObject({ active: null });
     const publication = async () =>
       (
         await f.db.pool.query<{ phase: string; pit: string | null; has_cursor: boolean }>(

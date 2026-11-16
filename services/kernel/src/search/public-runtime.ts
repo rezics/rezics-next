@@ -234,11 +234,11 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         }
       });
     },
-    step(job, context) {
+    step(job, context, options) {
       return track(async () => {
         const native = await publicationFor(job.consumer, context);
         try {
-          return await native.step(job, context);
+          return await native.step(job, context, options);
         } finally {
           await native.close();
         }

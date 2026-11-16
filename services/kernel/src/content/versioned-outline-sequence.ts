@@ -588,6 +588,7 @@ export async function setVersionedOutlineSequenceSubtreeHeight<Value>(
   if (node.subtreeHeight !== subtreeHeight) {
     access.writeNode({ ...node, subtreeHeight });
   }
+  await rebuild(access, node.id, node.leftId, node.rightId, node.treeParentId);
   for (const parent of ancestors) {
     await rebuild(access, parent.id, parent.leftId, parent.rightId, parent.treeParentId);
   }

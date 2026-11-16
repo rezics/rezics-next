@@ -30,7 +30,7 @@ export type PreparationRecord = {
   expires_at: string;
 };
 
-const PREPARATION_BUDGET_MS = 30_000;
+export const PUBLIC_PREPARATION_BUDGET_MS = 30_000;
 const lifetimeOptions = {
   deadlineError: () => new SearchUnavailableError('Public preparation database deadline expired'),
   isUncertainSettledQueryError: () => true,
@@ -84,7 +84,7 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
     async retain(
       locator: PreparationLocator,
       expiresAt: number,
-      deadline = deadlineFor(PREPARATION_BUDGET_MS),
+      deadline = deadlineFor(PUBLIC_PREPARATION_BUDGET_MS),
     ): Promise<string> {
       return transaction(deadline, async (client) => {
         const result = await client.query<{ id: string; revision: string }>(
@@ -153,7 +153,7 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
       record: PreparationRecord,
       locator: PreparationLocator | null,
       delayMs = 0,
-      deadline = deadlineFor(PREPARATION_BUDGET_MS),
+      deadline = deadlineFor(PUBLIC_PREPARATION_BUDGET_MS),
       readySuccessor = false,
     ): Promise<string | null> {
       return transaction(deadline, async (client) => {
@@ -179,7 +179,7 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
         return next?.revision ?? null;
       });
     },
-    async due(deadline = deadlineFor(PREPARATION_BUDGET_MS)): Promise<void> {
+    async due(deadline = deadlineFor(PUBLIC_PREPARATION_BUDGET_MS)): Promise<void> {
       await transaction(deadline, async (client) => {
         // CASE reads the uncleared lease; later SET assignments see earlier ones.
         const rows = await client.query<{ id: string; revision: string }>(

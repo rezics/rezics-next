@@ -23,6 +23,7 @@ import {
 import type { SubjectListingSource, SubjectSource } from './source.ts';
 import {
   createPublicPreparationStore,
+  PUBLIC_PREPARATION_BUDGET_MS,
   type PopulationFrontier,
   type PreparationLocator,
   type PreparationRecord,
@@ -203,7 +204,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     // writer and reconciles engine extras. The retired fixed-cut scan was a second population
     // frontier whose Source adapter is unavailable; it must not gate this existing lifecycle.
     if (state.phase !== 'activate') {
-      const reconciliation = await options.runtime.publication.step(job, context);
+      const reconciliation = await options.runtime.publication.step(job, context, { enrollSource: true });
       if (reconciliation.status === 'unavailable') reportUnavailable('step', state.generation, reconciliation);
       else unavailable.delete('step');
       return advance(
@@ -277,8 +278,10 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
         );
       });
     },
-    run(id: string, revision: string, deadline = deadlineFor(30_000)): Promise<void> {
-      const context = { deadline: Math.min(deadline, deadlineFor(30_000), Date.now() + 30_000) };
+    run(id: string, revision: string, deadline = deadlineFor(PUBLIC_PREPARATION_BUDGET_MS)): Promise<void> {
+      const context = {
+        deadline: Math.min(deadline, deadlineFor(PUBLIC_PREPARATION_BUDGET_MS), Date.now() + PUBLIC_PREPARATION_BUDGET_MS),
+      };
       return track(context.deadline, async () => {
         for (let turn = 1; turn <= enrollmentTurnsPerDelivery && !paused && !stopped; turn++) {
           const record = await store.claim(id, revision, context.deadline);
