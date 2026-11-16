@@ -26,7 +26,7 @@ import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-val
 import { factDataTypes, resolveItem, type FactRow, type Statement } from './item.ts';
 import { indexedStatement } from './search-source.ts';
 import { readRelease } from './definition-release-read.ts';
-import { nativeSourceQuery } from './native-source-query.ts';
+import { nativeSourceQuery } from '../database/native-source-query.ts';
 import { hasPublicFilterMeaningShape } from './public-filter-source-contract.ts';
 import type {
   PrivacyReductionHead,

@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { nativeSourceQuery } from '../database/native-source-query.ts';
 import read from './read.sql';
 import readBatch from './read-batch.sql';
 
@@ -16,7 +17,7 @@ export type Partition = {
 type Queryable = Pick<Pool | PoolClient, 'query'>;
 
 export async function readPartition(client: Queryable, partitionNo: number): Promise<Partition | null> {
-  const row = await read.run(client, { partition_no: partitionNo });
+  const row = await nativeSourceQuery(client, read, { partition_no: partitionNo });
   if (!row) return null;
   return {
     partitionNo: row.partitionNo,
