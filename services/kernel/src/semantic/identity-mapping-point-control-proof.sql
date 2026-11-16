@@ -16,7 +16,7 @@ WITH args AS MATERIALIZED (
   acquired.native_epoch AS acquired_epoch,acquired.native_position AS acquired_position,
   registration_commit.transaction_id AS registration_transaction_id,registration_commit.epoch AS registration_epoch,
   registration_commit.position AS registration_position,o.closure_registration_xid AS registration_xid,
-  o.closure_install_transaction AS install_transaction_id,i.transaction_id
+  o.closure_install_transaction AS install_transaction_id,i.transaction_id,o.closure_state
  FROM args i
  JOIN owner p ON p.partition_no=i.home AND p.epoch=i.owner_epoch AND p.write_state='active'
  JOIN semantic.identity_epoch_group g ON g.partition_no=p.partition_no AND g.terminal=i.terminal
@@ -52,20 +52,32 @@ WITH args AS MATERIALIZED (
    (acquired.partition_no,acquired.transaction_id,acquired.native_epoch,acquired.native_position)
    AND acquired_commit.purpose='admission' AND acquired_commit.xmin=acquired.xmin
  JOIN semantic.identity_epoch_original o ON o.partition_no=g.partition_no AND o.generation=g.generation
-  AND o.original=i.original AND o.terminal=g.terminal AND o.present AND o.closure_state='installed'
-  AND o.closure_incarnation=g.closure_incarnation AND o.source_partition=i.route/16 AND o.closure_reservation IS NULL
-  AND o.closure_enrollment IS NOT NULL AND o.closure_source_revision IS NOT NULL
-  AND o.closure_source_epoch IS NOT NULL AND o.closure_export_transaction IS NOT NULL
-  AND o.closure_registration_transaction IS NOT NULL AND o.closure_registration_xid IS NOT NULL
-  AND o.closure_install_transaction IS NOT NULL
- JOIN semantic.identity_epoch_native_commit registration_commit ON registration_commit.partition_no=p.partition_no
+  AND o.original=i.original AND o.terminal=g.terminal AND o.present AND o.source_partition=i.route/16
+ LEFT JOIN semantic.identity_epoch_native_commit registration_commit ON registration_commit.partition_no=p.partition_no
   AND registration_commit.transaction_id=o.closure_registration_transaction
   AND registration_commit.xmin::text=o.closure_registration_xid AND registration_commit.purpose='bootstrap'
  WHERE i.home<>i.route/16 AND char_length(i.scope_digest)=64
   AND i.route=(get_byte(uuid_send(i.original),10)*256+get_byte(uuid_send(i.original),11))
   AND prepared.native_epoch=p.epoch AND acquired.native_epoch=p.epoch
   AND prepared.native_position<=p.position AND acquired.native_position<=p.position
-  AND registration_commit.epoch=p.epoch AND registration_commit.position<=p.position
+  AND (
+   (o.closure_state='installed' AND o.closure_incarnation=g.closure_incarnation AND o.closure_reservation IS NULL
+    AND o.closure_enrollment IS NOT NULL AND o.closure_source_revision IS NOT NULL
+    AND o.closure_source_epoch IS NOT NULL AND o.closure_export_transaction IS NOT NULL
+    AND o.closure_registration_transaction IS NOT NULL AND o.closure_registration_xid IS NOT NULL
+    AND o.closure_install_transaction IS NOT NULL
+    AND registration_commit.epoch=p.epoch AND registration_commit.position<=p.position)
+   -- A published mapping can contain an ordinary membership without a closure registration.
+   OR (o.closure_state='legacy' AND g.ready AND ROW(
+    o.closure_incarnation,o.closure_enrollment,o.closure_source_revision,o.closure_source_epoch,
+    o.closure_export_transaction,o.closure_registration_transaction,o.closure_registration_xid,o.closure_install_transaction,
+    o.closure_claim,o.closure_reservation,o.closure_disposition_transaction,o.closure_release_transaction,
+    o.closure_disposition_epoch,o.closure_disposition_position
+   ) IS NULL AND NOT EXISTS(
+    SELECT 1 FROM semantic.identity_epoch_mapping_point_custody c
+    WHERE (c.partition_no,c.job_id,c.original)=(i.home,i.job,i.original)
+   ))
+  )
  FOR UPDATE OF g,b,a,o
 ), inserted AS (
  INSERT INTO semantic.identity_epoch_mapping_point_custody(
@@ -77,7 +89,7 @@ WITH args AS MATERIALIZED (
   owner_epoch,control_partition,enrollment,source_revision,source_epoch,export_transaction,
   prepared_transaction_id,prepared_epoch,prepared_position,acquired_transaction_id,acquired_epoch,acquired_position,
   registration_transaction_id,registration_epoch,registration_position,registration_xid,install_transaction_id,transaction_id
- FROM qualified WHERE (SELECT count(*) FROM qualified)=1
+ FROM qualified WHERE closure_state='installed' AND (SELECT count(*) FROM qualified)=1
  ON CONFLICT(partition_no,job_id,original) DO NOTHING
  RETURNING transaction_id
 ), matched AS (
@@ -100,8 +112,11 @@ WITH args AS MATERIALIZED (
   AND n.purpose='mapping' AND n.xmin=c.xmin
  JOIN core.partition owner ON owner.partition_no=n.partition_no AND owner.epoch=n.epoch
   AND owner.position>=n.position AND owner.write_state='active'
- WHERE NOT EXISTS(SELECT 1 FROM inserted) AND (SELECT count(*) FROM qualified)=1
+ WHERE q.closure_state='installed' AND NOT EXISTS(SELECT 1 FROM inserted) AND (SELECT count(*) FROM qualified)=1
 )
-SELECT transaction_id::text,true AS inserted FROM inserted
+SELECT transaction_id::text,true AS inserted,'registered' AS kind FROM inserted
 UNION ALL
-SELECT transaction_id::text,false AS inserted FROM matched;
+SELECT transaction_id::text,false AS inserted,'registered' AS kind FROM matched
+UNION ALL
+SELECT NULL,NULL,'unregistered' FROM qualified
+WHERE closure_state='legacy' AND (SELECT count(*) FROM qualified)=1;
