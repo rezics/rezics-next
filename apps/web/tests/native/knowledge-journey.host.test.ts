@@ -30,7 +30,7 @@ afterAll(async () => {
 nativeAfterAll(lifecycle, 240_000);
 
 async function authorPage(): Promise<Page> {
-  const journey = await fixture.auth.signIn('alice');
+  const journey = await fixture.auth.signIn('alice', { returnTo: fixture.createHref });
   const page = await journey.context.newPage();
   page.setDefaultTimeout(60_000);
   return page;
