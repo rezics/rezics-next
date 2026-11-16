@@ -2,6 +2,7 @@ import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, t
 import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
 import type { AnyRouter } from '@tanstack/react-router';
 import { readerSessionSource } from '../../reader/lifetime';
+import type { ReadCredentialMode } from '../../reader/lifetime/contract';
 import { createBookContentsNavigation } from './contents-navigation';
 import { bookCatalogueReturn, createBookCatalogueNavigation, withBookCatalogueReturn } from './catalogue-navigation';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -103,20 +104,34 @@ export function createHostedBookNavigation() {
 export type HostedBookNavigation = ReturnType<typeof createHostedBookNavigation>;
 
 // One bounded visit per live Router survives loader/pending remounts. It is never history payload.
-const contentsVisits = new WeakMap<AnyRouter, HostedBookNavigation>();
+const contentsVisits = new WeakMap<
+  AnyRouter,
+  { navigation: HostedBookNavigation; credentialMode: ReadCredentialMode }
+>();
 
 /** Bind the route's contents and focus memory to its existing Router and credential lifetime. */
 export function hostedBookNavigationForRouter(
   router: AnyRouter,
   client: QueryClient | undefined,
+  credentialMode: ReadCredentialMode = 'session',
 ): HostedBookNavigation {
   const existing = contentsVisits.get(router);
-  if (existing) return existing;
+  if (existing) {
+    existing.credentialMode = credentialMode;
+    return existing.navigation;
+  }
 
   const navigation = createHostedBookNavigation();
-  contentsVisits.set(router, navigation);
+  const visit = { navigation, credentialMode };
+  contentsVisits.set(router, visit);
   let path = router.state.location.pathname;
-  const stopSession = readerSessionSource(client).subscribe(() => navigation.retire());
+  const session = readerSessionSource(client);
+  let publicRevision = session.publicReadSnapshot();
+  const stopSession = session.subscribe(() => {
+    const revision = session.publicReadSnapshot();
+    if (visit.credentialMode === 'session' || revision !== publicRevision) navigation.retire();
+    publicRevision = revision;
+  });
   if (typeof window !== 'undefined') window.addEventListener('pagehide', navigation.retire);
   const stopRoute = router.subscribe('onBeforeLoad', ({ toLocation }) => {
     if (toLocation.pathname === path) return;
@@ -172,7 +187,7 @@ export function HostedBookVisitView({
         locale,
         viewer.kind,
         viewer.kind === 'session' ? viewer.subject : null,
-        session.snapshot(),
+        viewer.kind === 'anonymous' ? session.publicReadSnapshot() : session.snapshot(),
       ]),
     );
   } else coordinates.retireReading();
@@ -185,7 +200,7 @@ export function HostedBookVisitView({
   const catalogueReturn = chooser ? null : bookCatalogueReturn(location?.search ?? {});
   const catalogueScope = chooser ?? catalogueReturn;
   if (catalogueScope) {
-    if (coordinates.catalogues.bind(JSON.stringify([catalogueScope.subjectId, locale, session.snapshot()]))) {
+    if (coordinates.catalogues.bind(JSON.stringify([catalogueScope.subjectId, locale, session.publicReadSnapshot()]))) {
       coordinates.cancelFocus();
     }
     if (visit.state === 'catalogues') coordinates.catalogues.observe(chooser!.cursor);

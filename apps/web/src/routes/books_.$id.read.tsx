@@ -53,7 +53,11 @@ function BookReaderRoute() {
   const { id } = Route.useParams();
   const search = Route.useSearch();
   const client = useContext(QueryClientContext);
-  const navigation = hostedBookNavigationForRouter(router, client);
+  const navigation = hostedBookNavigationForRouter(
+    router,
+    client,
+    visit.state === 'ready' ? visit.admission.viewer.kind : 'session',
+  );
   return (
     <HostedBookVisitView
       visit={visit}

@@ -17,6 +17,7 @@ import {
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { readerSessionSource, useReaderVisit } from '../../reader/lifetime';
+import type { ReadCredentialMode } from '../../reader/lifetime/contract';
 import { ShellContextNavigation } from '../../shell/contextual-navigation';
 import { BookOutlineView } from './outline';
 import { ReaderWorkspace } from './reader-workspace';
@@ -47,6 +48,8 @@ export type HostedBookReaderProps = {
   locale?: string;
   /** Host publication/target/viewer admission identity; replacement retires equal body bytes. */
   readingIdentity: unknown;
+  /** An admitted anonymous read survives the browser's first session lookup. */
+  credentialMode?: ReadCredentialMode;
   /** Optional installed canonical route mapper. The reader invents no Content URLs. */
   hrefForAddress?: (address: BookAddress, contentsReturn?: BookContentsAddress | null) => string | null;
   /** One bounded originating contents position supplied by the route. */
@@ -68,6 +71,7 @@ export function HostedBookReader({
   source = uninstalledHostedBookSource,
   locale = getLocale(),
   readingIdentity,
+  credentialMode = 'session',
   contentsReturn,
   contentsNavigation,
   onNavigate,
@@ -77,18 +81,21 @@ export function HostedBookReader({
 }: HostedBookReaderProps) {
   const client = useContext(QueryClientContext);
   const session = useMemo(() => readerSessionSource(client), [client]);
+  const sessionRevision = credentialMode === 'anonymous' ? session.publicReadSnapshot : session.snapshot;
   const addressKey = JSON.stringify(address);
   const boundary = useRef({
     source,
     addressKey,
     locale,
     readingIdentity,
+    credentialMode,
     publication: address.publication,
     languagePreference: address.languagePreference,
   });
   const former = boundary.current;
   if (
     former.locale !== locale ||
+    former.credentialMode !== credentialMode ||
     !sameBookLanguagePreference(former.languagePreference, address.languagePreference) ||
     !samePublication(former.publication, address.publication) ||
     (former.addressKey === addressKey && (former.source !== source || former.readingIdentity !== readingIdentity))
@@ -99,11 +106,12 @@ export function HostedBookReader({
     addressKey,
     locale,
     readingIdentity,
+    credentialMode,
     publication: address.publication,
     languagePreference: address.languagePreference,
   };
   const readLocale = useCallback(() => locale, [locale]);
-  const owner = useMemo(() => ({}), [source, addressKey, locale, readingIdentity]);
+  const owner = useMemo(() => ({}), [source, addressKey, locale, readingIdentity, credentialMode]);
   const incarnation = useRef({ owner, generation: 0 });
   if (incarnation.current.owner !== owner)
     incarnation.current = { owner, generation: incarnation.current.generation + 1 };
@@ -111,12 +119,12 @@ export function HostedBookReader({
   const [reopening, setReopening] = useState<{ owner: object; address: BookAddress } | null>(null);
   const openingAddress = reopening?.owner === owner ? reopening.address : address;
   const reader = useMemo(() => {
-    const sessionVersion = session.snapshot();
+    const sessionVersion = sessionRevision();
     return createBookReader(
       source,
       openingAddress,
       locale,
-      () => route.current() && session.snapshot() === sessionVersion,
+      () => route.current() && sessionRevision() === sessionVersion,
       {
         ...(contentsNavigation !== undefined ? { contentsNavigation } : {}),
         ...(contentsReturn !== undefined ? { contentsReturn } : {}),
@@ -125,21 +133,18 @@ export function HostedBookReader({
         ...(focusOnRead !== undefined ? { initialFocus: focusOnRead.focus } : {}),
       },
     );
-  }, [source, addressKey, locale, readingIdentity, session, route, reopening, owner, contentsNavigation]);
+  }, [source, addressKey, locale, readingIdentity, sessionRevision, route, reopening, owner, contentsNavigation]);
   const previous = useRef(reader);
   if (previous.current !== reader) previous.current.retire();
   previous.current = reader;
   useLayoutEffect(() => {
-    const stopSession = session.subscribe(() => {
-      contentsNavigation?.retire();
-      reader.retire();
-    });
+    const stopSession = session.subscribe(reader.current);
     const disconnect = reader.connect();
     return () => {
       stopSession();
       disconnect();
     };
-  }, [reader, session, contentsNavigation]);
+  }, [reader, session]);
   useLayoutEffect(() => {
     if (!route.current()) reader.retireBoundary();
   });
