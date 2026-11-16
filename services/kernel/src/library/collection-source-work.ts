@@ -226,10 +226,15 @@ export async function registerCollectionSourceWork(context: WorkContext): Promis
       const afterRoute = input.route ?? input.partition * 16 - 1;
       const { rows } = await withConnection(context.pool, (client) =>
         client.query<{ route: number; collection: string; owner: string | null; builtin: string | null }>(
-          `SELECT route,collection_id::text AS collection,curator_account_id::text AS owner,builtin_kind AS builtin
-       FROM library.collection
-       WHERE (route,collection_id)>($1,COALESCE($2::uuid,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
-       ORDER BY route,collection_id LIMIT 1`,
+          `SELECT c.route,c.collection_id::text AS collection,a.account_id::text AS owner,c.builtin_kind AS builtin
+       FROM (
+         SELECT route,collection_id,curator_account_id,builtin_kind
+         FROM library.collection
+         WHERE (route,collection_id)>($1,COALESCE($2::uuid,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
+         ORDER BY route,collection_id LIMIT 1
+       ) c
+       LEFT JOIN access.account a ON (a.route,a.account_id)=(c.route,c.curator_account_id)
+         AND a.state='active' AND NOT a.authn_fenced`,
           [afterRoute, input.collection],
         ),
       );
