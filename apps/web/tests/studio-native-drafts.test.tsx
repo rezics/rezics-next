@@ -268,6 +268,16 @@ test('Studio leaves sidebar placement and the phone drawer to Shell', () => {
   expect(markup).not.toContain('studio-mobile-navigation');
 });
 
+test('a saved text opening exposes the native image tool in the mounted account editor', async () => {
+  const opening = await selection({ body: fromPlainText('Saved text opening', 'text') });
+  const mounted = await mountAuthoringFixture(createElement(StudioWorkspace, { input: input(opening), port: port().value }));
+  try {
+    await waitFor(() => expect(getByRole(mounted.host, 'button', { name: 'Image', exact: true })).toBeTruthy());
+  } finally {
+    await mounted.close();
+  }
+});
+
 const structuredHtml =
   '<h2>First structured heading</h2><p>A <strong>formatted</strong> opening with a <a href="https://example.org/source">source</a>.</p><ul><li><p>First point</p></li><li><p>Second point</p></li></ul><table><tbody><tr><th><p>Column</p></th></tr><tr><td><p>Preserved cell</p></td></tr></tbody></table><pre><code>const draft = "unsaved";</code></pre>';
 

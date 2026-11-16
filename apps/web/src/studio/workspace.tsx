@@ -14,6 +14,7 @@ import { PreferredRichTextEditor as RichTextEditor } from '../editor/preferred-r
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { PostReadingBody } from '../threads/post-reading-body';
+import { uploadReplyImage, UploadRefusal } from '../threads/upload';
 import type { BookOrganizerPort, StudioInput, StudioPort, StudioPresentation } from './contract';
 import { StudioController, type WorkingDocument } from './controller';
 import { NativeDraftComposer } from './native-draft-composer';
@@ -165,6 +166,16 @@ export function StudioWorkbench({
   const editorGeneration = selected?.editorGeneration ?? 0;
   const authoringSelection = useAuthoringSelection(writingCanvas, `${postId}:${editorGeneration}`);
   const editorCurrent = () => postId !== null && controller.isEditorCurrent(postId, editorGeneration);
+  const uploadThreadId =
+    input.nativeDrafts && selected?.source.permissions.edit ? selected.source.native?.threadId : null;
+  const upload =
+    editorPresentation?.upload ??
+    (uploadThreadId
+      ? (file: File, signal: AbortSignal) => {
+          if (!editorCurrent()) throw new UploadRefusal('unavailable');
+          return uploadReplyImage(uploadThreadId, file, signal);
+        }
+      : undefined);
   const unresolved = controller.hasUnresolvedCommand();
   const atRisk = Boolean(
     organization.dirty ||
@@ -853,6 +864,7 @@ export function StudioWorkbench({
                 />
                 <RichTextEditor
                   {...editorPresentation}
+                  upload={upload}
                   labels={editorLabels}
                   lang={editorPresentation?.lang ?? locale}
                   key={`${postId}:${selected.editorGeneration}`}
@@ -1073,7 +1085,7 @@ function WorkingPreview({
       ) : (
         <PostReadingBody
           {...presentation.reader?.(source.revision.exact)}
-          document={body}
+          document={selected.dirty ? body : source.revision.body}
           readerIdentity={readerIdentity}
           isReaderCurrent={isReaderCurrent}
           visitKey={visitKey}

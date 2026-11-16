@@ -6,6 +6,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale, locales, type Locale } from '../paraglide/runtime.js';
 import { hasKernelOrigin, kernelClient } from '../kernel/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
+import { sessionCsrfToken } from '../session/browser-state';
 import type { SessionEnv } from '../session/client';
 import type { StudioResult } from './contract';
 import {
@@ -304,17 +305,43 @@ export const readOwnedHostedBook = createServerFn({ method: 'GET' })
   );
 
 /** Browser callers receive admitted data only. Credentials remain inside the ordinary BFF session boundary. */
+async function hostedBrowserMutation(
+  locale: Locale,
+  run: (headers: HeadersInit) => Promise<StudioResult<HostedBook>>,
+): Promise<StudioResult<HostedBook>> {
+  const csrfToken = sessionCsrfToken();
+  if (!csrfToken) return hostedFailure('denied', m.studio_sign_in({}, { locale }));
+  return run({ 'X-CSRF-Token': csrfToken });
+}
+
 export const hostedBookNative: HostedBookNative = {
   listHistory: (catalogueId, cursor, signal) => listHostedBookHistory({ data: { catalogueId, cursor }, signal }),
   read: (data, signal) => readHostedBook({ data: { ...data, locale: getLocale() }, signal }),
   listOwn: (accountId, cursor, signal, expected) => listHostedBooks({ data: { accountId, cursor, expected, locale: getLocale() }, signal }),
   readOwn: (accountId, catalogueId, signal, expectedViewer) =>
     readOwnedHostedBook({ data: { accountId, catalogueId, expectedViewer, locale: getLocale() }, signal }),
-  create: (body, idempotencyKey, signal) => createHostedBook({ data: { body, idempotencyKey, locale: getLocale() }, signal }),
-  bindLanguage: (catalogueId, occurrenceId, body, idempotencyKey, signal) =>
-    bindHostedChapterLanguage({ data: { catalogueId, occurrenceId, body, idempotencyKey, locale: getLocale() }, signal }),
-  revise: (catalogueId, body, idempotencyKey, signal) =>
-    reviseHostedBook({ data: { catalogueId, body, idempotencyKey, locale: getLocale() }, signal }),
-  publish: (catalogueId, body, idempotencyKey, signal) =>
-    publishHostedBook({ data: { catalogueId, body, idempotencyKey, locale: getLocale() }, signal }),
+  create: (body, idempotencyKey, signal) => {
+    const locale = getLocale();
+    return hostedBrowserMutation(locale, (headers) =>
+      createHostedBook({ data: { body, idempotencyKey, locale }, signal, headers }),
+    );
+  },
+  bindLanguage: (catalogueId, occurrenceId, body, idempotencyKey, signal) => {
+    const locale = getLocale();
+    return hostedBrowserMutation(locale, (headers) =>
+      bindHostedChapterLanguage({ data: { catalogueId, occurrenceId, body, idempotencyKey, locale }, signal, headers }),
+    );
+  },
+  revise: (catalogueId, body, idempotencyKey, signal) => {
+    const locale = getLocale();
+    return hostedBrowserMutation(locale, (headers) =>
+      reviseHostedBook({ data: { catalogueId, body, idempotencyKey, locale }, signal, headers }),
+    );
+  },
+  publish: (catalogueId, body, idempotencyKey, signal) => {
+    const locale = getLocale();
+    return hostedBrowserMutation(locale, (headers) =>
+      publishHostedBook({ data: { catalogueId, body, idempotencyKey, locale }, signal, headers }),
+    );
+  },
 };

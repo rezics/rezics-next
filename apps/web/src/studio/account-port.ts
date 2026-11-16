@@ -11,7 +11,8 @@ import {
   type OwnDraftReader,
 } from '../threads';
 import type { HistoricalReaderSource } from '../threads/historical-reader-provenance';
-import { createPostDocumentPort, type PostDocumentPort } from './post-document-port';
+import { createPostDocumentPort, projectPostDocumentHead, type PostDocumentPort } from './post-document-port';
+import { readPostDocumentHead, type PostDocumentHead } from './post-document-read';
 import {
   sameExact,
   type NativeDraftCreate,
@@ -93,6 +94,31 @@ function exactSelection(selection: StudioSelection, entry: OwnDraftEntry, accoun
   );
 }
 
+function openingEntry({ post, title }: Pick<PostDocumentHead, 'post' | 'title'>): OwnDraftEntry {
+  return {
+    id: post.id,
+    threadId: post.threadId,
+    firstPostId: post.id,
+    revisionId: post.revisionId,
+    authorId: post.authorId,
+    kind: 'discussion',
+    documentKind: 'opening',
+    title,
+    savedAt: post.revisedAt ?? post.createdAt,
+    licence: post.licence,
+    subjectIds: [...post.subjectIds],
+    mediaIds: [...post.mediaIds],
+    board: { id: post.boardId, title: null, realmId: null },
+    language: null,
+    actions: {
+      resume: `/v1/accounts/${post.authorId}/drafts/${post.id}?threadId=${post.threadId}`,
+      edit: null,
+      publish: null,
+      erase: null,
+    },
+  };
+}
+
 /** Compose Studio's existing document lifecycle over the mounted native account reader and writers. */
 export function createStudioAccountPort(
   input: Readonly<{
@@ -105,7 +131,7 @@ export function createStudioAccountPort(
     locale: string;
     isCurrent: () => boolean;
   }>,
-): StudioPort {
+): StudioPort & { resume(postId: string, signal: AbortSignal): Promise<StudioResult<StudioSelection>> } {
   const { identity, reader, commands, source, locale } = input;
   const accountId = identity.accountId;
   const projectId = accountId;
@@ -124,19 +150,20 @@ export function createStudioAccountPort(
     admitsPost: (postId) => visibleEntries.has(postId) || selectedEntries.has(postId),
   });
 
-  async function open(postId: string, signal: AbortSignal): Promise<StudioResult<StudioSelection>> {
-    const entry = visibleEntries.get(postId) ?? selectedEntries.get(postId);
-    if (!entry || entry.documentKind !== 'opening' || entry.kind !== 'discussion')
-      return failure('withdrawn', m.studio_discussion_only({}, accountOptions(locale)));
-    const currentIdentity = { ...identity, authnEpoch };
-    const resumed = await readSelectedOwnDraft(reader, currentIdentity, entry, signal, isCurrent);
+  async function openEntry(
+    entry: OwnDraftEntry,
+    signal: AbortSignal,
+    load: () => Promise<StudioResult<StudioSelection>>,
+  ): Promise<StudioResult<StudioSelection>> {
+    const resumed = await readSelectedOwnDraft(reader, { ...identity, authnEpoch }, entry, signal, isCurrent);
     if (typeof resumed === 'string') return readFailure(resumed, locale);
-    if (!isCurrent() || resumed.revision !== entry.revisionId)
-      return failure('stale', m.studio_inventory_stale({}, accountOptions(locale)));
-    const result = await documents.open({ projectId, postId }, signal);
+    const result = await load();
     if (!result.ok) return result;
     const selection = result.value;
     if (
+      signal.aborted ||
+      !documents.isCurrent() ||
+      resumed.post.parentId !== null ||
       !exactSelection(selection, entry, accountId) ||
       serializeDocument(selection.revision.body) !== serializeDocument(resumed.post.body) ||
       !sameList(selection.revision.mediaIds, resumed.post.mediaIds)
@@ -145,9 +172,37 @@ export function createStudioAccountPort(
     const admitted = { ...selection, permissions: { edit: true, publish: true } };
     selectedEntries.clear();
     selections.clear();
-    selectedEntries.set(postId, entry);
-    selections.set(postId, admitted);
+    selectedEntries.set(entry.id, entry);
+    selections.set(entry.id, admitted);
     return { ok: true, value: admitted };
+  }
+
+  async function open(postId: string, signal: AbortSignal): Promise<StudioResult<StudioSelection>> {
+    const entry = selectedEntries.get(postId) ?? visibleEntries.get(postId);
+    if (!entry || entry.documentKind !== 'opening' || entry.kind !== 'discussion')
+      return failure('withdrawn', m.studio_discussion_only({}, accountOptions(locale)));
+    return openEntry(entry, signal, () => documents.open({ projectId, postId }, signal));
+  }
+
+  async function resume(postId: string, signal: AbortSignal): Promise<StudioResult<StudioSelection>> {
+    if (signal.aborted || !documents.isCurrent()) return { ok: false, error: unavailable(locale) };
+    try {
+      // The explicit Post address resolves one current opening, then the exact account reader confirms it.
+      const head = await readPostDocumentHead({
+        data: { postId, accountId, locale: accountOptions(locale).locale, ownDiscussionOpening: true },
+        signal,
+      });
+      if (!head.ok) return head;
+      const { post, viewerId } = head.value;
+      if (post.id !== postId || viewerId !== accountId || signal.aborted || !documents.isCurrent())
+        return { ok: false, error: unavailable(locale) };
+      return await openEntry(openingEntry(head.value), signal, async () => {
+        const selection = await projectPostDocumentHead(head.value, source.read().csrfReady && !!input.csrfToken);
+        return selection ? { ok: true, value: selection } : { ok: false, error: unavailable(locale) };
+      });
+    } catch {
+      return { ok: false, error: unavailable(locale) };
+    }
   }
 
   async function createNativeDraft(
@@ -197,28 +252,10 @@ export function createStudioAccountPort(
       },
       permissions: { edit: true, publish: true },
     };
-    const entry = {
-      id: post.id,
-      threadId: thread.id,
-      firstPostId: post.id,
-      revisionId: post.revisionId,
-      authorId: accountId,
-      kind: 'discussion' as const,
-      documentKind: 'opening' as const,
+    const entry = openingEntry({
+      post: { ...post, boardId: thread.boardId, licence: thread.licence, subjectIds: thread.subjectIds },
       title: thread.title,
-      savedAt: selection.revision.savedAt,
-      licence: thread.licence,
-      subjectIds: [...thread.subjectIds],
-      mediaIds: [...post.mediaIds],
-      board: { id: thread.boardId, title: null, realmId: null },
-      language: null,
-      actions: {
-        resume: `/v1/accounts/${accountId}/drafts/${post.id}?threadId=${thread.id}`,
-        edit: null,
-        publish: null,
-        erase: null,
-      },
-    } satisfies OwnDraftEntry;
+    });
     visibleEntries.delete(post.id);
     visibleEntries.set(post.id, entry);
     while (visibleEntries.size > 20) visibleEntries.delete(visibleEntries.keys().next().value!);
@@ -263,6 +300,8 @@ export function createStudioAccountPort(
         mediaIds: selection.revision.mediaIds,
       };
       selectedEntries.set(save.postId, updated);
+      if (!visibleEntries.has(save.postId) && visibleEntries.size === 20)
+        visibleEntries.delete([...visibleEntries.keys()].at(-1)!);
       visibleEntries.set(save.postId, updated);
     }
     selections.set(save.postId, selection);
@@ -390,6 +429,7 @@ export function createStudioAccountPort(
 
   return {
     isCurrent,
+    resume,
     async documents(request, signal) {
       if (!isCurrent() || request.projectId !== projectId)
         return failure('denied', m.studio_open_current_account({}, accountOptions(locale)));
