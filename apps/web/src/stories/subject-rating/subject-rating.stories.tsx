@@ -520,7 +520,7 @@ export const RichRatings: Story = {
     await expect(sources).toBeVisible();
     await expect(within(sources).getByRole('heading', { name: 'VNDB' })).toBeVisible();
     await expect(within(sources).getByRole('heading', { name: 'Bangumi' })).toBeVisible();
-    await expect(context.canvasElement.querySelector('[data-slot="rating-personal"]')).toHaveTextContent('0 / 20');
+    await expect(context.canvasElement.querySelector('[data-slot="rating-personal"]')).toHaveTextContent('0 / 10');
     await expect(context.canvasElement.querySelector('[data-slot="public-rating-figure"]')).toHaveTextContent('8.4');
     await expect(canvas.getByRole('button', { name: m.subject_rating_control_clear() })).toBeEnabled();
   },
@@ -532,7 +532,7 @@ export const MultipleIndependentSources: Story = {
     const sources = canvasElement.querySelector<HTMLElement>('[data-slot="rating-imported"]')!;
     await expect(sources.closest('details')).toBeNull();
     await expect(sources.querySelectorAll('[data-slot="imported-score"]')).toHaveLength(2);
-    await expect(canvasElement.querySelector('[data-slot="own-rating"]')).toHaveTextContent('0 / 20');
+    await expect(canvasElement.querySelector('[data-slot="own-rating"]')).toHaveTextContent('0 / 10');
   },
 };
 

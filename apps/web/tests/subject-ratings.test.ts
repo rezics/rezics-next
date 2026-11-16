@@ -483,12 +483,12 @@ test('a vote write quotes its command key and treats 503 atomic_guard_unavailabl
   ).toBe('stale');
 });
 
-test('own exact units, public scores and independent imported scales keep separate regions', async () => {
+test('the personal score uses the standard display scale and imported scores retain their own scales', async () => {
   const statistics = [imported, { ...imported, source: 'Second source', mean: 7.2, scale: { min: 1, max: 10 } }];
   const window = await ratingDocument(render({ ...hierarchyData, own: 0, statistics }));
   try {
     const document = window.document;
-    expect(document.querySelector('[data-slot="rating-personal"]')!.textContent).toContain('0 / 20');
+    expect(document.querySelector('[data-slot="rating-personal"]')!.textContent).toContain('0 / 10');
     expect(document.querySelector('[data-slot="rating-public"]')!.textContent).toContain('8.4 out of 10');
     expect(document.querySelectorAll('[data-slot="imported-score"]')).toHaveLength(2);
     for (const row of document.querySelectorAll('[data-slot="imported-score"]'))
