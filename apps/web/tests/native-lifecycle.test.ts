@@ -6,7 +6,6 @@ import {
   currentNativeLifecycle,
   NativeLifecycleTimeoutError,
   NativeTestLifecycle,
-  inspectNativeProcess,
   inspectNativeProcessGroup,
   nativeProcessGroupIsGone,
   nativeProcessIsSame,
@@ -140,6 +139,50 @@ test('operation timer is cleared before reserved cleanup and preserves the first
       await lifecycle.close().catch(() => {});
     }
   }
+});
+
+test('native process custody settles a terminated group before its parent reaps it', async () => {
+  const holder = Bun.spawn(
+    [
+      'python3',
+      '-c',
+      `import os, signal, sys
+child = os.fork()
+if not child:
+    os.setsid()
+    print(os.getpid(), flush=True)
+    signal.pause()
+    os._exit(0)
+sys.stdin.readline()
+try:
+    os.kill(child, signal.SIGKILL)
+except ProcessLookupError:
+    pass
+os.waitpid(child, 0)`,
+    ],
+    { stdin: 'pipe', stdout: 'pipe', stderr: 'inherit' },
+  );
+  const reader = holder.stdout.getReader();
+  const lifecycle = new NativeTestLifecycle('terminated process group', undefined, { forceGraceMs: 150 });
+  let identity: NativeProcessIdentity | undefined;
+  try {
+    const ready = await settledWithin(reader.read(), 1_000);
+    const pid = Number(new TextDecoder().decode(ready?.value).trim());
+    expect(pid).toBeGreaterThan(0);
+    const owned = lifecycle.ownProcessId('held child', pid);
+    identity = owned.identity;
+    await owned.force();
+    await owned.close();
+    expect(nativeProcessIsSame(identity)).toBe(true);
+    expect(nativeProcessGroupIsGone(identity)).toBe(false);
+    owned.release();
+  } finally {
+    await reader.cancel();
+    holder.stdin.end();
+    expect(await holder.exited).toBe(0);
+    await lifecycle.close().catch(() => {});
+  }
+  expect(nativeProcessGroupIsGone(identity!)).toBe(true);
 });
 
 type LifecycleReceipt = {
