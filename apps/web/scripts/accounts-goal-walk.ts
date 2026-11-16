@@ -669,12 +669,23 @@ async function signIn(
   const persona = `account ${accountId}`;
   observedPersonas.add(persona);
   journeyPersonas.add(persona);
-  if (activeCapture)
+  if (activeCapture) {
+    const granted = result.value.scope;
+    if (
+      accountId !== activeCapture.authority?.subjectAccountId ||
+      result.value.client_id !== clientId ||
+      !Array.isArray(granted) ||
+      granted.length !== scopes.length ||
+      !scopes.every((scope) => granted.includes(scope))
+    )
+      throw new Error('Sign-in did not return the selected account, client and scopes');
     activeCapture.authority = {
       ...activeCapture.authority,
-      sameSubject: activeCapture.authority?.subjectAccountId === accountId,
+      sameSubject: true,
       client: clientId,
+      grantedScopes: [...scopes],
     };
+  }
   return {
     accountId,
     cookie: result.cookie,
@@ -860,6 +871,15 @@ async function fillPasswordSignIn(page: import('playwright').Page, email: string
 export const API_CAPTURE_JOURNEYS = ['J03', 'J04', 'J10'] as const;
 export const API_CAPTURE_DIRECTORY = '.temp/goal/accounts/post-seed-api-capture';
 type CaptureId = (typeof API_CAPTURE_JOURNEYS)[number];
+
+export function selectApiCaptureJourneys(argv: readonly string[]): readonly CaptureId[] {
+  const requested = argv.filter((argument) => argument.startsWith('--journey=')).map((argument) => argument.slice(10));
+  if (!requested.length) return API_CAPTURE_JOURNEYS;
+  const selected = API_CAPTURE_JOURNEYS.filter((id) => requested.includes(id));
+  if (requested.some((id) => !selected.some((selectedId) => selectedId === id)))
+    throw new Error('API capture journeys are J03, J04 and J10');
+  return selected;
+}
 type CaptureCase = {
   id: CaptureId;
   personaRole: 'newly registered ordinary human';
@@ -879,6 +899,7 @@ export function captureResponse(input: unknown): Json {
   const fields = [
     'success',
     'error',
+    'code',
     'effect_status',
     'accountId',
     'account_id',
@@ -900,9 +921,12 @@ export function captureResponse(input: unknown): Json {
     'access_denied',
     'temporarily_unavailable',
   ];
+  const code = [value.code, value.error].find(
+    (candidate) => typeof candidate === 'string' && codes.includes(candidate),
+  );
   return {
     shape,
-    ...(typeof value.error === 'string' && codes.includes(value.error) ? { code: value.error } : {}),
+    ...(code === undefined ? {} : { code }),
     ...(['not_applied', 'applied'].includes(String(value.effect_status)) ? { effectStatus: value.effect_status } : {}),
   };
 }
@@ -927,7 +951,11 @@ function beginCaptureRequest(url: string, init: Parameters<typeof send>[1]): Jso
     ),
     origin: init?.origin ?? init?.headers?.origin ?? null,
     client:
-      fields.client_id === WEBSITE_CLIENT_ID ? WEBSITE_CLIENT_ID : fields.client_id === 'login' ? 'login' : undefined,
+      fields.client_id === WEBSITE_CLIENT_ID ||
+      fields.client_id === AUTH_MANAGEMENT_CLIENT_ID ||
+      fields.client_id === 'login'
+        ? fields.client_id
+        : undefined,
     resource:
       typeof fields.resource === 'string' && fields.resource.startsWith('https://') ? fields.resource : undefined,
     tokenKind: fields.token_type_hint === 'refresh_token' ? 'refresh_token' : undefined,
@@ -965,9 +993,10 @@ function captureLocalDelivery() {
 export async function collectApiCapture(
   operations: Record<CaptureId, () => Promise<unknown>>,
   persist: (cases: CaptureCase[]) => Promise<void>,
+  selected: readonly CaptureId[] = API_CAPTURE_JOURNEYS,
 ): Promise<CaptureCase[]> {
   const cases: CaptureCase[] = [];
-  for (const id of API_CAPTURE_JOURNEYS) {
+  for (const id of selected) {
     const started = Date.now();
     const current: CaptureCase = {
       id,
@@ -1007,7 +1036,7 @@ type CaptureHandoff = {
   recoveryDirectory: string;
 };
 
-async function captureOriginalAuthJourneys(): Promise<number> {
+async function captureOriginalAuthJourneys(selected: readonly CaptureId[]): Promise<number> {
   if (!walkAcceptanceId(process.env, 'native')) throw new Error('API capture requires native acceptance');
   const directory = join(root, API_CAPTURE_DIRECTORY);
   await mkdir(directory, { recursive: true, mode: 0o700 });
@@ -1064,11 +1093,12 @@ async function captureOriginalAuthJourneys(): Promise<number> {
         },
       },
       persist,
+      selected,
     );
     console.log(`accounts-api-capture: ${cases.map((entry) => `${entry.id} ${entry.result}`).join('; ')}`);
     return cases.every((entry) => entry.result === 'PASS') ? 0 : 1;
   } catch {
-    const cases = API_CAPTURE_JOURNEYS.map((id) => ({
+    const cases = selected.map((id) => ({
       id,
       result: 'unverified',
       prerequisite,
@@ -1101,7 +1131,7 @@ async function captureOriginalAuthJourneys(): Promise<number> {
 }
 
 if (import.meta.main && process.argv.includes('--api-capture')) {
-  process.exitCode = await captureOriginalAuthJourneys();
+  process.exitCode = await captureOriginalAuthJourneys(selectApiCaptureJourneys(process.argv.slice(2)));
 }
 
 if (import.meta.main && !process.argv.includes('--api-capture') && process.argv.includes('--launch')) {
