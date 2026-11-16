@@ -1,4 +1,4 @@
-import { checkDocument, serializeDocument, type DocumentSnapshot } from '@rezics/document';
+import { checkDocument, normalizeDocument, serializeDocument, type DocumentSnapshot } from '@rezics/document';
 import { editionDocumentDigest } from '../content-editions/edition-model';
 import { getLocale, type Locale } from '../paraglide/runtime.js';
 import { workspaceFailureMessage, workspaceFeedbackMessage, workspaceOperationMessage } from './workspace-language';
@@ -193,10 +193,17 @@ async function validRevision(revision: StudioRevision, exact?: ExactDocument): P
     (await editionDocumentDigest(revision.body)) === revision.exact.sha256,
   );
 }
+function workingBody(source: StudioSelection, body: DocumentSnapshot): DocumentSnapshot {
+  // Native revisions use the rich editor profile. Keep the exact saved snapshot in source.
+  return source.permissions.edit && source.native && body.profile === 'text'
+    ? normalizeDocument({ ...body, profile: 'blocks' })
+    : body;
+}
+
 function working(source: StudioSelection, generation = 0): WorkingDocument {
   return {
     source,
-    body: source.revision.body,
+    body: workingBody(source, source.revision.body),
     title: source.revision.title,
     dirty: false,
     snapshotPending: false,
@@ -707,7 +714,7 @@ export class StudioController {
       return false;
     this.edit({
       title: historical.title,
-      body: historical.body,
+      body: workingBody(selected.source, historical.body),
       dirty: true,
       invalid: false,
       snapshotPending: false,

@@ -27,6 +27,7 @@ import {
   sealInterruptedWalkInventory,
   applyWalkInventoryToCapabilities,
   capabilitiesResultCell,
+  captureSeedStderr,
   currentAnimeCharacterIds,
   firstPublicRow,
   licensedVndbArchive,
@@ -420,6 +421,24 @@ test('walk seed env uses native Auth transport and keeps the issuer for CSRF aud
   expect(operatorsAt).toBeGreaterThan(0);
   expect(seedAt).toBeGreaterThan(operatorsAt);
   expect(pagesAt).toBeGreaterThan(seedAt);
+});
+
+test('the walk forwards only seed phase evidence and retains the child stderr', async () => {
+  const started = 'Cross-media seed finalization state=started scope=seed phase=record-import remaining=record-import';
+  const completed = 'Cross-media seed finalization state=completed scope=seed remaining=none';
+  const other = 'private transport detail';
+  const content = [started, other, completed].join('\n');
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(content.slice(0, 31)));
+      controller.enqueue(encoder.encode(content.slice(31)));
+      controller.close();
+    },
+  });
+  const progress: string[] = [];
+  expect(await captureSeedStderr(stream, (line) => progress.push(line))).toBe(content);
+  expect(progress).toEqual([started, completed]);
 });
 
 test('ordinary CLI admits loopback HTTP Auth with the kernel test origin', async () => {

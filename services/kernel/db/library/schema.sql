@@ -1716,7 +1716,9 @@ BEGIN
      IS NOT DISTINCT FROM (OLD.route,OLD.collection_id,OLD.created_at,OLD.curator_account_id)
      AND NOT (OLD.state='deleted' AND NEW.state='active') THEN CONTINUE; END IF;
    IF TG_OP='UPDATE' AND NEW.curator_account_id IS NULL AND OLD.curator_account_id IS NOT NULL
-     AND (to_jsonb(NEW)-'curator_account_id')=(to_jsonb(OLD)-'curator_account_id') THEN
+     -- PostgreSQL computes the stored partition number after BEFORE triggers; the route still must match.
+     AND (to_jsonb(NEW)-ARRAY['curator_account_id','partition_no'])=
+         (to_jsonb(OLD)-ARRAY['curator_account_id','partition_no']) THEN
      SELECT f.generation INTO frozen_generation FROM library.collection_retained_output f
      WHERE f.route=item.route AND f.collection_id=item.collection_id;
      IF library.may_deidentify_frozen_output(item.route,item.collection_id,frozen_generation) THEN CONTINUE; END IF;

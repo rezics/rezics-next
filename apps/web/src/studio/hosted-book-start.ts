@@ -1,6 +1,8 @@
 import type { HistoricalReaderSource } from '../threads/historical-reader-provenance';
 import type { StudioFailure, StudioSelection } from './contract';
 import type { StudioState } from './controller';
+import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { sameHostedViewer, type HostedBookNative, type HostedCreate, type HostedOwnerViewer } from './hosted-contract';
 import { hostedOwnerBookHref } from './hosted-inventory';
 
@@ -176,6 +178,13 @@ export class HostedBookStart {
       }
       this.update({ kind: 'ready' });
       if (current()) this.binding.navigate(hostedOwnerBookHref(item, viewer));
+    } catch {
+      if (current())
+        this.update({
+          kind: 'failed',
+          error: { kind: 'uncertain', message: m.studio_result_unknown({}, { locale: getLocale() }) },
+          retryable: true,
+        });
     } finally {
       if (this.request === request) this.request = null;
     }
