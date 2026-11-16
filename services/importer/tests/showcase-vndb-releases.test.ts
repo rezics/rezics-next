@@ -324,15 +324,15 @@ test('selected VNDB seed rereads the canonical statistic and leaves an unchanged
     });
     const created = new Map<string, string>();
     const observations = sourceObservationFixture();
-    const writes: string[] = [];
+    const effects: { action: 'read' | 'write'; subjectId: string }[] = [];
     const statisticPort: CrossMediaPort = {
       ...port([], true, created),
       async readSourceObservationHead({ subjectId }) {
+        effects.push({ action: 'read', subjectId });
         return observations.read(subjectId);
       },
       async writeSourceStatistic({ subjectId, value }) {
-        expect(value.expectedObservation).toBeNull();
-        writes.push(subjectId);
+        effects.push({ action: 'write', subjectId });
         observations.observe(subjectId, value);
       },
     };
@@ -345,6 +345,11 @@ test('selected VNDB seed rereads the canonical statistic and leaves an unchanged
       });
     await seed();
     const subjectId = created.get('source:v1')!;
+    expect(effects).toEqual([
+      { action: 'read', subjectId },
+      { action: 'write', subjectId },
+      { action: 'read', subjectId },
+    ]);
     expect(observations.read(subjectId)).toMatchObject({
       state: 'published',
       observation: {
@@ -352,7 +357,7 @@ test('selected VNDB seed rereads the canonical statistic and leaves an unchanged
       },
     });
     await seed();
-    expect(writes).toEqual([subjectId]);
+    expect(effects.filter(({ action }) => action === 'write')).toEqual([{ action: 'write', subjectId }]);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
