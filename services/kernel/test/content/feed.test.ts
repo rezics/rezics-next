@@ -43,6 +43,13 @@ test('Default mixed feed composes real discovery, current Following and Continue
   const { runtime } = driver.fixtures;
   const prefix = `feed-${randomUUID().replaceAll('-', '').slice(0, 20)}-`;
   const search = createOpenSearch(endpoint);
+  const observations = new Set<string>();
+  function observe(phase: string, readiness: Record<string, boolean | string> = {}) {
+    const message = JSON.stringify({ phase, ...readiness });
+    if (observations.has(message)) return;
+    observations.add(message);
+    console.info('Mixed Home readiness', message);
+  }
   let server: Awaited<ReturnType<typeof startServer>> | undefined;
   let worker: ReturnType<typeof startOutcomeWorkerProcess> | undefined;
   let work: Awaited<ReturnType<typeof createWorkClient>> | undefined;
@@ -137,6 +144,7 @@ test('Default mixed feed composes real discovery, current Following and Continue
     });
     worker = startOutcomeWorkerProcess(env);
     await worker.ready;
+    observe('worker ready');
     const config = readConfig(env);
     // Following a Space with an already indexed adoption uses the native follow backfill.
     const activityPool = new Pool({ connectionString: runtime.databaseUrl, max: 1 });
@@ -151,6 +159,7 @@ test('Default mixed feed composes real discovery, current Following and Continue
     }
     const followedSpace = await driver.fixtures.send(viewer, 'PUT', `/v1/follows/${spaceId}`, undefined, key());
     expect(followedSpace.status, JSON.stringify(followedSpace.body)).toBe(200);
+    observe('Book activity available and Space followed');
     // Start the existing canonical and owner index workflows before the read-only feed calls.
     work = await createWorkClient(runtime.databaseUrl);
     await work.enqueue(
@@ -172,6 +181,7 @@ test('Default mixed feed composes real discovery, current Following and Continue
       );
     }
     server = await startServer(config); // Its createKernel consumes the ordinary Search producer.
+    observe('feed server ready');
     async function page(account: typeof viewer | null, stream = 'home', cursor?: string) {
       const query = new URLSearchParams({ stream, limit: '20' });
       if (cursor) query.set('cursor', cursor);
@@ -186,12 +196,13 @@ test('Default mixed feed composes real discovery, current Following and Continue
     const anonymous = await eventually(async () => {
       const result = await page(null);
       const row = result.feedItems.find((item) => item.source === 'discovery' && item.key.id === book);
-      const projection = subjectReactions(row);
-      return result.sources.discovery === 'ready' &&
-        projection?.counts.state === 'available' &&
-        projection.counts.values.love === 1
-        ? result
-        : undefined;
+      const expectedReaction = projection?.counts.state === 'available' && projection.counts.values.love === 1;
+      observe('anonymous Discovery', {
+        discovery: result.sources.discovery,
+        bookPresent: row !== undefined,
+        expectedReaction,
+      });
+      return result.sources.discovery === 'ready' && expectedReaction ? result : undefined;
     });
     expect(anonymous.sources).toEqual({ discovery: 'ready', following: 'not_requested', continue: 'not_requested' });
     expect(anonymous.feedItems.every((item) => item.source === 'discovery' && !('continue' in item))).toBe(true);
@@ -200,11 +211,22 @@ test('Default mixed feed composes real discovery, current Following and Continue
     expect(subjectReactions(anonymousSubject)).not.toHaveProperty('viewer');
     const mixed = await eventually(async () => {
       const result = await page(viewer);
+      const continuedBook = result.feedItems.some((item) => item.source === 'continue' && item.key.id === book);
+      const followedCollection = result.feedItems.some(
+        (item) => item.source === 'following' && item.key.id === collectionId,
+      );
+      const discovery = result.feedItems.some((item) => item.source === 'discovery');
+      observe('signed-in Home', {
+        ...result.sources,
+        continuedBook,
+        followedCollection,
+        hasDiscoveryItem: discovery,
+      });
       return result.sources.continue === 'ready' &&
         result.sources.following === 'ready' &&
-        result.feedItems.some((item) => item.source === 'continue' && item.key.id === book) &&
-        result.feedItems.some((item) => item.source === 'following' && item.key.id === collectionId) &&
-        result.feedItems.some((item) => item.source === 'discovery')
+        continuedBook &&
+        followedCollection &&
+        discovery
         ? result
         : undefined;
     });
@@ -224,13 +246,20 @@ test('Default mixed feed composes real discovery, current Following and Continue
     const following = await eventually(async () => {
       const result = await page(viewer, 'following');
       const row = result.feedItems.find((item) => item.source === 'following' && item.key.id === book);
-      return subjectReactions(row)?.action === 'allowed' ? result : undefined;
+      const expectedAction = subjectReactions(row)?.action === 'allowed';
+      observe('Following', {
+        following: result.sources.following,
+        bookPresent: row !== undefined,
+        expectedAction,
+      });
+      return expectedAction ? result : undefined;
     });
     expect(subjectReactions(following.feedItems.find((item) => item.key.id === book))).toMatchObject({
       counts: { state: 'available', values: { love: 1 } },
       viewer: { state: 'available', kind: 'love' },
       action: 'allowed',
     });
+    observe('current disclosure checks');
     const unfollow = await driver.fixtures.send(viewer, 'DELETE', `/v1/follows/${collectionId}`, undefined, key());
     expect(unfollow.status).toBe(200);
     // No cleanup/projection wait: the native current negative immediately overrides retained refs.
