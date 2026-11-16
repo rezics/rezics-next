@@ -103,6 +103,18 @@ async function makeUpload(person: Identity, value: unknown = artifact) {
   return { id: status.uploadId as string, status };
 }
 
+async function observationAdmissionReceiptCount(person: Identity, requestKey: string) {
+  const accountId = person.actor.accountId;
+  const command = 'library.entry.source-observation.admit';
+  const { rows } = await f.pool.query<{ count: string }>(
+    `SELECT count(*)::text AS count FROM core.receipt
+     WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
+       AND command_kind=$3 AND idempotency_key=ANY($4::text[])`,
+    [partitionOf(routeOf(accountId)!), accountId, command, nativeReceiptKeyCandidates(f.pool, command, accountId, requestKey)],
+  );
+  return rows[0]?.count;
+}
+
 beforeAll(async () => {
   f = await createProfileEntryFixture({ gameUnits: ['page'] });
   for (const group of ['personal_library', 'reading_progress', 'collections'])
@@ -616,17 +628,7 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
       })
     ).status,
   ).toBe(409);
-  const observationReceipt = await f.pool.query<{ count: string }>(
-    `SELECT count(*)::text AS count FROM core.receipt
-     WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
-       AND command_kind='library.entry.source-observation.admit' AND idempotency_key=ANY($3::text[])`,
-    [
-      partitionOf(routeOf(main.actor.accountId)!),
-      main.actor.accountId,
-      nativeReceiptKeyCandidates(f.pool, 'library.entry.source-observation.admit', main.actor.accountId, observationKey),
-    ],
-  );
-  expect(observationReceipt.rows[0]?.count).toBe('1');
+  expect(await observationAdmissionReceiptCount(main, observationKey)).toBe('1');
   const currentAnnotation = await personal.readPersonalEntry(main.actor, subjects[0]);
   const currentEntry = await f.commands.readEntry(main.actor, subjects[0]);
   const annotationEpoch = await f.pool.query<{ review_revision: number }>(
@@ -1864,8 +1866,13 @@ test('a merged canonical target invalidates the reviewed observation identity', 
   } finally {
     await client.close();
   }
-  const applied = await json(await send(identityOwner, 'POST', `${mergePath}/${id}/apply`, selected([row.ordinal])));
-  expect(applied.applied).toMatchObject([{ status: 'stale' }]);
+  const reviewRevision = review.reviewed[0].reviewRevision;
+  const applied = await json(
+    await send(identityOwner, 'POST', `${mergePath}/${id}/apply`, selected([row.ordinal], reviewRevision)),
+  );
+  expect(applied.applied).toMatchObject([{ ordinal: row.ordinal, status: 'stale', result: { visibility: 'private' } }]);
+  const requestKey = `archive-merge-${id.replaceAll('-', '')}-${row.ordinal}-${reviewRevision}`;
+  expect(await observationAdmissionReceiptCount(identityOwner, requestKey)).toBe('0');
   const personal = createEntryPersonalCommands({ pool: f.pool, access: f.access });
   expect(
     await personal.readSourceObservation(identityOwner.actor, survivor, 'archive-fixture', 'source-visible-row'),
