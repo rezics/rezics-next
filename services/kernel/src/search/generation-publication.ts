@@ -776,6 +776,23 @@ export function createSearchGenerationPublication(
     meter.frontierWrites += inserted.rowCount ?? 0;
     if (inserted.rowCount !== expected) throw new Pending('source_pending');
   }
+  async function rewindSubjectHome(job: Job, home: number, client: PoolClient, meter: Meter) {
+    const removed = await client.query(
+      'DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2',
+      [home, job.job],
+    );
+    meter.frontierWrites += removed.rowCount ?? 0;
+    job.phase = 'subject';
+    job.home = home;
+    job.after_route = null;
+    job.after_id = null;
+    await save(client, job, meter);
+  }
+
+  function advancedUnderSubjectFence(job: Job, before: Home, epoch: number | null, position: bigint) {
+    return job.family === 'subjects' && job.fenced_pass && before.epoch === epoch && BigInt(before.position) < position;
+  }
+
   async function remember(
     job: Job,
     before: Home,
@@ -1020,6 +1037,10 @@ export function createSearchGenerationPublication(
             console.warn('Search publication trace', {
               gate: 'source-head', before, partition: page.partition, epoch: page.epoch, position: page.position.toString(),
             });
+            // A same-owner advance only invalidates this page. Read it again
+            // from its first key under the held fence before witnessing it.
+            if (page.partition === before.partition && advancedUnderSubjectFence(job, before, page.epoch, page.position))
+              return rewindSubjectHome(job, before.partition, client, meter);
             throw new Pending('source_pending');
           }
           ids = page.ids;
@@ -1065,6 +1086,8 @@ export function createSearchGenerationPublication(
         const observed = await head(job.home, context);
         if (!same(before, observed)) {
           console.warn('Search publication trace', { gate: 'post-reconcile-head', before, observed });
+          if (advancedUnderSubjectFence(job, before, observed.epoch, BigInt(observed.position)))
+            return rewindSubjectHome(job, before.partition, client, meter);
           throw new Pending('source_pending');
         }
         job.after_route = next?.route ?? null;
@@ -1198,7 +1221,7 @@ export function createSearchGenerationPublication(
         if (job.fenced_pass && (coverage.missing.length || coverage.extra.length)) throw new Pending('source_pending');
         const before = await head(group.partition, context);
         const verifyChanged =
-          job.family === 'subjects' && !job.fenced_pass
+          job.family === 'subjects'
             ? () => verifyChangedEngineHome(job, before, group.ids, context, meter)
             : undefined;
         if (await remember(job, before, client, meter, verifyChanged)) continue;
@@ -1275,6 +1298,13 @@ export function createSearchGenerationPublication(
               row.claim_revision === '0'
             : same(row, await head(row.partition, context));
         if (matches) continue;
+        if (
+          current_position !== null &&
+          row.account_revision === '0' &&
+          row.claim_revision === '0' &&
+          advancedUnderSubjectFence(job, row, current_epoch, BigInt(current_position))
+        )
+          return rewindSubjectHome(job, row.partition, client, meter);
         await client.query('DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2', [
           row.partition,
           job.job,
