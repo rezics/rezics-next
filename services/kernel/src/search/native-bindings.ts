@@ -41,6 +41,7 @@ export let readErasureStatus: SearchNativePorts['readErasureStatus'];
 export let readIdentityMappings: SearchNativePorts['readIdentityMappings'];
 export let readIdentitySourceProjection: SearchNativePorts['readIdentitySourceProjection'];
 export let prepareRetainedIdentitySourceProjections: SearchNativePorts['prepareRetainedIdentitySourceProjections'];
+export let nativeSubjectPublicationRepairEvidence: SearchNativePorts['nativeSubjectPublicationRepairEvidence'];
 export let readNativePublicFilterAccountRepair: SearchNativePorts['readNativePublicFilterAccountRepair'];
 export let readNativePublicFilterPublicationCompletion: SearchNativePorts['readNativePublicFilterPublicationCompletion'];
 export let readNativePublicFilterRepairStart: SearchNativePorts['readNativePublicFilterRepairStart'];
@@ -108,6 +109,7 @@ export function bindSearchNativePorts(port: SearchNativePorts): SearchNativePort
   readIdentityMappings = port.readIdentityMappings;
   readIdentitySourceProjection = port.readIdentitySourceProjection;
   prepareRetainedIdentitySourceProjections = port.prepareRetainedIdentitySourceProjections;
+  nativeSubjectPublicationRepairEvidence = port.nativeSubjectPublicationRepairEvidence;
   readNativePublicFilterAccountRepair = port.readNativePublicFilterAccountRepair;
   readNativePublicFilterPublicationCompletion = port.readNativePublicFilterPublicationCompletion;
   readNativePublicFilterRepairStart = port.readNativePublicFilterRepairStart;

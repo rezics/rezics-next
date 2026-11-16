@@ -602,6 +602,21 @@ const nativeAccountRepairs = new WeakMap<
     }>
   >
 >();
+// One verified reply may carry the exact Subject bodies already read by that
+// invocation. A copied reply or another binding cannot recover this evidence.
+const subjectPublicationRepairEvidence = new WeakMap<
+  Extract<NativeSourceRepairStepVerification, { status: 'verified' }>,
+  Readonly<{ binding: PublicFilterSourceBinding; repairs: readonly PublicSourceRepair[] }>
+>();
+
+export function nativeSubjectPublicationRepairEvidence(
+  binding: PublicFilterSourceBinding,
+  step: Extract<NativeSourceRepairStepVerification, { status: 'verified' }>,
+): readonly PublicSourceRepair[] | undefined {
+  const evidence = subjectPublicationRepairEvidence.get(step);
+  return evidence?.binding === binding ? evidence.repairs : undefined;
+}
+
 type NativeRepairStartInput = Readonly<{
   bootstrap: string;
   queried: PublicFilterQueriedObservation;
@@ -2637,6 +2652,8 @@ export function createNativePublicFilterSourceBinding(
         }
         const chain = repairChain(cut.bootstrap, joined);
         if (!uuid.test(row.step) || !uuid.test(record.input.advance)) throw new BindingError('binding_mismatch');
+        const subjectPublication = boundSubjectPublication(cut, input) && record.account === undefined;
+        let repairs: PublicSourceRepair[] = [];
         let expected: RepairState | undefined;
         let expectedScan: RepairRecord['scan'];
         let expectedWindowBatch: RepairRecord['windowBatch'];
@@ -2733,6 +2750,10 @@ export function createNativePublicFilterSourceBinding(
           )
             throw new BindingError('owner_unavailable');
           await currentRepairHome(input.bootstrap, input.execution, record.input, page.source, db);
+          if (subjectPublication)
+            repairs = page.repairLocators.map((locator) =>
+              producedRepair(input.bootstrap, input.execution, row.step, page, locator),
+            );
           expected =
             page.status === 'complete'
               ? record.input.resumeBridge
@@ -2912,7 +2933,7 @@ export function createNativePublicFilterSourceBinding(
         if (
           current.row.state !== 'adopted' ||
           current.row.queried !== cut.row.queried ||
-          encode(current.definition) !== encode(cut.definition)
+          !isDeepStrictEqual(current.definition, cut.definition)
         )
           throw new BindingError('configuration_changed');
         await retainPublicFilterRepairVerification(
@@ -2944,7 +2965,7 @@ export function createNativePublicFilterSourceBinding(
             cost.frontierWrites += controls.frontierWrites ?? 0;
           },
         );
-        return {
+        const result = {
           status: 'verified' as const,
           step: row.step,
           predecessor: row.predecessor,
@@ -2958,6 +2979,9 @@ export function createNativePublicFilterSourceBinding(
           })),
           cost,
         };
+        if (subjectPublication && repairs.length === receiptDigests.length)
+          subjectPublicationRepairEvidence.set(result, { binding: bootstrapBinding, repairs });
+        return result;
       });
     },
     async readRepairReceipt(request, context) {
@@ -3051,7 +3075,7 @@ export function createNativePublicFilterSourceBinding(
         if (
           current.row.state !== 'adopted' ||
           current.row.queried !== cut.row.queried ||
-          encode(current.definition) !== encode(cut.definition)
+          !isDeepStrictEqual(current.definition, cut.definition)
         )
           throw new BindingError('configuration_changed');
         return {

@@ -953,6 +953,7 @@ export async function readPublicFilterRepairSettlement(
           entry.page,
           context,
           charge,
+          allowance?.maintenance,
         ),
       );
     }

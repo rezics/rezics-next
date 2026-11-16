@@ -2311,6 +2311,8 @@ replay accounting may change, as in Source's original projection digest. The act
 charged and the retained original intent is preserved. The final owner step additionally proves its original
 complete window/chain and creation/change closure; an empty final step needs no item receipt.
 Search does not infer this from counts, a current equivalent page, callback completion or a serialized brand.
+For an exact bound Subject publication, the same native step invocation can supply the verified repair bodies.
+Search compares them to its retained intent. The other paths keep separate receipt and Account owner reads.
 It then opens a fresh local transaction and compares the entire staged custody/execution/work, retained
 intent/effect, physical allocation, owner epoch, writer and enrollment/fence generation basis before its actual
 native writer verification, readback and refresh. A changed basis invalidates that invocation's owner positives.
