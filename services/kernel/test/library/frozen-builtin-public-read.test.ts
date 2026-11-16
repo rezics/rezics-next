@@ -7,7 +7,7 @@ import { routeOf } from '../../src/route/route.ts';
 import { startConsentServer, type ConsentServer } from '../community/membership-fixture.ts';
 import { deletePersona } from '../support/account-deletion.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
-import { createOwnedErasureFixture } from './support/erasure-worker.ts';
+import { createOwnedErasureFixture, readLibraryWorkerResult } from './support/erasure-worker.ts';
 
 async function waitFor<T>(phase: string, read: () => Promise<T>, ready: (value: T) => boolean): Promise<T> {
   const deadline = performance.now() + 60_000;
@@ -46,7 +46,7 @@ test('anonymous members retain the selected built-in generation after curator er
       async () => {
         const status = await f.json(owner, 'GET', `/v1/collectionPublications/${admitted.id}`, 200);
         if (status.phase !== 'complete' && (await f.client.getWorkflow(admitted.id))?.status === 'ERROR')
-          await f.client.retrieveWorkflow(admitted.id).getResult();
+          await readLibraryWorkerResult(f.client, admitted.id);
         return status;
       },
       (value) => {
@@ -55,7 +55,6 @@ test('anonymous members retain the selected built-in generation after curator er
       },
     ).catch(async (error: unknown) => {
       const workflow = await f.client.getWorkflow(admitted.id);
-      if (workflow?.status === 'ERROR') await f.client.retrieveWorkflow(admitted.id).getResult();
       throw new Error(`Publication workflow status: ${workflow?.status ?? 'absent'}`, { cause: error });
     });
     const generation: string = completed.publication.generation;

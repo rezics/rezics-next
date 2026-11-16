@@ -1,6 +1,18 @@
 import type { WorkClient } from '../../../src/work/client.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
 
+/** DBOS reports retried failures as a list. Surface the original native step stack when present. */
+export async function readLibraryWorkerResult(client: WorkClient, workflowId: string) {
+  try {
+    return await client.retrieveWorkflow(workflowId).getResult();
+  } catch (error) {
+    if (!(error instanceof Error) || !('errors' in error) || !Array.isArray(error.errors)) throw error;
+    const [first] = error.errors;
+    if (!first || typeof first.stack !== 'string') throw error;
+    throw new Error(`${error.message}\n${first.stack}`, { cause: error });
+  }
+}
+
 /** The fixture owns this child and its two pipes, never the Auth executor. */
 export async function startErasureWorker(
   url: string,
