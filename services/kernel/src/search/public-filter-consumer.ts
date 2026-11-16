@@ -1919,7 +1919,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           )
         ).rows[0];
         if (!saved || saved.registration !== work.registration.id) return m.unavailable('observation_lost');
-        const q = decodeState<PublicFilterQueriedObservation>(saved.queried);
+        const q = decodeNative<PublicFilterQueriedObservation>(saved.queried);
         if (
           q.snapshot.kind !== 'pit' ||
           q.snapshot.observation !== work.materializing.snapshot.observation ||
