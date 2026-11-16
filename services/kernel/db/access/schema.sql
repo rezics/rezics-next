@@ -5506,7 +5506,7 @@ CREATE INDEX erasure_handle_unfinished ON access.lifecycle_handle_operation USIN
 -- Name: erasure_late_item_open; Type: INDEX; Schema: access; Owner: -
 --
 
-CREATE INDEX erasure_late_item_open ON access.erasure_late_item USING btree (route, account_id) WHERE (resolved_at IS NULL);
+CREATE INDEX erasure_late_item_open ON access.erasure_late_item USING btree (route, account_id, participant) WHERE (resolved_at IS NULL);
 
 
 --

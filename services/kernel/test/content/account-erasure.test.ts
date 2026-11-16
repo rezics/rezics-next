@@ -7,12 +7,15 @@ import { createHash } from 'node:crypto';
 import sharp from 'sharp';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
-import { readErasureStatus, resolveRetention } from '../../src/access/erasure.ts';
+import { readErasureStatus, recordLateErasureItem, resolveRetention } from '../../src/access/erasure.ts';
+import { noEffect, runCommand } from '../../src/command/command.ts';
+import { nativeReceiptKeyCandidates } from '../../src/command/receipt-key.ts';
 import { createAccountErasureEffect } from '../../src/content/account-erasure.ts';
 import { purgeAccountStatementsPage } from '../../src/content/account-erasure-moderation.ts';
 import { readLikedVersion } from '../../src/content/liked-read.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { beginSemanticErasure } from '../../src/semantic/account-erasure.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { accountDeletionRuntime, deletePersona, drainEffects } from '../support/account-deletion.ts';
@@ -597,7 +600,7 @@ test('deleting an account with no content acknowledges content none', async () =
   await waitParticipant(person, 'delivery', 'none');
 });
 
-test('global content erasure waits for held Knowledge before uploads and commits fresh durable steps until acknowledgement', async () => {
+test('Content erasure waits for held Knowledge and leaves unrelated late work pending', async () => {
   const person = await createPerson();
   const notebook = await call<{ notebookId: string; structureRevisionId: string }>(
     person, 'POST', '/v1/knowledge/notebooks', { subjectId: boardSubjectId, title: 'Held private notebook' },
@@ -619,7 +622,20 @@ test('global content erasure waits for held Knowledge before uploads and commits
   const avatar = await upload(person, person.accountId, 'avatar');
   await waitMediaReady(avatar);
   await drainRelays();
-  await erase(person);
+  const obligation = await erase(person);
+
+  const { pool } = system.database;
+  const route = routeOf(person.accountId)!;
+  const tombstone = await eventFor(person.accountId);
+  const admission = await pool.query(
+    `SELECT d.state, s.queue_name,
+       NOT EXISTS (SELECT 1 FROM dbos.workflow_status WHERE workflow_uuid=d.workflow_id) AS native
+     FROM core.history_event_consumer d
+     JOIN dbos.workflow_status s ON s.workflow_uuid=$3
+     WHERE d.partition_no=$1 AND d.position=$2 AND d.consumer='content_account_erasure'`,
+    [partitionOf(route), tombstone.sequence, `content-account-erasure:${person.accountId}:close:0`],
+  );
+  expect(admission.rows).toEqual([{ state: 'transferred', queue_name: 'governance', native: true }]);
 
   type Progress = { step: string; phase: string; cursor: unknown; phase_pending: boolean; content_found: boolean };
   const progress = async () => (await system.database.pool.query<Progress>(
@@ -640,6 +656,22 @@ test('global content erasure waits for held Knowledge before uploads and commits
     'SELECT erased FROM content.media WHERE route=$1 AND media_id=$2', [routeOf(avatar), avatar],
   )).rows[0].erased).toBe(false);
 
+  // Hold a separate participant's locator open through the Content acknowledgement.
+  await beginSemanticErasure(pool, person.accountId);
+  await runCommand(pool, { partition: partitionOf(route) }, async (tx) => {
+    const fence = await tx.query(
+      'SELECT 1 FROM semantic.erasure_fence WHERE route=$1 AND account_id=$2 AND at IS NOT NULL FOR UPDATE',
+      [route, person.accountId],
+    );
+    expect(fence.rowCount).toBe(1);
+    await recordLateErasureItem(tx, {
+      accountId: person.accountId,
+      participant: 'semantic',
+      locator: 'fixture:semantic-copy',
+    });
+    return noEffect(null);
+  });
+
   // Resume the current native step while the hold persists. The source cursor
   // stays fixed, but a new step and receipt must replace the withheld attempt.
   await resumeParticipant(person);
@@ -648,18 +680,16 @@ test('global content erasure waits for held Knowledge before uploads and commits
   expect(second).toMatchObject({
     phase: 'knowledge', cursor: first.cursor, phase_pending: true, content_found: true,
   });
-  const stepKeys = [first.step, second.step].map((step) => `${person.accountId}:${BigInt(step) - 1n}`);
-  const receipts = await system.database.pool.query<{ command_kind: string; idempotency_key: string }>(
-    `SELECT command_kind,idempotency_key FROM core.receipt
-     WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
-       AND command_kind IN ('content.account-erasure.knowledge','content.account-erasure.progress')
-       AND idempotency_key=ANY($3::text[]) ORDER BY command_kind,idempotency_key`,
-    [partitionOf(routeOf(person.accountId)!), person.accountId, stepKeys],
-  );
-  expect(receipts.rows).toHaveLength(4);
-  for (const key of stepKeys) {
-    expect(receipts.rows).toContainEqual({ command_kind: 'content.account-erasure.knowledge', idempotency_key: key });
-    expect(receipts.rows).toContainEqual({ command_kind: 'content.account-erasure.progress', idempotency_key: key });
+  for (const step of [first.step, second.step]) {
+    const key = `${person.accountId}:${BigInt(step) - 1n}`;
+    for (const kind of ['content.account-erasure.knowledge', 'content.account-erasure.progress']) {
+      const { rowCount } = await pool.query(
+        `SELECT 1 FROM core.receipt WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
+         AND command_kind=$3 AND idempotency_key=ANY($4::text[])`,
+        [partitionOf(route), person.accountId, kind, nativeReceiptKeyCandidates(pool, kind, person.accountId, key)],
+      );
+      expect(rowCount).toBe(1);
+    }
   }
   expect((await system.database.pool.query(
     `SELECT 1 FROM access.erasure_acknowledgement
@@ -675,6 +705,12 @@ test('global content erasure waits for held Knowledge before uploads and commits
   await resumeParticipant(person);
   await waitParticipant(person, 'content', 'erased');
   await waitParticipant(person, 'delivery', 'erased');
+  expect(await readErasureStatus(pool, person.accountId)).toMatchObject({
+    at: obligation.at,
+    state: 'pending',
+    outstanding: { lateItems: true },
+    participants: { content: { outcome: 'erased' }, semantic: { outcome: 'pending' } },
+  });
   expect((await system.database.pool.query(
     'SELECT 1 FROM content.knowledge_notebook WHERE route=$1 AND notebook_id=$2',
     [routeOf(person.accountId), notebook.notebookId],
@@ -691,7 +727,17 @@ test('global content erasure waits for held Knowledge before uploads and commits
   expect(committed[0].value.outcome).toBe('erased');
   const client = await createWorkClient(system.database.pool.options.connectionString!);
   try {
-    await createAccountErasureEffect({ client }).run(await eventFor(person.accountId));
+    const replay = await client.enqueue(
+      {
+        workflowName: 'effect',
+        queueName: 'effects',
+        workflowID: crypto.randomUUID(),
+        queuePartitionKey: `content_account_erasure:${partitionOf(route)}`,
+      },
+      'content_account_erasure',
+      tombstone,
+    );
+    await replay.getResult();
   } finally {
     await client.close();
   }
