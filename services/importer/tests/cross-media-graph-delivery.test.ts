@@ -99,6 +99,48 @@ test('seed graph failure keeps the refused Episode receipt ahead of another prep
   }
 });
 
+test('an Episode position stays literal when the same provider key names a Book', async () => {
+  using db = new Database(':memory:');
+  const graph = new CrossMediaGraph(db);
+  const draft: GraphEdgeDraft = {
+    source: 'bangumi',
+    alias: 'bangumi_cross_media',
+    table: 'episode',
+    holder: 'episode:150204',
+    target: '10380',
+    property: 'schema:isPartOf',
+    url: 'https://bgm.tv/ep/150204',
+    membership: 'referenced',
+    record: { id: 150204, subject_id: 10380, sort: 25 },
+    fields: ['episode.id', 'episode.subject_id', 'episode.sort'],
+    qualifiers: [{ property: 'schema:position', content: '26' }],
+  };
+  graph.remember([draft]);
+  const subjects = new Map([
+    [draft.holder, id(1)],
+    [draft.target, id(2)],
+    ['26', id(3)],
+  ]);
+  await graph.deliver({
+    claim: ({ external_id }) => ({ state: 'bound', subject: subjects.get(external_id)! }),
+    nativeType: () => undefined,
+    currentRelationEndpoint: async () => 'current',
+    fence: async () => ({ fenced: false, securityRevision: null }),
+    async batch({ commands: [command] }) {
+      expect(command).toMatchObject({
+        key: graphEdgeCommandKey(draft),
+        subject: id(1),
+        statement: {
+          property: { id: 'schema:isPartOf' },
+          value: { type: 'value', content: id(2) },
+          qualifiers: [{ property: { id: 'schema:position' }, value: { type: 'value', content: '26' } }],
+        },
+      });
+      return { results: [{ key: command!.key, status: 201, value: { candidate: id(4), revision: 2 } }] };
+    },
+  });
+});
+
 test('graph delivery keeps sealed order and skips acknowledged proposal pages on reopen', async () => {
   const db = new Database(':memory:');
   try {
