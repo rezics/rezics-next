@@ -26,7 +26,7 @@ import {
   sameShowcaseVndbReleaseClassifications,
 } from '../src/showcase-vndb-releases.ts';
 import { captureShowcaseCommands, ShowcaseJournal } from '../src/showcase-publication.ts';
-import { ImportTransportError } from '../src/import-client.ts';
+import { createImportTransport, ImportTransportError } from '../src/import-client.ts';
 import { planVndbReleasePlatforms } from '../src/vndb-release-platforms.ts';
 import { sourceObservationFixture, sourceRecordMetadataFixture } from './transport-driver.ts';
 import { seedShowcaseVndbReleases } from '../src/selected-import.ts';
@@ -325,16 +325,36 @@ test('selected VNDB seed rereads the canonical statistic and leaves an unchanged
     const created = new Map<string, string>();
     const observations = sourceObservationFixture();
     const effects: { action: 'read' | 'write'; subjectId: string }[] = [];
-    const statisticPort: CrossMediaPort = {
-      ...port([], true, created),
-      async readSourceObservationHead({ subjectId }) {
-        effects.push({ action: 'read', subjectId });
-        return observations.read(subjectId);
-      },
-      async writeSourceStatistic({ subjectId, value }) {
+    const statistics = createImportTransport({
+      origin: 'https://showcase-statistics.test',
+      tokenProvider: async () => 'local-protocol-token',
+      fetch: (async (input, init) => {
+        const request = new Request(input, init);
+        const path = new URL(request.url).pathname;
+        const subjectId = path.split('/')[3]!;
+        const endpoint = `/v1/subjects/${subjectId}/source-statistics/vndb`;
+        if (request.method === 'GET') {
+          expect(path).toBe(`${endpoint}/observations`);
+          effects.push({ action: 'read', subjectId });
+          return Response.json(observations.inspect(subjectId));
+        }
+        expect(request.method).toBe('PUT');
+        expect(path).toBe(endpoint);
+        expect(request.headers.get('idempotency-key')).toBeTruthy();
+        const value = await request.json();
         effects.push({ action: 'write', subjectId });
         observations.observe(subjectId, value);
-      },
+        return Response.json({
+          source: 'vndb',
+          ...value,
+          observation: { kind: 'unversioned', digest: observations.read(subjectId).digest },
+        });
+      }) as typeof fetch,
+    });
+    const statisticPort: CrossMediaPort = {
+      ...port([], true, created),
+      readSourceObservationHead: statistics.readSourceObservationHead,
+      writeSourceStatistic: statistics.writeSourceStatistic,
     };
     const seed = () =>
       seedShowcaseVndbReleases({
