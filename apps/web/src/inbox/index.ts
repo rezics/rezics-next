@@ -1,5 +1,6 @@
 /** Inbox feature entry for route and shell composition. */
 export { InboxPageView } from './inbox-page';
+export { hasArrivedInboxReturn } from './inbox-return';
 export { setInboxResponsePolicy } from './inbox-read';
 export type { UnreadCount } from './inbox-read';
 export { UnreadBadge, UnreadBadgeView, useInboxUnreadCount } from './unread-badge';

@@ -1,19 +1,22 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { PageStory, pagePaths, pageReady } from '../page';
+import { useQuery } from '@tanstack/react-query';
+import { PageStory, PatternStory, pagePaths, pageReady } from '../page';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { RatingControlView, RatingRecoveryView, type RatingAnswerRecovery } from '../../features/pages/rating-control';
 import type { QuestionBoundRatingInput } from '../../features/pages/rating-actions';
 import { RatingsView } from '../../features/pages/subject-ratings-view';
 import { GLOBAL, type PublicFigure, type Ratings } from '../../features/pages/subject-ratings';
 import {
-  IMPORTED_VN_SUBJECT_ID,
   independentSourceStatistics,
+  selectRatingsFixture,
   ratingsFixtures,
   standardRatingQuestion,
 } from '../../kernel/fake/ratings';
-import { subjectHref } from '../../subject/subject-href';
-import { storySubjects } from '../../kernel/story-subjects';
+import { subjectRatingQuery } from '../../features/pages/subject-queries';
+import { useSubjectPersonalReader } from '../../features/pages/subject-personal-reader';
+import { useSession } from '../../session/query';
+import recordedSubject from '../../kernel/recorded/subject.json';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 
@@ -154,13 +157,15 @@ export const SaveClearZero: Story = {
     await userEvent.keyboard('{Home}');
     await userEvent.tab();
     await expectKeyboardFocus(save);
-    await userEvent.click(view.getByRole('button', { name: m.subject_rating_control_save() }));
-    await expect(view.getByRole('button', { name: m.subject_rating_control_clear() })).toBeEnabled();
+    await userEvent.keyboard('{Enter}');
+    await expect(clear).toBeEnabled();
     await expect(slider).toHaveAttribute('aria-valuenow', '0');
     await expect(save).toBeDisabled();
+    // Simulated Tab needs a starting node after the browser blurs the disabled Save button.
+    slider.focus();
     await userEvent.tab();
     await expectKeyboardFocus(clear);
-    await userEvent.click(view.getByRole('button', { name: m.subject_rating_control_clear() }));
+    await userEvent.keyboard('{Enter}');
     await expect(view.getByText(m.subject_rating_control_unrated())).toBeVisible();
   },
 };
@@ -519,15 +524,50 @@ export const IndependentSources: Story = {
   },
 };
 
-function detailedRatingsPath() {
-  const work = storySubjects.find(({ id }) => id === IMPORTED_VN_SUBJECT_ID)!;
+function RichRatingPanel() {
+  const subjectId = recordedSubject.subject.id;
   const locale = getLocale();
-  const label = (work.labels as Record<string, string>)[locale] ?? work.labels.en;
-  return subjectHref({ id: work.id, label }, locale).href;
+  const session = useSession();
+  const ratings = useQuery(subjectRatingQuery(subjectId, locale));
+  const { ownRating, binding } = useSubjectPersonalReader({
+    subjectId,
+    locale,
+    view: 'overview',
+    session,
+    includeOwnRating: true,
+  });
+  if (!ratings.data) return null;
+  return (
+    <RatingsView
+      data={ratings.data}
+      id="ratings"
+      subject={subjectId}
+      locale={locale}
+      control={{
+        subjectId,
+        locale,
+        returnTo: `/${locale}${pagePaths.subject}`,
+        session: session.state,
+        own: ownRating,
+        ...(binding ? { binding } : {}),
+      }}
+    />
+  );
 }
 
+// Render the detailed panel with the public and current-answer reads used by the subject page.
 export const RichRatings: Story = {
-  render: () => <PageStory visitor="Signed In" path={detailedRatingsPath()} ratingsFixture="subject-ratings-rich" />,
+  beforeEach: () => {
+    selectRatingsFixture('subject-ratings-rich');
+    return () => selectRatingsFixture();
+  },
+  render: () => (
+    <PatternStory visitor="Signed In" path={pagePaths.subject}>
+      <main className="mx-auto w-full max-w-5xl p-4 sm:p-6">
+        <RichRatingPanel />
+      </main>
+    </PatternStory>
+  ),
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);

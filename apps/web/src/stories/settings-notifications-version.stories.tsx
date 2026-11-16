@@ -196,12 +196,8 @@ export const SharedVersionRecovery: Story = {
     const advanceReading = async (level: 0 | 1 | 2) => {
       await selectSettingsCategory(canvasElement, m.settings_reading_heading());
       const reading = within(canvas.getByRole('region', { name: m.settings_reading_heading() }));
-      const refresh = reading.getByRole('button', { name: m.settings_reload() });
-      const before = fixture.reads.length;
-      await userEvent.click(refresh);
-      await waitFor(() => expect(fixture.reads).toHaveLength(before + 1));
-      await waitFor(() => expect(refresh).toBeEnabled());
       const beforeWrite = fixture.readingCommands.length;
+      const version = fixture.current().preferences.version;
       await userEvent.click(
         reading.getByRole('radio', {
           name: ([m.settings_spoiler_0_title(), m.settings_spoiler_1_title(), m.settings_spoiler_2_title()] as const)[
@@ -209,8 +205,17 @@ export const SharedVersionRecovery: Story = {
           ],
         }),
       );
+      if (reading.queryByText(m.settings_conflict_title())) {
+        const beforeRead = fixture.reads.length;
+        await userEvent.click(reading.getByRole('button', { name: m.settings_reload() }));
+        const saveDraft = await reading.findByRole('button', { name: m.settings_reading_save_draft() });
+        await expect(fixture.reads).toHaveLength(beforeRead + 1);
+        await userEvent.click(saveDraft);
+      }
       await reading.findByText(m.settings_saved());
-      await expect(fixture.readingCommands).toHaveLength(beforeWrite + 1);
+      await expect(
+        fixture.readingCommands.slice(beforeWrite).filter((command) => command.expectedVersion === version),
+      ).toMatchObject([{ expectedVersion: version, spoilerLevel: level }]);
       await selectSettingsCategory(canvasElement, m.settings_notifications_heading());
     };
 
