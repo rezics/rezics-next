@@ -808,8 +808,10 @@ export function createSearchGenerationPublication(
       [before.partition, job.job, job.pass],
     );
     const changed = old && !same(old, before);
-    // With no cursor, the ordinary Subject scan is already about to replay this home from its first key.
-    const startsSubjectHome = job.family === 'subjects' && job.phase === 'subject' && !job.after_id && !job.fenced_pass;
+    // With no cursor, the Subject scan is already about to replay this home from its first key.
+    const sameOwnerAdvance = old && advancedUnderSubjectFence(job, old, before.epoch, BigInt(before.position));
+    const startsSubjectHome =
+      job.family === 'subjects' && job.phase === 'subject' && !job.after_id && (!job.fenced_pass || sameOwnerAdvance);
     const replayed =
       changed &&
       verifyChanged !== undefined &&
@@ -817,6 +819,10 @@ export function createSearchGenerationPublication(
       BigInt(old.position) < BigInt(before.position) &&
       (await verifyChanged());
     if (changed && !startsSubjectHome && !replayed) {
+      if (sameOwnerAdvance) {
+        await rewindSubjectHome(job, before.partition, client, meter);
+        return 'rewound';
+      }
       console.warn('Search publication trace', { gate: 'remember', home: before.partition, old, before });
       const deleted = await client.query(
         'DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2',
@@ -847,7 +853,7 @@ export function createSearchGenerationPublication(
       );
       meter.frontierWrites += stored.rowCount ?? 0;
     }
-    return replayed === true;
+    return replayed === true ? 'verified' : 'retained';
   }
   function cursor(job: Job): SearchPublicFilterSourceKeyCursor | null {
     return job.after_id === null ? null : { route: job.after_route!, id: job.after_id };
@@ -1008,7 +1014,7 @@ export function createSearchGenerationPublication(
           return;
         }
         const before = await head(job.home, context);
-        await remember(job, before, client, meter);
+        if ((await remember(job, before, client, meter)) === 'rewound') return;
         const after = cursor(job);
         let ids: readonly string[],
           next: SearchPublicFilterSourceKeyCursor | null,
@@ -1224,7 +1230,9 @@ export function createSearchGenerationPublication(
           job.family === 'subjects'
             ? () => verifyChangedEngineHome(job, before, group.ids, context, meter)
             : undefined;
-        if (await remember(job, before, client, meter, verifyChanged)) continue;
+        const remembered = await remember(job, before, client, meter, verifyChanged);
+        if (remembered === 'rewound') return;
+        if (remembered === 'verified') continue;
         const discoveryKeys =
           job.family === 'discovery'
             ? group.keys.filter((key): key is DiscoveryKey => key.owner === 'semantic' || key.owner === 'accounts')
