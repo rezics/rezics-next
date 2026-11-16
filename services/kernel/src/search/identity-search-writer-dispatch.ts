@@ -1,12 +1,22 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import { currentCommand, runCommand, type CommandTransaction } from '../command/command.ts';
+import {
+  currentCommand,
+  noEffect,
+  registerCommandCallback,
+  runCommand,
+  type CommandTransaction,
+} from '../command/command.ts';
 import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts';
 import { recordIdentityEpochNativeCommit } from '../semantic/identity-adapters/identity-epoch-binding.ts';
 import { bindSemanticProducerRoles, identityErasureRoles } from '../semantic/erasure-producer.ts';
 import type { IdentityJobRef, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import { identitySourceConsumerNativeWork } from '../semantic/identity-source-consumer-maintenance.ts';
-import { advanceSearchIdentityReceivingReconciliation } from '../semantic/identity-receiving-effects.ts';
+import {
+  advanceSearchIdentityReceivingReconciliation,
+  applySearchIdentityReceivingEffect,
+} from '../semantic/identity-receiving-effects.ts';
+import { serializeIdentityValue as json } from '../semantic/identity-core/encoding.ts';
 import type { IdentityReceivingEffect } from '../semantic/identity-receiving-effects-types.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { prepareRetainedIdentitySourceProjections } from '../semantic/search-source.ts';
@@ -22,7 +32,8 @@ import {
   SEARCH_IDENTITY_BULK_RESPONSE_BYTES,
   searchIdentityWriterBodyBytes,
 } from './identity-search-writer-dispatch-sql.ts';
-import type { searchIdentityWorkContext } from './identity-search-receiving-work.ts';
+import { searchIdentityWorkUsed, type searchIdentityWorkContext } from './identity-search-receiving-work.ts';
+import stepSql from './identity-epoch-participant-step.sql';
 import { searchIdentityWriterChanged } from './identity-epoch-participant-events.ts';
 import { readSearchWriterPhysicalTarget } from './identity-epoch-participant-physical.ts';
 import type { OpenSearch } from './opensearch.ts';
@@ -113,6 +124,41 @@ export function searchIdentityDispatchEffect(
   };
 }
 
+/** The receiving effect and its fixed step share the same native command. */
+export function applySearchIdentityWriterStep(
+  configuration: SearchReceivingConfiguration,
+  effect: IdentityReceivingEffect,
+  planId: string,
+  scopeDigest: string,
+  context: ReturnType<typeof searchIdentityWorkContext>,
+  roles: Awaited<ReturnType<typeof identityErasureRoles>>,
+) {
+  const { pool, clock, consumer, index } = configuration;
+  const command = { partition: effect.receipt.partition, deadline: context.deadline, clock };
+  return runCommand<IdentityNativeReceipt | null>(pool, command, async (tx) => {
+    const applied = await applySearchIdentityReceivingEffect(
+      tx,
+      effect,
+      { scopeDigest, consumer, physicalTarget: index, planId },
+      roles,
+    );
+    if (applied.receipt) return noEffect(applied.receipt);
+    registerCommandCallback(tx, async (id) => {
+      const saved = await tx.query(stepSql.sql, [
+        currentCommand(tx).partition,
+        id,
+        effect.job.jobId,
+        String(effect.job.epoch),
+        applied.scopeDigest,
+        json(applied.frontier),
+        json(searchIdentityWorkUsed(pool, context)),
+      ]);
+      if (saved.rowCount !== 1) throw unavailable('Search application lost its same-transaction fixed step');
+    });
+    return { value: null, events: searchIdentityWriterChanged() };
+  });
+}
+
 export async function advanceSearchIdentityDispatch(
   configuration: SearchReceivingConfiguration,
   writer: SearchWriterNativeCustody,
@@ -145,7 +191,7 @@ export async function advanceSearchIdentityDispatch(
         basis,
         roles:
           basis &&
-          basis.state === null &&
+          (basis.state === null || basis.state === 'visible') &&
           basis.hold_id === request.holdId &&
           basis.source.consumer === configuration.consumer
             ? await identityErasureRoles(pool, job.jobId)
@@ -169,6 +215,11 @@ export async function advanceSearchIdentityDispatch(
   };
   if (basis.state === 'applied' && !basis.released)
     return advanceSearchIdentityReceivingReconciliation(pool, searchIdentityDispatchEffect(job, selection, basis));
+  if (basis.state === 'visible') {
+    const effect = searchIdentityDispatchEffect(job, selection, basis);
+    const applied = await applySearchIdentityWriterStep(configuration, effect, request.planId, scope, context, roles);
+    return { state: 'progress', transactionId: applied.value?.transactionId ?? applied.transactionId } as const;
+  }
   if (basis.visible) return { state: 'prepared' } as const;
   const allocation = async () => {
     const actual = await readSearchWriterPhysicalTarget(engine, index);
@@ -228,7 +279,7 @@ export async function advanceSearchIdentityDispatch(
       position: BigInt(response.dispatch_position),
     };
     await outsideSource(allocation);
-    await runCommand(pool, command, async (tx) => {
+    const visible = await runCommand(pool, command, async (tx) => {
       const bytes = await writer.settleIdentityAction(
         tx,
         job,
@@ -242,7 +293,7 @@ export async function advanceSearchIdentityDispatch(
       await store.recordVisible(tx, selection.native, request.holdId, response.operation_id, remaining(), bytes);
       return { value: null, events: searchIdentityWriterChanged() };
     });
-    return { state: 'prepared' } as const;
+    return { state: 'progress', transactionId: visible.transactionId } as const;
   }
   if (basis.state !== null) throw unavailable('Search writer awaits the original uncertain dispatch result');
 

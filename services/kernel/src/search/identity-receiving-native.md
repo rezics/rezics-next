@@ -190,8 +190,10 @@ An advanced position requires fresh proofs in the release command.
 The projection reader checks the admitted root and anonymous Access in the same snapshot as its Source header.
 The root becomes the initial identity observation while redirected or referenced Subjects retain their own checks.
 The build commit rechecks the original Subject and owner against that observation. Once OpenSearch visibility is
-settled, application verifies the common acceptance, its gate and the expected native plan in one receiving command.
-It commits the applied effect and fixed step together. Directory retirement still rechecks the committed control plan.
+settled, the retained dispatch drives application in the writer's next turn. That turn verifies the common
+acceptance, gate and native plan and commits the applied effect and fixed step together. Visibility settlement,
+application and hold release each yield their committed transaction before the next owner turn. Directory retirement
+still rechecks the committed control plan after release.
 
 For a visible canonical original, the writer verifies the completed Source build and current Access before
 reading one active term head and its complete fact slot. Each owned turn commits the slot cursor and a digest
