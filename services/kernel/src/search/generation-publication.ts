@@ -436,10 +436,13 @@ export function createSearchGenerationPublication(
     );
     add(meter, custody.cost);
     if ('status' in custody) throw new Pending(custody.reason === 'deadline' ? 'deadline' : 'registration_missing');
-    const resolved = await binding.resolve(
-      { source, meaning: structuredClone(meaning), capture: publicationCapture(custody.definition.capture) },
-      context,
-    );
+    const resolved =
+      binding.readDefinition && job.observation
+        ? await binding.readDefinition({ source, id: job.consumer.readDefinition }, context)
+        : await binding.resolve(
+            { source, meaning: structuredClone(meaning), capture: publicationCapture(custody.definition.capture) },
+            context,
+          );
     add(meter, resolved.cost);
     if (resolved.status !== 'resolved')
       throw new Pending(resolved.reason === 'deadline' ? 'deadline' : 'source_pending');

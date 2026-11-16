@@ -2387,39 +2387,35 @@ export async function readGenerationPublicationCustody(
     const registered = await sql(
       pool,
       meter,
-      `SELECT r.partition_no,r.id,r.definition FROM search.public_filter_registration r
+      `SELECT r.partition_no,r.id,r.definition,o.queried,o.expires_at
+       FROM search.public_filter_registration r
        JOIN search.public_filter_target t USING(partition_no,physical_target)
-       WHERE ($1::integer IS NULL OR r.partition_no=$1) AND r.physical_target=$2 AND md5(r.consumer)=md5($3) AND r.consumer=$3 AND r.state='active'
-       AND t.incarnation=$4 LIMIT 2`,
-      [sourceHome, consumer.physicalTarget, encode(consumer), consumer.incarnation],
+       LEFT JOIN LATERAL (
+         SELECT queried,expires_at FROM search.public_filter_observation
+         WHERE (partition_no,registration)=(r.partition_no,r.id)
+           AND (observation=$5::text OR $5::text IS NULL) AND state='open'
+         ORDER BY observation DESC LIMIT 1
+       ) o ON true
+       WHERE ($1::integer IS NULL OR r.partition_no=$1) AND r.physical_target=$2 AND md5(r.consumer)=md5($3)
+         AND r.consumer=$3 AND r.state='active' AND t.incarnation=$4 LIMIT 2`,
+      [sourceHome, consumer.physicalTarget, encode(consumer), consumer.incarnation, observation ?? null],
     );
     const row = registered.rows[0];
     if (!row || registered.rows.length !== 1) throw new Failure('definition_missing');
-    sourceHome = row.partition_no as number;
     const definition = decode<{ digest: string; data: CustodyRetainedDefinition }>(row.definition);
     requireValue(definition.digest === digest(definition.data));
-    const found =
-      observation === undefined
-        ? await sql(
-            pool,
-            meter,
-            `SELECT queried FROM search.public_filter_observation WHERE partition_no=$1 AND registration=$2
-         AND state='open' ORDER BY observation DESC LIMIT 1`,
-            [sourceHome, row.id],
-          )
-        : await sql(
-            pool,
-            meter,
-            `SELECT queried FROM search.public_filter_observation WHERE partition_no=$1 AND registration=$2
-         AND observation=$3 AND state='open'`,
-            [sourceHome, row.id, observation],
-          );
     const registration = { partition: row.partition_no as number, id: row.id as string };
-    if (!found.rows[0]) return { definition: definition.data, registration, queried: null, cost: meter };
-    const q = decode<PublicFilterQueriedObservation>(found.rows[0].queried);
-    requireValue(encode(q.consumer) === encode(consumer));
-    const native = await read(pool, { queried: q }, context, meter);
-    return { definition: native.definition, registration, queried: native.queried, cost: meter };
+    if (row.queried === null) return { definition: definition.data, registration, queried: null, cost: meter };
+    const q = decode<PublicFilterQueriedObservation>(row.queried);
+    queried(q);
+    requireValue(encode(q.consumer) === encode(consumer) && encode(q) === row.queried);
+    if (!(Number(row.expires_at) > Date.now())) throw new Failure('observation_lost');
+    if (isReleaseReference(definition.data.meaning.release)) {
+      requireValue(definition.data.meaning.release.digest === definition.data.meaning.digest);
+      await requireReleaseAuthority(pool, meter, definition.data.meaning.digest);
+    }
+    check(context);
+    return { definition: definition.data, registration, queried: q, cost: meter };
   } catch (error) {
     return failure(error, meter);
   }

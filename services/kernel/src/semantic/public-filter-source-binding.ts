@@ -308,6 +308,11 @@ export type PublicFilterSourceBinding = Readonly<{
     request: NativeSourceRepairRead,
     context: PublicFilterConsumerContext,
   ): Promise<NativeSourceRepairVerification>;
+  /** Read an already retained definition through the current Source owner. */
+  readDefinition?(
+    request: Readonly<{ source: PublicFilterSource; id: string }>,
+    context: PublicFilterConsumerContext,
+  ): ReturnType<PublicFilterSourceBinding['resolve']>;
   resolve(
     request: Readonly<{
       source: PublicFilterSource;
@@ -2110,7 +2115,7 @@ export function createNativePublicFilterSourceBinding(
           )
             throw new BindingError('binding_mismatch');
         } else {
-          const started = await loadBootstrap(startLocator, db, definition);
+          const started = startLocator === cut.bootstrap.id ? cut : await loadBootstrap(startLocator, db, definition);
           if (
             started.definition.readDefinition !== definition.readDefinition ||
             encode(started.bootstrap.consumer) !== encode(retained.queried.consumer) ||
@@ -2133,13 +2138,24 @@ export function createNativePublicFilterSourceBinding(
       };
     });
   }
+  function ownsSource(source: PublicFilterSource) {
+    const origin = ports.sourceOrigin(source);
+    return origin?.pool === pool && origin.access === access && hash(origin.routeKey) === routeDigest;
+  }
   const binding: PublicFilterSourceBinding = {
+    async readDefinition(request, context) {
+      if (!ownsSource(request.source)) return fail('source_missing');
+      const id = request.id;
+      return run(context, async (cost, db) => {
+        const definition = await loadDefinition(id, db);
+        freeze(definition);
+        return { status: 'resolved' as const, definition, cost };
+      });
+    },
     async resolve(request, context) {
       // Capture all caller data and constructor identity before the first suspension.
       let meaning: PublicFilterProjectionMeaning, capture: PublicSourceCaptureInput;
-      const origin = ports.sourceOrigin(request.source);
-      if (!origin || origin.pool !== pool || origin.access !== access || hash(origin.routeKey) !== routeDigest)
-        return fail('source_missing');
+      if (!ownsSource(request.source)) return fail('source_missing');
       try {
         if (!hasPublicFilterMeaningShape(request.meaning)) return fail('binding_mismatch');
         meaning = structuredClone(request.meaning);

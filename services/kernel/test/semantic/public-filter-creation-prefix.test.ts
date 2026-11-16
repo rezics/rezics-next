@@ -45,7 +45,7 @@ test('creation prefix closes only complete unrelated event groups under the reta
   const pool = {
     async query(sql: string, values: unknown[]) {
       if (sql.includes('generate_series')) return { rows: [{ ...first, head: '5' }] };
-      expect(values).toEqual([6, '3', '4', 4]);
+      expect(values).toEqual([6, '3', '4', 7]);
       return { rows: [event, tail] };
     },
   } as unknown as Pool;
@@ -58,4 +58,32 @@ test('creation prefix closes only complete unrelated event groups under the reta
     { inputKeys: 0, rows: 0, dependencyPoints: 0 },
   );
   expect(replay[0]?.window.through).toBe(4n);
+});
+
+test('quiet windows use the full remaining metadata allowance across groups', async () => {
+  const receipt = '12'.repeat(32);
+  const pool = {
+    async query(sql: string, values: [number, number]) {
+      expect(sql).toContain('generate_series');
+      const [from, through] = values;
+      return {
+        rows: Array.from({ length: through - from + 1 }, (_, i) => ({
+          home: from + i,
+          epoch: 1,
+          base: '0',
+          head: '0',
+          receipt,
+        })),
+      };
+    },
+  } as unknown as Pool;
+  const cost = { inputKeys: 0, rows: 0, dependencyPoints: 0 };
+  const result = await readPublicFilterCreationPrefix(
+    pool,
+    { bootstrap: '32323232-3232-3232-3232-323232323232', from: 0, inputLimit: 128 },
+    { deadline: Date.now() + 30_000 },
+    cost,
+  );
+  expect(result).toHaveLength(128);
+  expect(cost).toEqual({ inputKeys: 128, rows: 384, dependencyPoints: 384 });
 });
