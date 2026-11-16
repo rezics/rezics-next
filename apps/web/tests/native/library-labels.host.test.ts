@@ -68,6 +68,42 @@ async function checkLabelProducer(since: number) {
   }
 }
 
+async function openLabelPicker(page: Page, since: number): Promise<void> {
+  try {
+    await page.getByRole('button', { name: 'Add a label', exact: true }).click();
+  } catch (cause) {
+    await stack.refreshKernelRequests();
+    const reads = stack
+      .kernelRequests()
+      .slice(since)
+      .filter(
+        ({ fixtureRequest, url }) =>
+          !fixtureRequest &&
+          /^\/v1\/(?:platform\/exposure|libraryLabelAssignments|libraryLabels|libraryEntries)(?:[/?]|$)/.test(url),
+      )
+      .slice(-8)
+      .map(({ url, method, responseStatus, authorization, access }) => ({
+        method,
+        path: new URL(url, stack.kernelOrigin).pathname,
+        status: responseStatus,
+        credentialPresent: Boolean(authorization),
+        authenticated: access?.authenticated,
+        authorized: access?.authorized,
+      }));
+    const pageState = await page.evaluate(() => ({
+      hydrated: document.documentElement.hasAttribute('data-hydrated'),
+      library: document.querySelector('[data-slot="subject-library-actions"]') !== null,
+      labels: document.querySelector('[data-subject-labels]') !== null,
+      picker: document.querySelector('[data-subject-label-picker-details]') !== null,
+      alerts: document.querySelectorAll('[data-slot="subject-library-actions"] [role="alert"]').length,
+    }));
+    throw new Error(
+      `Subject label picker did not open at ${new URL(page.url()).pathname}: ${JSON.stringify({ pageState, reads })}`,
+      { cause },
+    );
+  }
+}
+
 async function waitForLabelOutcome(page: Page, target: Locator, since: number): Promise<void> {
   try {
     await Promise.race([
@@ -90,7 +126,7 @@ nativeTest(
     try {
       await openSubject(alice);
       await checkLabelProducer(beforeAlice);
-      await alice.getByRole('button', { name: 'Add a label', exact: true }).click();
+      await openLabelPicker(alice, beforeAlice);
       const picker = alice.locator('[data-subject-label-picker]');
       await picker.getByRole('textbox').fill('Alice private label');
       await picker.getByRole('button', { name: 'Create “Alice private label”', exact: true }).click();
