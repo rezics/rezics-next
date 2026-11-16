@@ -234,7 +234,7 @@ export type CrossMediaPort = Pick<
   | 'clearSourceStatistic'
   | 'readReviewedSubject'
 > &
-  Partial<Pick<ReturnType<typeof createImportTransport>, 'requestMedia' | 'mediaStatus'>>;
+  Partial<Pick<ReturnType<typeof createImportTransport>, 'requestMedia' | 'mediaStatus' | 'readSourceObservationHead'>>;
 
 /** Selected review and fence capability; producers take this from the contract, not publication. */
 export type ShowcaseReviewPort = Pick<
