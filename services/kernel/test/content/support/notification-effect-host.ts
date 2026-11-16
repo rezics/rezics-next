@@ -210,6 +210,11 @@ async function runWorker(): Promise<void> {
         : { executorId: process.env.NOTIFICATION_EFFECT_EXECUTOR }),
       systemDatabasePool: pool,
     });
+    const queue = await DBOS.retrieveQueue('effects');
+    if (!queue) throw new Error('Notification effect queue is missing');
+    // The fixture drains many workflows on one serial partition in its own
+    // database. Shorten the delay between dispatches on that partition.
+    await queue.setMinPollingIntervalMs(500);
     process.stdout.write('NOTIFICATION_EFFECT_READY\n');
 
     const { createInterface } = await import('node:readline');
