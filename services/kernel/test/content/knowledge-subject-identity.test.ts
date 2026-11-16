@@ -9,6 +9,7 @@ import { routeOf } from '../../src/route/route.ts';
 import { identityEpochStore } from '../../src/semantic/identity-adapters/index.ts';
 import { readIdentityEpochCutover } from '../../src/semantic/identity-epoch-bootstrap.ts';
 import { identityJobPartition, type IdentityIntent } from '../../src/semantic/identity-epoch-contract.ts';
+import { identityEpochWorkflowId } from '../../src/semantic/core/identity-epoch-sequence.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createSubjectIndex } from '../../src/search/indices.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
@@ -192,6 +193,8 @@ test('private Knowledge attachments stay on their originals through published me
         } catch (error) {
           // The fixture drops its database after stopping the worker. Read the
           // retained boundary once before teardown without fetching source bodies.
+          const locator = { jobId: job.jobId, epoch: job.epoch.toString() };
+          const workflows = [0, 1, 2, 3].map((segment) => identityEpochWorkflowId(locator, segment));
           const observed = await withBoundedReadConnection(pool, Date.now() + 3_000, (client) =>
             client.query(
               `SELECT j.state,j.prearm_phase,
@@ -204,9 +207,36 @@ test('private Knowledge attachments stay on their originals through published me
                (SELECT count(*)::int FROM semantic.identity_epoch_admission_source s
                 WHERE s.partition_no=j.partition_no AND s.job_id=j.job_id) AS sources,
                (SELECT count(*)::int FROM semantic.identity_epoch_admission_validation v
-                WHERE v.partition_no=j.partition_no AND v.job_id=j.job_id) AS validated_sources
+                WHERE v.partition_no=j.partition_no AND v.job_id=j.job_id) AS validated_sources,
+               (SELECT jsonb_agg(p ORDER BY p.generation) FROM (
+                 SELECT d.generation,d.sequence::text AS frontier,d.exhausted,
+                   d.sealed_transaction_id IS NOT NULL AS sealed,
+                   page.sequence::text AS last_page,page.capture_id IS NOT NULL AS captured,
+                   (SELECT array_agg(x.stage ORDER BY x.stage)
+                    FROM semantic.identity_epoch_prearm_disposition x
+                    WHERE x.partition_no=d.partition_no AND x.page_id=page.page_id) AS disposition
+                 FROM semantic.identity_epoch_prearm_directory d
+                 LEFT JOIN LATERAL (
+                   SELECT p.sequence,p.page_id,p.capture_id FROM semantic.identity_epoch_prearm_page p
+                   WHERE p.partition_no=d.partition_no AND p.job_id=d.job_id AND p.generation=d.generation
+                   ORDER BY p.sequence DESC LIMIT 1
+                 ) page ON true
+                 WHERE d.partition_no=j.partition_no AND d.job_id=j.job_id ORDER BY d.generation LIMIT 2
+               ) p) AS prearm,
+               (SELECT jsonb_agg(w ORDER BY w.ordinal) FROM (
+                 SELECT ids.ordinal,s.status,NULLIF(s.error,'') IS NOT NULL AS error_recorded,
+                   (SELECT step.function_name FROM dbos.operation_outputs step
+                    WHERE step.workflow_uuid=ids.workflow_uuid ORDER BY step.function_id DESC LIMIT 1) AS last_step,
+                   (SELECT jsonb_build_object('step',step.function_name,'code',
+                      substring(step.error FROM '"code"[[:space:]]*:[[:space:]]*"(identity_[a-z_]+)"'))
+                    FROM dbos.operation_outputs step
+                    WHERE step.workflow_uuid=ids.workflow_uuid AND NULLIF(step.error,'') IS NOT NULL
+                    ORDER BY step.function_id LIMIT 1) AS first_error
+                 FROM unnest($3::text[]) WITH ORDINALITY AS ids(workflow_uuid,ordinal)
+                 LEFT JOIN dbos.workflow_status s USING (workflow_uuid)
+               ) w) AS coordinator
                FROM semantic.identity_epoch_job j WHERE j.partition_no=$1 AND j.job_id=$2`,
-              [identityJobPartition(job), job.jobId],
+              [identityJobPartition(job), job.jobId, workflows],
             ),
           ).then(
             ({ rows }) => rows[0] ?? null,
