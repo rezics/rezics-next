@@ -9,7 +9,7 @@ import {
 import { requestDigest } from '../command/request.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { ContentNotFoundError, hostedPostAuthorization, RevisionPreconditionError } from './commands.ts';
-import { discloseHostedTargetMetadata } from './hosted-chapters-disclosure.ts';
+import { discloseHostedTargetMetadata, hostedTargetKey } from './hosted-chapters-disclosure.ts';
 import type { HostedCommandDependencies } from './hosted-chapters-commands.ts';
 import type { HostedCommandContext } from './hosted-chapters-model.ts';
 import { hostedCatalogue } from './hosted-chapters-store.ts';
@@ -779,16 +779,21 @@ async function readCommittedPage(
   );
   const result = read.value;
   const items: HostedMigrationEntry[] = [];
+  const visibleTargets = new Map<string, boolean>();
   for (const item of result.items) {
     if (item.kind !== 'chapter' || item.availability !== 'available') {
       items.push(item);
       continue;
     }
-    const disclosed = await discloseHostedTargetMetadata(dependencies, item.target, {
-      actor,
-      deadline: context.deadline,
-    });
-    if (disclosed) {
+    const key = hostedTargetKey(item.target);
+    if (!visibleTargets.has(key)) {
+      const disclosed = await discloseHostedTargetMetadata(dependencies, item.target, {
+        actor,
+        deadline: context.deadline,
+      });
+      visibleTargets.set(key, disclosed !== null);
+    }
+    if (visibleTargets.get(key)) {
       items.push(item);
     } else {
       items.push({
