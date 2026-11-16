@@ -250,7 +250,7 @@ nativeTest(
 
 async function runNativeRealmsSpacesJourney() {
   const anonymousContext = await auth.context('anonymous');
-  const anonymous = await anonymousContext.newPage();
+  let anonymous = await anonymousContext.newPage();
   const browserEvidence = observeBrowserErrors(anonymous);
   await anonymous.setViewportSize({ width: 390, height: 844 });
 
@@ -290,7 +290,10 @@ async function runNativeRealmsSpacesJourney() {
   expect(await realmLink.getAttribute('href')).toBe(`/en/realms/${fixture.publicRealm.realmId}`);
   await realmLink.click();
   await anonymous.waitForURL((url) => url.pathname === `/en/spaces/${fixture.publicRealm.address}`);
+  await anonymous.close();
 
+  anonymous = await anonymousContext.newPage();
+  await anonymous.setViewportSize({ width: 390, height: 844 });
   const emptySpaceResponse = await open(anonymous, `/spaces/${fixture.emptyRealm.address}`);
   expect(emptySpaceResponse).toBe(200);
   await anonymous.getByText('No boards yet.').waitFor();
@@ -307,7 +310,6 @@ async function runNativeRealmsSpacesJourney() {
   }));
   expect(emptyDesktop).toEqual({ width: 1280, documentWidth: 1280 });
   await screenshot(anonymous, 'empty-boards-1280');
-  await anonymous.setViewportSize({ width: 390, height: 844 });
   const emptyBoards = await nativePageResponse(
     'anonymous',
     `/v1/realms/${fixture.emptyRealm.realmId}/boards?limit=20`,
@@ -320,11 +322,12 @@ async function runNativeRealmsSpacesJourney() {
     200,
   );
   expect(emptyPublications.items).toEqual([]);
+  await anonymous.close();
 
   const aliceJourney = await auth.signIn('alice', { returnTo: `/en/spaces/${fixture.publicRealm.address}` });
   const alice = aliceJourney.context.pages().at(-1)!;
   const bobJourney = await auth.signIn('bob', { returnTo: '/en/realms' });
-  const bob = bobJourney.context.pages().at(-1)!;
+  let bob = bobJourney.context.pages().at(-1)!;
   await alice.setViewportSize({ width: 390, height: 844 });
   await bob.setViewportSize({ width: 1280, height: 900 });
 
@@ -342,6 +345,11 @@ async function runNativeRealmsSpacesJourney() {
   await screenshot(bob, 'my-realms-empty-390');
   await bob.setViewportSize({ width: 1280, height: 900 });
   await screenshot(bob, 'my-realms-empty-1280');
+  await bob.close();
+
+  // Keep Bob's authenticated visit ahead of the anonymous access check.
+  anonymous = await anonymousContext.newPage();
+  await anonymous.setViewportSize({ width: 390, height: 844 });
   const anonymousRealmsStatus = await open(anonymous, '/realms');
   expect(anonymousRealmsStatus).toBeGreaterThanOrEqual(200);
   expect(anonymousRealmsStatus).toBeLessThan(400);
@@ -349,6 +357,7 @@ async function runNativeRealmsSpacesJourney() {
   expect(await anonymous.locator('body').innerText()).not.toContain(fixture.publicRealm.realmTitle);
   const privateRealmsRead = await communityRequest('anonymous', 'GET', '/v1/me/realms');
   expect(privateRealmsRead.response.status).toBe(401);
+  await anonymous.close();
 
   const publicJoinReads = await open(alice, `/spaces/${fixture.publicRealm.address}`);
   expect(publicJoinReads).toBe(200);
@@ -476,11 +485,15 @@ async function runNativeRealmsSpacesJourney() {
     `/v1/boards/${fixture.protectedRealm.boardId}`,
   );
   expect(boardUnavailableBeforeAdmission.response.status).toBe(404);
+  bob = await bobJourney.context.newPage();
+  bob.setDefaultTimeout(15_000);
+  await bob.setViewportSize({ width: 1280, height: 900 });
   await open(bob, `/spaces/${fixture.protectedRealm.address}`);
   await expectCount(bob.getByRole('heading', { name: fixture.protectedRealm.realmTitle }), 0);
   expect(await open(bob, `/boards/${fixture.protectedRealm.boardId}`)).toBe(404);
   await expectVisible(bob.getByRole('heading', { level: 1, name: 'Page not found' }));
   expect(await bob.locator('body').innerText()).not.toContain(fixture.protectedRealm.boardTitle);
+  await bob.close();
 
   await changeMembershipFromPage(alice, 'Leave');
   await waitForRealmMembership(stack, fixture.protectedRealm.realmId, 'alice', 'none');
@@ -590,6 +603,9 @@ async function runNativeRealmsSpacesJourney() {
   await expectAttribute(alice.getByRole('region', { name: 'Membership' }), 'data-member-state', 'member');
 
   await alice.setViewportSize({ width: 390, height: 844 });
+  await alice.close();
+  anonymous = await anonymousContext.newPage();
+  await anonymous.setViewportSize({ width: 390, height: 844 });
   await open(anonymous, `/spaces/${fixture.publicRealm.address}`);
   const viewport = await anonymous.evaluate(() => ({
     width: window.innerWidth,
@@ -627,4 +643,5 @@ async function runNativeRealmsSpacesJourney() {
   await expectVisible(anonymous.getByRole('heading', { level: 1, name: 'Page not found' }));
   await screenshot(anonymous, 'missing-subject-1280');
   await nativePageResponse('anonymous', '/v1/subjects/00000000-0000-4000-8000-000000000000', 404);
+  await anonymous.close();
 }
