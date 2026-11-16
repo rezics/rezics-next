@@ -1198,11 +1198,7 @@ function RealmBansVisit({
                   {m.realm_bans_ban()}
                 </Button>
                 {banConfirm && selected ? (
-                  <ManagementReview
-                    title={m.realm_bans_ban_confirm()}
-                    destructive
-                    aria-labelledby={`${id}-ban-confirm`}
-                  >
+                  <ManagementReview title={m.realm_bans_ban_confirm()} destructive aria-labelledby={`${id}-ban-confirm`}>
                     <ContentItemHeading
                       level={3}
                       id={`${id}-ban-confirm`}
