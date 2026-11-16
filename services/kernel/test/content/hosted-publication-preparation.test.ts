@@ -50,13 +50,16 @@ test('progress observes retained preparation without materializing or advancing,
         [route, catalogueId, stageId],
       )
     ).rows[0];
-  const started = await native.call('POST', `${path}:prepareRelease`, {
-    stageId,
-    expectedRevisionId: created.revisionId,
-    expectedPublicationId: published.revisionId,
-    mode: 'whole',
-  });
-  expect(started.status).toBe(202);
+  const expiresAt = await f.beginExpiringStage(
+    {
+      catalogueId,
+      stageId,
+      expectedHeadRevisionId: created.revisionId,
+      expectedPublicationId: published.revisionId,
+      mode: 'whole',
+    },
+    60,
+  );
   const initial = await retainedState();
   const building = await call('progress');
   expect(building.status).toBe(200);
@@ -164,20 +167,17 @@ test('progress observes retained preparation without materializing or advancing,
     );
   }
   expect((await native.call('POST', `${stagePath}:progress`, {}, { key: progressKey, other: true })).status).toBe(403);
-  await native.pool.query(
-    `UPDATE content.hosted_publication_staging SET expires_at=clock_timestamp()-interval '1 second'
-    WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
-    [route, catalogueId, stageId],
-  );
+  await f.waitForStageExpiry(expiresAt);
   const expired = await call('progress');
   expect(expired.status).toBe(200);
   expect(expired.value).toMatchObject({ stage: { state: 'expired' }, candidate: null, candidateReady: false });
   expect((await call('cancel')).value).toEqual(expired.value);
   expect((await call('progress', {}, progressKey)).value).toEqual(retained.value);
-  await native.pool.query(
-    `UPDATE content.hosted_publication_staging SET owner_epoch=owner_epoch+1
-    WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
-    [route, catalogueId, stageId],
-  );
+  const { previous, current } = await native.rotateAuthorSessions();
+  expect(current.actor.accountId).toBe(previous.actor.accountId);
+  expect(current.actor.authnEpoch).toBeGreaterThan(previous.actor.authnEpoch);
+  const revoked = await native.call('POST', `${stagePath}:progress`, {}, { key: progressKey, bearer: previous.bearer });
+  expect(revoked.status).toBe(401);
+  expect(revoked.value.code).toBe('invalid_credentials');
   expect((await call('progress', {}, progressKey)).status).toBe(404);
 });

@@ -1,9 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 import type { HostedPlacement } from '../../src/content/hosted-chapters-model.ts';
-import { beginHostedPublicationStaging } from '../../src/content/hosted-publication-staging.ts';
 import { HOSTED_PUBLICATION_STAGING_BATCH_LIMIT } from '../../src/content/hosted-publication-staging-model.ts';
-import { withConnection } from '../../src/database/pool.ts';
 import { newId, ROUTES, routeOf } from '../../src/route/route.ts';
 
 setDefaultTimeout(240_000);
@@ -104,32 +102,29 @@ function prepPath(path: string, stageId: string): string {
   return `${path}/publicationPreparations/${stageId}`;
 }
 
-async function prepareStageAndWaitForExpiry(book: Awaited<ReturnType<typeof newBook>>): Promise<string> {
+async function beginExpiringStage(
+  book: Awaited<ReturnType<typeof newBook>>,
+  mode: 'whole' | 'selection',
+  lifetimeSeconds: number,
+) {
   const stageId = book.newId();
-  const expiresAt = await withConnection(f.native.pool, async (client) => {
-    await client.query('BEGIN');
-    try {
-      const { rows } = await client.query<{ expires_at: Date }>(
-        "SELECT clock_timestamp() + interval '5 seconds' AS expires_at",
-      );
-      const deadline = rows[0]!.expires_at;
-      await beginHostedPublicationStaging(client, f.native.author.actor, {
-        catalogueId: book.catalogueId,
-        stageId,
-        expectedHeadRevisionId: book.created.revisionId,
-        expectedPublicationId: book.published.revisionId,
-        mode: 'whole',
-        expiresAt: deadline,
-      });
-      await client.query('COMMIT');
-      return deadline;
-    } catch (error) {
-      await client.query('ROLLBACK').catch(() => undefined);
-      throw error;
-    }
-  });
-  await f.native.pool.query('SELECT pg_sleep_until($1::timestamptz)', [expiresAt]);
-  return prepPath(book.path, stageId);
+  const expiresAt = await f.beginExpiringStage(
+    {
+      catalogueId: book.catalogueId,
+      stageId,
+      expectedHeadRevisionId: book.created.revisionId,
+      expectedPublicationId: book.published.revisionId,
+      mode,
+    },
+    lifetimeSeconds,
+  );
+  return { path: prepPath(book.path, stageId), expiresAt };
+}
+
+async function prepareStageAndWaitForExpiry(book: Awaited<ReturnType<typeof newBook>>): Promise<string> {
+  const stage = await beginExpiringStage(book, 'whole', 5);
+  await f.waitForStageExpiry(stage.expiresAt);
+  return stage.path;
 }
 
 async function preparationEventCount(catalogueId: string): Promise<number> {
@@ -531,15 +526,8 @@ test('mounted whole and nested selection builds complete private candidates with
     stage: { state: 'building', candidateCount: '20' },
   });
 
-  const selectedStartBody = {
-    stageId: book.newId(),
-    expectedRevisionId: book.created.revisionId,
-    expectedPublicationId: book.published.revisionId,
-    mode: 'selection',
-  } as const;
-  const selectedStart = await f.native.call('POST', `${book.path}:prepareRelease`, selectedStartBody);
-  expect(selectedStart.status).toBe(202);
-  const selectedStage = prepPath(book.path, selectedStart.value.stageId as string);
+  // Seed only the shorter immutable expiry. Every selection command and receipt below is native HTTP.
+  const { path: selectedStage, expiresAt: selectedExpiresAt } = await beginExpiringStage(book, 'selection', 60);
   const firstBatchBody = { batchId: book.newId(), occurrenceIds: [book.rootPart, book.childPart] };
   const firstBatchKey = crypto.randomUUID();
   const eventsBeforeBatch = await preparationEventCount(book.catalogueId);
@@ -619,11 +607,7 @@ test('mounted whole and nested selection builds complete private candidates with
   expect(frozenNoOp.value.stage.state).toBe('sealed');
 
   const eventsBeforeExpiryReplay = await preparationEventCount(book.catalogueId);
-  await f.native.pool.query(
-    `UPDATE content.hosted_publication_staging SET expires_at=clock_timestamp()-interval '1 second'
-     WHERE catalogue_id=$1 AND stage_id=$2`,
-    [book.catalogueId, selectedStart.value.stageId],
-  );
+  await f.waitForStageExpiry(selectedExpiresAt);
   const expiryReplay = await f.native.call('POST', `${selectedStage}:appendSelectionBatch`, firstBatchBody, {
     key: crypto.randomUUID(),
   });

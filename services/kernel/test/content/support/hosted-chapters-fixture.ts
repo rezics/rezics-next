@@ -2,6 +2,9 @@ import { fromPlainText } from '@rezics/document';
 import type { CloudEvent } from '../../../src/events/log.ts';
 import { createSubjectThreadEffect } from '../../../src/content/subject-thread-index.ts';
 import type { HostedChapterTarget } from '../../../src/content/hosted-chapters-model.ts';
+import { beginHostedPublicationStaging } from '../../../src/content/hosted-publication-staging.ts';
+import type { BeginHostedPublicationStaging } from '../../../src/content/hosted-publication-staging-model.ts';
+import { withConnection } from '../../../src/database/pool.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { postPublicationFixture, type PublicationPost } from './post-publication-fixture.ts';
 import { retainedHostedData } from './hosted-retained-data.ts';
@@ -129,6 +132,28 @@ export async function hostedChaptersFixture() {
       threadOutsidePartition,
       projectSubjectThread,
       target,
+      /** Start a stage with a short immutable lease through the same native staging owner. */
+      beginExpiringStage(input: Omit<BeginHostedPublicationStaging, 'expiresAt'>, lifetimeSeconds: number) {
+        return withConnection(native.pool, async (client) => {
+          await client.query('BEGIN');
+          try {
+            const { rows } = await client.query<{ expires_at: Date }>(
+              "SELECT clock_timestamp() + $1::integer * interval '1 second' AS expires_at",
+              [lifetimeSeconds],
+            );
+            const expiresAt = rows[0]!.expires_at;
+            await beginHostedPublicationStaging(client, native.author.actor, { ...input, expiresAt });
+            await client.query('COMMIT');
+            return expiresAt;
+          } catch (error) {
+            await client.query('ROLLBACK').catch(() => undefined);
+            throw error;
+          }
+        });
+      },
+      async waitForStageExpiry(expiresAt: Date) {
+        await native.pool.query('SELECT pg_sleep_until($1::timestamptz)', [expiresAt]);
+      },
       async protectedChapter() {
         const created = await native.command('/v1/threads', {
           title: 'Protected source',
