@@ -242,7 +242,10 @@ async function activationCommand(
   const authorization = (includeAdvancePreparation: boolean): CommandAuthorization => ({
     ...baseAuthorization,
     async prepare(attempt) {
-      const evidence = await baseAuthorization.prepare!(attempt);
+      const advance = includeAdvancePreparation ? prepareAdvance : undefined;
+      // Receipt preflight has already authorized a new advance. Do not age the
+      // write's short-lived evidence while reading a page of foreign targets.
+      const evidence = advance ? undefined : await baseAuthorization.prepare!(attempt);
       const staged = (
         await snapshot(deps, catalogueId, context, (client) =>
           client.query<{ initiator_account_id: string; owner_epoch: string }>(
@@ -255,15 +258,14 @@ async function activationCommand(
       ).value.rows[0];
       if (!staged || staged.initiator_account_id !== actor.accountId || staged.owner_epoch !== String(actor.authnEpoch))
         throw activationNotFound();
-      if (includeAdvancePreparation && prepareAdvance) {
-        try {
-          prepared = await prepareAdvance(attempt);
-        } catch (error) {
-          preparationFailed = true;
-          throw error;
-        }
+      if (!advance) return evidence;
+      try {
+        prepared = await advance(attempt);
+      } catch (error) {
+        preparationFailed = true;
+        throw error;
       }
-      return evidence;
+      return baseAuthorization.prepare!(attempt);
     },
   });
   const input = {
