@@ -1009,7 +1009,8 @@ async function populationPage(pool: Pool, projection: DiscoveryProjection, row: 
     const actions = projection.prepareOwnerPageActions(row.owner, partition, page);
     next = page.next;
     position = page.position;
-    await searchTurnCall(() => projection.applyNativeActions(actions));
+    // Empty native pages advance owner coverage without reserving an engine write.
+    if (actions.length > 0) await searchTurnCall(() => projection.applyNativeActions(actions));
     await assertDiscoveryCapabilityBinding(pool, target, projection.metadataProducers);
     await withSearchConnection(pool, async (client) => {
       await client.query(
@@ -1254,7 +1255,7 @@ async function reconcileMetadataDiscoveryPage(
       return false;
     }
     const actions = projection.prepareOwnerPageActions(kind, row.partition, page);
-    await searchTurnCall(() => projection.applyNativeActions(actions));
+    if (actions.length > 0) await searchTurnCall(() => projection.applyNativeActions(actions));
     await assertDiscoveryCapabilityBinding(pool, target, projection.metadataProducers);
     if (page.next === null && (await producer.position(row.partition)) !== page.position) {
       await restartMetadataReconciliation(pool, target, row.partition, kind);
