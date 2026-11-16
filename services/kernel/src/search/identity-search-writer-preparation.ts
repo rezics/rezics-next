@@ -181,10 +181,30 @@ export function createSearchIdentityWriterPreparation(
                 );
               }
               if (change.plan) {
-                const plan = await readSearchIdentityOriginalPlan(pool, job, change, configuration, context.deadline);
-                if (!plan?.originalBarrier || plan.selection.native.planId !== change.plan.planId)
+                const allowance = identitySourceConsumerNativeWork(pool, context.identityConsumerWork, context.deadline);
+                if (!allowance) throw unavailable('Search writer acceptance lost its Source work frame');
+                const { value: plan } = await store.readPlanPoint(
+                  {
+                    kind: 'search-canonical-index',
+                    version: 1,
+                    partition: subjectPartition(change.original),
+                    planId: change.plan.planId,
+                  },
+                  { deadline: context.deadline, allowance },
+                );
+                if (
+                  plan.selection.job.jobId !== job.jobId ||
+                  plan.selection.job.epoch !== job.epoch ||
+                  plan.scopeDigest !== directory.scope ||
+                  plan.source.barrier.kind !== 'original' ||
+                  plan.source.original !== change.original ||
+                  plan.source.terminal !== change.terminal
+                )
                   throw unavailable('Search writer request lost its exact prepared original');
-                return advanceSearchIdentityReceivingAcceptance(pool, plan.selection);
+                return advanceSearchIdentityReceivingAcceptance(
+                  pool, plan, native.transactionId,
+                  (tx, frontier, roles) => retainWriterStep(tx, pool, job, directory.scope, roles, frontier, context, 0),
+                );
               }
 
               const { original } = change;

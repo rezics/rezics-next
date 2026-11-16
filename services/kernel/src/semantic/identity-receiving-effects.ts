@@ -71,6 +71,7 @@ import {
   searchReceivingOwnedPageStatements,
 } from './identity-search-receiving-statements.ts';
 import { snapshotSearchIdentityReceivingFrontier } from '../search/identity-receiving-native-contract.ts';
+import { readSearchIdentityWriterSupportSql } from '../search/identity-search-receiving-directory-sql.ts';
 
 export type * from './identity-receiving-effects-types.ts';
 export type { SearchReceivingWorkContext, SearchReceivingWorkDeclaration } from './identity-search-receiving-work.ts';
@@ -431,29 +432,30 @@ async function retainReceivingBindingPlan(
   if (Buffer.byteLength(json(binding)) > 3072) throw stale();
   const bindingDigest = digest(binding);
   const home = identityJobPartition(binding.job);
-  await runCommand(pool, { partition: home }, async (tx) => {
+  const committed = await runCommand<boolean>(pool, { partition: home }, async (tx) => {
     const job = (await tx.query(receivingJob.sql, [home, binding.job.jobId, binding.job.epoch.toString()])).rows[0];
     if (!job || job.state !== 'pending' || job.scope_digest !== scopeDigest) throw stale();
     const prior = (await tx.query(receivingStatements.existingPlan, [home, binding.job.jobId, binding.effectKey]))
       .rows[0];
     if (prior) {
       if (prior.binding_digest !== bindingDigest) throw stale();
-      return noEffect(null);
+      return noEffect(false);
     }
     if ((await tx.query(receivingStatements.completedStep, [home, binding.job.jobId, binding.step])).rowCount)
       throw stale();
     // Register the exact expected obligation BEFORE a remote hold or receiving write can commit.
-    await tx.query(receivingStatements.expectEffect, [
+    const expected = await tx.query(receivingStatements.expectEffect, [
       home,
       binding.job.jobId,
       binding.step,
       binding.effectKey,
       source.disposition === 'OLD' ? 'remove' : source.disposition === 'handoff' ? 'pending-fence' : 'add',
     ]);
+    if (expected.rowCount !== 1) throw stale();
     bindSemanticProducerRoles(tx, roles);
     recordIdentityEpochNativeCommit(tx, 'identity-receiving-plan');
     registerCommandCallback(tx, async (id) => {
-      await tx.query(receivingStatements.insertPlan, [
+      const inserted = await tx.query(receivingStatements.insertPlan, [
         home,
         binding.job.jobId,
         binding.job.epoch.toString(),
@@ -462,10 +464,13 @@ async function retainReceivingBindingPlan(
         bindingDigest,
         id,
       ]);
+      if (inserted.rowCount !== 1) throw stale();
     });
-    return { value: null, events: [wake(binding)] };
+    return { value: true, events: [wake(binding)] };
   });
-  return planAtHome(pool, binding);
+  return committed.value
+    ? receipt(home, committed.transactionId, committed.epoch, committed.position)
+    : planAtHome(pool, binding);
 }
 
 async function acceptReceivingBinding(
@@ -567,8 +572,12 @@ async function acceptPreparedReceivingBinding(
   };
 }
 
-async function localRecord(tx: CommandTransaction, effect: IdentityReceivingEffect) {
+function localRecord(tx: CommandTransaction, effect: IdentityReceivingEffect) {
   if (currentCommand(tx).partition !== effect.receipt.partition) throw stale();
+  return readReceivingRecord(tx, effect);
+}
+
+async function readReceivingRecord(tx: CommandTransaction, effect: IdentityReceivingEffect) {
   const row = (
     await tx.query(receivingLookup.sql, [
       effect.receipt.partition,
@@ -1416,22 +1425,29 @@ export async function prepareSearchIdentityReceivingEffect(
   const work = searchContext(pool);
   const replay = await readSearchIdentityReceivingSelection(pool, selection, { deadline: work.deadline });
   if (replay) return effectOf(replay);
-  const binding = await resolveSearchReceivingBinding(pool, selection, owner, work);
+  const binding = await resolveSearchReceivingBinding(selection, owner, work, await jobBasis(pool, selection));
   return acceptReceivingBinding(pool, binding);
 }
 
 async function resolveSearchReceivingBinding(
-  pool: Pool,
   selection: SearchIdentityReceivingSelection,
   owner: SearchIdentityReceivingNative,
   work: SearchReceivingWork,
+  scopeDigest: string,
 ) {
-  const scopeDigest = await jobBasis(pool, selection);
   const resolved = await work.invoke<SearchIdentityReceivingResult<SearchIdentityReceivingSource>>(
     'resolvePlanned',
     (context) => owner.resolvePlanned(selection, context),
   );
   if (resolved.status !== 'ready') throw unavailable(`Native Search resolvePlanned: ${resolved.status}`);
+  return searchReceivingBinding(selection, scopeDigest, resolved.value);
+}
+
+function searchReceivingBinding(
+  selection: SearchIdentityReceivingSelection,
+  scopeDigest: string,
+  source: SearchIdentityReceivingSource,
+) {
   const binding = decodeSearchBinding({
     job: selection.job,
     original: selection.original,
@@ -1440,51 +1456,88 @@ async function resolveSearchReceivingBinding(
     step: 'search-canonical-index',
     version: 1,
     scopeDigest,
-    source: resolved.value,
+    source,
   });
   if (!sameSearchSelection(binding, selection)) throw stale();
   return binding;
 }
-/** One retained control plan or one local hold per owned Search turn. */
+/** Verify the retained writer request's Source before funding the two control captures in another turn. */
 export async function advanceSearchIdentityReceivingAcceptance(
   pool: Pool,
-  selection: SearchIdentityReceivingSelection,
+  plan: Readonly<{
+    selection: SearchIdentityReceivingSelection;
+    source: SearchIdentityReceivingSource;
+    scopeDigest: string;
+  }>,
+  request: string,
+  retain: (
+    tx: CommandTransaction,
+    frontier: IdentityReceivingProgress['frontier'],
+    roles: Awaited<ReturnType<typeof identityErasureRoles>>,
+  ) => void,
 ) {
+  const { selection, source, scopeDigest } = plan;
   searchSelection(selection);
+  if (source.barrier.kind !== 'original') throw stale();
   const home = identityJobPartition(selection.job);
   const work = searchContext(pool);
-  const prepared = await withReadTransaction(
+  const binding = searchReceivingBinding(selection, scopeDigest, source);
+  const bindingDigest = digest(binding);
+  const frontier = {
+    after: ['search-writer-support', request, 'binding', selection.native.planId, bindingDigest],
+    segment: 0,
+  };
+  async function verified(tx: CommandTransaction) {
+    const saved = (
+      await tx.query<{ transaction_id: string; frontier: unknown; proven: boolean }>(
+        readSearchIdentityWriterSupportSql,
+        [selection.native.partition, selection.job.jobId, String(selection.job.epoch), request, 'binding', scopeDigest],
+      )
+    ).rows[0];
+    if (!saved) return null;
+    if (!saved.proven || !isDeepStrictEqual(snapshotSearchIdentityReceivingFrontier(saved.frontier), frontier))
+      throw stale();
+    return saved.transaction_id;
+  }
+  const { prepared, checked } = await withReadTransaction(
     pool,
     async (tx) => {
-      const job = (await tx.query(receivingJob.sql, [home, selection.job.jobId, String(selection.job.epoch)])).rows[0];
-      if (!job || job.state !== 'pending') throw stale();
+      const job = (
+        await tx.query<{ scope_digest: string }>(receivingStatements.pendingJobScope, [
+          home,
+          selection.job.jobId,
+          String(selection.job.epoch),
+        ])
+      ).rows[0];
+      if (job?.scope_digest !== scopeDigest) throw stale();
       const saved = (
         await tx.query(receivingPlan.sql, [home, selection.job.jobId, String(selection.job.epoch), selection.effectKey])
       ).rows[0];
-      if (!saved) return null;
-      const binding = decodeSearchBinding(saved.binding);
-      if (
-        binding.original !== selection.original ||
-        binding.job.jobId !== selection.job.jobId ||
-        binding.job.epoch !== selection.job.epoch ||
-        binding.effectKey !== selection.effectKey ||
-        !sameSearchSelection(binding, selection) ||
-        digest(binding) !== saved.binding_digest ||
-        binding.scopeDigest !== job.scope_digest
-      )
+      if (!saved) return { prepared: null, checked: await verified(tx) };
+      if (digest(decodeSearchBinding(saved.binding)) !== bindingDigest || bindingDigest !== saved.binding_digest)
         throw stale();
-      return { binding, plan: receipt(home, saved.transaction_id, saved.native_epoch, saved.native_position) };
+      return { prepared: receipt(home, saved.transaction_id, saved.native_epoch, saved.native_position), checked: null };
     },
     work.deadline,
   );
   const roles = await identityErasureRoles(pool, selection.job.jobId);
   if (prepared) {
-    await acceptPreparedReceivingBinding(pool, prepared.binding, prepared.plan, roles);
+    await acceptPreparedReceivingBinding(pool, binding, prepared, roles);
     return { state: 'prepared' } as const;
   }
-  const binding = await resolveSearchReceivingBinding(pool, selection, installedSearch(pool), work);
-  const plan = await retainReceivingBindingPlan(pool, binding, roles);
-  return { state: 'progress', transactionId: plan.transactionId } as const;
+  if (checked) {
+    const control = await retainReceivingBindingPlan(pool, binding, roles);
+    return { state: 'progress', transactionId: control.transactionId } as const;
+  }
+  const resolved = await resolveSearchReceivingBinding(selection, installedSearch(pool), work, scopeDigest);
+  if (digest(resolved) !== bindingDigest) throw stale();
+  const proof = await runCommand<string | null>(pool, { partition: selection.native.partition }, async (tx) => {
+    const prior = await verified(tx);
+    if (prior) return noEffect(prior);
+    retain(tx, frontier, roles);
+    return { value: null, events: [wake(binding)] };
+  });
+  return { state: 'progress', transactionId: proof.value ?? proof.transactionId } as const;
 }
 type SearchReceivingContinuation = Readonly<{
   revision: string;
@@ -1570,34 +1623,39 @@ async function advanceSearchOriginalPage(
   return { state: next.state, transactionId: committed.transactionId };
 }
 
-/** A committed page or control acknowledgement yields the next owned turn. */
-export async function advanceSearchIdentityReceivingReconciliation(pool: Pool, effect: IdentityReceivingEffect) {
-  const saved = await runCommand(pool, { partition: effect.receipt.partition }, async (tx) => {
-    const { record } = await localRecord(tx, effect);
-    if (record.step !== 'search-canonical-index' || record.source.barrier.kind !== 'original' || !record.applied)
-      throw stale();
-    return noEffect({ record, progress: await searchContinuation(tx, record) });
-  });
-  const { record, progress } = saved.value;
-  if (progress.state === 'released') return { state: 'prepared' } as const;
-  if (progress.state === 'progress') {
-    const page = await advanceSearchOriginalPage(pool, record, progress);
-    return { state: 'progress', transactionId: page.transactionId } as const;
-  }
-  const native = record.applied!.receipt;
+/** Observe committed custody in the writer's snapshot, then advance after releasing that snapshot. */
+export async function prepareSearchIdentityReceivingReconciliation(pool: Pool, effect: IdentityReceivingEffect) {
+  const work = searchContext(pool);
   const home = identityJobPartition(effect.job);
-  const { retained, roles } = await withReadTransaction(pool, async (tx) => {
-    const retained = (await tx.query(receivingStatements.controlCustody, [home, effect.job.jobId, effect.effectKey]))
-      .rows[0];
-    return { retained, roles: await identityErasureRoles(pool, effect.job.jobId) };
-  });
-  if (!retained) {
-    const { custody } = await acknowledgeReceivingControl(pool, effect, record, native, roles);
-    return { state: 'progress', transactionId: custody.transactionId } as const;
-  }
-  const custody = receipt(home, retained.transaction_id, retained.epoch, retained.position);
-  const released = await releaseReceivingCustody(pool, effect, record, native, custody, roles, progress);
-  return { state: 'progress', transactionId: released.transactionId } as const;
+  const { record, progress, retained, roles } = await withReadTransaction(
+    pool,
+    async (tx) => {
+      const { record } = await readReceivingRecord(tx, effect);
+      if (record.step !== 'search-canonical-index' || record.source.barrier.kind !== 'original' || !record.applied)
+        throw stale();
+      const progress = await searchContinuation(tx, record);
+      if (progress.state !== 'settled') return { record, progress, retained: null, roles: [] };
+      const retained = (await tx.query(receivingStatements.controlCustody, [home, effect.job.jobId, effect.effectKey]))
+        .rows[0];
+      return { record, progress, retained, roles: await identityErasureRoles(pool, effect.job.jobId) };
+    },
+    work.deadline,
+  );
+  return async () => {
+    if (progress.state === 'released') return { state: 'prepared' } as const;
+    if (progress.state === 'progress') {
+      const page = await advanceSearchOriginalPage(pool, record, progress);
+      return { state: 'progress', transactionId: page.transactionId } as const;
+    }
+    const native = record.applied!.receipt;
+    if (!retained) {
+      const { custody } = await acknowledgeReceivingControl(pool, effect, record, native, roles);
+      return { state: 'progress', transactionId: custody.transactionId } as const;
+    }
+    const custody = receipt(home, retained.transaction_id, retained.epoch, retained.position);
+    const released = await releaseReceivingCustody(pool, effect, record, native, custody, roles, progress);
+    return { state: 'progress', transactionId: released.transactionId } as const;
+  };
 }
 
 /** Every release, including a lost-response or published-gate replay, obtains a new private native
