@@ -10,4 +10,4 @@ JOIN semantic.identity_epoch_step s ON (s.partition_no,s.transaction_id)=(c.part
  AND s.scope_digest=$6 AND s.frontier=e.frontier AND s.frontier=o.frontier
  AND s.native_epoch=c.epoch AND s.native_position=c.position AND s.xmin=c.xmin
 WHERE o.partition_no=$1 AND o.plan_id=$2 AND o.state='applied'
- AND (c.xmin=pg_current_xact_id_if_assigned()::xid)=$7::boolean;
+ AND (c.xmin IS NOT DISTINCT FROM pg_current_xact_id_if_assigned()::xid)=$7::boolean;

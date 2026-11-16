@@ -20,4 +20,4 @@ WHERE r.partition_no=$1 AND r.job_id=$2 AND r.job_epoch=$3 AND r.effect_key=$4
  AND ((g.pending_job=r.job_id AND g.pending_epoch=r.job_epoch)
    OR (h.released_transaction_id IS NOT NULL AND g.pending_job IS NULL AND g.pending_epoch IS NULL))
  AND r.owner_epoch=c.epoch
- AND (c.xmin=pg_current_xact_id_if_assigned()::xid)=$10::boolean;
+ AND (c.xmin IS NOT DISTINCT FROM pg_current_xact_id_if_assigned()::xid)=$10::boolean;
