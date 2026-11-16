@@ -30,9 +30,15 @@ test('a growing serial keeps exact public releases and advances preparation in b
     'first preparation page': [] as number[],
     'later preparation page': [] as number[],
     'point publication': [] as number[],
+    'public TOC': [] as number[],
+    'exact public body': [] as number[],
   };
-  async function measuredCommand(operation: keyof typeof measuredScales, scale: number, path: string, input: unknown) {
-    const { value, capture } = await captureWithFoldedCost(growth, () => native.call('POST', path, input, { kernel }));
+  async function measureHttp(
+    operation: keyof typeof measuredScales,
+    scale: number,
+    request: () => ReturnType<typeof native.call>,
+  ) {
+    const { value, capture } = await captureWithFoldedCost(growth, request);
     expect({ status: value.status, error: value.status === 200 ? null : value.value }).toEqual({
       status: 200,
       error: null,
@@ -60,7 +66,7 @@ test('a growing serial keeps exact public releases and advances preparation in b
         hostedRelations,
       }),
     );
-    return { result: value.value, statements: capture.statements };
+    return { response: value, statements: capture.statements };
   }
   const path = `/v1/hostedCatalogues/${f.catalogueId}`;
   const originalBody = fromPlainText('Opening');
@@ -99,12 +105,17 @@ test('a growing serial keeps exact public releases and advances preparation in b
   let lastChapter = placements.at(-1)!.occurrenceId;
   let current: string | null = null;
 
-  const read = (suffix: string) => native.call('GET', `${path}${suffix}`, undefined, { anonymous: true });
-  const children = (parentId?: string) =>
-    read(`/children?kind=publication&limit=${HOSTED_PAGE_LIMIT}${parentId ? `&parentId=${parentId}` : ''}`);
-  const exact = (revision: string) => read(`/occurrences/${nested}?kind=publication&revisionId=${revision}`);
-  async function expectCurrent(revisionId: string | null) {
-    const result = await children();
+  const read = (suffix: string, through?: typeof kernel) =>
+    native.call('GET', `${path}${suffix}`, undefined, { anonymous: true, ...(through ? { kernel: through } : {}) });
+  const childrenPath = (parentId?: string) =>
+    `/children?kind=publication&limit=${HOSTED_PAGE_LIMIT}${parentId ? `&parentId=${parentId}` : ''}`;
+  const exact = (revision: string, through?: typeof kernel) =>
+    read(`/occurrences/${nested}?kind=publication&revisionId=${revision}`, through);
+  async function expectCurrent(revisionId: string | null, measureAtSize?: number) {
+    const result =
+      measureAtSize === undefined
+        ? await read(childrenPath())
+        : (await measureHttp('public TOC', measureAtSize, () => read(childrenPath(), kernel))).response;
     if (revisionId === null) {
       expect(result.status, JSON.stringify(result.value)).toBe(404);
     } else {
@@ -116,7 +127,7 @@ test('a growing serial keeps exact public releases and advances preparation in b
         [root, part],
         [part, nested],
       ]) {
-        const branch = await children(parent);
+        const branch = await read(childrenPath(parent));
         expect(branch.status, JSON.stringify(branch.value)).toBe(200);
         expect(branch.value.revisionId).toBe(revisionId);
         expect(branch.value.items.map((row: { occurrenceId: string }) => row.occurrenceId)).toEqual([child]);
@@ -206,13 +217,10 @@ test('a growing serial keeps exact public releases and advances preparation in b
       const next =
         steps === 1 || steps === laterStep
           ? (
-              await measuredCommand(
-                steps === 1 ? 'first preparation page' : 'later preparation page',
-                size,
-                advance,
-                input,
+              await measureHttp(steps === 1 ? 'first preparation page' : 'later preparation page', size, () =>
+                native.call('POST', advance, input, { kernel }),
               )
-            ).result
+            ).response.value
           : await native.command(advance, input, 200);
       expect(Number(next.stage.candidateCount) - Number(progress.stage.candidateCount)).toBeLessThanOrEqual(
         HOSTED_PUBLICATION_STAGING_STEP_LIMIT,
@@ -249,7 +257,7 @@ test('a growing serial keeps exact public releases and advances preparation in b
     const result = await native.command(`${stagePath}:activate`, {}, 200);
     expect(result.state).toBe('activated');
     current = result.publicationId;
-    await expectCurrent(current);
+    await expectCurrent(current, size);
     console.info('Hosted serial preparation growth', {
       chapters: size,
       placements: size + 2,
@@ -268,21 +276,23 @@ test('a growing serial keeps exact public releases and advances preparation in b
     await grow(size);
     await expectCurrent(previous);
     expect((await read(`/occurrences/${lastChapter}?kind=publication&revisionId=${previous}`)).status).toBe(404);
-    const { result: published, statements } = await measuredCommand(
-      'point publication',
-      size,
-      `${path}:publishChapter`,
-      {
-        expectedRevisionId: head,
-        expectedPublicationId: previous,
-        occurrenceId: lastChapter,
-        target,
-        parentId: null,
-        beforeOccurrenceId: null,
-        selectedAncestors: [],
-      },
+    const { response, statements } = await measureHttp('point publication', size, () =>
+      native.call(
+        'POST',
+        `${path}:publishChapter`,
+        {
+          expectedRevisionId: head,
+          expectedPublicationId: previous,
+          occurrenceId: lastChapter,
+          target,
+          parentId: null,
+          beforeOccurrenceId: null,
+          selectedAncestors: [],
+        },
+        { kernel },
+      ),
     );
-    current = published.revisionId;
+    current = response.value.revisionId;
     expect(
       statements.some((statement) => /(?:INSERT INTO|UPDATE) content\.hosted_(?:placement|append)\b/i.test(statement)),
     ).toBe(false);
@@ -294,15 +304,21 @@ test('a growing serial keeps exact public releases and advances preparation in b
   await grow(511);
   await expectCurrent(null);
   const originalPublicationId = await releaseWhole(511);
-  const original = await exact(originalPublicationId);
-  expect(original.status).toBe(200);
+  const { response: original } = await measureHttp('exact public body', 511, () =>
+    exact(originalPublicationId, kernel),
+  );
   expect(original.value.occurrence.target).toEqual(target);
   expect(original.value.document.canonicalBytes).toBe(bytes(originalBody));
 
   for (const size of [512, 513]) await publishLast(size);
   for (const size of [1_000, 10_000]) {
     await provisionExistingDraft(size);
-    await releaseWhole(size);
+    const wholePublicationId = await releaseWhole(size);
+    const { response: selected } = await measureHttp('exact public body', size, () =>
+      exact(wholePublicationId, kernel),
+    );
+    expect(selected.value.occurrence.target).toEqual(target);
+    expect(selected.value.document.canonicalBytes).toBe(original.value.document.canonicalBytes);
     await publishLast(size + 1);
     const retained = await exact(originalPublicationId);
     expect(retained.status).toBe(200);
@@ -344,4 +360,6 @@ test('a growing serial keeps exact public releases and advances preparation in b
   expect(measuredScales['first preparation page']).toEqual([511, 1_000, 10_000]);
   expect(measuredScales['later preparation page']).toEqual([511, 1_000, 10_000]);
   expect(measuredScales['point publication']).toEqual([512, 513, 1_001, 10_001]);
+  expect(measuredScales['public TOC']).toEqual([511, 1_000, 10_000]);
+  expect(measuredScales['exact public body']).toEqual([511, 1_000, 10_000]);
 }, 480_000);
