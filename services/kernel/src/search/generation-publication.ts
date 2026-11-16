@@ -3,7 +3,11 @@ import {
   PUBLIC_FILTER_PREPARATION_INPUT_LIMIT,
   PUBLIC_FILTER_PREPARATION_INPUT_RESERVE,
 } from './public-filter-consumer.ts';
-import { bindSearchWriterPublicationReader, readSearchWriterGenerationActions } from './writer-guard.ts';
+import {
+  bindSearchWriterPublicationReader,
+  nativeSourceForHeldPublication,
+  readSearchWriterGenerationActions,
+} from './writer-guard.ts';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { releaseDigest } from '@rezics/definitions';
@@ -417,7 +421,13 @@ export function createSearchGenerationPublication(
     if (definition.meaning.digest !== meaning.digest)
       throw new Pending('registration_missing');
   }
-  async function adopt(job: Job, context: PublicFilterConsumerContext, meter: Meter, needObservation = false) {
+  async function adopt(
+    job: Job,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+    needObservation = false,
+    heldSource?: GenerationPublicationPin,
+  ) {
     const current = await native(job.consumer, context);
     if (
       current.incarnation !== job.native_incarnation ||
@@ -455,14 +465,18 @@ export function createSearchGenerationPublication(
     )
       throw new Pending('source_pending');
     if (!needObservation) return;
-    const completion = await readPublicationCompletion({ job: job.job }, context);
-    add(meter, completion.cost);
-    if (completion.status !== 'complete') throw new Pending('source_pending');
-    const pin = publicationPinFromNative(completion.publication);
+    let pin = heldSource;
+    if (!pin) {
+      const completion = await readPublicationCompletion({ job: job.job }, context);
+      add(meter, completion.cost);
+      if (completion.status !== 'complete') throw new Pending('source_pending');
+      pin = publicationPinFromNative(completion.publication);
+    }
+    if (pin.job !== job.job || !same(pin.queried.consumer, job.consumer)) throw new Pending('source_pending');
     const retained = jobPin(job);
     if (retained && !sameGenerationPublicationPin(retained, pin)) throw new Pending('source_pending');
     if (!retained) persistPin(job, pin);
-    return completion.publication.queried;
+    return pin.queried;
   }
   async function completeSource(
     job: Job,
@@ -562,6 +576,10 @@ export function createSearchGenerationPublication(
     add(meter, result.cost);
     if (result.status !== 'held') throw new Pending(result.reason);
     if (!same(result.fence, fence(job))) throw new Pending('incarnation_changed');
+    return nativeSourceForHeldPublication(result);
+  }
+  async function adoptHeld(job: Job, context: PublicFilterConsumerContext, meter: Meter) {
+    return adopt(job, context, meter, true, await held(job, context, meter));
   }
   async function save(client: PoolClient, job: Job, meter: Meter) {
     const result = await client.query(
@@ -1580,27 +1598,23 @@ export function createSearchGenerationPublication(
               await save(client, job, meter);
               return preparing('step', true);
             }
-            await held(job, context, meter);
-            const queried = await adopt(job, context, meter, true);
-            if (!queried) throw new Pending('source_pending');
-            if (!job.observation) {
-              job.observation = queried.snapshot.observation;
-              await save(client, job, meter);
-            }
             if (job.phase !== 'intent') {
+              const queried = await adoptHeld(job, context, meter);
+              if (!queried) throw new Pending('source_pending');
+              if (!job.observation) job.observation = queried.snapshot.observation;
               job.previous_target = await aliasTarget(job, context, meter);
               job.previous_uuid = job.previous_target ? await discoveryIndexUuid(search, job.previous_target) : null;
               job.activated_at = config.clock().toISOString();
               job.phase = 'intent';
               await save(client, job, meter);
+              return preparing('activate', true);
             }
             if (job.family === 'subjects')
               await publishSubjectActivationMetadata(search, job.physical_target, job.activated_at);
             const before = await aliasTarget(job, context, meter);
             if (before !== job.physical_target && before !== job.previous_target) throw new Pending('source_pending');
             if (before !== job.physical_target) {
-              await held(job, context, meter);
-              await adopt(job, context, meter, true);
+              await adoptHeld(job, context, meter);
               await observedWrite(
                 () =>
                   search.request('POST', '/_aliases', {
@@ -1613,8 +1627,7 @@ export function createSearchGenerationPublication(
                 'Generation publication alias could not be established',
               );
             }
-            await held(job, context, meter);
-            await adopt(job, context, meter, true);
+            await adoptHeld(job, context, meter);
             if ((await aliasTarget(job, context, meter)) !== job.physical_target) throw new Pending('source_pending');
             // Native readback precedes metadata. Lost replies replay the retained intent under the same fence.
             if (job.family === 'discovery') {

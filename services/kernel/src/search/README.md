@@ -2216,7 +2216,9 @@ barrier evidence returns typed unready; no observation readiness is minted here.
 remain bound to their own exact physical target and definition.
 
 Publication persists native fencing invocation intent before requesting the gate, and alias intent, including
-the previous physical target/UUID, before the native alias switch. A lost fence response resolves through the
+the previous physical target/UUID, before the native alias switch.
+The alias intent resumes on a fresh publication turn. Each fence check uses its own verified Source proof
+for the exact publication pin, and the swap and its readback still have separate current checks. A lost fence response resolves through the
 same producer/job. A Source change during adoption safely recovers outstanding intent before returning unready.
 Only exact native alias readback settles a lost response. Source and writer/copy custody are revalidated through
 the critical section, before generation metadata becomes active; release occurs afterwards. A safe abort restores
