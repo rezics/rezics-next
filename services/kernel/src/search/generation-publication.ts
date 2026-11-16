@@ -506,9 +506,11 @@ export function createSearchGenerationPublication(
       const pin = publicationPinFromNative(completion.publication);
       const retained = jobPin(job);
       if (retained && !sameGenerationPublicationPin(retained, pin)) throw new Pending('source_pending');
-      if (!retained) persistPin(job, pin);
-      if (!job.observation) job.observation = completion.publication.queried.snapshot.observation;
-      await save(client, job, meter);
+      if (!retained || !job.observation) {
+        if (!retained) persistPin(job, pin);
+        if (!job.observation) job.observation = completion.publication.queried.snapshot.observation;
+        await save(client, job, meter);
+      }
     }
     return {
       complete: completion.status === 'complete',

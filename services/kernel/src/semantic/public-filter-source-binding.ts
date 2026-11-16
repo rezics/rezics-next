@@ -539,6 +539,7 @@ export type NativePublicFilterPublicationCompletion =
       status: 'pending';
       publication: NativePublicFilterPublication;
       reason: PublicFilterBindingFailure['reason'];
+      advanced?: boolean;
       cost: PublicFilterCost;
     }>
   | Readonly<{
@@ -2450,7 +2451,7 @@ export function createNativePublicFilterSourceBinding(
         cost.frontierWrites++;
         if (!(await advancePublicFilterRepairAckFrontier(db, chain, seal.terminal, seal.home)))
           throw new BindingError('owner_unavailable');
-        if (seal.home !== 4095) return fail('owner_unavailable', cost);
+        if (seal.home !== 4095) return { ...fail('owner_unavailable', cost), advanced: true as const };
       }
       return {
         ...joined,
@@ -3279,9 +3280,27 @@ export function createNativePublicFilterSourceBinding(
         if (adopted.status !== 'adopted')
           return { status: 'pending' as const, publication, reason: adopted.reason, cost };
       }
+      // Until the verified chain closes, the exact original execution still
+      // needs repair. The terminal settlement always verifies the full seal.
+      const terminal = await db.query(
+        `/* semantic.native-keyed:1:2 */
+         SELECT 1 FROM semantic.public_filter_repair_step
+         WHERE (partition_no,bootstrap,execution)=(0,$1,$2)
+           AND verified_root IS NOT NULL AND verified_next IS NULL AND complete`,
+        [retained.bootstrap, retained.execution],
+      );
+      if (terminal.rowCount === 0)
+        return { status: 'pending' as const, publication, reason: 'owner_unavailable' as const, cost };
       const settled = await settleNative(publication, { deadline }, cost);
       addCost(cost, settled.cost);
-      if (settled.status !== 'joined') return { status: 'pending' as const, publication, reason: settled.reason, cost };
+      if (settled.status !== 'joined')
+        return {
+          status: 'pending' as const,
+          publication,
+          reason: settled.reason,
+          ...('advanced' in settled && settled.advanced === true ? { advanced: true as const } : {}),
+          cost,
+        };
       // Clean current population alone cannot replace the independently verified original
       // chain and Search's dispatch/winner/copy/writer/physical-target completion above.
       const observation = await sourceReader(cut.definition).readPrivacyReductionHeads({

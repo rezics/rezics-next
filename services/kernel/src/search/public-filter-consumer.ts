@@ -2993,6 +2993,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         m.add(original.cost);
         if ('publication' in original) {
           if (original.status === 'pending') {
+            if (original.advanced) {
+              m.check();
+              return { ...original, cost: m.cost };
+            }
             const repair = await repairStep(
               { consumer: input.consumer, job: original.publication.queried.snapshot.observation },
               context,
@@ -3099,6 +3103,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       );
       m.add(completion.cost);
       if (completion.status === 'pending') {
+        if (completion.advanced) {
+          m.check();
+          return { ...completion, cost: m.cost };
+        }
         const repair = await repairStep(job, context, m);
         return { ...completion, advanced: repair.status === 'progress' || repair.status === 'settled', cost: m.cost };
       }
