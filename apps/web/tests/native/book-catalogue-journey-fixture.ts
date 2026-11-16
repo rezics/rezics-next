@@ -396,7 +396,8 @@ async function readSearchFailureSnapshot(stack: NativeWebStack, expected: readon
              p.lease_until > extract(epoch FROM now()) * 1000 AS preparation_leased,
              j.phase, j.home, j.pass, j.native_incarnation,
              b.state AS source_state, b.owner_epoch AS source_epoch, b.publication_job IS NOT NULL AS source_pinned,
-             b.coverage_after, b.coverage_sealed, seal.ack_after,
+             b.coverage_after, b.coverage_sealed, repair.verified_ordinal AS repair_pages,
+             repair.verified_home AS repair_window_home, repair.ack_after,
              g.publication_home AS writer_home, g.publication_fence IS NOT NULL AS writer_fenced,
              g.publication_fence::text=j.fence AS writer_fence_matches,
              (SELECT jsonb_agg(jsonb_build_object(
@@ -447,11 +448,12 @@ async function readSearchFailureSnapshot(stack: NativeWebStack, expected: readon
              ORDER BY (b.publication_job IS NOT NULL) DESC LIMIT 1
            ) b ON true
            LEFT JOIN LATERAL (
-             SELECT ack_after FROM semantic.public_filter_repair_step t
+             SELECT verified_ordinal, verified_home, CASE WHEN complete THEN ack_after END AS ack_after
+             FROM semantic.public_filter_repair_step t
              WHERE t.partition_no=b.partition_no AND t.bootstrap=b.bootstrap
-               AND t.execution=b.publication_execution AND t.complete AND t.verified_next IS NULL
-             ORDER BY t.ack_after DESC LIMIT 1
-           ) seal ON true
+               AND t.execution=b.publication_execution AND t.verified_root IS NOT NULL AND t.verified_next IS NULL
+             LIMIT 1
+           ) repair ON true
            LEFT JOIN search.identity_writer_gate g ON g.partition_no=0 AND g.physical_target=j.physical_target
              AND g.incarnation=j.native_incarnation AND g.publication_job=j.job
            LEFT JOIN LATERAL (
