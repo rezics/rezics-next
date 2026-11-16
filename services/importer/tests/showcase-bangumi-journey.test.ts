@@ -315,7 +315,7 @@ test('the walk inventory replaces each pending capabilities row and names the sl
     result: 'failing',
     elapsedMs: 12_000,
     cause: 'seed published no Game identity',
-    evidence: { seed: true },
+    evidence: {},
   };
   const passing: WalkRowResult = {
     id: 'I01',
@@ -351,11 +351,25 @@ test('the walk inventory replaces each pending capabilities row and names the sl
     passing: 1,
     total: 2,
     slowestFailing: { id: 'I06', path: failing.path, elapsedMs: 4_000, cause: failing.cause! },
-    rows: [passing, failing],
+    rows: [passing, { ...failing, elapsedMs: 4_000 }],
   });
   expect(rewritten).toContain('Revision `def`.');
   expect(rewritten).toContain('Slowest failing: I06 4000ms seed published no Game identity.');
   expect(rewritten).toContain('Books owner-grant composition uses the ordinary Global grant intent.');
+  const prerequisite = { ...failing, elapsedMs: 930_227, evidence: { seed: true } };
+  const blocked: WalkInventory = {
+    command: 'walk',
+    revision: 'abc',
+    startedAt: 't0',
+    endedAt: 't1',
+    passing: 1,
+    total: 2,
+    slowestFailing: { id: 'I06', path: failing.path, elapsedMs: 930_227, cause: failing.cause! },
+    rows: [passing, prerequisite],
+  };
+  expect(capabilitiesResultCell(prerequisite)).toBe('unreached; seed published no Game identity');
+  expect(walkInventorySummary(blocked)).toBe('1/2 passing; slowest failing none; 0 failing; 1 unreached');
+  expect(applyWalkInventoryToCapabilities(markdown, blocked)).toContain('No measured row failure.');
   expect(walkRepairSkipReason(failing)).toBeNull();
   expect(
     walkRepairBrief(
