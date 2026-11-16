@@ -215,12 +215,26 @@ export function mountedWalkRow(
   };
 }
 
+function prerequisiteFailed(row: WalkRowResult): boolean {
+  return row.result === 'failing' && (row.evidence.seed === true || row.evidence.sharedStartup === true);
+}
+
+function slowestReachedFailure(rows: readonly WalkRowResult[]): WalkInventory['slowestFailing'] {
+  const slowest = rows
+    .filter((row) => row.result === 'failing' && row.elapsedMs !== null && !prerequisiteFailed(row))
+    .sort((left, right) => right.elapsedMs! - left.elapsedMs!)[0];
+  return slowest && slowest.elapsedMs !== null
+    ? { id: slowest.id, path: slowest.path, elapsedMs: slowest.elapsedMs, cause: slowest.cause ?? 'failed' }
+    : null;
+}
+
 export function walkInventorySummary(inventory: WalkInventory): string {
-  const failing = inventory.rows.filter((row) => row.result === 'failing');
-  const slowest = inventory.slowestFailing;
+  const unreached = inventory.rows.filter(prerequisiteFailed).length;
+  const failing = inventory.rows.filter((row) => row.result === 'failing').length - unreached;
+  const slowest = slowestReachedFailure(inventory.rows);
   return `${inventory.passing}/${inventory.total} passing; slowest failing ${
     slowest ? `${slowest.id} ${slowest.elapsedMs}ms ${slowest.cause}` : 'none'
-  }; ${failing.length} failing`;
+  }; ${failing} failing${unreached ? `; ${unreached} unreached` : ''}`;
 }
 
 const OBSERVED_WALK_HEADING = '### Observed walk';
@@ -251,12 +265,11 @@ function currentReadEvidence(evidence: Record<string, unknown>): string {
     if (typeof value === 'string') parts.push(`${key} ${value}`);
   }
   if (evidence.browser === 'passing' || evidence.browser === 'failing') parts.push(`browser ${evidence.browser}`);
-  if (evidence.sharedStartup === true) parts.push('shared startup not exercised');
-  if (evidence.seed === true) parts.push('catalogue seed not exercised');
   return parts.join(', ') || 'current read';
 }
 
 export function capabilitiesResultCell(row: WalkRowResult): string {
+  if (prerequisiteFailed(row)) return markdownTableCell(`unreached; ${row.cause ?? 'prerequisite failed'}`);
   const detail = row.result === 'passing' ? currentReadEvidence(row.evidence) : (row.cause ?? 'failed');
   return markdownTableCell(
     `${row.result}; ${row.elapsedMs === null ? 'duration unknown' : `${row.elapsedMs}ms`}; ${detail}`,
@@ -270,13 +283,16 @@ export function applyWalkInventoryToCapabilities(markdown: string, inventory: Wa
     if (!pattern.test(text)) throw new Error(`capabilities table is missing ${row.id}`);
     text = text.replace(pattern, `$1${capabilitiesResultCell(row)} `);
   }
+  const slowest = slowestReachedFailure(inventory.rows);
+  const unreached = inventory.rows.filter(prerequisiteFailed).length;
   const record = [
     OBSERVED_WALK_HEADING,
     '',
     `Command: \`${inventory.command}\`. Revision \`${inventory.revision}\`. Started ${inventory.startedAt}; ended ${inventory.endedAt}. ${inventory.passing}/${inventory.total} passing.`,
-    inventory.slowestFailing
-      ? `Slowest failing: ${inventory.slowestFailing.id} ${inventory.slowestFailing.elapsedMs}ms ${inventory.slowestFailing.cause}.`
-      : 'No failing journey.',
+    slowest
+      ? `Slowest failing: ${slowest.id} ${slowest.elapsedMs}ms ${slowest.cause}.`
+      : 'No measured row failure.',
+    ...(unreached ? [`${unreached} rows were unreached after a prerequisite failed.`] : []),
     ...(inventory.browserStageFailure ? [`Mounted stage failure: ${inventory.browserStageFailure}.`] : []),
     '',
   ].join('\n');
@@ -414,23 +430,13 @@ export function sealInterruptedWalkInventory(
   const missing = FIRST_PUBLIC_IMPORT_ROWS.filter((row) => !observed.has(row.id));
   if (missing.length) throw new Error(`No returned walk observation for ${missing.map((row) => row.id).join(', ')}`);
   const ordered = FIRST_PUBLIC_IMPORT_ROWS.map((row) => observed.get(row.id)!);
-  const slowest = ordered
-    .filter((row) => row.result === 'failing' && row.elapsedMs !== null)
-    .sort((left, right) => right.elapsedMs! - left.elapsedMs!)[0];
   return {
     ...run,
     endedAt: terminal.finishedAt,
     passing: ordered.filter((row) => row.result === 'passing').length,
     total: ordered.length,
     rows: ordered,
-    slowestFailing: slowest
-      ? {
-          id: slowest.id,
-          path: slowest.path,
-          elapsedMs: slowest.elapsedMs!,
-          cause: slowest.cause!,
-        }
-      : null,
+    slowestFailing: slowestReachedFailure(ordered),
   };
 }
 
@@ -1591,10 +1597,6 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
   rows.sort((left, right) => left.id.localeCompare(right.id));
 
   const endedAt = new Date().toISOString();
-  const failing = rows.filter((row) => row.result === 'failing');
-  const slowestFailing = failing
-    .filter((row) => row.elapsedMs !== null)
-    .sort((left, right) => right.elapsedMs! - left.elapsedMs!)[0];
   const inventory: WalkInventory = {
     command: retainedCommand,
     revision,
@@ -1603,14 +1605,7 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
     passing: rows.filter((row) => row.result === 'passing').length,
     total: FIRST_PUBLIC_IMPORT_ROWS.length,
     ...(browserStageFailure ? { browserStageFailure } : {}),
-    slowestFailing: slowestFailing
-      ? {
-          id: slowestFailing.id,
-          path: slowestFailing.path,
-          elapsedMs: slowestFailing.elapsedMs!,
-          cause: slowestFailing.cause!,
-        }
-      : null,
+    slowestFailing: slowestReachedFailure(rows),
     rows,
   };
   await writeFile(resolve(evidenceRoot, 'inventory.json'), JSON.stringify(inventory, null, 2), { mode: 0o600 });
