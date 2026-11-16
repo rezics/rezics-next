@@ -1,5 +1,6 @@
 import { expect, spyOn, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
+import type { MembershipBanFollowRemoval } from '@rezics/auth-contract';
 import { testDatabase } from '../scripts/database.ts';
 import {
   registerMembershipWorkflows,
@@ -7,12 +8,12 @@ import {
   type MembershipWorkflowPorts,
 } from '../src/membership-workflows.ts';
 
-async function fixture(leaving = false, fail = false) {
+async function fixture(leaving = false, fail = false, banFollowRemoval?: MembershipBanFollowRemoval) {
   const calls: string[] = [];
   const authorization = 'a'.repeat(300) + '.' + 'b'.repeat(43);
   const input: MembershipWorkInput = {
     kind: 'membership',
-    principal: { kind: 'organization', id: 'organization' },
+    principal: banFollowRemoval ? { kind: 'realm', id: 'realm' } : { kind: 'organization', id: 'organization' },
     memberAccountId: 'member',
     role: leaving ? null : 'member',
     ...(leaving ? { reservationId: 'reservation' } : {}),
@@ -34,11 +35,14 @@ async function fixture(leaving = false, fail = false) {
     async publish() {
       calls.push('publish');
       if (fail) throw new Error('fail');
+      if (banFollowRemoval) return { banFollowRemoval };
     },
     async terminalize() {
       calls.push('terminalize');
     },
-    async release() {
+    async release(input, removal) {
+      expect(input).toMatchObject(reservation);
+      expect(removal).toEqual(banFollowRemoval);
       calls.push('release');
     },
   };
@@ -65,6 +69,12 @@ test('sealed locators survive registered steps and each protected phase resolves
   const compensation = await fixture(false, true);
   await expect(compensation.run(compensation.input)).rejects.toThrow();
   expect(compensation.calls).toEqual(['authorize', 'reserve', 'authorize', 'publish', 'terminalize', 'release']);
+});
+
+test('Realm ban cleanup releases only after publication carries the exact Space and transaction', async () => {
+  const ban = await fixture(true, false, { spaceId: 'space', publicationTransactionId: 'publication' });
+  await ban.run(ban.input);
+  expect(ban.calls).toEqual(['authorize', 'authorize', 'publish', 'release']);
 });
 
 test('registered steps reject bearer and raw contexts before resolving or effects', async () => {

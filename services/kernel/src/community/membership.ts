@@ -760,7 +760,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
       role,
     };
     enter('open_command');
-    return runCommand(
+    const publication = await runCommand(
       pool,
       {
         ...identity,
@@ -887,6 +887,14 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
           : noEffect(value);
       },
     );
+    if (operation?.kind !== 'removal') return publication;
+    return {
+      ...publication,
+      banFollowRemoval: {
+        spaceId: operation.facts.spaceId,
+        publicationTransactionId: publication.value.transactionId,
+      },
+    };
   }
 
   /** Exact mechanical obligation, not a user-result command. The source lock
