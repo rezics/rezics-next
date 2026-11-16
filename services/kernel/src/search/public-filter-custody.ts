@@ -1424,7 +1424,7 @@ export function createPublicFilterCustody(
           const prepared = await sql(
             client,
             meter,
-            `SELECT state,segment_state,raw_count,output_count,raw_exhausted
+            `SELECT state,segment_state,raw_count,output_count,source_cursor,raw_exhausted
              FROM search.public_filter_prepared
              WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4::numeric) FOR UPDATE`,
             [input.registration.partition, input.registration.id, input.build, input.generation.toString()],
