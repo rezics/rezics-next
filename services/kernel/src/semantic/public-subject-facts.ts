@@ -128,10 +128,18 @@ export async function readLabels(
 export async function readPublicSubject(
   client: Queryable,
   subjectId: string,
+  unverifiedOwnerId?: string,
 ): Promise<{ id: string; label: string; type: string } | null> {
-  const [labels, types] = await Promise.all([readLabels(client, [subjectId]), readItemTypes(client, [subjectId])]);
+  const [labels, details] = await Promise.all([readLabels(client, [subjectId]), readItemDetails(client, [subjectId])]);
+  const subject = details.get(subjectId);
+  if (!subject) return null;
   const labelSet = labels.get(subjectId);
-  const type = types.get(subjectId);
   const label = labelSet ? subjectLabel(labelSet) : '';
-  return type && label ? { id: subjectId, label, type } : null;
+  if (unverifiedOwnerId !== undefined) {
+    // A visible graph agent remains addressable while its replaceable display label is absent.
+    if (subject.agentAccountId !== unverifiedOwnerId || subject.agentVerified) return null;
+  } else if (!label) {
+    return null;
+  }
+  return { id: subjectId, label, type: subject.type };
 }

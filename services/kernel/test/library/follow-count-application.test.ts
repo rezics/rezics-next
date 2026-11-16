@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import type { Pool, PoolClient, QueryConfig } from 'pg';
+import { withFollowCountReadConnection } from '../../src/library/adapters/follow-count-observation.ts';
 import {
   createFollowCountReadApplication,
   deliverFollowCountApplication,
@@ -176,6 +178,44 @@ test('final health, identity epoch and agent binding can each withhold a provisi
   });
   await expect(missing.app.target(owner, target, 123)).rejects.toBeInstanceOf(FollowCountTargetAbsentError);
   expect(missing.calls).not.toContain('total');
+});
+
+test('expired Follow read retires an open checkout while the callback is still stalled', async () => {
+  const statements: string[] = [];
+  const releases: (Error | undefined)[] = [];
+  const connection = () =>
+    ({
+      async query(query: QueryConfig) {
+        statements.push(query.text);
+        return { rows: [] };
+      },
+      release(error?: Error) {
+        releases.push(error);
+      },
+    }) as unknown as PoolClient;
+  const pool = { connect: async () => connection() } as unknown as Pool;
+  const stalled = Promise.withResolvers<void>();
+  const drained = Promise.withResolvers<void>();
+  const read = withFollowCountReadConnection(pool, Date.now() + 50, async (client) => {
+    await client.query('BEGIN');
+    await stalled.promise;
+    try {
+      await client.query('COMMIT');
+    } finally {
+      drained.resolve();
+    }
+  });
+
+  try {
+    await expect(read).rejects.toMatchObject({ reason: 'deadline' });
+    expect(releases).toEqual([expect.any(Error)]);
+    await withFollowCountReadConnection(pool, Date.now() + 1_000, (client) => client.query('SELECT 1'));
+  } finally {
+    stalled.resolve();
+    await drained.promise;
+  }
+  expect(statements).toEqual(['BEGIN', 'SELECT 1']);
+  expect(releases).toEqual([expect.any(Error), undefined]);
 });
 
 test('nonpublic Collection counts retain curator terminal fencing and native management checks', async () => {

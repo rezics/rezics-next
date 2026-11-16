@@ -266,10 +266,11 @@ async function publicIdentityForAccount(
     operatorId: row.operatorAccountId,
     ...(movedTo ? { movedTo } : {}),
   };
-  const subjectId = row.agentVerified ? row.agentSubjectId : boundAccountAgentId(row.accountId);
+  const nativeOwner = !row.agentVerified && row.state === 'active' && !row.fenced ? row.accountId : undefined;
+  const subjectId = row.agentVerified ? row.agentSubjectId : nativeOwner && boundAccountAgentId(nativeOwner);
   const subject =
     subjectId !== undefined && subjectId !== null
-      ? ((await identitySemantic()?.readPublicSubject?.(client as AccessQueryClient, subjectId)) ?? null)
+      ? ((await identitySemantic()?.readPublicSubject?.(client as AccessQueryClient, subjectId, nativeOwner)) ?? null)
       : null;
   const avatar = row.avatar
     ? ((await tryAccessApplication()?.readAvatarSummaries(client, [row.avatar]))?.get(row.avatar) ?? null)

@@ -520,25 +520,38 @@ function accountRow(value: Json): Json | undefined {
   return Array.isArray(accounts) ? (accounts[0] as Json | undefined) : undefined;
 }
 
-function agentSubjectId(row: Json | undefined, label: string): string {
-  const subject = row?.subject;
-  const id = subject && typeof subject === 'object' ? (subject as Json).id : undefined;
-  if (typeof id !== 'string' || !uuid.test(id)) throw new Error(`${label} omitted a public agent subject`);
-  return id;
+async function publicAgentSubject(stack: Origins, target: Person, label: string): Promise<string | null> {
+  const profile = accountRow(
+    requireStatus(await kernel(stack, 'GET', '/v1/accounts', { query: { handle: target.handle } }), label, 200),
+  );
+  if (!profile) return null;
+  if (profile.id !== target.accountId) throw new Error(`${label} resolved to a different account`);
+  const subject = profile.subject as Json | null | undefined;
+  const id = subject?.id;
+  if (id === undefined) return null;
+  return asId(id, `${label} subject`);
 }
 
-async function waitForPublicAgentSubject(stack: Origins, handle: string, label: string): Promise<string> {
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    const publicTarget = accountRow(
-      requireStatus(await kernel(stack, 'GET', '/v1/accounts', { query: { handle } }), label, 200),
-    );
-    try {
-      return agentSubjectId(publicTarget, label);
-    } catch {
-      await Bun.sleep(250);
-    }
+type WaitForAccountAgent = (accountId: string) => Promise<string>;
+
+async function resolveFollowTarget(
+  stack: Origins,
+  target: Person,
+  label: string,
+  waitForAccountAgent?: WaitForAccountAgent,
+): Promise<string> {
+  if (waitForAccountAgent) {
+    const received = await waitForAccountAgent(target.accountId);
+    const subject = await publicAgentSubject(stack, target, label);
+    if (subject !== received) throw new Error(`${label} did not disclose the received agent subject`);
+    return subject;
   }
+  const deadline = Date.now() + 30_000;
+  do {
+    const subject = await publicAgentSubject(stack, target, label);
+    if (subject) return subject;
+    await Bun.sleep(250);
+  } while (Date.now() < deadline);
   throw new Error(`${label} omitted a public agent subject`);
 }
 
@@ -1273,8 +1286,6 @@ if (import.meta.main && !process.argv.includes('--api-capture') && !process.argv
     let organizationId = '';
     let orgHandle = '';
     let humanSoftwareId = '';
-    let followTarget: Person | undefined;
-    let followTargetId = '';
     let realmId = '';
     let spaceId = '';
 
@@ -1632,63 +1643,17 @@ if (import.meta.main && !process.argv.includes('--api-capture') && !process.argv
       return 'person, organization and agent omit private fields';
     });
 
-    await runJourney('J13', 'PUT /v1/follows/{id} → GET /v1/follows → DELETE /v1/follows/{id}', async () => {
-      const follower = walker ?? (await signup(stack, 'j13a'));
-      followTarget = await signup(stack, 'j13b');
-      const token = await websiteToken(stack, follower, bindings, keys.website);
-      followTargetId = await waitForPublicAgentSubject(stack, followTarget.handle, 'follow target');
-      const followed = await kernel(stack, 'PUT', `/v1/follows/${followTargetId}`, { bearer: token.bearer });
-      if (followed.status !== 200) throw new Error(`follow HTTP ${followed.status}: ${summarize(followed.value)}`);
-      const listed = await kernel(stack, 'GET', '/v1/follows', { bearer: token.bearer, query: { limit: '20' } });
-      requireStatus(listed, 'Following', 200);
-      const removed = await kernel(stack, 'DELETE', `/v1/follows/${followTargetId}`, { bearer: token.bearer });
-      requireStatus(removed, 'unfollow', 200);
-      const again = await kernel(stack, 'PUT', `/v1/follows/${followTargetId}`, { bearer: token.bearer });
-      requireStatus(again, 'refollow', 200);
-      const deleteSession = await signIn(
-        stack,
-        followTarget,
-        AUTH_PAGE_OPERATION_CLIENT_ID,
-        AUTH_PAGE_OPERATION_SCOPES.delete,
-      );
-      const erased = await operate(
-        stack,
-        deleteSession,
-        { kind: 'delete', accountId: followTarget.accountId },
-        { confirmation: followTarget.handle },
-      );
-      const unavailable = await kernel(stack, 'DELETE', `/v1/follows/${followTargetId}`, { bearer: token.bearer });
-      if (unavailable.status !== 200 && erased.status !== 200)
-        throw new Error(
-          `unavailable unfollow HTTP ${unavailable.status} after target delete HTTP ${erased.status}: ${summarize(unavailable.value)}`,
-        );
-      if (unavailable.status !== 200)
-        throw new Error(`stored unavailable unfollow HTTP ${unavailable.status}: ${summarize(unavailable.value)}`);
-      return `followed then removed unavailable ${followTargetId}`;
-    });
+    await runJourney('J13', 'PUT /v1/follows/{id} → GET /v1/follows → DELETE /v1/follows/{id}', () =>
+      originalFollowJourney(stack, bindings, keys.website, { follower: walker }),
+    );
 
     await runJourney('J14', 'GET /v1/followCounts/outgoing → stranger GET /v1/followCounts/{type}/{id}', async () => {
-      const anonymous = await kernel(stack, 'GET', '/v1/followCounts/outgoing');
-      if (anonymous.status === 200 && typeof anonymous.value.followingCount === 'number')
-        throw new Error('anonymous reader received a private outgoing count');
-      if (kernelBearerCause)
-        throw new Error(`anonymous outgoing HTTP ${anonymous.status}; not reached: own count (${kernelBearerCause})`);
-      const follower = walker ?? (await signup(stack, 'j14a'));
-      const target = outsider ?? (await signup(stack, 'j14b'));
-      const token = await websiteToken(stack, follower, bindings, keys.website);
-      const stranger = await websiteToken(stack, target, bindings, keys.website);
-      const subjectId = await waitForPublicAgentSubject(stack, target.handle, 'count target');
-      await kernel(stack, 'PUT', `/v1/follows/${subjectId}`, { bearer: token.bearer });
-      const own = await kernel(stack, 'GET', '/v1/followCounts/outgoing', { bearer: token.bearer });
-      await rememberKernelBearerFailure(own, 'own outgoing count');
-      requireStatus(own, 'own outgoing count', 200);
-      if (typeof own.value.followingCount !== 'number') throw new Error('outgoing omitted followingCount');
-      const concealed = await kernel(stack, 'GET', `/v1/followCounts/subject/${subjectId}`, {
-        bearer: stranger.bearer,
+      if (kernelBearerCause) throw new Error(`not reached: own count (${kernelBearerCause})`);
+      return originalFollowCountJourney(stack, bindings, keys.website, {
+        follower: walker,
+        target: outsider,
+        observeOwnerResponse: (response) => rememberKernelBearerFailure(response, 'own outgoing count'),
       });
-      if (concealed.status === 200 && typeof concealed.value.followerCount === 'number')
-        throw new Error('unrelated reader received the private follower aggregate');
-      return `own followingCount ${String(own.value.followingCount)}; stranger HTTP ${concealed.status}; anonymous HTTP ${anonymous.status}`;
     });
 
     await runJourney(
@@ -2023,6 +1988,118 @@ if (import.meta.main && !process.argv.includes('--api-capture') && !process.argv
     );
     await persist();
   }
+}
+
+type FollowJourneyOptions = {
+  follower?: Person | undefined;
+  waitForAccountAgent?: WaitForAccountAgent;
+};
+
+export async function originalFollowJourney(
+  stack: Origins,
+  bindings: Record<string, string>,
+  websiteKey: JWK,
+  options: FollowJourneyOptions = {},
+): Promise<string> {
+  const follower = options.follower ?? (await signup(stack, 'j13a'));
+  const target = await signup(stack, 'j13b');
+  const { bearer } = await websiteToken(stack, follower, bindings, websiteKey);
+  const subject = await resolveFollowTarget(stack, target, 'follow target', options.waitForAccountAgent);
+  const linked = requireStatus(
+    await kernel(stack, 'GET', '/v1/accounts', { query: { agent: subject } }),
+    'follow target by agent',
+    200,
+  );
+  const linkedProfile = accountRow(linked);
+  if (linkedProfile?.id !== target.accountId || (linkedProfile.subject as Json | undefined)?.id !== subject)
+    throw new Error('handle and agent lookups did not resolve to the same public identity');
+
+  const path = `/v1/follows/${subject}`;
+  requireStatus(await kernel(stack, 'PUT', path, { bearer }), 'follow', 200);
+  const following = async () => {
+    const result = requireStatus(
+      await kernel(stack, 'GET', '/v1/follows', { bearer, query: { limit: '20' } }),
+      'Following',
+      200,
+    );
+    if (!Array.isArray(result.follows)) throw new Error('Following response omitted its edges');
+    return (result.follows as Json[]).some((edge) => edge.targetId === subject && edge.state === 'following');
+  };
+  if (!(await following())) throw new Error('Following omitted the written edge');
+  requireStatus(await kernel(stack, 'DELETE', path, { bearer }), 'unfollow', 200);
+  if (await following()) throw new Error('Following retained the removed edge');
+
+  requireStatus(await kernel(stack, 'PUT', path, { bearer }), 'refollow', 200);
+  const session = await signIn(stack, target, AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES.delete);
+  const erased = await operate(
+    stack,
+    session,
+    { kind: 'delete', accountId: target.accountId },
+    {
+      confirmation: target.handle,
+    },
+  );
+  requireStatus(erased, 'follow target delete', 200);
+  const hidden = requireStatus(
+    await kernel(stack, 'GET', '/v1/accounts', { query: { agent: subject } }),
+    'deleted target by agent',
+    200,
+  );
+  if (!Array.isArray(hidden.accounts) || hidden.accounts.length !== 0)
+    throw new Error('deleted target still resolved publicly');
+  const edge = requireStatus(await kernel(stack, 'GET', path, { bearer }), 'stored unavailable follow', 200);
+  const stored = edge.follow as Json | undefined;
+  if (stored?.targetId !== subject || stored.state !== 'following')
+    throw new Error('stored edge did not survive loss of its public target');
+  requireStatus(await kernel(stack, 'DELETE', path, { bearer }), 'stored unavailable unfollow', 200);
+  if (await following()) throw new Error('Following retained the unavailable edge after removal');
+  return `followed then removed unavailable ${subject}`;
+}
+
+export async function originalFollowCountJourney(
+  stack: Origins,
+  bindings: Record<string, string>,
+  websiteKey: JWK,
+  options: FollowJourneyOptions & {
+    target?: Person | undefined;
+    observeOwnerResponse?: (response: { status: number; value: Json }, accountId: string) => Promise<void>;
+  } = {},
+): Promise<string> {
+  const outgoing = '/v1/followCounts/outgoing';
+  const anonymous = requireStatus(await kernel(stack, 'GET', outgoing), 'anonymous outgoing', 401);
+  if (anonymous.code !== 'authentication_required' || 'followingCount' in anonymous)
+    throw new Error('anonymous outgoing did not return the private count refusal');
+  const follower = options.follower ?? (await signup(stack, 'j14a'));
+  const target = options.target ?? (await signup(stack, 'j14b'));
+  const stranger = await signup(stack, 'j14c');
+  const { bearer } = await websiteToken(stack, follower, bindings, websiteKey);
+  const { bearer: unrelated } = await websiteToken(stack, stranger, bindings, websiteKey);
+  const subject = await resolveFollowTarget(stack, target, 'count target', options.waitForAccountAgent);
+
+  const count = async (label: string) => {
+    const response = await kernel(stack, 'GET', outgoing, { bearer });
+    await options.observeOwnerResponse?.(response, follower.accountId);
+    const { followingCount } = requireStatus(response, label, 200);
+    if (typeof followingCount !== 'number' || !Number.isSafeInteger(followingCount) || followingCount < 0)
+      throw new Error(`${label} omitted an exact followingCount`);
+    return followingCount;
+  };
+  const before = await count('baseline own outgoing count');
+  const path = `/v1/follows/${subject}`;
+  requireStatus(await kernel(stack, 'PUT', path, { bearer }), 'counted follow', 200);
+  const after = await count('own outgoing count');
+  if (after !== before + 1) throw new Error('own outgoing count did not increase after the follow');
+  const concealed = requireStatus(
+    await kernel(stack, 'GET', `/v1/followCounts/subject/${subject}`, { bearer: unrelated }),
+    'unrelated target count',
+    404,
+  );
+  if (concealed.code !== 'not_found' || 'followerCount' in concealed)
+    throw new Error('unrelated target count did not return the concealed refusal');
+  requireStatus(await kernel(stack, 'DELETE', path, { bearer }), 'counted unfollow', 200);
+  if ((await count('own outgoing count after unfollow')) !== before)
+    throw new Error('own outgoing count did not return to its baseline');
+  return `own followingCount ${after}; unrelated target count HTTP 404; anonymous outgoing HTTP 401`;
 }
 
 async function originalJ03(stack: Origins): Promise<string> {
