@@ -960,7 +960,24 @@ async function mapBounded<T, Result>(
   return results;
 }
 
-async function populationPage(pool: Pool, projection: DiscoveryProjection, row: Population): Promise<boolean> {
+function populationCapabilityCheck(pool: Pool, { target, metadataProducers }: DiscoveryProjection) {
+  let scheduled: Promise<void> | undefined;
+  return () => {
+    // Share only checks queued before the native observation starts. A page that reaches
+    // its next check during that observation must still obtain a fresh one.
+    return (scheduled ??= Promise.resolve().then(() => {
+      scheduled = undefined;
+      return assertDiscoveryCapabilityBinding(pool, target, metadataProducers);
+    }));
+  };
+}
+
+async function populationPage(
+  pool: Pool,
+  projection: DiscoveryProjection,
+  row: Population,
+  checkCapability: () => Promise<void>,
+): Promise<boolean> {
   const { registry, target } = projection,
     partition = row.partition;
   const account = registry.get('account');
@@ -996,7 +1013,7 @@ async function populationPage(pool: Pool, projection: DiscoveryProjection, row: 
   } else {
     const producer = await retainedMetadataProducer(pool, projection, row.owner);
     if (!producer) return true;
-    await assertDiscoveryCapabilityBinding(pool, target, projection.metadataProducers);
+    await checkCapability();
     const after = row.after_id === null ? null : { route: row.after_route!, id: row.after_id };
     const page = await nativePopulationPage(pool, target, producer, partition, after, row.continuation);
     if (!page) return true;
@@ -1011,7 +1028,7 @@ async function populationPage(pool: Pool, projection: DiscoveryProjection, row: 
     position = page.position;
     // Empty native pages advance owner coverage without reserving an engine write.
     if (actions.length > 0) await searchTurnCall(() => projection.applyNativeActions(actions));
-    await assertDiscoveryCapabilityBinding(pool, target, projection.metadataProducers);
+    await checkCapability();
     await withSearchConnection(pool, async (client) => {
       await client.query(
         `UPDATE search.discovery_population SET after_route=$5,after_id=$6,continuation=$7::jsonb,
@@ -1631,13 +1648,14 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
     );
     if (populations.length > 0) {
       let retiring: Promise<void> | undefined;
+      const checkCapability = populationCapabilityCheck(pool, projection);
       await mapBounded(
         populations,
         Math.min(DISCOVERY_POPULATION_CONCURRENCY, Math.max(1, (pool.options.max ?? 10) - 1)),
         async (population) => {
           try {
             return await (target.state === 'populating'
-              ? populationPage(pool, projection, population)
+              ? populationPage(pool, projection, population, checkCapability)
               : reconcileDiscoveryPage(pool, search, projection, population));
           } catch (error) {
             if (!(error instanceof DiscoveryPhysicalTargetChangedError)) throw error;
