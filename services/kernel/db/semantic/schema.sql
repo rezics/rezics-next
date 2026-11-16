@@ -6866,8 +6866,8 @@ CREATE TABLE semantic.identity_epoch_prearm_bridge (
     scope_digest text,
     erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     reclaim_transaction_id uuid,
-    CONSTRAINT identity_epoch_prearm_bridge_reclaim_unclaimed CHECK (((reclaim_transaction_id IS NULL) OR (job_id IS NULL))),
-    CONSTRAINT identity_epoch_prearm_bridge_check CHECK (((job_id IS NULL) = (job_epoch IS NULL)))
+    CONSTRAINT identity_epoch_prearm_bridge_check CHECK (((job_id IS NULL) = (job_epoch IS NULL))),
+    CONSTRAINT identity_epoch_prearm_bridge_reclaim_unclaimed CHECK (((reclaim_transaction_id IS NULL) OR (job_id IS NULL)))
 );
 
 
@@ -16466,6 +16466,14 @@ ALTER TABLE ONLY semantic.identity_epoch_mapping_withdrawal
 
 
 --
+-- Name: identity_epoch_prearm_bridge identity_epoch_prearm_bridge_reclaim_commit_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_bridge
+    ADD CONSTRAINT identity_epoch_prearm_bridge_reclaim_commit_fkey FOREIGN KEY (partition_no, reclaim_transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id);
+
+
+--
 -- Name: identity_epoch_prearm_claim identity_epoch_prearm_claim_partition_no_transaction_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -16495,14 +16503,6 @@ ALTER TABLE ONLY semantic.identity_epoch_prearm_custody
 
 ALTER TABLE ONLY semantic.identity_epoch_prearm_decision
     ADD CONSTRAINT identity_epoch_prearm_decision_partition_no_transaction_id_fkey FOREIGN KEY (partition_no, transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id);
-
-
---
--- Name: identity_epoch_prearm_bridge identity_epoch_prearm_bridge_reclaim_commit_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
---
-
-ALTER TABLE ONLY semantic.identity_epoch_prearm_bridge
-    ADD CONSTRAINT identity_epoch_prearm_bridge_reclaim_commit_fkey FOREIGN KEY (partition_no, reclaim_transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id);
 
 
 --
