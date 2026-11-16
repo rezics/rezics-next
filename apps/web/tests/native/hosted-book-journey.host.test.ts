@@ -1566,7 +1566,13 @@ nativeTest(
               placement.target?.sha256,
           };
         },
-        () => pageObservation(ownerPage),
+        async () => {
+          const [browser, draft] = await Promise.all([
+            pageObservation(ownerPage),
+            observeDraftReadiness(control!.authorAccountId, control!.chapter.postId, pointRevision!.revisionId),
+          ]);
+          return `${browser}; exact draft readiness=${draft}`;
+        },
       );
     } else {
       journal.unreached(
