@@ -318,8 +318,10 @@ export function createSearchIdentityWriterPreparation(
                   { partition, deadline: context.deadline, clock: configuration.clock },
                   async (tx) => {
                     if (!(await admitted(tx))) throw unavailable('Search writer lost its retained admission');
-                    await support.compare(tx);
-                    retainWriterStep(tx, pool, job, directory.scope, roles, support.frontier, context, 0);
+                    const frontier = snapshotSearchIdentityReceivingFrontier(await support.advance(tx));
+                    if (!frontier)
+                      throw unavailable('Search writer Source support exceeds its retained frontier bound');
+                    retainWriterStep(tx, pool, job, directory.scope, roles, frontier, context, 0);
                     return { value: null, events: searchIdentityWriterChanged() };
                   },
                 );

@@ -46,6 +46,7 @@ import extensionHeadRead from './extension-active.sql';
 import extensionRead from './extension-read.sql';
 import eligibilityRead from './scope-leaf-evidence-eligibility.sql';
 import sourceVisibilityRead from './read-visibility.sql';
+import { readIdentitySearchIndexTermSlotSql } from './identity-search-index-terms.ts';
 import projectionReleasesRead from './search-source-releases.sql';
 import projectionPrivacyRead from './public-filter-projection-head-read.sql';
 import projectionBuildRead from './public-filter-projection-build-read.sql';
@@ -97,6 +98,7 @@ function sourceStatementCosts(): readonly (readonly [string, Cost])[] {
         [extensionRead.sql, [1, 1, 1, 65536, 1]],
         [eligibilityRead.sql, [1, 1, 1, 1024, 1]],
         [sourceVisibilityRead.sql, [1, 1, 1, 512, 1]],
+        [readIdentitySearchIndexTermSlotSql, [36, 36, 1, 81920, 3]],
         [projectionReleasesRead.sql, [1, 1, 1, 65536, 1]],
         [projectionPrivacyRead.sql, [1, 1, 1, 512, 1]],
         [projectionBuildRead.sql, [1, 1, 1, 2048, 1]],
