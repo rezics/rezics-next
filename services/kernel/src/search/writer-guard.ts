@@ -54,6 +54,7 @@ import {
   withReadTransaction,
 } from './native-bindings.ts';
 import gateSql from './writer-guard-gate.sql';
+import repairWriter from './public-filter-custody-repair-writer.sql';
 import dispatchSql from './writer-guard-dispatch.sql';
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
 import { documentActions, validateIndexObservation, type IndexAction, type SubjectDocument } from './document.ts';
@@ -123,6 +124,80 @@ export function isDiscoveryRepairWriterReceipt(
 }
 export const repairWriterPosition = (receipt: PublicFilterRepairWriterReceipt): bigint =>
   isDiscoveryRepairWriterReceipt(receipt) ? receipt.sourcePosition : receipt.action.version;
+
+export type RetainedSearchRepairWriter = NonNullable<Awaited<ReturnType<typeof repairWriter.run>>>;
+
+function sameRepairWriter(original: SearchRepairWriterReceipt, receipt: SearchRepairWriterReceipt) {
+  return (
+    receipt.locator === original.locator &&
+    receipt.subject === original.subject &&
+    receipt.partition === original.partition &&
+    receipt.epoch === original.epoch &&
+    receipt.incarnation === original.incarnation &&
+    receipt.writeAlias === original.writeAlias &&
+    receipt.consumer === original.consumer &&
+    (isDeepStrictEqual(receipt, original) ||
+      (receipt.enrollment.position > original.completion.position &&
+        receipt.action.version >= receipt.enrollment.position &&
+        receipt.action.version < receipt.completion.position &&
+        receipt.action.version > original.action.version))
+  );
+}
+
+/** A publication may repair a strictly newer ordinary settlement, using its exact native row as a CAS. */
+export type SupersededSearchRepair = Readonly<{
+  receipt: SearchRepairWriterReceipt;
+  writer: RetainedSearchRepairWriter;
+}>;
+
+export function inspectSearchRepairWriter(
+  index: string,
+  original: SearchRepairWriterReceipt,
+  writer: RetainedSearchRepairWriter | null | undefined,
+): { current: SearchRepairWriterReceipt } | { superseded: SupersededSearchRepair } | undefined {
+  if (
+    !writer ||
+    writer.writer_token !== null ||
+    writer.dispatch_state !== 'settled' ||
+    writer.closed_job ||
+    writer.owner_epoch !== original.epoch ||
+    writer.incarnation !== original.incarnation ||
+    writer.repair_locator !== original.locator ||
+    !writer.repair_receipt ||
+    !writer.repair_action ||
+    !writer.writer_transaction_id ||
+    !writer.visible_transaction_id ||
+    writer.visible_transaction_id !== writer.settled_transaction_id
+  )
+    return;
+  const receipt = decodeSearchRepairWriterReceipt(writer.repair_receipt);
+  if (
+    !sameRepairWriter(original, receipt) ||
+    !isDeepStrictEqual(JSON.parse(writer.repair_action, repairReviver), receipt.action)
+  )
+    return;
+  validateSearchRepairWriterEvidence(index, receipt);
+  const enrollment = BigInt(writer.writer_position ?? -1);
+  const settled = BigInt(writer.settled_position ?? -1);
+  const source = BigInt(writer.source_position ?? -1);
+  if (BigInt(writer.visible_position ?? -1) !== settled) return;
+  if (
+    writer.writer_transaction_id === receipt.enrollment.transactionId &&
+    enrollment === receipt.enrollment.position &&
+    writer.settled_transaction_id === receipt.completion.transactionId &&
+    settled === receipt.completion.position &&
+    source === receipt.action.version
+  )
+    return { current: receipt };
+  if (
+    writer.writer_transaction_id !== receipt.enrollment.transactionId &&
+    writer.settled_transaction_id !== receipt.completion.transactionId &&
+    enrollment > receipt.completion.position &&
+    source >= enrollment &&
+    settled > source
+  )
+    return { superseded: { receipt, writer } };
+}
 
 const repairEncode = (value: unknown) =>
   JSON.stringify(value, (_key, item) => (typeof item === 'bigint' ? { nativeBigint: String(item) } : item));
@@ -760,8 +835,8 @@ export type SearchWriterNativeCustody = SearchWriterGuard &
       locator: string,
       context: PublicFilterConsumerContext,
     ): Promise<SearchRepairWriterReceipt>;
-    /** No caller body/version or saved positive can be submitted. */
-    write(partition: number, ids: readonly string[], obligation: bigint): Promise<void>;
+    /** Re-enter ordinary dispatch with the exact superseding native row still present. */
+    renewPublicationRepair(input: SupersededSearchRepair, context: PublicFilterConsumerContext): Promise<void>;
     fenceOriginal(job: IdentityJobRef, original: string): Promise<SearchIdentityWriterFence>;
     observeIdentityPreparation(
       tx: CommandTransaction,
@@ -1007,10 +1082,17 @@ export function createSearchWriterGuard(options: {
           : point(partition, row.owner_epoch, row.writer_transaction_id, row.writer_position),
     };
   }
-  async function gate(tx: CommandTransaction, receipt: IdentityNativeReceipt, incarnation: string, writeAlias: string) {
+  async function gate(
+    tx: CommandTransaction,
+    receipt: IdentityNativeReceipt,
+    incarnation: string,
+    writeAlias: string,
+    allowCreate = true,
+  ) {
     const parameters = [receipt.partition, options.index, options.consumer, incarnation, receipt.epoch, writeAlias];
     const existing = await tx.query(gateSql.sql, parameters);
     if (existing.rowCount === 1) return existing.rows[0]!;
+    if (!allowCreate) throw unavailable('Search publication repair lost its native writer gate');
     const inserted = await tx.query<Pick<GateRow, 'enrollment_generation' | 'fence_generation' | 'closed_token'>>(
       insertWriterGateSql,
       parameters,
@@ -1359,6 +1441,22 @@ export function createSearchWriterGuard(options: {
     });
     return result.value;
   }
+  async function confirmDrainedPublication(
+    input: SearchWriterPublicationFence,
+    context: PublicFilterConsumerContext,
+    cost: PublicationCost,
+  ) {
+    const publication = await publicationSource(input, context, cost);
+    await publicationPhysical(input, context);
+    const row = await withReadTransaction(
+      options.pool,
+      (tx) => publicationRetained(tx, input, context),
+      context.deadline,
+    );
+    publicationDeadline(context);
+    if (row.publication_home !== 4096) return pendingPublication();
+    return publication;
+  }
   const publication: Omit<SearchWriterPublicationGuard, 'write'> = {
     fencePublication(request, context) {
       const input = structuredClone(request);
@@ -1438,8 +1536,10 @@ export function createSearchWriterGuard(options: {
         );
         publicationDeadline(context);
         if (before.publication_home === 4096) {
-          await publicationSource(input, context, cost);
-          return { status: 'drained' as const, fence: input, cost };
+          const source = await confirmDrainedPublication(input, context, cost);
+          const result = { status: 'drained' as const, fence: input, cost };
+          if (source) heldPublicationSources.set(result, source);
+          return result;
         }
         const progress = home === 4096 ? null : await drainPublicationHome(input, context, cost, before, home);
         publicationDeadline(context);
@@ -1478,15 +1578,7 @@ export function createSearchWriterGuard(options: {
     adoptPublication(value, context) {
       const input = structuredClone(value);
       return publicationCall(context, async (cost, context) => {
-        const publication = await publicationSource(input, context, cost);
-        await publicationPhysical(input, context);
-        const row = await withReadTransaction(
-          options.pool,
-          (tx) => publicationRetained(tx, input, context),
-          context.deadline,
-        );
-        publicationDeadline(context);
-        if (row.publication_home !== 4096) return pendingPublication();
+        const publication = await confirmDrainedPublication(input, context, cost);
         const result = { status: 'held' as const, fence: input, cost };
         if (publication) heldPublicationSources.set(result, publication);
         return result;
@@ -1578,7 +1670,15 @@ export function createSearchWriterGuard(options: {
     return own;
   }
 
-  const guard: SearchWriterNativeCustody & SearchWriterPublicationGuard = {
+  const guard: SearchWriterNativeCustody &
+    SearchWriterPublicationGuard & {
+      write(
+        partition: number,
+        input: readonly string[],
+        obligation: bigint,
+        renewal?: Readonly<{ input: SupersededSearchRepair; context: PublicFilterConsumerContext }>,
+      ): Promise<void>;
+    } = {
     ...publication,
     fenceOriginal: (job, original) =>
       fenceSearchIdentityWriter(options.pool, { job, original, index: options.index, search: options.search }),
@@ -2109,17 +2209,45 @@ export function createSearchWriterGuard(options: {
       });
       return completed.value;
     },
-    async write(partition, input, obligation) {
+    async renewPublicationRepair(input, context) {
+      const { receipt, writer } = input;
+      const inspected = inspectSearchRepairWriter(options.index, receipt, writer);
+      if (!inspected || !('superseded' in inspected)) throw unavailable('Search publication writer is not superseded');
+      await guard.write(receipt.partition, [receipt.subject], BigInt(writer.settled_position!), { input, context });
+    },
+    async write(
+      partition,
+      input,
+      obligation,
+      renewal?: Readonly<{ input: SupersededSearchRepair; context: PublicFilterConsumerContext }>,
+    ) {
       if (typeof obligation !== 'bigint' || obligation < 0n)
         throw new TypeError('Search writer requires a native nonnegative obligation');
       const ids = keys(partition, input);
       const { incarnation, writeAlias } = await readSearchWriterPhysicalTarget(options.search, options.index);
       const token = crypto.randomUUID();
-      const enrollment = await runCommand(options.pool, { partition }, async (tx, context) => {
+      const commandOptions = { partition, ...(renewal && { deadline: renewal.context.deadline }) };
+      const enrollment = await runCommand(options.pool, commandOptions, async (tx, context) => {
         const receipt = await native(tx, context.transactionId);
         await publicationAdmission(tx);
-        const target = await gate(tx, receipt, incarnation, writeAlias);
+        const target = await gate(tx, receipt, incarnation, writeAlias, !renewal);
         if (target.closed_token) throw unavailable('Search generation is closed to writer enrollment');
+        if (renewal) {
+          const { receipt: original, writer } = renewal.input;
+          const current = await repairWriter.run(tx, {
+            partition_no: partition,
+            physical_target: options.index,
+            original_id: original.subject,
+          });
+          if (
+            !isDeepStrictEqual(current, writer) ||
+            BigInt(writer.settled_position!) >= receipt.position ||
+            original.consumer !== options.consumer ||
+            original.incarnation !== incarnation ||
+            original.writeAlias !== writeAlias
+          )
+            throw unavailable('Superseding Search writer changed before repair enrollment');
+        }
         await tx.query(
           `UPDATE search.identity_writer_gate SET enrollment_generation=enrollment_generation+1
           WHERE partition_no=$1 AND physical_target=$2`,
@@ -2143,8 +2271,9 @@ export function createSearchWriterGuard(options: {
       let dispatched = false;
       let revoked = false;
       let sourcePosition: bigint | null = null;
+      let renewedEffect: { action: IndexAction; bulk: unknown } | undefined;
       const release = async () => {
-        await runCommand(options.pool, { partition }, async (tx, context) => {
+        await runCommand(options.pool, commandOptions, async (tx, context) => {
           const completion = await native(tx, context.transactionId);
           if (completion.epoch !== receipt.epoch) throw unavailable('Search writer owner changed before custody');
           const result = await tx.query(settle.sql, [
@@ -2161,6 +2290,23 @@ export function createSearchWriterGuard(options: {
             sourcePosition?.toString() ?? null,
           ]);
           if (result.rowCount !== ids.length) throw unavailable('Search writer enrollment changed before custody');
+          if (renewal && renewedEffect) {
+            const fresh: SearchRepairWriterReceipt = {
+              ...renewal.input.receipt,
+              action: renewedEffect.action,
+              enrollment: receipt,
+              completion,
+              native: { evidence: { kind: 'bulk', bulk: renewedEffect.bulk } },
+            };
+            validateSearchRepairWriterEvidence(options.index, fresh, { allowReadbackRecovery: false });
+            const retained = await tx.query(
+              `UPDATE search.identity_writer SET repair_action=$4,repair_receipt=$5
+               WHERE (partition_no,physical_target,original_id)=($1,$2,$3) AND repair_locator=$6`,
+              [partition, options.index, fresh.subject, repairEncode(fresh.action), repairEncode(fresh), fresh.locator],
+            );
+            if (retained.rowCount !== 1)
+              throw unavailable('Search publication writer lost its original repair locator');
+          }
           return { value: null, events: changed() };
         });
       };
@@ -2182,7 +2328,7 @@ export function createSearchWriterGuard(options: {
         if (current.incarnation !== incarnation || current.writeAlias !== writeAlias)
           throw unavailable('Search physical index changed before dispatch');
         // Native CAS makes pre-dispatch recovery revoke a delayed continuation before external I/O.
-        await runCommand(options.pool, { partition }, async (tx, context) => {
+        await runCommand(options.pool, commandOptions, async (tx, context) => {
           const dispatch = await native(tx, context.transactionId);
           if (dispatch.epoch !== receipt.epoch) throw unavailable('Search writer home changed before dispatch');
           await gate(tx, dispatch, incarnation, writeAlias);
@@ -2202,11 +2348,23 @@ export function createSearchWriterGuard(options: {
         });
         // Set BEFORE calling the transport: a thrown/lost response says nothing about native application.
         dispatched = true;
-        await writeIndexActions(options.search, options.index, actions, { rejectConflicts: true, writeAlias });
+        let bulk: unknown;
+        const transport: OpenSearch = renewal
+          ? {
+              ...options.search,
+              async bulk(lines, opts) {
+                const response = await options.search.bulk(lines, opts);
+                bulk = response;
+                return response as never;
+              },
+            }
+          : options.search;
+        await writeIndexActions(transport, options.index, actions, { rejectConflicts: true, writeAlias });
         const observed = await readSearchWriterPhysicalTarget(options.search, options.index);
         if (observed.incarnation !== incarnation || observed.writeAlias !== writeAlias)
           throw unavailable('Search physical index changed after dispatch');
         sourcePosition = snapshot.position;
+        if (renewal) renewedEffect = { action: actions[0]!, bulk };
       } catch (error) {
         // No engine mutation was invoked on this branch. A failed release still retains native custody.
         if (!dispatched && !revoked) await release();

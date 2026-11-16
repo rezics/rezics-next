@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { fixture, nativeProducer, readContext } from './support/public-filter-source.ts';
+import { fixture, nativeProducer, readContext, statement } from './support/public-filter-source.ts';
 import {
   createPublicFilterSourceBinding,
   readNativePublicFilterPublicationCompletion,
@@ -522,3 +522,155 @@ test('native publication starts repair from the original adopted Source executio
     }
   }
 }, 240_000);
+
+test('publication repairs a newer settled Subject writer under its original Source acknowledgement', async () => {
+  const f = await fixture();
+  const search = createOpenSearch(process.env.OPENSEARCH_URL!);
+  const prefix = `source-renew-writer-${crypto.randomUUID().slice(0, 8)}-`;
+  const target = subjectIndexName(prefix, 1);
+  const runtime = createDefaultPublicFilterRuntime({ ...f.config, search, prefix });
+  const context = () => ({ deadline: Date.now() + PUBLIC_PREPARATION_BUDGET_MS });
+  try {
+    const author = await f.create();
+    const book = await f.create('schema:Book', { 'schema:author': [statement('schema:author', author)] });
+    const home = partitionOf(routeOf(book)!);
+    await createSubjectIndex(search, prefix, 1);
+    const writer = createSearchWriterGuard({
+      pool: f.db.pool,
+      search,
+      index: target,
+      consumer: subjectConsumer(prefix, 1),
+      source: createRatedSubjectSource(f.db.pool, f.config.routeKey).source,
+      listing: subjectListingSource(f.db.pool),
+    });
+    for (const subject of [author, book]) await writer.write(partitionOf(routeOf(subject)!), [subject], 0n);
+    const admitted = await runtime.preparePublication(1, context());
+    if (admitted.status !== 'preparing') throw new Error(admitted.reason);
+    const { job } = admitted;
+    const binding = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
+    const completion = () => readNativePublicFilterPublicationCompletion(binding, { job: job.job }, context());
+    const retained = async () =>
+      (
+        await f.db.pool.query(
+          `SELECT j.bootstrap,j.observation,j.execution,t.step,t.verified_root,t.ack_after
+       FROM search.generation_publication j
+       LEFT JOIN semantic.public_filter_repair_step t ON (t.partition_no,t.bootstrap,t.execution)=(0,substring(j.bootstrap from 3)::uuid,j.execution)
+         AND t.complete AND t.verified_root IS NOT NULL AND t.verified_next IS NULL
+       WHERE (j.partition_no,j.job)=(0,$1)`,
+          [job.job],
+        )
+      ).rows[0]!;
+    const readWriter = async () =>
+      (
+        await f.db.pool.query(
+          `SELECT writer_transaction_id,settled_transaction_id,repair_locator,repair_receipt
+       FROM search.identity_writer WHERE (partition_no,physical_target,original_id)=($1,$2,$3)`,
+          [home, target, book],
+        )
+      ).rows[0]!;
+    const effect = async () =>
+      (
+        await f.db.pool.query(
+          `SELECT page,item,receipt FROM search.public_filter_repair_effect
+       WHERE (partition_no,observation,execution)=(0,$1,$2) ORDER BY page,item`,
+          [(await retained()).observation, job.job],
+        )
+      ).rows;
+    let next: 'step' | 'activate' = 'step';
+    let original: Awaited<ReturnType<typeof retained>> | undefined;
+    let historicalEffects: Awaited<ReturnType<typeof effect>> | undefined;
+    let last: unknown;
+    for (let turn = 0; turn < 900; turn++) {
+      if (next === 'step') {
+        const result = await runtime.publication.step(job, context(), { enrollSource: true });
+        last = result;
+        if (result.status === 'reconciled') next = 'activate';
+        continue;
+      }
+      const result = await runtime.publication.activate(job, context());
+      last = result;
+      if (result.status === 'preparing') next = result.next;
+      const proof = await retained();
+      if (proof.ack_after > 0 && !original) {
+        original = proof;
+        historicalEffects = await effect();
+        const first = await readWriter();
+        expect(first.repair_receipt).toBeString();
+        await writer.write(home, [book], 0n);
+        const newer = await readWriter();
+        expect(newer).toMatchObject({ repair_locator: first.repair_locator, repair_receipt: first.repair_receipt });
+        expect(newer.writer_transaction_id).not.toBe(first.writer_transaction_id);
+        expect((await completion()).status).toBe('pending');
+        expect(await retained()).toEqual(original);
+        expect((await subjectGenerations(search, prefix)).active).toBeNull();
+        const historical = historicalEffects[0]!;
+        const effectKey = [proof.observation, job.job, historical.page, historical.item];
+        await f.db.pool.query(
+          `DELETE FROM search.public_filter_repair_effect WHERE (partition_no,observation,execution,page,item)=(0,$1,$2,$3,$4)`,
+          effectKey,
+        );
+        try {
+          expect(await runtime.publication.activate(job, context())).toMatchObject({
+            status: 'preparing',
+            advanced: false,
+          });
+          expect(await readWriter()).toEqual(newer);
+          expect(await retained()).toEqual(original);
+        } finally {
+          await f.db.pool.query(
+            `INSERT INTO search.public_filter_repair_effect(partition_no,observation,execution,page,item,receipt) VALUES (0,$1,$2,$3,$4,$5)`,
+            [...effectKey, historical.receipt],
+          );
+        }
+        const renewed = await runtime.publication.activate(job, context());
+        expect(renewed).toMatchObject({ status: 'preparing', advanced: true });
+        const fresh = await readWriter();
+        expect(fresh.repair_locator).toBe(first.repair_locator);
+        expect(fresh.repair_receipt).not.toBe(first.repair_receipt);
+        expect(fresh.writer_transaction_id).not.toBe(newer.writer_transaction_id);
+        expect(await retained()).toEqual(original);
+        expect(await effect()).toEqual(historicalEffects);
+        const winner = (
+          await search.request<{ _source: Record<string, unknown>; _version: number }>('GET', `/${target}/_doc/${book}`)
+        ).body;
+        const replaceWinner = async (document: Record<string, unknown>) => {
+          const result = await search.bulk<{ errors: boolean }>(
+            [
+              { index: { _index: target, _id: book, version: winner._version, version_type: 'external_gte' } },
+              document,
+            ],
+            { query: { refresh: 'wait_for' } },
+          );
+          expect(result).toMatchObject({ errors: false });
+          expect((await search.request('GET', `/${target}/_doc/${book}`)).body).toMatchObject({ _source: document });
+        };
+        await replaceWinner({ ...winner._source, names: ['Wrong book'] });
+        try {
+          expect((await completion()).status).toBe('pending');
+          expect(await retained()).toEqual(original);
+          expect((await subjectGenerations(search, prefix)).active).toBeNull();
+        } finally {
+          await replaceWinner(winner._source);
+        }
+      }
+      if (result.status === 'activated') {
+        expect(original).toBeDefined();
+        expect(proof).toEqual({ ...original, ack_after: 4096 });
+        expect(await effect()).toEqual(historicalEffects);
+        expect((await subjectGenerations(search, prefix)).active).toBe(1);
+        return;
+      }
+    }
+    throw new Error(`Subject renewal did not activate: ${JSON.stringify({ retained: await retained(), last })}`);
+  } finally {
+    try {
+      await runtime.close();
+    } finally {
+      try {
+        await search.request('DELETE', `/${target}`);
+      } finally {
+        await f.close();
+      }
+    }
+  }
+}, 420_000);

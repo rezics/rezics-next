@@ -1,5 +1,6 @@
 import { lockPublicationAdmission, readPublicationFence } from './publication-admission.ts';
 import { tree, encode, decode, requireValue } from './public-filter-codec.ts';
+import { encodeGenerationPublicationQueried } from './generation-publication-pin.ts';
 import { hasExactPublicFilterMeaning } from './public-filter-meaning.ts';
 import { canonicalDiscoveryCatalogue, publicFilterCatalogue } from './discovery-catalogue.ts';
 import { verifyPublicFilterRepairSourcePage, PublicFilterRepairSourceError } from './public-filter-custody-source.ts';
@@ -26,6 +27,8 @@ import {
   validatePublicFilterRepairWriterEvidence,
   isDiscoveryRepairWriterReceipt,
   type PublicFilterRepairWriterReceipt,
+  inspectSearchRepairWriter,
+  type SupersededSearchRepair,
 } from './writer-guard.ts';
 import { subjectPartition } from './source.ts';
 import { validateRefreshResponse } from './write-actions.ts';
@@ -571,6 +574,15 @@ export function withPublicFilterRepairAllowance<T>(
   return repairAllowance.run({ spent: { ...spent }, maintenance }, work);
 }
 
+// Only the generation's maintenance call can receive a repair candidate from this read.
+// The candidate is invocation-local and never a successful settlement.
+const publicationRepair = new AsyncLocalStorage<{ job: string; writer?: SupersededSearchRepair }>();
+export async function readWithPublicationWriterRepair<T>(job: string, read: () => Promise<T>) {
+  const attempt: { job: string; writer?: SupersededSearchRepair } = { job };
+  const result = await publicationRepair.run(attempt, read);
+  return { result, writer: attempt.writer };
+}
+
 /** The sole native guard: owner verification runs between released and freshly reopened local homes. */
 export async function readPublicFilterRepairSettlement(
   pool: Pool,
@@ -960,10 +972,56 @@ export async function readPublicFilterRepairSettlement(
     return await local(async (db, raw) => {
       const final = await load(db, raw);
       if (!isDeepStrictEqual(final.basis, staged.basis)) throw new Failure('binding_mismatch');
-      for (const receipt of [...final.latest.values()].sort(
+      let publication: { phase: string; fence: string | null } | null | undefined;
+      let superseded: SupersededSearchRepair | undefined;
+      for (const original of [...final.latest.values()].sort(
         (a, b) => a.partition - b.partition || a.subject.localeCompare(b.subject),
-      ))
+      )) {
+        let receipt = original;
+        if (q.snapshot.kind === 'prepared' && !isDiscoveryRepairWriterReceipt(original)) {
+          const writer = final.basis.writers.find(({ original_id }) => original_id === original.subject)?.writer;
+          // Matching command identities take the original strict verifier directly.
+          if (writer && writer.writer_transaction_id !== original.enrollment.transactionId) {
+            const inspected = inspectSearchRepairWriter(q.consumer.physicalTarget, original, writer);
+            if (!inspected) throw new Failure('identity_pending');
+            if (publication === undefined) {
+              publication =
+                (
+                  await db.query(
+                    `SELECT phase,fence FROM search.generation_publication
+                 WHERE (partition_no,job)=(0,$1::uuid) AND family='subjects' AND source_home=0
+                   AND physical_target=$2 AND native_incarnation=$3 AND consumer=$4::jsonb
+                   AND bootstrap=$5 AND queried=$6 AND observation=$7 AND execution=$1::text`,
+                    [
+                      input.execution,
+                      q.consumer.physicalTarget,
+                      q.consumer.incarnation,
+                      q.consumer,
+                      final.state.bootstrap,
+                      encodeGenerationPublicationQueried(q),
+                      q.snapshot.observation,
+                    ],
+                  )
+                ).rows[0] ?? null;
+            }
+            if (publication) {
+              if ('current' in inspected) receipt = inspected.current;
+              else {
+                if (publication.phase !== 'reconciled' || publication.fence !== null)
+                  throw new Failure('identity_pending');
+                superseded ??= inspected.superseded;
+                continue;
+              }
+            }
+          }
+        }
         await verifyPublicFilterRepairWriterReceipt(db, search, q.consumer.physicalTarget, receipt);
+      }
+      if (superseded) {
+        const attempt = publicationRepair.getStore();
+        if (attempt?.job === input.execution) attempt.writer = superseded;
+        throw new Failure('identity_pending');
+      }
       const refreshed = await search.request('POST', `/${q.consumer.physicalTarget}/_refresh`);
       validateRefreshResponse(refreshed.status, refreshed.body);
       if (
