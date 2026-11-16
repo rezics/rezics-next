@@ -2,6 +2,7 @@ import { chmod, mkdir, rm, writeFile } from 'node:fs/promises';
 import { connect as connectTcp, createServer, type Socket } from 'node:net';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser } from 'playwright';
+import type { WebModuleFailureTrace } from './web-module-failure.ts';
 import {
   currentNativeLifecycle,
   settledWithin,
@@ -33,7 +34,10 @@ type BridgeResponse = {
   body: string;
 };
 
-export async function launchPrivateBrowser(allowedOrigins: readonly string[]): Promise<PrivateBrowser> {
+export async function launchPrivateBrowser(
+  allowedOrigins: readonly string[],
+  moduleFailureTrace?: WebModuleFailureTrace,
+): Promise<PrivateBrowser> {
   const lifecycle = currentNativeLifecycle();
   if (!lifecycle) throw new Error('Private browser startup requires an active native test lifecycle');
   lifecycle.assertOpen('start private browser');
@@ -200,6 +204,8 @@ export async function launchPrivateBrowser(allowedOrigins: readonly string[]): P
       if (mode !== 'http') return;
       void withSlot(async () => {
         let controller: AbortController | undefined;
+        let moduleStarted: number | undefined;
+        let upstreamStatus: number | undefined;
         try {
           const request = JSON.parse(Buffer.concat(chunks).toString('utf8')) as BridgeRequest;
           const target = new URL(request.url);
@@ -226,6 +232,12 @@ export async function launchPrivateBrowser(allowedOrigins: readonly string[]): P
           const body = Buffer.from(request.body, 'base64');
           controller = new AbortController();
           controllers.add(controller);
+          if (
+            target.origin === moduleFailureTrace?.origin &&
+            request.method === 'GET' &&
+            headers.get('sec-fetch-dest') === 'script'
+          )
+            moduleStarted = performance.now();
           const response = await fetch(target, {
             method: request.method,
             headers,
@@ -233,9 +245,16 @@ export async function launchPrivateBrowser(allowedOrigins: readonly string[]): P
             redirect: 'manual',
             signal: AbortSignal.any([controller.signal, AbortSignal.timeout(120_000)]),
           });
+          upstreamStatus = response.status;
           const responseBody = Buffer.from(await response.arrayBuffer());
           if (responseBody.length > maxFrameBytes)
             throw new Error('Private browser bridge response exceeded its size bound');
+          if (!socket.destroyed && moduleStarted !== undefined && upstreamStatus === 502)
+            moduleFailureTrace?.report({
+              phase: 'upstream-response',
+              upstreamStatus,
+              elapsedMs: performance.now() - moduleStarted,
+            });
           const responseHeaders: [string, string][] = [];
           for (const [name, value] of response.headers) {
             if (name !== 'set-cookie') responseHeaders.push([name, value]);
@@ -248,13 +267,20 @@ export async function launchPrivateBrowser(allowedOrigins: readonly string[]): P
             body: responseBody.toString('base64'),
           });
         } catch (error) {
-          if (!socket.destroyed)
-            sendBridgeResponse(socket, {
-              status: 502,
-              statusText: 'Bad Gateway',
-              headers: [['content-type', 'text/plain; charset=utf-8']],
-              body: Buffer.from(error instanceof Error ? error.message : String(error)).toString('base64'),
+          if (socket.destroyed) return;
+          if (moduleStarted !== undefined)
+            moduleFailureTrace?.report({
+              phase: upstreamStatus === undefined ? 'upstream-fetch' : 'upstream-body',
+              upstreamStatus,
+              elapsedMs: performance.now() - moduleStarted,
+              error,
             });
+          sendBridgeResponse(socket, {
+            status: 502,
+            statusText: 'Bad Gateway',
+            headers: [['content-type', 'text/plain; charset=utf-8']],
+            body: Buffer.from(error instanceof Error ? error.message : String(error)).toString('base64'),
+          });
         } finally {
           if (controller) controllers.delete(controller);
         }
