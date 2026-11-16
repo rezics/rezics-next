@@ -182,8 +182,12 @@ cursor, the exact subject and privacy revisions, the empty dependency tail and t
 job. Search rereads the immutable original plan and writer fence after Source resolution. The release command
 checks the current continuation revision and the live native hold and application for the same accepted effect.
 
-Visible canonical originals still require a bounded assembly of the native indexed document. The writer keeps
-that preparation pending. Recovery of an uncertain dispatch requires evidence from the original operation.
+For a visible canonical original, the writer verifies the completed Source build and current Access before
+reading one active term head and its complete fact slot. Each owned turn commits the slot cursor and a digest
+of the terms read so far. The native reader recovers the cursor from the preceding slot's indexed key and
+requires that head to remain current. An empty next seek closes term traversal. The continuation keeps term
+text in Source custody until document assembly. The writer still needs the remaining native document inputs
+before retaining an indexed action. Recovery of an uncertain dispatch requires evidence from the original operation.
 
 ## Cost
 
