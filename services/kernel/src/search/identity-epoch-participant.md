@@ -101,8 +101,14 @@ structural, publication-admission and generation gates to retain its admission. 
 original admission at its current owner. The writer then resolves the admitted definition and retains separate
 Source cursors for original and terminal support. Verified progress keeps the coordinator on the same request
 until those Source reads finish. Each private projection turn retains its selection or one dependency page.
-Superseded builds invalidate the old generation and reclaim one dependency head per turn. The next writer
-phase must bind these current references to the exact native action and accepted hold.
+Superseded builds invalidate the old generation and reclaim one dependency head per turn.
+The removal preparation verifies the retained support and allocation, closes the original in the index writer,
+and saves the delete action and its native plan in that command. The original's committed close component is its
+external version. The allocation stays open for unaffected writers. A previously visible copy is retained for
+replacement verification. Successor preparation requires the previous published job and its released native
+operation. Pending plans hold the target publication fence and generation close open through indexed probes.
+The accepted hold is required for dispatch. Visible Subject preparation still needs the bounded
+ordinary writer document input.
 For an existing accepted scope it fuses actual native operation application, the common effect and fixed Search
 `more` step in one transaction, then reconciles original custody. Each common Search plan enters the operational `identity_receiving_native_scope_pending` queue when it commits.
 The participant resumes at the last Search directory key retained in the committed native step. It reads one

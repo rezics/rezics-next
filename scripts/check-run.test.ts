@@ -1044,6 +1044,73 @@ test('Early native zero cannot settle before returns source verification and cle
   }
 });
 
+test('a final-only receiver restores row evidence from a long native check', async () => {
+  const fixture = candidate();
+  const path = 'reports/row.json';
+  const row = '{"result":"failing"}';
+  const finals: string[] = [];
+  let retained: CandidateSnapshot | undefined;
+  try {
+    const result = await runCheck(argsFor(fixture, ['bun', 'test', 'journey'], [path]), {
+      settlementWriter: (line) => finals.push(line),
+      stateDirectory: fixture.parent,
+      onRetainSnapshot: (snapshot) => (retained = snapshot),
+      transport: async (options) => {
+        const native = receipt('a', 1);
+        native.resources = {
+          schema: 1,
+          host: native.host,
+          run: native.run,
+          boot: 'boot',
+          supervisor: { pid: 8, start: '1', group: 8 },
+          cgroup: null,
+          cadenceMs: 5000,
+          startedMonoMs: 0,
+          commandStartedMonoMs: 0,
+          terminalMonoMs: 2_500_000,
+          samples: Array.from({ length: 501 }, (_, index) => ({
+            monoMs: index * 5000,
+            phase: index === 500 ? 'terminal' : 'command',
+            usageUsec: index * 5000,
+            memoryPeakBytes: 2_000_000_000,
+            intervalMs: 5000,
+            cores: 0.001,
+            unavailable: null,
+          })),
+          sampledMaxCores: 0.001,
+        };
+        const output = join(options.workspace, path);
+        mkdirSync(dirname(output), { recursive: true });
+        writeFileSync(output, row);
+        await options.allocated?.({ host: native.host, run: native.run });
+        await options.completed?.(native);
+        await options.settled?.(
+          remoteSettlement(options, native, {
+            returns: {
+              schema: 1,
+              status: 'complete',
+              entries: [
+                { path, size: Buffer.byteLength(row), sha256: createHash('sha256').update(row).digest('hex'), kind: 'file' },
+              ],
+              failures: [],
+            },
+          }),
+        );
+        return native.exitCode;
+      },
+    });
+    expect(result).toBe(1);
+    expect(JSON.parse(finals[0]!)).toMatchObject({
+      native: { exitCode: 1 },
+      returns: { status: 'restored' },
+      cleanup: { disposition: 'settled', localWorktree: 'removed' },
+    });
+    expect(readFileSync(join(fixture.root, path), 'utf8')).toBe(row);
+  } finally {
+    if (retained) removeRetainedSnapshot(fixture, retained);
+  }
+});
+
 test('final settlement follows verified local cleanup and terminal replay never allocates a replacement run', async () => {
   const fixture = candidate();
   const finals: string[] = [];

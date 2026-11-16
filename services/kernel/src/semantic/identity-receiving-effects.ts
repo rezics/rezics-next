@@ -1123,6 +1123,7 @@ function decodeSearchBinding(value: unknown): SearchIdentityReceivingBinding {
     !s.writeAlias ||
     !s.barrier ||
     !uuid(s.barrier.token) ||
+    (s.barrier.kind !== undefined && s.barrier.kind !== 'original') ||
     !Number.isInteger(s.barrier.partition) ||
     s.barrier.partition < 0 ||
     s.barrier.partition > 4095 ||

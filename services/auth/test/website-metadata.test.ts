@@ -3,7 +3,7 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { trustedAccessPorts } from './support/trusted-access.ts';
-import { WEBSITE_CLIENT_ID, websiteRoutes } from '../src/website.ts';
+import { observeWebsiteRevocation, WEBSITE_CLIENT_ID, websiteRoutes } from '../src/website.ts';
 import type { AuthServiceOptions, PublicJwks } from '../src/index.ts';
 
 const issuer = 'https://auth.test';
@@ -162,4 +162,29 @@ test('revocation without Access invalidation maps native 400s, including non-obj
   });
   expect(malformed?.status).toBe(400);
   expect(await malformed?.json()).toEqual({ error: 'invalid_request' });
+});
+
+test('the exact revocation response can distinguish resource refusal from native rejection', async () => {
+  const refused = await observeWebsiteRevocation(() =>
+    posted(
+      '/revoke',
+      async () => {
+        throw new Error('Wrong-resource revocation must not reach the native provider');
+      },
+      { token: 'unknown-token', resource: `${audience}/` },
+    ),
+  );
+  expect(refused.observation).toEqual({ stage: 'resource' });
+  expect(await refused.response?.json()).toEqual({ error: 'invalid_request' });
+
+  const native = await observeWebsiteRevocation(() =>
+    posted(
+      '/revoke',
+      async () =>
+        Response.json({ error: 'invalid_client', error_description: 'private provider detail' }, { status: 400 }),
+      { token: 'unknown-token' },
+    ),
+  );
+  expect(native.observation).toEqual({ stage: 'native-assertion', nativeStatus: 400, nativeCode: 'invalid_client' });
+  expect(await native.response?.json()).toEqual({ error: 'invalid_request' });
 });

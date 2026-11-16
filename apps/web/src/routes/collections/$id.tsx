@@ -2,7 +2,8 @@ import { createFileRoute, isNotFound } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import * as v from 'valibot';
-import { CollectionPage, collectionPageHead } from '../../library/collection-page';
+import { CollectionPage } from '../../library/collection-page';
+import { collectionPageHead } from '../../library/collection-page-head';
 import { DynamicCollectionPage } from '../../library/dynamic-collection-page';
 import type { DynamicCollectionPage as DynamicCollectionPageData } from '../../library/dynamic-collection';
 import {

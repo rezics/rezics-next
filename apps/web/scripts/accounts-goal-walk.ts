@@ -861,7 +861,7 @@ async function settle(page: import('playwright').Page, url: string) {
   return response;
 }
 
-async function fillPasswordSignIn(page: import('playwright').Page, email: string, secret: string) {
+export async function fillPasswordSignIn(page: import('playwright').Page, email: string, secret = password) {
   await page.getByLabel(/email/i).fill(email);
   await page.locator('input[name="password"]').fill(secret);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
@@ -978,6 +978,52 @@ function endCaptureRequest(entry: Json | undefined, response: Response, value: J
     // Native Auth deliberately omits request context from its diagnostic stream.
     diagnostics: 'Auth/Access internal cause unavailable; no request-correlated diagnostic handoff',
   });
+  if (entry.operation === 'POST /revoke' && process.env.REZICS_WALK_AUTH_FIXTURE === '1') {
+    const diagnostic = capturedWebsiteRevocation(response.headers.get('x-rezics-dev-website-revocation'));
+    if (diagnostic) entry.diagnostics = diagnostic;
+  }
+}
+
+function capturedWebsiteRevocation(encoded: string | null): Json | undefined {
+  if (!encoded || encoded.length > 256) return;
+  try {
+    const { stage, nativeStatus, nativeCode } = JSON.parse(encoded) as Json;
+    const stages = [
+      'issuer',
+      'form',
+      'fields',
+      'client-proof',
+      'resource',
+      'refresh-lookup',
+      'native-assertion',
+      'session-read',
+      'session-remember',
+      'access-floor',
+      'native-family',
+    ];
+    if (typeof stage !== 'string' || !stages.includes(stage)) return;
+    const codes = [
+      'invalid_request',
+      'invalid_client',
+      'invalid_grant',
+      'invalid_scope',
+      'invalid_target',
+      'unsupported_grant_type',
+      'unsupported_token_type',
+    ];
+    return {
+      stage,
+      ...(typeof nativeStatus === 'number' &&
+      Number.isInteger(nativeStatus) &&
+      nativeStatus >= 100 &&
+      nativeStatus <= 599
+        ? { nativeStatus }
+        : {}),
+      ...(typeof nativeCode === 'string' && codes.includes(nativeCode) ? { nativeCode } : {}),
+    };
+  } catch {
+    // The optional fixture diagnostic never changes the observed protocol response.
+  }
 }
 
 function capturePhase(phase: string) {
@@ -1012,7 +1058,7 @@ export async function collectApiCapture(
       current.result = 'PASS';
     } catch {
       current.result = 'FAIL';
-      current.firstFailingOperation = `${current.phase ?? 'setup'}: ${current.operation}`;
+      current.firstFailingOperation ??= `${current.phase ?? 'setup'}: ${current.operation}`;
       const last = current.phases.at(-1);
       if (last && (last.result === 'dispatched' || last.result === 'waiting')) last.result = 'unavailable';
     } finally {
@@ -2321,20 +2367,24 @@ export async function originalJ10(stack: Origins, bindings: Record<string, strin
   const person = await signup(stack, 'j10');
   capturePhase('website OAuth');
   const granted = await websiteToken(stack, person, bindings, websiteKey);
+  const readProfile = () =>
+    kernel(stack, 'GET', `/v1/accounts/${granted.session.accountId}/profile`, { bearer: granted.bearer });
   capturePhase('admitted Kernel bearer read');
-  const before = await kernel(stack, 'GET', `/v1/accounts/${granted.session.accountId}/profile`, {
-    bearer: granted.bearer,
-  });
+  const before = await readProfile();
   requireStatus(before, 'consented profile', 200);
   if (!granted.refresh) throw new Error('website token omitted refresh_token');
   capturePhase('website refresh-family revoke');
   const revoked = await revokeWebsiteRefresh(stack, bindings, websiteKey, granted.refresh);
-  if (revoked.status !== 200)
+  if (revoked.status !== 200) {
+    if (activeCapture) {
+      activeCapture.firstFailingOperation = `${activeCapture.phase}: ${activeCapture.operation}`;
+      capturePhase('original Kernel bearer read after revoke refusal');
+      await readProfile();
+    }
     throw new Error(`website revoke returned HTTP ${revoked.status}: ${summarize(revoked.value)}`);
+  }
   capturePhase('formerly admitted Kernel bearer denial');
-  const after = await kernel(stack, 'GET', `/v1/accounts/${granted.session.accountId}/profile`, {
-    bearer: granted.bearer,
-  });
+  const after = await readProfile();
   if (!isInvalidCredentials(after))
     throw new Error(`revoked bearer read returned HTTP ${after.status}: ${summarize(after.value)}`);
   return `profile after revoke HTTP ${after.status}`;

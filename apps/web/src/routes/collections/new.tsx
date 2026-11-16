@@ -10,7 +10,7 @@ import { pageHeadContext } from '../../shell/head-context';
 import { createFileRoute } from '@tanstack/react-router';
 import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { createCollection, readNewCollection } from '../../library/collection-edit';
-import { VisibilityField } from '../../library/collection-page';
+import { VisibilityField } from '../../library/collection-visibility-field';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';

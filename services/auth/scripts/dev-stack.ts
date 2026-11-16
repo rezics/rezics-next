@@ -1206,16 +1206,27 @@ async function serveHost() {
       const person = await phase('auth-persona', provisionPersona(composition));
       if (!firstPublicWebWalk()) printPersona(composition.keys, person.accountId);
     }
+    const observeRevocation = ordinaryAuthFixture
+      ? (await import('../src/website.ts')).observeWebsiteRevocation
+      : undefined;
     const mediaBindings = developmentMediaBindings(await kernelEnvironment(), composition.keys);
     const media = mediaBindings.LOCAL_MEDIA_TOKEN
       ? (await import('../../kernel/src/content/index.ts')).developmentMediaHandler(mediaBindings.LOCAL_MEDIA_TOKEN)
       : undefined;
     if (stopping) throw new Error('Native Auth/Work host stopped during startup');
     native = loopbackServe(localPort(origins.native), async (request) => {
-      if (new URL(request.url).pathname.startsWith('/_local/media/') && media) return media(request);
-      if (new URL(request.url).pathname === '/local-turnstile.js')
+      const { pathname } = new URL(request.url);
+      if (pathname.startsWith('/_local/media/') && media) return media(request);
+      if (pathname === '/local-turnstile.js')
         return new Response(widgetScript, { headers: { 'content-type': 'text/javascript' } });
-      return composition.host.handler(issuerRequest(request));
+      const upstream = issuerRequest(request);
+      if (observeRevocation && request.method === 'POST' && pathname === '/revoke') {
+        const { response, observation } = await observeRevocation(() => composition.host.handler(upstream));
+        const headers = new Headers(response.headers);
+        headers.set('x-rezics-dev-website-revocation', JSON.stringify(observation));
+        return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+      }
+      return composition.host.handler(upstream);
     });
     // Recovery uses the existing native JWKS transport. The private IPC capability
     // is installed before Work launches; no session-revocation HTTP route exists.

@@ -41,6 +41,8 @@ import {
 } from './identity-receiving-native-contract.ts';
 import { readRetainedWriterCopySql, searchIdentityWriterAdmissionSql } from './writer-guard.ts';
 import {
+  advanceWriterPublicationAdmissionSql,
+  lockPublicationFence,
   insertWriterPublicationWitness,
   lockPublicationAdmission,
   readPublicationFence,
@@ -64,6 +66,12 @@ import {
   readSearchIdentityWriterAdmissionSql,
   readSearchIdentityWriterSupportSql,
 } from './identity-search-receiving-directory-sql.ts';
+
+import {
+  lockSearchIdentityOriginalSql,
+  prepareSearchIdentityOriginalSql,
+  readSearchIdentityPredecessorSql,
+} from './identity-search-writer-plan-sql.ts';
 
 export type { SearchReceivingConfiguration };
 
@@ -99,7 +107,12 @@ function searchIdentityParticipantStatementCosts(): SearchReceivingWorkDeclarati
       [
         [readSearchIdentityWriterAdmissionSql, 3, 3, 4096],
         [readSearchIdentityWriterSupportSql, 3, 3, 4096],
+        [lockSearchIdentityOriginalSql, 1, 1, 2048],
+        [readSearchIdentityPredecessorSql, 6, 6, 4096],
+        [prepareSearchIdentityOriginalSql, 1, 2, 4096],
         [lockPublicationAdmission, 1, 1, 512],
+        [lockPublicationFence, 1, 1, 512],
+        [advanceWriterPublicationAdmissionSql, 1, 1, 512],
         [readWriterPublicationWitness, 1, 1, 512],
         [insertWriterPublicationWitness, 1, 1, 512],
         [readPublicationFence, 1, 1, 512],

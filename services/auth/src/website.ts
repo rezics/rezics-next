@@ -98,6 +98,32 @@ function protocolErrorCode(value: unknown): RefusalCode | undefined {
       return error;
   }
 }
+
+type WebsiteRevocationStage =
+  | 'issuer'
+  | 'form'
+  | 'fields'
+  | 'client-proof'
+  | 'resource'
+  | 'refresh-lookup'
+  | 'native-assertion'
+  | 'session-read'
+  | 'session-remember'
+  | 'access-floor'
+  | 'native-family';
+type WebsiteRevocationObservation = {
+  stage: WebsiteRevocationStage;
+  nativeStatus?: number;
+  nativeCode?: RefusalCode | 'unsupported_token_type';
+};
+const revocationObservation = new AsyncLocalStorage<WebsiteRevocationObservation>();
+
+/** Used by the isolated loopback walk to correlate closed values with its exact response. */
+export async function observeWebsiteRevocation<T>(run: () => Promise<T>) {
+  const observation: WebsiteRevocationObservation = { stage: 'issuer' };
+  const response = await revocationObservation.run(observation, run);
+  return { response, observation };
+}
 async function protocolResponse(run: () => Promise<Response>, token: boolean) {
   try {
     const response = await run();
@@ -578,6 +604,10 @@ export function websiteRoutes(input: {
         request.headers.get('content-type')?.split(';')[0]?.trim() === 'application/json'
       )
         return;
+      const revocation = url.pathname === '/revoke' ? revocationObservation.getStore() : undefined;
+      const revocationStage = (stage: WebsiteRevocationStage) => {
+        if (revocation) revocation.stage = stage;
+      };
       return protocolResponse(async () => {
         if (url.origin !== options.issuer) deny('invalid_request');
         if (url.pathname.startsWith('/.well-known/')) {
@@ -661,12 +691,17 @@ export function websiteRoutes(input: {
         }
         if (url.pathname === '/token' || url.pathname === '/revoke') {
           if (request.method !== 'POST' || url.search) deny('invalid_request');
+          revocationStage('form');
           const fields = await form(request);
           const base = ['client_id', 'client_assertion_type', 'client_assertion', 'resource'];
           if (url.pathname === '/revoke') {
+            revocationStage('fields');
             only(fields, [...base, 'token', 'token_type_hint']);
+            revocationStage('client-proof');
             await assertion(fields);
+            revocationStage('resource');
             resource(fields);
+            revocationStage('refresh-lookup');
             let row = (
               await database.query<{ sessionId: string; clientId: string }>(
                 'SELECT "sessionId","clientId" FROM "oauthRefreshToken" WHERE token=$1',
@@ -692,8 +727,10 @@ export function websiteRoutes(input: {
             // Revocation cannot issue authority. Do not hold the issuance
             // connection while native JWT verification fetches public JWKS.
             let invalidated = false;
+            revocationStage('native-assertion');
             const response = await assertionAdmission.run(
               async () => {
+                revocationStage('session-read');
                 // An ended session was already invalidated Access-first by logout or
                 // revocation; the native family revocation still follows.
                 const session =
@@ -701,13 +738,26 @@ export function websiteRoutes(input: {
                     ? (await database.query<Session>('SELECT * FROM session WHERE id=$1', [row.sessionId])).rows[0]
                     : undefined;
                 if (session) {
+                  revocationStage('session-remember');
                   await remember(session);
+                  revocationStage('access-floor');
                   await invalidate(session, 'session-revocation');
                   invalidated = true;
                 }
+                revocationStage('native-family');
               },
               () => input.native().handler(nativeRequest(request, '/oauth2/revoke', fields)),
             );
+            if (revocation) {
+              revocation.nativeStatus = response.status;
+              if (response.status >= 400) {
+                const rejection = await jsonRecord(response).catch(() => undefined);
+                revocation.nativeCode =
+                  rejection?.error === 'unsupported_token_type'
+                    ? 'unsupported_token_type'
+                    : protocolErrorCode(rejection);
+              }
+            }
             // Native RFC 7009 cannot revoke self-contained JWTs. Our existing
             // Access floor does, after native confidential proof admission.
             if (

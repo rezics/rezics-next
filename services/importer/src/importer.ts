@@ -139,6 +139,13 @@ export type ImportRunResult = {
   committedPrefix?: number;
   checkpointed?: boolean;
 };
+const runTransportFailures = new WeakMap<ImportRunResult, ImportTransportError>();
+
+/** The first typed terminal request is diagnostic context, outside the public run report. */
+export function importRunTransportFailure(result: ImportRunResult): ImportTransportError | undefined {
+  return runTransportFailures.get(result);
+}
+
 export type ImportRunOptions = {
   /** Complete source snapshots are the default; partial observations must opt into selected mode. */
   acquisitionMode?: AcquisitionMode;
@@ -277,6 +284,7 @@ export class Importer {
   private readonly shutdown = new AbortController();
   private readonly runControllers = new WeakMap<AbortSignal, AbortController>();
   private readonly progressObservers = new WeakMap<AbortSignal, ImportProgressObserver>();
+  private readonly transportFailures = new WeakMap<AbortSignal, ImportTransportError>();
   private readonly recordConcurrency: number;
   private readonly writeWidths = new WeakMap<AbortSignal, { width: number }>();
   private readonly planInflight = new WeakMap<AbortSignal, Map<string, PlanFlight>>();
@@ -1099,6 +1107,11 @@ export class Importer {
     return result.results.every(success);
   }
 
+  private retainTransportFailure(signal: AbortSignal, error: unknown): void {
+    if (error instanceof ImportTransportError && !this.transportFailures.has(signal))
+      this.transportFailures.set(signal, error);
+  }
+
   private async drain(run: Run, signal: AbortSignal, phase: Phase): Promise<boolean> {
     let after: string | undefined;
     let complete = true;
@@ -1118,6 +1131,7 @@ export class Importer {
             return await this.dispatch(run, pending, signal, write);
           } catch (error) {
             if (error instanceof Interrupted) throw error;
+            this.retainTransportFailure(signal, error);
             return false;
           }
         },
@@ -1911,6 +1925,7 @@ export class Importer {
         return await this.plan(registration, run, staged, signal, write);
       } catch (error) {
         if (error instanceof Interrupted) throw error;
+        this.retainTransportFailure(signal, error);
         return 'failed';
       } finally {
         stack.delete(staged.row.recordKey);
@@ -2415,6 +2430,7 @@ export class Importer {
               const overload =
                 error instanceof ImportTransportError &&
                 (error.status === 429 || (error.status === 503 && error.retryable));
+              if (overload) this.retainTransportFailure(signal, error);
               return { outcome: overload ? ('stopped' as const) : ('failed' as const), kind: entry.kind };
             }
           },
@@ -2493,6 +2509,12 @@ export class Importer {
   ): Promise<ImportRunResult> {
     const store = this.session.store;
     const { observe, finish, signal, mediaDeadline } = work;
+    const finishBulkFailure = () => {
+      const result = finish('bulk-failed', 'Durable operations remain unresolved');
+      const failure = this.transportFailures.get(signal);
+      if (failure) runTransportFailures.set(result, failure);
+      return result;
+    };
     if (work.finalizeOnly) {
       const finalizing = this.progress(signal)?.onPhase?.('finalizing');
       if (finalizing !== undefined) await finalizing;
@@ -2507,8 +2529,7 @@ export class Importer {
     }
     const reconciling = this.progress(signal)?.onPhase?.('reconciling');
     if (reconciling !== undefined) await reconciling;
-    if (work.resumed && !(await this.drain(run, signal, 'resumed')))
-      return finish('bulk-failed', 'Durable operations remain unresolved');
+    if (work.resumed && !(await this.drain(run, signal, 'resumed'))) return finishBulkFailure();
     let failed = false;
     let observationConflict = false;
     let after: string | undefined;
@@ -2551,6 +2572,7 @@ export class Importer {
               error instanceof ClassificationRefusedError
             )
               return { kind: 'unchanged' as const, deferredCover: false, observationConflict: true };
+            this.retainTransportFailure(signal, error);
             return 'failed';
           }
         },
@@ -2607,6 +2629,7 @@ export class Importer {
               error instanceof ClassificationRefusedError
             )
               return { kind: 'unchanged' as const, deferredCover: false, observationConflict: true };
+            this.retainTransportFailure(signal, error);
             return 'failed';
           }
         },
@@ -2630,8 +2653,7 @@ export class Importer {
       if (conflict !== undefined) await conflict;
       return finish('observation-conflict', 'Source observation requires explicit operator resolution');
     }
-    if (failed || store.hasUnresolvedAggregates(run))
-      return finish('bulk-failed', 'Durable operations remain unresolved');
+    if (failed || store.hasUnresolvedAggregates(run)) return finishBulkFailure();
     const finalizing = this.progress(signal)?.onPhase?.('finalizing');
     if (finalizing !== undefined) await finalizing;
     let final = store.finalize(run, 100);
@@ -2746,6 +2768,7 @@ export class Importer {
       return finish('bulk-failed', 'Import operations remain unresolved');
     } finally {
       this.runControllers.delete(signal);
+      this.transportFailures.delete(signal);
       this.progressObservers.delete(signal);
       this.planInflight.delete(signal);
       this.planningStack.delete(signal);
@@ -2934,6 +2957,7 @@ export class Importer {
       );
     } finally {
       this.runControllers.delete(signal);
+      this.transportFailures.delete(signal);
       this.progressObservers.delete(signal);
       this.planInflight.delete(signal);
       this.planningStack.delete(signal);

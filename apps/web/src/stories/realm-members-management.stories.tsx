@@ -239,7 +239,7 @@ export const AdditionRejected: Story = {
     const canvas = within(canvasElement);
     await inspectEnteredAccount(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.realm_members_add_member() }));
-    await userEvent.click(canvas.getByRole('button', { name: m.realm_bans_confirm() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.realm_members_add_member() }));
     await expect(await canvas.findByRole('alert')).toHaveTextContent(m.realm_members_add_rejected());
   },
 };
@@ -249,7 +249,7 @@ export const AdditionUnknown: Story = {
     const canvas = within(canvasElement);
     await inspectEnteredAccount(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.realm_members_add_member() }));
-    await userEvent.click(canvas.getByRole('button', { name: m.realm_bans_confirm() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.realm_members_add_member() }));
     await expect(await canvas.findByText(m.realm_members_unknown_command())).toBeVisible();
     await expect(canvas.getByRole('button', { name: m.realm_members_retry_command() })).toBeVisible();
   },
@@ -260,7 +260,7 @@ export const AdditionAcceptedPending: Story = {
     const canvas = within(canvasElement);
     await inspectEnteredAccount(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.realm_members_add_member() }));
-    await userEvent.click(canvas.getByRole('button', { name: m.realm_bans_confirm() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.realm_members_add_member() }));
     await expect(await canvas.findByText(m.realm_members_add_pending())).toBeVisible();
   },
 };
@@ -318,7 +318,7 @@ export const AcceptedAdditionWithUnavailableReadback: Story = {
     await userEvent.click(await canvas.findByRole('button', { name: m.realm_members_add_member() }));
     const review = canvas.getByRole('group', { name: m.realm_members_add_member() });
     await expect(within(review).getByText(realmId, { exact: true })).toBeVisible();
-    await userEvent.click(within(review).getByRole('button', { name: m.realm_bans_confirm() }));
+    await userEvent.click(within(review).getByRole('button', { name: m.realm_members_add_member() }));
     await userEvent.click(await canvas.findByRole('button', { name: m.realm_members_check_status() }));
     await expect(await canvas.findByText(m.realm_members_selected_unavailable())).toBeVisible();
     await expect(canvas.getByText(m.realm_members_add_pending())).toBeVisible();

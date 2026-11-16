@@ -50,7 +50,7 @@ export type SearchIdentityReceivingSource = Readonly<{
   physicalGeneration: number;
   enrollmentGeneration: bigint;
   fenceGeneration: bigint;
-  barrier: SearchWriterBarrierLocator;
+  barrier: SearchWriterBarrierLocator & Readonly<{ kind?: 'original' }>;
   originalFence: IdentityNativeReceipt;
   plan: IdentityNativeReceipt;
 }>;

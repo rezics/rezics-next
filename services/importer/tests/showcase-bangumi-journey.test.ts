@@ -359,9 +359,11 @@ test('walk seed env uses native Auth transport and keeps the issuer for CSRF aud
   expect(env.KERNEL_ORIGIN).toBe(stack.kernel);
   expect(env.REZICS_DEV_PERSONA_ACCOUNT).toBe('persona');
   const source = await readFile(join(import.meta.dir, '../src/imports-public-journey.ts'), 'utf8');
+  const coverAt = source.indexOf("await recordOperator('I01')");
   const seedAt = source.indexOf('scripts/datasets/cross-media-seed.ts');
   const pagesAt = source.search(/startWalkStackActions\(\s*\['pages', 'web'\]/);
-  expect(seedAt).toBeGreaterThan(0);
+  expect(coverAt).toBeGreaterThan(0);
+  expect(seedAt).toBeGreaterThan(coverAt);
   expect(pagesAt).toBeGreaterThan(seedAt);
 });
 

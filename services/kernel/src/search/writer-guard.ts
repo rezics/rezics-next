@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { SEARCH_IDENTITY_WRITER_CHUNK } from './writer-limits.ts';
 import type { Pool } from 'pg';
 import type { AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
@@ -18,12 +19,26 @@ import type {
   PublicFilterConsumerUnavailable,
 } from './public-filter-consumer-contract.ts';
 import { isDeepStrictEqual } from 'node:util';
-import { currentCommand, currentCommandResources, noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
+import {
+  currentCommand,
+  currentCommandResources,
+  noEffect,
+  runCommand,
+  type CommandTransaction,
+} from '../command/command.ts';
 import { classifyUnavailability } from '../access/unavailable.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { IdentityJobRef, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
+import { identityJobPartition } from '../semantic/identity-adapters/identity-epoch-contract.ts';
+import {
+  lockSearchIdentityOriginalSql,
+  prepareSearchIdentityOriginalSql,
+  readSearchIdentityPredecessorSql,
+  readSearchIdentityTargetPendingSql,
+  readSearchIdentityHomePendingSql,
+} from './identity-search-writer-plan-sql.ts';
 import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts';
 import {
   identityEpochStore,
@@ -709,6 +724,14 @@ export type SearchRetainedCopy = Readonly<{
 export type SearchWriterGuard = Readonly<{
   write(partition: number, ids: readonly string[], obligation: bigint): Promise<void>;
 }>;
+export type SearchIdentityWriterAdmission = Readonly<{
+  incarnation: string;
+  writeAlias: string;
+  enrollmentGeneration: bigint;
+  fenceGeneration: bigint;
+  close: string | null;
+}>;
+
 export type SearchWriterNativeCustody = SearchWriterGuard &
   Readonly<{
     /** Retained native repair, using the ordinary Source, serializer and writer enrollment. */
@@ -727,6 +750,24 @@ export type SearchWriterNativeCustody = SearchWriterGuard &
       original: string,
       allocation: Readonly<{ incarnation: string; writeAlias: string }>,
     ): Promise<Readonly<{ enrollmentGeneration: string; fenceGeneration: string; close: string | null }>>;
+    prepareIdentityRemoval(
+      tx: CommandTransaction,
+      job: IdentityJobRef,
+      original: string,
+      planId: string,
+      admission: SearchIdentityWriterAdmission,
+    ): Promise<
+      Readonly<{
+        close: IdentityNativeReceipt;
+        physicalGeneration: number;
+        enrollmentGeneration: bigint;
+        fenceGeneration: bigint;
+        actionDigest: string;
+        previousPlan: string | null;
+        firstAbsence: boolean;
+        previousVisible: IdentityNativeReceipt | null;
+      }>
+    >;
     /** Closes first absence under the same native gate as enrollment; does not assert population. */
     closeGeneration(partition: number): Promise<SearchWriterBarrier>;
     /** Publication consumes retained state, never fields from a diagnostic read or caller certificate. */
@@ -1215,6 +1256,9 @@ export function createSearchWriterGuard(options: {
       const retained = await publicationRetained(tx, input, context);
       if (retained.publication_revision !== before.publication_revision) return pendingPublication();
       const copies = publicationQueries(tx, context);
+      cost.dependencyPoints++;
+      if ((await copies.query(readSearchIdentityHomePendingSql, [home, options.index])).rowCount)
+        return pendingPublication();
       const proofDrained = await drainGenerationPublicationProofCopy(copies, home, options.index, input.job);
       publicationDeadline(context);
       const copiesPending = await hasRetainedWriterPublicationCopies(copies, home, options.index, input.job);
@@ -1305,6 +1349,9 @@ export function createSearchWriterGuard(options: {
               return noEffect(row.publication_fence);
             if (row.publication_fence) return pendingPublication();
             await advanceWriterPublicationAdmission(tx, options.index);
+            cost.dependencyPoints++;
+            if ((await tx.query(readSearchIdentityTargetPendingSql, [options.index])).rowCount)
+              return pendingPublication();
             const token = crypto.randomUUID();
             await tx.query(
               `UPDATE search.identity_writer_gate SET publication_job=$2,publication_consumer=$3,
@@ -1477,14 +1524,140 @@ export function createSearchWriterGuard(options: {
         close: row?.closed_transaction_id ?? null,
       };
     },
+    async prepareIdentityRemoval(tx, job, original, planId, admission) {
+      const command = currentCommand(tx);
+      if (currentCommandResources(tx).pool !== options.pool || command.partition !== subjectPartition(original))
+        throw unavailable('Search writer preparation requires the original home and Pool');
+      await identityEpochStore().admitHomeEffect(tx, { kind: 'structural', job, original });
+      const close = await native(tx, command.transactionId);
+      // The durable plan and the target witness move together under the exclusive
+      // admission lock. A publication waiter with an earlier snapshot must retry.
+      await tx.query(lockPublicationFence, [options.index]);
+      await advanceWriterPublicationAdmission(tx, options.index);
+      if ((await tx.query(readPublicationFence, [options.index])).rowCount)
+        throw unavailable('Search generation is fenced for native publication');
+      const target = (
+        await tx.query(gateSql.sql, [
+          close.partition,
+          options.index,
+          options.consumer,
+          admission.incarnation,
+          close.epoch,
+          admission.writeAlias,
+        ])
+      ).rows[0];
+      if (
+        !target ||
+        target.closed_token ||
+        BigInt(target.fence_generation) !== admission.fenceGeneration ||
+        BigInt(target.enrollment_generation) < admission.enrollmentGeneration
+      )
+        throw unavailable('Search generation changed before the original writer closed');
+      const before = (
+        await tx.query<{
+          incarnation: string;
+          owner_epoch: number;
+          writer_token: string | null;
+          dispatch_state: string;
+          source_position: string | null;
+          visible_transaction_id: string | null;
+          visible_position: string | null;
+          closed_job: string | null;
+          closed_epoch: string | null;
+          closed_transaction_id: string | null;
+          repair_locator: string | null;
+        }>(lockSearchIdentityOriginalSql, [close.partition, options.index, original])
+      ).rows[0];
+      if (
+        (before?.closed_transaction_id ?? null) !== admission.close ||
+        (before && (before.incarnation !== admission.incarnation || before.owner_epoch !== close.epoch))
+      )
+        throw unavailable('Search original close or owner changed after admission');
+      if (before?.writer_token || (before && !['settled', 'cancelled'].includes(before.dispatch_state)))
+        throw unavailable('Search original requires settlement of its outstanding writer');
+      if (before?.source_position != null && BigInt(before.source_position) >= close.position)
+        throw unavailable('Search original writer version exceeds its native close component');
+      if (before?.visible_position != null && BigInt(before.visible_position) >= close.position)
+        throw unavailable('Search original visibility is newer than its native close');
+      const firstAbsence =
+        !before ||
+        (before.dispatch_state === 'cancelled' &&
+          before.visible_transaction_id === null &&
+          before.source_position === null &&
+          before.closed_job === null);
+      let previousPlan: string | null = null;
+      if (before?.closed_job) {
+        if (
+          before.closed_job === job.jobId ||
+          !before.closed_epoch ||
+          !before.repair_locator ||
+          !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(before.repair_locator)
+        )
+          throw unavailable('Search writer needs the exact previous closed plan for handoff');
+        const previousJob = { jobId: before.closed_job, epoch: BigInt(before.closed_epoch) };
+        previousPlan =
+          (
+            await tx.query<{ plan_id: string }>(readSearchIdentityPredecessorSql, [
+              close.partition,
+              options.index,
+              original,
+              before.repair_locator,
+              before.closed_job,
+              before.closed_epoch,
+              before.closed_transaction_id,
+              identityJobPartition(previousJob),
+              close.epoch,
+            ])
+          ).rows[0]?.plan_id ?? null;
+        if (!previousPlan) throw unavailable('Previous Search original has no published and released writer handoff');
+      }
+      const previousVisible =
+        before?.visible_transaction_id && before.visible_position
+          ? point(close.partition, close.epoch, before.visible_transaction_id, before.visible_position)
+          : null;
+      if (!firstAbsence && !previousVisible)
+        throw unavailable('Search original prior visibility requires retained writer custody');
+      if (close.position > BigInt(Number.MAX_SAFE_INTEGER))
+        throw unavailable('Search writer close cannot be represented as an external version');
+      const action: IndexAction = { op: 'delete', id: original, version: close.position };
+      const body = repairEncode(action);
+      const prepared = await tx.query(prepareSearchIdentityOriginalSql, [
+        close.partition,
+        options.index,
+        original,
+        admission.incarnation,
+        close.epoch,
+        job.jobId,
+        String(job.epoch),
+        close.transactionId,
+        String(close.position),
+        planId,
+        body,
+        admission.close,
+      ]);
+      if (prepared.rowCount !== 1) throw unavailable('Search original changed while retaining its removal action');
+      return {
+        close,
+        physicalGeneration: generation,
+        firstAbsence,
+        previousPlan,
+        previousVisible,
+        enrollmentGeneration: BigInt(target.enrollment_generation),
+        fenceGeneration: BigInt(target.fence_generation),
+        actionDigest: createHash('sha256').update(body).digest('hex'),
+      };
+    },
     adoptGenerationPublicationBarrier: inspect,
     async closeGeneration(partition) {
       const { incarnation, writeAlias } = await readSearchWriterPhysicalTarget(options.search, options.index);
       const token = crypto.randomUUID();
       const closed = await runCommand(options.pool, { partition }, async (tx, context) => {
         const receipt = await native(tx, context.transactionId);
+        await lockWriterPublicationAdmission(tx, options.index);
         const row = await gate(tx, receipt, incarnation, writeAlias);
         if (row.closed_token) return noEffect(row.closed_token);
+        if ((await tx.query(readSearchIdentityHomePendingSql, [partition, options.index])).rowCount)
+          throw unavailable('Pending Search identity plans still hold the generation open');
         await tx.query(
           `UPDATE search.identity_writer_gate SET closed_token=$3,closed_transaction_id=$4,
           closed_position=$5,fence_generation=fence_generation+1 WHERE partition_no=$1 AND physical_target=$2`,

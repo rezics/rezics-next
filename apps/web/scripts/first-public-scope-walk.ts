@@ -5,11 +5,11 @@
  */
 import { walkAcceptanceId, walkStackAdmitted } from '../../../scripts/stack-run.ts';
 import { spawn } from 'node:child_process';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
-import { firstPublicWebWalk, startSeededFrontends } from '../../../services/auth/scripts/dev-stack.ts';
-import { parseEnv } from './accounts-goal-walk.ts';
+import { developmentKeys, firstPublicWebWalk, startSeededFrontends } from '../../../services/auth/scripts/dev-stack.ts';
+import { fillPasswordSignIn, parseEnv, websiteToken } from './accounts-goal-walk.ts';
 import { readFirstPublicCatalogueReport, seedFirstPublicWeb, type WebFixture } from './first-public-scope-fixture.ts';
 import { readZonePage, type KernelOptions } from './semantic-first-public-native.ts';
 import { FIRST_PUBLIC_SCOPE_PATHS, type PathAuth, type PathId, type PathStatus } from './first-public-scope-paths.ts';
@@ -63,7 +63,7 @@ function publicFields(value: unknown): unknown {
   if (!value || typeof value !== 'object') return value;
   const output: Json = {};
   for (const [key, field] of Object.entries(value as Json)) {
-    if (/token|password|cookie|authorization|secret|credential|bearer/i.test(key)) continue;
+    if (/token|password|cookie|authorization|secret|credential|bearer|^email$/i.test(key)) continue;
     output[key] = publicFields(field);
   }
   return output;
@@ -409,6 +409,71 @@ async function walkW18(ctx: WalkContext): Promise<unknown> {
   return { url: url.url, itemList, members: ctx.seed.collectionMembers, native: native.status };
 }
 
+async function withOwnerPage<T>(
+  ctx: WalkContext,
+  returnUrl: string,
+  observed: Json,
+  witness: (page: Page, enter: (stage: string) => void) => Promise<T>,
+): Promise<T> {
+  if (!ctx.signIn.ok) throw Object.assign(new Error(ctx.signIn.detail), { unreached: true, observed });
+  const { stack, seed } = ctx;
+  const context = await ctx.page.context().browser()!.newContext({ locale: 'en-US', viewport: desktop });
+  const page = await context.newPage();
+  page.setDefaultTimeout(60_000);
+  const target = new URL(returnUrl);
+  const returned = (url: URL) =>
+    url.origin === stack.web && url.pathname === target.pathname && url.search === target.search;
+  const consent = (url: URL) => url.origin === stack.issuer && url.pathname === '/consent';
+  let stage = 'Open the ordinary Auth login';
+  let signedIn = false;
+  try {
+    const signInUrl = new URL('/auth/sign-in', stack.web);
+    signInUrl.searchParams.set('return_to', target.pathname + target.search);
+    const login = await gotoPage(page, signInUrl.href);
+    const loginUrl = new URL(login.url);
+    if (login.status !== 200 || loginUrl.origin !== stack.issuer || loginUrl.pathname !== '/login')
+      throw new Error('Auth did not open the login form');
+    stage = 'Sign in through Auth as the seeded owner';
+    const [response] = await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          new URL(response.url()).origin === stack.issuer &&
+          new URL(response.url()).pathname === '/signin' &&
+          response.request().method() === 'POST',
+      ),
+      fillPasswordSignIn(page, seed.owner.email),
+    ]);
+    observed.authStatus = response.status();
+    if (response.status() !== 200 || (await response.json()).account_id !== seed.owner.accountId)
+      throw new Error('Auth did not acknowledge the exact owner');
+    stage = 'Return from Auth to the exact signed-in page';
+    await page.waitForURL((url) => returned(url) || consent(url), { waitUntil: 'domcontentloaded' });
+    if (consent(new URL(page.url()))) {
+      stage = 'Approve the website request through Auth';
+      await hydrated(page);
+      await page.getByRole('button', { name: 'Approve', exact: true }).click();
+    }
+    stage = 'Return from Auth to the exact signed-in page';
+    await page.waitForURL(returned, { waitUntil: 'domcontentloaded' });
+    await hydrated(page);
+    await page.locator('#account-menu-button').waitFor({ state: 'visible' });
+    signedIn = true;
+    return await witness(page, (next) => {
+      stage = next;
+    });
+  } catch (error) {
+    const path = new URL(page.url()).pathname;
+    // Auth redirect URLs can contain transient credentials; preserve only paths and the sign-in status.
+    const detail =
+      signedIn && error instanceof Error
+        ? error.message
+        : `stopped at ${path}${observed.authStatus === undefined ? '' : ` after Auth HTTP ${observed.authStatus}`}`;
+    throw Object.assign(new Error(`${stage}: ${detail}`), { observed: { ...observed, mountedPath: path } });
+  } finally {
+    await context.close();
+  }
+}
+
 async function walkW29(ctx: WalkContext): Promise<unknown> {
   if (!ctx.seed.boardId || !ctx.seed.threadId) throw new Error('seed published no board or thread');
   const board = await gotoPage(ctx.page, `${ctx.stack.web}/en/boards/${ctx.seed.boardId}`);
@@ -442,13 +507,65 @@ async function walkW29(ctx: WalkContext): Promise<unknown> {
     revision.authorId !== ctx.seed.owner.accountId
   )
     throw new Error(`The exact native opening history was absent (HTTP ${history.status})`);
-  throw Object.assign(
-    new Error(`Anonymous Board and exact Thread reached. Mounted post or reply is unreached (${ctx.signIn.detail})`),
-    {
-      unreached: true,
-      observed: { board: board.url, thread: ctx.page.url(), native: native.status, history: history.status },
-    },
-  );
+  const observed = { board: board.url, thread: ctx.page.url(), native: native.status, history: history.status };
+  const { boardId, threadId, openingPostId, owner } = ctx.seed;
+  return withOwnerPage(ctx, observed.thread, observed, async (page, enter) => {
+    enter('Open the reply composer for the exact opening post');
+    await page
+      .locator(`[id="post-${openingPostId}"]`)
+      .getByRole('button', { name: 'Reply to this post', exact: true })
+      .click();
+    const composer = page.getByRole('region', { name: 'Reply', exact: true });
+    const text = `First-public conversation reply ${crypto.randomUUID()}`;
+    await composer.getByRole('textbox', { name: 'Reply', exact: true }).fill(text);
+    enter('Send the mounted reply and wait for it in the conversation');
+    await composer.getByRole('button', { name: 'Send', exact: true }).click();
+    const rendered = page.locator('[id^="post-"]').getByText(text, { exact: true });
+    const failure = composer.getByRole('alert').first();
+    await rendered.or(failure).waitFor({ state: 'visible' });
+    if (!(await rendered.isVisible())) throw new Error(await failure.innerText());
+
+    enter('Read the exact current reply from the native conversation');
+    const matchesReply = (post: Json) =>
+      post.threadId === threadId &&
+      post.boardId === boardId &&
+      post.parentId === openingPostId &&
+      post.authorId === owner.accountId &&
+      post.visibility === 'published' &&
+      post.availability === 'available' &&
+      JSON.stringify(post.body)?.includes(JSON.stringify(text));
+    const posts = await kernel(ctx.stack, 'GET', `/v1/threads/${threadId}/posts`);
+    const replies = Array.isArray(posts.value.posts) ? (posts.value.posts as Json[]).filter(matchesReply) : [];
+    const reply = replies[0];
+    if (
+      posts.status !== 200 ||
+      replies.length !== 1 ||
+      typeof reply?.id !== 'string' ||
+      reply.id === openingPostId ||
+      typeof reply.revisionId !== 'string' ||
+      typeof reply.sha256 !== 'string'
+    )
+      throw new Error(`Expected one new native reply to the opening post (HTTP ${posts.status})`);
+    await page.locator(`[id="post-${reply.id}"]`).getByText(text, { exact: true }).waitFor({ state: 'visible' });
+
+    enter('Read the immutable native reply revision');
+    const replyHistory = await kernel(ctx.stack, 'GET', `/v1/posts/${reply.id}/revisions/${reply.revisionId}`);
+    const stored = replyHistory.value.post as Json | undefined;
+    if (
+      replyHistory.status !== 200 ||
+      stored?.id !== reply.id ||
+      stored.revisionId !== reply.revisionId ||
+      stored.sha256 !== reply.sha256 ||
+      !matchesReply(stored)
+    )
+      throw new Error(`The exact native reply revision was absent (HTTP ${replyHistory.status})`);
+    return {
+      ...observed,
+      reply: { postId: reply.id, revisionId: reply.revisionId, parentId: openingPostId, authorId: owner.accountId },
+      replyRead: posts.status,
+      replyHistory: replyHistory.status,
+    };
+  });
 }
 
 async function walkW31(ctx: WalkContext): Promise<unknown> {
@@ -462,12 +579,97 @@ async function walkW31(ctx: WalkContext): Promise<unknown> {
   const realm = current.value.realm as Json | undefined;
   if (current.status !== 200 || realm?.realmId !== ctx.seed.realmId || realm.spaceId !== ctx.seed.spaceId)
     throw new Error(`The exact public Realm and Space readback was missing (HTTP ${current.status})`);
-  throw Object.assign(
-    new Error(
-      `Exact public Realm reached. Mounted membership or appearance action is unreached (${ctx.signIn.detail})`,
-    ),
-    { unreached: true, observed: { opened: opened.url, realmId, spaceId: ctx.seed.spaceId, native: current.status } },
-  );
+  const observed: Json = { opened: opened.url, realmId, spaceId: ctx.seed.spaceId, native: current.status };
+  return withOwnerPage(ctx, opened.url, observed, async (page, enter) => {
+    enter('Open the owner’s Members page from the public Realm home');
+    await page.getByRole('button', { name: 'Manage community', exact: true }).click();
+    await page.getByRole('link', { name: 'Members', exact: true }).click();
+    await page.waitForURL((url) => url.origin === ctx.stack.web && url.pathname === `/en/realms/${realmId}/members`);
+
+    const { outsider } = ctx.seed;
+    observed.selectedAccountId = outsider.accountId;
+    enter('Inspect the exact seeded nonmember on the owner’s roster');
+    await page.getByRole('textbox', { name: 'Exact account ID', exact: true }).fill(outsider.accountId);
+    await page.getByRole('button', { name: 'Look up account', exact: true }).click();
+    const selected = page.getByRole('region', { name: 'Selected account', exact: true });
+    await selected.getByText('Not a current member', { exact: true }).waitFor({ state: 'visible' });
+    const addition = selected.getByRole('group', { name: 'Add member', exact: true });
+    await addition.getByRole('button', { name: 'Add member', exact: true }).click();
+    await addition.getByText(outsider.accountId, { exact: true }).waitFor({ state: 'visible' });
+    await addition.getByText(realmId, { exact: true }).waitFor({ state: 'visible' });
+
+    enter('Authenticate the seeded nonmember for independent native reads');
+    const [bindings, { website }] = await Promise.all([parseEnv(join(root, 'apps/web/.dev.vars')), developmentKeys()]);
+    // Use a fresh ordinary website token so expiry during earlier walks cannot look like a membership failure.
+    const auth = await websiteToken(ctx.stack, outsider, bindings, website).catch(() => {
+      throw new Error('Ordinary Auth could not issue the nonmember’s website token');
+    });
+    if (auth.session.accountId !== outsider.accountId) throw new Error('Auth returned a different nonmember');
+
+    enter('Independently read the nonmember and protected roster boundary');
+    const rosterPath = `/v1/realms/${realmId}/members`;
+    const readMembership = () => kernel(ctx.stack, 'GET', `${rosterPath}/me`, { bearer: auth.bearer });
+    const readRoster = () => kernel(ctx.stack, 'GET', rosterPath, { bearer: auth.bearer });
+    const [before, anonymousRoster, outsiderRoster] = await Promise.all([
+      readMembership(),
+      kernel(ctx.stack, 'GET', rosterPath),
+      readRoster(),
+    ]);
+    if (before.status !== 200 || before.value.state !== 'none' || before.value.since !== null)
+      throw new Error(
+        `Expected no current membership before the add (HTTP ${before.status}, ${before.value.code ?? before.value.state ?? 'no state'})`,
+      );
+    if (anonymousRoster.status !== 401 || outsiderRoster.status !== 403 || outsiderRoster.value.code !== 'forbidden')
+      throw new Error(
+        `Roster boundary returned HTTP ${anonymousRoster.status} anonymous, ${outsiderRoster.status} nonmember`,
+      );
+
+    enter('Confirm the mounted owner add and wait for its acknowledgement');
+    const accepted = addition.getByText(
+      'The request to add this member was accepted. Membership is still pending confirmation.',
+      { exact: true },
+    );
+    const unresolved = addition.getByText(
+      /^(The request to add this member was rejected\.|The add result is unknown\.)/,
+    );
+    await addition.getByRole('button', { name: 'Add member', exact: true }).click();
+    await accepted.or(unresolved).waitFor({ state: 'visible' });
+    if (!(await accepted.isVisible())) throw new Error(await unresolved.innerText());
+    observed.addAccepted = true;
+
+    enter('Wait for native membership publication for the exact selected account');
+    const deadline = performance.now() + 60_000;
+    let membership = await readMembership();
+    while (membership.status === 200 && membership.value.state !== 'member' && performance.now() < deadline) {
+      await Bun.sleep(250);
+      membership = await readMembership();
+    }
+    const { state, since, code } = membership.value;
+    if (
+      membership.status !== 200 ||
+      state !== 'member' ||
+      typeof since !== 'string' ||
+      !Number.isFinite(Date.parse(since))
+    )
+      throw new Error(
+        `Owner add was accepted but members/me returned HTTP ${membership.status} (${code ?? state ?? 'no state'})`,
+      );
+    observed.membership = { state, since };
+
+    enter('Confirm current membership on the owner’s roster');
+    await addition.getByRole('button', { name: 'Check member status', exact: true }).click();
+    await selected.getByText('Current member', { exact: true }).waitFor({ state: 'visible' });
+
+    enter('Read the protected roster boundary as the newly admitted member');
+    const memberRoster = await readRoster();
+    if (memberRoster.status !== 403 || memberRoster.value.code !== 'forbidden')
+      throw new Error(`Membership disclosed the management roster (HTTP ${memberRoster.status})`);
+    return {
+      ...observed,
+      membersPage: page.url(),
+      roster: { anonymous: anonymousRoster.status, nonmember: outsiderRoster.status, member: memberRoster.status },
+    };
+  });
 }
 
 async function walkW34(ctx: WalkContext): Promise<unknown> {
@@ -618,6 +820,8 @@ export async function run(): Promise<PathResult[]> {
 
     for (const path of FIRST_PUBLIC_SCOPE_PATHS) {
       const started = performance.now();
+      const persona =
+        path.id === 'W29' || path.id === 'W31' ? 'mixed' : path.auth === 'signed-in' ? 'signed-in' : 'anonymous';
       try {
         if ('nativeHost' in path) {
           const acceptanceCommand = ['bun', 'apps/web/scripts/check.ts', '--host', path.nativeHost];
@@ -674,7 +878,7 @@ export async function run(): Promise<PathResult[]> {
           job: path.job,
           auth: path.auth,
           status: 'PASS',
-          persona: path.auth === 'signed-in' ? 'signed-in' : 'anonymous',
+          persona,
           elapsedMs: Math.round(performance.now() - started),
           source,
           evidence,
@@ -687,7 +891,7 @@ export async function run(): Promise<PathResult[]> {
           job: path.job,
           auth: path.auth,
           status: unreached ? 'FAIL-unreached' : 'FAIL',
-          persona: path.auth === 'signed-in' ? 'signed-in' : 'anonymous',
+          persona,
           elapsedMs: Math.round(performance.now() - started),
           source,
           evidence: { error: message, url: page.url(), ...(observed && { observed }) },

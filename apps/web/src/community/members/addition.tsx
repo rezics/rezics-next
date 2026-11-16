@@ -177,7 +177,7 @@ export function MemberAddition({
                   void submit(intent);
                 }}
               >
-                {m.realm_bans_confirm()}
+                {m.realm_members_add_member()}
               </Button>
               <Button
                 type="button"
