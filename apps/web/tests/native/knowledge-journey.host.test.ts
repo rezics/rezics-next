@@ -121,24 +121,31 @@ nativeTest(
     fixture.evidence.parent = parent;
 
     await fixture.open(page, fixture.createHref);
-    await knowledgeJourneyClick(page, copy.existingNotebook);
+    const existingNotebook = page.getByRole('button', { name: copy.existingNotebook, exact: true });
+    await existingNotebook.click();
+    await expect(existingNotebook).toHaveAttribute('aria-pressed', 'true');
     await knowledgeJourneyClick(page, copy.openNotebooks);
-    await expect(page.getByText(text.notebook)).toBeVisible();
-    await expect(page.getByText(sourceNotebookId)).toBeVisible();
-    await page
-      .locator('li')
-      .filter({ hasText: text.notebook })
-      .getByRole('button', { name: copy.useNotebook, exact: true })
+    const notebookPicker = page.getByRole('region', { name: copy.chooseNotebook, exact: true });
+    const notebookRow = notebookPicker
+      .getByRole('listitem')
+      .filter({ has: page.getByText(sourceNotebookId, { exact: true }) });
+    await expect(notebookRow.getByText(text.notebook, { exact: true })).toBeVisible();
+    await notebookRow
+      .locator('summary')
+      .and(page.getByText(copy.notebookDetails, { exact: true }))
       .click();
+    await expect(notebookRow.getByText(sourceNotebookId, { exact: true })).toBeVisible();
+    await notebookRow.getByRole('button', { name: copy.useNotebook, exact: true }).click();
     await knowledgeJourneyClick(page, copy.openOutline);
-    await expect(page.getByText(text.parentTitle)).toBeVisible();
-    await page
-      .locator('li')
-      .filter({ hasText: text.parentTitle })
-      .getByRole('button', { name: copy.openParent, exact: true })
-      .click();
+    const outline = page.getByRole('region', { name: copy.outlineDestination, exact: true });
+    const parentPlacement = outline
+      .getByRole('listitem')
+      .filter({ has: page.getByText(text.parentTitle, { exact: true }) });
+    await parentPlacement.getByRole('button', { name: copy.openParent, exact: true }).click();
     await knowledgeJourneyClick(page, copy.placeHere);
-    await expect(page.getByText(text.parentTitle)).toBeVisible();
+    const review = page.getByRole('region', { name: copy.reviewPlacement, exact: true });
+    await expect(review.getByText(text.parentTitle, { exact: true })).toBeVisible();
+    await expect(review.getByText(sourceNotebookId, { exact: true })).toBeVisible();
     await fixture.fillTitle(page, copy.documentTitle, text.firstTitle);
     await fixture.fillBody(page, text.firstBody);
     await fixture.waitEnabled(page, copy.createDocument);
@@ -200,8 +207,8 @@ nativeTest(
 
     fixture.evidence.stage = 'publication';
     await knowledgeJourneyClick(page, copy.reviewPublication);
-    await expect(page.getByText(text.selectedTitle)).toBeVisible();
     const publicationReview = page.getByRole('region', { name: copy.reviewPublication, exact: true });
+    await expect(publicationReview.getByText(text.selectedTitle, { exact: true })).toBeVisible();
     await expect(publicationReview.getByText(text.selectedBody, { exact: true })).toBeVisible();
     const previewImage = publicationReview.getByRole('img', { name: imageAlt, exact: true });
     await expect(previewImage).toBeVisible();
@@ -212,7 +219,8 @@ nativeTest(
         ),
       )
       .toBe(true);
-    await expect(publicationReview.getByText(selectedHead.revisionId, { exact: true })).toBeVisible();
+    const reviewedRevision = publicationReview.getByText(copy.revisionId, { exact: true }).locator('xpath=..');
+    await expect(reviewedRevision.getByText(selectedHead.revisionId, { exact: true })).toBeVisible();
     await expectAbsent(page, text.parentBody, text.firstBody, text.laterBody);
     await knowledgeJourneyClick(page, copy.publishExact);
     await fixture.waitStatus(page, copy.publicationAcknowledged);
@@ -230,7 +238,10 @@ nativeTest(
       throw new Error(`publication private read omitted publication identity: ${JSON.stringify(publishedPrivate)}`);
     expect(publishedPrivate.body).toBe(selectedBody);
     fixture.evidence.selectedPublicationId = publicationId;
-    await expect(page.getByText(publicationId)).toBeVisible();
+    const publicReading = page.getByRole('navigation', { name: copy.publicationLinks, exact: true });
+    const publicationReceipt = publicReading.locator('xpath=preceding-sibling::details[1]');
+    await publicationReceipt.locator('summary').click();
+    await expect(publicationReceipt.getByText(publicationId, { exact: true })).toBeVisible();
     const nativePublication = await fixture.requirePublicDocument(
       'publication',
       firstHead.documentId,
@@ -265,7 +276,7 @@ nativeTest(
     publicPage.setDefaultTimeout(60_000);
     await fixture.open(publicPage, fixture.liveHref(firstHead.documentId));
     await expect(publicPage.getByText(copy.liveKind)).toBeVisible();
-    await expect(publicPage.getByRole('heading', { name: text.selectedTitle })).toBeVisible();
+    await expect(publicPage.getByRole('heading', { name: text.selectedTitle, level: 1, exact: true })).toBeVisible();
     await expect(publicPage.getByRole('main')).toContainText(text.selectedBody);
     const publicImage = publicPage.getByRole('img', { name: imageAlt, exact: true });
     await expect(publicImage).toBeVisible();
@@ -286,6 +297,7 @@ nativeTest(
     await expectPrivateTextsAbsent(publicPage, [text.firstTitle, text.parentTitle, text.laterTitle]);
     await fixture.open(publicPage, fixture.exactHref(firstHead.documentId, selectedHead.revisionId));
     await expect(publicPage.getByText(copy.exactKind)).toBeVisible();
+    await expect(publicPage.getByRole('heading', { name: text.selectedTitle, level: 1, exact: true })).toBeVisible();
     await expect(publicPage.getByRole('main')).toContainText(text.selectedBody);
     await expectPrivateTextsAbsent(publicPage, [text.firstTitle, text.laterTitle]);
 
@@ -335,7 +347,7 @@ nativeTest(
     const bobPage = await bobJourney.context.newPage();
     bobPage.setDefaultTimeout(60_000);
     await fixture.open(bobPage, fixture.privateHref(sourceNotebookId, firstHead.documentId));
-    await expect(bobPage.getByText(copy.privateDenied).or(bobPage.getByText(copy.privateNotFound))).toBeVisible();
+    await expect(bobPage.getByRole('main').getByRole('alert')).toHaveText(copy.privateMissing);
     await expectPrivateTextsAbsent(bobPage, [text.selectedBody, text.selectedTitle]);
     await fixture.open(bobPage, fixture.liveHref(firstHead.documentId));
     await expect(bobPage.getByRole('main')).toContainText(text.selectedBody);
@@ -348,7 +360,11 @@ nativeTest(
     await fixture.waitEnabled(page, copy.save);
     await knowledgeJourneyClick(page, copy.save);
     await fixture.waitStatus(page, copy.readbackConfirmed);
-    await expect(page.getByText(copy.newerDraft)).toBeVisible();
+    await expect(
+      page
+        .getByRole('region', { name: copy.publicationHeading, exact: true })
+        .getByText(copy.publicationSelected, { exact: true }),
+    ).toBeVisible();
     const laterHead = await fixture.requirePrivateDocument(
       'public-read',
       'alice',
@@ -357,13 +373,16 @@ nativeTest(
       firstHead.documentId,
     );
     expect(laterHead.title).toBe(text.laterTitle);
-    expect(laterHead.body).toBe(text.laterBody);
+    expect(laterHead.body.trim()).toBe([text.laterBody, imageAlt].join('\n'));
+    expect(laterHead.mediaSources).toEqual(selectedHead.mediaSources);
     expect(laterHead.revisionId).not.toBe(selectedHead.revisionId);
     expect(laterHead.publicationId).toBe(publicationId);
     fixture.evidence.laterRevisionId = laterHead.revisionId;
     const frozenPublic = await fixture.requirePublicDocument('public-read', firstHead.documentId);
     expect(frozenPublic.revisionId).toBe(selectedHead.revisionId);
-    expect(frozenPublic.body).toBe(text.selectedBody);
+    expect(frozenPublic.body).toBe(selectedBody);
+    expect(frozenPublic.sha256).toBe(nativePublication.sha256);
+    expect(frozenPublic.mediaSources).toEqual(nativePublication.mediaSources);
     expect(frozenPublic.publicationId).toBe(publicationId);
     const laterPublic = await fixture.readPublicDocument(
       'public-read',
@@ -413,8 +432,11 @@ nativeTest(
     await page.getByRole('button', { name: text.reuseNotebook, exact: true }).click();
     await expect(page.getByText(text.reuseSeedTitle)).toBeVisible();
     await knowledgeJourneyClick(page, copy.reviewDestination);
-    await expect(page.getByText(reuseNotebookId)).toBeVisible();
-    await knowledgeJourneyClick(page, copy.confirmCopy);
+    const confirmCopy = page.getByRole('button', { name: copy.confirmCopy, exact: true });
+    const destinationReview = confirmCopy.locator('xpath=..');
+    await expect(destinationReview.getByText(reuseNotebookId, { exact: true })).toBeVisible();
+    await expect(destinationReview.getByText(reuseRoot.structureRevisionId, { exact: true })).toBeVisible();
+    await confirmCopy.click();
     await fixture.waitStatus(page, copy.copied);
     const openCopy = page.getByRole('link', { name: copy.openCopy, exact: true });
     await expect(openCopy).toBeVisible();
@@ -439,7 +461,8 @@ nativeTest(
     expect(copied.title).toBe(text.selectedTitle);
     expect(copied.body).toBe(selectedBody);
     expect(copied.mediaSources).toEqual(nativePublication.mediaSources);
-    expect(copied.sha256).toBe(nativePublication.sha256);
+    // Reuse creates independent block IDs while retaining the exact source content and image authority.
+    expect(copied.sha256).not.toBe(nativePublication.sha256);
     expect(copied.body).not.toBe(text.laterBody);
     fixture.evidence.copy = copied;
     await openCopy.click();
@@ -453,6 +476,7 @@ nativeTest(
     );
     expect(reopened.revisionId).toBe(copied.revisionId);
     expect(reopened.body).toBe(selectedBody);
+    expect(reopened.sha256).toBe(copied.sha256);
     await fixture.requireUnauthorizedPrivate(
       'reuse',
       'bob copied private document',
@@ -481,12 +505,9 @@ nativeTest(
 
     fixture.evidence.stage = 'withdrawal';
     await fixture.open(page, fixture.privateHref(sourceNotebookId, firstHead.documentId));
-    await knowledgeJourneyClick(page, 'Review withdrawal');
-    await knowledgeJourneyClick(page, 'Withdraw this publication');
-    await fixture.waitStatus(
-      page,
-      'The native withdrawal command was acknowledged. This document has no selected publication.',
-    );
+    await knowledgeJourneyClick(page, copy.reviewWithdrawal);
+    await knowledgeJourneyClick(page, copy.confirmWithdrawal);
+    await fixture.waitStatus(page, copy.withdrawn);
     await fixture.open(publicPage, fixture.exactHref(firstHead.documentId, selectedHead.revisionId));
     await expect(publicPage.getByRole('main')).not.toContainText(text.selectedBody);
     await expect(publicPage.locator('img')).toHaveCount(0);
