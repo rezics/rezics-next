@@ -183,6 +183,11 @@ export function stepUpFailure(result: Exclude<SignInResult, { ok: true }>): stri
   return failureMessage(503, 'unavailable', null);
 }
 
+function securityStepUp(query: string): boolean {
+  const targets = new URLSearchParams(query).getAll('return_to');
+  return targets.length === 1 && targets[0] === '/security' && signInTarget(query) === '/security';
+}
+
 export async function confirmStepUp(
   email: string,
   password: string,
@@ -214,14 +219,19 @@ export async function confirmStepUp(
   const selection = selectStepUp(query);
   if (selection.kind === 'invalid') return { ok: false, message: m.auth_account_operation_failure() };
   notify(observer?.onDispatch);
-  const result =
-    selection.kind === 'operation' || selection.kind === 'organization-delete'
-      ? await signInForAccountOperation(
-          email,
-          password,
-          selection.kind === 'organization-delete' ? 'delete' : selection.pending.kind,
-        )
-      : await signIn(email, password);
+  let result: SignInResult;
+  if (selection.kind === 'operation' || selection.kind === 'organization-delete') {
+    result = await signInForAccountOperation(
+      email,
+      password,
+      selection.kind === 'organization-delete' ? 'delete' : selection.pending.kind,
+    );
+  } else if (securityStepUp(query)) {
+    const profile = managementOperationProfile('security');
+    result = signInResult(await submitSignIn('/signin', { email, password, ...profile }, profile));
+  } else {
+    result = await signIn(email, password);
+  }
   if (!isCurrent()) return { ok: false, message: null };
   observeResult(result, observer);
   if (!result.ok) return { ok: false, message: stepUpFailure(result) };
@@ -261,13 +271,17 @@ export async function confirmStepUpWithPasskey(
   }
   const selection = selectStepUp(query);
   if (selection.kind === 'invalid') return { ok: false, message: m.auth_account_operation_failure() };
-  const result = await signInWithPasskey(
-    selection.kind === 'organization-delete'
-      ? { operation: 'delete', isCurrent: passkeyCurrentCheck(isCurrent, observer) }
-      : selection.kind === 'operation'
-        ? { operation: selection.pending.kind, isCurrent: passkeyCurrentCheck(isCurrent, observer) }
-        : { isCurrent: passkeyCurrentCheck(isCurrent, observer) },
-  );
+  const current = passkeyCurrentCheck(isCurrent, observer);
+  const result =
+    selection.kind === 'organization-delete' || selection.kind === 'operation'
+      ? await signInWithPasskey({
+          operation: selection.kind === 'organization-delete' ? 'delete' : selection.pending.kind,
+          isCurrent: current,
+        })
+      : await signInWithPasskey({
+          ...(securityStepUp(query) ? { management: 'security' } : {}),
+          isCurrent: current,
+        });
   if (!isCurrent()) return { ok: false, message: null };
   observeResult(result, observer);
   if (result.ok) {

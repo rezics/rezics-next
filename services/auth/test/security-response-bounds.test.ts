@@ -23,6 +23,7 @@ const viewer = {
   client_id: id,
   now: now / 1000,
   fresh: true,
+  credentialScope: true,
   credentialCommands: true,
   passwordCommands: true,
 };

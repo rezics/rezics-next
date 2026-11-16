@@ -24,6 +24,7 @@ const AUTH_MANAGEMENT_SCOPES = {
   transfer: ['account:manage'] as const,
   'transfer-acceptance': ['account:manage'] as const,
   opening: ['account:manage'] as const,
+  security: ['account:manage'] as const,
 };
 const WEBSITE_CLIENT_ID = 'rezics-website';
 const WEBSITE_AUDIENCE = 'https://api.rezics.test';
@@ -2145,9 +2146,8 @@ async function originalJ03(stack: Origins): Promise<string> {
 async function originalJ04(stack: Origins): Promise<string> {
   capturePhase('independent persona signup');
   const person = await signup(stack, 'j04');
-  // Security uses the login client; a just-established session is the fresh step-up for this HTTP walk.
-  capturePhase('fresh same-subject login step-up');
-  const session = await signIn(stack, person, 'login', []);
+  capturePhase('fresh same-subject Security management step-up');
+  const session = await signIn(stack, person, AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.security);
   capturePhase('credential replacement');
   const changed = await credentialEffect(stack, session, session.accountId, {
     kind: 'password',
@@ -2162,7 +2162,7 @@ async function originalJ04(stack: Origins): Promise<string> {
     { email: person.email, password, client_id: 'login', scope: [] },
     15_000,
   );
-  if (stale.status === 200) throw new Error('old password still signed in after credential replace');
+  requireStatus(stale, 'old password after credential replacement', 401);
   capturePhase('new-password sign-in');
   const fresh = await signIn(stack, person, 'login', [], nextPassword);
   capturePhase('current-session readback');

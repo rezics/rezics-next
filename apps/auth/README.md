@@ -825,8 +825,10 @@ Native `GET /security-page` accepts no account selector or query. The existing h
 revalidate account, exact session, epoch, client and scopes around composition. Each ready section supplies `rows`,
 `limit` and `truncated`; a dependency or malformed native row makes that section `unavailable`. Session rows include
 `revoke` advice, passkey rows `remove`, and page actions describe password change and passkey registration. Advice
-observes the existing freshness, own-human, capacity and last-interactive-credential guards. Commands recheck all
-native authorization at submission; advice is never a grant or prepared command. Registration retains its existing
+observes the existing freshness, own-human, capacity and last-interactive-credential guards. Credential advice also
+requires the session's `account:manage` scope. A Security step-up with a password or passkey requests that single
+scope from the existing first-party management client. Commands recheck native authorization at submission.
+Registration retains its existing
 before/after session checks. Accepted other-session revocation refreshes advice automatically; uncertain responses
 still require explicit reconciliation. Current-session revocation uses the existing native cookie clearing and `/login` remedy.
 

@@ -8,6 +8,7 @@ export const AUTH_MANAGEMENT_SCOPES = Object.freeze({
   transfer: Object.freeze(['account:manage'] as const),
   'transfer-acceptance': Object.freeze(['account:manage'] as const),
   opening: Object.freeze(['account:manage'] as const),
+  security: Object.freeze(['account:manage'] as const),
 });
 
 export type ManagementOperation =
@@ -53,7 +54,7 @@ export type ManagementOperationInput = {
   accountId: string;
 };
 
-export function managementOperationProfile(kind: ManagementOperationKind) {
+export function managementOperationProfile(kind: ManagementOperationKind | 'security') {
   return { client_id: AUTH_MANAGEMENT_CLIENT_ID, scope: [...AUTH_MANAGEMENT_SCOPES[kind]] };
 }
 
