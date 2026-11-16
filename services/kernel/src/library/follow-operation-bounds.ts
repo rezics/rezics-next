@@ -4,6 +4,8 @@ import { currentCommandWorkAssociation, withNativeCommandAccounting } from '../c
 import type { WorkDimensions } from './contract/work-dimensions.ts';
 import { MAX_FOLLOW_PAGE_SIZE } from './follow-model.ts';
 import apply from './follow-store-apply.sql';
+import removeMembership from './follow-store-remove-membership.sql';
+import reservation from '../access/membership-inverse-20261025095033-reservation.sql';
 import read from './follow-store-read.sql';
 import page from './follow-store-page.sql';
 import { librarySemanticObservations } from './semantic-observation.ts';
@@ -203,7 +205,9 @@ const sourceHookSQL = Object.freeze({
     WHERE route = edge.route AND account_id = edge.account_id`,
 });
 
-export function followSourceHookWork(input: Input<typeof apply>): Bound {
+export function followSourceHookWork(
+  input: Pick<Input<typeof apply>, 'route' | 'account_id' | 'target_type' | 'target_id' | 'state' | 'time'>,
+): Bound {
   const owner = [input.route, input.account_id];
   const source = [...owner, input.target_type, input.target_id];
   return sumBounds(
@@ -235,6 +239,19 @@ export function followMutationPlan(input: Input<typeof apply>) {
     followSourceHookWork(input),
     (rows) => rows[0]?.changed === true,
   );
+}
+export function followMembershipRemovalPlan(input: Input<typeof removeMembership>, time: string) {
+  return statement(
+    'remove-membership',
+    removeMembership,
+    input,
+    { keys: 1, rows: 9, points: 4, seeks: 1, output: 1, width: size({ changed: true }) },
+    followSourceHookWork({ ...input, target_type: 'space', state: 'unfollowed', time }),
+    (rows) => rows[0]?.changed === true,
+  );
+}
+export function followMembershipReservationPlan(input: Input<typeof reservation>) {
+  return statement('membership-reservation', reservation, input, point(size({ reservationId: uuid })));
 }
 export function followPointPlan(input: Input<typeof read>) {
   return statement('point', read, input, point(FOLLOW_ROW_BYTES));

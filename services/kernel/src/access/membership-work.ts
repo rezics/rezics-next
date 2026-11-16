@@ -11,6 +11,7 @@ import {
   registerMembershipWorkflows,
 } from '@rezics/auth/membership-workflows';
 import canonicalize from 'canonicalize';
+import type { CommandEvent, CommandTransaction } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
 import { accountsWorkModule as writeRateExpiryWorkModule } from './write-rate-expiry.ts';
 import type { WorkClient } from '../work/client.ts';
@@ -79,6 +80,7 @@ type Options = {
   authorize?: MembershipAuthorization;
   access?: Access;
   realm?: RealmMembershipCommands;
+  removeMembershipFollow?: (tx: CommandTransaction, accountId: string, spaceId: string) => Promise<CommandEvent | null>;
   sessionRevocation?: CommittedSessionRevocationWorkflow;
 };
 
@@ -241,7 +243,15 @@ function membershipWorkPorts(
         key,
       });
     },
-    release: (input) => inverse.release(input),
+    release(input, removal) {
+      if (!removal) return inverse.release(input);
+      const removeFollow = options.removeMembershipFollow;
+      if (!removeFollow) throw new RealmMembershipUnavailableError();
+      return inverse.release(input, {
+        ...removal,
+        removeFollow: (tx) => removeFollow(tx, input.accountId, removal.spaceId),
+      });
+    },
   };
 }
 export function registerAccounts(

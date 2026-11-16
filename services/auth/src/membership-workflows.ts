@@ -1,4 +1,5 @@
 import type {
+  MembershipBanFollowRemoval,
   MembershipWorkInput,
   MembershipWorkReservation,
   MembershipWorkResult,
@@ -93,16 +94,28 @@ export function registerMembershipWorkflows<Context>(ports: MembershipWorkflowPo
       // read runs again if the publication step died after its foreign commit.
       if (await ports.recover(reservation, key('recover'))) return;
     }
-    await ports.publish(await authorized(input), input, reservation, key('publish'));
+    const publication = await ports.publish(await authorized(input), input, reservation, key('publish'));
+    if (
+      input.kind === 'membership' &&
+      input.principal.kind === 'realm' &&
+      input.role === null &&
+      publication &&
+      typeof publication === 'object' &&
+      'banFollowRemoval' in publication
+    )
+      return publication.banFollowRemoval as MembershipBanFollowRemoval;
   });
-  // Cleanup carries only the exact native reservation. Its terminal proof,
-  // rather than membership rights that publication may remove, permits release.
+  // Release requires the reservation's terminal proof. A ban also carries the
+  // exact publication transaction and Space so the account write can clear its implied follow.
   const terminalize = step('terminalize', async (reservation: MembershipWorkReservation) => {
     await ports.terminalize(reservation, key('terminalize'));
   });
-  const release = step('release', async (reservation: MembershipWorkReservation) => {
-    await ports.release({ ...reservation, key: key('release') });
-  });
+  const release = step(
+    'release',
+    async (reservation: MembershipWorkReservation, banFollowRemoval?: MembershipBanFollowRemoval) => {
+      await ports.release({ ...reservation, key: key('release') }, banFollowRemoval);
+    },
+  );
   const finalize = step('finalize', async (reservation: MembershipWorkReservation) => {
     if (!ports.finalize) throw new Error('Realm transition protocol unavailable');
     await ports.finalize(reservation, key('finalize'));
@@ -117,11 +130,14 @@ export function registerMembershipWorkflows<Context>(ports: MembershipWorkflowPo
       if ('status' in reservation) return reservation;
       const positiveRealm =
         reservation.principal.kind === 'realm' && input.kind === 'membership' && input.role !== null;
+      let banFollowRemoval: MembershipBanFollowRemoval | undefined;
       await coordinateMembership({
         leaving: input.kind === 'membership' && input.role === null,
         reserve: async () => reservation,
-        publish: (held) => publish(input, held),
-        release,
+        publish: async (held) => {
+          banFollowRemoval = await publish(input, held);
+        },
+        release: (held) => (banFollowRemoval ? release(held, banFollowRemoval) : release(held)),
         compensate: async (held) => {
           if (positiveRealm) {
             await cancel(held);

@@ -64,7 +64,7 @@ async function followRows(member: Account, spaceId: string) {
 }
 
 async function followEffects(member: Account, spaceId: string) {
-  return queryCommunityDatabase(
+  return queryCommunityDatabase<{ receipts: unknown[]; events: unknown[] }>(
     `SELECT
        (SELECT coalesce(jsonb_agg(r ORDER BY idempotency_key), '[]'::jsonb) FROM core.receipt r
          WHERE principal_kind = 'account' AND principal_id = $1 AND command_kind = 'library.follow.membership'
@@ -207,12 +207,13 @@ afterAll(async () => {
   await closeCommunityDrivers();
 });
 
-test('leave and ban removal revoke protected access before the inverse release and leave follows unchanged', async () => {
+test('departure revokes protected access before release and a ban clears only the membership follow', async () => {
   expect(
     await queryCommunityDatabase('SELECT kind, state FROM access.account WHERE account_id = $1', [fixture.outsider.id]),
   ).toEqual([{ kind: 'actor', state: 'active' }]);
   // Run the moderator departure last so the member and ban paths are independently exercised.
-  for (const kind of ['member', 'ban', 'moderator'] as const) {
+  for (const kind of ['member', 'ban', 'ban-explicit', 'moderator'] as const) {
+    const banning = kind === 'ban' || kind === 'ban-explicit';
     const target = await realm('protected', `Protected ${kind} departure`);
     const content = await protectedContent(target);
     const member = kind === 'moderator' ? fixture.moderator : fixture.member;
@@ -250,26 +251,32 @@ test('leave and ban removal revoke protected access before the inverse release a
       const hidden = await refusal('GET', path!, fixture.outsider, 404, secrets);
       expect(hidden).toEqual(await refusal('GET', unknown!, fixture.outsider, 404, secrets));
     }
+    if (kind === 'ban-explicit') await request('PUT', `/v1/follows/${target.spaceId}`, member, 200);
     const following = await followRows(member, target.spaceId);
-    expect(following).toMatchObject([{ target_type: 'space', state: 'following', reason: 'membership' }]);
+    expect(following).toMatchObject([
+      { target_type: 'space', state: 'following', reason: kind === 'ban-explicit' ? 'explicit' : 'membership' },
+    ]);
     const effects = await followEffects(member, target.spaceId);
     const interval = await queryCommunityDatabase<{ reservation_id: string }>(
       `SELECT reservation_id FROM community.realm_member WHERE realm_id = $1 AND account_id = $2 AND upper_inf(valid)`,
       [target.realmId, member.id],
     );
     expect(interval).toHaveLength(1);
-    const removed =
-      kind === 'ban'
-        ? await request('PUT', `/v1/realms/${target.realmId}/bans/${member.id}`, fixture.owner, 200, {
-            body: { reason: 'Protected access removal' },
-          })
-        : await request('DELETE', `/v1/realms/${target.realmId}/membership`, member, 202);
+    const banKey = JSON.stringify(crypto.randomUUID());
+    const ban = () =>
+      request('PUT', `/v1/realms/${target.realmId}/bans/${member.id}`, fixture.owner, 200, {
+        body: { reason: 'Protected access removal' },
+        key: banKey,
+      });
+    const removed = banning
+      ? await ban()
+      : await request('DELETE', `/v1/realms/${target.realmId}/membership`, member, 202);
     const workflowId = (
-      kind === 'ban' ? (removed.value.ban as { workflowId: string }).workflowId : removed.value.workflowId
+      banning ? (removed.value.ban as { workflowId: string }).workflowId : removed.value.workflowId
     ) as string;
     expect(workflowId).toEqual(expect.any(String));
     await driver.settle();
-    await assertRemovalOrder(workflowId, kind === 'ban');
+    await assertRemovalOrder(workflowId, banning);
     expect(
       await queryCommunityDatabase(
         `SELECT upper_inf(valid) AS open FROM community.realm_member
@@ -283,8 +290,19 @@ test('leave and ban removal revoke protected access before the inverse release a
         [member.id, target.realmId],
       ),
     ).toEqual([]);
-    expect(await followRows(member, target.spaceId)).toEqual(following);
-    expect(await followEffects(member, target.spaceId)).toEqual(effects);
+    if (kind === 'ban') {
+      expect(await followRows(member, target.spaceId)).toEqual([]);
+      const [{ receipts, events }] = effects;
+      const after = [{ receipts, events: [...events, expect.any(Object)] }];
+      expect(await followEffects(member, target.spaceId)).toEqual(after);
+      expect((await ban()).value.ban).toEqual(removed.value.ban);
+      await driver.settle();
+      expect(await followRows(member, target.spaceId)).toEqual([]);
+      expect(await followEffects(member, target.spaceId)).toEqual(after);
+    } else {
+      expect(await followRows(member, target.spaceId)).toEqual(following);
+      expect(await followEffects(member, target.spaceId)).toEqual(effects);
+    }
     if (kind === 'moderator') {
       // Leaving membership preserves the moderator role's independent read grant.
       await request('GET', `/v1/realms/${target.realmId}`, member, 200);

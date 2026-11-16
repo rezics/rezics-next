@@ -628,6 +628,11 @@ export type MembershipWorkReservation = {
 export type MembershipWorkResult =
   | { status: 'completed'; accountId: string; reservationId: string }
   | { status: 'membership_limit'; code: 'membership_limit' };
+/** Native Realm publication can carry a membership-derived follow cleanup obligation. */
+export type MembershipBanFollowRemoval = {
+  spaceId: string;
+  publicationTransactionId: string;
+};
 export interface MembershipWorkflowPorts<Context> {
   authorize(reference: string, input: MembershipWorkInput): Promise<Context>;
   actorAccountId(context: Context): string;
@@ -643,7 +648,10 @@ export interface MembershipWorkflowPorts<Context> {
   finalize?(reservation: MembershipWorkReservation, key: string): Promise<unknown>;
   cancel?(reservation: MembershipWorkReservation, key: string): Promise<unknown>;
   terminalize(reservation: MembershipWorkReservation, key: string): Promise<unknown>;
-  release(input: MembershipWorkReservation & { key: string }): Promise<unknown>;
+  release(
+    input: MembershipWorkReservation & { key: string },
+    banFollowRemoval?: MembershipBanFollowRemoval,
+  ): Promise<unknown>;
 }
 
 /** Nonsecret reference resolution; this receipt confers no authority by itself. */

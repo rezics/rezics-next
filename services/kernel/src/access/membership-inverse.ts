@@ -1,5 +1,6 @@
 import { memoizedValue } from '../memoized.ts';
 import type { Pool } from 'pg';
+import type { CommandEvent, CommandTransaction } from '../command/command.ts';
 import { accessEvidence } from './evidence.ts';
 import type { AccessClient } from '../request/access.ts';
 import { derivedId, routeOf } from '../route/route.ts';
@@ -284,7 +285,14 @@ export function createMembershipInverseCommands(config: {
     async reserve(input: MembershipAdmission) {
       return reserveOne(admission(input));
     },
-    async release(input: MembershipRelease) {
+    async release(
+      input: MembershipRelease,
+      cleanup?: {
+        spaceId: string;
+        publicationTransactionId: string;
+        removeFollow(tx: CommandTransaction): Promise<CommandEvent | null>;
+      },
+    ) {
       const identity = admission(input);
       const reservationRoute = route(input.reservationId);
       const reservationId = input.reservationId;
@@ -320,22 +328,35 @@ export function createMembershipInverseCommands(config: {
           ...(config.clock ? { clock: config.clock } : {}),
         }).consume({ ...(input as RealmMembershipTransition), key: `${identity.key}:transition` });
       }
+      let followEvent: CommandEvent | null = null;
       return execute(
         {
           route: route(identity.accountId),
           id: identity.accountId,
           kind: config.releaseCommandKind ?? 'membership-inverse-released',
           key: identity.key,
-          // Preserve existing durable workflow keys/digests across the upgrade.
+          additionalEvents: () => (followEvent ? [followEvent] : []),
+          // An ordinary release retains its existing receipt digest.
           input: coordination
             ? { ...coordination, key: identity.key }
-            : { accountId: identity.accountId, principal: identity.principal, reservationId },
+            : {
+                accountId: identity.accountId,
+                principal: identity.principal,
+                reservationId,
+                ...(cleanup
+                  ? { spaceId: cleanup.spaceId, publicationTransactionId: cleanup.publicationTransactionId }
+                  : {}),
+              },
         },
         async (tx, transactionId) => {
           // Receipt replay/conflict is decided before semantic denial, as with
           // the existing lifecycle coordinator command.
           requireAllowed(reservationRoute === route(identity.accountId));
           requireAllowed(proof && routeOf(proof.transactionId) !== null);
+          if (cleanup)
+            requireAllowed(
+              identity.principal.kind === 'realm' && proof.transactionId === cleanup.publicationTransactionId,
+            );
           requireAllowed(
             await accountRead.run(tx, { route: route(identity.accountId), account_id: identity.accountId }),
           );
@@ -349,6 +370,9 @@ export function createMembershipInverseCommands(config: {
             transaction_id: transactionId,
           });
           requireAllowed(rows[0]);
+          // Release holds the account lock. A successor reservation and a
+          // delayed join follow cannot interleave with removal of this edge.
+          followEvent = cleanup ? await cleanup.removeFollow(tx) : null;
           return {
             accountId: identity.accountId,
             principal: identity.principal,
