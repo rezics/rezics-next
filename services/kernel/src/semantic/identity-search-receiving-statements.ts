@@ -64,6 +64,15 @@ import { permissionCheckStatements } from '../access/permission.ts';
 
 type Cost = readonly [rows: number, points: number, statements: number, bytes: number, emptySeeks: number];
 
+function commandStatementCosts(): readonly (readonly [string, Cost])[] {
+  // The Core compiled controls preserve Reylo's current source tag in the dispatched text.
+  return [
+    [commandTime['~standard'].query.text, [1, 1, 1, 128, 0]],
+    [commandFence['~standard'].query.text, [2, 2, 1, 2048, 0]],
+    [commandNoEffect['~standard'].query.text, [1, 1, 1, 256, 0]],
+  ];
+}
+
 /** Exact Semantic Source SQL reached while a fixed Search participant proves original custody. */
 function sourceStatementCosts(): readonly (readonly [string, Cost])[] {
   return memoizedValue(
@@ -204,9 +213,7 @@ export function commonSearchReceivingStatements(): readonly string[] {
           searchUnreleased.sql,
           nativeCommit.sql,
           partitionRead.sql,
-          commandTime.sql,
-          commandFence.sql,
-          commandNoEffect.sql,
+          ...commandStatementCosts().map(([sql]) => sql),
           participantNext.sql,
           participantStep.sql,
           participantAdvance.sql,
@@ -321,9 +328,7 @@ export function searchReceivingCapturedStatementCosts(): SearchReceivingWorkDecl
     [searchUnreleased.sql, [1, 1, 1, 256, 1]],
     [nativeCommit.sql, [2, 2, 1, 128, 0]],
     [partitionRead.sql, [1, 1, 1, 512, 1]],
-    [commandTime.sql, [1, 1, 1, 128, 0]],
-    [commandFence.sql, [2, 2, 1, 2048, 0]],
-    [commandNoEffect.sql, [1, 1, 1, 256, 0]],
+    ...commandStatementCosts(),
     [participantNext.sql, [6, 6, 1, 16384, 1]],
     [participantStep.sql, [6, 6, 6, 4096, 0]],
     [participantAdvance.sql, [7, 7, 1, 16384, 1]],

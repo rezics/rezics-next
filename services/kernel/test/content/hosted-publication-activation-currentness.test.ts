@@ -47,8 +47,25 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await secondPool?.end();
-  await f?.close();
+  const failures: unknown[] = [];
+  async function closePhase(phase: string, close: () => Promise<void>) {
+    console.info(`Hosted currentness teardown: starting ${phase}`);
+    try {
+      await close();
+      console.info(`Hosted currentness teardown: completed ${phase}`);
+    } catch (error) {
+      failures.push(error);
+      console.error(`Hosted currentness teardown: failed ${phase}`, error);
+    }
+  }
+
+  if (secondPool) {
+    const { totalCount, idleCount, waitingCount } = secondPool;
+    console.info('Hosted currentness second pool before end', { totalCount, idleCount, waitingCount });
+    await closePhase('secondPool.end()', () => secondPool.end());
+  }
+  if (f) await closePhase('hostedChaptersFixture.close()', () => f.close());
+  if (failures.length) throw new AggregateError(failures, 'Hosted currentness teardown failed');
 });
 
 const commandContext = (idempotencyKey = crypto.randomUUID()) => ({
