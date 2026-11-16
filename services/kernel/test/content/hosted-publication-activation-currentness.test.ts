@@ -66,10 +66,36 @@ afterAll(async () => {
   }
   if (f)
     await closePhase('hostedChaptersFixture.close()', () =>
-      f.close((phase, state) => console.info(`Hosted fixture teardown: ${state} ${phase}`)),
+      f.close((phase, state) => {
+        console.info(`Hosted fixture teardown: ${state} ${phase}`);
+        if (phase === 'app pool end' && state === 'starting') {
+          const pool = f.native.pool;
+          console.info('Hosted app pool before end', poolSnapshot(pool));
+          // pg starts removing idle clients synchronously. Use the same turn to see what it retained.
+          queueMicrotask(() => console.info('Hosted app pool after end request', poolSnapshot(pool)));
+        }
+      }),
     );
   if (failures.length) throw new AggregateError(failures, 'Hosted currentness teardown failed');
 });
+
+function poolSnapshot(pool: Pool) {
+  const { totalCount, idleCount, waitingCount } = pool;
+  // pg exposes counts publicly but no way to distinguish a connecting client from a checked-out one.
+  const { _clients } = pool as Pool & {
+    _clients: (PoolClient & {
+      processID: number | null;
+      _connecting: boolean;
+      _ended: boolean;
+    })[];
+  };
+  const clients = _clients.map(({ processID, _connecting, _ended }) => ({
+    backendPid: processID,
+    connecting: _connecting,
+    ended: _ended,
+  }));
+  return { totalCount, idleCount, waitingCount, clients };
+}
 
 const commandContext = (idempotencyKey = crypto.randomUUID()) => ({
   idempotencyKey,
