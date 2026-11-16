@@ -5,7 +5,7 @@ export const identityChangeTransformSQL = `SELECT substring(intent->>'kind' FROM
        substring(intent->>'terminal' FROM '^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$') AS terminal,
        remainder_terminal
 FROM semantic.identity_epoch_job
-WHERE partition_no=$1 AND job_id=$2 AND epoch=$3 AND state IN ('pending','published');`;
+WHERE partition_no=$1 AND job_id=$2 AND epoch=$3 AND state='pending';`;
 
 /** The one-key cursor validates the retained input's own control epoch before treating a keyset as empty. */
 export const identityChangeFirstInputsSQL = `SELECT i.generation,i.terminal,i.control_partition,

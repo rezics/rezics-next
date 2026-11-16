@@ -256,19 +256,20 @@ async function minimizePayload(
   partition: number,
   accountId: string,
   locator: Locator,
-  retain = false,
+  retain: boolean,
+  nativePresent: boolean,
 ): Promise<{ defer: true; rawKeys: number; bytes: number } | undefined> {
   const { store, record_key: key, role } = locator;
   if (!allowedStores.has(store)) throw new TypeError('Unknown Semantic erasure store');
   // These copies still protect native retry/undo custody. Without an owning
   // minimizer, retain the exact pending obligation rather than acknowledging it.
   if (
+    (store === 'identity_epoch_mapping_generation' && nativePresent) ||
     [
       'identity_epoch_mapping_head',
       'identity_epoch_mapping_plan',
       'identity_epoch_mapping_effect',
       'identity_epoch_mapping_payload',
-      'identity_epoch_mapping_generation',
       'identity_epoch_mapping_fence',
       'identity_epoch_mapping_withdrawal',
       'identity_epoch_mapping_undo',
@@ -287,6 +288,7 @@ async function minimizePayload(
       [partition, accountId, role, locator.source_transaction_id, locator.source_position],
     );
   }
+  if (store === 'identity_epoch_mapping_generation') return;
   if (role === 'acting-human' && store !== 'write_basis' && store !== 'context_directory_entry') return;
   if (store === 'record_source_set' || store === 'record_source_set_member') return;
   if (store === 'write_basis') {
@@ -574,14 +576,15 @@ async function minimize(
       : `${store === 'release_composite' ? 'extension_route' : 'route'} BETWEEN $1*16 AND $1*16+15`;
   const exists = async () =>
     (await tx.query(`SELECT 1 FROM ${table} WHERE ${nativeHome} AND ${keyColumn}=$2`, [partition, key])).rowCount === 1;
-  if (!(await exists())) {
+  const nativePresent = await exists();
+  if (!nativePresent) {
     const removed = await tx.query(
       `SELECT 1 FROM semantic.erasure_source_disposition WHERE partition_no=$1 AND store=$2 AND record_key=$3 AND disposition='removed'`,
       [partition, store, key],
     );
     if (!removed.rowCount) return { defer: true, rawKeys: 1, bytes: 0 };
   }
-  const result = await minimizePayload(tx, partition, accountId, locator, retain);
+  const result = await minimizePayload(tx, partition, accountId, locator, retain, nativePresent);
   if (!result?.defer)
     recordSemanticSourceDisposition(tx, store, key, (await exists()) ? 'retained-nonpersonal' : 'removed');
   return result;

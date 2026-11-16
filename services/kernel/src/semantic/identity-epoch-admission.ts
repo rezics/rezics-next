@@ -20,6 +20,11 @@ import {
   type IdentityAdmissionSource,
 } from './identity-adapters/identity-epoch-binding.ts';
 import type { NativeIdentityAdmission, NativeIdentityCapabilities } from './identity-adapter-port.ts';
+import {
+  assertIdentityGenerationCapacity,
+  retainedIdentityReclaimJob,
+  stepIdentityGenerationReclaim,
+} from './identity-generation-reclaim.ts';
 import { assertIdentityTerminalGroupsOpen } from './identity-terminal-closure.ts';
 import sourcePoints from './identity-epoch-read-sources.sql';
 import publishedSource from './identity-epoch-admission-published-source.sql';
@@ -289,7 +294,14 @@ export function createIdentityAdmissionOperations(
         'identity_group_overflow',
         'Resulting identity group exceeds 4096 complete originals',
       );
-    const home = Math.min(...groups.map((r) => r.partition_no));
+    const homes = [...new Set(groups.map((r) => r.partition_no))].sort((a, b) => a - b);
+    const home = homes[0]!;
+    for (const resourceHome of homes) {
+      const predecessor = await retainedIdentityReclaimJob(pool, resourceHome);
+      if (!predecessor) continue;
+      await stepIdentityGenerationReclaim(pool, predecessor, true);
+      break;
+    }
     const state = await capabilities.read.withReadTransaction(
       pool,
       async (tx) =>
@@ -451,6 +463,7 @@ export function createIdentityAdmissionOperations(
       )
     ).rows[0];
     if (closed?.state === 'closed') throw stale();
+    await assertIdentityGenerationCapacity(tx, home, data.job.jobId);
     await guardIdentityAdmissionReviewedPerson(tx, input);
     const groups = [...new Map(data.sources.map((s) => [s.terminal, s])).values()];
     const localSources = data.sources
@@ -705,6 +718,7 @@ export function createIdentityAdmissionOperations(
       await cmd().runCommand(pool, command, async (tx) => {
         await measuredQuery(tx, selectControl.sql, [home], measured);
         // Acquire always checks the irreversible local fence, even after an earlier successful receipt.
+        if (stage === 'prepared') await assertIdentityGenerationCapacity(tx, home, ref.jobId);
         if (stage !== 'closed')
           await measuredQuery(
             tx,

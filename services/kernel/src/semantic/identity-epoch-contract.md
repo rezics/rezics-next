@@ -527,7 +527,7 @@ Required `semantic/identity-epoch-store.ts` export `identityEpochStore: Identity
    native absence, `unavailable` names bootstrap/missing/moved owner, and `pending` names the affected job. Unaffected
    point reads inspect their indexed local mapping; they do not enumerate the affected group or all homes.
 5. `pageChanges(client, job, after)` uses the immutable affected-original keyset and returns at most 100 changes with
-   before/after terminals and a bounded continuation, including self rows/destinations needed for split and repoint.
+   before/after terminals and a bounded continuation, including self rows/destinations needed for split and repoint. Pending jobs alone expose this keyset.
    It does not return personal references or a privacy-filtered representative vector. This is the concrete input
    shared by Search and Library; both consume the same job and page through the store themselves.
 6. `admitHomeEffect(tx, effect)` locks/compares the persisted job/mapping gate in the SAME native home transaction
@@ -2079,12 +2079,22 @@ For a released self gate whose terminal changed, the new gate takes its basis fr
 mapping only when that mapping agrees with the admitted previous terminal.
 
 Output memberships use separate immutable generations. Four home-local reservation slots cover partial outputs
-and retired inputs under the existing G/A allowance; unknown bootstrap exports pause allocation. These slots
-are not an erasure or reclaim producer. Missing minimizer and receiving-owner transfer remain pending.
-Mapping heads, intents, effects, transient payloads, generation reservations, fences, withdrawals and undo
-footers are in the physical erasure inventory. Their native source hooks carry actual job and copied-link roles;
-the erasure step retains these obligations pending an owning minimizer. Native cost certification still requires the existing all-pool/nested-SQL harness and
-its owning correction; returned body counters are not a substitute for inclusive native plans or failed work.
+and retired inputs under the existing G/A allowance. Unknown bootstrap exports pause allocation. After
+publication and native prearm release, the original coordinator closes each retired input under its generation
+bridge lock. Search and Library settle their input cursors through their publication ACKs. Commerce pages
+its own offer references for the saved prior terminals so unchanged terminals also receive the new epoch.
+Scoped registrations retain their exact receipt and inverse keys for owner release. Undo keeps the original,
+before/after terminals and exact moved-link provenance.
+
+The first reclaim receipt fences membership writes before any deletion. Child keyset pages advance the saved
+frontier with their native receipts. A later command proves the entire generation prefix empty under the same
+lock, records the slot's erasure disposition, and wakes admission in the slot removal transaction. Current,
+prepared, closure-held and other-owner generations retain their storage. Durable abandonment and physical owner
+transfer require their own proofs.
+
+Mapping heads, intents, effects, transient payloads, fences, withdrawals and undo footers remain in the physical
+erasure inventory. Native cost certification still requires the all-pool/nested-SQL harness. Returned body
+counters cannot account for inclusive native plans or failed work.
 
 Ordinary merge authority cannot stand in for an Accounts source intent. Mapping of an admitted account-agent job
 re-reads the original Access source at the account home and releases that home before destination work; a moved,

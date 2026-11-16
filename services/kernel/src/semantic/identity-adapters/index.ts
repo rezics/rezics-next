@@ -57,6 +57,7 @@ import canonicalize from 'canonicalize';
 import type { CommandTransaction } from '../../command/command.ts';
 import { withConnection } from '../../database/pool.ts';
 import { readPartition } from '../../partition/partition.ts';
+import { assertIdentityGenerationCapacity } from '../identity-generation-reclaim.ts';
 import { nativeIdentityCapabilities } from '../identity-adapter-bind.ts';
 import type { NativeIdentityCapabilities } from '../identity-adapter-port.ts';
 import {
@@ -400,17 +401,9 @@ export function createIdentityEpochStore(capabilities: NativeIdentityCapabilitie
           'identity_group_overflow',
           'Resulting identity group exceeds 4096 complete originals',
         );
-      if (
-        (
-          await tx.query(
-            `SELECT slot FROM semantic.identity_epoch_mapping_generation WHERE partition_no=$1 ORDER BY slot LIMIT 1`,
-            [command.partition],
-          )
-        ).rowCount
-      )
-        throw unavailable();
       // Lock/revalidate every immutable input BEFORE reservation. The control row serializes local P=1 capacity.
       const state = (await tx.query(storeSelectControl2.sql, [command.partition])).rows[0];
+      await assertIdentityGenerationCapacity(tx, command.partition);
       const locked = (await tx.query(storeSelectGroup.sql, [command.partition, inputs.map((g) => g.terminal)])).rows;
       if (
         locked.some(
@@ -539,7 +532,7 @@ export function createIdentityEpochStore(capabilities: NativeIdentityCapabilitie
       const owner = await readPartition(tx, partition);
       if (!owner || owner.writeState !== 'active') throw unavailable();
       const saved = (await tx.query(identityChangeTransformSQL, [partition, job.jobId, job.epoch.toString()])).rows[0];
-      if (!saved) throw new TypeError('Unknown native identity job');
+      if (!saved) throw unavailable();
       let transform: IdentityEpochLibraryTransform;
       if (saved.kind === 'merge' && saved.survivor) transform = { kind: saved.kind, survivor: saved.survivor };
       else if (saved.kind === 'unmerge' && saved.original) transform = { kind: saved.kind, original: saved.original };
@@ -550,10 +543,12 @@ export function createIdentityEpochStore(capabilities: NativeIdentityCapabilitie
       const firstInputs =
         first === 1
           ? (
-              await tx.query<{ generation: string; terminal: string; control_partition: number; owner_current: boolean }>(
-                identityChangeFirstInputsSQL,
-                args,
-              )
+              await tx.query<{
+                generation: string;
+                terminal: string;
+                control_partition: number;
+                owner_current: boolean;
+              }>(identityChangeFirstInputsSQL, args)
             ).rows
           : null;
       if (firstInputs && (!firstInputs.length || firstInputs.some((input) => !input.owner_current)))
