@@ -47,7 +47,7 @@ import {
   resumeCanonicalGenerationDelivery,
 } from './canonical-generation-delivery.ts';
 
-// Content binds delivery into its existing canonical-work effect and owns WorkClient/rebuild resumption.
+// Content binds the native canonical rebuild into its declared effects.
 export {
   deliverCanonicalGenerationEvent,
   readCanonicalGenerationDeliveryPage,
