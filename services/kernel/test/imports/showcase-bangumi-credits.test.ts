@@ -152,13 +152,17 @@ test('default anime staff and voice publication adopts exact cited endpoints and
       }),
     );
     const role = first.result.creditRoles![0]!;
-    const workId = first.result.readings.find((reading) => reading.externalId === '101')!.subject.subject!.id!;
-    const directorId = first.result.readings.find((reading) => reading.externalId === 'person:11')!.subject.subject!
-      .id!;
-    const performerId = first.result.readings.find((reading) => reading.externalId === 'person:12')!.subject.subject!
-      .id!;
-    const characterId = first.result.readings.find((reading) => reading.externalId === 'character:21')!.subject.subject!
-      .id!;
+    // First-pass seed readings precede adoption of the provider identifiers.
+    function publishedBangumiId(key: string, type: string): string {
+      const record = first.publication.published.find((row) => row.provider === 'bangumi' && row.sourceKey === key);
+      if (!record) throw new Error(`Missing published Bangumi Subject for ${key}`);
+      expect(record.nativeType).toBe(type);
+      return record.subjectId;
+    }
+    const workId = publishedBangumiId('101', 'schema:TVSeries');
+    const directorId = publishedBangumiId('person:11', 'schema:Person');
+    const performerId = publishedBangumiId('person:12', 'schema:Person');
+    const characterId = publishedBangumiId('character:21', 'wd:Q95074');
     const workRead = await publicClient.readSubject(workId);
     const workSubject = workRead.subject as {
       id: string;
@@ -168,7 +172,6 @@ test('default anime staff and voice publication adopts exact cited endpoints and
     const work = workSubject;
     const staff = work.statements['schema:director']?.find((statement) => valueContent(statement) === directorId);
     const voice = work.statements['wdt:P725']?.find((statement) => valueContent(statement) === performerId);
-    expect(first.publication.published.some((record) => record.subjectId === workId)).toBe(true);
     expect(work.id).toBe(workId);
     expect(work.type).toBe('schema:TVSeries');
     expect(valueContent(work.statements['wdt:P5732']?.[0])).toBe('101');
@@ -217,19 +220,24 @@ test('default anime staff and voice publication adopts exact cited endpoints and
     expect(valueContent(roleStatements['schema:sameAs']?.[0])).toBe(role.uri);
     expect(valueContent(roleStatements['skos:inScheme']?.[0])).toBe(role.schemeId);
 
+    const acknowledgedBeforeRefresh = journal.acknowledgedCommands().length;
     journal.close();
     journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
     const refreshed = await importAndPublish(first.publication);
-    expect(refreshed.result.readings.find((reading) => reading.externalId === '101')!.subject.subject!.id).toBe(workId);
-    expect(refreshed.result.readings.find((reading) => reading.externalId === 'person:11')!.subject.subject!.id).toBe(
-      directorId,
-    );
-    expect(refreshed.result.readings.find((reading) => reading.externalId === 'person:12')!.subject.subject!.id).toBe(
-      performerId,
-    );
-    expect(
-      refreshed.result.readings.find((reading) => reading.externalId === 'character:21')!.subject.subject!.id,
-    ).toBe(characterId);
+    expect(journal.acknowledgedCommands()).toHaveLength(acknowledgedBeforeRefresh);
+    for (const [key, id] of [
+      ['101', workId],
+      ['person:11', directorId],
+      ['person:12', performerId],
+      ['character:21', characterId],
+    ]) {
+      expect(refreshed.result.readings.find((row) => row.source === 'bangumi' && row.externalId === key)).toMatchObject(
+        {
+          boundSubjectId: id,
+          subject: { subject: { id } },
+        },
+      );
+    }
     expect(refreshed.result.creditRoles?.[0]).toMatchObject({ conceptId: role.conceptId, schemeId: role.schemeId });
 
     const roleRequirement = resolution!.requirements.find((item) => item.sourceKey === `bangumi.staff:${role.code}`)!;
