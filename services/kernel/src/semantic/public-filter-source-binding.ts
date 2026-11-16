@@ -37,6 +37,7 @@ import {
   type PublicFilterCreationWindow,
 } from './public-filter-creation-window.ts';
 import { publicFilterCreationConsumer } from './public-filter-creation-consumer.ts';
+import { readPublicFilterCreationPrefix } from './public-filter-creation-prefix.ts';
 import {
   readPublicFilterRepairVerification,
   readPublicFilterRepairVerificationTip,
@@ -970,7 +971,14 @@ export function createNativePublicFilterSourceBinding(
     } | null;
     account?: AccountDiscoveryRepairObservation;
     scan?: Readonly<{ kind: 'semantic' | 'accounts'; homes: number; digest: string }>;
-    windowBatch?: Readonly<{ from: number; count: number; examined: number; digest: string; packed: string }>;
+    windowBatch?: Readonly<{
+      from: number;
+      count: number;
+      examined: number;
+      digest: string;
+      packed: string;
+      through?: readonly string[];
+    }>;
   };
   type Projection = Extract<PublicFilterProjectionPage, { status: 'progress' | 'complete' }>;
   function projectionDigest(page: Projection): string {
@@ -1067,7 +1075,7 @@ export function createNativePublicFilterSourceBinding(
     for (const [index, window] of windows.entries()) {
       if (
         window.position !== window.base + 1n ||
-        window.through !== window.base ||
+        window.through < window.base ||
         window.sequence !== 0 ||
         window.eventCount !== null ||
         !/^[0-9a-f]{64}$/.test(window.receipt)
@@ -1097,6 +1105,7 @@ export function createNativePublicFilterSourceBinding(
       batch.examined > repairHomeBatchLimit ||
       batch.from + batch.count > 4096 ||
       batch.from + batch.examined > 4096 ||
+      (batch.through !== undefined && (batch.through.length !== batch.count || batch.count !== batch.examined)) ||
       !/^[0-9a-f]{64}$/.test(batch.digest)
     )
       throw new BindingError('binding_mismatch');
@@ -1109,13 +1118,14 @@ export function createNativePublicFilterSourceBinding(
     const epoch = packed.readUInt32BE(start);
     const base = packed.readBigUInt64BE(start + 4);
     const receipt = packed.subarray(start + 12, start + 44).toString('hex');
-    if (epoch < 1 || !/^[0-9a-f]{64}$/.test(receipt)) throw new BindingError('binding_mismatch');
+    const through = batch.through === undefined ? base : BigInt(batch.through[offset]!);
+    if (epoch < 1 || through < base || !/^[0-9a-f]{64}$/.test(receipt)) throw new BindingError('binding_mismatch');
     return {
       partition: home,
       epoch,
       receipt,
       base,
-      through: base,
+      through,
       position: base + 1n,
       sequence: 0,
       eventCount: null,
@@ -1239,6 +1249,51 @@ export function createNativePublicFilterSourceBinding(
       version: null,
       projection: null,
       resumeBridge: result.next,
+    };
+  }
+  async function scanPublicationCreationPrefix(
+    bootstrap: string,
+    state: RepairState,
+    inputLimit: number,
+    db: Pool,
+    context: PublicFilterConsumerContext,
+    cost: BindingCost,
+    retained?: NonNullable<RepairRecord['windowBatch']>,
+  ) {
+    if (
+      state.phase !== 'window' ||
+      state.owner !== 'semantic' ||
+      state.epoch !== null ||
+      state.subject !== null ||
+      state.projection !== null ||
+      state.bridge ||
+      state.resumeBridge
+    )
+      throw new BindingError('binding_mismatch');
+    const prefix = await readPublicFilterCreationPrefix(
+      db,
+      {
+        bootstrap: nativeId(bootstrap),
+        from: state.partition,
+        inputLimit,
+        ...(retained?.through === undefined ? {} : { through: retained.through }),
+      },
+      context,
+      cost,
+    );
+    if (retained && prefix.length !== retained.count) throw new BindingError('owner_unavailable');
+    if (!prefix.length) return null;
+    const windows = prefix.map(({ window }) => window);
+    return {
+      next: { ...state, partition: state.partition + windows.length },
+      batch: {
+        from: state.partition,
+        count: windows.length,
+        examined: windows.length,
+        digest: hash(encode({ input: state, inputLimit, prefix })),
+        packed: packClosedCreationWindows(windows),
+        through: windows.map(({ through }) => String(through)),
+      },
     };
   }
   async function scanCreationWindows(
@@ -1711,7 +1766,11 @@ export function createNativePublicFilterSourceBinding(
         };
       }
     } else if (state.phase === 'window' && (!replay || replay.windowBatch)) {
-      const scanned = await scanCreationWindows(bootstrap.id, state, inputLimit, db, cost);
+      const scanPrefix = replay ? replay.windowBatch?.through !== undefined : request.homeLimit !== undefined;
+      const prefix = scanPrefix
+        ? await scanPublicationCreationPrefix(bootstrap.id, state, inputLimit, db, context, cost, replay?.windowBatch)
+        : null;
+      const scanned = prefix ?? (await scanCreationWindows(bootstrap.id, state, inputLimit, db, cost));
       next = scanned.next;
       windowBatch = scanned.batch;
     } else if (state.phase === 'window' || state.phase === 'bridge') {
@@ -2329,7 +2388,7 @@ export function createNativePublicFilterSourceBinding(
         windows.push(original.input.bridge);
       }
       const verify = async () => {
-        if (original?.windowBatch) return; // The authority read checks every retained empty window.
+        if (original?.windowBatch) return; // The authority read checks every retained verified window.
         const verified = await bootstrapBinding.readRepairStep(
           {
             bootstrap: input.bootstrap,
@@ -2499,6 +2558,18 @@ export function createNativePublicFilterSourceBinding(
         cost,
       };
     });
+  }
+
+  function boundSubjectPublication(
+    cut: Awaited<ReturnType<typeof loadBootstrap>>,
+    input: { execution: string; queried: PublicFilterQueriedObservation },
+  ) {
+    return (
+      !('representation' in cut.definition.capture) &&
+      cut.row.publication_job === input.execution &&
+      cut.row.publication_execution === input.execution &&
+      cut.row.publication_observation === input.queried.snapshot.observation
+    );
   }
 
   const bootstrapBinding: PublicFilterSourceBootstrapBinding = {
@@ -2705,7 +2776,21 @@ export function createNativePublicFilterSourceBinding(
           )
             throw new BindingError('binding_mismatch');
           if (record.input.phase === 'window' && record.windowBatch) {
-            const scanned = await scanCreationWindows(input.bootstrap, record.input, row.input_limit, db, cost);
+            if (record.windowBatch.through !== undefined && !boundSubjectPublication(cut, input))
+              throw new BindingError('binding_mismatch');
+            const scanned =
+              record.windowBatch.through === undefined
+                ? await scanCreationWindows(input.bootstrap, record.input, row.input_limit, db, cost)
+                : await scanPublicationCreationPrefix(
+                    input.bootstrap,
+                    record.input,
+                    row.input_limit,
+                    db,
+                    { deadline },
+                    cost,
+                    record.windowBatch,
+                  );
+            if (!scanned) throw new BindingError('owner_unavailable');
             expected = scanned.next;
             expectedWindowBatch = scanned.batch;
           } else {
@@ -3097,10 +3182,7 @@ export function createNativePublicFilterSourceBinding(
           (!Number.isInteger(input.homeLimit) ||
             input.homeLimit < input.inputLimit ||
             input.homeLimit > repairHomeBatchLimit ||
-            'representation' in cut.definition.capture ||
-            cut.row.publication_job !== input.execution ||
-            cut.row.publication_execution !== input.execution ||
-            cut.row.publication_observation !== input.queried.snapshot.observation)
+            !boundSubjectPublication(cut, input))
         )
           throw new BindingError('binding_mismatch');
         return repairNative(cut.bootstrap, joined, input, db, cost, { deadline });

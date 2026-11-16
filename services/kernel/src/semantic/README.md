@@ -85,6 +85,9 @@ reads bounded per call rather than multiplying them for every home. The first ra
 still becomes ordinary repair owner work, and terminal proof remains separate. When a batch finds an open
 window after a closed prefix, its first event resumes at the captured window home. The retained batch start
 stays part of the verified predecessor, and the next scan starts after the drained home.
+Bound Subject publication also batches creation windows containing only unrelated events. Its proof re-reads
+every position, sequence, group count and owner epoch through the retained per-home cut within the original
+allowance. A gap, oversized window or Subject event keeps that home in ordinary repair.
 
 Decision: native identity mapping resumes from its admitted original selector. Each accepted mapping row carries the
 transaction ID of its actual native mapping commit. Receiving keeps one persisted page cursor, and terminal custody is
