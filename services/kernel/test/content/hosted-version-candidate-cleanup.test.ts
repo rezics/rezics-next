@@ -4,7 +4,6 @@ import type { HostedDependencies } from '../../src/content/hosted-chapters-model
 import {
   advanceHostedPublicationStaging,
   appendHostedPublicationSelectionBatch,
-  beginHostedPublicationStaging,
   cancelHostedPublicationStaging,
   freezeHostedPublicationSelection,
   sealHostedPublicationStaging,
@@ -62,7 +61,7 @@ function dependencies(): HostedDependencies {
   };
 }
 
-async function createSealedCandidate(mode: 'whole' | 'selection' = 'whole') {
+async function createSealedCandidate(mode: 'whole' | 'selection' = 'whole', lifetimeSeconds = 24 * 60 * 60) {
   const { path, target, created, published, placements } = await hostedRootAppendBase(f);
   const appendedOccurrenceId = f.newOccurrenceId();
   const sourceHead = await f.native.command(
@@ -76,14 +75,14 @@ async function createSealedCandidate(mode: 'whole' | 'selection' = 'whole') {
     200,
   );
   const locator = { catalogueId: f.catalogueId, stageId: f.newOccurrenceId() };
-  await transaction((client) =>
-    beginHostedPublicationStaging(client, f.native.author.actor, {
+  const expiresAt = await f.beginExpiringStage(
+    {
       ...locator,
       expectedHeadRevisionId: sourceHead.revisionId,
       expectedPublicationId: published.revisionId,
       mode,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60_000),
-    }),
+    },
+    lifetimeSeconds,
   );
 
   if (mode === 'selection') {
@@ -112,6 +111,7 @@ async function createSealedCandidate(mode: 'whole' | 'selection' = 'whole') {
     ),
   );
   while (stage.progress.state !== 'ready') {
+    expect(['building', 'closing']).toContain(stage.progress.state);
     stagingPages += 1;
     stage = await transaction((client) =>
       advanceHostedPublicationStaging(
@@ -149,6 +149,7 @@ async function createSealedCandidate(mode: 'whole' | 'selection' = 'whole') {
   );
   return {
     locator,
+    expiresAt,
     target,
     sourceHead,
     expectedPublicationId: published.revisionId,
@@ -415,6 +416,7 @@ test.each(['expired', 'cancelled'] as const)(
     try {
       const {
         locator,
+        expiresAt,
         target,
         sourceHead,
         expectedPublicationId,
@@ -422,7 +424,7 @@ test.each(['expired', 'cancelled'] as const)(
         generationSequence,
         stagingPages,
         candidatePages,
-      } = await createSealedCandidate('selection');
+      } = await createSealedCandidate('selection', 60);
       expect(stagingPages).toBeGreaterThan(1);
       expect(candidatePages).toBeGreaterThan(1);
 
@@ -475,23 +477,8 @@ test.each(['expired', 'cancelled'] as const)(
         ).rejects.toBeInstanceOf(HostedVersionCandidateCleanupConflictError);
         expect(await generationState(generationId)).toEqual(candidateBefore);
         expect(await generationHasRows(generationId)).toEqual(candidateRowsBefore);
-        // Move the fixture deadline past without relabelling the cancellation or sleeping.
-        await transaction((client) =>
-          client.query(
-            `UPDATE content.hosted_publication_staging SET expires_at=clock_timestamp()-interval '1 microsecond'
-             WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 AND status='cancelled'`,
-            [route, f.catalogueId, locator.stageId],
-          ),
-        );
-      } else {
-        await transaction((client) =>
-          client.query(
-            `UPDATE content.hosted_publication_staging SET status='expired'
-             WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 AND status='sealed'`,
-            [route, f.catalogueId, locator.stageId],
-          ),
-        );
       }
+      await f.waitForStageExpiry(expiresAt);
 
       await transaction((client) =>
         client.query(

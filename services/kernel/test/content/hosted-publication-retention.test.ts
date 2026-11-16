@@ -473,10 +473,13 @@ test('retention reclaims due cancelled candidates, preserves pins and keeps publ
   try {
     const route = routeOf(f.catalogueId)!;
     const source = await createSource();
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60_000);
+    const { rows } = await f.native.pool.query<{ expires_at: Date }>(
+      "SELECT clock_timestamp() + interval '60 seconds' AS expires_at",
+    );
+    const expiresAt = rows[0]!.expires_at;
     const eligible = await createCandidate(source, expiresAt);
     const pinned = await createCandidate(source, expiresAt);
-    const young = await createCandidate(source, expiresAt);
+    const young = await createCandidate(source, new Date(expiresAt.getTime() + 24 * 60 * 60_000));
     await pinCandidate(pinned.generationId, pinned.generationSequence, source.sourceRevisionId);
     for (const candidate of [eligible, pinned, young]) {
       const cancelled = await transaction((client) =>
@@ -508,22 +511,9 @@ test('retention reclaims due cancelled candidates, preserves pins and keeps publ
 
     const premature = await runSweep(crypto.randomUUID(), new Date());
     expect(premature.every((result) => result.scanned === 0 && !result.advanced)).toBe(true);
-    // Age just the two due fixtures and their existing pending entries; the young cancellation stays private.
-    const cutoff = new Date();
-    const due = new Date(cutoff.getTime() - 1);
-    await transaction(async (client) => {
-      const stageIds = [eligible.locator.stageId, pinned.locator.stageId];
-      await client.query(
-        `UPDATE content.hosted_publication_staging SET expires_at=$4
-         WHERE route=$1 AND catalogue_id=$2 AND stage_id=ANY($3::uuid[])`,
-        [route, f.catalogueId, stageIds, due],
-      );
-      await client.query(
-        `UPDATE content.hosted_publication_retention_pending SET available_at=$4
-         WHERE route=$1 AND catalogue_id=$2 AND stage_id=ANY($3::uuid[])`,
-        [route, f.catalogueId, stageIds, due],
-      );
-    });
+    await f.waitForStageExpiry(expiresAt);
+    const sweepClock = await f.native.pool.query<{ cutoff: Date }>('SELECT clock_timestamp() AS cutoff');
+    const cutoff = sweepClock.rows[0]!.cutoff;
     const passId = `${crypto.randomUUID()}:retention:0`;
     const first = await advanceHostedPublicationRetention(f.native.pool, passId, cutoff);
     expect(first.cleanup).toMatchObject({
