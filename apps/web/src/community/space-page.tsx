@@ -347,6 +347,13 @@ export function RealmShelf({
     <>
       <RealmCommunityBoards
         returnFor={(id) => returnFor('boards', id)}
+        canonicalLinkFor={(board) =>
+          !!realm.nativeObservation &&
+          realm.visibility === 'public' &&
+          board.visibility === 'published' &&
+          !selection.node &&
+          boards.cursors.get(board.id) === null
+        }
         current={current}
         focus={boardFocus}
         boards={boardRestoring ? [] : boards.items}
@@ -449,6 +456,16 @@ export function SpacePage(props: {
     };
   }
   const native = props.page.realm?.nativeObservation;
+  // Reuse the route lifetime's admission of the first browser session for an anonymous read.
+  if (
+    native?.viewer.state === 'anonymous' &&
+    source.current.state === 'unknown' &&
+    state !== 'unknown' &&
+    lifetime?.admission.credentialMode === 'anonymous' &&
+    lifetime.admission.sessionState === 'unknown' &&
+    lifetime.admitted()
+  )
+    source.current = { ...source.current, state, subject, csrfToken };
   // A replacement credential/route cannot adopt the old native response, even with the same subject.
   if (
     (native || source.current.binding) &&

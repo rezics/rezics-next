@@ -86,9 +86,11 @@ export function RealmCommunityBoards({
   complete,
   focus,
   returnFor,
+  canonicalLinkFor,
   current,
 }: {
   returnFor: (id: string) => string | undefined;
+  canonicalLinkFor: (board: RealmBoard) => boolean;
   current: () => boolean;
   boards: RealmBoard[];
   unavailable: number;
@@ -96,10 +98,7 @@ export function RealmCommunityBoards({
   complete: boolean;
   focus: ReturnType<typeof useShelfContinuationFocus>;
 }) {
-  const boardHref = (board: RealmBoard) => {
-    const returnTo = returnFor(board.id);
-    return boardRequestHref(getLocale(), board.id, returnTo ? { returnTo } : {});
-  };
+  const locale = getLocale();
   return (
     <section
       data-slot="realm-community-boards"
@@ -118,7 +117,9 @@ export function RealmCommunityBoards({
       {boards.length ? (
         <ul className="grid min-w-0 gap-3 sm:gap-4 lg:grid-cols-2">
           {boards.map((board) => {
-            const href = boardHref(board);
+            const returnTo = returnFor(board.id);
+            const visitHref = boardRequestHref(locale, board.id, returnTo ? { returnTo } : {});
+            const href = canonicalLinkFor(board) ? boardRequestHref(locale, board.id, {}) : visitHref;
             const visibilityLabel = {
               published: m.catalogue_reports_visibility_visible(),
               draft: m.realm_board_draft(),
@@ -144,7 +145,23 @@ export function RealmCommunityBoards({
                       <a
                         href={href}
                         onClick={(event) => {
-                          if (!current()) event.preventDefault();
+                          if (!current()) {
+                            event.preventDefault();
+                            return;
+                          }
+                          if (
+                            href === visitHref ||
+                            event.defaultPrevented ||
+                            event.button !== 0 ||
+                            event.metaKey ||
+                            event.ctrlKey ||
+                            event.shiftKey ||
+                            event.altKey
+                          )
+                            return;
+                          // A normal opening keeps the supplying shelf's return and focus.
+                          event.preventDefault();
+                          window.location.assign(visitHref);
                         }}
                         onAuxClick={(event) => {
                           if (!current()) event.preventDefault();
@@ -172,7 +189,7 @@ export function RealmCommunityBoards({
                       <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{board.description}</p>
                     ) : null}
                   </header>
-                  {recentRegion(board, href, current)}
+                  {recentRegion(board, visitHref, current)}
                 </article>
               </li>
             );
