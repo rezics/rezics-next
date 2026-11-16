@@ -482,7 +482,12 @@ test('Search frontiers enforce the inclusive native UTF-8 boundary and reject JS
 
 import { epochFixture, release, digest } from './support/identity-epoch.ts';
 import { libraryCutoverInput } from './support/identity-epoch-cutover.ts';
-import { identityEpochStore } from '../../src/semantic/identity-epoch-store.ts';
+import { createIdentityEpochStore, identityEpochStore } from '../../src/semantic/identity-epoch-store.ts';
+import type { NativeIdentityCapabilities } from '../../src/semantic/identity-adapter-port.ts';
+import { withReadTransaction } from '../../src/semantic/read.ts';
+import { identityChangeTransformSQL } from '../../src/semantic/identity-epoch-store-change-transform.ts';
+import changeInputs from '../../src/semantic/identity-epoch-store-select-input.sql';
+import changeOriginals from '../../src/semantic/identity-epoch-store-select-original.sql';
 import { stepIdentityEpochAdmission } from '../../src/semantic/identity-epoch-admission.ts';
 import { stepIdentityEpochMapping } from '../../src/semantic/identity-epoch-mapping.ts';
 import { createSearchIdentityEpochParticipant } from '../../src/search/identity-epoch-participant.ts';
@@ -699,6 +704,88 @@ test('Search receiving dispatches only the declared partition owner lookup', asy
     });
   });
 });
+
+test.each(['merge', 'unmerge'] as const)(
+  'Search change page funds the complete %s snapshot in both ledgers',
+  async (kind) => {
+    const { job, original } = input();
+    const home = partitionOf(routeOf(job.jobId)!);
+    const terminal = newId(0x8430);
+    const generations = [crypto.randomUUID(), crypto.randomUUID()];
+    const merging = kind === 'merge';
+    const limit = merging ? 50 : 100;
+    const inputRows = [{ generation: generations[0], terminal: original, control_partition: home - 1 }];
+    if (merging) inputRows.push({ generation: generations[1], terminal, control_partition: home + 1 });
+    const { pool, calls } = driver(undefined, (sql, values) => {
+      if (sql === readPartitionStatement.sql) {
+        expect(values).toEqual([String(home)]);
+        return [[String(home), 'b', 'active', null, '1', '0']];
+      }
+      if (sql === identityChangeTransformSQL) {
+        expect(values).toEqual([home, job.jobId, job.epoch.toString()]);
+        return [{ kind, survivor: merging ? terminal : null, original, remainder_terminal: null }];
+      }
+      if (sql === changeInputs.sql) {
+        expect(values).toEqual([home, job.jobId]);
+        return inputRows;
+      }
+      if (sql === changeOriginals.sql) {
+        const row = inputRows.find((input) => input.generation === values[0])!;
+        expect(values).toEqual([row.generation, null, limit, row.terminal, row.control_partition]);
+        return [{ original: row.terminal, terminal: row.terminal }];
+      }
+      return [];
+    });
+    await funded(pool, async (context) => {
+      const store = createIdentityEpochStore({} as NativeIdentityCapabilities);
+      const declaration = receivingWorkDeclaration(searchReceivingProductionDeclaration());
+      const result = await withSearchReceivingWork(pool, context, declaration, commonSearchReceivingStatements(), () =>
+        withReadTransaction(pool, (tx) => store.pageChanges(tx, job, null), context.deadline),
+      );
+      expect(calls).toEqual([
+        'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
+        expect.stringMatching(/^SET LOCAL statement_timeout = '[1-9][0-9]*ms'$/),
+        readPartitionStatement.sql,
+        identityChangeTransformSQL,
+        changeInputs.sql,
+        ...inputRows.map(() => changeOriginals.sql),
+        'COMMIT',
+      ]);
+      expect(result.value.next).toBeNull();
+      expect(result.value.changes).toEqual(
+        expect.arrayContaining(
+          inputRows.map(({ terminal: prior }) => ({
+            original: prior,
+            previousTerminal: prior,
+            terminal: merging ? terminal : original,
+          })),
+        ),
+      );
+      expect(result.work.used).toMatchObject({
+        nativeRows: 106 + Number(merging),
+        nativePoints: 5 + Number(merging),
+        identityMetadataRows: 0,
+        statements: 7 + Number(merging),
+        emptySeeks: 0,
+      });
+      const remaining = identitySourceConsumerNativeWork(pool, context.identityConsumerWork, context.deadline)!;
+      const used = result.work.used;
+      expect(remaining).toEqual({
+        rows: context.allowance.rows - used.nativeRows,
+        points: context.allowance.points - used.nativePoints,
+        statements: context.allowance.statements - used.statements - 1, // native ledger also funds the rollback slot
+        bytes: context.allowance.bytes - used.bytes,
+        engineRequests: context.allowance.engineRequests,
+      });
+      expect(declaration.footprint(identityChangeTransformSQL, [home + 1, job.jobId, '1'])).toBeUndefined();
+      expect(
+        declaration.footprint(identityChangeTransformSQL, [home, job.jobId, '9223372036854775808']),
+      ).toBeUndefined();
+      expect(declaration.footprint(changeInputs.sql, [home + 1, job.jobId])).toBeUndefined();
+      expect(declaration.footprint(changeOriginals.sql, [generations[0], null, 101, original, home])).toBeUndefined();
+    });
+  },
+);
 
 test('transitive SQL cannot overrun the already reserved native method even if its returned work is smaller', async () => {
   const { pool, calls } = driver();
