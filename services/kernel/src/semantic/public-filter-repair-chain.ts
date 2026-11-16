@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import { withConnection, discardConnection } from '../database/pool.ts';
+import { withConnection, discardConnection, withBoundedReadConnection } from '../database/pool.ts';
 import { CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 
 type Chain = Readonly<{ bootstrap: string; execution: string; binding: string }>;
@@ -12,6 +12,7 @@ type Page = Readonly<{
   inputLimit: number;
   digests: string;
   closedHome?: number;
+  alreadyVerified?: boolean;
 }>;
 type Proof = {
   step: string;
@@ -59,10 +60,12 @@ export async function readPublicFilterRepairVerification(pool: Pool, chain: Chai
   return row;
 }
 
-/** Called only after the independent Source verifier has checked this original
- * page against native owner facts. This transaction adopts that checked page in
- * the SAME repair authority. It neither settles Search nor acknowledges coverage.
- * Foreign reads have ended before this home-zero checkout begins.
+function pageRoot(parentRoot: string, page: Page) {
+  return hash([parentRoot, page.step, page.predecessor, page.state, page.complete, page.inputLimit, page.digests]);
+}
+
+/** Revalidate or retain the original page in the same repair authority after
+ * the independent Source verifier has released all foreign reads.
  */
 export async function retainPublicFilterRepairVerification(
   pool: Pool,
@@ -72,6 +75,51 @@ export async function retainPublicFilterRepairVerification(
   chargeControls: (cost: Readonly<{ rows: number; keys: number; bytes: number; frontierWrites?: number }>) => void,
 ): Promise<boolean> {
   requireAccessDeadline(context.deadline);
+  if (page.alreadyVerified) {
+    // Revalidate the same owner, cut and immutable chain links in one current
+    // snapshot. A durable page needs no new journal write or writer lock.
+    const proof = await withBoundedReadConnection(
+      pool,
+      context.deadline,
+      (client) =>
+        client.query<{ root: string; parent_root: string | null }>(
+          `/* semantic.native-keyed:4:11 */
+         SELECT c.verified_root AS root,p.verified_root AS parent_root
+         FROM semantic.public_filter_repair_step c
+         JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap)=(c.partition_no,c.bootstrap)
+         JOIN core.partition o ON o.partition_no=b.partition_no
+         LEFT JOIN semantic.public_filter_repair_step p
+           ON (p.partition_no,p.bootstrap,p.execution,p.step)=(c.partition_no,c.bootstrap,c.execution,c.predecessor)
+         WHERE (c.partition_no,c.bootstrap,c.execution,c.step)=(0,$1,$2,$3)
+           AND b.state='adopted' AND b.owner_epoch=o.epoch AND o.write_state='active'
+           AND c.predecessor IS NOT DISTINCT FROM $4::uuid
+           AND c.state=$5 AND c.complete=$6 AND c.input_limit=$7 AND c.receipt_protocol=1
+           AND c.repair_locator_digests=decode($8,'hex') AND c.verified_binding=$9
+           AND c.verified_root IS NOT NULL AND ($10::integer IS NULL OR c.verified_home=$10)
+           AND c.verified_ordinal=coalesce(p.verified_ordinal+1,1)
+           AND (c.predecessor IS NULL OR
+                (NOT p.complete AND p.verified_binding=$9 AND p.verified_root IS NOT NULL AND p.verified_next=c.step))`,
+          [
+            chain.bootstrap,
+            chain.execution,
+            page.step,
+            page.predecessor,
+            page.state,
+            page.complete,
+            page.inputLimit,
+            page.digests,
+            chain.binding,
+            page.closedHome ?? null,
+          ],
+        ),
+      { deadlineError: () => new CommandUnavailableError('deadline', 0) },
+    );
+    const retained = proof.rows[0];
+    requireAccessDeadline(context.deadline);
+    if (!retained || retained.root !== pageRoot(retained.parent_root ?? chain.binding, page))
+      throw new CommandUnavailableError('contention', 0);
+    return false;
+  }
   return withConnection(pool, async (client) => {
     await client.query('BEGIN');
     try {
@@ -142,15 +190,7 @@ export async function retainPublicFilterRepairVerification(
       )
         throw new CommandUnavailableError('contention', 0);
       const ordinal = parent ? BigInt(parent.ordinal!) + 1n : 1n;
-      const root = hash([
-        parent?.root ?? chain.binding,
-        page.step,
-        page.predecessor,
-        page.state,
-        page.complete,
-        page.inputLimit,
-        page.digests,
-      ]);
+      const root = pageRoot(parent?.root ?? chain.binding, page);
       if (current.root !== null) {
         if (current.binding !== chain.binding || current.root !== root || BigInt(current.ordinal!) !== ordinal)
           throw new CommandUnavailableError('contention', 0);
