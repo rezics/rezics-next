@@ -3278,6 +3278,7 @@ export async function readNoticePostContexts(
             const thread = threadById.get(reference.threadId);
             const board = thread?.board_id ? boardById.get(thread.board_id) : undefined;
             if (
+              post === undefined ||
               !thread ||
               !board ||
               !permitted.get(thread.id) ||
@@ -3295,6 +3296,7 @@ export async function readNoticePostContexts(
                 if (current.thread_id !== thread.id || !permitted.get(current.id)) break;
                 seen.add(current.id);
                 chain.push(current);
+                // Ordinary post ancestry ends at a top-level post, which may be the opener.
                 if (current.parent_id === null) {
                   complete = true;
                   break;
@@ -3302,7 +3304,6 @@ export async function readNoticePostContexts(
                 current = posts.get(current.parent_id);
               }
               if (!complete) continue;
-              if (chain.at(-1)?.id !== thread.first_post_id) continue;
             }
             const realm = board.realm_id ? (realms.find((row) => row.realm_id === board.realm_id) ?? null) : null;
             const value = {
