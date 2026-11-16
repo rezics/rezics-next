@@ -17,5 +17,5 @@ JOIN semantic.identity_epoch_native_commit c
  ON (c.partition_no,c.transaction_id)=(j.partition_no,j.recorded_transaction_id) AND c.purpose='admission'
 JOIN core.partition p ON p.partition_no=j.partition_no AND p.epoch=c.epoch AND p.position>=c.position
  AND p.write_state='active' AND p.moved_to IS NULL
-WHERE j.partition_no=$1 AND j.job_id=$2 AND j.epoch=$3 AND j.state IN ('pending','published')
+WHERE j.partition_no=$1 AND j.job_id=$2 AND j.epoch=$3 AND j.state='pending'
  AND jsonb_typeof(j.intent)='object';
