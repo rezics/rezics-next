@@ -25,7 +25,7 @@ test('private Knowledge attachments stay on their originals through published me
     const env = workerTestEnv({
       ...process.env,
       DATABASE_URL: databaseUrl,
-      KERNEL_SEARCH_PREFIX: `knowledge-identity-${randomUUID()}`,
+      KERNEL_SEARCH_PREFIX: `knowledge-${randomUUID().replaceAll('-', '')}`,
     });
     const search = readSearchConfig(env);
     if (!search) throw new Error('Knowledge identity requires the native Search producer');
