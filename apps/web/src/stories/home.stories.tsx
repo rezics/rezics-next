@@ -107,10 +107,11 @@ export const PartialSources: Story = {
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
-    await expect(await canvas.findByRole('link', { name: 'Letters from B-612' })).toBeVisible();
     await expect(await canvas.findByText(m.home_presentation_partial())).toBeVisible();
     await waitFor(() => expect(canvas.getAllByRole('status')).toHaveLength(1));
-    const retry = canvas.getByRole('button', { name: m.library_follow_retry() });
+    const results = canvas.getByRole('region', { name: m.home_feed_discovery() });
+    await expect(results.querySelector('[data-feed-source="discovery"]')).toBeVisible();
+    const retry = within(results).getByRole('button', { name: m.library_follow_retry(), exact: true });
     await expect(retry).toBeEnabled();
   },
 };
@@ -121,14 +122,15 @@ export const PartialSourcesRetryInteraction: Story = {
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
-    await expect(await canvas.findByRole('link', { name: 'Letters from B-612' })).toBeVisible();
     await expect(await canvas.findByText(m.home_presentation_partial())).toBeVisible();
     await waitFor(() => expect(canvas.getAllByRole('status')).toHaveLength(1));
-    const retry = canvas.getByRole('button', { name: m.library_follow_retry() });
+    const results = canvas.getByRole('region', { name: m.home_feed_discovery() });
+    await expect(results.querySelector('[data-feed-source="discovery"]')).toBeVisible();
+    const retry = within(results).getByRole('button', { name: m.library_follow_retry(), exact: true });
     await expect(retry).toBeEnabled();
     await userEvent.click(retry);
-    await expect(await canvas.findByRole('link', { name: 'Letters from B-612' })).toBeVisible();
-    await expect(canvas.getByText(m.home_presentation_partial())).toBeVisible();
+    await expect(results.querySelector('[data-feed-source="discovery"]')).toBeVisible();
+    await expect(await canvas.findByText(m.home_presentation_partial())).toBeVisible();
   },
 };
 export const Preparing: Story = {

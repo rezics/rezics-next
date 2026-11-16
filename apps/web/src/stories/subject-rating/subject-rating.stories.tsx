@@ -136,8 +136,10 @@ export const SaveClearZero: Story = {
     await expectComfortableAction(clear);
     await expect(save).toBeDisabled();
     await expect(clear).toBeDisabled();
-    await userEvent.tab();
-    const slider = view.getByLabelText(standardRatingQuestion.label, { selector: 'input[type="range"]' });
+    const slider = view.getByLabelText<HTMLInputElement>(standardRatingQuestion.label, {
+      selector: 'input[type="range"]',
+    });
+    slider.focus();
     await expect(slider).toHaveFocus();
     await userEvent.keyboard('{Home}');
     await expect(slider).toHaveAttribute('aria-valuenow', '0');

@@ -290,7 +290,7 @@
 
   --radius-3xl: calc(var(--radius) * 2.2);
 
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-4xl: calc(var(--radius) * 2.6)
 }
 
 /* Self-hosted faces. Official Neutral color tokens are applied by the shadcn CLI. */
@@ -395,7 +395,7 @@
 
   --sidebar-border: oklch(0.922 0 0);
 
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-ring: oklch(0.708 0 0)
 }
 
 /* Simplified Chinese interface: Latin keeps Manrope and Source Serif; Han falls

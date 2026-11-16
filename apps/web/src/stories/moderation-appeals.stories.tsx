@@ -111,6 +111,8 @@ export const Pending: Story = {
     await userEvent.tab();
     await expect(reports).toHaveFocus();
     await userEvent.tab();
+    await expect(view.getByText(m.reporter_status_reference(), { exact: true })).toHaveFocus();
+    await userEvent.tab();
     await expect(statement).toHaveFocus();
     await expect(uphold).toBeDisabled();
     await userEvent.type(statement, 'Illustrative independent review statement.');
@@ -167,7 +169,7 @@ export const IllustrativeCurrentTargetWithLongReferences: Story = {
     await expect(view.getByRole('heading', { level: 3, name: m.moderation_current_target_label() })).toBeVisible();
     await expect(view.getByText(m.reporter_status_post(), { exact: true })).toBeVisible();
     await expect(view.getByText(currentText)).toBeVisible();
-    await expect(view.getByText(longAppeal.statement)).toBeVisible();
+    await expect(view.getByText(longAppeal.statement.replace(/\s+/g, ' '))).toBeVisible();
     await userEvent.click(view.getByText(m.reporter_status_reference(), { exact: true }));
     await expect(view.getByText(longAppeal.id, { exact: true })).toBeVisible();
     await expect(view.getByText(longAppeal.decisionId, { exact: true })).toBeVisible();

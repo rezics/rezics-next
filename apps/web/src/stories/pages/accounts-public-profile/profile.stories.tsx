@@ -118,7 +118,12 @@ export const Human: Story = {
   render: () => <PageStory visitor="Signed Out" path="/@mira" />,
   play: async (context) => {
     await pageReady(context);
-    await profileShellReady(context.canvasElement, 'Mira Okabe');
+    const view = await profileShellReady(context.canvasElement, 'Mira Okabe');
+    const follow = await view.findByRole('link', { name: m.library_follow(), exact: true });
+    await expect(follow).toHaveAttribute(
+      'href',
+      `/auth/sign-in?return_to=${encodeURIComponent(`/${getLocale()}/@mira`)}`,
+    );
   },
 };
 export const SignedIn: Story = {

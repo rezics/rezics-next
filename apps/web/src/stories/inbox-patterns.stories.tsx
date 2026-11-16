@@ -422,7 +422,10 @@ export const HiddenTarget: Story = {
   play: async ({ canvasElement }) => {
     const list = within(await within(canvasElement).findByRole('list'));
     await list.findByText(m.inbox_kind_moderation());
-    await expect(list.queryByRole('link')).toBeNull();
+    await expect(list.getByRole('link')).toHaveAttribute(
+      'href',
+      `/${getLocale()}/moderation/decisions/01a17a3b-0884-721b-91ef-d7ffd7bb58f5`,
+    );
   },
 };
 export const UnreadUnavailable: Story = {
@@ -450,7 +453,10 @@ export const ModeratorResponse: Story = {
   play: async ({ canvasElement }) => {
     const list = within(await within(canvasElement).findByRole('list'));
     await list.findByText(m.inbox_notice_report_actioned());
-    await expect(list.queryByRole('link')).toBeNull();
+    await expect(list.getByRole('link')).toHaveAttribute(
+      'href',
+      `/${getLocale()}/moderation/reports/01a17a3b-0884-721b-91ef-d7ffd7bb58f3`,
+    );
     await expect(list.queryByText('Repeated advertising in this discussion.')).toBeNull();
   },
 };

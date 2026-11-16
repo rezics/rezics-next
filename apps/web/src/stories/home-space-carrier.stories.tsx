@@ -27,7 +27,11 @@ const page: FeedPage = {
 };
 
 function SpaceCarrierReading() {
-  return <HomeFeed result={{ state: 'ready', page }} locale={getLocale()} />;
+  return (
+    <div className="p-4">
+      <HomeFeed result={{ state: 'ready', page }} locale={getLocale()} />
+    </div>
+  );
 }
 
 const meta = {
