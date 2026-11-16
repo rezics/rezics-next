@@ -483,8 +483,9 @@ export async function readIdentitySupportMappingsInSnapshot(
   client: Queryable,
   originals: readonly string[],
   job: IdentityJobRef,
+  observedOwners?: ReadonlyMap<number, Partition>,
 ) {
-  return (await readIdentityMappingsInSnapshot(client, originals, job)).mappings;
+  return (await readIdentityMappingsInSnapshot(client, originals, job, observedOwners)).mappings;
 }
 
 async function readIdentityMappingsInSnapshot(

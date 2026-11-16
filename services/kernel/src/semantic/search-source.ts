@@ -520,7 +520,7 @@ export async function prepareRetainedIdentitySourceProjections(
       if (visible !== Boolean(check.frontier)) return null;
     }
     if (visibleIds.length) {
-      const mappings = await readIdentitySupportMappingsInSnapshot(tx, visibleIds, input.job);
+      const mappings = await readIdentitySupportMappingsInSnapshot(tx, visibleIds, input.job, owners);
       if (
         mappings.some(
           (mapping) =>
@@ -534,10 +534,13 @@ export async function prepareRetainedIdentitySourceProjections(
   };
 }
 
-/** Internal same-job operation. The ordinary Source retains ALL native projection guards.
- * Only exact installed identity mappings become readable inside the scoped invocation.
- * This operation does not use subjectSource's history fold or its sampled scalar arrays.
- */
+class IdentityProjectionRefusal extends Error {
+  constructor(readonly state: 'withheld' | 'unavailable' | 'unready' | 'changed') {
+    super(state);
+  }
+}
+
+/** Resolve the exact admitted root on the native projection's Source snapshot. */
 export async function readIdentitySourceProjection(
   config: Parameters<PublicFilterSourceFactory>[0],
   source: PublicFilterSource,
@@ -587,34 +590,7 @@ export async function readIdentitySourceProjection(
       { ...resource, eligibility: subjectReadEligibility(resource) },
       { pool: config.pool, deadline: request.context.deadline },
     );
-    const visible = await withRequestDeadline(request.context.deadline, () =>
-      withReadTransaction(config.pool, async (tx) => {
-        charge('dependencyPoints');
-        const owner = await readPartition(tx, partitionOf(route));
-        if (!owner || owner.writeState !== 'active') return 'unavailable' as const;
-        charge('dependencyPoints');
-        const state = await nativeSourceQuery(tx, readVisibility, {
-          route,
-          subject_id: request.original,
-        });
-        // Missing original is unknown native support, not a withheld/absent projection.
-        if (!state) return 'unavailable' as const;
-        if (state.visibility !== 'visible') return 'withheld' as const;
-        requireAccessDeadline(request.context.deadline);
-        const at = await mintReadTime(tx, config.clock, config.pool);
-        if (!(await authorize(tx, at))) return 'withheld' as const;
-        if (request.frontier === null) {
-          charge('dependencyPoints');
-          const [mapping] = await readIdentitySupportMappingsInSnapshot(tx, [request.original], request.job);
-          if (mapping?.state === 'pending') return 'unready' as const;
-          if (mapping?.state !== 'mapped') return 'unavailable' as const;
-          if (mapping.epoch !== request.job.epoch || mapping.terminal !== request.terminal) return 'changed' as const;
-        }
-        return 'visible' as const;
-      }),
-    );
-    if (visible === 'withheld') return { status: 'projected', projection: null, cost };
-    if (visible !== 'visible') return { status: visible, cost };
+    let checked = false;
     return await withPublicStatementReader(() =>
       withIdentitySourceSupportJob(request.job, async () => {
         // A resumed cursor authenticates the retained build. A complete page still
@@ -632,6 +608,7 @@ export async function readIdentitySourceProjection(
         if (page.status === 'unready' && page.retirement)
           return { status: page.status, cost, retirement: page.retirement };
         if (page.status !== 'progress' && page.status !== 'complete') return { status: page.status, cost };
+        if (!checked) return { status: 'unavailable', cost };
         if (page.source.subject !== request.original || page.source.terminal !== request.terminal)
           return { status: 'changed', cost };
         if (page.status === 'progress') {
@@ -652,9 +629,33 @@ export async function readIdentitySourceProjection(
           return { status: 'changed', cost };
         requireAccessDeadline(request.context.deadline);
         return { status: 'projected', projection: page, cost };
+      }, {
+        original: request.original,
+        async check(tx, owner, visibility, time) {
+          if (owner.partitionNo !== partitionOf(route) || owner.writeState !== 'active')
+            throw new IdentityProjectionRefusal('unavailable');
+          if (visibility !== 'visible') throw new IdentityProjectionRefusal('withheld');
+          if (!time) throw new IdentityProjectionRefusal('unavailable');
+          if (!(await authorize(tx, time))) throw new IdentityProjectionRefusal('withheld');
+          if (!request.frontier) {
+            charge('dependencyPoints');
+            const [mapping] = await readIdentitySupportMappingsInSnapshot(
+              tx, [request.original], request.job, new Map([[owner.partitionNo, owner]]),
+            );
+            if (mapping?.state === 'pending') throw new IdentityProjectionRefusal('unready');
+            if (mapping?.state !== 'mapped') throw new IdentityProjectionRefusal('unavailable');
+            if (mapping.epoch !== request.job.epoch || mapping.terminal !== request.terminal)
+              throw new IdentityProjectionRefusal('changed');
+          }
+          checked = true;
+        },
       }),
     );
   } catch (error) {
+    if (error instanceof IdentityProjectionRefusal) {
+      if (error.state === 'withheld') return { status: 'projected', projection: null, cost };
+      return { status: error.state, cost };
+    }
     if (classifyUnavailability(error)) return { status: 'unavailable', cost };
     throw error;
   }

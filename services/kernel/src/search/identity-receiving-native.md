@@ -187,6 +187,12 @@ and locks the live native hold. It reuses the accepted and applied proofs from i
 next fenced position of the same original home.
 An advanced position requires fresh proofs in the release command.
 
+The projection reader checks the admitted root and anonymous Access in the same snapshot as its Source header.
+The root becomes the initial identity observation while redirected or referenced Subjects retain their own checks.
+The build commit rechecks the original Subject and owner against that observation. Once OpenSearch visibility is
+settled, application verifies the common acceptance, its gate and the expected native plan in one receiving command.
+It commits the applied effect and fixed step together. Directory retirement still rechecks the committed control plan.
+
 For a visible canonical original, the writer verifies the completed Source build and current Access before
 reading one active term head and its complete fact slot. Each owned turn commits the slot cursor and a digest
 of the terms read so far. The native reader recovers the cursor from the preceding slot's indexed key and

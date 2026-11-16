@@ -823,8 +823,45 @@ export async function recordIdentityReceivingEffect(
   )
     throw stale();
   if (row.effect_transaction_id) throw stale(); // Consumers replay the committed receipt before mutating again.
+  await writeReceivingApplication(tx, effect, record, progress.frontier);
+}
+
+/** Apply the installed Search writer's accepted operation under its one exact local custody read. */
+export async function applySearchIdentityReceivingEffect(
+  tx: CommandTransaction,
+  effect: IdentityReceivingEffect,
+  expected: Readonly<{ scopeDigest: string; consumer: string; physicalTarget: string; planId: string }>,
+  roles: Awaited<ReturnType<typeof identityErasureRoles>>,
+) {
+  if (currentCommand(tx).basis !== null) throw stale();
+  const local = await localRecord(tx, effect);
+  const { record } = local;
+  if (
+    record.step !== 'search-canonical-index' ||
+    record.scopeDigest !== expected.scopeDigest ||
+    record.source.consumer !== expected.consumer ||
+    record.source.physicalTarget !== expected.physicalTarget ||
+    record.source.locator.planId !== expected.planId ||
+    !(await lookupReceivingRecord(tx, effect, local))
+  )
+    throw stale();
+  if (record.applied) return { ...record.applied, scopeDigest: record.scopeDigest };
+  if (local.row.effect_transaction_id) throw stale();
+  const frontier = snapshotSearchIdentityReceivingFrontier({ after: [record.original, record.effectKey], segment: 0 });
+  if (!frontier) throw stale();
+  bindSemanticProducerRoles(tx, roles);
+  await writeReceivingApplication(tx, effect, record, frontier);
+  return { frontier, receipt: null, scopeDigest: record.scopeDigest };
+}
+
+async function writeReceivingApplication(
+  tx: CommandTransaction,
+  effect: IdentityReceivingEffect,
+  record: NativeIdentityReceivingRecord,
+  frontier: IdentityReceivingProgress['frontier'],
+) {
   if (record.step === 'search-canonical-index') {
-    const applied = await searchNativeCall(tx, 'recordApplied', record, progress.frontier);
+    const applied = await searchNativeCall(tx, 'recordApplied', record, frontier);
     if (applied.holdId !== record.nativeHold.holdId) throw stale();
     // recordApplied already fenced the exact common acceptance, writer and native hold in this T.
     registerReceivingApplication(tx, effect, record);
@@ -836,7 +873,7 @@ export async function recordIdentityReceivingEffect(
       effect.job.jobId,
       effect.effectKey,
       id,
-      json(progress.frontier),
+      json(frontier),
     ]);
   });
 }
