@@ -14,6 +14,7 @@ import searchProgressInsert from './identity-search-receiving-progress-insert.sq
 import searchProgressAdvance from './identity-search-receiving-progress-advance.sql';
 import searchProgressRelease from './identity-search-receiving-progress-release.sql';
 import searchUnreleased from './identity-search-receiving-unreleased.sql';
+import searchPredecessor from './identity-search-receiving-predecessor.sql';
 import nativeCommit from './identity-epoch-store-insert-native-commit.sql';
 import partitionRead from '../partition/read.sql';
 import commandTime from '../command/time.sql';
@@ -238,6 +239,7 @@ export function commonSearchReceivingStatements(): readonly string[] {
           searchProgressAdvance.sql,
           searchProgressRelease.sql,
           searchUnreleased.sql,
+          searchPredecessor.sql,
           nativeCommit.sql,
           partitionRead.sql,
           ...commandStatementCosts().map(([sql]) => sql),
@@ -352,6 +354,7 @@ export function searchReceivingCapturedStatementCosts(): SearchReceivingWorkDecl
     [searchProgressAdvance.sql, [1, 1, 1, 2560, 0]],
     [searchProgressRelease.sql, [1, 1, 1, 512, 0]],
     [searchUnreleased.sql, [1, 1, 1, 256, 1]],
+    [searchPredecessor.sql, [14, 14, 1, 1024, 1]],
     [nativeCommit.sql, [2, 2, 1, 128, 0]],
     [partitionRead.sql, [1, 1, 1, 512, 1]],
     [structuralHomeGate.sql, [1, 1, 1, 1024, 1]],

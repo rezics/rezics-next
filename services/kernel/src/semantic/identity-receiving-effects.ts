@@ -58,6 +58,7 @@ import searchProgressInsert from './identity-search-receiving-progress-insert.sq
 import searchProgressAdvance from './identity-search-receiving-progress-advance.sql';
 import searchProgressRelease from './identity-search-receiving-progress-release.sql';
 import searchUnreleased from './identity-search-receiving-unreleased.sql';
+import searchPredecessor from './identity-search-receiving-predecessor.sql';
 import {
   receivingWorkDeclaration,
   withSearchReceivingWork,
@@ -72,6 +73,7 @@ import {
   searchReceivingOwnedPageStatements,
 } from './identity-search-receiving-statements.ts';
 import { snapshotSearchIdentityReceivingFrontier } from '../search/identity-receiving-native-contract.ts';
+import type { SearchNativeReceivingPlan } from '../search/identity-receiving-native-internal.ts';
 import { readSearchIdentityWriterSupportSql } from '../search/identity-search-receiving-directory-sql.ts';
 
 export type * from './identity-receiving-effects-types.ts';
@@ -1042,21 +1044,15 @@ async function releaseReceivingCustody(
   });
 }
 
-/** Published control custody is monotonic. Release only this job's local gate, after releasing control.
- * This is an exact-key handoff used by the owner, not a new scan, scheduler or ordinary disposition authority.
- */
-export async function releaseIdentityReceivingEffect(pool: Pool, effect: IdentityReceivingEffect): Promise<void> {
-  const observed = await runCommand(pool, { partition: effect.receipt.partition }, async (tx) =>
-    noEffect((await localRecord(tx, effect)).record),
-  );
-  const record = observed.value;
-  const home = identityJobPartition(effect.job);
+async function requirePublishedReceivingCustody(pool: Pool, record: NativeIdentityReceivingRecord) {
+  const { job: ref, effectKey } = record;
+  const home = identityJobPartition(ref);
   await runCommand(pool, { partition: home }, async (tx) => {
-    const job = (await tx.query(receivingJob.sql, [home, effect.job.jobId, effect.job.epoch.toString()])).rows[0];
+    const job = (await tx.query(receivingJob.sql, [home, ref.jobId, ref.epoch.toString()])).rows[0];
     if (!job || job.state !== 'published') throw stale();
     if (!record.applied || job.scope_digest !== record.scopeDigest) throw stale();
     const planned = (
-      await tx.query(receivingPlan.sql, [home, effect.job.jobId, effect.job.epoch.toString(), effect.effectKey])
+      await tx.query(receivingPlan.sql, [home, ref.jobId, ref.epoch.toString(), effectKey])
     ).rows[0];
     if (
       !planned ||
@@ -1067,9 +1063,9 @@ export async function releaseIdentityReceivingEffect(pool: Pool, effect: Identit
     const applied = record.applied.receipt;
     const expected = await tx.query(receivingStatements.publishedCustody, [
       home,
-      effect.job.jobId,
+      ref.jobId,
       record.step,
-      effect.effectKey,
+      effectKey,
       applied.partition,
       applied.epoch,
       applied.position.toString(),
@@ -1078,6 +1074,17 @@ export async function releaseIdentityReceivingEffect(pool: Pool, effect: Identit
     if (expected.rowCount !== 1) throw stale();
     return noEffect(null);
   });
+}
+
+/** Published control custody is monotonic. Release only this job's local gate, after releasing control.
+ * This is an exact-key handoff used by the owner, not a new scan, scheduler or ordinary disposition authority.
+ */
+export async function releaseIdentityReceivingEffect(pool: Pool, effect: IdentityReceivingEffect): Promise<void> {
+  const observed = await runCommand(pool, { partition: effect.receipt.partition }, async (tx) =>
+    noEffect((await localRecord(tx, effect)).record),
+  );
+  const record = observed.value;
+  await requirePublishedReceivingCustody(pool, record);
   if (record.step === 'search-canonical-index') await revalidateSearchTerminal(pool, record);
   await runCommand(pool, { partition: effect.receipt.partition }, async (tx) => {
     const { record: local } = await localRecord(tx, effect);
@@ -1470,14 +1477,72 @@ export function searchIdentityWriterCheckpointRoles(pool: Pool, job: IdentityJob
   return partition === identityJobPartition(job) ? null : identityErasureRoles(pool, job.jobId);
 }
 
+type SearchPredecessor = {
+  job_id: string;
+  job_epoch: string;
+  effect_key: string;
+  transaction_id: string;
+  accepted_epoch: number;
+  accepted_position: string;
+  applied_transaction_id: string;
+  released_transaction_id: string;
+};
+
+/** The successor closes the writer before acceptance. The predecessor's consumed hold and released
+ * continuation prove its completed local release even after that close replaced its writer fence.
+ */
+async function releasePublishedSearchPredecessor(pool: Pool, binding: SearchIdentityReceivingBinding) {
+  const { receivingHome, locator } = binding.source;
+  const deadline = searchContext(pool).deadline;
+  const args = [receivingHome, locator.planId, binding.job.jobId, String(binding.job.epoch), binding.original];
+  const read = async (tx: CommandTransaction) => (await tx.query<SearchPredecessor>(searchPredecessor.sql, args)).rows[0];
+  const predecessor = await withReadTransaction(
+    pool,
+    async (tx) => {
+      const prior = await read(tx);
+      if (!prior) return null;
+      const effect: IdentityReceivingEffect = {
+        kind: 'receiving',
+        job: { jobId: prior.job_id, epoch: BigInt(prior.job_epoch) },
+        original: binding.original,
+        effectKey: prior.effect_key,
+        receipt: receipt(receivingHome, prior.transaction_id, prior.accepted_epoch, prior.accepted_position),
+      };
+      const { record } = await readReceivingRecord(tx, effect);
+      if (
+        record.step !== 'search-canonical-index' ||
+        record.applied?.receipt.transactionId !== prior.applied_transaction_id
+      )
+        throw stale();
+      return { prior, record };
+    },
+    deadline,
+  );
+  if (!predecessor) return null;
+  const { prior, record } = predecessor;
+  await requirePublishedReceivingCustody(pool, record);
+  const released = await runCommand(pool, { partition: receivingHome }, async (tx) => {
+    const current = await read(tx);
+    if (!current) return noEffect(false);
+    if (!isDeepStrictEqual(current, prior)) throw stale();
+    const gate = await tx.query(receivingStatements.releaseGate, [
+      receivingHome,
+      record.owner,
+      record.original,
+      record.source.receivingEpoch,
+      prior.job_id,
+      prior.job_epoch,
+    ]);
+    if (gate.rowCount !== 1) throw stale();
+    return { value: true, events: [wake(binding)] };
+  });
+  return released.value ? released.transactionId : null;
+}
+
 /** Verify the retained writer request's Source before funding the two control captures in another turn. */
 export async function advanceSearchIdentityReceivingAcceptance(
   pool: Pool,
-  plan: Readonly<{
-    selection: SearchIdentityReceivingSelection;
-    source: SearchIdentityReceivingSource;
-    scopeDigest: string;
-  }>,
+  plan: Pick<SearchNativeReceivingPlan, 'selection' | 'source' | 'scopeDigest' | 'references'>,
   request: string,
   retain: (
     tx: CommandTransaction,
@@ -1530,6 +1595,10 @@ export async function advanceSearchIdentityReceivingAcceptance(
     work.deadline,
   );
   if (prepared || checked) {
+    if (prepared && plan.references.predecessor) {
+      const released = await releasePublishedSearchPredecessor(pool, binding);
+      if (released) return { state: 'progress', transactionId: released } as const;
+    }
     const roles = await identityErasureRoles(pool, selection.job.jobId);
     if (prepared) {
       await acceptPreparedReceivingBinding(pool, binding, prepared, roles);
