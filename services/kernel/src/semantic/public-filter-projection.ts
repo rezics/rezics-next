@@ -52,7 +52,7 @@ import readPage from './public-filter-projection-page.sql';
 import readRetainedHeadPage from './public-filter-projection-head-page.sql';
 import readCurrentRetainedHead from './public-filter-projection-head-current.sql';
 import upsertRetainedHeads from './public-filter-projection-head-upsert.sql';
-import { identitySourceSupportJob } from './identity-source-support-scope.ts';
+import { identitySourceSupportJob, identitySourceSupportRoot } from './identity-source-support-scope.ts';
 import {
   invalidateProjectionBuildSql,
   lockProjectionBuildForHeadsSql,
@@ -586,12 +586,20 @@ async function readPublicIdentities(
   time: AuthoritativeTime,
   deadline: number,
   cost: MutableCost,
+  root?: Readonly<{ state: IdentityState; head: PrivacyReductionHead }>,
 ): Promise<IdentityRead> {
   const states = new Map<string, IdentityState>();
   const heads = new Map<number, PrivacyReductionHead>();
   const epochs = new Map<number, number>();
   let complete = true;
   let pending = [...new Set(ids)];
+  if (root) {
+    const { state, head } = root;
+    states.set(state.row.id, state);
+    heads.set(head.partition, head);
+    epochs.set(head.partition, head.epoch);
+    if (state.row.redirect && !pending.includes(state.row.redirect)) pending.push(state.row.redirect);
+  }
   for (let depth = 0; pending.length > 0 && depth < 8; depth++) {
     const groups = new Map<number, { id: string; route: number }[]>();
     for (const id of pending) {
@@ -827,6 +835,7 @@ async function saveBuild(
   subject: string,
   meaning: PublicFilterProjectionMeaning,
   observation: PublicFilterProjectionObservation,
+  expected: SubjectRow,
   privacyPosition: bigint,
   build: string,
   heads: ReadonlyMap<number, PrivacyReductionHead>,
@@ -854,11 +863,7 @@ async function saveBuild(
         owner.position < observation.position ||
         !privacy ||
         BigInt(privacy.position) !== privacyPosition ||
-        !current ||
-        current.id !== subject ||
-        current.current_revision !== observation.revision ||
-        current.securityRevision !== observation.securityRevision ||
-        current.currentRelease !== observation.currentRelease
+        !sameSource(expected, current)
       ) {
         await client.query('ROLLBACK');
         return null;
@@ -975,6 +980,8 @@ export async function readPublicFilterProjectionPage(
   }
   const deadline = request.context.deadline;
   const { route, partition } = routed;
+  const supportRoot = identitySourceSupportRoot();
+  if (supportRoot && supportRoot.original !== request.subject) return unavailable('missing_owner', cost);
 
   type SourceWindow = {
     owner: NonNullable<Awaited<ReturnType<typeof readPartition>>>;
@@ -1005,11 +1012,15 @@ export async function readPublicFilterProjectionPage(
         ) as SubjectRow[];
         const subject = sourceRows[0];
         if (!subject) return unavailable('missing_owner', cost);
+        const rootTime = supportRoot && subject.visibility === 'visible'
+          ? await mintReadTime(client, config.clock, config.pool)
+          : null;
+        await supportRoot?.check(client, owner, subject.visibility, rootTime);
         if (!subject.selection_ready) return unready('owner_pending', cost);
         if (!subject.current_revision || !subject.currentRelease) return unready('metadata_missing', cost);
         const privacy = await nativeSourceQuery(client, readPrivacyHead, { partition_no: partition });
         if (!privacy) return unready('metadata_missing', cost);
-        const time = await mintReadTime(client, config.clock, config.pool);
+        const time = rootTime ?? (await mintReadTime(client, config.clock, config.pool));
         const buildRows = request.frontier
           ? rows(
               await nativeSourceQuery(client, readBuild, {
@@ -1258,7 +1269,20 @@ export async function readPublicFilterProjectionPage(
     }
     if (metadataMissing) return unready('metadata_missing', cost);
 
-    const identities = await readPublicIdentities(config, accessPort, [...targetIds], snapshot.time, deadline, cost);
+    const identities = await readPublicIdentities(
+      config,
+      accessPort,
+      [...targetIds],
+      snapshot.time,
+      deadline,
+      cost,
+      supportRoot
+        ? {
+            state: { row: snapshot.subject, allowed: true },
+            head: { partition, epoch: snapshot.owner.epoch, position: BigInt(snapshot.privacyPosition) },
+          }
+        : undefined,
+    );
     if (!identities.complete) return unready('dependency_pending', cost);
     const observedSourceHead = identities.heads.get(partition);
     if (
@@ -1366,25 +1390,31 @@ export async function readPublicFilterProjectionPage(
     cost.outputSlots = records.length;
     cost.resultWrites = records.length;
 
-    const currentSource = await inSnapshot(config.pool, deadline, async (client) => {
-      const owner = await readPartition(client, partition);
-      const privacy = await nativeSourceQuery(client, readPrivacyHead, { partition_no: partition });
-      const currentRows = rows(
-        await nativeSourceQuery(client, readSubjects, { partition_no: partition, routes: [route], subject_ids: [request.subject] }),
-      ) as SubjectRow[];
-      return { owner, privacy, subject: currentRows[0] };
-    });
-    if (
-      !currentSource.owner ||
-      currentSource.owner.writeState !== 'active' ||
-      currentSource.owner.epoch !== snapshot.owner.epoch ||
-      !currentSource.privacy ||
-      BigInt(currentSource.privacy.position) !== BigInt(snapshot.privacyPosition) ||
-      !sameSource(snapshot.subject, currentSource.subject)
-    )
-      return request.frontier
-        ? { status: 'changed', frontier: request.frontier, cost }
-        : unready('dependency_pending', cost);
+    if (request.frontier || !supportRoot) {
+      const currentSource = await inSnapshot(config.pool, deadline, async (client) => {
+        const owner = await readPartition(client, partition);
+        const privacy = await nativeSourceQuery(client, readPrivacyHead, { partition_no: partition });
+        const currentRows = rows(
+          await nativeSourceQuery(client, readSubjects, {
+            partition_no: partition,
+            routes: [route],
+            subject_ids: [request.subject],
+          }),
+        ) as SubjectRow[];
+        return { owner, privacy, subject: currentRows[0] };
+      });
+      if (
+        !currentSource.owner ||
+        currentSource.owner.writeState !== 'active' ||
+        currentSource.owner.epoch !== snapshot.owner.epoch ||
+        !currentSource.privacy ||
+        BigInt(currentSource.privacy.position) !== BigInt(snapshot.privacyPosition) ||
+        !sameSource(snapshot.subject, currentSource.subject)
+      )
+        return request.frontier
+          ? { status: 'changed', frontier: request.frontier, cost }
+          : unready('dependency_pending', cost);
+    }
 
     const heads = new Map(identities.heads);
     heads.set(partition, {
@@ -1406,6 +1436,7 @@ export async function readPublicFilterProjectionPage(
         request.subject,
         meaning,
         initialObservation,
+        snapshot.subject,
         BigInt(snapshot.privacyPosition),
         randomUUID(),
         heads,
