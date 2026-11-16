@@ -44,18 +44,29 @@ export async function semanticCopyRoles(
   return result.rows;
 }
 
+const identityErasureRoleSelect = `SELECT l.account_id::text,l.role FROM semantic.identity_epoch_job j
+     JOIN semantic.erasure_locator l
+       ON l.partition_no=j.partition_no AND l.store='identity_epoch_job' AND l.record_key=j.erasure_key
+     WHERE j.partition_no=$1 AND j.job_id=$2 ORDER BY l.account_id,l.role`;
+export const identityErasureRolesSql = `${identityErasureRoleSelect} LIMIT 9`;
+export const identityErasureRolePairSql = `${identityErasureRoleSelect} LIMIT 2`;
+
 /** Bounded real job-home provenance, loaded before a receiving-home command is opened. */
-export async function identityErasureRoles(pool: import('pg').Pool, jobId: string): Promise<SemanticCopyRole[]> {
+export async function identityErasureRoles(
+  pool: import('pg').Pool,
+  jobId: string,
+  options?: Readonly<{ preferSingleRole: boolean }>,
+): Promise<SemanticCopyRole[]> {
   const { routeOf, partitionOf } = await import('../route/route.ts');
   const partition = partitionOf(routeOf(jobId)!);
-  const result = await withReadTransaction(pool, (tx) =>
-    tx.query<SemanticCopyRole>(
-      `SELECT l.account_id::text,l.role FROM semantic.identity_epoch_job j
-     JOIN semantic.erasure_locator l ON l.partition_no=j.partition_no AND l.store='identity_epoch_job' AND l.record_key=j.erasure_key
-     WHERE j.partition_no=$1 AND j.job_id=$2 ORDER BY l.account_id,l.role LIMIT 9`,
-      [partition, jobId],
-    ),
-  );
+  const result = await withReadTransaction(pool, async (tx) => {
+    const key = [partition, jobId];
+    if (options?.preferSingleRole) {
+      const prefix = await tx.query<SemanticCopyRole>(identityErasureRolePairSql, key);
+      if (prefix.rows.length < 2) return prefix;
+    }
+    return tx.query<SemanticCopyRole>(identityErasureRolesSql, key);
+  });
   if (result.rows.length > 8) throw new TypeError('Identity producer role bound exceeded');
   return result.rows;
 }

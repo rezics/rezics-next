@@ -7,6 +7,7 @@ import type { SearchNativeReceivingPreparation } from './identity-receiving-nati
 import type { SearchReceivingConfiguration } from './identity-receiving-native.ts';
 import { subjectPartition } from './source.ts';
 import {
+  locateSearchIdentityOriginalPlanSql,
   readSearchIdentityOriginalPlanSql,
   searchIdentityOriginalPlanPresentSql,
 } from './identity-search-receiving-directory-sql.ts';
@@ -21,6 +22,34 @@ export function searchIdentityWriterEffectKey(
   return `${consumer}:${original}:${disposition}`;
 }
 
+function originalPlanBinds(job: IdentityJobRef, original: string, configuration: SearchReceivingConfiguration) {
+  const keys = (['OLD', 'NEW', 'first-apply', 'handoff'] as const).map((disposition) =>
+    searchIdentityWriterEffectKey(configuration.consumer, original, disposition),
+  );
+  return [subjectPartition(original), job.jobId, String(job.epoch), keys, original, configuration.index];
+}
+
+export async function locateSearchIdentityOriginalPlan(
+  pool: Pool,
+  job: IdentityJobRef,
+  original: string,
+  configuration: SearchReceivingConfiguration,
+  deadline: number,
+) {
+  const rows = await withReadTransaction(
+    pool,
+    async (tx) => (
+      await tx.query<{ plan_id: string; original_barrier: boolean }>(
+        locateSearchIdentityOriginalPlanSql,
+        originalPlanBinds(job, original, configuration),
+      )
+    ).rows,
+    deadline,
+  );
+  if (rows.length > 1) throw unavailable('Retained Search plan changed for the selected original');
+  return rows[0] ?? null;
+}
+
 export async function readSearchIdentityOriginalPlan(
   pool: Pool,
   job: IdentityJobRef,
@@ -33,10 +62,7 @@ export async function readSearchIdentityOriginalPlan(
   originalBarrier: boolean;
 }> | null> {
   const partition = subjectPartition(change.original);
-  const keys = (['OLD', 'NEW', 'first-apply', 'handoff'] as const).map((disposition) =>
-    searchIdentityWriterEffectKey(configuration.consumer, change.original, disposition),
-  );
-  const binds = [partition, job.jobId, String(job.epoch), keys, change.original, configuration.index];
+  const binds = originalPlanBinds(job, change.original, configuration);
   const plans = await withReadTransaction(
     pool,
     async (tx) => {

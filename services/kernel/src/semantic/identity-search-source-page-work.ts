@@ -27,7 +27,11 @@ import {
   SEARCH_INDEX_STATEMENT_BYTES,
   SEARCH_INDEX_STATEMENT_KEYS,
 } from './identity-search-index-statements.ts';
-import { readIdentitySearchIndexTermsSql, SEARCH_INDEX_TERM_REPLAY_POINTS } from './identity-search-index-terms.ts';
+import {
+  readIdentitySearchIndexTermSlotSql,
+  readIdentitySearchIndexTermsSql,
+  SEARCH_INDEX_TERM_REPLAY_POINTS,
+} from './identity-search-index-terms.ts';
 import { prepareSearchIdentityOriginalSql } from '../search/identity-search-writer-plan-sql.ts';
 import { bindSemanticProducerRolesSql } from './erasure-producer.ts';
 import {
@@ -286,6 +290,26 @@ export function identitySearchSourcePageCosts(): readonly PageCost[] {
             emptySeeks: tuples.length,
           });
         },
+      }),
+      declare(readIdentitySearchIndexTermSlotSql, [65535, maxId, maxId, 32], (values) => {
+        const [route, subject, after, limit] = values;
+        if (
+          values.length !== 4 ||
+          typeof route !== 'number' ||
+          typeof subject !== 'string' || routeOf(subject) !== route ||
+          (after !== null && !uuid(after)) ||
+          typeof limit !== 'number' || !Number.isInteger(limit) || limit < 0 || limit > 32
+        ) return undefined;
+        return Object.freeze({
+          candidateKeys: 0,
+          identityMetadataRows: 0,
+          nativeRows: 5 + limit,
+          nativePoints: 5 + limit,
+          witnessKeys: 0,
+          statements: 1,
+          bytes: 4096 + 2304 * (limit + 1),
+          emptySeeks: 3,
+        });
       }),
       declare(readIdentitySearchIndexTermsSql, [65535, maxId, SEARCH_INDEX_TERM_REPLAY_POINTS], (values) => {
         const [route, subject, points] = values;

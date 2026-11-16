@@ -1,4 +1,5 @@
 import { identitySearchSourcePageCosts } from './identity-search-source-page-work.ts';
+import { identityErasureRolePairSql, identityErasureRolesSql } from './erasure-producer.ts';
 import { readCreatorTermBudgetSql } from './credit-search-creators.ts';
 import structuralHomeGate from './identity-epoch-store-select-home-gate.sql';
 import { memoizedValue } from '../memoized.ts';
@@ -56,7 +57,7 @@ import extensionHeadRead from './extension-active.sql';
 import extensionRead from './extension-read.sql';
 import eligibilityRead from './scope-leaf-evidence-eligibility.sql';
 import sourceVisibilityRead from './read-visibility.sql';
-import { readIdentitySearchIndexTermSlotSql } from './identity-search-index-terms.ts';
+import { readIdentitySearchIndexTermSlotShapeSql } from './identity-search-index-terms.ts';
 import projectionReleasesRead from './search-source-releases.sql';
 import projectionPrivacyRead from './public-filter-projection-head-read.sql';
 import projectionBuildRead from './public-filter-projection-build-read.sql';
@@ -117,7 +118,7 @@ function sourceStatementCosts(): readonly (readonly [string, Cost])[] {
         [extensionRead.sql, [1, 1, 1, 65536, 1]],
         [eligibilityRead.sql, [1, 1, 1, 1024, 1]],
         [sourceVisibilityRead.sql, [1, 1, 1, 512, 1]],
-        [readIdentitySearchIndexTermSlotSql, [36, 36, 1, 81920, 3]],
+        [readIdentitySearchIndexTermSlotShapeSql, [4, 4, 1, 1024, 4]],
         [projectionReleasesRead.sql, [1, 1, 1, 65536, 1]],
         [projectionPrivacyRead.sql, [1, 1, 1, 512, 1]],
         [projectionBuildRead.sql, [1, 1, 1, 2048, 1]],
@@ -259,9 +260,8 @@ export function commonSearchReceivingStatements(): readonly string[] {
           "SELECT set_config('semantic.erasure_native_transaction',$1,true)",
           `INSERT INTO semantic.erasure_source_role(partition_no,transaction_id,account_id,role)
       SELECT $1,$2,account_id,role FROM unnest($3::uuid[],$4::text[]) AS input(account_id,role) ON CONFLICT DO NOTHING`,
-          `SELECT l.account_id::text,l.role FROM semantic.identity_epoch_job j
-     JOIN semantic.erasure_locator l ON l.partition_no=j.partition_no AND l.store='identity_epoch_job' AND l.record_key=j.erasure_key
-     WHERE j.partition_no=$1 AND j.job_id=$2 ORDER BY l.account_id,l.role LIMIT 9`,
+          identityErasureRolesSql,
+          identityErasureRolePairSql,
         ].map((sql) => [receivingSqlKey(sql), sql] as const),
       ).values(),
     ]),
@@ -377,12 +377,8 @@ export function searchReceivingCapturedStatementCosts(): SearchReceivingWorkDecl
   ])
     add(sql, [0, 0, 1, 0, 0]);
   add("SELECT set_config('semantic.erasure_native_transaction',$1,true)", [1, 0, 1, 128, 0]);
-  add(
-    `SELECT l.account_id::text,l.role FROM semantic.identity_epoch_job j
-     JOIN semantic.erasure_locator l ON l.partition_no=j.partition_no AND l.store='identity_epoch_job' AND l.record_key=j.erasure_key
-     WHERE j.partition_no=$1 AND j.job_id=$2 ORDER BY l.account_id,l.role LIMIT 9`,
-    [10, 2, 1, 2048, 1],
-  );
+  add(identityErasureRolesSql, [10, 2, 1, 2048, 1]);
+  add(identityErasureRolePairSql, [3, 2, 1, 1024, 1]);
   for (const [name, statement] of Object.entries(searchNativeReceivingStatements())) {
     const [rows, points, bytes] = searchNativeReceivingSqlCost[name as keyof typeof searchNativeReceivingSqlCost];
     add(statement.sql, [rows, points, 1, bytes, 0]);
