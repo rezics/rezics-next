@@ -505,11 +505,11 @@ async function buildContentNotificationDriver(growth: boolean): Promise<{
       const result = await pendingAppealRows(actor);
       return resultMap(result, (rows) => rows.map(pendingAppealOf));
     },
-    async effects(mode) {
+    async effects(mode, traceProgress) {
       if (!effectHost) throw new Error('Notification effect host is unavailable in a growth fixture');
       const consumer =
         mode === 'drain' ? 'notification_drain' : `notification_replay_${crypto.randomUUID().replaceAll('-', '')}`;
-      await effectHost.deliver(consumer, [...setup.contentPartitions]);
+      await effectHost.deliver(consumer, [...setup.contentPartitions], traceProgress);
     },
     fixtures: {
       async notificationAllowed(account: Persona, kind: NoticeKind, allowed: boolean) {

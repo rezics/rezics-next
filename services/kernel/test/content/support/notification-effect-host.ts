@@ -5,8 +5,16 @@ import { configureReceiptKeys, readReceiptKeyRing } from '../../../src/command/r
 import { workerTestEnv } from '../../support/worker-env.ts';
 
 type WorkerMessage = { id: string; ok: boolean; error?: string };
-type WorkerRequest = { id: string; command: string; consumer: string; partitions: number[]; at: string };
+type WorkerRequest = {
+  id: string;
+  command: string;
+  consumer: string;
+  partitions: number[];
+  at: string;
+  traceProgress?: boolean;
+};
 type Waiter = { matches(line: string): boolean; resolve(line: string): void; reject(error: Error): void };
+const PROGRESS_PREFIX = 'NOTIFICATION_EFFECT_PROGRESS ';
 
 /** Keep the production DBOS effect boundary in its own process: the native
  * Auth fixture already owns DBOS in the test process. */
@@ -14,7 +22,7 @@ export async function createNotificationEffectHost(
   databaseUrl: string,
   clock: KernelClock,
 ): Promise<{
-  deliver(consumer: string, partitions: readonly number[]): Promise<void>;
+  deliver(consumer: string, partitions: readonly number[], traceProgress?: boolean): Promise<void>;
   close(): Promise<void>;
 }> {
   const child = Bun.spawn([process.execPath, import.meta.filename], {
@@ -37,6 +45,10 @@ export async function createNotificationEffectHost(
   const waiters: Waiter[] = [];
   const accept = (line: string) => {
     output += `${line}\n`;
+    if (line.startsWith(PROGRESS_PREFIX)) {
+      process.stderr.write(`${line}\n`);
+      return;
+    }
     const index = waiters.findIndex((waiter) => waiter.matches(line));
     if (index >= 0) waiters.splice(index, 1)[0]!.resolve(line);
     else lines.push(line);
@@ -122,11 +134,11 @@ export async function createNotificationEffectHost(
   let closed = false;
   let nextId = 0;
   return {
-    async deliver(consumer, partitions) {
+    async deliver(consumer, partitions, traceProgress) {
       if (closed) throw new Error('Notification effect host is closed');
       const id = `${++nextId}`;
       child.stdin.write(
-        `${JSON.stringify({ id, command: 'deliver', consumer, partitions, at: clock().toISOString() })}\n`,
+        `${JSON.stringify({ id, command: 'deliver', consumer, partitions, at: clock().toISOString(), traceProgress })}\n`,
       );
       child.stdin.flush();
       const line = await waitForLine((item) => item.startsWith(`NOTIFICATION_EFFECT_RESULT ${id} `), 300_000);
@@ -228,7 +240,7 @@ async function runWorker(): Promise<void> {
           const at = new Date(request.at);
           if (!Number.isFinite(at.getTime())) throw new TypeError('Invalid effect clock');
           effectTime = at;
-          await deliver(request.consumer, request.partitions);
+          await deliver(request.consumer, request.partitions, request.traceProgress === true);
           process.stdout.write(
             `NOTIFICATION_EFFECT_RESULT ${request.id} ${JSON.stringify({ id: request.id, ok: true })}\n`,
           );
@@ -250,11 +262,23 @@ async function runWorker(): Promise<void> {
       input.close();
     }
 
-    async function deliver(consumer: string, partitions: number[]): Promise<void> {
+    async function deliver(consumer: string, partitions: number[], traceProgress: boolean): Promise<void> {
       const pending = new Set<string>();
+      const started = performance.now();
+      let round = 0;
+      const progress = (stage: string, envelopes: number, workflows: number) => {
+        if (!traceProgress || round > 4) return;
+        const elapsedMs = Math.round(performance.now() - started);
+        process.stdout.write(
+          `${PROGRESS_PREFIX}${stage} round=${round} elapsed_ms=${elapsedMs} envelopes=${envelopes} workflows=${workflows}\n`,
+        );
+      };
       let hadWork: boolean;
       do {
         hadWork = false;
+        round += 1;
+        let envelopeCount = 0;
+        progress('batch-read-started', 0, 0);
         for (const partition of [...new Set(partitions)].sort((left, right) => left - right)) {
           const result = await readBatch(pool, {
             consumer,
@@ -273,10 +297,13 @@ async function runWorker(): Promise<void> {
           });
           if (result.status !== 'read') throw new Error(`Notification effect barrier stopped (${result.status})`);
           if (result.envelopes > 0) hadWork = true;
+          envelopeCount += result.envelopes;
         }
         const current = [...pending];
         pending.clear();
+        progress('workflow-wait-started', envelopeCount, current.length);
         await Promise.all(current.map((id) => DBOS.retrieveWorkflow(id).getResult()));
+        progress('workflow-wait-complete', envelopeCount, current.length);
       } while (hadWork);
     }
   } finally {

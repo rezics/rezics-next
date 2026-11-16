@@ -139,7 +139,7 @@ export interface ContentNotificationDriver {
   ): Promise<ApiResult<Appeal>>;
   /** Map the pending appeals section of the real moderator queue response. */
   pendingAppeals(actor: Persona): Promise<ApiResult<Appeal[]>>;
-  effects(mode: 'drain' | 'replay'): Promise<void>;
+  effects(mode: 'drain' | 'replay', traceProgress?: boolean): Promise<void>;
   fixtures: {
     /** Set actual preference evidence consumed by accounts' notificationAllowed. */
     notificationAllowed(account: Persona, kind: NoticeKind, allowed: boolean): Promise<void>;

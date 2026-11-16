@@ -17,7 +17,10 @@ let driver: ContentNotificationDriver;
 let fixture: Fixture;
 let current: ContentNotificationDriver | undefined;
 let serial: number;
+let fixtureSetupMs = 0;
+let unreadProgress: ((stage: string) => void) | undefined;
 beforeEach(async () => {
+  const setupStarted = performance.now();
   const location = process.env.CONTENT_NOTIFICATION_DRIVER;
   if (!location) throw new Error('Content notification outcome driver is required');
   if (!isAbsolute(location) && !location.startsWith('file:')) {
@@ -33,11 +36,19 @@ beforeEach(async () => {
   fixture = await driver.provision();
   expect(fixture.readers).toHaveLength(11);
   serial = 0;
+  fixtureSetupMs = Math.round(performance.now() - setupStarted);
 }, 180_000);
 afterEach(async () => {
   const closing = current;
   current = undefined;
-  await closing?.close();
+  const progress = unreadProgress;
+  unreadProgress = undefined;
+  progress?.('teardown-started');
+  try {
+    await closing?.close();
+  } finally {
+    progress?.('teardown-settled');
+  }
 });
 
 // The mention node is the document contract; no adapter parses text for mentions.
@@ -299,18 +310,33 @@ test("the inbox lists only the viewer's notices newest first with an opaque curs
 });
 
 test('the unread count stops at 100 and the seen marker never moves backward', async () => {
+  const started = performance.now();
+  const progress = (stage: string) => {
+    process.stderr.write(`notification-unread elapsed_ms=${Math.round(performance.now() - started)} ${stage}\n`);
+  };
+  unreadProgress = progress;
+  progress(`fixture-ready setup_ms=${fixtureSetupMs}`);
   const t = await thread();
   expect(ok(await driver.unread(fixture.author.id, fixture.author))).toEqual({ count: 0, capped: false });
-  for (let i = 0; i < 100; i++) await post(t);
-  await driver.effects('drain');
+  progress('posting-started');
+  for (let count = 1; count <= 100; count++) {
+    await post(t);
+    if (count % 25 === 0) progress(`posts-acknowledged count=${count}`);
+  }
+  progress('drain-started posts=100');
+  await driver.effects('drain', true);
+  progress('drain-complete posts=100');
   expect(ok(await driver.unread(fixture.author.id, fixture.author))).toEqual({ count: 100, capped: false });
   await post(t);
-  await driver.effects('drain');
+  progress('drain-started posts=101');
+  await driver.effects('drain', true);
+  progress('drain-complete posts=101');
   expect(ok(await driver.unread(fixture.author.id, fixture.author))).toEqual({ count: 100, capped: true });
   const items = await inbox(fixture.author);
   expect(items).toHaveLength(101);
   expect(items.every((n) => n.unread)).toBe(true);
   expect(ok(await driver.inbox(fixture.author.id, fixture.author)).items).toHaveLength(20);
+  progress('inbox-pages-verified');
   written(await driver.markSeen(fixture.author.id, items[1]!.id, options()));
   expect(ok(await driver.unread(fixture.author.id, fixture.author))).toEqual({ count: 1, capped: false });
   written(await driver.markSeen(fixture.author.id, items[100]!.id, options()));
@@ -318,6 +344,7 @@ test('the unread count stops at 100 and the seen marker never moves backward', a
   expect(after.map((n) => n.unread)).toEqual([true, ...Array(100).fill(false)]);
   written(await driver.markSeen(fixture.author.id, items[0]!.id, options()));
   expect(ok(await driver.unread(fixture.author.id, fixture.author))).toEqual({ count: 0, capped: false });
+  progress('marker-verified');
 });
 
 test('a takedown sends its author the decision with its statement and appeal deadline whatever their preferences', async () => {
