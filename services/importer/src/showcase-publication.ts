@@ -1138,6 +1138,19 @@ async function publishShowcasePhases(
         left.assertion.candidateId.localeCompare(right.assertion.candidateId),
     );
   let assertions = assertionsFor(manifest);
+  // Validation sees one reviewed listing per Subject/property before any acceptance or adoption.
+  // Keep only rows the bounded manifest will validate, even when intervening reads evict the full page.
+  const validationGroups = new Map<string, { selected: Set<string>; completeRows?: Map<string, CandidateRead> }>();
+  for (const { record, assertion } of assertions) {
+    if (!record.subjectId) continue;
+    const key = groupKey(record.subjectId, assertion.property);
+    let group = validationGroups.get(key);
+    if (!group) {
+      group = { selected: new Set() };
+      validationGroups.set(key, group);
+    }
+    group.selected.add(assertion.candidateId);
+  }
   const currentSubjectCache = new Map<string, ReviewedSubjectRead | null>();
   const validated = new Map<string, CandidateRead>();
   const currentTagMembershipCandidateDigests = new Set<string>();
@@ -1457,12 +1470,24 @@ async function publishShowcasePhases(
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'source-uri-not-current' });
       continue;
     }
-    let page: CandidatePage;
+    let candidate: CandidateRead | undefined;
     try {
-      page = await candidatePage(
-        { review: input.review, id, property: assertion.property, journal: input.journal },
-        pageCache,
-      );
+      const group = validationGroups.get(groupKey(id, assertion.property))!;
+      candidate = group.completeRows?.get(assertion.candidateId);
+      if (!candidate) {
+        // A missing row, partial listing, or failed read keeps the ordinary lookup and retry behavior.
+        delete group.completeRows;
+        const page = await candidatePage(
+          { review: input.review, id, property: assertion.property, journal: input.journal },
+          pageCache,
+        );
+        candidate = page.candidates.find((entry) => entry.id === assertion.candidateId);
+        if (page.complete && group.selected.size > 1) {
+          const rows = new Map<string, CandidateRead>();
+          for (const entry of page.candidates) if (group.selected.has(entry.id)) rows.set(entry.id, entry);
+          group.completeRows = rows;
+        }
+      }
     } catch {
       omissions.push({
         provider: record.provider,
@@ -1471,7 +1496,6 @@ async function publishShowcasePhases(
       });
       continue;
     }
-    const candidate = page.candidates.find((entry) => entry.id === assertion.candidateId);
     if (
       !candidate ||
       !showcaseSourceMatches(candidate.source, assertion.source) ||
@@ -1481,13 +1505,10 @@ async function publishShowcasePhases(
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'candidate-digest-changed' });
       continue;
     }
-    if (!page.complete && !candidate) {
-      omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'candidate-page-bounded' });
-      continue;
-    }
     validated.set(assertion.candidateId, candidate);
     if (currentMembership) currentTagMembershipCandidateDigests.add(assertion.candidateDigest);
   }
+  validationGroups.clear();
 
   manifestAcknowledgements = manifestAcknowledgements.filter(
     (acknowledgement) => !acknowledgement.candidateId || validated.has(acknowledgement.candidateId),
