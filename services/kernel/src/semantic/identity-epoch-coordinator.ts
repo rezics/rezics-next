@@ -39,6 +39,7 @@ import control from './identity-epoch-coordinator-control.sql';
 import { withReadTransaction } from './read.ts';
 
 const workflowName = 'semantic.identityEpoch';
+const queueName = 'governance';
 type JobLocator = Readonly<{ jobId: string; epoch: string }>;
 type ReceiptLocator = IdentityStepReceiptLocator;
 type Next = IdentityEpochNext;
@@ -229,7 +230,7 @@ export function registerIdentityEpochCoordinator(
       if (!Number.isSafeInteger(segment) || segment < 1) throw new TypeError('Invalid identity workflow segment');
       const id = identityEpochWorkflowId(job, segment);
       await context.client.enqueue(
-        { workflowName, workflowID: id, workflowIDReusePolicy: 'return-existing', queueName: 'maintenance' },
+        { workflowName, workflowID: id, workflowIDReusePolicy: 'return-existing', queueName },
         job,
         segment,
       );
@@ -299,7 +300,7 @@ export const resumeIdentityEpochJob: ResumeIdentityEpochJob = async (pool, job) 
     workflowName,
     workflowID: id,
     workflowIDReusePolicy: 'return-existing' as const,
-    queueName: 'maintenance',
+    queueName,
   };
   if (segment === 0) await binding.client.enqueue(options, input);
   else await binding.client.enqueue(options, input, segment);
