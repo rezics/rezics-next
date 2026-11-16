@@ -33,10 +33,25 @@ async function collectionCount(tx: CommandTransaction, partition: number, id: st
   return listing?.publicCollectionCount ?? 0;
 }
 
+async function currentSubject(tx: CommandTransaction, partition: number, id: string) {
+  const [header] = (await nativeSourceQuery(tx, readSubjects, {
+    partition_no: partition,
+    routes: [routeOf(id)!],
+    subject_ids: [id],
+  })) as WorkHeader[];
+  return header?.visibility === 'visible' &&
+    !header.redirect &&
+    header.currentRelease &&
+    header.current_revision &&
+    header.selection_ready
+    ? header
+    : null;
+}
+
 export async function verifyCanonicalIdentityDocumentAtDispatch(
   tx: CommandTransaction,
   document: SubjectDocument,
-  routeKey: Uint8Array,
+  configuration: SearchReceivingConfiguration,
   statementInput: CanonicalStatementInput | undefined,
 ) {
   const { id, partition } = document;
@@ -46,14 +61,20 @@ export async function verifyCanonicalIdentityDocumentAtDispatch(
   const runtime = await activeRelease(tx, 'native');
   if (!runtime) return false;
   if (statementInput) {
+    const header = await currentSubject(tx, partition, id);
+    if (!header || header.currentRelease !== statementInput.release || header.type !== document.type) return false;
     const release =
       runtime.digest === statementInput.release ? runtime.release : await readRelease(tx, statementInput.release);
     if (!release) return false;
-    const current = await readCanonicalIndexStatements(tx, id, routeKey, statementInput.keys, {
-      type: document.type,
-      digest: statementInput.release,
+    const current = await readCanonicalIndexStatements(
+      tx,
+      configuration.pool,
+      header,
+      configuration.routeKey,
+      statementInput.keys,
       release,
-    });
+      runtime,
+    );
     if (current?.proof.digest !== statementInput.digest) return false;
   }
   const relations = facetProperties(runtime.release, [document.type]).filter((property) =>
@@ -95,30 +116,15 @@ export async function prepareCanonicalIdentityDocument(
       const statementKeys = selectedExists ? await readCanonicalStatementCount(tx, subject) : 0;
       if (statementKeys === null) return null;
 
-      const [header] = (await nativeSourceQuery(tx, readSubjects, {
-        partition_no: partition,
-        routes: [route],
-        subject_ids: [subject],
-      })) as WorkHeader[];
-      if (
-        !header ||
-        header.visibility !== 'visible' ||
-        header.redirect ||
-        !header.currentRelease ||
-        !header.current_revision
-      )
-        return null;
+      const header = await currentSubject(tx, partition, subject);
+      if (!header?.currentRelease) return null;
       const runtime = await activeRelease(tx, 'native');
       if (!runtime) return null;
       const release =
         runtime.digest === header.currentRelease ? runtime.release : await readRelease(tx, header.currentRelease);
       if (!release) return null;
       const selected = statementKeys
-        ? await readCanonicalIndexStatements(tx, subject, configuration.routeKey, statementKeys, {
-            type: header.type,
-            digest: header.currentRelease,
-            release,
-          })
+        ? await readCanonicalIndexStatements(tx, pool, header, configuration.routeKey, statementKeys, release, runtime)
         : null;
       if (statementKeys && !selected) return null;
       const publicRating = await readNativeSearchPublicRating(tx, partition, subject);
