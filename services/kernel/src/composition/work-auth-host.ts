@@ -1,49 +1,79 @@
 import { fork } from 'node:child_process';
+import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
+import type { CurrentConsent } from '../access/auth-consent.ts';
 import type { CommittedSessionRevocationWorkflow } from '../access/session-revocation-work.ts';
 
-// This protocol carries one capability and lifecycle control, never an Auth service,
-// credential, receipt, database address or a caller-selected method. Its authority is
-// the inherited IPC handle of the child created by the existing application host.
+// The inherited handle carries two fixed Auth capabilities for the local host.
+// It carries no bearer, signing material, database address or caller-selected method.
 export const WORK_AUTH_CHANNEL = 'kernel-work-auth-v1';
 export const WORK_AUTH_MAX_PENDING = 4;
 export const WORK_AUTH_CALL_MS = 15_000;
 export const WORK_AUTH_STOP_MS = 20_000;
 
-export type WorkAuthMessage =
-  | { channel: typeof WORK_AUTH_CHANNEL; type: 'ready' | 'stop' | 'failed' }
-  | {
-      channel: typeof WORK_AUTH_CHANNEL;
-      type: 'resume';
-      id: number;
-      accountId: string;
-      operationKey: string;
-    }
-  | { channel: typeof WORK_AUTH_CHANNEL; type: 'result'; id: number; ok: boolean };
+export type WorkAuthRequest =
+  | { type: 'resume'; accountId: string; operationKey: string }
+  | { type: 'realm-consent'; actorAccountId: string; clientId: string };
+
+type WorkAuthReply =
+  | { type: 'result'; ok: boolean }
+  | { type: 'realm-consent-result'; ok: false }
+  | { type: 'realm-consent-result'; ok: true; scopes: readonly string[] | null };
+
+export type WorkAuthMessage = { channel: typeof WORK_AUTH_CHANNEL } & (
+  | { type: 'ready' | 'stop' | 'failed' }
+  | ((WorkAuthRequest | WorkAuthReply) & { id: number })
+);
 
 export type AuthBoundKernelWorker = { stop(): Promise<void>; failed: Promise<never> };
+
+function consentId(value: unknown): boolean {
+  return typeof value === 'string' && /^[\x21-\x7e]{1,1024}$/.test(value);
+}
 
 export function isWorkAuthMessage(value: unknown): value is WorkAuthMessage {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const message = value as Record<string, unknown>;
   if (message.channel !== WORK_AUTH_CHANNEL) return false;
   const keys = Object.keys(message).sort().join(',');
-  if (message.type === 'ready' || message.type === 'stop' || message.type === 'failed')
-    return keys === 'channel,type';
+  if (message.type === 'ready' || message.type === 'stop' || message.type === 'failed') return keys === 'channel,type';
   if (!Number.isSafeInteger(message.id) || (message.id as number) < 1) return false;
-  if (message.type === 'result') return keys === 'channel,id,ok,type' && typeof message.ok === 'boolean';
-  const bounded = (item: unknown) => typeof item === 'string' && item.length > 0 && item.length <= 128;
-  return (
-    message.type === 'resume' &&
-    keys === 'accountId,channel,id,operationKey,type' &&
-    bounded(message.accountId) &&
-    bounded(message.operationKey)
-  );
+  switch (message.type) {
+    case 'result':
+      return keys === 'channel,id,ok,type' && typeof message.ok === 'boolean';
+    case 'realm-consent':
+      return (
+        keys === 'actorAccountId,channel,clientId,id,type' &&
+        consentId(message.actorAccountId) &&
+        consentId(message.clientId)
+      );
+    case 'realm-consent-result':
+      if (message.ok === false) return keys === 'channel,id,ok,type';
+      return (
+        message.ok === true &&
+        keys === 'channel,id,ok,scopes,type' &&
+        (message.scopes === null ||
+          (Array.isArray(message.scopes) &&
+            message.scopes.length <= MAX_CONSENTED_SCOPES &&
+            message.scopes.every(
+              (scope) => typeof scope === 'string' && scope.length <= 128 && /^[\x21\x23-\x5b\x5d-\x7e]+$/.test(scope),
+            )))
+      );
+    case 'resume': {
+      const bounded = (item: unknown) => typeof item === 'string' && item.length > 0 && item.length <= 128;
+      return (
+        keys === 'accountId,channel,id,operationKey,type' && bounded(message.accountId) && bounded(message.operationKey)
+      );
+    }
+    default:
+      return false;
+  }
 }
 
 /** Auth has already started in the caller. Only this child configures Kernel's
  * process-global DBOS SDK; both owners retain their native databases and schemas. */
 export async function startAuthBoundKernelWorker(options: {
   sessionRevocation: CommittedSessionRevocationWorkflow;
+  readRealmConsent(input: { actorAccountId: string; clientId: string }): Promise<CurrentConsent | null>;
   env: NodeJS.ProcessEnv;
   signal?: AbortSignal;
 }): Promise<AuthBoundKernelWorker> {
@@ -116,26 +146,40 @@ export async function startAuthBoundKernelWorker(options: {
       return;
     }
     // Recovery can call Auth while Kernel is still launching, before its ready message.
-    if (value.type !== 'resume' || failure || value.id <= lastCall || calls.size >= WORK_AUTH_MAX_PENDING)
+    if (
+      (value.type !== 'resume' && value.type !== 'realm-consent') ||
+      failure ||
+      value.id <= lastCall ||
+      calls.size >= WORK_AUTH_MAX_PENDING
+    )
       return fail();
     lastCall = value.id;
     const call = Promise.resolve()
-      .then(() =>
-        options.sessionRevocation.resumeCommittedSessionRevocation({
-          accountId: value.accountId,
-          operationKey: value.operationKey,
-        }),
+      .then(async (): Promise<WorkAuthReply> => {
+        if (value.type === 'resume') {
+          await options.sessionRevocation.resumeCommittedSessionRevocation({
+            accountId: value.accountId,
+            operationKey: value.operationKey,
+          });
+          // Only the owner's committed receipt or its replay can acknowledge this call.
+          return { type: 'result', ok: true };
+        }
+        const consent = await options.readRealmConsent({
+          actorAccountId: value.actorAccountId,
+          clientId: value.clientId,
+        });
+        if (consent && (consent.actorAccountId !== value.actorAccountId || consent.clientId !== value.clientId))
+          throw new Error('Auth returned a different consent identity');
+        return { type: 'realm-consent-result', ok: true, scopes: consent?.scopes ?? null };
+      })
+      .catch((): WorkAuthReply =>
+        value.type === 'resume' ? { type: 'result', ok: false } : { type: 'realm-consent-result', ok: false },
       )
-      .then(
-        () => {
-          // The owner's void result means its original native receipt committed or
-          // was replayed. Nothing here creates or substitutes terminal evidence.
-          if (child.connected) send({ channel: WORK_AUTH_CHANNEL, type: 'result', id: value.id, ok: true });
-        },
-        () => {
-          if (child.connected) send({ channel: WORK_AUTH_CHANNEL, type: 'result', id: value.id, ok: false });
-        },
-      )
+      .then((reply) => {
+        const message = { channel: WORK_AUTH_CHANNEL, id: value.id, ...reply } as const;
+        if (!isWorkAuthMessage(message)) return fail();
+        if (child.connected) send(message);
+      })
       .finally(() => calls.delete(value.id));
     calls.set(value.id, call);
   });
