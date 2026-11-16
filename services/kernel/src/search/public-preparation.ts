@@ -219,7 +219,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     const activated = await options.runtime.publication.activate(job, context);
     if (activated.status === 'unavailable') reportUnavailable('activate', state.generation, activated);
     else unavailable.delete('activate');
-    if (activated.status === 'activated') return advance(null);
+    if (activated.status === 'activated' || activated.status === 'superseded') return advance(null);
     if (activated.status === 'preparing') {
       const next = { ...state, phase: activated.next === 'activate' ? ('activate' as const) : ('native' as const) };
       return advance(

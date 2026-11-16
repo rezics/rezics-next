@@ -2125,6 +2125,9 @@ Native complete key pages may retain their terminal cursor or advance past only 
 that cursor. The publication's finite passes own population, repair, reconciliation and activation through
 the same worker. CLI rebuild waits for that worker-owned alias publication. Retirement
 still requires actual retained-copy and writer evidence. Live physical generations remain capped at three.
+Native Subject publication serializes alias changes by prefix. A settled predecessor can release its exact
+publication fence after observing a newer read alias. An unfinished predecessor retains its existing custody
+and waits when the read alias names a newer generation.
 
 The installed Semantic Source binding and Source key-page adapters supply the default worker's population,
 completion and current-definition reads. Composition does not certify native readiness or receiving acceptance;
