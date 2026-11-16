@@ -88,7 +88,12 @@ export type SearchGenerationPublication = Readonly<{
     context: PublicFilterConsumerContext,
     options?: Readonly<{ enrollSource: boolean }>,
   ): Promise<
-    | { status: 'progress' | 'reconciled'; job: GenerationPublicationJob; cost: SearchPublicFilterCost }
+    | {
+        status: 'progress' | 'reconciled';
+        job: GenerationPublicationJob;
+        cost: SearchPublicFilterCost;
+        sourceAdvanced?: boolean;
+      }
     | PublicFilterConsumerUnavailable
   >;
   activate(
@@ -1555,13 +1560,24 @@ export function createSearchGenerationPublication(
             !job.fenced_pass &&
             !job.observation &&
             (job.phase === 'subject' || job.phase === 'engine' || job.phase === 'validate');
+          let waiting: Pending | undefined;
+          let sourceAdvanced = false;
           try {
-            await advance(job, client, context, meter);
+            try {
+              await advance(job, client, context, meter);
+            } catch (error) {
+              if (!mayEnroll || !(error instanceof Pending) || error.reason !== 'source_pending') throw error;
+              waiting = error;
+            }
+            // A writer or replay can stall reconciliation while original Source
+            // enrollment can still commit. Only that progress bypasses backoff.
             if (
               mayEnroll &&
               meter.inputKeys < PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE
             )
-              await completeSource(job, client, context, meter, true);
+              sourceAdvanced = (await completeSource(job, client, context, meter, true)).sourceAdvanced;
+            if (waiting && !sourceAdvanced) throw waiting;
+            if (waiting) await save(client, job, meter);
           } catch (error) {
             if (
               error instanceof Pending &&
@@ -1577,14 +1593,16 @@ export function createSearchGenerationPublication(
           // Fencing and intent do no step work; the existing scheduler must resume activate.
           return {
             status:
-              job.phase === 'reconciled' ||
-              job.phase === 'fencing' ||
-              job.phase === 'intent' ||
-              job.phase === 'active'
+              !waiting &&
+              (job.phase === 'reconciled' ||
+                job.phase === 'fencing' ||
+                job.phase === 'intent' ||
+                job.phase === 'active')
                 ? ('reconciled' as const)
                 : ('progress' as const),
             job: reference(job),
             cost: meter,
+            ...(sourceAdvanced ? { sourceAdvanced } : {}),
           };
         }),
       );
