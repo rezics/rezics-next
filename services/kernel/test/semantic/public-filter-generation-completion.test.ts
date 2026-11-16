@@ -14,6 +14,7 @@ import { createRatedSubjectSource } from '../../src/search/rated-source.ts';
 import { subjectListingSource } from '../../src/library/listing-counts.ts';
 import { subjectConsumer } from '../../src/search/runner.ts';
 import { createDefaultPublicFilterRuntime } from '../../src/search/public-runtime.ts';
+import { PUBLIC_PREPARATION_BUDGET_MS } from '../../src/search/public-preparation-store.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 
 // Actual generation, original Source, ordinary writer and engine: no home/ACK/phase setters.
@@ -276,7 +277,13 @@ test('an unfenced engine page completes after exact inline replay of an advanced
     const admitted = await runtime.preparePublication(1, readContext());
     if (admitted.status !== 'preparing') throw new Error(admitted.reason);
     const { job } = admitted;
-    expect((await runtime.publication.step(job, readContext())).status).toBe('progress');
+    const enrollmentStep = await runtime.publication.step(
+      job,
+      { deadline: Date.now() + PUBLIC_PREPARATION_BUDGET_MS },
+      { enrollSource: true },
+    );
+    if (enrollmentStep.status !== 'progress')
+      throw new Error(`Native enrollment step: ${JSON.stringify(enrollmentStep)}`);
     const {
       rows: [enrollment],
     } = await f.db.pool.query<{

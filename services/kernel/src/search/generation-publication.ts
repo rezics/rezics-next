@@ -81,6 +81,7 @@ export type SearchGenerationPublication = Readonly<{
   step(
     job: GenerationPublicationJob,
     context: PublicFilterConsumerContext,
+    options?: Readonly<{ enrollSource: boolean }>,
   ): Promise<
     | { status: 'progress' | 'reconciled'; job: GenerationPublicationJob; cost: SearchPublicFilterCost }
     | PublicFilterConsumerUnavailable
@@ -1446,10 +1447,11 @@ export function createSearchGenerationPublication(
         return { status: 'preparing' as const, job: reference(job), cost: meter };
       });
     },
-    step(input, context) {
+    step(input, context, options) {
       return run(context, (meter) =>
         locked(input, context, meter, async (job, client) => {
           const mayEnroll =
+            options?.enrollSource === true &&
             !registry &&
             job.family === 'subjects' &&
             !job.fence &&
