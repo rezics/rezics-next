@@ -629,6 +629,7 @@ import {
   encodePublicFilterNativeState as encodeNative,
   decodePublicFilterNativeState as decodeNative,
   readPublicFilterRepairSettlement,
+  readWithPublicationWriterRepair,
   withPublicFilterRepairAllowance,
 } from './public-filter-custody.ts';
 import type {
@@ -2881,6 +2882,20 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       }),
     });
   }
+  async function subjectRepairWriter(m: Meter) {
+    const origin = publicFilterSourceOrigin(config.source);
+    const subjectTarget = /^(.*)subjects-g([1-9][0-9]*)$/.exec(target);
+    if (!origin || !subjectTarget) throw new ConsumerFailure('source_pending');
+    await readSubjectCreditMappingFormatForIndex(m.native, target);
+    return createSearchWriterGuard({
+      pool: m.pool,
+      search: m.native,
+      index: target,
+      consumer: subjectConsumer(subjectTarget[1]!, Number(subjectTarget[2])),
+      source: createRatedSubjectSource(m.pool, origin.routeKey, config.creditSearch).source,
+      listing: subjectListingSource(m.pool),
+    });
+  }
   async function applyRepair(
     repair: RetainedSourceRepair,
     work: ConsumerWork,
@@ -2910,27 +2925,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       return save(work, encoded, false, m);
     }
     if (work.records.some((row) => row.indexed === null)) throw new ConsumerFailure('source_pending');
-    const origin = publicFilterSourceOrigin(config.source);
-    const subjectTarget = /^(.*)subjects-g([1-9][0-9]*)$/.exec(target);
-    const mixedTarget = /^(.*)discovery-g([1-9][0-9]*)$/.exec(target);
-    if (!origin || (!subjectTarget && !mixedTarget)) throw new ConsumerFailure('source_pending');
-    let guard:
-      | Pick<ReturnType<typeof createSearchWriterGuard>, 'repair'>
-      | ReturnType<typeof createDiscoveryRepairWriter>;
-    if (mixedTarget) {
-      guard = await mixedRepairWriter(q, m);
-    } else {
-      if (!subjectTarget) throw new ConsumerFailure('source_pending');
-      await readSubjectCreditMappingFormatForIndex(m.native, target);
-      guard = createSearchWriterGuard({
-        pool: m.pool,
-        search: m.native,
-        index: target,
-        consumer: subjectConsumer(subjectTarget[1]!, Number(subjectTarget[2])),
-        source: createRatedSubjectSource(m.pool, origin.routeKey, config.creditSearch).source,
-        listing: subjectListingSource(m.pool),
-      });
-    }
+    const guard = /discovery-g[1-9][0-9]*$/.test(target) ? await mixedRepairWriter(q, m) : await subjectRepairWriter(m);
     const locator = encodeNative({
       observation: q.snapshot.observation,
       execution: work.execution,
@@ -3060,15 +3055,23 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     });
     try {
       if (!m.enrollmentOnly) {
-        const original = await readNativePublicFilterPublicationCompletion(
-          binding,
-          { job: input.job },
-          context,
-          spent(),
+        const { result: original, writer } = await readWithPublicationWriterRepair(input.job, () =>
+          readNativePublicFilterPublicationCompletion(binding, { job: input.job }, context, spent()),
         );
         m.add(original.cost);
         if ('publication' in original) {
           if (original.status === 'pending') {
+            if (writer) {
+              m.cost.inputKeys++;
+              m.cost.candidates++;
+              m.cost.accessPoints++;
+              m.cost.dependencyPoints++;
+              m.check();
+              await (await subjectRepairWriter(m)).renewPublicationRepair(writer, context);
+              m.cost.resultWrites++;
+              m.check();
+              return { ...original, advanced: true, cost: m.cost };
+            }
             if (original.advanced) {
               m.check();
               return { ...original, cost: m.cost };
