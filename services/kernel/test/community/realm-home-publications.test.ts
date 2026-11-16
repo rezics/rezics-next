@@ -52,11 +52,12 @@ async function publish(realmId: string, subjectId: string) {
   });
 }
 async function shelf(realmId: string, cursor?: string, actor: Account | null = null) {
-  return driver.request({
-    actor,
-    method: 'GET',
-    path: `/v1/realms/${realmId}/publicationShelf${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,
-  });
+  const query = new URLSearchParams([
+    ['languages', 'en'],
+    ['languages', 'zh-Hans'],
+  ]);
+  if (cursor) query.set('cursor', cursor);
+  return driver.request({ actor, method: 'GET', path: `/v1/realms/${realmId}/publicationShelf?${query}` });
 }
 async function page(realmId: string, cursor?: string) {
   const response = await shelf(realmId, cursor);

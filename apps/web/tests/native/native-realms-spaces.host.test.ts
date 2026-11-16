@@ -1,8 +1,9 @@
-import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
+import { afterAll, expect, setDefaultTimeout } from 'bun:test';
 import type { Locator, Page } from 'playwright';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
+import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
 import { startNativeWebStack, type NativeKernelRequest, type NativeWebStack } from './stack.ts';
 import {
   createNativeRealmsSpacesFixture,
@@ -14,6 +15,8 @@ import {
 } from './native-realms-spaces-fixture.ts';
 
 setDefaultTimeout(600_000);
+
+const lifecycle = new NativeTestLifecycle('native Realm and Space journey');
 
 let stack: NativeWebStack;
 let auth: NativeAuthStack;
@@ -31,16 +34,17 @@ async function startAuthStackWithoutWorkerInspector(stack: NativeWebStack): Prom
   }
 }
 
-beforeAll(async () => {
+nativeBeforeAll(lifecycle, 600_000, async () => {
   stack = await startNativeWebStack();
   auth = await startAuthStackWithoutWorkerInspector(stack);
   fixture = await createNativeRealmsSpacesFixture(stack);
-}, 600_000);
+});
 
 afterAll(async () => {
   await auth?.stop();
   await stack?.stop();
 });
+nativeAfterAll(lifecycle, 600_000);
 
 async function hydrated(page: Page): Promise<void> {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
@@ -237,7 +241,14 @@ async function protectedSpaceRequestCount(page: Page, realm: NativeRealmFixture,
   return pageRequests.length;
 }
 
-test('anonymous community navigation, native membership actions, protected admission, ban authority and honest page states', async () => {
+nativeTest(
+  'anonymous community navigation, native membership actions, protected admission, ban authority and honest page states',
+  600_000,
+  runNativeRealmsSpacesJourney,
+  lifecycle,
+);
+
+async function runNativeRealmsSpacesJourney() {
   const anonymousContext = await auth.context('anonymous');
   const anonymous = await anonymousContext.newPage();
   const browserEvidence = observeBrowserErrors(anonymous);
@@ -310,9 +321,9 @@ test('anonymous community navigation, native membership actions, protected admis
   );
   expect(emptyPublications.items).toEqual([]);
 
-  const aliceJourney = await auth.signIn('alice');
+  const aliceJourney = await auth.signIn('alice', { returnTo: `/en/spaces/${fixture.publicRealm.address}` });
   const alice = aliceJourney.context.pages().at(-1)!;
-  const bobJourney = await auth.signIn('bob');
+  const bobJourney = await auth.signIn('bob', { returnTo: '/en/realms' });
   const bob = bobJourney.context.pages().at(-1)!;
   await alice.setViewportSize({ width: 390, height: 844 });
   await bob.setViewportSize({ width: 1280, height: 900 });
@@ -616,4 +627,4 @@ test('anonymous community navigation, native membership actions, protected admis
   await expectVisible(anonymous.getByRole('heading', { level: 1, name: 'Page not found' }));
   await screenshot(anonymous, 'missing-subject-1280');
   await nativePageResponse('anonymous', '/v1/subjects/00000000-0000-4000-8000-000000000000', 404);
-});
+}
