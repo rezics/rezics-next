@@ -84,7 +84,13 @@ test('mounted result rows retain only completed visits for their sources', () =>
   const visits = [...phone, desktop];
   expect(mountedVisitsForRow('I05', visits).map(({ sourceKey }) => sourceKey)).toEqual(['10380', '51', '233', '233']);
   expect(mountedVisitsForRow('I11', visits).map(({ sourceKey }) => sourceKey)).toEqual(['499', '26']);
-  expect(mountedVisitsForRow('I12', visits).map(({ sourceKey }) => sourceKey)).toEqual(['233', '2815', '5329', '10862', '233']);
+  expect(mountedVisitsForRow('I12', visits).map(({ sourceKey }) => sourceKey)).toEqual([
+    '233',
+    '2815',
+    '5329',
+    '10862',
+    '233',
+  ]);
 });
 
 test('mounted verdicts require every visit independently of later shared failures', () => {
@@ -408,11 +414,11 @@ test('walk seed env uses native Auth transport and keeps the issuer for CSRF aud
   expect(env.KERNEL_ORIGIN).toBe(stack.kernel);
   expect(env.REZICS_DEV_PERSONA_ACCOUNT).toBe('persona');
   const source = await readFile(join(import.meta.dir, '../src/imports-public-journey.ts'), 'utf8');
-  const coverAt = source.indexOf("await recordOperator('I01')");
+  const operatorsAt = source.indexOf("['I01', 'I02', 'I04', 'I03'] as const) await recordOperator(id)");
   const seedAt = source.indexOf('scripts/datasets/cross-media-seed.ts');
   const pagesAt = source.search(/startWalkStackActions\(\s*\['pages', 'web'\]/);
-  expect(coverAt).toBeGreaterThan(0);
-  expect(seedAt).toBeGreaterThan(coverAt);
+  expect(operatorsAt).toBeGreaterThan(0);
+  expect(seedAt).toBeGreaterThan(operatorsAt);
   expect(pagesAt).toBeGreaterThan(seedAt);
 });
 
@@ -533,7 +539,8 @@ test('seed remaining request names the prepared classification create without bo
     });
     const error = new ImportTransportError();
     expect(formatSeedFailure(undefined, remaining)).toBe(
-      'POST /v1/subjects:batchWrite create vndb_cross_media vocabulary:vndb.releases.media skos:ConceptScheme',
+      'status=none type=none problem=none phase=unknown pending=create vndb_cross_media vocabulary:vndb.releases.media skos:ConceptScheme ' +
+        'method=POST target=/v1/subjects:batchWrite converter="vndb-release-classification-vocabulary@1"',
     );
     expect(walkFailureCause(error)).toContain('status=none');
     await writeSeedRemainingRequest(directory, remaining);

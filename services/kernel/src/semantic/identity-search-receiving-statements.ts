@@ -39,6 +39,11 @@ import sourceBindingDefine from './public-filter-source-binding-define.sql';
 import sourceDefinitionRead from './public-filter-source-binding-definition.sql';
 import releaseExists from './definitions-exists.sql';
 import releaseRead from './definitions-read.sql';
+import activeReleaseRead from './definitions-active.sql';
+import readListingCounts from '../library/listing-counts.sql';
+import readPublicFigures from '../rating/public-figures-read.sql';
+import { readCanonicalStatementPresenceSql } from '../search/identity-search-writer-document.ts';
+import { readSearchCanonicalGenerationSql } from './search-source.ts';
 import composedReleaseRead from './composite-read.sql';
 import contextOwnerRead from './context-read-creator.sql';
 import contextCommunityRead from './context-read-community.sql';
@@ -91,6 +96,11 @@ function sourceStatementCosts(): readonly (readonly [string, Cost])[] {
         [sourceDefinitionRead.sql, [1, 1, 1, 32768, 1]],
         [releaseExists.sql, [1, 1, 1, 512, 1]],
         [releaseRead.sql, [1, 1, 1, 65536, 1]],
+        [activeReleaseRead.sql, [1, 1, 1, 1024, 1]],
+        [readListingCounts.sql, [1, 1, 1, 1024, 1]],
+        [readPublicFigures.sql, [1, 1, 1, 2048, 1]],
+        [readCanonicalStatementPresenceSql, [1, 1, 1, 512, 1]],
+        [readSearchCanonicalGenerationSql, [1, 1, 1, 512, 1]],
         [composedReleaseRead.sql, [1, 1, 1, 1024, 1]],
         [contextOwnerRead.sql, [1, 1, 1, 512, 1]],
         [contextCommunityRead.sql, [1, 1, 1, 512, 1]],

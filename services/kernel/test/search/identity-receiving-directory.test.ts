@@ -75,7 +75,14 @@ import mappingCurrent from '../../src/semantic/identity-terminal-closure-current
 import {
   EMPTY_IDENTITY_SEARCH_TERMS_DIGEST,
   readIdentitySearchIndexTermSlotSql,
+  readIdentitySearchIndexTermsSql,
 } from '../../src/semantic/identity-search-index-terms.ts';
+import { readCanonicalStatementPresenceSql } from '../../src/search/identity-search-writer-document.ts';
+import activeDefinition from '../../src/semantic/definitions-active.sql';
+import publicFigures from '../../src/rating/public-figures-read.sql';
+import { STANDARD_QUESTION_ID } from '../../src/rating/standard-question.ts';
+import { GLOBAL_CONTEXT_RESOURCE } from '../../src/semantic/contract/global-context.ts';
+import listingCounts from '../../src/library/listing-counts.sql';
 import projectionRelease from '../../src/semantic/search-source-releases.sql';
 import projectionSubjects from '../../src/semantic/search-source-subjects.sql';
 import projectionPrivacy from '../../src/semantic/public-filter-projection-head-read.sql';
@@ -156,10 +163,16 @@ test.each([
   { label: 'keeps an outstanding original writer pending', intent: 'merge', resumed: false, mode: 'uncertain' },
   { label: 'resumes a visible terminal projection', intent: 'merge', resumed: false, mode: 'visible' },
   {
-    label: 'retains canonical term slots across owned turns',
+    label: 'reindexes and retires a visible canonical unmerge original',
     intent: 'unmerge',
     resumed: false,
     mode: 'canonical-terms',
+  },
+  {
+    label: 'indexes and retires a visible canonical merge survivor',
+    intent: 'merge',
+    resumed: false,
+    mode: 'canonical-merge',
   },
   {
     label: 'refuses a changed completed build before acceptance',
@@ -196,7 +209,8 @@ test.each([
   const jobId = newId(jobHome << 4);
   const job = { jobId, epoch: 1n };
   const savedJob = { jobId, epoch: '1' };
-  const canonicalTerms = mode === 'canonical-terms';
+  const canonicalTerms = mode === 'canonical-terms' || mode === 'canonical-merge';
+  const priorVisible = mode === 'handoff' || mode === 'canonical-terms';
   const visible = canonicalTerms || ['visible', 'changed-proof', 'retire', 'superseded'].includes(mode);
   const languageDigest = createHash('sha256').update('en').digest('hex');
   const termSlots = [
@@ -210,6 +224,26 @@ test.each([
   ];
   const termReads: unknown[] = [];
   let canonicalBuildCurrent = true;
+  let changedTermReplay = false;
+  let canonicalStatements = false;
+  let activeCollectionCount = '2';
+  let normalizationCalls = 0;
+  const canonicalDocument = {
+    id: second,
+    partition: writerHome,
+    type: 'schema:Person',
+    security_revision: 1,
+    names: ['Canonical name', 'Native alias', 'Alternate alias'],
+    descriptions: [],
+    name_sort: 'canonical name',
+    statements: [],
+    facts: [],
+    public_collection_count: 2,
+    rating_score: 0.7,
+    rating_prior_epoch: 3,
+    credit_search_complete: false,
+    credited_names: [],
+  };
   const oldBuild = crypto.randomUUID();
   const oldHeads = mode === 'retire' ? [0, writerHome] : [];
   let oldMeaning = bundledDigest;
@@ -219,7 +253,7 @@ test.each([
   const frontier = resumed ? { after: ['search-directory', previous, 9], segment: 0 } : null;
   const leftGeneration = newId(jobHome << 4);
   const rightGeneration = newId(jobHome << 4);
-  const selected = mode === 'materialized' ? first : intent === 'unmerge' ? second : first;
+  const selected = mode === 'materialized' ? first : intent === 'unmerge' || canonicalTerms ? second : first;
   const pool = new Pool();
   const routeKey = new Uint8Array(32);
   const routeDigest = createHash('sha256').update(routeKey).digest('hex');
@@ -338,7 +372,7 @@ test.each([
             'active',
             null,
             '1',
-            engineReads > 1 && values[0] === String(writerHome) ? nativePosition() : '0',
+            (canonicalTerms || engineReads > 1) && values[0] === String(writerHome) ? nativePosition() : '0',
           ],
         ];
       else if (sql === jobRead.sql)
@@ -402,7 +436,9 @@ test.each([
         const isLeft = values[0] === leftGeneration;
         expect(values).toEqual([values[0], after, 1, isLeft ? first : second, isLeft ? otherControlHome : jobHome]);
         rows =
-          mode === 'empty' || mode === 'changed' || (mode === 'materialized' && values[0] === leftGeneration)
+          mode === 'empty' ||
+          mode === 'changed' ||
+          ((mode === 'materialized' || canonicalTerms) && values[0] === leftGeneration)
             ? []
             : [{ original, terminal: original }];
       } else if (sql === readSearchIdentityMaterializedOriginalSql) {
@@ -507,7 +543,45 @@ test.each([
         expect(values).toEqual([writerHome << 4, second, prior]);
         termReads.push(prior);
         const next = termSlots[termReads.length - 1];
-        rows = [{ prior_current: true, slot_id: null, ...next }];
+        rows = [{ prior_current: true, slot_id: null, ...next, fact_count: next?.terms.length ?? 0 }];
+      } else if (canonicalTerms && sql === readIdentitySearchIndexTermsSql) {
+        expect(values).toEqual([writerHome << 4, second, 8]);
+        rows = [
+          ...termSlots.map((slot) => ({
+            ...slot,
+            ...(changedTermReplay && slot.kind === 'label' && { terms: ['Changed canonical name'] }),
+            language: 'en',
+            state: 'progress',
+          })),
+          { state: 'complete', remaining: 0 },
+        ];
+      } else if (canonicalTerms && sql === readCanonicalStatementPresenceSql) {
+        expect(values).toEqual([writerHome << 4, second]);
+        rows = canonicalStatements ? [{}] : [];
+      } else if (canonicalTerms && sql === activeDefinition.sql) {
+        expect(values).toEqual(['0']);
+        rows = [[bundledDigest, '1']];
+      } else if (canonicalTerms && sql === publicFigures.sql) {
+        expect(values).toContain(String(writerHome));
+        rows = [
+          [
+            STANDARD_QUESTION_ID,
+            GLOBAL_CONTEXT_RESOURCE.id,
+            second,
+            '5',
+            '0.8',
+            '0.7',
+            '0.4',
+            '8',
+            '3',
+            '2',
+            '2026-01-01T00:00:00Z',
+            '19',
+          ],
+        ];
+      } else if (canonicalTerms && sql === listingCounts.sql) {
+        expect(values[0]).toBe(String(writerHome));
+        rows = [[second, activeCollectionCount]];
       } else if (visible && sql === projectionRelease.sql) rows = [[bundledDigest, JSON.stringify(bundledRelease)]];
       else if (visible && sql === projectionSubjects.sql)
         rows = [[String(writerHome << 4), second, 'schema:Person', 'visible', '1', bundledDigest, null, 't', '1']];
@@ -562,7 +636,7 @@ test.each([
                   closed_transaction_id: null,
                 },
               ]
-            : mode === 'handoff'
+            : priorVisible
               ? [
                   {
                     incarnation: 'allocation',
@@ -605,9 +679,14 @@ test.each([
           expect.any(String),
           '21',
         ]);
-        expect(values[11]).toBe(mode === 'handoff' ? previousClose : null);
+        expect(values[11]).toBe(priorVisible ? previousClose : null);
         retainedAction = String(values[10]);
-        expect(JSON.parse(retainedAction)).toEqual({ op: 'delete', id: selected, version: { nativeBigint: '21' } });
+        expect(JSON.parse(retainedAction)).toEqual({
+          op: canonicalTerms ? 'index' : 'delete',
+          id: selected,
+          version: { nativeBigint: '21' },
+          ...(canonicalTerms && { document: expect.objectContaining(canonicalDocument) }),
+        });
         preparedWriter = {
           consumer: 'search_directory_probe_subjects_g1',
           incarnation: 'allocation',
@@ -639,6 +718,7 @@ test.each([
                 {
                   hold_id: hold!.hold_id,
                   source: retainedPlan.source,
+                  obligations: retainedPlan.references,
                   effect_key: retainedPlan.effect_key,
                   action_digest: createHash('sha256').update(retainedAction!).digest('hex'),
                   action_bytes: Buffer.byteLength(retainedAction!),
@@ -952,7 +1032,7 @@ test.each([
         const copies = JSON.parse(String(values[2]));
         copyLocator = copies[0];
         expect(copies).toEqual(
-          mode === 'handoff'
+          priorVisible
             ? [
                 expect.objectContaining({
                   original: selected,
@@ -967,7 +1047,7 @@ test.each([
       } else if (sql === planSql.lock.sql) rows = [{ document_id: selected }];
       else if (sql === planSql.prepare.sql) {
         expect(values[11]).toBe(createHash('sha256').update(retainedAction!).digest('hex'));
-        expect(values[13]).toBe(mode === 'handoff' ? 1 : 0);
+        expect(values[13]).toBe(priorVisible ? 1 : 0);
         stagingPlan = {
           effect_key: String(values[7]),
           source: JSON.parse(String(values[9])),
@@ -983,7 +1063,7 @@ test.each([
         else if (sql === readPublicationFence && mode === 'fenced') rows = [{ publication_fence: crypto.randomUUID() }];
         else if (sql === writerSql.insertGate || (sql === writerSql.gate && (mode === 'existing' || engineReads > 1)))
           rows = [{ enrollment_generation: '0', fence_generation: '0', closed_token: null }];
-        else if (sql === writerSql.original && mode === 'handoff') {
+        else if (sql === writerSql.original && priorVisible) {
           rows = [{ incarnation: 'allocation', owner_epoch: 1, closed_transaction_id: previousClose }];
         } else rows = [];
       } else if (sql === stepSql.sql) {
@@ -1048,10 +1128,19 @@ test.each([
     return client;
   }) as Pool['connect'];
   const search = {
-    async request<T>(method: string, path: string) {
-      expect([method, path]).toEqual(['GET', `/${index}`]);
+    async request<T>(method: string, path: string, body?: unknown) {
       expect(checkedOut).toBe(false);
       expect(activeIdentitySourceConsumerMaintenance(pool)).toBeNull();
+      if (canonicalTerms && path === `/${index}/_analyze`) {
+        expect(method).toBe('POST');
+        expect(body).toEqual({ text: ['Canonical name'], normalizer: 'name_key' });
+        normalizationCalls++;
+        return {
+          status: 200,
+          body: { tokens: [{ token: 'canonical name', position: 0, start_offset: 0, end_offset: 14 }] } as T,
+        };
+      }
+      expect([method, path]).toEqual(['GET', `/${index}`]);
       engineReads++;
       return {
         status: 200,
@@ -1067,7 +1156,11 @@ test.each([
       expect(checkedOut).toBe(false);
       expect(activeIdentitySourceConsumerMaintenance(pool)).toBeNull();
       expect(committedOperation?.state).toBe('dispatched');
-      expect(lines).toEqual([{ delete: { _index: alias, _id: selected, version: 21, version_type: 'external' } }]);
+      const op = canonicalTerms ? 'index' : 'delete';
+      const target = { _index: alias, _id: selected, version: 21, version_type: 'external' };
+      expect(lines).toEqual(
+        canonicalTerms ? [{ index: target }, expect.objectContaining(canonicalDocument)] : [{ delete: target }],
+      );
       expect(options?.query).toMatchObject({ require_alias: true, refresh: 'wait_for' });
       bulkCalls++;
       if (mode === 'lost') throw new Error('Synthetic transport response lost');
@@ -1075,15 +1168,15 @@ test.each([
         errors: false,
         items: [
           {
-            delete: {
+            [op]: {
               _index: index,
               _id: selected,
               _version: 21,
               _shards: { total: 1, successful: 1, failed: 0 },
               _seq_no: 1,
               _primary_term: 1,
-              status: 200,
-              result: 'deleted',
+              status: canonicalTerms ? 201 : 200,
+              result: canonicalTerms ? 'created' : 'deleted',
             },
           },
         ],
@@ -1116,6 +1209,7 @@ test.each([
     'fenced',
     'visible',
     'canonical-terms',
+    'canonical-merge',
     'changed-proof',
     'retire',
     'superseded',
@@ -1186,7 +1280,7 @@ test.each([
         alias,
         '0',
         '0',
-        mode === 'handoff' ? previousClose : null,
+        priorVisible ? previousClose : null,
       ]);
       expect(committed.map((step) => step.engineRequests)).toEqual([0, 1]);
       expect(engineReads).toBe(1);
@@ -1244,30 +1338,39 @@ test.each([
         expect(engineReads).toBe(1);
         expect(bulkCalls).toBe(0);
         expect(retainedPlan).toBeUndefined();
-        return;
-      }
-      if (mode === 'retire') {
-        await nextSupport(['terminal', 'retiring', oldBuild, '5', 0]);
-        await nextSupport(['terminal', 'retiring', oldBuild, '5', writerHome]);
-        expect(oldHeads).toEqual([]);
-      }
-      if (visible) {
-        await nextSupport(['terminal', 'progress']);
-        expect(projectionHeadCursors).toEqual([]);
-        await nextSupport(['terminal', 'progress', retainedBuild, newGeneration]);
-        if (mode === 'superseded') {
-          await nextSupport(['terminal', 'restart']);
-          expect(engineReads).toBe(1);
-          expect(readBuilds).toBe(3);
-          return;
+        changedTermReplay = true;
+        expect(await prepare(pool, progress.receipt)).toEqual({ state: 'pending' });
+        expect(normalizationCalls).toBe(0);
+        changedTermReplay = false;
+        canonicalStatements = true;
+        expect(await prepare(pool, progress.receipt)).toEqual({ state: 'pending' });
+        expect(normalizationCalls).toBe(0);
+        expect(retainedPlan).toBeUndefined();
+        canonicalStatements = false;
+      } else {
+        if (mode === 'retire') {
+          await nextSupport(['terminal', 'retiring', oldBuild, '5', 0]);
+          await nextSupport(['terminal', 'retiring', oldBuild, '5', writerHome]);
+          expect(oldHeads).toEqual([]);
         }
-        await nextSupport(['terminal', 'complete', retainedBuild, newGeneration]);
-        expect(projectionHeadCursors).toEqual(['-1', String(writerHome)]);
-      } else if (intent === 'merge') await nextSupport(['terminal', 'withheld']);
-      expect(committed[3]?.frontier.after.slice(2)).toEqual(['original', 'withheld']);
-      expect(projectedSubjects).toEqual(
-        intent === 'unmerge' ? [second] : [first, ...Array(mode === 'retire' ? 5 : visible ? 3 : 1).fill(second)],
-      );
+        if (visible) {
+          await nextSupport(['terminal', 'progress']);
+          expect(projectionHeadCursors).toEqual([]);
+          await nextSupport(['terminal', 'progress', retainedBuild, newGeneration]);
+          if (mode === 'superseded') {
+            await nextSupport(['terminal', 'restart']);
+            expect(engineReads).toBe(1);
+            expect(readBuilds).toBe(3);
+            return;
+          }
+          await nextSupport(['terminal', 'complete', retainedBuild, newGeneration]);
+          expect(projectionHeadCursors).toEqual(['-1', String(writerHome)]);
+        } else if (intent === 'merge') await nextSupport(['terminal', 'withheld']);
+        expect(committed[3]?.frontier.after.slice(2)).toEqual(['original', 'withheld']);
+        expect(projectedSubjects).toEqual(
+          intent === 'unmerge' ? [second] : [first, ...Array(mode === 'retire' ? 5 : visible ? 3 : 1).fill(second)],
+        );
+      }
       if (mode === 'uncertain') {
         await expect(prepare(pool, progress.receipt)).rejects.toThrow('requires settlement of its outstanding writer');
         expect(retainedPlan).toBeUndefined();
@@ -1279,23 +1382,24 @@ test.each([
       expect(retainedPlan?.source).toMatchObject({
         original: selected,
         documentId: selected,
-        disposition: mode === 'handoff' ? 'NEW' : mode === 'first' ? 'first-apply' : 'OLD',
+        disposition: priorVisible ? 'NEW' : mode === 'first' || canonicalTerms ? 'first-apply' : 'OLD',
         barrier: { kind: 'original', partition: writerHome },
         originalFence: { position: '21', epoch: 1, partition: writerHome },
       });
       expect(retainedPlan?.references).toMatchObject({
         definition: definitionId,
         release: bundledDigest,
-        originalSupport: null,
+        originalSupport: canonicalTerms ? { build: retainedBuild, generation: newGeneration } : null,
         terminalSupport: visible ? { build: retainedBuild, generation: newGeneration } : null,
-        predecessor: mode === 'handoff' ? { planId: previousPlan } : null,
+        predecessor: priorVisible ? { planId: previousPlan } : null,
       });
-      expect(predecessorReads).toBe(mode === 'handoff' ? 1 : 0);
+      expect(predecessorReads).toBe(priorVisible ? 1 : 0);
       expect(publicationWrites).toEqual([lockPublicationFence, advanceWriterPublicationAdmissionSql]);
       expect(await prepare(pool, progress.receipt)).toEqual({ state: 'prepared' });
       expect(engineReads).toBe(2);
+      expect(normalizationCalls).toBe(Number(canonicalTerms));
       expect(committed.map((step) => step.engineRequests)).toEqual([0, 1, ...Array(committed.length - 2).fill(0)]);
-      if (['dispatch', 'lost', 'handoff', 'visible', 'changed-proof'].includes(mode)) {
+      if (canonicalTerms || ['dispatch', 'lost', 'handoff', 'visible', 'changed-proof'].includes(mode)) {
         accepting = true;
         const acceptance = await withIdentitySourceConsumerMaintenance(
           { pool, env: {} },
@@ -1357,11 +1461,23 @@ test.each([
           expect(receiptText).toBeUndefined();
           expect(engineReads).toBe(3);
         } else {
+          if (canonicalTerms) {
+            canonicalBuildCurrent = false;
+            await expect(prepare(pool, request)).rejects.toThrow('Canonical Search Source changed before dispatch');
+            expect(committedOperation).toBeUndefined();
+            expect(bulkCalls).toBe(0);
+            canonicalBuildCurrent = true;
+            activeCollectionCount = '3';
+            await expect(prepare(pool, request)).rejects.toThrow('Canonical Search Source changed before dispatch');
+            expect(committedOperation).toBeUndefined();
+            expect(bulkCalls).toBe(0);
+            activeCollectionCount = '2';
+          }
           expect(await prepare(pool, request)).toEqual({ state: 'prepared' });
           expect(committedOperation?.state).toBe('visible');
           expect(receiptText).toContain('"kind":"bulk"');
           expect(await prepare(pool, request)).toEqual({ state: 'prepared' });
-          expect(engineReads).toBe(4);
+          expect(engineReads).toBe(canonicalTerms ? 6 : 4);
           const applied = await withIdentitySourceConsumerMaintenance(
             { pool, env: {} },
             { deadline: Date.now() + 5000 },
@@ -1371,15 +1487,18 @@ test.each([
           expect(applied.frontier.after).toEqual([selected, retainedPlan?.effect_key]);
           expect(applied.receipt.native.position).toBe(33n);
           expect(committedOperation?.state).toBe('applied');
-          expect(engineReads).toBe(4);
-          for (const phase of mode === 'handoff' ? [null, 'original', null] : ['original', 'terminal', null]) {
+          expect(engineReads).toBe(canonicalTerms ? 6 : 4);
+          for (const phase of priorVisible
+            ? [null, 'original', null]
+            : canonicalTerms
+              ? ['original', null]
+              : ['original', 'terminal', null]) {
             const next = await prepare(pool, request);
             expect(next.state).toBe('progress');
             expect(JSON.parse(receivingContinuation.after_key!).phase ?? null).toBe(phase);
           }
           expect(receivingContinuation.state).toBe('settled');
-          if (mode === 'handoff')
-            expect(copySettlement?.transactionId).toBe(committedOperation?.visible_transaction_id);
+          if (priorVisible) expect(copySettlement?.transactionId).toBe(committedOperation?.visible_transaction_id);
           expect(await prepare(pool, request)).toEqual({
             state: 'progress',
             transactionId: controlCustody?.transaction_id,
@@ -1394,7 +1513,7 @@ test.each([
           );
           expect(retired.frontier.after).toEqual(['search-directory', selected, 1]);
           expect(retiredScope).toBe(true);
-          expect(engineReads).toBe(4);
+          expect(engineReads).toBe(canonicalTerms ? 6 : 4);
         }
         expect(bulkCalls).toBe(1);
       }

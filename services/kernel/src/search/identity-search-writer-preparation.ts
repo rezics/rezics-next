@@ -49,6 +49,8 @@ import { subjectPartition } from './source.ts';
 import { createSearchWriterGuard, type SearchIdentityWriterAdmission } from './writer-guard.ts';
 import { createSearchIdentityWriterSupport } from './identity-search-writer-support.ts';
 import { advanceSearchIdentityDispatch } from './identity-search-writer-dispatch.ts';
+import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
+import { prepareCanonicalIdentityDocument } from './identity-search-writer-document.ts';
 
 const unavailable = (message: string) => new IdentityEpochStoreError('identity_epoch_unavailable', message);
 
@@ -203,7 +205,19 @@ export function createSearchIdentityWriterPreparation(
                   const plan = await readSearchIdentityOriginalPlan(pool, job, change, configuration, context.deadline);
                   if (plan) return { state: 'prepared' } as const;
                   const redirected = original !== change.terminal;
-                  if (!redirected && support.originalSupport) return { state: 'pending' } as const;
+                  const canonical = support.canonical
+                    ? await prepareCanonicalIdentityDocument(
+                        configuration,
+                        original,
+                        support.canonical,
+                        context.deadline,
+                        (actions) =>
+                          outsideSource(() =>
+                            prepareBoundedSortKeys(turn.search(configuration.search), configuration.index, actions),
+                          ),
+                      )
+                    : null;
+                  if (!redirected && support.originalSupport && !canonical) return { state: 'pending' } as const;
                   const allocation = await outsideSource(() =>
                     readSearchWriterPhysicalTarget(turn.search(configuration.search), configuration.index),
                   );
@@ -226,12 +240,14 @@ export function createSearchIdentityWriterPreparation(
                       if ((await admitted(tx))?.transactionId !== admission.transactionId)
                         throw unavailable('Search writer lost its retained admission');
                       await support.compare(tx);
-                      const retained = await writer.prepareIdentityRemoval(
+                      await canonical?.compare(tx);
+                      const retained = await writer.prepareIdentityAction(
                         tx,
                         job,
                         original,
                         locator.planId,
                         admission,
+                        canonical?.document,
                       );
                       const disposition = redirected ? 'OLD' : retained.firstAbsence ? 'first-apply' : 'NEW';
                       const effectKey = searchIdentityWriterEffectKey(configuration.consumer, original, disposition);

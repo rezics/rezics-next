@@ -23,6 +23,7 @@ import lockPriorEpochTotals from './population-prior-epoch-totals-lock.sql';
 import readPriorEpoch from './population-prior-epoch-read.sql';
 import readPriorQuestion from './question-read.sql';
 import { partitionReadClient } from '../database/read-snapshot.ts';
+import { nativeSourceQuery } from '../database/native-source-query.ts';
 import { ratingQuestionIdentity } from './question-directory.ts';
 import writePriorEpoch from './population-prior-epoch-upsert.sql';
 import enqueuePriorRepublish from './population-prior-republish-enqueue.sql';
@@ -686,6 +687,7 @@ export async function readPublicFigurePending(
 export async function readPublicFigures(
   client: Queryable,
   input: { partition: number; questionId: string; populationId: string; subjectIds: readonly string[] },
+  mode?: 'native',
 ): Promise<PublicFigure[]> {
   validateAddress(input);
   if (!Array.isArray(input.subjectIds) || input.subjectIds.length > MAX_READ_IDS)
@@ -695,12 +697,15 @@ export async function readPublicFigures(
     if (route === null || partitionOf(route) !== input.partition)
       throw new TypeError('Public figure subjects must belong to the requested partition');
   }
-  const rows = (await readPublicFiguresStatement().run(client, {
+  const parameters = {
     partition_no: input.partition,
     question_id: input.questionId,
     population_id: input.populationId,
     subject_ids: [...input.subjectIds],
-  })) as PublicFigureRow[];
+  };
+  const rows = (await (mode === 'native'
+    ? nativeSourceQuery(client, readPublicFiguresSql, parameters)
+    : readPublicFiguresStatement().run(client, parameters))) as PublicFigureRow[];
   return rows.map(figureFromRow);
 }
 

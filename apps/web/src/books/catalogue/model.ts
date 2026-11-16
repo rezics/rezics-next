@@ -1,5 +1,5 @@
 import { BOOK_CATALOGUE_TYPES } from '@rezics/definitions/contract';
-import { discoverySearchHref } from '../../search/search';
+import { discoverySearchHref } from '../../search/search-params';
 
 /** Exact released identities. An Edition is never silently replaced by its work. */
 export const bookCatalogueTypes = BOOK_CATALOGUE_TYPES;

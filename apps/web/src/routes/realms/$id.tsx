@@ -7,12 +7,12 @@ import { useMemo } from 'react';
 import { useSession } from '../../session/query';
 import { personalRead } from '../../session/reading-policy';
 import { CommunityReaderStatus, useCurrentCommunityRoutePage } from '../../community/current-route-page';
-import { realmPageQuery } from '../../community';
+import { realmPageQuery } from '../../community/space-queries';
 import { SpacePage } from '../../session/community-application';
 import { getLocale } from '../../paraglide/runtime.js';
 import { ClosedErrorPage } from '../../shell/closed';
-import { spacePageHead } from '../../community';
-import type { SpacePageData } from '../../community';
+import { spacePageHead } from '../../community/space-head';
+import type { SpacePageData } from '../../community/space';
 import {
   awaitSpacePageRead,
   captureSpacePageAdmission,
@@ -23,8 +23,9 @@ import {
   spacePageReadWasCancelled,
   spacePageReadResultWasReplaced,
   SpacePageLifetimeHost,
-} from '../../community';
-import type { SpacePageAdmission, SpacePageTarget } from '../../community';
+  type SpacePageAdmission,
+  type SpacePageTarget,
+} from '../../community/space-page-lifetime';
 
 type RealmLoaderData = { page: SpacePageData; admission: SpacePageAdmission };
 

@@ -7,6 +7,7 @@ import type { IdentityChange, IdentityFrontier, IdentityJobRef } from '../semant
 import {
   EMPTY_IDENTITY_SEARCH_TERMS_DIGEST,
   readIdentitySearchIndexTermSlot,
+  readIdentitySearchIndexTerms,
 } from '../semantic/identity-search-index-terms.ts';
 import { createPublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
 import { readPublicFilterSourceDefinition } from '../semantic/source-binding-application.ts';
@@ -55,11 +56,11 @@ async function retained(tx: CommandTransaction, basis: Basis, phase: Phase) {
   if (
     !row.proven ||
     !frontier ||
-    frontier.segment !== 0 ||
+    (phase !== 'terms' && frontier.segment !== 0) ||
     !isDeepStrictEqual(frontier.after.slice(0, 3), [marker, basis.request, phase])
   )
     throw unavailable('Search writer support changed at its retained owner');
-  return { transactionId: row.transaction_id, after: frontier.after };
+  return { transactionId: row.transaction_id, ...frontier };
 }
 
 function decodeDefinition(row: Awaited<ReturnType<typeof retained>>, expectedRelease: string): Definition | null {
@@ -102,12 +103,13 @@ function decodeProjection(row: Awaited<ReturnType<typeof retained>>): Projection
   return { transactionId: row.transactionId, state, frontier: { build, generation: BigInt(generation), continuation } };
 }
 
-function closed(value: Projection | null): value is Projection {
+function closed(value: Projection | null): value is Projection & { state: 'complete' | 'withheld' } {
   return value?.state === 'complete' || value?.state === 'withheld';
 }
 
 function termCursor(row: Awaited<ReturnType<typeof retained>>, support: PublicFilterProjectionFrontier) {
-  if (!row) return { after: null, digest: EMPTY_IDENTITY_SEARCH_TERMS_DIGEST, state: 'progress' as const };
+  if (!row || row.segment === 0)
+    return { after: null, digest: EMPTY_IDENTITY_SEARCH_TERMS_DIGEST, points: 0, state: 'progress' as const };
   const [, , , state, build, generation, after, digest] = row.after;
   if (
     row.after.length !== 8 ||
@@ -120,7 +122,7 @@ function termCursor(row: Awaited<ReturnType<typeof retained>>, support: PublicFi
     !/^[a-f0-9]{64}$/.test(digest)
   )
     throw unavailable('Search writer term cursor changed with its Source build');
-  return { after, digest, state };
+  return { after, digest, points: row.segment, state };
 }
 
 export function createSearchIdentityWriterSupport(configuration: SearchReceivingConfiguration) {
@@ -138,6 +140,7 @@ export function createSearchIdentityWriterSupport(configuration: SearchReceiving
         release: string;
         originalSupport: PublicFilterProjectionFrontier | null;
         terminalSupport: PublicFilterProjectionFrontier | null;
+        canonical: null | ((tx: CommandTransaction) => ReturnType<typeof readIdentitySearchIndexTerms>);
         compare(tx: CommandTransaction): Promise<void>;
       }>
   > => {
@@ -171,18 +174,19 @@ export function createSearchIdentityWriterSupport(configuration: SearchReceiving
           throw unavailable('Search writer Source support changed before preparation');
       }
       const support = original.frontier;
+      let canonical: null | ((tx: CommandTransaction) => ReturnType<typeof readIdentitySearchIndexTerms>) = null;
       if (sameDocument && support) {
         const cursor = termCursor(terms, support);
+        const verify = await prepareRetainedIdentitySourceProjections(configuration, {
+          job: basis.job,
+          ...basis.change,
+          release: definition.release,
+          originalSupport: support,
+          terminalSupport: support,
+          deadline,
+        });
+        if (!verify) throw unavailable('Search writer canonical terms lost their Source build');
         if (cursor.state === 'progress') {
-          const verify = await prepareRetainedIdentitySourceProjections(configuration, {
-            job: basis.job,
-            ...basis.change,
-            release: definition.release,
-            originalSupport: support,
-            terminalSupport: support,
-            deadline,
-          });
-          if (!verify) throw unavailable('Search writer canonical terms lost their Source build');
           return {
             state: 'progress',
             async advance(tx) {
@@ -209,11 +213,15 @@ export function createSearchIdentityWriterSupport(configuration: SearchReceiving
                   next.after,
                   next.digest,
                 ],
-                segment: 0,
+                segment: cursor.points + next.points,
               };
             },
           };
         }
+        canonical = async (tx) => {
+          if (!(await verify(tx))) throw unavailable('Search writer canonical terms lost their Source build');
+          return readIdentitySearchIndexTerms(tx, basis.change.original, cursor);
+        };
       }
       return {
         state: 'ready',
@@ -221,6 +229,7 @@ export function createSearchIdentityWriterSupport(configuration: SearchReceiving
         release: definition.release,
         originalSupport: original.frontier,
         terminalSupport: terminal.frontier,
+        canonical,
         compare,
       };
     }

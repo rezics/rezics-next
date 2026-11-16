@@ -32,7 +32,7 @@ import readPosition from './search-source-position.sql';
 import readStatements from './search-source-statements.sql';
 import readSubjects from './search-source-subjects.sql';
 import { accessCheck } from '../request/access.ts';
-import { DEFAULT_REQUEST_DEADLINE_MS, mintReadTime, type CommandTransaction } from '../command/command.ts';
+import { commandTime, DEFAULT_REQUEST_DEADLINE_MS, mintReadTime, type CommandTransaction } from '../command/command.ts';
 import { nativeSourceQuery } from '../database/native-source-query.ts';
 import { withBoundedReadConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -113,10 +113,10 @@ export const SEARCH_SOURCE_CURRENT_CANDIDATE_BUDGET = 32;
 const CURRENT_STATEMENT_LIMIT = SEARCH_SOURCE_CURRENT_SLOT_BUDGET * SEARCH_SOURCE_CURRENT_CANDIDATE_BUDGET + 1;
 
 /** Current name/fact/visibility publication fence used by complete Search traversals. */
-export async function readSearchCanonicalGeneration(pool: Pool | PoolClient): Promise<string> {
-  const result = await pool.query<{ last_value: string; is_called: boolean }>(
-    `SELECT last_value::text,is_called FROM semantic.search_canonical_generation`,
-  );
+export const readSearchCanonicalGenerationSql =
+  'SELECT last_value::text,is_called FROM semantic.search_canonical_generation';
+export async function readSearchCanonicalGeneration(pool: CommandTransaction): Promise<string> {
+  const result = await pool.query<{ last_value: string; is_called: boolean }>(readSearchCanonicalGenerationSql);
   const row = result.rows[0];
   if (!row || !/^[0-9]+$/.test(row.last_value)) throw new Error('Search canonical generation is unavailable');
   return `${row.last_value}:${row.is_called ? 1 : 0}`;
@@ -418,7 +418,12 @@ export async function prepareRetainedIdentitySourceProjections(
       : [{ id: input.original, frontier: input.originalSupport }];
   if (!input.phase && input.original !== input.terminal)
     requested.push({ id: input.terminal, frontier: input.terminalSupport });
-  const checks = [];
+  const checks: {
+    id: string;
+    route: number;
+    frontier: PublicFilterProjectionFrontier | null;
+    authorize: Awaited<ReturnType<typeof accessCheck>>;
+  }[] = [];
   for (const item of requested) {
     const route = routeOf(item.id);
     if (route === null) return null;
@@ -449,7 +454,7 @@ export async function prepareRetainedIdentitySourceProjections(
       if (!state) return false;
       let visible = false;
       if (state.visibility === 'visible') {
-        at ??= await mintReadTime(tx, config.clock, config.pool);
+        at ??= commandTime(tx) ?? (await mintReadTime(tx, config.clock, config.pool));
         visible = await check.authorize(tx, at);
       }
       if (visible !== Boolean(check.frontier)) return false;

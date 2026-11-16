@@ -7,7 +7,7 @@ import { useMemo } from 'react';
 import { CommunityReaderStatus, useCurrentCommunityRoutePage } from '../../community/current-route-page';
 import { personalRead } from '../../session/reading-policy';
 import { useSession } from '../../session/index';
-import { spaceQuery } from '../../community';
+import { spaceQuery } from '../../community/space-queries';
 import { getLocale } from '../../paraglide/runtime.js';
 import { SpacePage } from '../../session/community-application';
 import {
@@ -20,11 +20,12 @@ import {
   spacePageReadWasCancelled,
   spacePageReadResultWasReplaced,
   SpacePageLifetimeHost,
-} from '../../community';
-import type { SpacePageAdmission, SpacePageTarget } from '../../community';
-import type { SpacePageData } from '../../community';
+  type SpacePageAdmission,
+  type SpacePageTarget,
+} from '../../community/space-page-lifetime';
+import type { SpacePageData } from '../../community/space';
 import { ClosedErrorPage } from '../../shell/closed';
-import { spacePageHead } from '../../community';
+import { spacePageHead } from '../../community/space-head';
 
 type SpaceLoaderData = { page: SpacePageData; admission: SpacePageAdmission };
 

@@ -62,6 +62,20 @@ function toPublicFigure(figure: Awaited<ReturnType<typeof readPublicFigures>>[nu
   };
 }
 
+export async function readNativeSearchPublicRating(client: Pick<Pool, 'query'>, partition: number, subject: string) {
+  const [figure] = await readPublicFigures(
+    client,
+    {
+      partition,
+      questionId: STANDARD_QUESTION_ID,
+      populationId: GLOBAL_CONTEXT.id,
+      subjectIds: [subject],
+    },
+    'native',
+  );
+  return figure?.count ? toPublicFigure(figure) : undefined;
+}
+
 /** Compose the search rating source from current public figures for the standard question and Global population. */
 export function createPublicRatingSource(pool: Pool): PublicRatingSource {
   return {

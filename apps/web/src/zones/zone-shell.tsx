@@ -1,4 +1,4 @@
-import { pickZoneName, type CompositionDocument, type View } from '@rezics/composition';
+import type { CompositionDocument, View } from '@rezics/composition';
 import { useLocation, useRouter, notFound } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -28,14 +28,7 @@ import { loadReader } from '../subject/load-reader';
 import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { NotFoundPage } from '../shell/shell';
 import { RouteState } from '../shell/route-state';
-import type { PagePaths } from '../shell/head';
-import {
-  continueZonePageRequest,
-  readZonePageRequest,
-  zoneReturnHref,
-  type ZonePageInput,
-  type ZonePageRouteOutcome,
-} from './zone-read';
+import { continueZonePageRequest, zoneReturnHref, type ZonePageInput, type ZonePageRouteOutcome } from './zone-read';
 import { zoneAppearanceAttributes, zonePageDocument, type ZonePublic } from './appearance';
 import { advanceZoneCallback, type ZoneCallbackIdentity } from './callback';
 import { zoneVisitFromRequest, zoneVisitHref, zoneVisitReturn, zoneVisitWithoutCursor, type ZoneVisit } from './visit';
@@ -43,31 +36,13 @@ import type { ReceivedZonePage } from './receive';
 import { projectZoneSlots } from './slots';
 import { kernelClient } from '../kernel/client';
 import { m } from '../paraglide/messages.js';
-import { metaText } from '@rezics/ui/meta-line';
-import { getLocale, locales } from '../paraglide/runtime.js';
+import { locales } from '../paraglide/runtime.js';
 import { useSession } from '../session/query';
-import { subjectHref, subjectViewPaths } from '../subject/subject-href';
+import { zoneLabel, zonePageTitle, zoneRouteHeading } from './zone-title';
+import type { ZoneSubjectRouteData } from './zone-subject-route-data';
 
-function zoneLabel(zone: ZonePublic, locale: string): { text: string; lang?: string } | undefined {
-  const label = pickZoneName(zone, locale);
-  if (!label.text) return;
-  return { text: label.text, ...(label.lang ? { lang: label.lang } : {}) };
-}
-
-function navigationLabel(route: string, locale: string): string {
-  if (!route) return m.zone_home();
-  const segment = route.split('/').at(-1) ?? route;
-  return segment.replaceAll('-', ' ').replace(/\b\p{L}/gu, (letter) => letter.toLocaleUpperCase(locale));
-}
-
-export function zoneRouteHeading(route: string, locale: string): string {
-  return navigationLabel(route, locale);
-}
-
-export function zonePageTitle(zone: ZonePublic, route: string, locale: string): string {
-  const title = zoneLabel(zone, locale)?.text ?? m.zone_home();
-  return route ? `${navigationLabel(route, locale)} · ${title}` : title;
-}
+export { zonePageTitle, zoneRouteHeading } from './zone-title';
+export { readZoneSubjectRoute, zoneSubjectHead, type ZoneSubjectRouteData } from './zone-subject-route-data';
 
 function navigationHref(zone: ZonePublic, locale: string, route: string): string {
   const suffix = route ? `/${route.split('/').map(encodeURIComponent).join('/')}` : '';
@@ -890,50 +865,6 @@ function ZoneSubjectPage({
 }
 
 export { ZoneSubjectPage };
-
-export type ZoneSubjectRouteData = { outcome: ZonePageRouteOutcome; paths: PagePaths; view: View };
-
-export async function readZoneSubjectRoute(input: {
-  id: string;
-  subjectId: string;
-  locale?: string;
-  credentialMode?: ReadCredentialMode;
-  view?: View;
-}) {
-  const locale = input.locale ?? getLocale();
-  const target: ZonePageInput['target'] = {
-    subject: input.subjectId,
-    ...(input.view && input.view !== 'overview' ? { view: input.view } : {}),
-  };
-  const outcome = await readZonePageRequest({
-    data: {
-      id: input.id,
-      locale,
-      target,
-      ...(input.credentialMode === undefined ? {} : { credentialMode: input.credentialMode }),
-    },
-  });
-  const view = input.view ?? 'overview';
-  const admittedSubjectId = outcome.kind === 'page' ? (outcome.page.subject ?? input.subjectId) : input.subjectId;
-  const overview = outcome.kind === 'page' ? outcome.common?.overview : undefined;
-  const basePaths = Object.fromEntries(
-    locales.map((language) => {
-      const path = overview
-        ? subjectHref({ id: admittedSubjectId, label: subjectPageTitle(overview, language) }, language).href
-        : `/${encodeURIComponent(language)}/subjects/${encodeURIComponent(admittedSubjectId)}`;
-      return [language, path.slice(`/${encodeURIComponent(language)}`.length)];
-    }),
-  ) as PagePaths;
-  return { outcome, paths: subjectViewPaths(basePaths, view), view };
-}
-
-export function zoneSubjectHead(data: ZoneSubjectRouteData | undefined, view: View = data?.view ?? 'overview') {
-  const locale = getLocale();
-  const page = data?.outcome.kind === 'page' ? data.outcome.common?.overview : undefined;
-  const title = page ? subjectPageTitle(page, locale) : m.not_found_heading();
-  const label = view === 'overview' ? '' : viewTabLabels().names[view];
-  return { meta: [{ title: metaText([title, label]) }] };
-}
 
 export function ZoneSubjectRoute({
   data,
