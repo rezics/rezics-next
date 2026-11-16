@@ -1,7 +1,10 @@
 import { expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { randomUUID } from 'node:crypto';
+import { readErasureStatus } from '../../src/access/erasure.ts';
+import { validateContentDocument } from '../../src/content/document.ts';
 import { accessCommandAuthorization } from '../../src/request/access.ts';
+import { routeOf } from '../../src/route/route.ts';
 import { identityEpochStore } from '../../src/semantic/identity-adapters/index.ts';
 import { readIdentityEpochCutover } from '../../src/semantic/identity-epoch-bootstrap.ts';
 import type { IdentityIntent } from '../../src/semantic/identity-epoch-contract.ts';
@@ -9,6 +12,7 @@ import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions
 import { createSubjectIndex } from '../../src/search/indices.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { readSearchConfig } from '../../src/search/work.ts';
+import { accountDeletionRuntime, deletePersona } from '../support/account-deletion.ts';
 import { digest, release } from '../semantic/support/identity-epoch.ts';
 import { nativeOperator } from './support/native-system.ts';
 import { openUserCasesSystem, startUserCasesWorker } from './support/user-cases-fixtures.ts';
@@ -34,15 +38,16 @@ test('private Knowledge attachments stay on their originals through published me
       }
 
       await awaitWorker(async () => (await readIdentityEpochCutover(pool)).state === 'ready', 'identity topology');
+      const accountId = system.actors.author.actor.accountId;
       const owner = system.actors.author.bearer;
       const outsider = system.actors.other.bearer;
       const kernel = system.kernel;
-      const call = async (method: 'GET' | 'POST', path: string, body?: unknown, bearer = owner) => {
+      const call = async (method: 'GET' | 'POST', path: string, body?: unknown, bearer: string | null = owner) => {
         const response = await kernel.handle(
           new Request(`https://kernel.test${path}`, {
             method,
             headers: {
-              authorization: `Bearer ${bearer}`,
+              ...(bearer === null ? {} : { authorization: `Bearer ${bearer}` }),
               ...(body === undefined
                 ? {}
                 : { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(randomUUID()) }),
@@ -67,7 +72,7 @@ test('private Knowledge attachments stay on their originals through published me
       });
       const survivor: string = survivorSubject.id;
       const original: string = originalSubject.id;
-      const inventory = `/v1/accounts/${system.actors.author.actor.accountId}/knowledge/notebooks`;
+      const inventory = `/v1/accounts/${accountId}/knowledge/notebooks`;
       const scope = (id: string, limit = 20) => `${inventory}?subjectId=${id}&limit=${limit}`;
       const first = await create('/v1/knowledge/notebooks', { subjectId: survivor, title: 'Survivor notes' });
       const second = await create('/v1/knowledge/notebooks', { subjectId: survivor, title: 'More survivor notes' });
@@ -80,6 +85,40 @@ test('private Knowledge attachments stay on their originals through published me
         expectedStructureRevisionId: third.structureRevisionId,
         parentPlacementId: null,
       });
+      const selectedBody = {
+        body: fromPlainText('Selected public original notes'),
+        licence: 'MIT',
+        subjectIds: [original],
+      };
+      const selected = await create(`/v1/knowledge/notebooks/${third.notebookId}/documents`, {
+        ...selectedBody,
+        title: 'Selected original manuscript',
+        expectedStructureRevisionId: document.structureRevisionId,
+        parentPlacementId: null,
+      });
+      const publicPath = `/v1/knowledge/documents/${selected.documentId}`;
+      const publication = await call('POST', `${publicPath}/publication:select`, {
+        expectedHeadRevisionId: selected.revisionId,
+        expectedPublicationId: null,
+        revisionId: selected.revisionId,
+      });
+      expect(publication.status, JSON.stringify(publication.value)).toBe(200);
+      const unselected = await call('POST', `${publicPath}/revisions:revise`, {
+        ...selectedBody,
+        body: fromPlainText('Unselected replacement manuscript'),
+        title: 'Unselected replacement',
+        expectedHeadRevisionId: selected.revisionId,
+      });
+      expect(unselected.status, JSON.stringify(unselected.value)).toBe(200);
+      const exactPath = `${publicPath}?revisionId=${selected.revisionId}`;
+      const expectedPublicRevision = {
+        revisionId: selected.revisionId,
+        publicationId: publication.value.publicationId,
+        canonicalBytes: Buffer.from(validateContentDocument(selectedBody).canonicalBytes).toString('base64'),
+      };
+      const publicBefore = await call('GET', exactPath, undefined, null);
+      expect(publicBefore.status).toBe(200);
+      expect(publicBefore.value.document).toMatchObject(expectedPublicRevision);
       const privatePath = `${inventory}/${third.notebookId}/documents/${document.documentId}`;
       const privateBefore = await call('GET', privatePath);
       expect(privateBefore.status).toBe(200);
@@ -164,10 +203,42 @@ test('private Knowledge attachments stay on their originals through published me
       expect(notebooks).toEqual(expect.arrayContaining(own));
       expect((await listed(original)).notebooks).toEqual([old]);
       expect(await call('GET', privatePath)).toEqual(privateBefore);
+      expect((await call('GET', privatePath, undefined, outsider)).status).toBe(404);
+
+      const runtime = accountDeletionRuntime(system);
+      const obligation = await deletePersona({ pool, auth: runtime.auth }, { accountId, bearer: owner });
+      await awaitWorker(async () => {
+        const status = await readErasureStatus(pool, accountId);
+        return status?.at === obligation.at && status.participants.content?.outcome === 'erased';
+      }, 'Knowledge account disposition after merge and unmerge');
+
+      const route = routeOf(accountId)!;
+      const notebooksAfterErasure = await pool.query(
+        'SELECT notebook_id FROM content.knowledge_notebook WHERE route=$1 AND owner_account_id=$2',
+        [route, accountId],
+      );
+      expect(notebooksAfterErasure.rowCount).toBe(0);
+      const remainingRevisions = await pool.query(
+        `SELECT document_id,revision_id,author_account_id FROM content.knowledge_revision
+         WHERE route=$1 AND document_id=ANY($2::uuid[])`,
+        [route, [document.documentId, selected.documentId]],
+      );
+      expect(remainingRevisions.rows).toEqual([
+        { document_id: selected.documentId, revision_id: selected.revisionId, author_account_id: null },
+      ]);
+      const publicAfter = await call('GET', exactPath, undefined, null);
+      expect(publicAfter.status).toBe(200);
+      expect(publicAfter.value.document).toMatchObject({ ...expectedPublicRevision, authorId: null });
+      expect(publicAfter.value.document).not.toHaveProperty('notebookId');
+      expect(
+        (await call('GET', `${publicPath}?revisionId=${unselected.value.revisionId}`, undefined, null)).status,
+      ).toBe(404);
+      expect(await call('GET', privatePath)).toMatchObject({ status: 401, value: { code: 'invalid_credentials' } });
+      expect((await call('GET', privatePath, undefined, outsider)).status).toBe(404);
     } finally {
       await worker.stop();
     }
   } finally {
     await system.close();
   }
-}, 480_000);
+}, 600_000);
