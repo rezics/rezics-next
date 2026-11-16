@@ -636,6 +636,8 @@ async function advanceCleanup(
     while (phase !== 'done' && deletedRows < HOSTED_VERSION_CANDIDATE_CLEANUP_STEP_LIMIT) {
       const remaining = HOSTED_VERSION_CANDIDATE_CLEANUP_STEP_LIMIT - deletedRows;
       if (phase === 'generation') {
+        // Language cleanup requires the generation phase to be retained before its step starts.
+        if (row.phase !== 'generation') break;
         const languages = await cleanupHostedLanguageCandidate(client, locator, remaining);
         deletedRows += languages.deletedRows;
         if (!languages.complete || deletedRows === HOSTED_VERSION_CANDIDATE_CLEANUP_STEP_LIMIT) break;
