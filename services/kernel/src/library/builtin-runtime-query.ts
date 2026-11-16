@@ -1,3 +1,4 @@
+import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import type { FilterDocument } from '@rezics/filter';
 import type { Pool } from 'pg';
 import { systemClock, type KernelClock } from '../clock.ts';
@@ -7,12 +8,16 @@ import { ProblemError } from '../http/problem-error.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { readCanonicalSourceGroup, readCanonicalSourceState, type CanonicalWork } from './canonical-source-store.ts';
+import { CANONICAL_SOURCE_COMPLETED_READBACK, CANONICAL_SOURCE_RECEIVING_COST } from './canonical-source-bounds.ts';
+import { CANONICAL_SOURCE_RAW_KEY_LIMIT } from './canonical-source-limits.ts';
+import { collectionAuthorizationPreparationWork } from './access-port.ts';
 import { createCollectionSource, createOrdinaryCollectionPageSource } from './collection-source.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
-import { libraryActorOf, type SearchPreparationCapability } from './contract/index.ts';
+import type { SearchPreparationCapability } from './contract/index.ts';
 import { readNativeCollectionScopeIdentity } from './collection-source-native.ts';
 import {
   CollectionWorkLedger,
+  zeroWorkDimensions,
   ordinaryCollectionPagePlan,
   ordinaryPageWorkDimensions,
   type OrdinaryCollectionPagePlan,
@@ -75,6 +80,36 @@ class OwnerQueryWorkLedger {
 /** Canonical and Search work settle into the same request reservation, including failed dispatches. */
 export function ownerQueryWork(limit: number, view: 'BASIC' | 'FULL' = 'BASIC') {
   return new OwnerQueryWorkLedger(ordinaryCollectionPagePlan(limit, view));
+}
+
+/** Continue reads chronological candidates, resolves whole Source groups, and verifies shown rows again. */
+export function continueOwnerQueryWork(limit: number) {
+  const page = ordinaryCollectionPagePlan(limit);
+  const checks = page.candidateLimit + limit;
+  const sourceReads = 2 + 3 * checks;
+  const cost = (axes: Partial<Bound>) => declareBound({ ...zeroWorkDimensions(), engineRequests: 0, ...axes });
+  const sourceBound = sumBounds(
+    page.sourceBound,
+    repeatBound(
+      sumBounds(
+        CANONICAL_SOURCE_COMPLETED_READBACK(),
+        declareBound(collectionAuthorizationPreparationWork()),
+        cost({ nativeRows: 128, nativePoints: 24, statements: 24, emptySeeks: 16, bytes: 48 * 1024 }),
+      ),
+      sourceReads,
+    ),
+    repeatBound(
+      cost({ ...CANONICAL_SOURCE_RECEIVING_COST().group(CANONICAL_SOURCE_RAW_KEY_LIMIT), candidateKeys: 0 }),
+      2 * checks,
+    ),
+    // Membership may probe, resolve and recheck each original. Eligibility also resolves the original,
+    // reads its owner facts and interprets both accepted pins, all settled against the same raw-key cap.
+    repeatBound(
+      cost({ nativeRows: 16_640, nativePoints: 300, statements: 300, emptySeeks: 24, bytes: 3 * 1024 * 1024 }),
+      page.candidateLimit,
+    ),
+  );
+  return new OwnerQueryWorkLedger({ ...page, sourceBound, total: sourceBound });
 }
 
 function canonicalAllowance(allowance: WorkAllowance) {
@@ -156,7 +191,7 @@ export async function openOwnerQuery(
       const domain = peekLibraryDomain();
       if (domain) {
         prepared = await domain.sourceCapture.capture({
-          actor: libraryActorOf(input.actor),
+          actor: input.actor,
           collectionId: input.collectionId,
           deadline: input.deadline,
           at,
