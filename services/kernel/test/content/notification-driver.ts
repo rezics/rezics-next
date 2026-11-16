@@ -67,6 +67,17 @@ function decisionOf(value: unknown): Decision {
   };
 }
 
+function pendingAppealOf(queued: Raw): Appeal {
+  return {
+    id: string(queued.id, 'appeal.id'),
+    decisionId: string(queued.decisionId, 'appeal.decisionId'),
+    appellantId: string(queued.appellantId, 'appeal.appellantId'),
+    statement: string(queued.statement, 'appeal.statement'),
+    outcome: 'pending',
+    resolutionStatement: null,
+  };
+}
+
 function postOf(value: unknown): Post & { revisionId: string } {
   const raw = object(value, 'Post');
   return {
@@ -157,6 +168,7 @@ async function buildContentNotificationDriver(growth: boolean): Promise<{
     }
   }
   const threadIds: string[] = [];
+  const postThreads = new Map<string, string>();
   let fixtureValue: Fixture | undefined;
   let closed = false;
 
@@ -201,8 +213,8 @@ async function buildContentNotificationDriver(growth: boolean): Promise<{
   }
 
   async function appealFromApi(queued: Raw, actor: Persona): Promise<Appeal> {
-    const id = string(queued.id, 'appeal.id');
-    const decisionId = string(queued.decisionId, 'appeal.decisionId');
+    const pending = pendingAppealOf(queued);
+    const { id, decisionId } = pending;
     const decisionResult = await request('GET', `/v1/moderation-decisions/${decisionId}`, actor);
     if (!decisionResult.value) throw new Error(`Appeal decision read failed (${decisionResult.response.status})`);
     const decision = object(decisionResult.value, 'Appeal decision');
@@ -220,10 +232,7 @@ async function buildContentNotificationDriver(growth: boolean): Promise<{
                 throw new TypeError('Appeal outcome is invalid');
               })();
     return {
-      id,
-      decisionId,
-      appellantId: string(queued.appellantId, 'appeal.appellantId'),
-      statement: string(queued.statement, 'appeal.statement'),
+      ...pending,
       outcome,
       resolutionStatement: nullableString(state.statement, 'appeal.resolutionStatement'),
     };
@@ -306,6 +315,7 @@ async function buildContentNotificationDriver(growth: boolean): Promise<{
       const mapped = resultMap(result, (body) => {
         const thread = threadOf(object(body, 'Thread create').thread);
         threadIds.push(thread.id);
+        postThreads.set(thread.firstPost.id, thread.id);
         remember(thread.id);
         remember(thread.firstPost.id);
         return thread;
@@ -341,6 +351,7 @@ async function buildContentNotificationDriver(growth: boolean): Promise<{
         return post;
       });
       if (mapped.value) {
+        postThreads.set(mapped.value.id, mapped.value.threadId);
         if (growth) {
           await setup.grantModerationTarget(mapped.value.id, input.threadId);
           await setup.grantReportTarget(mapped.value.id, fixture.reporter.id);
@@ -411,7 +422,7 @@ async function buildContentNotificationDriver(growth: boolean): Promise<{
       );
     },
     async takedown(target, reason, options) {
-      if (!growth) await setup.grantModerationTarget(target.id);
+      if (!growth) await setup.grantModerationTarget(target.id, postThreads.get(target.id));
       const result = await request(
         'POST',
         `/v1/${target.kind === 'thread' ? 'threads' : 'posts'}/${target.id}:takeDown`,
@@ -469,7 +480,7 @@ async function buildContentNotificationDriver(growth: boolean): Promise<{
       remember(mapped.value.id);
       const queued = await pendingAppealRows(fixture.secondModerator);
       const row = queued.value?.find((item) => item.id === mapped.value!.id);
-      if (!row) throw new Error('Created appeal is missing from the moderator queue');
+      if (!row) throw new Error(`Created appeal is missing from the moderator queue (${queued.response.status})`);
       return { response: result.response, value: await appealFromApi(row, options.actor) };
     },
     async resolveAppeal(id, outcome, statement, options) {
@@ -492,9 +503,7 @@ async function buildContentNotificationDriver(growth: boolean): Promise<{
     },
     async pendingAppeals(actor) {
       const result = await pendingAppealRows(actor);
-      if (!result.value) return { response: result.response, value: null };
-      const appeals = await Promise.all(result.value.map((queued) => appealFromApi(queued, actor)));
-      return { response: result.response, value: appeals };
+      return resultMap(result, (rows) => rows.map(pendingAppealOf));
     },
     async effects(mode) {
       if (!effectHost) throw new Error('Notification effect host is unavailable in a growth fixture');
