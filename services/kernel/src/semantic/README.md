@@ -2466,10 +2466,8 @@ a sealed account is refused. Rolling the migration down refuses to collapse dist
   the nullable historical cases. It is present in the directory primary/traversal keys, generated
   value, raw/detail projections, cursor digest, hold and page/terminal writes and comparisons.
   The replay index additionally stores the authentic transaction text and source position. Each
-  nonempty page has one origin; EOF uses the separate empty discriminator. These are additional
-  costs, not funding, a replacement eight-axis quote or a reduction in capture's existing
-  defective five-empty-seek layout. The complete original pre-I/O price and physical capture
-  repair remain required before the configured Source journey can be declared complete.
+  nonempty page has one origin. EOF uses the separate empty discriminator. These reads and
+  writes add to the complete original pre-I/O charge.
 - Growth check: `test/semantic/identity-search-receiving-provenance.test.ts` retains both genuine
   command orders and rollback of attempted native provenance. The appended native case in
   `test/semantic/subject-erasure-source.test.ts` requires both equal-delivery origins through
@@ -2498,15 +2496,14 @@ native transaction whose basis is absent. A present operand contains its exact b
   the planner and deferred body; native provenance upsert and all actual actor/delegation
   locator calls, their existing locks, conflict probes and triggers. The pending event stores
   both nullable native operands. Repeated events repeat the reads, reservations and validation.
-- Bound: all eight axes remain explicit. The additional deferred native probe reserves
-  `{candidateKeys:0,nativeRows:1,identityMetadataRows:0,nativePoints:1,witnessKeys:0,statements:1,bytes:256,emptySeeks:1}`.
+- Bound: all eight axes remain explicit. The additional deferred native copy EOF, source EOF and basis probe reserve
+  `{candidateKeys:0,nativeRows:3,identityMetadataRows:0,nativePoints:3,witnessKeys:0,statements:3,bytes:256,emptySeeks:3}`.
   A present native basis with L locators (0–5) and R bounded requested-by bytes (0 or 92) adds
   rows/points `2+9L`, statements `2+8L`, bytes `512+R+2816L`, empty seeks `5L`, with zero
   candidate/metadata/witness axes for this operational body. The planner separately prepays
   its real basis SELECT and arm UPDATE, including a 512-byte arm bound. Failure retains
-  reached reservations and rolls SQL back. These additions do not discount the existing
-  conservative five-empty-seek base, replace the complete origin/index/control derivation,
-  raise an allowance or establish the required Source-core 24-point/two-seek fit.
+  reached reservations and rolls SQL back. The complete origin, index and control derivation also
+  accounts for these reservations.
 - Growth check: the new native-basis unit regression independently enumerates all eight
   reservation axes, separate and shared transactions, absent original basis and refusal before
   arming. The native regression uses real executor write bases and delivery for two actor
@@ -2530,14 +2527,13 @@ collisions still refuse until complete Source support/copy closure is available.
   of planner origin bookkeeping. The deferred loop uses the actual copy transaction,
   preserving equal-delivery distinct origins. Failures retain attempted reservations.
 - Bound: `copies` in the deferred cost function is the complete aggregate over both
-  distinct copy prefixes. The retained fixed eight rows/points/statements cover budget
-  read and consume, partition, two copy EOFs, two source EOFs and the original basis
-  probe. The distinct native basis probe adds one more. Each visited copy/source role
+  distinct copy prefixes. The fixed six rows/points/statements cover budget read and consume,
+  partition, the original copy and source EOFs, and the original basis probe. A distinct
+  native origin adds its own two EOFs and basis probe. Each visited copy/source role
   still reserves rows/points/statements/bytes/empty-seeks `10/10/9/3072/5`, plus the
   planner's separate 512 bytes; the event adds 1024 planner bytes. Candidate, metadata
-  and witness axes are zero for these operational bodies. These conservative subtotals
-  preserve the defective five-seek base; they neither establish Source-core fit nor
-  replace the complete original preparation quote and physical repair.
+  and witness axes are zero for these operational bodies. The complete original preparation
+  quote also covers the other work in the Source invocation.
 - Growth check: new planner-unit assertions retain 17 overlapping roles per origin,
   all-eight-axis arithmetic, shared-origin traversal and pre-arm funding refusal. New
   genuine-command regressions require complete 1/10/100 copy capture and a late native

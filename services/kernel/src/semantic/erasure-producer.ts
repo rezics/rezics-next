@@ -71,12 +71,17 @@ export async function identityErasureRoles(
   return result.rows;
 }
 
-/** Typed provenance travels with actual admission input and commits in the receiving source transaction. */
-export function bindSemanticProducerRoles(tx: CommandTransaction, roles: readonly SemanticCopyRole[]): void {
+/** Bind roles to this source transaction. Other captures can also inherit them through the native origin. */
+export function bindSemanticProducerRoles(
+  tx: CommandTransaction,
+  roles: readonly SemanticCopyRole[],
+  options?: Readonly<{ exposeCaptureOrigin: boolean }>,
+): void {
   const { partition } = currentCommand(tx);
   if (roles.length > 8) throw new TypeError('Identity producer role bound exceeded');
   registerCommandCallback(tx, async (transactionId) => {
-    await tx.query("SELECT set_config('semantic.erasure_native_transaction',$1,true)", [transactionId]);
+    if (options?.exposeCaptureOrigin !== false)
+      await tx.query("SELECT set_config('semantic.erasure_native_transaction',$1,true)", [transactionId]);
     await tx.query(bindSemanticProducerRolesSql, [
       partition,
       transactionId,

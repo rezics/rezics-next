@@ -75,8 +75,8 @@ test('original and native bases have separate prepaid footprints and immutable a
   expect(p.reads).toEqual([original, native]);
   expect(p.arms).toEqual([['1', original, native, 0, 0, 2, 0, 5, 92, emptyIdentity, emptyIdentity]]);
   // These are only the additional deferred/body reservations. SQL queries have
-  // their separate observer. Existing base: 8/8/8/2048/5 and 1536 control/identity bytes;
-  // native probe: 1/1/1/256/1; actor basis: 20/20/18/6144/10;
+  // their separate observer. Original base: 6/6/6/2048/3 and 1536 control/identity bytes;
+  // distinct native probes: 3/3/3/256/3; actor basis: 20/20/18/6144/10;
   // delegated actor basis: 47/47/42/14684/25. No axis is omitted.
   const total: { -readonly [Axis in keyof WorkDimensions]: number } = {
     candidateKeys: 0,
@@ -125,6 +125,9 @@ test('a shared original/native transaction has exactly one basis reservation', a
   expect(p.reads).toEqual([original]);
   expect(p.arms).toEqual([['1', original, original, 0, 0, 2, 0, null, null, emptyIdentity, emptyIdentity]]);
   expect(p.costs.filter((cost) => cost.nativePoints === 20)).toHaveLength(1);
+  expect(p.costs[0]).toEqual(searchReceivingCaptureCost(0, 0, null));
+  expect(p.costs[0]?.nativePoints).toBe(6);
+  expect(p.costs[0]?.emptySeeks).toBe(3);
 });
 
 test('an absent native basis retains its actual probe and nullable arm binding', async () => {
@@ -178,5 +181,5 @@ test('insufficient native-basis funding refuses arming and retains reached reser
   ).rejects.toBe(refusal);
   expect(p.arms).toEqual([]);
   expect(p.reads).toEqual([original, native]);
-  expect(p.costs.map((cost) => cost.nativePoints)).toEqual([8, 0, 1]);
+  expect(p.costs.map((cost) => cost.nativePoints)).toEqual([6, 0, 3]);
 });
