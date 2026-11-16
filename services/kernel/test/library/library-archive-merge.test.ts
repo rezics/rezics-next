@@ -1839,14 +1839,16 @@ test('a merged canonical target invalidates the reviewed observation identity', 
       KERNEL_SEARCH_PREFIX: prefix,
     });
     try {
-      const { operation } = await json(
-        await send(identityOwner, 'POST', '/v1/subjects:merge', { subjects: [survivor, redirected] }),
-        202,
-      );
+      const admitted = await send(identityOwner, 'POST', '/v1/subjects:merge', { subjects: [survivor, redirected] });
+      if (admitted.status !== 202) throw new Error(`${admitted.status}: ${await admitted.text()}`);
+      const { operation } = (await admitted.json()) as { operation: { id: string } };
       expect(operation.id).toBeString();
       const deadline = performance.now() + 90_000;
-      const readOperation = async () =>
-        (await json(await send(identityOwner, 'GET', `/v1/subjectIdentityOperations/${operation.id}`))).operation;
+      const readOperation = async () => {
+        const response = await send(identityOwner, 'GET', `/v1/subjectIdentityOperations/${operation.id}`);
+        if (response.status !== 200) throw new Error(`${response.status}: ${await response.text()}`);
+        return ((await response.json()) as { operation: { id: string; done: boolean } }).operation;
+      };
       let current = await readOperation();
       while (!current.done && performance.now() < deadline) {
         await Bun.sleep(100);
