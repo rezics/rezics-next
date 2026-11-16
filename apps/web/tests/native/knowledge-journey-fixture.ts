@@ -551,6 +551,7 @@ export function knowledgeJourneyCopy() {
     publishExact: m.knowledge_publication_confirm(),
     publicationAcknowledged: m.knowledge_publication_acknowledged(),
     publicationObserved: m.knowledge_publication_observed(),
+    publicationLinks: m.knowledge_publication_links(),
     newerDraft: m.knowledge_publication_new_draft(),
     exactPublic: m.knowledge_publication_exact(),
     livePublic: m.knowledge_publication_live(),

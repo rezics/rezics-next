@@ -207,8 +207,8 @@ nativeTest(
 
     fixture.evidence.stage = 'publication';
     await knowledgeJourneyClick(page, copy.reviewPublication);
-    await expect(page.getByText(text.selectedTitle)).toBeVisible();
     const publicationReview = page.getByRole('region', { name: copy.reviewPublication, exact: true });
+    await expect(publicationReview.getByText(text.selectedTitle, { exact: true })).toBeVisible();
     await expect(publicationReview.getByText(text.selectedBody, { exact: true })).toBeVisible();
     const previewImage = publicationReview.getByRole('img', { name: imageAlt, exact: true });
     await expect(previewImage).toBeVisible();
@@ -219,7 +219,8 @@ nativeTest(
         ),
       )
       .toBe(true);
-    await expect(publicationReview.getByText(selectedHead.revisionId, { exact: true })).toBeVisible();
+    const reviewedRevision = publicationReview.getByText(copy.revisionId, { exact: true }).locator('xpath=..');
+    await expect(reviewedRevision.getByText(selectedHead.revisionId, { exact: true })).toBeVisible();
     await expectAbsent(page, text.parentBody, text.firstBody, text.laterBody);
     await knowledgeJourneyClick(page, copy.publishExact);
     await fixture.waitStatus(page, copy.publicationAcknowledged);
@@ -237,7 +238,10 @@ nativeTest(
       throw new Error(`publication private read omitted publication identity: ${JSON.stringify(publishedPrivate)}`);
     expect(publishedPrivate.body).toBe(selectedBody);
     fixture.evidence.selectedPublicationId = publicationId;
-    await expect(page.getByText(publicationId)).toBeVisible();
+    const publicReading = page.getByRole('navigation', { name: copy.publicationLinks, exact: true });
+    const publicationReceipt = publicReading.locator('xpath=preceding-sibling::details[1]');
+    await publicationReceipt.locator('summary').click();
+    await expect(publicationReceipt.getByText(publicationId, { exact: true })).toBeVisible();
     const nativePublication = await fixture.requirePublicDocument(
       'publication',
       firstHead.documentId,
@@ -370,7 +374,7 @@ nativeTest(
     fixture.evidence.laterRevisionId = laterHead.revisionId;
     const frozenPublic = await fixture.requirePublicDocument('public-read', firstHead.documentId);
     expect(frozenPublic.revisionId).toBe(selectedHead.revisionId);
-    expect(frozenPublic.body).toBe(text.selectedBody);
+    expect(frozenPublic.body).toBe(selectedBody);
     expect(frozenPublic.publicationId).toBe(publicationId);
     const laterPublic = await fixture.readPublicDocument(
       'public-read',
