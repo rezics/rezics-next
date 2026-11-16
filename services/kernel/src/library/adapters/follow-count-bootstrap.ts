@@ -1,5 +1,8 @@
+import type { PoolClient } from 'pg';
 import { bootstrapFollowCountOwner, lockCountOwner, type CountRuntime } from './follow-count-source.ts';
 import { countTransaction, ZERO_COUNT_KEY } from './follow-count-runtime.ts';
+
+const BOOTSTRAP_PAGE_SIZE = 100;
 
 /** Each physical owner is discovered in finite immutable account-key coverage.
  * Account creation after hook installation initializes its source counter natively. */
@@ -66,6 +69,43 @@ const TARGETS = [
   { table: 'library.collection', id: 'collection_id', type: 'collection' },
   { table: 'community.space', id: 'space_id', type: 'space' },
 ] as const;
+
+/** Fresh native writes install owners and totals in their own transactions. Verify complete
+ * small homes in one turn. A missing row or an overfull probe leaves the bounded cursors in charge.
+ * The caller holds the native home fences and bootstrap rows for this page. */
+export async function coverInitializedFollowCountHomes(tx: Pick<PoolClient, 'query'>, partitions: number[]) {
+  // Only fixed table, column and type declarations enter the query text.
+  const coveredTargets = TARGETS.map(
+    ({ table, id, type }, kind) => `(p.target_kind > ${kind} OR (
+      SELECT count(*) < $2 AND coalesce(bool_and(EXISTS(
+        SELECT 1 FROM library.follow_count_total
+        WHERE (route,target_type,target_id)=(target.route,'${type}',target.id)
+      )), true)
+      FROM (SELECT route, ${id} AS id FROM ${table}
+        WHERE route >= p.partition_no * 16 AND route < (p.partition_no + 1) * 16
+        ORDER BY route,${id} LIMIT $2) target
+    ))`,
+  ).join(' AND ');
+  await tx.query(
+    `UPDATE library.follow_count_partition p
+     SET source_complete=true,target_kind=3,target_started=false,target_after=NULL,
+         target_route=NULL,target_upper=NULL,target_upper_route=NULL
+     WHERE p.partition_no=ANY($1::integer[]) AND (NOT p.source_complete OR p.target_kind<3)
+       AND (p.source_complete OR (
+         SELECT count(*) < $2 AND coalesce(bool_and(
+           (a.state='deleted' AND a.authn_fenced) OR EXISTS(
+             SELECT 1 FROM library.follow_count_owner o WHERE (o.route,o.account_id)=(a.route,a.account_id)
+           )
+         ), true)
+         FROM (SELECT route,account_id,state,authn_fenced FROM access.account
+           WHERE route >= p.partition_no * 16 AND route < (p.partition_no + 1) * 16
+           ORDER BY route,account_id LIMIT $2) a
+       ))
+       AND ${coveredTargets}`,
+    [partitions, BOOTSTRAP_PAGE_SIZE + 1],
+  );
+}
+
 export async function bootstrapFollowCountTargets(deps: CountRuntime, partition: number) {
   return countTransaction(deps, partition * 16, 'library.follow-count.target-bootstrap', async (tx) => {
     const state = (

@@ -8,7 +8,7 @@ import {
   bootstrapNextFollowCountOwner,
   discoverFollowCountOwners,
 } from './follow-count-bootstrap.ts';
-import { sampleFollowCountHealth } from './follow-count-health.ts';
+import { sampleFollowCountHealth, sampleFollowCountHealthPage } from './follow-count-health.ts';
 import { admitFollowCountAccount, reconcileFollowCountAccountPage } from './follow-count-lifecycle.ts';
 import { FOLLOW_COUNT_ACCOUNT_EVENTS } from '../contract/index.ts';
 import { bootstrapFollowCountOwner, pendingFollowCountKeys } from './follow-count-source.ts';
@@ -130,9 +130,20 @@ export async function registerFollowCountWork(context: WorkContext) {
       }),
     { name: 'library.followCountHomes', ...COMMAND_STEP_RETRIES },
   );
+  const samplePage = DBOS.registerStep((partitions: number[]) => sampleFollowCountHealthPage(deps, partitions), {
+    name: 'library.followCountSamplePage',
+    ...COMMAND_STEP_RETRIES,
+  });
   const batch = DBOS.registerWorkflow(
     async (partitions: number[]) => {
       let failure: { cause: unknown } | undefined;
+      if (await DBOS.patch('library-follow-count-sample-page')) {
+        try {
+          partitions = await samplePage(partitions);
+        } catch (cause) {
+          failure = { cause };
+        }
+      }
       for (const partition of partitions) {
         try {
           await maintain(partition);
@@ -176,19 +187,20 @@ export async function registerFollowCountWork(context: WorkContext) {
     },
     { name: SWEEP },
   );
-  const startSweep = DBOS.registerStep(
-    async (root: string) => {
-      await client.enqueue({
-        workflowName: SWEEP,
-        queueName: 'maintenance',
-        workflowID: `${root}:sweep`,
-        workflowIDReusePolicy: 'return-existing',
-        deduplicationID: SWEEP,
-        duplicationPolicy: 'return-existing',
-      });
-    },
-    { name: 'library.followCountStartSweep', ...COMMAND_STEP_RETRIES },
-  );
+  const enqueueSweep = async (workflowID?: string) => {
+    await client.enqueue({
+      workflowName: SWEEP,
+      queueName: 'maintenance',
+      ...(workflowID === undefined ? {} : { workflowID }),
+      workflowIDReusePolicy: 'return-existing',
+      deduplicationID: SWEEP,
+      duplicationPolicy: 'return-existing',
+    });
+  };
+  const startSweep = DBOS.registerStep((root: string) => enqueueSweep(`${root}:sweep`), {
+    name: 'library.followCountStartSweep',
+    ...COMMAND_STEP_RETRIES,
+  });
   // The native scheduler supplies its fire time, never a discovery cursor.
   // A retained discovery invocation can safely wake the same full sweep.
   DBOS.registerWorkflow(async (_input?: Date | Discovery) => startSweep(DBOS.workflowID!), { name: DISCOVERY });
@@ -202,6 +214,11 @@ export async function registerFollowCountWork(context: WorkContext) {
       queueName: 'maintenance',
     },
   ]);
+  // Cold registration wakes the same deduplicated sweep before the first cron turn.
+  const { rowCount: cold } = await withConnection(pool, (tx) =>
+    tx.query('SELECT 1 FROM library.follow_count_health WHERE node=0 AND NOT ready'),
+  );
+  if (cold) await enqueueSweep();
   addEffects([
     {
       name: 'library_follow_count_account',
