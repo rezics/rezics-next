@@ -39,7 +39,11 @@ import {
   type SearchIdentityReceivingBinding,
   validSearchIdentityReceivingFrontier,
 } from './identity-receiving-native-contract.ts';
-import { readRetainedWriterCopySql, searchIdentityWriterAdmissionSql } from './writer-guard.ts';
+import {
+  readRetainedWriterCopySql,
+  searchIdentityWriterAdmissionSql,
+  searchIdentityWriterSettlementSql,
+} from './writer-guard.ts';
 import {
   advanceWriterPublicationAdmissionSql,
   lockPublicationFence,
@@ -56,6 +60,7 @@ import {
   readSearchIdentityDirectoryOriginal,
   requireCurrentSearchIdentityDirectory,
   requestSearchIdentityWriter,
+  type SearchWriterPlanRequest,
 } from './identity-search-receiving-directory.ts';
 import {
   advanceSearchIdentityOriginalSql,
@@ -69,10 +74,19 @@ import {
 
 import {
   lockSearchIdentityOriginalSql,
+  readSearchIdentityPlanComponentSql,
+  revalidateSearchIdentityPlanFenceSql,
   prepareSearchIdentityOriginalSql,
   readSearchIdentityPredecessorSql,
 } from './identity-search-writer-plan-sql.ts';
 
+import {
+  dispatchSearchIdentityOriginalSql,
+  readSearchIdentityPlanBodySizeSql,
+  readSearchIdentityDispatchBasisSql,
+} from './identity-search-writer-dispatch-sql.ts';
+import { readSearchIdentityDispatchBasis } from './identity-search-writer-dispatch.ts';
+import { searchNativeOriginalOperationSql } from './identity-receiving-native-work.ts';
 export type { SearchReceivingConfiguration };
 
 const participantStatementWork = (
@@ -108,8 +122,15 @@ function searchIdentityParticipantStatementCosts(): SearchReceivingWorkDeclarati
         [readSearchIdentityWriterAdmissionSql, 3, 3, 4096],
         [readSearchIdentityWriterSupportSql, 3, 3, 4096],
         [lockSearchIdentityOriginalSql, 1, 1, 2048],
+        [readSearchIdentityPlanComponentSql, 1, 1, 512],
+        [revalidateSearchIdentityPlanFenceSql, 5, 5, 2048],
+        [searchNativeOriginalOperationSql(), 4, 4, 4096],
         [readSearchIdentityPredecessorSql, 6, 6, 4096],
         [prepareSearchIdentityOriginalSql, 1, 2, 4096],
+        [readSearchIdentityDispatchBasisSql, 7, 7, 16384],
+        [dispatchSearchIdentityOriginalSql, 1, 1, 1024],
+        [readSearchIdentityPlanBodySizeSql, 1, 1, 512],
+        [searchIdentityWriterSettlementSql(), 1, 1, 2048],
         [lockPublicationAdmission, 1, 1, 512],
         [lockPublicationFence, 1, 1, 512],
         [advanceWriterPublicationAdmissionSql, 1, 1, 512],
@@ -320,11 +341,24 @@ export function createSearchIdentityEpochParticipant(options: {
           };
         }
         const configuration = configured.configuration;
-        const selection = await readSearchIdentityOriginalPlan(pool, ref, change, configuration, deadline);
-        if (!selection) {
+        const plan = await readSearchIdentityOriginalPlan(pool, ref, change, configuration, deadline);
+        const stageWriter = async (wanted?: SearchWriterPlanRequest) => {
+          if (
+            request?.plan &&
+            (!wanted ||
+              request.plan.planId !== wanted.planId ||
+              (request.plan.holdId && request.plan.holdId !== wanted.holdId))
+          )
+            throw unavailable('Retained writer request no longer matches the original plan and hold');
+          const replay =
+            request &&
+            Boolean(request.plan) === Boolean(wanted) &&
+            Boolean(request.plan?.holdId) === Boolean(wanted?.holdId)
+              ? request
+              : undefined;
           const frontier =
-            request?.frontier ?? requestSearchIdentityWriter(directory, change.original, change.terminal);
-          let native = request?.native;
+            replay?.frontier ?? requestSearchIdentityWriter(directory, change.original, change.terminal, wanted);
+          let native = replay?.native;
           if (!native) {
             const roles = await identityErasureRoles(pool, ref.jobId);
             const staged = await runCommand(
@@ -332,9 +366,11 @@ export function createSearchIdentityEpochParticipant(options: {
               { partition: identityJobPartition(ref), deadline, clock: configuration.clock },
               async (tx) => {
                 await requireCurrentSearchIdentityDirectory(tx, ref, directory);
-                const original = await readSearchIdentityDirectoryOriginal(tx, ref, directory);
-                if (!original || original.original !== change.original || original.terminal !== change.terminal)
-                  throw unavailable('Search writer request changed before commit');
+                if (!wanted) {
+                  const original = await readSearchIdentityDirectoryOriginal(tx, ref, directory);
+                  if (!original || original.original !== change.original || original.terminal !== change.terminal)
+                    throw unavailable('Search writer request changed before commit');
+                }
                 bindSemanticProducerRoles(tx, roles);
                 recordIdentityEpochNativeCommit(tx, 'search-canonical-index');
                 registerCommandCallback(tx, async (id) => {
@@ -366,8 +402,30 @@ export function createSearchIdentityEpochParticipant(options: {
             receipt: { job: ref, step: 'search-canonical-index', version: 1, native },
             work: searchIdentityWorkUsed(pool, context),
           } satisfies IdentityStepProgress;
+        };
+        if (!plan) return stageWriter();
+        const { selection } = plan;
+        const dispatch = plan.originalBarrier
+          ? await readSearchIdentityDispatchBasis(pool, ref, selection, directory.scope, configuration.index, deadline)
+          : null;
+        if (plan.originalBarrier) {
+          if (!dispatch) return stageWriter({ planId: selection.native.planId });
+          if (!dispatch.visible) return stageWriter({ planId: selection.native.planId, holdId: dispatch.hold_id });
         }
-        const effect = await prepareSearchIdentityReceivingEffect(pool, selection);
+        const effect = dispatch
+          ? {
+              kind: 'receiving' as const,
+              job: ref,
+              original: selection.original,
+              effectKey: selection.effectKey,
+              receipt: {
+                partition: selection.native.partition,
+                epoch: dispatch.accepted_epoch,
+                position: BigInt(dispatch.accepted_position),
+                transactionId: dispatch.accepted_transaction_id,
+              },
+            }
+          : await prepareSearchIdentityReceivingEffect(pool, selection);
         const row = await withReadTransaction(
           pool,
           async (tx) =>
@@ -399,7 +457,7 @@ export function createSearchIdentityEpochParticipant(options: {
         )
           throw unavailable('Prepared scope differs from its configured native Search owner');
         const roles = await identityErasureRoles(pool, ref.jobId);
-        await runCommand<{ frontier: IdentityFrontier; receipt: IdentityNativeReceipt | null }>(
+        const application = await runCommand<{ frontier: IdentityFrontier; receipt: IdentityNativeReceipt | null }>(
           pool,
           { partition: effect.receipt.partition, deadline, clock: configured.configuration.clock },
           async (tx) => {
@@ -427,6 +485,25 @@ export function createSearchIdentityEpochParticipant(options: {
             return { value: { frontier, receipt: null }, events: searchIdentityWriterChanged() };
           },
         );
+        if (plan.originalBarrier && application.value.receipt === null) {
+          return {
+            job: ref,
+            frontier: application.value.frontier,
+            state: 'more',
+            receipt: {
+              job: ref,
+              step: 'search-canonical-index',
+              version: 1,
+              native: {
+                partition: application.partition,
+                epoch: application.epoch,
+                position: application.position,
+                transactionId: application.transactionId,
+              },
+            },
+            work: searchIdentityWorkUsed(pool, context),
+          } satisfies IdentityStepProgress;
+        }
         const applied = await reconcileIdentityReceivingEffect(pool, effect);
         const frontier = advanceSearchIdentityDirectory(directory, change.original);
         // Releasing custody and retiring its pending key comes before moving past this original.

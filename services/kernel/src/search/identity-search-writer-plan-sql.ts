@@ -42,3 +42,24 @@ export const readSearchIdentityTargetPendingSql = `SELECT 1 FROM search.identity
 
 export const readSearchIdentityHomePendingSql = `SELECT 1 FROM search.identity_receiving_native_pending
  WHERE (partition_no,physical_target)=($1,$2) LIMIT 1`;
+
+/** Checks the same immutable plan row without loading its body a second time. */
+export const readSearchIdentityPlanComponentSql = `SELECT 1 FROM search.identity_receiving_native_plan
+ WHERE (partition_no,plan_id,transaction_id)=($1,$2,$3)`;
+
+/** Original-specific plans and writer closes commit together. Revalidate both in one keyed snapshot. */
+export const revalidateSearchIdentityPlanFenceSql = `SELECT 1
+ FROM search.identity_receiving_native_plan n
+ JOIN semantic.identity_epoch_native_commit c ON (c.partition_no,c.transaction_id)=(n.partition_no,n.transaction_id)
+  AND c.purpose='search-canonical-index' AND c.xmin=n.xmin
+  AND c.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid
+ JOIN core.partition p ON p.partition_no=c.partition_no AND p.epoch=c.epoch
+  AND p.write_state='active' AND p.position>=c.position
+ JOIN search.identity_writer_gate g ON (g.partition_no,g.physical_target)=(n.partition_no,n.physical_target)
+  AND g.incarnation=$8 AND g.write_alias=$9 AND g.consumer=$10 AND g.owner_epoch=c.epoch
+  AND g.fence_generation=$11 AND g.enrollment_generation >= $12 AND g.closed_token IS NULL
+ JOIN search.identity_writer w ON (w.partition_no,w.physical_target,w.original_id)=(n.partition_no,n.physical_target,n.original_id)
+  AND w.closed_transaction_id=c.transaction_id AND w.closed_position=c.position
+  AND w.owner_epoch=c.epoch AND w.incarnation=g.incarnation AND w.writer_token IS NULL
+  AND w.dispatch_state IN ('settled','cancelled') AND (w.closed_job,w.closed_epoch)=($5,$6)
+ WHERE (n.partition_no,n.plan_id,n.transaction_id,n.physical_target,n.original_id)=($1,$2,$3,$4,$7)`;

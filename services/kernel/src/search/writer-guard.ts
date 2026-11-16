@@ -30,6 +30,11 @@ import { classifyUnavailability } from '../access/unavailable.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
+import type { StoredSource } from './identity-receiving-native-internal.ts';
+import {
+  dispatchSearchIdentityOriginalSql,
+  retainSearchIdentityWriterReceiptSql,
+} from './identity-search-writer-dispatch-sql.ts';
 import type { IdentityJobRef, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import { identityJobPartition } from '../semantic/identity-adapters/identity-epoch-contract.ts';
 import {
@@ -121,11 +126,24 @@ export const repairWriterPosition = (receipt: PublicFilterRepairWriterReceipt): 
 const repairEncode = (value: unknown) =>
   JSON.stringify(value, (_key, item) => (typeof item === 'bigint' ? { nativeBigint: String(item) } : item));
 export const decodeSearchRepairWriterReceipt = (value: string): SearchRepairWriterReceipt =>
-  JSON.parse(value, (_key, item) =>
-    item && typeof item === 'object' && Object.keys(item).length === 1 && typeof item.nativeBigint === 'string'
-      ? BigInt(item.nativeBigint)
-      : item,
-  );
+  JSON.parse(value, repairReviver);
+
+export function decodeSearchIdentityWriterAction(value: string, source: StoredSource): IndexAction {
+  const action = JSON.parse(value, repairReviver) as IndexAction;
+  if (
+    !action ||
+    action.id !== source.documentId ||
+    typeof action.version !== 'bigint' ||
+    action.version < 1n ||
+    action.version > BigInt(Number.MAX_SAFE_INTEGER) ||
+    (action.op !== 'delete' &&
+      (action.op !== 'index' ||
+        action.document?.id !== action.id ||
+        action.document.partition !== source.receivingHome))
+  )
+    throw unavailable('Retained Search writer action conflicts with its native document');
+  return action;
+}
 
 /** Search-visible keyed readback; absence alone never recovers an uncertain delete. */
 export async function readSearchRepairWinner(search: OpenSearch, index: string, action: IndexAction) {
@@ -768,6 +786,21 @@ export type SearchWriterNativeCustody = SearchWriterGuard &
         previousVisible: IdentityNativeReceipt | null;
       }>
     >;
+    dispatchIdentityAction(
+      tx: CommandTransaction,
+      job: IdentityJobRef,
+      source: StoredSource,
+      token: string,
+    ): Promise<IdentityNativeReceipt>;
+    settleIdentityAction(
+      tx: CommandTransaction,
+      job: IdentityJobRef,
+      source: StoredSource,
+      token: string,
+      dispatch: IdentityNativeReceipt,
+      action: IndexAction,
+      bulk: unknown,
+    ): Promise<number>;
     /** Closes first absence under the same native gate as enrollment; does not assert population. */
     closeGeneration(partition: number): Promise<SearchWriterBarrier>;
     /** Publication consumes retained state, never fields from a diagnostic read or caller certificate. */
@@ -908,6 +941,10 @@ const insertWriterGateSql = `INSERT INTO search.identity_writer_gate (partition_
        RETURNING enrollment_generation,fence_generation,closed_token`;
 const lockOriginalWriterSql = `SELECT incarnation,owner_epoch,closed_transaction_id::text
  FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3 FOR UPDATE`;
+
+export function searchIdentityWriterSettlementSql() {
+  return settle.sql;
+}
 
 export function searchIdentityWriterAdmissionSql() {
   return {
@@ -1497,6 +1534,41 @@ export function createSearchWriterGuard(options: {
     },
   };
 
+  async function identityActionFence(tx: CommandTransaction, job: IdentityJobRef, source: StoredSource) {
+    const command = currentCommand(tx);
+    if (
+      source.barrier.kind !== 'original' ||
+      source.original !== source.documentId ||
+      source.physicalTarget !== options.index ||
+      source.consumer !== options.consumer ||
+      currentCommandResources(tx).pool !== options.pool ||
+      command.partition !== source.receivingHome
+    )
+      throw unavailable('Search writer action requires its exact native original');
+    await identityEpochStore().admitHomeEffect(tx, { kind: 'structural', job, original: source.original });
+    const own = await native(tx, command.transactionId);
+    await publicationAdmission(tx);
+    const target = (
+      await tx.query(gateSql.sql, [
+        own.partition,
+        options.index,
+        options.consumer,
+        source.incarnation,
+        own.epoch,
+        source.writeAlias,
+      ])
+    ).rows[0];
+    if (
+      !target ||
+      target.closed_token ||
+      own.epoch !== source.receivingEpoch ||
+      BigInt(target.fence_generation) !== BigInt(source.fenceGeneration) ||
+      BigInt(target.enrollment_generation) < BigInt(source.enrollmentGeneration)
+    )
+      throw unavailable('Search writer action allocation or fence changed');
+    return own;
+  }
+
   const guard: SearchWriterNativeCustody & SearchWriterPublicationGuard = {
     ...publication,
     fenceOriginal: (job, original) =>
@@ -1646,6 +1718,62 @@ export function createSearchWriterGuard(options: {
         fenceGeneration: BigInt(target.fence_generation),
         actionDigest: createHash('sha256').update(body).digest('hex'),
       };
+    },
+    async dispatchIdentityAction(tx, job, source, token) {
+      const own = await identityActionFence(tx, job, source);
+      const written = await tx.query(dispatchSearchIdentityOriginalSql, [
+        own.partition,
+        options.index,
+        source.documentId,
+        source.locator.planId,
+        token,
+        own.transactionId,
+        String(own.position),
+      ]);
+      if (written.rowCount !== 1) throw unavailable('Search writer action is already dispatched or changed');
+      return own;
+    },
+    async settleIdentityAction(tx, job, source, token, dispatch, action, bulk) {
+      const own = await identityActionFence(tx, job, source);
+      const written = await tx.query(settle.sql, [
+        own.partition,
+        options.index,
+        source.incarnation,
+        dispatch.epoch,
+        token,
+        dispatch.transactionId,
+        String(dispatch.position),
+        [source.documentId],
+        own.transactionId,
+        String(own.position),
+        String(action.version),
+      ]);
+      if (written.rowCount !== 1) throw unavailable('Search writer lost original dispatch at settlement');
+      const receipt: SearchRepairWriterReceipt = {
+        locator: source.locator.planId,
+        subject: source.documentId,
+        partition: own.partition,
+        epoch: own.epoch,
+        incarnation: source.incarnation,
+        writeAlias: source.writeAlias,
+        consumer: options.consumer,
+        action,
+        enrollment: dispatch,
+        completion: own,
+        native: { evidence: { kind: 'bulk', bulk } },
+      };
+      const value = repairEncode(receipt);
+      const bytes = Buffer.byteLength(value);
+      if (bytes > 1048576) throw unavailable('Search writer receipt exceeds retained custody');
+      const saved = await tx.query(retainSearchIdentityWriterReceiptSql, [
+        own.partition,
+        options.index,
+        source.documentId,
+        source.locator.planId,
+        value,
+      ]);
+      if (saved.rowCount !== 1) throw unavailable('Search writer lost its original bulk receipt');
+      return bytes;
     },
     adoptGenerationPublicationBarrier: inspect,
     async closeGeneration(partition) {
