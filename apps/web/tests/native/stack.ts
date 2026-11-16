@@ -1,3 +1,4 @@
+import { webServeEnvironment } from '../../scripts/storybook-dev.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Access, AccessConfig } from '../../../../services/kernel/src/request/access.ts';
 import { fork, spawn, type ChildProcess } from 'node:child_process';
@@ -218,7 +219,8 @@ async function startWeb(
       cwd: webRoot,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env,
+      // Leave memory for the native Kernel, Auth, workerd and the browser.
+      env: webServeEnvironment('app', env),
     },
   );
   onOwnedGroup(child, stateDirectory);
