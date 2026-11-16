@@ -1694,7 +1694,8 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/realms/:realmId/home',
       {
         params: realmParams,
-        query: strict(RealmHomeQuerySchema()),
+        // The native query parser needs the TypeBox array shape to preserve language preferences.
+        query: RealmHomeQuerySchema(),
         response: { 200: strict(RealmHomePageSchema()), ...readFailures() },
         detail: {
           operationId: 'realm.home',
@@ -2245,7 +2246,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/realms/:realmId/publicationShelf',
       {
         params: realmParams,
-        query: strict(RealmHomePublicationQuerySchema),
+        query: RealmHomePublicationQuerySchema,
         response: {
           200: strict(RealmHomePublicationPageSchema()),
           ...readFailures(),
