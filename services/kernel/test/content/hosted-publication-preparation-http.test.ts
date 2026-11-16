@@ -727,7 +727,8 @@ test('selection progress exposes only its pinned binding and rejects new batches
   const releaseProgress = await f.native.call('POST', `${releaseStage}:progress`, {});
   expect(releaseProgress.value.stage).toMatchObject({
     state: 'collecting',
-    inputCount: '0',
+    inputVersion: '1',
+    inputCount: '1',
     sourceRevisionId: releaseBook.created.revisionId,
     expectedHeadRevisionId: releaseBook.created.revisionId,
     expectedPublicationId: releaseBook.published.revisionId,
