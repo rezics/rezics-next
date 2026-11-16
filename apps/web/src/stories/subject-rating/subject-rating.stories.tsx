@@ -136,17 +136,20 @@ export const SaveClearZero: Story = {
     await expectComfortableAction(clear);
     await expect(save).toBeDisabled();
     await expect(clear).toBeDisabled();
-    await userEvent.click(view.getByRole('slider'));
+    await userEvent.tab();
+    const slider = view.getByLabelText(standardRatingQuestion.label, { selector: 'input[type="range"]' });
+    await expect(slider).toHaveFocus();
     await userEvent.keyboard('{Home}');
-    await expect(view.getByRole('slider')).toHaveAttribute('aria-valuenow', '0');
+    await expect(slider).toHaveAttribute('aria-valuenow', '0');
     await userEvent.keyboard('{ArrowRight}');
-    await expect(view.getByRole('slider')).toHaveAttribute('aria-valuenow', '1');
+    await expect(slider).toHaveAttribute('aria-valuenow', '1');
+    await expect(slider).toHaveAttribute('aria-valuetext', `${new Intl.NumberFormat(getLocale()).format(0.5)} / 10`);
     await userEvent.keyboard('{Home}');
     await userEvent.tab();
     await expectKeyboardFocus(save);
     await userEvent.click(view.getByRole('button', { name: m.subject_rating_control_save() }));
     await expect(view.getByRole('button', { name: m.subject_rating_control_clear() })).toBeEnabled();
-    await expect(view.getByRole('slider')).toHaveAttribute('aria-valuenow', '0');
+    await expect(slider).toHaveAttribute('aria-valuenow', '0');
     await expect(save).toBeDisabled();
     await userEvent.tab();
     await expectKeyboardFocus(clear);
@@ -326,7 +329,7 @@ export const StaleReview: Story = {
   ),
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
-    await expect(view.getByRole('status')).toHaveTextContent(m.subject_rating_control_stale());
+    await expect(view.getByText(m.subject_rating_control_stale())).toHaveAttribute('role', 'status');
     await expect(view.getByRole('button', { name: m.subject_rating_control_save() })).toBeDisabled();
   },
 };

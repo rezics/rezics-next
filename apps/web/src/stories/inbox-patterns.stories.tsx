@@ -421,7 +421,7 @@ export const HiddenTarget: Story = {
   render: () => <Example fixture="unavailable" />,
   play: async ({ canvasElement }) => {
     const list = within(await within(canvasElement).findByRole('list'));
-    await list.findByText(m.inbox_unavailable_item());
+    await list.findByText(m.inbox_kind_moderation());
     await expect(list.queryByRole('link')).toBeNull();
   },
 };
@@ -449,7 +449,7 @@ export const ModeratorResponse: Story = {
   render: () => <Example fixture="report-moderator" />,
   play: async ({ canvasElement }) => {
     const list = within(await within(canvasElement).findByRole('list'));
-    await list.findByText(m.inbox_unavailable_item());
+    await list.findByText(m.inbox_notice_report_actioned());
     await expect(list.queryByRole('link')).toBeNull();
     await expect(list.queryByText('Repeated advertising in this discussion.')).toBeNull();
   },
