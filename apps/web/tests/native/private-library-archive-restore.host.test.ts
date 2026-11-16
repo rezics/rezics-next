@@ -14,14 +14,14 @@ const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as co
 const messagesRoot = resolve(import.meta.dir, '../../messages');
 const repositoryRoot = resolve(import.meta.dir, '../../../..');
 
-function gitHead(): string {
+// The check runner separately binds and verifies the source manifest of a Git-free transfer.
+function gitHead(): string | null {
   const result = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], {
     cwd: repositoryRoot,
     stdout: 'pipe',
     stderr: 'pipe',
   });
-  if (result.exitCode !== 0) throw new Error(result.stderr.toString());
-  return result.stdout.toString().trim();
+  return result.exitCode === 0 ? result.stdout.toString().trim() : null;
 }
 
 setDefaultTimeout(300_000);
