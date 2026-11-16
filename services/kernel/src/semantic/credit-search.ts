@@ -17,6 +17,8 @@ import {
 import { canonicalCreators, type CreditCreatorSnapshot, type PublicCreator } from './credit-search-creators.ts';
 import {
   digestOf,
+  EMPTY_CREDIT_OBSERVATION,
+  emptyCreditObservationOf,
   installedLimits,
   readCursor,
   selectedCursorOf,
@@ -35,6 +37,7 @@ import {
   publicWorkCut,
   resumeSelection,
   selectedCredits,
+  unchangedEmptyCreditSelection,
   workCut,
   type ParsedCredit,
   type SelectedCredit,
@@ -166,6 +169,9 @@ export function createCreditSearchSource(pool: Pool, routeKey?: Uint8Array): Cre
       if (input.observation !== null && input.observation !== observation)
         return { state: 'current', workId, observation, entries: [], next: null };
       const seek = await selectedCredits(pool, cut.work, plan.properties, after, limits.creditsPerPage + 1);
+      // A first seek with no raw rows has no creator or qualifier dependency to observe.
+      if (after === null && input.observation === null && seek.length === 0)
+        return { state: 'current', workId, observation: emptyCreditObservationOf(cut), entries: [], next: null };
       const pageRows = seek.slice(0, limits.creditsPerPage);
       // The lookahead row only proves another page exists. The cursor is the last row returned, because the next
       // seek is strictly after it; a cursor on the lookahead row would skip that credit.
@@ -225,6 +231,8 @@ export function createCreditSearchSource(pool: Pool, routeKey?: Uint8Array): Cre
     },
 
     async unchanged(workId, observation) {
+      if (observation.startsWith(EMPTY_CREDIT_OBSERVATION))
+        return unchangedEmptyCreditSelection(pool, workId, observation);
       const cut = await workCut(pool, workId);
       if (cut === 'moved' || cut === 'unavailable' || !currentObservation(cut, observation)) return false;
       const plan = await creditPlan(pool, cut.work);
