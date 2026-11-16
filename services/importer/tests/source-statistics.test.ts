@@ -194,7 +194,11 @@ test('the production import transport PUTs the VNDB statistic route with its ide
         key: request.headers.get('idempotency-key'),
         body: JSON.parse(await request.text()),
       });
-      return Response.json({ source: 'vndb', ...value });
+      return Response.json({
+        source: 'vndb',
+        ...value,
+        observation: { kind: 'unversioned', digest: 'a'.repeat(64) },
+      });
     }) as typeof fetch,
     maxAttempts: 1,
   });

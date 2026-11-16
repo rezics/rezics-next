@@ -729,7 +729,7 @@ export function createImportTransport(options: ImportTransportOptions) {
           typeof (observation as { digest: unknown }).digest === 'string' &&
           /^[0-9a-f]{64}$/.test((observation as { digest: string }).digest),
       );
-      expected.observation = observation;
+      expected.observation = { kind: 'unversioned', digest: (observation as { digest: string }).digest };
     }
     ensure(isDeepStrictEqual(JSON.parse(JSON.stringify(row)), expected));
     return row as ImportSourceStatisticFigure;
