@@ -752,10 +752,12 @@ export function websiteRoutes(input: {
               revocation.nativeStatus = response.status;
               if (response.status >= 400) {
                 const rejection = await jsonRecord(response).catch(() => undefined);
-                revocation.nativeCode =
+                const nativeCode =
                   rejection?.error === 'unsupported_token_type'
                     ? 'unsupported_token_type'
                     : protocolErrorCode(rejection);
+                if (nativeCode === undefined) delete revocation.nativeCode;
+                else revocation.nativeCode = nativeCode;
               }
             }
             // Native RFC 7009 cannot revoke self-contained JWTs. Our existing

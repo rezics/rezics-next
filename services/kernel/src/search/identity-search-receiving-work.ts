@@ -8,9 +8,15 @@ import {
   currentIdentitySourceConsumerMaintenance,
   identitySourceConsumerLibraryWork,
   identitySourceConsumerNativeWork,
+  type IdentitySourceConsumerMaintenanceWork,
 } from '../semantic/identity-source-consumer-maintenance.ts';
 
-export function searchIdentityWorkContext(pool: Pool) {
+export function searchIdentityWorkContext(pool: Pool): {
+  deadline: number;
+  identityConsumerWork: IdentitySourceConsumerMaintenanceWork;
+  ceiling: WorkDimensions;
+  allowance: NativeStepWork;
+} {
   const funded = activeIdentitySourceConsumerMaintenance(pool);
   const deadline = funded?.deadline ?? deadlineFor(1000);
   const token = currentIdentitySourceConsumerMaintenance(pool, deadline);

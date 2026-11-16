@@ -26,9 +26,9 @@ type Lifecycle = Pick<
 >;
 type Proofs = Pick<BarrierProofPort, 'verify'>;
 type Capabilities = Required<Pick<AuthBindingCapabilities, 'invalidateAccount' | 'authorizeRecovery'>>;
-type Ports = Required<
-  Pick<TrustedAccessPorts, 'invalidateAccount' | 'authorizeRecovery' | 'confirmBarrier' | 'completeBarrier'>
->;
+type Ports = Required<Pick<TrustedAccessPorts, 'authorizeRecovery' | 'confirmBarrier' | 'completeBarrier'>> & {
+  invalidateAccount: NonNullable<TrustedAccessPorts['invalidateAccount']>;
+};
 const AUTH_BARRIER_BUDGET_MS = 3_000;
 function allowed(value: unknown): asserts value {
   if (!value) throw new AuthBindingDeniedError();
