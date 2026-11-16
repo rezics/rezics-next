@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { repeatBound, sumBounds } from '@rezics/bounds';
+import { repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import { systemClock } from '../clock.ts';
 import { mintReadTime, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
 import { ProblemError } from '../http/problem-error.ts';
@@ -24,6 +24,32 @@ import { resolveSubject, SubjectIdentityUnavailableError } from './subject-ancho
 
 const lastOriginal = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
 const refillRounds = 3;
+const disclosureOriginalsSQL = `SELECT requested.subject_id::text AS "subjectId",
+       CASE WHEN g.output_mode='selected' THEN requested.subject_id
+            ELSE member.original_subject_id END::text AS "originalSubjectId"
+  FROM library.collection_source_output g
+  CROSS JOIN unnest($4::uuid[]) AS requested(subject_id)
+  CROSS JOIN LATERAL (
+    SELECT m.original_subject_id FROM library.collection_source_output_member m
+    WHERE m.route=g.route AND m.collection_id=g.collection_id AND m.generation=g.generation
+      AND m.subject_id=requested.subject_id
+    LIMIT 1
+  ) member
+  WHERE g.route=$1 AND g.collection_id=$2 AND g.generation=$3 AND g.state='complete'`;
+
+function disclosureOriginalsBound(keys: number): Bound {
+  return {
+    candidateKeys: 0,
+    identityMetadataRows: 0,
+    witnessKeys: 0,
+    engineRequests: 0,
+    nativeRows: 4 + 4 * keys,
+    nativePoints: 1 + keys,
+    statements: 1,
+    emptySeeks: 1 + keys,
+    bytes: Buffer.byteLength(disclosureOriginalsSQL) + 256 + 192 * keys,
+  };
+}
 
 /** The public branch pages only the selected, sealed output. Its original witnesses still require live disclosure. */
 export async function readPublicCollectionMembers(
@@ -62,11 +88,16 @@ export async function readPublicCollectionMembers(
 
   const ordinary = ordinaryCollectionPagePlan(input.limit, input.view);
   const publicRead = publicOutputReadWork(refillRounds + 1);
+  const rawLimit = Math.min(100, 2 * input.limit + 1);
   const work = new NativeCollectionWork(
     {
       reservationId: randomUUID(),
       remaining: ordinaryPageWorkDimensions(
-        sumBounds({ ...publicRead, engineRequests: 0 }, repeatBound(ordinary.sourceBound, 4)),
+        sumBounds(
+          { ...publicRead, engineRequests: 0 },
+          repeatBound(ordinary.sourceBound, 4),
+          repeatBound(disclosureOriginalsBound(rawLimit), refillRounds),
+        ),
       ),
     },
     input.deadline,
@@ -104,8 +135,7 @@ export async function readPublicCollectionMembers(
         nativeOutput,
       ),
     );
-    if (result.status !== 'ready')
-      throw new ProblemError(position ? 'stale_cursor' : 'dependency_unavailable');
+    if (result.status !== 'ready') throw new ProblemError(position ? 'stale_cursor' : 'dependency_unavailable');
     return result;
   };
   const versionOf = (page: Awaited<ReturnType<typeof seek>>) =>
@@ -113,6 +143,32 @@ export async function readPublicCollectionMembers(
   let after: PublicOutputOriginalKey | null = position
     ? { terminal: String(position.after[3]), original: lastOriginal }
     : null;
+  // The seal's original is the exact retained output key. Whole-query outputs also carry the
+  // native Source operand that supported that key. Both survive independently of the private Source.
+  const disclosureRows = async (page: Awaited<ReturnType<typeof seek>>) => {
+    if (!page.rows.length) return page.rows;
+    const ids = page.rows.map(({ original }) => original);
+    const reservation = work.reserve(ordinaryPageWorkDimensions(disclosureOriginalsBound(ids.length)));
+    reservation.dispatch();
+    try {
+      const { rows } = await withCollectionReadConnection(deps.pool, input.deadline, (client) =>
+        client.query<{ subjectId: string; originalSubjectId: string | null }>(disclosureOriginalsSQL, [
+          route,
+          input.collectionId,
+          page.generation,
+          ids,
+        ]),
+      );
+      const originals = new Map(rows.map((row) => [row.subjectId, row.originalSubjectId]));
+      return page.rows.map(({ original, terminal }) => {
+        const sourceOriginal = originals.get(original);
+        if (!sourceOriginal) throw new ProblemError('dependency_unavailable');
+        return { original: sourceOriginal, terminal };
+      });
+    } finally {
+      reservation.settle();
+    }
+  };
   const mintTime = () =>
     withCollectionReadConnection(deps.pool, input.deadline, (client) => mintReadTime(client, clock));
   const at = await mintTime();
@@ -134,7 +190,6 @@ export async function readPublicCollectionMembers(
   let exhausted = false;
   let first: Awaited<ReturnType<typeof seek>>;
   let version: string;
-  const rawLimit = Math.min(100, 2 * input.limit + 1);
   try {
     const accountFree = await authorize(at);
     first = await seek(after, rawLimit, accountFree);
@@ -152,8 +207,9 @@ export async function readPublicCollectionMembers(
       const page = round === 0 ? first : await seek(after, rawLimit, accountFree);
       if (versionOf(page) !== version) throw new ProblemError('stale_cursor');
       if (page.more && page.rows.length === 0) throw new ProblemError('dependency_unavailable');
-      const readable = await disclose(page.rows, at);
-      disclosed.push({ rows: page.rows, readable });
+      const rows = await disclosureRows(page);
+      const readable = await disclose(rows, at);
+      disclosed.push({ rows, readable });
       for (const [index, row] of page.rows.entries()) {
         if (!readable[index] || row.terminal === lastDisclosed) continue;
         members.push({ kind: 'dynamic', subjectId: row.terminal });

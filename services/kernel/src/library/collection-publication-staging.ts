@@ -481,10 +481,13 @@ export async function stageCollectionPublicationStep(
       return { state: 'sealed', checkpoint: publicCheckpoint(row), work: work.receipt() };
     }
     let frontier = row.frontier;
-    let subject: string | null = null;
+    let member: { subject: string; originalSubjectId: string } | null = null;
     let included: boolean | null = null;
     let references: readonly string[] = [];
-    if (!frontier.exhausted && !frontier.pending) {
+    if (!frontier.exhausted && !frontier.pending?.originalSubjectId) {
+      // A checkpoint written before originals were retained can still resume its unsettled decision.
+      const pending = frontier.pending;
+      frontier = { ...frontier, pending: null };
       if (catalogueOnly) {
         const page = await work.compose(async (allowance) => {
           const remaining = Math.min(16, allowance.remaining.candidateKeys - 1);
@@ -523,9 +526,16 @@ export async function stageCollectionPublicationStep(
           throw unavailable();
         frontier = enterCollectionPublicationPrefix(frontier, page);
       }
+      if (pending) {
+        const proven = frontier.pending;
+        if (!proven?.originalSubjectId || proven.subject !== pending.subject) throw unavailable();
+        frontier = { ...frontier, pending: { ...pending, originalSubjectId: proven.originalSubjectId } };
+      }
     }
     if (frontier.pending) {
-      subject = frontier.pending.subject;
+      const { subject, originalSubjectId } = frontier.pending;
+      if (!originalSubjectId) throw unavailable();
+      member = { subject, originalSubjectId };
       if (catalogueOnly) {
         const settled = settleCollectionPublicationSubject(frontier, {
           values: [true],
@@ -540,7 +550,7 @@ export async function stageCollectionPublicationStep(
       } else {
         const evaluated = await work.compose(async (allowance) => {
           const r = allowance.remaining;
-          const evaluation = await scope!.evaluate(ownerPrepared!, [subject!], {
+          const evaluation = await scope!.evaluate(ownerPrepared!, [subject], {
             rawKeys: Math.min(256, r.candidateKeys),
             allowance,
             native: {
@@ -575,7 +585,7 @@ export async function stageCollectionPublicationStep(
       !isDeepStrictEqual(finalSource.basis, source.basis)
     )
       throw unavailable();
-    await writeCollectionPublicationCheckpoint(tx, locator, row, { frontier, subject, included, references }, work);
+    await writeCollectionPublicationCheckpoint(tx, locator, row, { frontier, member, included, references }, work);
     if (frontier.exhausted) await sealCollectionPublicationStaging(tx, locator, work, search);
     const updated = await checkpoint(tx, locator, work);
     if (!updated) throw conflict();
@@ -597,7 +607,7 @@ async function writeCollectionPublicationCheckpoint(
   row: Checkpoint,
   next: Readonly<{
     frontier: CollectionPublicationFrontier;
-    subject: string | null;
+    member: Readonly<{ subject: string; originalSubjectId: string }> | null;
     included: boolean | null;
     references: readonly string[];
   }>,
@@ -605,13 +615,14 @@ async function writeCollectionPublicationCheckpoint(
 ) {
   if (Buffer.byteLength(json(next.frontier)) > 4096 || Buffer.byteLength(json(next.references)) > 16384)
     throw unavailable();
-  if (next.subject !== null && next.included !== null) {
+  if (next.member && next.included !== null) {
+    const { subject, originalSubjectId } = next.member;
     await query(
       tx,
       work,
       `INSERT INTO library.collection_publication_staging_evidence
        (route,collection_id,generation,subject_id,included,evidence) VALUES($1,$2,$3,$4,$5,$6::jsonb)`,
-      [locator.route, locator.collectionId, row.generation, next.subject, next.included, json(next.references)],
+      [locator.route, locator.collectionId, row.generation, subject, next.included, json(next.references)],
     );
     if (next.included) {
       const [appended] = await query<{ subject_id: string }>(
@@ -624,10 +635,10 @@ async function writeCollectionPublicationCheckpoint(
             AND (g.after_subject_id IS NULL OR g.after_subject_id<$4::uuid)
           FOR UPDATE
         ), inserted AS (
-          INSERT INTO library.collection_source_output_member(route,collection_id,generation,subject_id)
-          SELECT route,collection_id,generation,$4 FROM admitted RETURNING subject_id
+          INSERT INTO library.collection_source_output_member(route,collection_id,generation,subject_id,original_subject_id)
+          SELECT route,collection_id,generation,$4,$6 FROM admitted RETURNING subject_id
         ) SELECT subject_id::text FROM inserted`,
-        [locator.route, locator.collectionId, row.generation, next.subject, locator.ownerAccountId],
+        [locator.route, locator.collectionId, row.generation, subject, locator.ownerAccountId, originalSubjectId],
         128,
       );
       if (!appended) throw conflict();
@@ -636,7 +647,7 @@ async function writeCollectionPublicationCheckpoint(
         work,
         `UPDATE library.collection_source_output SET written_members=written_members+1,after_subject_id=$4
          WHERE route=$1 AND collection_id=$2 AND generation=$3`,
-        [locator.route, locator.collectionId, row.generation, next.subject],
+        [locator.route, locator.collectionId, row.generation, subject],
       );
     }
   }
