@@ -11,8 +11,12 @@ import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes
 import { purgeOwnedGraphPage } from '../../src/library/erasure-owned-graph.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
+import { createSubjectIndex } from '../../src/search/indices.ts';
+import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identityEpochStore } from '../../src/semantic/identity-adapters/index.ts';
+import { createWorkClient } from '../../src/work/client.ts';
+import { readLibraryMergeDispatch, startErasureWorker } from './support/erasure-worker.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
 type Identity = Awaited<ReturnType<NativeProfileFixture['identity']>>;
@@ -97,6 +101,18 @@ function selectedFrom(records: any[], ordinals: number[]) {
 async function makeUpload(person: Identity, value: unknown = artifact) {
   const status = await upload(person, value);
   return { id: status.uploadId as string, status };
+}
+
+async function observationAdmissionReceiptCount(person: Identity, requestKey: string) {
+  const accountId = person.actor.accountId;
+  const command = 'library.entry.source-observation.admit';
+  const { rows } = await f.pool.query<{ count: string }>(
+    `SELECT count(*)::text AS count FROM core.receipt
+     WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
+       AND command_kind=$3 AND idempotency_key=ANY($4::text[])`,
+    [partitionOf(routeOf(accountId)!), accountId, command, nativeReceiptKeyCandidates(f.pool, command, accountId, requestKey)],
+  );
+  return rows[0]?.count;
 }
 
 beforeAll(async () => {
@@ -612,17 +628,7 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
       })
     ).status,
   ).toBe(409);
-  const observationReceipt = await f.pool.query<{ count: string }>(
-    `SELECT count(*)::text AS count FROM core.receipt
-     WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
-       AND command_kind='library.entry.source-observation.admit' AND idempotency_key=ANY($3::text[])`,
-    [
-      partitionOf(routeOf(main.actor.accountId)!),
-      main.actor.accountId,
-      nativeReceiptKeyCandidates(f.pool, 'library.entry.source-observation.admit', main.actor.accountId, observationKey),
-    ],
-  );
-  expect(observationReceipt.rows[0]?.count).toBe('1');
+  expect(await observationAdmissionReceiptCount(main, observationKey)).toBe('1');
   const currentAnnotation = await personal.readPersonalEntry(main.actor, subjects[0]);
   const currentEntry = await f.commands.readEntry(main.actor, subjects[0]);
   const annotationEpoch = await f.pool.query<{ review_revision: number }>(
@@ -1803,7 +1809,7 @@ test('a merged canonical target invalidates the reviewed observation identity', 
   const row = (await previewAll(identityOwner, id)).records.find(
     (item: any) => item.section === 'provenance' && item.evidence.observation.recordId === 'source-visible-row',
   )!;
-  await json(
+  const review = await json(
     await send(identityOwner, 'PATCH', `${mergePath}/${id}/review`, {
       items: [
         {
@@ -1818,22 +1824,85 @@ test('a merged canonical target invalidates the reviewed observation identity', 
       ],
     }),
   );
-  const merged = await send(identityOwner, 'POST', '/v1/subjects:merge', { subjects: [survivor, redirected] });
-  expect([200, 202]).toContain(merged.status);
-  const admission = (await merged.json()) as { operation?: { id?: string }; survivor?: string; redirected?: string };
-  if (merged.status === 202) {
-    if (typeof admission.operation?.id !== 'string') throw new Error('Native merge admission has no operation');
-    await f.drainIdentityMerge(admission.operation.id);
-  } else expect(admission).toMatchObject({ survivor, redirected });
-  for (const id of [survivor, redirected]) await f.awaitCurrentIdentity(id);
-  expect(await identityEpochStore().readMapping(f.pool, redirected)).toMatchObject({ state: 'mapped', terminal: survivor });
-  const applied = await json(await send(identityOwner, 'POST', `${mergePath}/${id}/apply`, selected([row.ordinal])));
-  expect(applied.applied).toMatchObject([{ status: 'stale' }]);
+  expect(review.reviewed).toEqual([{ ordinal: row.ordinal, status: 'mapped', reviewRevision: 1 }]);
+  // Publishing the actual redirect needs both fixed identity participants on the default worker.
+  const databaseUrl = f.pool.options.connectionString;
+  const searchUrl = process.env.OPENSEARCH_URL;
+  if (!databaseUrl || !searchUrl) throw new Error('Native identity worker needs PostgreSQL and Search');
+  const prefix = `library-archive-${randomUUID().replaceAll('-', '')}`;
+  await createSubjectIndex(createOpenSearch(searchUrl), prefix, 1);
+  const client = await createWorkClient(databaseUrl);
+  // During the ordinary worker run, avoid the fixture's separate bootstrap driver.
+  const sendNative = (method: 'GET' | 'POST', path: string, body?: unknown) =>
+    f.handle(
+      new Request(`http://kernel.test${path}`, {
+        method,
+        headers: {
+          authorization: `Bearer ${identityOwner.bearer}`,
+          'idempotency-key': JSON.stringify(key()),
+          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
+    );
+  try {
+    const worker = await startErasureWorker(databaseUrl, client, {
+      ...f.workerEnv,
+      OPENSEARCH_URL: searchUrl,
+      KERNEL_SEARCH_PREFIX: prefix,
+    });
+    try {
+      const admitted = await sendNative('POST', '/v1/subjects:merge', { subjects: [survivor, redirected] });
+      if (admitted.status !== 202) throw new Error(`${admitted.status}: ${await admitted.text()}`);
+      const { operation } = (await admitted.json()) as { operation: { id: string } };
+      expect(operation.id).toBeString();
+      const deadline = performance.now() + 90_000;
+      const readOperation = async () => {
+        const response = await sendNative('GET', `/v1/subjectIdentityOperations/${operation.id}`);
+        if (response.status !== 200) throw new Error(`${response.status}: ${await response.text()}`);
+        return ((await response.json()) as { operation: { id: string; done: boolean } }).operation;
+      };
+      let current = await readOperation();
+      while (!current.done && performance.now() < deadline) {
+        await Bun.sleep(100);
+        current = await readOperation();
+      }
+      if (!current.done) {
+        const dispatch = await readLibraryMergeDispatch(f.pool, client, operation.id, worker.effectsQueueWarning);
+        throw new Error(`Archive redirect did not publish: ${JSON.stringify(dispatch)}`);
+      }
+      expect(current).toMatchObject({ id: operation.id, done: true, result: { survivor, redirected } });
+      const store = identityEpochStore();
+      expect(await store.readMapping(f.pool, redirected)).toMatchObject({ state: 'mapped', terminal: survivor });
+      expect(await store.readMapping(f.pool, survivor)).toMatchObject({ state: 'mapped', terminal: survivor });
+    } finally {
+      await worker.close();
+    }
+  } finally {
+    await client.close();
+  }
+  const reviewRevision = review.reviewed[0].reviewRevision;
+  const applied = await json(
+    await sendNative('POST', `${mergePath}/${id}/apply`, selected([row.ordinal], reviewRevision)),
+  );
+  expect(applied.applied).toMatchObject([{ ordinal: row.ordinal, status: 'stale', result: { visibility: 'private' } }]);
+  const requestKey = `archive-merge-${id.replaceAll('-', '')}-${row.ordinal}-${reviewRevision}`;
+  expect(await observationAdmissionReceiptCount(identityOwner, requestKey)).toBe('0');
   const personal = createEntryPersonalCommands({ pool: f.pool, access: f.access });
   expect(
     await personal.readSourceObservation(identityOwner.actor, survivor, 'archive-fixture', 'source-visible-row'),
   ).toBeNull();
-});
+  expect(
+    (
+      await f.pool.query(
+        `SELECT 1 FROM library.entry_source_observation
+         WHERE route=$1 AND account_id=$2 AND subject_id=ANY($3::uuid[])
+           AND provider='archive-fixture' AND record_id='source-visible-row'`,
+        [routeOf(identityOwner.actor.accountId), identityOwner.actor.accountId, [survivor, redirected]],
+      )
+    ).rows,
+  ).toEqual([]);
+}, 180_000);
 
 test('unsupported archived observation tokens stay private evidence with a field reason', async () => {
   const records = artifact.records.map((row) => {
