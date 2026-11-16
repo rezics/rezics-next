@@ -46,6 +46,22 @@ type LogRow = {
 
 type EnvelopeGroup = { position: bigint; rows: LogRow[] };
 
+function logPoint(row: LogRow) {
+  return { epoch: row.epoch, position: String(row.position), eventSeq: row.event_seq, eventId: row.id, type: row.type };
+}
+
+export type ProjectionProgress =
+  | { stage: 'read' | 'read_busy' | 'checkpoint' | 'checkpoint_busy' | 'checkpoint_advanced' }
+  | {
+      stage: 'released';
+      checkpoint: string;
+      readThrough: string;
+      validatedThrough: string;
+      first?: ReturnType<typeof logPoint>;
+      blocked?: ReturnType<typeof logPoint>;
+      reason?: StopReason;
+    };
+
 function stop(reason: StopReason, envelopes: number, position: bigint): BatchResult {
   return { status: 'stopped', reason, envelopes, position };
 }
@@ -141,7 +157,15 @@ function validateOptions(options: { consumer: string; envelopes?: number }): num
   return limit;
 }
 
-async function readSnapshot(pool: Pool, options: { consumer: string; partition: number; envelopes?: number }) {
+async function readSnapshot(
+  pool: Pool,
+  options: {
+    consumer: string;
+    partition: number;
+    envelopes?: number;
+    observe?: (progress: ProjectionProgress) => void;
+  },
+) {
   const limit = validateOptions(options);
   return withConnection(pool, async (client) => {
     await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
@@ -162,7 +186,7 @@ async function readSnapshot(pool: Pool, options: { consumer: string; partition: 
       });
       const parsed = parseRows(rows, options.partition, checkpoint);
       await client.query('COMMIT');
-      return { checkpoint, ...parsed };
+      return { checkpoint, ...parsed, rows: options.observe ? rows : undefined };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -233,14 +257,34 @@ export async function projectBatch(
     partition: number;
     apply: (envelopes: readonly Envelope[]) => Promise<void>;
     envelopes?: number;
+    observe?: (progress: ProjectionProgress) => void;
   },
 ): Promise<BatchResult> {
+  options.observe?.({ stage: 'read' });
   const snapshot = await readSnapshot(pool, options);
-  if (!snapshot) return { status: 'busy' };
-  const { checkpoint, envelopes, reason } = snapshot;
+  if (!snapshot) {
+    options.observe?.({ stage: 'read_busy' });
+    return { status: 'busy' };
+  }
+  const { checkpoint, envelopes, reason, rows } = snapshot;
+  const position = envelopes.at(-1)?.position ?? checkpoint.position;
+  if (rows && options.observe) {
+    const first = rows[0];
+    const blocked = reason && rows.find((row) => row.position !== null && BigInt(row.position) > position);
+    options.observe({
+      stage: 'released',
+      checkpoint: String(checkpoint.position),
+      readThrough: String(rows.at(-1)?.position ?? checkpoint.position),
+      validatedThrough: String(position),
+      ...(first && first.position !== null ? { first: logPoint(first) } : {}),
+      ...(blocked ? { blocked: logPoint(blocked) } : {}),
+      ...(reason ? { reason } : {}),
+    });
+  }
   if (envelopes.length > 0) {
     await options.apply(envelopes);
     const last = envelopes.at(-1)!;
+    options.observe?.({ stage: 'checkpoint' });
     const advanced = await withConnection(pool, async (client) =>
       compareAdvanceCheckpoint.run(client, {
         partition_no: options.partition,
@@ -252,9 +296,9 @@ export async function projectBatch(
         next_position: last.position,
       }),
     );
+    options.observe?.({ stage: advanced.length === 0 ? 'checkpoint_busy' : 'checkpoint_advanced' });
     if (advanced.length === 0) return { status: 'busy' };
   }
-  const position = envelopes.at(-1)?.position ?? checkpoint.position;
   if (reason) return stop(reason, envelopes.length, position);
   return { status: 'read', envelopes: envelopes.length, position };
 }
