@@ -509,7 +509,7 @@ nativeTest(
           async () => {
             await page.getByRole('button', { name: 'Version history', exact: true }).click();
             const versions = page.getByRole('region', { name: 'Document versions', exact: true });
-            await versions.getByRole('button', { name: 'Load saved versions', exact: true }).click();
+            await expect(versions).toBeVisible();
             const original = versions.locator('li').filter({ hasText: seed!.chapterOne.revisionId });
             await original.getByRole('button', { name: /^Compare /u }).click();
             await versions.getByRole('heading', { name: 'Selected version', exact: true }).waitFor({
