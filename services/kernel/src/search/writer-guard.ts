@@ -147,7 +147,11 @@ export async function readSearchRepairWinner(search: OpenSearch, index: string, 
 }
 
 /** Validate only a native record loaded by custody; this is not a settlement producer. */
-export function validateSearchRepairWriterEvidence(index: string, receipt: SearchRepairWriterReceipt): void {
+export function validateSearchRepairWriterEvidence(
+  index: string,
+  receipt: SearchRepairWriterReceipt,
+  { allowReadbackRecovery = true }: { allowReadbackRecovery?: boolean } = {},
+): void {
   const fail = () => {
     throw unavailable('Native repair receipt or final writer fence changed');
   };
@@ -178,7 +182,7 @@ export function validateSearchRepairWriterEvidence(index: string, receipt: Searc
   };
   const evidence = nativeEvidence?.evidence;
   if (evidence?.kind === 'bulk') validateIndexWriteReceipt(evidence.bulk, index, [receipt.action]);
-  else if (evidence?.kind === 'recovered' && receipt.action.op === 'index') {
+  else if (allowReadbackRecovery && evidence?.kind === 'recovered' && receipt.action.op === 'index') {
     validateRefreshResponse(200, evidence.refresh);
     if (
       evidence.current?._id !== receipt.subject ||
