@@ -28,7 +28,7 @@ import {
   type ShowcaseVocabularyRecord,
   type ShowcaseVocabularyRequirement,
 } from './showcase-contract.ts';
-import { publishShowcase } from './showcase-publication.ts';
+import { publishedShowcaseSourceKeys, publishShowcase, publishShowcaseVocabulary } from './showcase-publication.ts';
 import { captureShowcaseCommands, ShowcaseJournal } from './showcase-journal.ts';
 import type { ShowcasePublicationResult } from './showcase-publication-contract.ts';
 import type { ShowcaseReviewPort } from './showcase-contract.ts';
@@ -444,6 +444,18 @@ function requirementBySource(
   return requirements.find((item) => item.sourceKey === sourceKey);
 }
 
+function creditEndpointsPublished(
+  plan: CrossMediaPlan,
+  drafts: readonly BangumiCreatorCreditDraft[],
+  publication: ShowcasePublicationResult,
+): boolean {
+  const selected = new Set([...plan.records.bangumi, ...plan.entities.bangumi].map((record) => record.key));
+  const current = publishedShowcaseSourceKeys(publication, 'bangumi');
+  return drafts.every(({ work, person, character }) =>
+    [work, person, character].every((key) => key === undefined || !selected.has(key) || current.has(key)),
+  );
+}
+
 /** Derive only source roles needed by selected work credits and publish through the common local reviewer. */
 export async function prepareBangumiCreatorCreditBindings(input: {
   plan: CrossMediaPlan;
@@ -498,6 +510,7 @@ export async function prepareBangumiCreatorCreditBindings(input: {
   }
   let schemeManifest = input.prior?.manifest;
   let activePublication = input.prior;
+  let endpointsPublished = false;
   let allRequirements: ShowcaseVocabularyRequirement[] = scheme ? [schemeRequirement] : [];
 
   if (!scheme && !schemeMustNotRestore) {
@@ -550,6 +563,7 @@ export async function prepareBangumiCreatorCreditBindings(input: {
     });
     schemeManifest = publication.manifest;
     activePublication = publication;
+    endpointsPublished = creditEndpointsPublished(input.plan, input.drafts, publication);
     cachedReads.clear();
     const schemeRecord = vocabularyRecord(publication.manifest, schemeSourceKey);
     const fresh = await currentVocabularyRecord({
@@ -677,7 +691,9 @@ export async function prepareBangumiCreatorCreditBindings(input: {
     }
     await writeBangumiStaffVocabularyCommands({ port, journal: input.journal, commands: candidates, read });
     allRequirements = [...allRequirements, ...existingRoleRequirements, ...newRequirements];
-    const publication = await publishShowcase({
+    // The Scheme pass read back the selected credit endpoints. The new commands only affect role vocabulary.
+    const publishRoles = endpointsPublished ? publishShowcaseVocabulary : publishShowcase;
+    const publication = await publishRoles({
       plan: input.plan,
       result: input.result,
       aliases: { bangumi: alias, vndb: 'vndb_cross_media' },

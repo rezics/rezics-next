@@ -179,6 +179,7 @@ test('selected anime staff and cast use the default acknowledged role adapter an
   } as unknown as CrossMediaPort;
   const port = captureShowcaseCommands(basePort, journal);
   const review: ShowcaseReviewPort = {
+    fence: basePort.fence,
     readReviewedSubject: async (id) => read(id),
     async reviewedCandidates(id, query) {
       expect(query.context).toBe(globalContext);
@@ -192,7 +193,11 @@ test('selected anime staff and cast use the default acknowledged role adapter an
               candidate.source.external_id === subjects.get(id)?.sourceExternalId &&
               candidate.statement.property.id === query.property,
           )
-          .map((candidate) => ({ ...candidate, rank: ranks.get(candidate.id) ?? null })),
+          .map((candidate) => ({
+            ...candidate,
+            decision: accepted.has(candidate.id) ? 'accepted' : null,
+            rank: ranks.get(candidate.id) ?? null,
+          })),
         next: null,
         adoption: current ? { mode: 'replace', head: current.head } : null,
       } as never;
@@ -255,6 +260,7 @@ test('selected anime staff and cast use the default acknowledged role adapter an
         },
       },
     );
+    expect(resolution!.publication!.manifest.records).toEqual([]);
     const currentRoles = await currentBangumiCreatorCreditBindings({
       resolution: resolution!,
       acknowledgements: journal.acknowledgedCommands(),
