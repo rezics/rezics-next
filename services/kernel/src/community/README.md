@@ -846,8 +846,11 @@ owner's add of a banned target return `403 forbidden`. Join and add-member accep
 refuse a currently banned target without writing an operation, membership, grant or follow. After unban, the Realm's
 ordinary admission rules apply.
 An existing member is removed by Accounts' native leave workflow: publish closes the
-Realm interval before release clears the account's inverse slot. The workflow is keyed
-by the ban. Its operation commits the moderator as initiator (see Durable initiators
+Realm interval before release clears the account's inverse slot and any membership-created
+follow of its Space in the same account-partition command. Explicit and Library follows
+retain their existing intent. The join step checks its exact inverse reservation before
+creating a follow, so delayed delivery cannot recreate an edge for the removed reservation.
+The workflow is keyed by the ban. Its operation commits the moderator as initiator (see Durable initiators
 below), and each step needs that moderator's own `realm:ban` on the Realm; the member's
 permission is irrelevant. A non-member starts no workflow. Retrying a receipted
 ban resumes enqueueing with the same durable key.

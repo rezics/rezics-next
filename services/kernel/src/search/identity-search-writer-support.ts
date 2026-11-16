@@ -4,12 +4,16 @@ import type { CommandTransaction } from '../command/command.ts';
 import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts';
 import { readRelease } from '../semantic/definitions.ts';
 import type { IdentityChange, IdentityFrontier, IdentityJobRef } from '../semantic/identity-epoch-contract.ts';
+import {
+  EMPTY_IDENTITY_SEARCH_TERMS_DIGEST,
+  readIdentitySearchIndexTermSlot,
+} from '../semantic/identity-search-index-terms.ts';
 import { createPublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
 import { readPublicFilterSourceDefinition } from '../semantic/source-binding-application.ts';
 import type { PublicFilterProjectionFrontier } from '../semantic/public-filter-source-contract.ts';
 import { publicFilterSource } from '../semantic/public-filter-source.ts';
 import { withReadTransaction } from '../semantic/read.ts';
-import { readIdentitySourceProjection } from '../semantic/search-source.ts';
+import { prepareRetainedIdentitySourceProjections, readIdentitySourceProjection } from '../semantic/search-source.ts';
 import { snapshotSearchIdentityReceivingFrontier } from './identity-receiving-native-contract.ts';
 import type { SearchReceivingConfiguration } from './identity-receiving-native.ts';
 import { readSearchIdentityWriterSupportSql } from './identity-search-receiving-directory-sql.ts';
@@ -20,7 +24,7 @@ const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const releaseDigest = /^sha256:[a-f0-9]{64}$/;
 const marker = 'search-writer-support';
 
-type Phase = 'definition' | 'original' | 'terminal';
+type Phase = 'definition' | 'original' | 'terminal' | 'terms';
 type Definition = Readonly<{ transactionId: string; id: string; release: string }>;
 type Projection = Readonly<{
   transactionId: string;
@@ -102,6 +106,23 @@ function closed(value: Projection | null): value is Projection {
   return value?.state === 'complete' || value?.state === 'withheld';
 }
 
+function termCursor(row: Awaited<ReturnType<typeof retained>>, support: PublicFilterProjectionFrontier) {
+  if (!row) return { after: null, digest: EMPTY_IDENTITY_SEARCH_TERMS_DIGEST, state: 'progress' as const };
+  const [, , , state, build, generation, after, digest] = row.after;
+  if (
+    row.after.length !== 8 ||
+    (state !== 'progress' && state !== 'complete') ||
+    build !== support.build ||
+    generation !== String(support.generation) ||
+    (after !== null && (typeof after !== 'string' || !uuid.test(after))) ||
+    (after === null && (state !== 'complete' || digest !== EMPTY_IDENTITY_SEARCH_TERMS_DIGEST)) ||
+    typeof digest !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(digest)
+  )
+    throw unavailable('Search writer term cursor changed with its Source build');
+  return { after, digest, state };
+}
+
 export function createSearchIdentityWriterSupport(configuration: SearchReceivingConfiguration) {
   const { pool } = configuration;
   const source = publicFilterSource(configuration);
@@ -110,7 +131,7 @@ export function createSearchIdentityWriterSupport(configuration: SearchReceiving
     basis: Basis,
     deadline: number,
   ): Promise<
-    | Readonly<{ state: 'progress'; frontier: IdentityFrontier; compare(tx: CommandTransaction): Promise<void> }>
+    | Readonly<{ state: 'progress'; advance(tx: CommandTransaction): Promise<IdentityFrontier> }>
     | Readonly<{
         state: 'ready';
         definition: string;
@@ -131,28 +152,76 @@ export function createSearchIdentityWriterSupport(configuration: SearchReceiving
         const sameDocument = basis.change.original === basis.change.terminal;
         const terminal = sameDocument ? original : decodeProjection(await retained(tx, basis, 'terminal'));
         if (!closed(terminal)) return { definition: savedDefinition, phase: 'terminal' as const, projection: terminal };
-        return { phase: 'ready' as const, definition: savedDefinition, original, terminal, sameDocument };
+        const terms = sameDocument && original.frontier ? await retained(tx, basis, 'terms') : null;
+        return { phase: 'ready' as const, definition: savedDefinition, original, terminal, sameDocument, terms };
       },
       deadline,
     );
     if (saved.phase === 'ready') {
+      const { definition, original, terminal, sameDocument, terms } = saved;
+      async function compare(tx: CommandTransaction) {
+        const retainedDefinition = await retained(tx, basis, 'definition');
+        const retainedOriginal = await retained(tx, basis, 'original');
+        const retainedTerminal = sameDocument ? retainedOriginal : await retained(tx, basis, 'terminal');
+        if (
+          retainedDefinition?.transactionId !== definition.transactionId ||
+          retainedOriginal?.transactionId !== original.transactionId ||
+          retainedTerminal?.transactionId !== terminal.transactionId
+        )
+          throw unavailable('Search writer Source support changed before preparation');
+      }
+      const support = original.frontier;
+      if (sameDocument && support) {
+        const cursor = termCursor(terms, support);
+        if (cursor.state === 'progress') {
+          const verify = await prepareRetainedIdentitySourceProjections(configuration, {
+            job: basis.job,
+            ...basis.change,
+            release: definition.release,
+            originalSupport: support,
+            terminalSupport: support,
+            deadline,
+          });
+          if (!verify) throw unavailable('Search writer canonical terms lost their Source build');
+          return {
+            state: 'progress',
+            async advance(tx) {
+              await compare(tx);
+              if (
+                (await retained(tx, basis, 'terms'))?.transactionId !== terms?.transactionId ||
+                !(await verify(tx))
+              )
+                throw unavailable('Search writer canonical terms lost their Source build');
+              const next = await readIdentitySearchIndexTermSlot(
+                tx,
+                basis.change.original,
+                cursor.after,
+                cursor.digest,
+              );
+              return {
+                after: [
+                  marker,
+                  basis.request,
+                  'terms',
+                  next.state,
+                  support.build,
+                  String(support.generation),
+                  next.after,
+                  next.digest,
+                ],
+                segment: 0,
+              };
+            },
+          };
+        }
+      }
       return {
         state: 'ready',
-        definition: saved.definition.id,
-        release: saved.definition.release,
-        originalSupport: saved.original.frontier,
-        terminalSupport: saved.terminal.frontier,
-        async compare(tx) {
-          const retainedDefinition = await retained(tx, basis, 'definition');
-          const retainedOriginal = await retained(tx, basis, 'original');
-          const retainedTerminal = saved.sameDocument ? retainedOriginal : await retained(tx, basis, 'terminal');
-          if (
-            retainedDefinition?.transactionId !== saved.definition.transactionId ||
-            retainedOriginal?.transactionId !== saved.original.transactionId ||
-            retainedTerminal?.transactionId !== saved.terminal.transactionId
-          )
-            throw unavailable('Search writer Source support changed before preparation');
-        },
+        definition: definition.id,
+        release: definition.release,
+        originalSupport: original.frontier,
+        terminalSupport: terminal.frontier,
+        compare,
       };
     }
 
@@ -206,10 +275,10 @@ export function createSearchIdentityWriterSupport(configuration: SearchReceiving
     const expected = saved.projection?.transactionId ?? null;
     return {
       state: 'progress',
-      frontier,
-      async compare(tx) {
+      async advance(tx) {
         if (((await retained(tx, basis, phase))?.transactionId ?? null) !== expected)
           throw unavailable('Search writer Source support was superseded');
+        return frontier;
       },
     };
   };

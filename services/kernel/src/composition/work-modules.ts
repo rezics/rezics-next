@@ -17,6 +17,7 @@ import {
 import { contentDeclaration, type ContentWorkAmbient } from '../content/register.ts';
 import type { WorkModule } from '../work/registry.ts';
 import { commerceWorkModule } from '../commerce/work-module.ts';
+import { removeMembershipFollow } from '../library/follows.ts';
 import { libraryWorkModule } from '../library/work-module.ts';
 import { createSemanticWorkModule, type SemanticDomainComposer } from '../semantic/work-module.ts';
 import { createSearchWorkModule } from '../search/work.ts';
@@ -70,7 +71,9 @@ function accountsWorkModule(
           readConsent: realmConsent ?? readConsent,
         }),
       });
-      await createAccountsWorkModule({ realm: membership, sessionRevocation }).register(context);
+      await createAccountsWorkModule({ realm: membership, removeMembershipFollow, sessionRevocation }).register(
+        context,
+      );
     },
   };
 }

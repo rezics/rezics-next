@@ -72,6 +72,10 @@ import mappingOwners from '../../src/semantic/identity-epoch-read-owners.sql';
 import mappingSources from '../../src/semantic/identity-epoch-read-sources.sql';
 import mappingPending from '../../src/semantic/identity-epoch-read-pending.sql';
 import mappingCurrent from '../../src/semantic/identity-terminal-closure-current.sql';
+import {
+  EMPTY_IDENTITY_SEARCH_TERMS_DIGEST,
+  readIdentitySearchIndexTermSlotSql,
+} from '../../src/semantic/identity-search-index-terms.ts';
 import projectionRelease from '../../src/semantic/search-source-releases.sql';
 import projectionSubjects from '../../src/semantic/search-source-subjects.sql';
 import projectionPrivacy from '../../src/semantic/public-filter-projection-head-read.sql';
@@ -84,6 +88,7 @@ import {
   lockProjectionBuildForRetirementSql,
   retireProjectionHeadSql,
   retiredProjectionMeaning,
+  verifyCompletedPublicFilterProjectionSql,
 } from '../../src/semantic/public-filter-projection-build-control.ts';
 import projectionHeads from '../../src/semantic/public-filter-projection-head-upsert.sql';
 import projectionHeadPage from '../../src/semantic/public-filter-projection-head-page.sql';
@@ -151,6 +156,18 @@ test.each([
   { label: 'keeps an outstanding original writer pending', intent: 'merge', resumed: false, mode: 'uncertain' },
   { label: 'resumes a visible terminal projection', intent: 'merge', resumed: false, mode: 'visible' },
   {
+    label: 'retains canonical term slots across owned turns',
+    intent: 'unmerge',
+    resumed: false,
+    mode: 'canonical-terms',
+  },
+  {
+    label: 'refuses a changed completed build before acceptance',
+    intent: 'merge',
+    resumed: false,
+    mode: 'changed-proof',
+  },
+  {
     label: 'restarts a terminal projection whose build changes during completion',
     intent: 'merge',
     resumed: false,
@@ -179,7 +196,20 @@ test.each([
   const jobId = newId(jobHome << 4);
   const job = { jobId, epoch: 1n };
   const savedJob = { jobId, epoch: '1' };
-  const visible = ['visible', 'retire', 'superseded'].includes(mode);
+  const canonicalTerms = mode === 'canonical-terms';
+  const visible = canonicalTerms || ['visible', 'changed-proof', 'retire', 'superseded'].includes(mode);
+  const languageDigest = createHash('sha256').update('en').digest('hex');
+  const termSlots = [
+    {
+      slot_id: crypto.randomUUID(),
+      kind: 'alias',
+      language_digest: languageDigest,
+      terms: ['Native alias', 'Alternate alias'],
+    },
+    { slot_id: crypto.randomUUID(), kind: 'label', language_digest: languageDigest, terms: ['Canonical name'] },
+  ];
+  const termReads: unknown[] = [];
+  let canonicalBuildCurrent = true;
   const oldBuild = crypto.randomUUID();
   const oldHeads = mode === 'retire' ? [0, writerHome] : [];
   let oldMeaning = bundledDigest;
@@ -423,7 +453,12 @@ test.each([
         projectedSubjects.push(String(values[1]));
         rows = [[visible && values[1] === second ? 'visible' : 'hidden', '1', 'schema:Person']];
       } else if (visible && sql === mappingOwners.sql)
-        rows = [{ partition_no: (values[0] as number[])[0], epoch: 1, position: '0', write_state: 'active' }];
+        rows = (values[0] as number[]).map((partition_no) => ({
+          partition_no,
+          epoch: 1,
+          position: '0',
+          write_state: 'active',
+        }));
       else if (visible && sql === mappingSources.sql) {
         expect(values[0]).toEqual([second]);
         rows = [
@@ -454,7 +489,26 @@ test.each([
             redirected: false,
           },
         ];
-      else if (visible && sql === projectionRelease.sql) rows = [[bundledDigest, JSON.stringify(bundledRelease)]];
+      else if (sql === verifyCompletedPublicFilterProjectionSql) {
+        expect(values).toEqual([
+          writerHome,
+          writerHome << 4,
+          second,
+          retainedBuild,
+          newGeneration,
+          1,
+          bundledDigest,
+          second,
+          writerHome,
+        ]);
+        rows = mode === 'changed-proof' || !canonicalBuildCurrent ? [] : [{}];
+      } else if (canonicalTerms && sql === readIdentitySearchIndexTermSlotSql) {
+        const prior = committed.findLast((step) => step.frontier.after[2] === 'terms')?.frontier.after[6] ?? null;
+        expect(values).toEqual([writerHome << 4, second, prior]);
+        termReads.push(prior);
+        const next = termSlots[termReads.length - 1];
+        rows = [{ prior_current: true, slot_id: null, ...next }];
+      } else if (visible && sql === projectionRelease.sql) rows = [[bundledDigest, JSON.stringify(bundledRelease)]];
       else if (visible && sql === projectionSubjects.sql)
         rows = [[String(writerHome << 4), second, 'schema:Person', 'visible', '1', bundledDigest, null, 't', '1']];
       else if (visible && sql === projectionPrivacy.sql) rows = [['0']];
@@ -1061,6 +1115,8 @@ test.each([
     'existing',
     'fenced',
     'visible',
+    'canonical-terms',
+    'changed-proof',
     'retire',
     'superseded',
     'handoff',
@@ -1164,6 +1220,32 @@ test.each([
         });
         expect(committed[position]?.frontier.after.slice(2, 2 + expected.length)).toEqual(expected);
       };
+      if (canonicalTerms) {
+        expect(committed[3]?.frontier.after.slice(2, 4)).toEqual(['original', 'progress']);
+        await nextSupport(['original', 'progress', retainedBuild, newGeneration]);
+        await nextSupport(['original', 'complete', retainedBuild, newGeneration]);
+        let digest = EMPTY_IDENTITY_SEARCH_TERMS_DIGEST;
+        for (const [i, slot] of termSlots.entries()) {
+          digest = createHash('sha256')
+            .update(JSON.stringify([digest, slot.slot_id, slot.kind, slot.language_digest, slot.terms]))
+            .digest('hex');
+          await nextSupport(['terms', 'progress', retainedBuild, newGeneration, slot.slot_id, digest]);
+          if (!i) {
+            const stepCount = committed.length;
+            canonicalBuildCurrent = false;
+            await expect(prepare(pool, progress.receipt)).rejects.toThrow('canonical terms lost their Source build');
+            expect(committed).toHaveLength(stepCount);
+            expect(termReads).toEqual([null]);
+            canonicalBuildCurrent = true;
+          }
+        }
+        await nextSupport(['terms', 'complete', retainedBuild, newGeneration, termSlots[1]!.slot_id, digest]);
+        expect(termReads).toEqual([null, ...termSlots.map(({ slot_id }) => slot_id)]);
+        expect(engineReads).toBe(1);
+        expect(bulkCalls).toBe(0);
+        expect(retainedPlan).toBeUndefined();
+        return;
+      }
       if (mode === 'retire') {
         await nextSupport(['terminal', 'retiring', oldBuild, '5', 0]);
         await nextSupport(['terminal', 'retiring', oldBuild, '5', writerHome]);
@@ -1213,7 +1295,7 @@ test.each([
       expect(await prepare(pool, progress.receipt)).toEqual({ state: 'prepared' });
       expect(engineReads).toBe(2);
       expect(committed.map((step) => step.engineRequests)).toEqual([0, 1, ...Array(committed.length - 2).fill(0)]);
-      if (mode === 'dispatch' || mode === 'lost' || mode === 'handoff') {
+      if (['dispatch', 'lost', 'handoff', 'visible', 'changed-proof'].includes(mode)) {
         accepting = true;
         const acceptance = await withIdentitySourceConsumerMaintenance(
           { pool, env: {} },
@@ -1232,6 +1314,14 @@ test.each([
           frontier: acceptance.frontier,
         };
         dispatchRequestPosition = String(acceptance.receipt.native.position);
+        if (mode === 'changed-proof') {
+          await expect(prepare(pool, acceptance.receipt)).rejects.toThrow('Native Search resolvePlanned: changed');
+          expect(commonPlan).toBeUndefined();
+          expect(hold).toBeUndefined();
+          expect(engineReads).toBe(2);
+          expect(bulkCalls).toBe(0);
+          return;
+        }
         expect(await prepare(pool, acceptance.receipt)).toEqual({
           state: 'progress',
           transactionId: commonPlan?.transaction_id,

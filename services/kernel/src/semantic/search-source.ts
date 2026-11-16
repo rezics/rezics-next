@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { jsonParameter } from '../database/json.ts';
 import type { ConceptStatementReader } from '../search/concept-browse-statements.ts';
 import { indexedStatement, selectedRank } from './scope-leaf-selection.ts';
@@ -31,17 +32,19 @@ import readPosition from './search-source-position.sql';
 import readStatements from './search-source-statements.sql';
 import readSubjects from './search-source-subjects.sql';
 import { accessCheck } from '../request/access.ts';
-import { DEFAULT_REQUEST_DEADLINE_MS, mintReadTime } from '../command/command.ts';
+import { DEFAULT_REQUEST_DEADLINE_MS, mintReadTime, type CommandTransaction } from '../command/command.ts';
 import { nativeSourceQuery } from '../database/native-source-query.ts';
 import { withBoundedReadConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { subjectReadEligibility } from './eligibility.ts';
 import { withPublicStatementReader } from './statement-disclosure.ts';
 import { withIdentitySourceSupportJob } from './identity-source-support-scope.ts';
-import { readIdentityMapping } from './identity-adapters/read.ts';
+import { readIdentitySupportMappingsInSnapshot } from './identity-adapters/identity-epoch-read.ts';
+import { verifyCompletedPublicFilterProjectionInSnapshot } from './public-filter-projection.ts';
 import type { IdentityJobRef } from './identity-epoch-contract.ts';
 import type {
   PublicFilterCost,
+  PublicFilterProjectionFrontier,
   PublicFilterProjectionPage,
   PublicFilterProjectionRequest,
   PublicFilterProjectionRetirement,
@@ -393,6 +396,93 @@ export function subjectSource(
   };
 }
 
+/** Revalidate retained support using one released snapshot of the installed native Pool. */
+export async function prepareRetainedIdentitySourceProjections(
+  config: Parameters<PublicFilterSourceFactory>[0],
+  input: Readonly<{
+    job: IdentityJobRef;
+    original: string;
+    terminal: string;
+    release: string;
+    originalSupport: PublicFilterProjectionFrontier | null;
+    terminalSupport: PublicFilterProjectionFrontier | null;
+    deadline: number;
+    phase?: 'original' | 'terminal';
+  }>,
+): Promise<((tx: CommandTransaction) => Promise<boolean>) | null> {
+  if (input.original === input.terminal && !isDeepStrictEqual(input.originalSupport, input.terminalSupport))
+    return null;
+  const requested =
+    input.phase === 'terminal'
+      ? [{ id: input.terminal, frontier: input.terminalSupport }]
+      : [{ id: input.original, frontier: input.originalSupport }];
+  if (!input.phase && input.original !== input.terminal)
+    requested.push({ id: input.terminal, frontier: input.terminalSupport });
+  const checks = [];
+  for (const item of requested) {
+    const route = routeOf(item.id);
+    if (route === null) return null;
+    const resource = { route, id: item.id };
+    const authorize = await accessCheck(
+      config.access,
+      { kind: 'anonymous' },
+      'subject:read',
+      { ...resource, eligibility: subjectReadEligibility(resource) },
+      { pool: config.pool, deadline: input.deadline },
+    );
+    checks.push({ ...item, route, authorize });
+  }
+  return async (tx) => {
+    const visibleIds: string[] = [];
+    const epochs = new Map<number, number>();
+    let at: Awaited<ReturnType<typeof mintReadTime>> | undefined;
+    for (const check of checks) {
+      const partition = partitionOf(check.route);
+      let epoch = epochs.get(partition);
+      if (epoch === undefined) {
+        const owner = await readPartition(tx, partition);
+        if (!owner || owner.writeState !== 'active') return false;
+        epoch = owner.epoch;
+        epochs.set(partition, epoch);
+      }
+      const state = await nativeSourceQuery(tx, readVisibility, { route: check.route, subject_id: check.id });
+      if (!state) return false;
+      let visible = false;
+      if (state.visibility === 'visible') {
+        at ??= await mintReadTime(tx, config.clock, config.pool);
+        visible = await check.authorize(tx, at);
+      }
+      if (visible !== Boolean(check.frontier)) return false;
+      if (!check.frontier) continue;
+      if (
+        !(await verifyCompletedPublicFilterProjectionInSnapshot(
+          tx,
+          config.routeKey,
+          check.id,
+          input.terminal,
+          input.release,
+          epoch,
+          check.frontier,
+        ))
+      )
+        return false;
+      visibleIds.push(check.id);
+    }
+    if (visibleIds.length) {
+      const mappings = await readIdentitySupportMappingsInSnapshot(tx, visibleIds, input.job);
+      if (
+        mappings.some(
+          (mapping) =>
+            mapping.state !== 'mapped' || mapping.terminal !== input.terminal || mapping.epoch !== input.job.epoch,
+        )
+      )
+        return false;
+    }
+    requireAccessDeadline(input.deadline);
+    return true;
+  };
+}
+
 /** Internal same-job operation. The ordinary Source retains ALL native projection guards.
  * Only exact installed identity mappings become readable inside the scoped invocation.
  * This operation does not use subjectSource's history fold or its sampled scalar arrays.
@@ -461,23 +551,23 @@ export async function readIdentitySourceProjection(
         if (state.visibility !== 'visible') return 'withheld' as const;
         requireAccessDeadline(request.context.deadline);
         const at = await mintReadTime(tx, config.clock, config.pool);
-        return (await authorize(tx, at)) ? ('visible' as const) : ('withheld' as const);
+        if (!(await authorize(tx, at))) return 'withheld' as const;
+        if (request.frontier === null) {
+          charge('dependencyPoints');
+          const [mapping] = await readIdentitySupportMappingsInSnapshot(tx, [request.original], request.job);
+          if (mapping?.state === 'pending') return 'unready' as const;
+          if (mapping?.state !== 'mapped') return 'unavailable' as const;
+          if (mapping.epoch !== request.job.epoch || mapping.terminal !== request.terminal) return 'changed' as const;
+        }
+        return 'visible' as const;
       }),
     );
-    if (visible === 'unavailable') return { status: 'unavailable', cost };
     if (visible === 'withheld') return { status: 'projected', projection: null, cost };
+    if (visible !== 'visible') return { status: visible, cost };
     return await withPublicStatementReader(() =>
       withIdentitySourceSupportJob(request.job, async () => {
         // A resumed cursor authenticates the retained build. A complete page still
         // rechecks the live job mapping before it can support any writer action.
-        if (request.frontier === null) {
-          charge('dependencyPoints');
-          const mapping = await readIdentityMapping(config.pool, request.original);
-          if (mapping.state === 'pending') return { status: 'unready', cost };
-          if (mapping.state !== 'mapped') return { status: 'unavailable', cost };
-          if (mapping.epoch !== request.job.epoch || mapping.terminal !== request.terminal)
-            return { status: 'changed', cost };
-        }
         const page = await source.readPublicFilterProjectionPage({
           subject: request.original,
           meaning: request.meaning,
@@ -498,8 +588,16 @@ export async function readIdentitySourceProjection(
           return { status: 'projected', projection: page, cost };
         }
         charge('dependencyPoints');
-        const current = await readIdentityMapping(config.pool, request.original);
-        if (current.state !== 'mapped' || current.epoch !== request.job.epoch || current.terminal !== request.terminal)
+        const [current] = await withReadTransaction(
+          config.pool,
+          (tx) => readIdentitySupportMappingsInSnapshot(tx, [request.original], request.job),
+          request.context.deadline,
+        );
+        if (
+          current?.state !== 'mapped' ||
+          current.epoch !== request.job.epoch ||
+          current.terminal !== request.terminal
+        )
           return { status: 'changed', cost };
         requireAccessDeadline(request.context.deadline);
         return { status: 'projected', projection: page, cost };

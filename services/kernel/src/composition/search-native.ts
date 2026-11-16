@@ -63,7 +63,11 @@ import {
 import { publicFilterSourceOrigin } from '../semantic/public-filter-source.ts';
 import { currentReadSnapshot, withReadTransaction } from '../semantic/read.ts';
 import { relationSource } from '../semantic/search-relations.ts';
-import { readIdentitySourceProjection, subjectSource } from '../semantic/search-source.ts';
+import {
+  readIdentitySourceProjection,
+  subjectSource,
+  prepareRetainedIdentitySourceProjections,
+} from '../semantic/search-source.ts';
 import { readScopeLeafEvidence } from '../semantic/scope-leaf-evidence.ts';
 import { readSubjectSummaries } from '../semantic/summaries.ts';
 import { bindSearchNativeCapabilities, type SearchNativePorts } from '../search/composition.ts';
@@ -136,6 +140,7 @@ export function composeSearchNativePorts(): SearchNativePorts {
     readErasureStatus,
     readIdentityMappings,
     readIdentitySourceProjection,
+    prepareRetainedIdentitySourceProjections,
     readNativePublicFilterAccountRepair,
     readNativePublicFilterPublicationCompletion,
     readNativePublicFilterRepairStart,

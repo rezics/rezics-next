@@ -34,10 +34,6 @@ import sourceMappingStep from './identity-epoch-store-select-step.sql';
 import sourceSupportInputs from './identity-source-support-inputs.sql';
 import sourceSupportOriginals from './identity-source-support-originals.sql';
 import sourceSupportGroups from './identity-source-support-groups.sql';
-import sourceOwners from './identity-epoch-read-owners.sql';
-import sourceMappings from './identity-epoch-read-sources.sql';
-import sourcePending from './identity-epoch-read-pending.sql';
-import sourceCurrent from './identity-terminal-closure-current.sql';
 import sourceBindingRegister from './public-filter-source-binding-register.sql';
 import sourceBindingDefine from './public-filter-source-binding-define.sql';
 import sourceDefinitionRead from './public-filter-source-binding-definition.sql';
@@ -50,6 +46,7 @@ import extensionHeadRead from './extension-active.sql';
 import extensionRead from './extension-read.sql';
 import eligibilityRead from './scope-leaf-evidence-eligibility.sql';
 import sourceVisibilityRead from './read-visibility.sql';
+import { readIdentitySearchIndexTermSlotSql } from './identity-search-index-terms.ts';
 import projectionReleasesRead from './search-source-releases.sql';
 import projectionPrivacyRead from './public-filter-projection-head-read.sql';
 import projectionBuildRead from './public-filter-projection-build-read.sql';
@@ -58,6 +55,7 @@ import {
   lockProjectionBuildForHeadsSql,
   lockProjectionBuildForRetirementSql,
   retireProjectionHeadSql,
+  verifyCompletedPublicFilterProjectionSql,
 } from './public-filter-projection-build-control.ts';
 import projectionBuildStart from './public-filter-projection-build-start.sql';
 import projectionPageRead from './public-filter-projection-page.sql';
@@ -88,10 +86,6 @@ function sourceStatementCosts(): readonly (readonly [string, Cost])[] {
         [sourceSupportInputs.sql, [2, 2, 1, 1024, 1]],
         [sourceSupportOriginals.sql, [1, 1, 1, 512, 1]],
         [sourceSupportGroups.sql, [1, 1, 1, 512, 1]],
-        [sourceOwners.sql, [1, 1, 1, 512, 1]],
-        [sourceMappings.sql, [1, 1, 1, 4096, 1]],
-        [sourcePending.sql, [1, 1, 1, 1024, 1]],
-        [sourceCurrent.sql, [1, 1, 1, 4096, 1]],
         [sourceBindingRegister.sql, [1, 1, 1, 1024, 1]],
         [sourceBindingDefine.sql, [1, 1, 1, 32768, 1]],
         [sourceDefinitionRead.sql, [1, 1, 1, 32768, 1]],
@@ -104,6 +98,7 @@ function sourceStatementCosts(): readonly (readonly [string, Cost])[] {
         [extensionRead.sql, [1, 1, 1, 65536, 1]],
         [eligibilityRead.sql, [1, 1, 1, 1024, 1]],
         [sourceVisibilityRead.sql, [1, 1, 1, 512, 1]],
+        [readIdentitySearchIndexTermSlotSql, [36, 36, 1, 81920, 3]],
         [projectionReleasesRead.sql, [1, 1, 1, 65536, 1]],
         [projectionPrivacyRead.sql, [1, 1, 1, 512, 1]],
         [projectionBuildRead.sql, [1, 1, 1, 2048, 1]],
@@ -111,6 +106,7 @@ function sourceStatementCosts(): readonly (readonly [string, Cost])[] {
         [retireProjectionHeadSql, [2, 2, 1, 1024, 1]],
         [invalidateProjectionBuildSql, [1, 1, 1, 1024, 1]],
         [lockProjectionBuildForHeadsSql, [1, 1, 1, 512, 1]],
+        [verifyCompletedPublicFilterProjectionSql, [6, 6, 1, 2048, 1]],
         [projectionBuildStart.sql, [1, 1, 1, 2048, 0]],
         [projectionPageRead.sql, [1, 1, 1, 131072, 1]],
         [projectionHeadsWrite.sql, [8, 8, 1, 2048, 0]],

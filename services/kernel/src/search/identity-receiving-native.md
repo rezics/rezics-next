@@ -176,25 +176,18 @@ copies and then checks the original and terminal projections in separate turns. 
 holds traversal of the job's originals. After committed control custody, an invocation-bound observation
 rechecks the original plan, application, copies and control receipt before releasing its hold.
 
-The existing writer owns enrollment, dispatch, settlement and retained copies. Its `SearchWriterBarrier` reports
-`firstApply: 'unavailable'` and `prepared: 'unavailable'`; no first-apply receiving preparation/dispatch hook is
-installed. The Source writer owner must receive the following disjoint native integration before readiness:
+Acceptance and final release verify the admitted meaning and retained Source projections together in one
+repeatable-read snapshot. For visible subjects, Semantic checks current anonymous Access, the signed build
+cursor, the exact subject and privacy revisions, the empty dependency tail and the mapping for the admitted
+job. Search rereads the immutable original plan and writer fence after Source resolution. The release command
+checks the current continuation revision and the live native hold and application for the same accepted effect.
 
-- Before a plan can be selected, register its actual per-document preparation under the existing writer's
-  publication-admission lock, native generation-gate lock and original writer lock, on the same live transaction
-  used by enrollment/structural close. Operands are the admitted job/original, mapped terminal/document, configured
-  consumer/physical UUID/alias/generation, exact complete support build/definition/release locators, original close,
-  planned action, predecessor for handoff and the caller's remaining `NativeStepWork` reservation.
-- Dispatch must consume the committed plan and accepted original hold through the existing guarded
-  `writeIndexActions` path with external versions, allocation alias, refresh and pre/post physical verification.
-  Retain the actual dispatch and visibility/recovery operation before local settlement. Never add a native adapter
-  bulk sink or use a current engine GET as lost-response settlement.
-- Enrollment, close, drain and retirement must count these pending preparations and original uncertain copies.
-  The local applied mutation must register its exact plan/hold/action/frontier with common receiving in the same T.
-  Final release must compare original applied/cancelled/control custody and all original copy obligations.
-
-These are missing installed authority, rather than an empty population. No reserved Source writer, runtime,
-coordinator, schema, Semantic or scoped body is modified here.
+For a visible canonical original, the writer verifies the completed Source build and current Access before
+reading one active term head and its complete fact slot. Each owned turn commits the slot cursor and a digest
+of the terms read so far. The native reader recovers the cursor from the preceding slot's indexed key and
+requires that head to remain current. An empty next seek closes term traversal. The continuation keeps term
+text in Source custody until document assembly. The writer still needs the remaining native document inputs
+before retaining an indexed action. Recovery of an uncertain dispatch requires evidence from the original operation.
 
 ## Cost
 

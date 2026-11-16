@@ -61,8 +61,10 @@ routes without source reads; saved-scope/mounted-Collection unions, direct catal
 remain grant-closed. These scope boundaries do not erase the broader Goal's retained acceptance obligations below.
 
 Decision: fewest tests pin the 31 user-visible first-public paths: one kernel native suite over bundled Types, proposals,
-Contexts and static Zones, plus one admitted seeded walk that executes every row with independent native readback and
-mounted pages. Walk `dev-stack.ts walk` stays on the worker host so `GOAL_ACCEPTANCE_REQUIRES` is not stripped.
+Contexts and static Zones, plus one admitted walk that executes every row with independent native readback and
+mounted pages. Use `bun services/auth/scripts/dev-stack.ts walk --first-public-web -- bun apps/web/scripts/semantic-first-public-walk.ts`
+on the worker host with native and browser acceptance. The scoped walk authors a Book for ordinary catalogue browsing
+and retains its inventory under `.temp/semantic-first-public-walk/`.
 Native JSON sign-in uses a dedicated first-party development client with exact catalogue and static Zone scopes;
 the confidential website client remains OAuth-only. The native transport sends the issuer Origin, and editor tokens
 refresh between journeys before their five-minute lifetime ends. Every result binds revision, UTC, persona, request

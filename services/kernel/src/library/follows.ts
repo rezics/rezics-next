@@ -4,6 +4,8 @@ import { currentCommandWorkAssociation } from '../command/work-context.ts';
 import { GrantDeniedError } from '../access/contract/errors.ts';
 import {
   authoritativeTimeValue,
+  currentCommand,
+  type CommandTransaction,
   mintReadTime,
   type CommandAttempt,
   type CommandEvent,
@@ -15,14 +17,20 @@ import { withConnection } from '../database/pool.ts';
 import { accessCheck } from '../request/access-check.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
-import { routeOf } from '../route/route.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 import { readCollection } from './collection-store.ts';
 import { createLibraryCommandRunner } from './command-support.ts';
 import { LibraryNotFoundError, workStepDeadline } from './collection-command-work.ts';
 import type { Follow, FollowPageCursor, FollowTargetType } from './follow-model.ts';
 import { applyFollow, pageFollows, readFollow as readStoredFollow } from './follow-store.ts';
 import { resolveSubject } from './subject-anchor.ts';
-import { consumeFollowWork, followAccountWork, withFollowWork } from './follow-operation-bounds.ts';
+import {
+  consumeFollowWork,
+  followAccountWork,
+  followMembershipRemovalPlan,
+  followMembershipReservationPlan,
+  withFollowWork,
+} from './follow-operation-bounds.ts';
 import { admitPrivateFollowRead, type FollowReadAdmission } from './follow-read-admission.ts';
 
 const FOLLOW_EVENT = 'com.rezics.library.follow.updated.v1';
@@ -88,8 +96,30 @@ class UnchangedFollow extends Error {
   }
 }
 
+class MembershipFollowEnded extends Error {}
+
+type MembershipFollowInput = { accountId: string; spaceId: string; stepKey: string };
+type MembershipFollowSource = { realmId: string; reservationId: string };
+
 function followEvent(accountId: string, targetId: string): CommandEvent {
   return { type: FOLLOW_EVENT, subject: accountId, data: { targetId } };
+}
+
+/** Ban cleanup joins the authorized inverse release on the follower's partition. */
+export async function removeMembershipFollow(
+  tx: CommandTransaction,
+  accountId: string,
+  spaceId: string,
+): Promise<CommandEvent | null> {
+  const route = routeOf(accountId);
+  const command = currentCommand(tx);
+  if (route === null || command.partition !== partitionOf(route) || routeOf(spaceId) === null)
+    throw new GrantDeniedError();
+  const [removed] = await followMembershipRemovalPlan(
+    { route, account_id: accountId, target_id: spaceId },
+    authoritativeTimeValue(command.time),
+  ).run(tx);
+  return removed?.changed ? followEvent(accountId, spaceId) : null;
 }
 
 function requireAccount(actor: Actor): AccountActor {
@@ -338,11 +368,12 @@ export function createFollowCommands(config: FollowDeps) {
     );
   }
 
-  async function followForMembership(input: {
-    accountId: string;
-    spaceId: string;
-    stepKey: string;
-  }): Promise<FollowWrite> {
+  function followForMembership(input: MembershipFollowInput): Promise<FollowWrite>;
+  function followForMembership(
+    input: MembershipFollowInput,
+    source: MembershipFollowSource,
+  ): Promise<FollowWrite | null>;
+  async function followForMembership(input: MembershipFollowInput, source?: MembershipFollowSource) {
     const { accountId, spaceId, stepKey } = input;
     const deadline = workStepDeadline();
     return withFollowWork(deadline, () =>
@@ -360,6 +391,16 @@ export function createFollowCommands(config: FollowDeps) {
               },
               async (tx, command) => {
                 const route = routeOf(accountId)!;
+                if (source) {
+                  // The Library command shares the same account row that inverse release locks.
+                  const current = await followMembershipReservationPlan({
+                    route,
+                    account_id: accountId,
+                    kind: 'realm',
+                    group_id: source.realmId,
+                  }).run(tx);
+                  if (current?.reservationId !== source.reservationId) throw new MembershipFollowEnded();
+                }
                 const changed = await applyFollow(tx, route, {
                   accountId,
                   targetId: spaceId,
@@ -382,7 +423,10 @@ export function createFollowCommands(config: FollowDeps) {
           deadline,
         ),
       ),
-    );
+    ).catch((error: unknown) => {
+      if (error instanceof MembershipFollowEnded) return null;
+      throw error;
+    });
   }
 
   /** Implied library follow inside an entry command already open on the follower's partition. */

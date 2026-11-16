@@ -233,6 +233,7 @@
         "services/kernel/src/access/handle-holder.ts",
         "services/kernel/src/access/lifecycle.ts",
         "services/kernel/src/access/membership-inverse.ts",
+        "services/kernel/src/access/membership-inverse-20261025095033-reservation.sql",
         "services/kernel/src/access/permission.ts",
         "services/kernel/src/access/realm-membership-transition.ts",
         "services/kernel/src/access/realm-ownership.ts",

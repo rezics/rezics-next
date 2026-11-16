@@ -69,8 +69,13 @@ export function registerCommunityWork({ pool, client, clock }: WorkContext): voi
     { name: 'community.join.membership', retriesAllowed: false },
   );
   const follow = DBOS.registerStep(
-    async (accountId: string, spaceId: string, stepKey: string) => {
-      await follows.followForMembership({ accountId, spaceId, stepKey });
+    async (
+      accountId: string,
+      spaceId: string,
+      stepKey: string,
+      membership: { realmId: string; reservationId: string },
+    ) => {
+      await follows.followForMembership({ accountId, spaceId, stepKey }, membership);
     },
     { name: 'community.join.follow', ...COMMAND_STEP_RETRIES },
   );
@@ -86,7 +91,10 @@ export function registerCommunityWork({ pool, client, clock }: WorkContext): voi
       await enqueueJoin(input, childId);
       const result = await DBOS.retrieveWorkflow<MembershipWorkResult>(childId).getResult();
       if (result?.status !== 'completed') throw new Error('Realm membership did not complete');
-      await follow(input.memberAccountId, input.spaceId, `${DBOS.workflowID!}:follow`);
+      await follow(input.memberAccountId, input.spaceId, `${DBOS.workflowID!}:follow`, {
+        realmId: input.realmId,
+        reservationId: result.reservationId,
+      });
     },
     { name: REALM_JOIN_WORKFLOW },
   );

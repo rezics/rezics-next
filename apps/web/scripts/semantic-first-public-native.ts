@@ -45,20 +45,6 @@ export function websiteCredentialHeaders(issuer: string, cookie?: string): Recor
   };
 }
 
-export function walkSeedProcessEnv(
-  stack: Pick<WalkStackOrigins, 'issuer' | 'native' | 'kernel'>,
-  persona: Record<string, string> = {},
-  env: NodeJS.ProcessEnv = process.env,
-): NodeJS.ProcessEnv {
-  return {
-    ...env,
-    ...persona,
-    AUTH_ORIGIN: stack.native,
-    REZICS_LOCAL_STACK_ISSUER_ORIGIN: stack.issuer,
-    KERNEL_ORIGIN: stack.kernel,
-  };
-}
-
 /** Ordinary website sign-in: POST the issuer Origin, the same form Home and VN-realm walks use. */
 export async function websiteAccessToken(
   issuer: string,
@@ -374,10 +360,20 @@ export async function takedownZone(call: KernelCall, bearer: string, id: string,
 }
 
 export async function searchType(call: KernelCall, type: string, limit = 8, bearer?: string) {
-  return call('POST', '/v1/subjects:search', {
-    ...(bearer === undefined ? {} : { bearer }),
-    body: { filter: { type: { in: [type] } }, sort: 'id', limit },
-  });
+  const deadline = Date.now() + 240_000;
+  while (true) {
+    const result = await call('POST', '/v1/subjects:search', {
+      ...(bearer === undefined ? {} : { bearer }),
+      body: { filter: { type: { in: [type] } }, sort: 'id', limit },
+    });
+    if (
+      result.status !== 503 ||
+      !['index_not_ready', 'semantic_not_ready'].includes(String(result.body.code)) ||
+      Date.now() >= deadline
+    )
+      return result;
+    await Bun.sleep(500);
+  }
 }
 
 export function handleCall(

@@ -14,7 +14,7 @@ type SemanticSourceApi = Pick<
 type SemanticIdentityReadApi = Pick<typeof import('../semantic/identity-adapters/read.ts'), 'readIdentityMappings'>;
 type SemanticSearchSourceApi = Pick<
   typeof import('../semantic/search-source.ts'),
-  'readIdentitySourceProjection' | 'subjectSource'
+  'readIdentitySourceProjection' | 'prepareRetainedIdentitySourceProjections' | 'subjectSource'
 >;
 type SemanticDefinitionReadApi = Pick<typeof import('../semantic/definitions.ts'), 'activeRelease' | 'readRelease'>;
 type SemanticPublicFilterBindingApi = Pick<
