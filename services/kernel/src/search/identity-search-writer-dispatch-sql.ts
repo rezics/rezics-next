@@ -1,8 +1,8 @@
-/** Exact committed preparation and accepted hold, with the retained writer's actual body size. */
+/** Exact preparation and accepted hold. The current operation has one native commit proof. */
 export const readSearchIdentityDispatchBasisSql = `SELECT h.hold_id::text,n.source,n.effect_key,n.action_digest,n.obligations,
   octet_length(w.repair_action) AS action_bytes, o.state,h.accepted_epoch,h.accepted_position::text,h.accepted_transaction_id::text,
-  o.applied_transaction_id::text, o.applied_position::text,
-  (v.transaction_id IS NOT NULL) AS visible, (r.transaction_id IS NOT NULL) AS released
+  o.applied_transaction_id::text, CASE WHEN o.state='applied' THEN proof.position::text END AS applied_position,
+  (proof.transaction_id IS NOT NULL) AS visible, (r.transaction_id IS NOT NULL) AS released
  FROM search.identity_receiving_native_plan n
  JOIN semantic.identity_epoch_native_commit p ON (p.partition_no,p.transaction_id)=(n.partition_no,n.transaction_id)
   AND p.purpose='search-canonical-index' AND p.xmin=n.xmin
@@ -13,11 +13,13 @@ export const readSearchIdentityDispatchBasisSql = `SELECT h.hold_id::text,n.sour
  JOIN search.identity_writer w ON (w.partition_no,w.physical_target,w.original_id)=(n.partition_no,n.physical_target,n.document_id)
   AND w.owner_epoch=c.epoch AND w.repair_locator=n.plan_id::text
  LEFT JOIN search.identity_receiving_native_operation o ON (o.partition_no,o.plan_id)=(n.partition_no,n.plan_id)
- LEFT JOIN semantic.identity_epoch_native_commit v ON (v.partition_no,v.transaction_id,v.position)=
-  (o.partition_no,o.visible_transaction_id,o.visible_position)
-  AND v.purpose='search-canonical-index' AND v.epoch=c.epoch AND c.position>=v.position
-  AND (o.state='applied' OR v.xmin=o.xmin)
-  AND v.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid
+ LEFT JOIN semantic.identity_epoch_native_commit proof
+  ON (proof.partition_no,proof.transaction_id)=(o.partition_no,
+   CASE o.state WHEN 'visible' THEN o.visible_transaction_id WHEN 'applied' THEN o.applied_transaction_id END)
+  AND proof.purpose='search-canonical-index' AND proof.epoch=c.epoch AND c.position>=proof.position
+  AND proof.xmin=o.xmin AND proof.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid
+  AND ((o.state='visible' AND proof.position=o.visible_position) OR
+       (o.state='applied' AND proof.position>o.visible_position))
  LEFT JOIN semantic.identity_epoch_receiving_search_progress s
   ON (s.partition_no,s.job_id,s.effect_key,s.accepted_transaction_id)=(n.partition_no,n.job_id,n.effect_key,h.accepted_transaction_id)
   AND s.state='released' AND s.released_transaction_id=h.released_transaction_id
@@ -25,7 +27,7 @@ export const readSearchIdentityDispatchBasisSql = `SELECT h.hold_id::text,n.sour
  LEFT JOIN semantic.identity_epoch_native_commit r
   ON (r.partition_no,r.transaction_id)=(s.partition_no,s.released_transaction_id)
   AND r.purpose='identity-receiving-custody' AND r.xmin=s.xmin AND r.xmin=h.xmin
-  AND r.epoch=c.epoch AND c.position>=r.position
+  AND r.epoch=c.epoch AND c.position>=r.position AND r.position>proof.position
   AND r.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid
  WHERE (n.partition_no,n.plan_id,n.job_id,n.job_epoch,n.physical_target,n.original_id,n.scope_digest)=
   ($1,$2,$3,$4,$5,$6,$7) AND h.accepted_epoch=c.epoch AND h.accepted_position<=c.position`;
@@ -41,23 +43,30 @@ export const SEARCH_IDENTITY_BULK_RESPONSE_BYTES = 8192;
 /** Save the original response while dispatch still owns the writer. Visibility is a later command. */
 export const retainSearchIdentityBulkResponseSql = `UPDATE search.identity_writer w SET repair_receipt=$8
  FROM search.identity_receiving_native_operation o
+ JOIN semantic.identity_epoch_native_commit d ON (d.partition_no,d.transaction_id)=(o.partition_no,o.dispatch_transaction_id)
+  AND d.purpose='search-canonical-index' AND d.xmin=o.xmin
+  AND d.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid
  WHERE (w.partition_no,w.physical_target,w.original_id,w.repair_locator)=($1,$2,$3,$4::text)
  AND w.writer_token=$7 AND w.dispatch_state='dispatched' AND w.repair_receipt IS NULL
  AND (o.partition_no,o.plan_id,o.hold_id,o.operation_id)=(w.partition_no,$4::text::uuid,$5,$6)
  AND o.state='dispatched' AND o.writer_token=w.writer_token
- AND o.dispatch_epoch=w.owner_epoch
+ AND d.epoch=w.owner_epoch
  AND (o.writer_transaction_id,o.writer_position)=(w.writer_transaction_id,w.writer_position)
  RETURNING w.original_id`;
 
 export const readSearchIdentityBulkResponseSql = `WITH retained AS MATERIALIZED (
  SELECT w.partition_no,w.xmin,CASE WHEN octet_length(w.repair_receipt)<=${SEARCH_IDENTITY_BULK_RESPONSE_BYTES}
    THEN w.repair_receipt::jsonb END AS response,
-   o.operation_id::text,o.writer_token::text,o.dispatch_transaction_id::text,o.dispatch_epoch,o.dispatch_position::text
+   o.operation_id::text,o.writer_token::text,o.dispatch_transaction_id::text,
+   d.epoch AS dispatch_epoch,d.position::text AS dispatch_position
  FROM search.identity_writer w JOIN search.identity_receiving_native_operation o
   ON (o.partition_no,o.plan_id)=(w.partition_no,$4::text::uuid) AND (o.hold_id,o.state)=($5,'dispatched')
+ JOIN semantic.identity_epoch_native_commit d ON (d.partition_no,d.transaction_id)=(o.partition_no,o.dispatch_transaction_id)
+  AND d.purpose='search-canonical-index' AND d.xmin=o.xmin
+  AND d.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid
  WHERE (w.partition_no,w.physical_target,w.original_id,w.repair_locator)=($1,$2,$3,$4::text)
  AND w.dispatch_state='dispatched' AND w.writer_token=o.writer_token
- AND w.owner_epoch=o.dispatch_epoch
+ AND w.owner_epoch=d.epoch
  AND (w.writer_transaction_id,w.writer_position)=(o.writer_transaction_id,o.writer_position)
 )
 SELECT r.operation_id,r.writer_token,r.dispatch_transaction_id,r.dispatch_epoch,r.dispatch_position,

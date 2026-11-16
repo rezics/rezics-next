@@ -12,13 +12,13 @@ import type { SearchCurrentnessPort } from '../semantic/contract/domain-ports.ts
 import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts';
 import { bindSemanticProducerRoles, identityErasureRoles } from '../semantic/erasure-producer.ts';
 import { recordIdentityEpochNativeCommit } from '../semantic/identity-adapters/identity-epoch-binding.ts';
-import { identityJobPartition } from '../semantic/identity-adapters/identity-epoch-contract.ts';
 import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
 import type { IdentityFrontier, IdentityJobRef } from '../semantic/identity-epoch-contract.ts';
 import { serializeIdentityValue as json } from '../semantic/identity-core/encoding.ts';
 import {
   installSearchIdentityReceivingNative,
   advanceSearchIdentityReceivingAcceptance,
+  searchIdentityWriterCheckpointRoles,
   type SearchReceivingWorkDeclaration,
 } from '../semantic/identity-receiving-effects.ts';
 import { subjectSource } from '../semantic/search-source.ts';
@@ -210,10 +210,6 @@ export function createSearchIdentityWriterPreparation(
 
               const { original } = change;
               const partition = subjectPartition(original);
-              // A same-home writer checkpoint captures the exact admission transaction in its
-              // deferred trigger. Only a foreign checkpoint needs roles bound to its own commit.
-              const checkpointRoles = () =>
-                partition === identityJobPartition(job) ? null : identityErasureRoles(pool, job.jobId);
               const admitted = async (tx: CommandTransaction) => {
                 const row = (
                   await tx.query<{ proven: boolean; transaction_id: string; frontier: unknown }>(
@@ -386,7 +382,7 @@ export function createSearchIdentityWriterPreparation(
                   );
                   return { state: 'prepared' } as const;
                 }
-                const roles = await checkpointRoles();
+                const roles = await searchIdentityWriterCheckpointRoles(pool, job, partition);
                 const committed = await runCommand(
                   pool,
                   { partition, deadline: context.deadline, clock: configuration.clock },
@@ -422,7 +418,7 @@ export function createSearchIdentityWriterPreparation(
               const allocation = await outsideSource(() =>
                 readSearchWriterPhysicalTarget(turn.search(configuration.search), configuration.index),
               );
-              const roles = await checkpointRoles();
+              const roles = await searchIdentityWriterCheckpointRoles(pool, job, partition);
               const committed = await runCommand<string | null>(
                 pool,
                 { partition, deadline: context.deadline, clock: configuration.clock },
