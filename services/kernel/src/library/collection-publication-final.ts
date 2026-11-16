@@ -245,21 +245,12 @@ export function createCollectionPublicationFinalCommand(
     resource,
     denied,
     async prepare(attempt: CommandAttempt) {
-      const actor = await restorer.restoreInitiator(
-        { operation, action: 'collection:update', anchor, context: { pool, deadline } },
-        attempt.time,
-      );
-      // A restored collection:update grant alone cannot publish a private predicate. Re-admit
-      // the current whole rule and every expanded private family at this exact command time,
-      // including on receipt replay. The body separately compares the immutable episode meaning.
-      if (!actor.scopes.includes('collection:read')) throw denied();
       const client = deadlineClient(pool, deadline);
       const rule =
         (await readSavedCollectionRule(client, route, collectionId)) ??
         (await readBuiltinPublicationRule(client, route, collectionId))?.rule;
       if (!rule) throw unavailable();
       const config = { pool, access, clock: () => new Date(authoritativeTimeValue(attempt.time)) };
-      const admission = await admitSavedCollectionMemberQuery(config, actor, rule, {}, deadline);
       const ownerAnchor = {
         resource: { route, id: ownerAccountId },
         async validate(client: Client) {
@@ -272,47 +263,61 @@ export function createCollectionPublicationFinalCommand(
           action,
           group: action === 'progress_session:read' ? 'reading_progress' : 'personal_library',
         })),
-        ...collectionMemberPrivateReads(admission.filter ?? rule.filter),
+        ...collectionMemberPrivateReads(rule.filter),
       ];
-      const checks: AccessCheck[] = [];
-      // Durable identities are bound to one action and resource. Restore each required
-      // read separately; the collection:update identity cannot authorize those reads.
-      for (const family of [{ action: 'collection:read', group: null }, ...families]) {
-        const target = family.group === null ? anchor : ownerAnchor;
-        const reader = await restorer.restoreInitiator(
-          { operation, action: family.action, anchor: target, context: { pool, deadline } },
+
+      const prepareUpdate = async () => {
+        const actor = await restorer.restoreInitiator(
+          { operation, action: 'collection:update', anchor, context: { pool, deadline } },
           attempt.time,
         );
-        if (family.group !== null)
-          await admitGroup({
-            pool,
-            access: () => access,
-            actor: reader,
-            group: family.group,
-            clientAction: family.action,
-            deadline,
-            clock: config.clock,
-          });
-        checks.push(
-          await accessCheck(
+        if (!actor.scopes.includes('collection:read')) throw denied();
+        await admitSavedCollectionMemberQuery(config, actor, rule, {}, deadline);
+        const current = resourceAuthorization({
+          access,
+          actor,
+          action: 'collection:update',
+          anchor,
+          context: { pool, deadline, partition },
+        });
+        return { current, proof: await current.prepare!(attempt) };
+      };
+      // Each action restores its own short-lived identity at T. Start the independent
+      // checks together, and settle all of them before the executor can release T.
+      const [update, ...reads] = await Promise.allSettled([
+        prepareUpdate(),
+        ...[{ action: 'collection:read', group: null }, ...families].map(async (family) => {
+          const target = family.group === null ? anchor : ownerAnchor;
+          const reader = await restorer.restoreInitiator(
+            { operation, action: family.action, anchor: target, context: { pool, deadline } },
+            attempt.time,
+          );
+          if (family.group !== null)
+            await admitGroup({
+              pool,
+              access: () => access,
+              actor: reader,
+              group: family.group,
+              clientAction: family.action,
+              deadline,
+              clock: config.clock,
+            });
+          return accessCheck(
             access,
             reader,
             family.action,
             target.resource,
             commandAccessContext({ pool, deadline }, attempt),
-          ),
-        );
-      }
-      const current = resourceAuthorization({
-        access,
-        actor,
-        action: 'collection:update',
-        anchor,
-        context: { pool, deadline, partition },
+          );
+        }),
+      ] as const);
+      if (update.status === 'rejected') throw update.reason;
+      const checks: AccessCheck[] = reads.map((read) => {
+        if (read.status === 'rejected') throw read.reason;
+        return read.value;
       });
-      const proof = await current.prepare!(attempt);
       const evidence = Object.freeze({});
-      proofs.set(evidence, { attempt, current, proof, checks });
+      proofs.set(evidence, { attempt, ...update.value, checks });
       return evidence;
     },
     async authorize(tx, attempt, evidence) {
