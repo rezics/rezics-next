@@ -317,13 +317,13 @@ test('21-target authority restarts after cross-home consent revoke and activates
     .find(({ target }) => partitionOf(routeOf(target.threadId)!) !== catalogueHome)?.target;
   if (!victim) throw new Error('The first authority page has no cross-home source');
   expect(partitionOf(routeOf(victim.threadId)!)).not.toBe(catalogueHome);
-  const victimOccurrence = f.newOccurrenceIdFor(catalogueId);
+  const oldOccurrence = f.newOccurrenceIdFor(catalogueId);
   const initial = await f.native.command('/v1/hostedCatalogues', {
     postId: catalogueId,
     threadId: catalogue.id,
     placements: [
       {
-        occurrenceId: victimOccurrence,
+        occurrenceId: oldOccurrence,
         parentId: null,
         position: 0,
         title: 'A stays selected',
@@ -337,7 +337,7 @@ test('21-target authority restarts after cross-home consent revoke and activates
     {
       expectedRevisionId: initial.revisionId,
       expectedPublicationId: null,
-      occurrenceIds: [victimOccurrence],
+      occurrenceIds: [oldOccurrence],
     },
     200,
   );
@@ -349,6 +349,7 @@ test('21-target authority restarts after cross-home consent revoke and activates
     kind: 'chapter' as const,
     target,
   }));
+  const victimOccurrence = occurrences.find(({ target }) => target === victim)!.occurrenceId;
   const revised = await f.native.command(
     `${path}:revise`,
     {
