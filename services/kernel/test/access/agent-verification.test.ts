@@ -28,6 +28,7 @@ import { EVENT_TYPES } from '../../src/events/log.ts';
 import { migrate } from '../../scripts/database.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { accountToken, admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { loadAccountIdentitySource } from '../../src/access/agent-verification-identity.ts';
 import { ORIGINAL_IDENTITY_SOURCE_REQUIRED } from '../../src/access/agent-verification-identity-recovery.ts';
@@ -251,10 +252,12 @@ beforeAll(async () => {
   pool = createPool(databaseUrl);
   await bootstrapRelease(pool, bundledRelease);
 
+  const receiptKeys = testReceiptKeys();
   const catalogueKernel = createKernel({
     pool,
     routeKey,
     tokens,
+    receiptKeys,
     clock,
     writeRate: {
       async spend() {
@@ -268,6 +271,7 @@ beforeAll(async () => {
     pool,
     routeKey,
     tokens,
+    receiptKeys,
     clock,
     access: () => access,
     writeRate: {
