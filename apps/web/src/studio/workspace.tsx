@@ -1192,7 +1192,7 @@ export function HostedBookInventory({ visit, locale }: { visit: HostedInventoryV
   const page = state.kind === 'ready' ? state.page : null;
   const reopen = localizeHref('/studio?books=1', { locale });
   return (
-    <main className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8">
+    <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8">
       <header className="space-y-2">
         <h1 className="text-3xl font-semibold">Studio</h1>
         <p>{m.studio_books_intro({}, { locale })}</p>
@@ -1282,6 +1282,6 @@ export function HostedBookInventory({ visit, locale }: { visit: HostedInventoryV
           </a>
         ) : null}
       </section>
-    </main>
+    </div>
   );
 }

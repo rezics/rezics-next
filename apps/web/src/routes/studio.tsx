@@ -167,10 +167,10 @@ function StudioRoute() {
 
 function StudioMessage({ message }: { message: string }) {
   return (
-    <main className="mx-auto w-full max-w-4xl space-y-4 px-4 py-8">
+    <div className="mx-auto w-full max-w-4xl space-y-4 px-4 py-8">
       <h1>{m.studio_title({}, { locale: getLocale() })}</h1>
       <p role="alert">{message}</p>
-    </main>
+    </div>
   );
 }
 
@@ -365,7 +365,7 @@ function StudioAccountVisit({
   ]);
 
   return (
-    <main className="mx-auto w-full max-w-screen-2xl px-4 py-6">
+    <div className="mx-auto w-full max-w-screen-2xl px-4 py-6">
       <nav
         className="mb-3 flex flex-wrap items-center justify-end"
         aria-label={m.studio_account_sections({}, { locale })}
@@ -391,7 +391,7 @@ function StudioAccountVisit({
           <StudioWorkspace {...loaded.workspace} />
         </>
       ) : null}
-    </main>
+    </div>
   );
 }
 
@@ -584,9 +584,9 @@ function BookStudioVisit({
   }, [owner, book, source, accountId, csrfToken, locale]);
   if (workspace)
     return (
-      <main className="mx-auto w-full max-w-screen-2xl px-4 py-6">
+      <div className="mx-auto w-full max-w-screen-2xl px-4 py-6">
         <StudioWorkspace {...workspace} publicationTools={<BookPublicationTools owner={owner} locale={locale} />} />
-      </main>
+      </div>
     );
   if (!result || result.ok || result.error.kind !== 'unavailable') return <StudioResultMessage result={result} />;
   return (

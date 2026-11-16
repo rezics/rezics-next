@@ -253,7 +253,7 @@ export function HostedDraftPointView({
               ? m.studio_draft_point_rejected({}, options)
               : m.studio_draft_point_review({}, options);
   return (
-    <main className="studio-workspace mx-auto w-full max-w-4xl px-4 py-8 [overflow-wrap:anywhere]">
+    <div className="studio-workspace mx-auto w-full max-w-4xl px-4 py-8 [overflow-wrap:anywhere]">
       <header className="studio-header">
         <h1>{m.studio_draft_point_heading({}, options)}</h1>
         <p className="studio-help max-w-prose">{m.studio_draft_point_help({}, options)}</p>
@@ -584,6 +584,6 @@ export function HostedDraftPointView({
         />
         {history ? <HostedHistoryDisclosure binding={history} /> : null}
       </div>
-    </main>
+    </div>
   );
 }

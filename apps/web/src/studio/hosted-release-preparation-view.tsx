@@ -33,18 +33,15 @@ export function HostedReleasePreparationView({
   const { progress, review, owner } = state;
   if (activation && state.phase === 'prepared' && progress)
     return (
-      <main className="studio-workspace mx-auto w-full max-w-4xl space-y-8 px-4 py-8">
+      <div className="studio-workspace mx-auto w-full max-w-4xl space-y-8 px-4 py-8">
         <header className="studio-header space-y-3">
           <h1>{activationCopy[locale].heading}</h1>
-          <a
-            className="studio-skip inline-flex items-center"
-            href={localizeHref('/studio?books=1', { locale })}
-          >
+          <a className="studio-skip inline-flex items-center" href={localizeHref('/studio?books=1', { locale })}>
             {m.studio_root_append_return({}, { locale })}
           </a>
         </header>
         <HostedReleaseActivationEntry {...activation} owner={owner} prepared={progress} locale={locale} />
-      </main>
+      </div>
     );
   const failure = ['unknown', 'invalid', 'stale', 'unavailable', 'expired', 'cancelled', 'failed'].includes(phase);
   const message = {
@@ -92,7 +89,7 @@ export function HostedReleasePreparationView({
       ]
     : [];
   return (
-    <main className="studio-workspace mx-auto w-full max-w-4xl space-y-8 px-4 py-8 selection:bg-primary selection:text-primary-foreground">
+    <div className="studio-workspace mx-auto w-full max-w-4xl space-y-8 px-4 py-8 selection:bg-primary selection:text-primary-foreground">
       <header className="studio-header space-y-3">
         <h1>{copy.heading}</h1>
         <a className="studio-skip inline-flex items-center" href={localizeHref('/studio?books=1', { locale })}>
@@ -216,6 +213,6 @@ export function HostedReleasePreparationView({
           ) : null}
         </div>
       </section>
-    </main>
+    </div>
   );
 }

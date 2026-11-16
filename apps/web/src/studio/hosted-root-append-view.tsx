@@ -131,7 +131,7 @@ export function HostedRootAppendView({ visit, locale }: { visit: HostedRootAppen
     state.phase,
   );
   return (
-    <main className="studio-workspace mx-auto w-full max-w-4xl px-4 py-8">
+    <div className="studio-workspace mx-auto w-full max-w-4xl px-4 py-8">
       <header className="studio-header">
         <h1>{m.studio_root_append_heading({}, options)}</h1>
         <a className="studio-skip" href={localizeHref('/studio?books=1', options)}>
@@ -272,6 +272,6 @@ export function HostedRootAppendView({ visit, locale }: { visit: HostedRootAppen
         ) : null}
         <RootAppendOutline key={state.head} window={state.outline} locale={locale} />
       </div>
-    </main>
+    </div>
   );
 }

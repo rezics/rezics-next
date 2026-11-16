@@ -96,7 +96,7 @@ export function HostedChapterStudio({
     return <p role="status">{m.studio_workspace_ended({}, options)}</p>;
 
   return (
-    <main className="mx-auto w-full max-w-screen-2xl space-y-4 px-4 py-6">
+    <div className="mx-auto w-full max-w-screen-2xl space-y-4 px-4 py-6">
       <div className="studio-action-row">
         <Button ref={back} type="button" variant="outline" disabled={atRisk} onClick={onBack}>
           {m.studio_point_back_draft({}, options)}
@@ -136,6 +136,6 @@ export function HostedChapterStudio({
           onDepartureRiskChange={setAtRisk}
         />
       ) : null}
-    </main>
+    </div>
   );
 }

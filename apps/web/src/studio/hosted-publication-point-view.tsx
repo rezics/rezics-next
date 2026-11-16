@@ -177,7 +177,7 @@ export function HostedPublicationPointView({
       ? (state.parent?.item.occurrenceId ?? null)
       : (state.ancestors.find((a) => a.draft.item.occurrenceId === state.destination)?.draft.item.parentId ?? null);
   return (
-    <main className="studio-workspace mx-auto w-full max-w-4xl px-4 py-8">
+    <div className="studio-workspace mx-auto w-full max-w-4xl px-4 py-8">
       <header className="studio-header">
         <h1>{m.studio_point_publication_heading({}, options)}</h1>
         <p className="studio-help max-w-prose">{m.studio_point_publication_help({}, options)}</p>
@@ -447,6 +447,6 @@ export function HostedPublicationPointView({
           <HostedReleaseReaderLink binding={visit.readerLink} locale={locale} />
         </section>
       </div>
-    </main>
+    </div>
   );
 }
