@@ -1,4 +1,5 @@
 import { identitySearchSourcePageCosts } from './identity-search-source-page-work.ts';
+import { withCompiledPermissionChecks } from '../access/permission.ts';
 import type { Pool, PoolClient } from 'pg';
 import { AsyncLocalStorage, AsyncResource } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
@@ -475,7 +476,9 @@ export async function withSearchReceivingWork<T>(
               queryLifetimes.run(lifetime, async () => {
                 observeQueryLifetimes(pool);
                 try {
-                  return await withCompiledCommandControls(pool, () => body(funded));
+                  return await withCompiledPermissionChecks(() =>
+                    withCompiledCommandControls(pool, () => body(funded)),
+                  );
                 } finally {
                   active = false;
                   // Drain actual existing handles. A settled callback can dispatch another funded

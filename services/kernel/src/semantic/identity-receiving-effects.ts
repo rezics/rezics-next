@@ -1550,12 +1550,11 @@ export async function advanceSearchIdentityReceivingReconciliation(pool: Pool, e
   }
   const native = record.applied!.receipt;
   const home = identityJobPartition(effect.job);
-  const retained = await withReadTransaction(
-    pool,
-    async (tx) =>
-      (await tx.query(receivingStatements.controlCustody, [home, effect.job.jobId, effect.effectKey])).rows[0],
-  );
-  const roles = await identityErasureRoles(pool, effect.job.jobId);
+  const { retained, roles } = await withReadTransaction(pool, async (tx) => {
+    const retained = (await tx.query(receivingStatements.controlCustody, [home, effect.job.jobId, effect.effectKey]))
+      .rows[0];
+    return { retained, roles: await identityErasureRoles(pool, effect.job.jobId) };
+  });
   if (!retained) {
     const { custody } = await acknowledgeReceivingControl(pool, effect, record, native, roles);
     return { state: 'progress', transactionId: custody.transactionId } as const;

@@ -48,7 +48,7 @@ export const readSearchIdentityPlanComponentSql = `SELECT 1 FROM search.identity
  WHERE (partition_no,plan_id,transaction_id)=($1,$2,$3)`;
 
 /** Original-specific plans and writer closes commit together. Revalidate both in one keyed snapshot. */
-export const revalidateSearchIdentityPlanFenceSql = `SELECT 1
+export const revalidateSearchIdentityPlanFenceSql = `SELECT p.epoch,p.position::text
  FROM search.identity_receiving_native_plan n
  JOIN semantic.identity_epoch_native_commit c ON (c.partition_no,c.transaction_id)=(n.partition_no,n.transaction_id)
   AND c.purpose='search-canonical-index' AND c.xmin=n.xmin

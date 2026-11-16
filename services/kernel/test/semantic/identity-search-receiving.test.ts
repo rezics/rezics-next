@@ -998,11 +998,15 @@ import sourceMappingStep from '../../src/semantic/identity-epoch-store-select-st
 import sourceDefinitionRead from '../../src/semantic/public-filter-source-binding-definition.sql';
 import projectionPage from '../../src/semantic/public-filter-projection-page.sql';
 import { permissionCheckStatements } from '../../src/access/permission.ts';
+import permissionTime from '../../src/access/permission-time.sql';
+import permissionFormula from '../../src/access/permission-check.sql';
 
 test('the installed receiving declaration covers Semantic Source support and projection SQL', () => {
   const common = new Set(commonSearchReceivingStatements());
   const declared = new Map(searchReceivingProductionDeclaration().statements.map(({ sql, work }) => [sql, work]));
   for (const sql of common) expect(declared.has(sql)).toBe(true);
+  expect(permissionCheckStatements.time).toBe(permissionTime['~standard'].query.text);
+  expect(permissionCheckStatements.formula).toBe(permissionFormula['~standard'].query.text);
 
   const expectedCost = (nativeRows: number, nativePoints: number, bytes: number): WorkDimensions => ({
     ...zero(),
@@ -1018,7 +1022,7 @@ test('the installed receiving declaration covers Semantic Source support and pro
     [sourceDefinitionRead.sql, expectedCost(1, 1, 32768)],
     [projectionPage.sql, expectedCost(1, 1, 131072)],
     [permissionCheckStatements.time, expectedCost(1, 1, 512)],
-    [permissionCheckStatements.formula, expectedCost(16, 16, 32768)],
+    [permissionCheckStatements.formula, expectedCost(24, 16, 32768)],
   ] as const) {
     expect(common.has(sql)).toBe(true);
     expect(declared.get(sql)).toEqual(work);

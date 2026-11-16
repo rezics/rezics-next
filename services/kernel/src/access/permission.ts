@@ -83,6 +83,7 @@ import {
 import { prepareAnonymousEligibility, type PreparedEligibilityVerify } from './eligibility.ts';
 import { createHash } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { nativeSourceQuery } from '../database/native-source-query.ts';
 import { createKindAudienceOriginal, type KindOriginalProducer } from './kind-audience-original.ts';
 import { kindOriginalFormulaPlan } from './kind-audience-formula.ts';
 import { readExposure, GLOBAL_CONTEXT } from './gates/catalogue.ts';
@@ -98,15 +99,23 @@ import { ACCOUNT_ROLE_BITS as HISTORY_ROLE } from '../history/contract/index.ts'
 // foreign callbacks. Ordinary preparation retains its installed owner protocol.
 const kindOriginalInvocation = new AsyncLocalStorage<boolean>();
 
+const compiledPermissionChecks = new AsyncLocalStorage<true>();
+
+/** The enclosing native ledger funds these exact checks. Keep the compiled wire
+ * text and codecs, and leave schema freshness verification to the compiler. */
+export function withCompiledPermissionChecks<T>(body: () => T): T {
+  return compiledPermissionChecks.run(true, body);
+}
+
 function permissionCheckTimeStatement(): string {
-  return memoizedValue(permissionCheckTimeStatement, () => timeRead.sql);
+  return memoizedValue(permissionCheckTimeStatement, () => timeRead['~standard'].query.text);
 }
 
 function permissionCheckFormulaStatement(): string {
-  return memoizedValue(permissionCheckFormulaStatement, () => permissionRead.sql);
+  return memoizedValue(permissionCheckFormulaStatement, () => permissionRead['~standard'].query.text);
 }
 
-/** Exact literals for callers that include Access checks in an outer SQL work envelope.
+/** Exact compiled dispatch literals for callers that include Access checks in an outer SQL work envelope.
  * Lazy properties retain the public object seam without evaluating SQL imports during module loading.
  * This exposes no prepared evidence, evaluator or authorization result.
  */
@@ -118,6 +127,47 @@ export const permissionCheckStatements = Object.freeze({
     return permissionCheckFormulaStatement();
   },
 });
+
+export function usesPermissionFormulaBatch(values: readonly unknown[]): boolean {
+  return values[permissionRead.params.indexOf('batch')] === 't';
+}
+
+/** These compiled Subject checks cannot visit grants or assignments without a
+ * subject key or delegation. All other argument shapes keep their general quote. */
+export function anonymousSubjectFormulaBound(values: readonly unknown[]) {
+  const params = permissionRead.params;
+  if (values.length !== params.length) return null;
+  const parameter = (name: (typeof params)[number]) => values[params.indexOf(name)];
+  const ids = parameter('resource_ids');
+  if (typeof ids !== 'string' || !ids.startsWith('{') || !ids.endsWith('}')) return null;
+  const subjects = ids
+    .slice(1, -1)
+    .split(',')
+    .map((id) => id.replace(/^"(.*)"$/, '$1'));
+  const disabled = (flag: unknown) => flag === 'f' || flag === null;
+  const batch = usesPermissionFormulaBatch(values);
+  const publicBranch = parameter('include_public') === 't';
+  const bounded =
+    subjects.every((id) => uuidPattern.test(id)) &&
+    (batch
+      ? subjects.length <= 2 && new Set(subjects).size === subjects.length && parameter('route') === '0'
+      : !publicBranch &&
+        disabled(parameter('batch')) &&
+        subjects.length === 1 &&
+        parameter('route') === String(routeOf(subjects[0]!))) &&
+    parameter('action') === 'subject:read' &&
+    parameter('anonymous') === 't' &&
+    parameter('actor_id') === '' &&
+    parameter('principal_id') === '' &&
+    parameter('roles') === '[]' &&
+    (parameter('assignment_request_id') === null || parameter('assignment_request_id') === '') &&
+    disabled(parameter('include_global')) &&
+    disabled(parameter('include_explicit')) &&
+    (publicBranch || disabled(parameter('include_public')));
+  if (!bounded) return null;
+  const bound = accessNativeDeclaration('formula', values, { targets: subjects.length, public: publicBranch }).bound;
+  return { ...bound, bytes: bound.bytes + Buffer.byteLength(permissionCheckStatements.formula) };
+}
 
 /** Kernel-owned request evidence, populated by the one authoritative actor point read.
  * Identity and this record must come from verified Auth/Access, never request JSON.
@@ -279,7 +329,11 @@ async function readPermissionTime(
   if (configured && !Number.isFinite(configured.getTime())) throw new TypeError('Invalid command clock');
   const observedAt = Date.now();
   const input = { at: configured?.toISOString() ?? '' };
-  const row = await accessNativeWork(work, 'time', input, {}, () => timeRead.run(client, input));
+  const row = await accessNativeWork(work, 'time', input, {}, () =>
+    compiledPermissionChecks.getStore()
+      ? nativeSourceQuery(client, timeRead, input, 'compiled')
+      : timeRead.run(client, input),
+  );
   if (!row?.at) return undefined;
   return { at: row.at, databaseAt: row.databaseAt, observedAt };
 }
@@ -460,7 +514,9 @@ async function checkPreparedPermission(
       policyResourceType !== undefined && hasNativePolicyProfile(facts.policyCatalogue, action, policyResourceType);
     const formula = preparedFormula(facts, actor, action, resource, at, floor, policyCore, page, includeExplicit);
     const rows = await accessNativeWork(facts.work, 'formula', formula.input, formula.shape, () =>
-      permissionRead.run(client, formula.input),
+      compiledPermissionChecks.getStore()
+        ? nativeSourceQuery(client, permissionRead, formula.input, 'compiled')
+        : permissionRead.run(client, formula.input),
     );
     if (
       !stillValid() ||
@@ -1305,7 +1361,10 @@ export function createAccess(config: PermissionConfig): Access {
                   global: formulaInput.include_global,
                   assignment: assignmentRequestId !== null,
                 },
-                () => permissionRead.run(bounded, formulaInput),
+                () =>
+                  compiledPermissionChecks.getStore()
+                    ? nativeSourceQuery(bounded, permissionRead, formulaInput, 'compiled')
+                    : permissionRead.run(bounded, formulaInput),
               );
               requireAccessDeadline(deadline);
               if (
