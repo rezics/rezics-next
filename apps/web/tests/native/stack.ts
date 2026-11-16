@@ -3,7 +3,7 @@ import type { Access, AccessConfig } from '../../../../services/kernel/src/reque
 import { fork, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { request as httpsRequest } from 'node:https';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync } from 'node:fs';
 import { sampleNativeMemory, type NativeMemoryObservation } from './native-memory.ts';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -1593,6 +1593,46 @@ function reportOwnedProcessGroup(label: string, child: ChildProcess, stateDirect
   } satisfies HostReply);
 }
 
+async function prepareNativeWebCache(
+  lifecycle: NativeTestLifecycle,
+  env: NodeJS.ProcessEnv,
+): Promise<{
+  directory: string;
+  dispose?: () => Promise<void>;
+}> {
+  const { prepareSharedWebDevCache, webTestDepCacheReadyEnvName } = await import('../../scripts/with-dev-server.ts');
+  lifecycle.assertOpen('prepare native Web dependencies');
+  const inherited = env.WEB_VITE_CACHE_DIR;
+  if (env[webTestDepCacheReadyEnvName] === '1' && inherited) return { directory: inherited };
+
+  // Cold prebundling retains memory in Vite. Finish it before the native services and browser can overlap it.
+  const temporary = join(repositoryRoot, '.temp');
+  mkdirSync(temporary, { recursive: true });
+  const stateDirectory = mkdtempSync(join(temporary, 'native-web-cache-'));
+  const preparation = prepareSharedWebDevCache(
+    { ...env, WEB_TEST_STATE_DIR: stateDirectory },
+    { signal: lifecycle.signal },
+  );
+  const remove = async () => {
+    await preparation.catch(() => {});
+    await rm(stateDirectory, { recursive: true, force: true });
+  };
+  const release = lifecycle.register({ label: 'native Web dependency cache', close: remove, force: remove });
+  const dispose = async () => {
+    await remove();
+    release();
+  };
+  try {
+    const cache = await preparation;
+    lifecycle.assertOpen('launch the native Web fixture after preparing dependencies');
+    console.info(`Native Web dependency cache ${cache.reused ? 'reused' : 'created'} ${cache.lockHash}`);
+    return { directory: cache.directory, dispose };
+  } catch (error) {
+    await dispose();
+    throw error;
+  }
+}
+
 export async function startNativeWebStack(options: NativeWebStackOptions = {}): Promise<NativeWebStack> {
   const lifecycle = currentNativeLifecycle();
   if (!lifecycle) {
@@ -1620,7 +1660,9 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
     )
       throw new Error('Native Auth test issuer must be the reserved HTTPS auth.native.rezics.com origin');
   }
-  const originalDatabaseUrl = process.env.DATABASE_URL;
+  const environment = { ...process.env };
+  const originalDatabaseUrl = environment.DATABASE_URL;
+  const viteCache = await prepareNativeWebCache(lifecycle, environment);
   let analysisDatabase: string | undefined;
   let postgresContainer: string | undefined;
   let postgresSocketDirectory: string | undefined;
@@ -1628,8 +1670,9 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
   let nativeStack: NativeWebStack | undefined;
   const ownedGroups = new Map<number, NativeProcessOwnership>();
   const hostEnvironment: NodeJS.ProcessEnv = {
-    ...process.env,
+    ...environment,
     NATIVE_WEB_STACK_HOST: '1',
+    WEB_VITE_CACHE_DIR: viteCache.directory,
     NATIVE_WEB_COMMERCE: options.commerce ? '1' : '0',
     NATIVE_WEB_LOCAL_SHOWCASE_BOARD_CREATION: options.localShowcaseBoardCreation ? '1' : '0',
     NATIVE_WEB_OBSERVE_PERSONAL_ACCESS: options.observePersonalAccess ? '1' : '0',
@@ -1745,6 +1788,13 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
       }
     }
     stateDirectories.clear();
+    if (viteCache.dispose) {
+      try {
+        await viteCache.dispose();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
     if (errors.length) throw new AggregateError(errors, 'Native external state cleanup failed');
   };
   const terminate = () =>

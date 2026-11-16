@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import {
   hashViteDepCacheIdentity,
   readPatchBytes,
@@ -21,8 +22,15 @@ function readReady(directory: string, lockHash: string): ViteDepCacheReady | und
   return parsed;
 }
 
-async function runOwned(command: string[], appRoot: string, env: NodeJS.ProcessEnv, label: string): Promise<string> {
+async function runOwned(
+  command: string[],
+  appRoot: string,
+  env: NodeJS.ProcessEnv,
+  label: string,
+  signal?: AbortSignal,
+): Promise<string> {
   const { cleanupAll, ownBunProcess } = await import('./server-custody.ts');
+  signal?.throwIfAborted();
   const child = Bun.spawn(command, {
     cwd: appRoot,
     env,
@@ -31,29 +39,47 @@ async function runOwned(command: string[], appRoot: string, env: NodeJS.ProcessE
     stderr: 'pipe',
   });
   const custody = ownBunProcess(child, { label });
+  const abort = () => void custody.close().catch(() => {});
+  signal?.addEventListener('abort', abort, { once: true });
   try {
     const status = await child.exited;
+    signal?.throwIfAborted();
     if (status !== 0) throw new Error(`${label} exited with ${status}\n${custody.diagnostics()}`);
     return custody.diagnostics();
   } finally {
+    signal?.removeEventListener('abort', abort);
     await cleanupAll([{ label, run: () => custody.close(), timeoutMs: 12_000 }]);
   }
 }
 
-async function defaultBuild(stagingDirectory: string, env: NodeJS.ProcessEnv, appRoot: string): Promise<void> {
+async function defaultBuild(
+  stagingDirectory: string,
+  env: NodeJS.ProcessEnv,
+  appRoot: string,
+  signal?: AbortSignal,
+): Promise<void> {
   const childEnv: NodeJS.ProcessEnv = {
     ...env,
     WEB_VITE_CACHE_DIR: stagingDirectory,
     REZICS_TEST_RUNTIME: '1',
     CLOUDFLARE_VITE_FORCE_LOCAL: 'true',
   };
+  // The startup probe owns the inspector. Optimizing dependencies does not open its listener.
+  delete childEnv.WORKER_INSPECTOR_PORT;
   const optimizeOutput = await runOwned(
     viteDepCacheOptimizeCommand(appRoot),
     appRoot,
     childEnv,
     'Vite dependency pre-bundle',
+    signal,
   );
-  const warmOutput = await runOwned(viteDepCacheWarmCommand(appRoot), appRoot, childEnv, 'Vite SSR dependency warm');
+  const warmOutput = await runOwned(
+    viteDepCacheWarmCommand(appRoot),
+    appRoot,
+    childEnv,
+    'Vite SSR dependency warm',
+    signal,
+  );
   const missing = viteDepCacheMetadataFiles.filter((relativePath) => !existsSync(join(stagingDirectory, relativePath)));
   if (missing.length > 0) {
     throw new Error(`Vite dependency pre-bundle did not write ${missing.join(', ')}\n${optimizeOutput}\n${warmOutput}`);
@@ -62,6 +88,8 @@ async function defaultBuild(stagingDirectory: string, env: NodeJS.ProcessEnv, ap
 
 /** Host-local Vite optimizeDeps cache keyed by lock, patch bytes and optimizer include/entries. */
 export async function prepareViteDepCache(options: PrepareViteDepCacheOptions): Promise<ViteDepCache> {
+  const { signal } = options;
+  signal?.throwIfAborted();
   const env = options.env ?? process.env;
   const lockBytes = options.lockBytes ?? readFileSync(join(options.workspaceRoot, 'bun.lock'));
   const patchBytes = options.patchBytes ?? readPatchBytes(options.workspaceRoot);
@@ -85,6 +113,7 @@ export async function prepareViteDepCache(options: PrepareViteDepCacheOptions): 
   let owned = false;
   const deadline = Date.now() + waitMs;
   while (!owned) {
+    signal?.throwIfAborted();
     const existing = cached();
     if (existing) return existing;
     try {
@@ -93,7 +122,7 @@ export async function prepareViteDepCache(options: PrepareViteDepCacheOptions): 
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
       if (Date.now() >= deadline) throw new Error(`Vite dependency cache lock ${lockDirectory} did not release`);
-      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+      await delay(pollIntervalMs, undefined, { signal });
     }
   }
 
@@ -105,8 +134,9 @@ export async function prepareViteDepCache(options: PrepareViteDepCacheOptions): 
     rmSync(staging, { recursive: true, force: true });
     mkdirSync(staging, { recursive: true, mode: 0o700 });
     try {
-      const build = options.build ?? ((path, buildEnv) => defaultBuild(path, buildEnv, options.appRoot));
+      const build = options.build ?? ((path, buildEnv) => defaultBuild(path, buildEnv, options.appRoot, signal));
       await build(staging, { ...env, WEB_VITE_CACHE_DIR: staging, REZICS_TEST_RUNTIME: '1' });
+      signal?.throwIfAborted();
       const ready: ViteDepCacheReady = {
         workspaceRoot,
         lockHash,

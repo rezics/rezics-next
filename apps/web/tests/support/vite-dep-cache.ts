@@ -364,6 +364,7 @@ export type PrepareViteDepCacheOptions = {
   appRoot: string;
   env?: NodeJS.ProcessEnv;
   cacheHome?: string;
+  signal?: AbortSignal;
   lockBytes?: Uint8Array | string;
   patchBytes?: string;
   optimizer?: unknown;
