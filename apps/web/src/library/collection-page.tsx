@@ -62,8 +62,6 @@ import {
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
-import { Field, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
-import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { RelativeTime } from '@rezics/ui/relative-time';
 import { useLocation, useRouter } from '@tanstack/react-router';
@@ -101,22 +99,15 @@ import {
   type CollectionWriteResult,
 } from './collection-edit';
 import {
-  collectionRenderPolicy,
   collectionRequestVariant,
-  type CollectionPageResult,
-  type CollectionPolicyPage,
   type EditableCollectionPage,
 } from './collection-load';
 import { admitsCollectionOperation, type CollectionMemberUndo } from './collection-records';
 import type { CollectionMember, CollectionVisibility } from './reads';
-import { pageHead, type HeadContext } from '../shell/head';
 import { LibraryNavigationNotice, libraryNavigationMenuEntries } from './library-nav';
 import { useCurrentLibraryNavigation } from './pins-current';
 import { PinControlNotice, usePinControlActions } from './pin-control';
 import type { DynamicCollectionPage as DynamicCollectionPageData } from './dynamic-collection';
-import { createIsomorphicFn } from '@tanstack/react-start';
-import { env } from 'cloudflare:workers';
-import { validatePublicOrigin } from '../shell/origin';
 import { CollectionFilterFeedback, CollectionFilters } from './collection-filters';
 import { EllipsisIcon, Share2Icon } from 'lucide-react';
 import {
@@ -126,7 +117,6 @@ import {
   type CollectionListPresentations,
 } from './collection-presentation';
 import { FollowTargetControl } from './follow-target-control';
-import { collectionPublicItemList } from './collection-public-document';
 import { CollectionExport } from './collection-export';
 import {
   collectionMemberReturnAddress,
@@ -171,136 +161,14 @@ import {
   type ReviewedCollectionMemberOperation,
 } from './collection-member-edit-plan';
 import { CollectionMetadataHistory } from './collection-metadata-history-view';
+import { collectionPublicOrigin } from './collection-page-head';
+import { VisibilityField, visibilityLabel } from './collection-visibility-field';
 
-const publicOrigin = createIsomorphicFn()
-  .server(() => validatePublicOrigin((env as { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN))
-  .client(() =>
-    validatePublicOrigin(new URL(document.querySelector<HTMLLinkElement>('link[rel="canonical"]')!.href).origin),
-  );
+export { collectionPageHead } from './collection-page-head';
+export { VisibilityField } from './collection-visibility-field';
 
-export function collectionPageHead(
-  page: Pick<CollectionPageResult, 'id' | 'title' | 'description' | 'curator' | 'members'> & CollectionPolicyPage,
-  suppliedContext?: HeadContext,
-  laterPage = false,
-) {
-  const path = `/collections/${encodeURIComponent(page.id)}`;
-  const context = suppliedContext ?? {
-    origin: publicOrigin(),
-    locale: getLocale(),
-    path,
-  };
-  const policy = collectionRenderPolicy(page, laterPage);
-  if (page.visibility === 'private')
-    return pageHead({ title: m.not_found_heading(), robots: 'noindex, follow' }, context);
-  const title = pageText(libraryTitleValue(page.title), context.locale).text;
-  const imageSubject = page.members[0]?.subject;
-  const cover = imageSubject?.cover;
-  const variants = cover && !cover.withheld ? cover.variants : [];
-  const width = variants.length
-    ? [...new Set(variants.map((v) => v.width))].sort((a, b) => Math.abs(a - 1200) - Math.abs(b - 1200))[0]
-    : undefined;
-  const format =
-    width === undefined
-      ? undefined
-      : (variants.find((v) => v.width === width && v.format === 'webp')?.format ??
-        variants.find((v) => v.width === width)?.format);
-  const image =
-    cover && width && format && cover.width > 0
-      ? {
-          url: coverSrc(cover.media, format, width),
-          width,
-          height: Math.round((cover.height * width) / cover.width),
-          alt: imageSubject ? pageText(libraryTitleValue(imageSubject.label), context.locale).text : title,
-        }
-      : undefined;
-  const itemList = collectionPublicItemList(page, context, laterPage);
-  const breadcrumbs = [
-    { '@type': 'ListItem', position: 1, name: 'REZICS', item: context.origin },
-    ...(page.curator?.handle
-      ? [
-          {
-            '@type': 'ListItem',
-            position: 2,
-            name: page.curator.displayName || page.curator.handle,
-            item: `${context.origin}/${context.locale}/@${encodeURIComponent(page.curator.handle)}`,
-          },
-        ]
-      : []),
-    {
-      '@type': 'ListItem',
-      position: page.curator?.handle ? 3 : 2,
-      name: title,
-      item: `${context.origin}/${context.locale}${path}`,
-    },
-  ];
-  const description = page.description?.trim() || undefined;
-  return pageHead(
-    {
-      title,
-      ...(description ? { description } : {}),
-      ...(image ? { image } : {}),
-      jsonLd: {
-        '@context': 'https://schema.org',
-        '@graph': [
-          {
-            '@type': 'CollectionPage',
-            name: title,
-            ...(description ? { description } : {}),
-            url: `${context.origin}/${context.locale}${path}`,
-            ...(itemList ? { mainEntity: itemList } : {}),
-          },
-          { '@type': 'BreadcrumbList', itemListElement: breadcrumbs },
-        ],
-      },
-      ...(!policy.indexable ? { robots: 'noindex, follow' } : {}),
-    },
-    context,
-  );
-}
-
-const visibilities = ['private', 'unlisted', 'public'] as const;
 export { fieldClass } from './collection-editor';
 export const buttonClass = buttonVariants({ variant: 'outline' });
-
-function visibilityLabel(visibility: CollectionVisibility): string {
-  if (visibility === 'public') return m.library_visibility_public();
-  if (visibility === 'unlisted') return m.library_visibility_unlisted();
-  return m.library_visibility_private();
-}
-
-export function VisibilityField({
-  value,
-  onChange,
-  disabled = false,
-}: {
-  value: CollectionVisibility | '';
-  onChange: (value: CollectionVisibility) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <FieldSet className="gap-2" disabled={disabled}>
-      <FieldLegend variant="label">{m.library_collection_visibility()}</FieldLegend>
-      <RadioGroup value={value} onValueChange={(next) => onChange(next as CollectionVisibility)} className="gap-2">
-        {visibilities.map((option) => (
-          <Field key={option} orientation="horizontal" className="items-start">
-            <RadioGroupItem id={`collection-visibility-${option}`} value={option} />
-            <FieldLabel htmlFor={`collection-visibility-${option}`} className="items-start">
-              <span>
-                <strong className="font-medium">{visibilityLabel(option)}</strong> {visibilityNote(option)}
-              </span>
-            </FieldLabel>
-          </Field>
-        ))}
-      </RadioGroup>
-    </FieldSet>
-  );
-}
-
-function visibilityNote(visibility: CollectionVisibility): string {
-  if (visibility === 'public') return m.library_visibility_public_note();
-  if (visibility === 'unlisted') return m.library_visibility_unlisted_note();
-  return m.library_visibility_private_note();
-}
 
 function writeMessage(result: Extract<CollectionWriteResult, { ok: false }>): string {
   return result.reason === 'full'
@@ -2646,7 +2514,7 @@ function CollectionPageLifetime({
         {!editing ? (
           <CollectionExport
             page={page}
-            context={{ origin: publicOrigin(), locale: getLocale() }}
+            context={{ origin: collectionPublicOrigin(), locale: getLocale() }}
             laterPage={cursor !== undefined}
           />
         ) : null}

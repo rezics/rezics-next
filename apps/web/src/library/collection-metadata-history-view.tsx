@@ -75,11 +75,11 @@ function value(snapshot: CollectionMetadataHistorySnapshot, field: CollectionMet
     case 'visibility':
       switch (snapshot.visibility) {
         case 'private':
-          return m.library_collection_visibility_private();
+          return m.library_visibility_private();
         case 'unlisted':
-          return m.library_collection_visibility_unlisted();
+          return m.library_visibility_unlisted();
         case 'public':
-          return m.library_collection_visibility_public();
+          return m.library_visibility_public();
       }
     case 'presentationKind':
       return snapshot.presentationKind ?? m.library_collection_metadata_history_empty_value();
