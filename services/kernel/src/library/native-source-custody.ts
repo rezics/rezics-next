@@ -439,6 +439,7 @@ async function bindOwner(
       outputMembers = output.members;
     }
   } else if (
+    !retained &&
     source.kind === 'dynamic' &&
     source.visibility !== 'private' &&
     (identity.scope !== 'private_builtin' || source.builtin !== null || !source.ruleReady)
