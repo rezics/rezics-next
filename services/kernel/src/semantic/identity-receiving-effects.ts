@@ -27,7 +27,7 @@ import { IdentityEpochStoreError } from './contract/identity-errors.ts';
 import { identityJobPartition } from './identity-adapters/identity-epoch-contract.ts';
 import { recordIdentityEpochNativeCommit } from './identity-adapters/native-commit.ts';
 import { serializeIdentityValue as json } from './identity-core/index.ts';
-import type { IdentityNativeReceipt, NativeStepWork } from './identity-epoch-contract.ts';
+import type { IdentityJobRef, IdentityNativeReceipt, NativeStepWork } from './identity-epoch-contract.ts';
 import type {
   IdentityReceivingBinding,
   IdentityReceivingEffect,
@@ -1461,6 +1461,11 @@ function searchReceivingBinding(
   if (!sameSearchSelection(binding, selection)) throw stale();
   return binding;
 }
+/** A same-home writer checkpoint inherits the exact job admission in the capture trigger. */
+export function searchIdentityWriterCheckpointRoles(pool: Pool, job: IdentityJobRef, partition: number) {
+  return partition === identityJobPartition(job) ? null : identityErasureRoles(pool, job.jobId);
+}
+
 /** Verify the retained writer request's Source before funding the two control captures in another turn. */
 export async function advanceSearchIdentityReceivingAcceptance(
   pool: Pool,
@@ -1473,7 +1478,7 @@ export async function advanceSearchIdentityReceivingAcceptance(
   retain: (
     tx: CommandTransaction,
     frontier: IdentityReceivingProgress['frontier'],
-    roles: Awaited<ReturnType<typeof identityErasureRoles>>,
+    roles: Awaited<ReturnType<typeof searchIdentityWriterCheckpointRoles>>,
   ) => void,
 ) {
   const { selection, source, scopeDigest } = plan;
@@ -1520,15 +1525,16 @@ export async function advanceSearchIdentityReceivingAcceptance(
     },
     work.deadline,
   );
-  const roles = await identityErasureRoles(pool, selection.job.jobId);
-  if (prepared) {
-    await acceptPreparedReceivingBinding(pool, binding, prepared, roles);
-    return { state: 'prepared' } as const;
-  }
-  if (checked) {
+  if (prepared || checked) {
+    const roles = await identityErasureRoles(pool, selection.job.jobId);
+    if (prepared) {
+      await acceptPreparedReceivingBinding(pool, binding, prepared, roles);
+      return { state: 'prepared' } as const;
+    }
     const control = await retainReceivingBindingPlan(pool, binding, roles);
     return { state: 'progress', transactionId: control.transactionId } as const;
   }
+  const roles = await searchIdentityWriterCheckpointRoles(pool, selection.job, selection.native.partition);
   const resolved = await resolveSearchReceivingBinding(selection, installedSearch(pool), work, scopeDigest);
   if (digest(resolved) !== bindingDigest) throw stale();
   const proof = await runCommand<string | null>(pool, { partition: selection.native.partition }, async (tx) => {
