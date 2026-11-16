@@ -10,8 +10,9 @@ Decision: capability rows record source-backed native coverage and its evidence 
 
 Decision: adopt the [capture research](../research/accounts-post-seed-api-capture-codex.md) as the acceptance contract
 for the original recovery, credential replacement and website refresh-family revocation API journeys. Reuse the
-original runner functions and assertions with three independent newly registered ordinary humans on one admitted,
-seeded runtime. Each case records its result independently and continues after a sibling failure. This isolated
+original runner functions and assertions with an independent newly registered ordinary human for each case on one
+admitted, seeded runtime. Repeat `--journey=J04` or the equivalent flag for each case still needing evidence. Each
+case records its result independently and continues after a sibling failure. This isolated
 capture leaves the complete nineteen-journey census and browser evidence separate.
 
 The existing visual/seed runtime owner supplies the current slot, explicit Web/issuer/native/Kernel origins, full

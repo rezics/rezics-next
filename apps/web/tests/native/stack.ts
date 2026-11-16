@@ -972,6 +972,7 @@ async function startStack(): Promise<
     // The semantic harness reads DATABASE_URL during module evaluation.
     const { createSemanticDriver } = await import('../../../../services/kernel/test/semantic/outcome-driver.ts');
     const { createKernel } = await import('../../../../services/kernel/src/http/kernel.ts');
+    const { composeLibraryDomain } = await import('../../../../services/kernel/src/composition/library.ts');
     const [{ createCommerceWork }, { readCommerceConfig }, { createStripePort }, { createWorkClient }] =
       await Promise.all([
         import('../../../../services/kernel/src/commerce/enqueue.ts'),
@@ -1063,9 +1064,30 @@ async function startStack(): Promise<
                   : observeAccess(factory),
             }
           : dependencies;
+        const searchService =
+          search && searchConfig
+            ? createSearchService({
+                pool: dependencies.pool,
+                client: search,
+                prefix: searchConfig.prefix,
+                source: subjectSource(dependencies.pool, dependencies.routeKey),
+                cursors: dependencies.tokens!,
+              })
+            : observedDependencies.search;
+        const library = {
+          pool: dependencies.pool,
+          routeKey: dependencies.routeKey,
+          ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
+          ...(searchService === undefined ? {} : { search: searchService }),
+        };
+        composeLibraryDomain(library);
         kernel = createKernel({
           ...observedDependencies,
           requestDeadlineMs: 30_000,
+          onAccessReady(access, viewerActions) {
+            observedDependencies.onAccessReady?.(access, viewerActions);
+            composeLibraryDomain({ ...library, access });
+          },
           ...(commerce
             ? {
                 commerce: {
@@ -1079,17 +1101,7 @@ async function startStack(): Promise<
                 },
               }
             : {}),
-          ...(search === undefined || searchConfig === undefined
-            ? {}
-            : {
-                search: createSearchService({
-                  pool: dependencies.pool,
-                  client: search,
-                  prefix: searchConfig.prefix,
-                  source: subjectSource(dependencies.pool, dependencies.routeKey),
-                  cursors: dependencies.tokens!,
-                }),
-              }),
+          ...(searchService === undefined ? {} : { search: searchService }),
         });
         return kernel;
       },

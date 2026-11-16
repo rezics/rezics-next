@@ -2193,8 +2193,11 @@ including foreign fences, ratings and counts, and the native retained copy's set
 Both ordinary and mixed comparisons check the complete projected body. Source census and query totals cannot
 certify reconciliation. A native repair invalidates the affected home's witness before replay. An ordinary
 Subject engine page interrupted by a changed home re-enumerates that home's native keys from the beginning
-and resumes the retained engine page. Interrupted pages repeat their actual work before committing the frontier. An owner move or pending identity invalidates
-the affected home, and physical recreation invalidates the entire old job.
+and resumes the retained engine page. An unfenced turn can finish that replay inline when a complete current
+Source home page matches the engine group exactly and the settled writer versions and bodies are visible.
+That check uses one lookahead key and charges the existing page meter. Interrupted pages repeat their actual
+work before committing the frontier. An owner move or pending identity invalidates the affected home, and
+physical recreation invalidates the entire old job.
 
 Activation first obtains the ordinary producer's durable publication fence and advances its native all-enrolled
 writer/uncertain-first-apply/retained-copy drain. A second finite pass compares under that continuously held
