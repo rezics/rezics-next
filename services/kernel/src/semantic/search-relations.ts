@@ -27,12 +27,13 @@ import {
 } from '@rezics/filter';
 import type { Pool, PoolClient } from 'pg';
 import { AccessUnavailableError } from '../access/unavailable.ts';
-import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
+import { DEFAULT_REQUEST_DEADLINE_MS, type CommandTransaction } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readFences } from '../content/source-fences.ts';
 import { withBoundedReadConnection } from '../database/pool.ts';
+import { nativeSourceQuery } from '../database/native-source-query.ts';
 import {
   MAX_RELATION_FACET_PROBES,
   MAX_RELATION_FACET_VALUES,
@@ -115,9 +116,14 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
     expected: ReadonlyMap<string, SourceSubject>,
     observations?: Map<string, string>,
     reserveNative?: (operations: number, keys: number) => void,
+    snapshot?: CommandTransaction,
   ): Promise<Map<string, { id: string; type: string }>> {
     const roots = [...new Set(ids)];
     const states = new Map<string, { visible: boolean; redirect: string | null; type: string }>();
+    if (snapshot) {
+      for (const [id, subject] of expected)
+        states.set(id, { visible: subject.visibility === 'visible', redirect: subject.redirect, type: subject.type });
+    }
     let pending = roots;
     for (let depth = 0; pending.length && depth < 8; depth++) {
       const groups = new Map<number, { route: number; id: string }[]>();
@@ -136,15 +142,20 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
       pending = [];
       for (const [partition, group] of groups) {
         reserveNative?.(4, group.length);
-        const values = await inSearchSnapshot(pool, async (client) => {
+        const parameters = {
+          partition_no: partition,
+          routes: group.map((x) => x.route),
+          subject_ids: group.map((x) => x.id),
+        };
+        const readSubjectsAt = async (client: CommandTransaction): Promise<SourceSubject[]> => {
           const home = await readPartition(client, partition);
+          if (snapshot && home?.writeState !== 'active') throw new AccessUnavailableError('contention');
           if (!home || home.writeState === 'moved') return [];
-          return readSubjects.run(client, {
-            partition_no: partition,
-            routes: group.map((x) => x.route),
-            subject_ids: group.map((x) => x.id),
-          });
-        });
+          return snapshot
+            ? ((await nativeSourceQuery(client, readSubjects, parameters)) as SourceSubject[])
+            : readSubjects.run(client, parameters);
+        };
+        const values = snapshot ? await readSubjectsAt(snapshot) : await inSearchSnapshot(pool, readSubjectsAt);
         const found = new Map(values.map((row) => [row.id, row]));
         for (const { id } of group) {
           const value = found.get(id);
@@ -167,6 +178,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
       }
       pending = [...new Set(pending)];
     }
+    if (snapshot && pending.some((id) => !states.has(id))) throw new AccessUnavailableError('contention');
     const allowed = new Map<string, { id: string; type: string }>();
     for (const root of roots) {
       const seen = new Set<string>();
@@ -196,8 +208,9 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
     expected: ReadonlyMap<string, SourceSubject>,
     observations?: Map<string, string>,
     reserveNative?: (operations: number, keys: number) => void,
+    snapshot?: CommandTransaction,
   ): Promise<Set<string>> {
-    return new Set((await canonicalPublicSubjects(ids, expected, observations, reserveNative)).keys());
+    return new Set((await canonicalPublicSubjects(ids, expected, observations, reserveNative, snapshot)).keys());
   }
 
   async function disclosed(
@@ -207,6 +220,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
     runtime: Prepared['runtime'],
     observations?: Map<string, string>,
     reserveNative?: (operations: number, keys: number) => void,
+    snapshot?: CommandTransaction,
   ): Promise<{ subject: string; statement: IndexedStatement }[]> {
     if (!routeKey || !runtime) return [];
     const facets = new Map<string, Set<string>>();
@@ -342,10 +356,12 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
       for (let offset = 0; offset < group.length; offset += 100) {
         const page = group.slice(offset, offset + 100);
         reserveNative?.(4, page.length);
-        const fences = await inSearchSnapshot(pool, async (client) => {
+        const readFencesAt = async (client: CommandTransaction) => {
           const home = await readPartition(client, partition);
+          if (snapshot && home?.writeState !== 'active') throw new AccessUnavailableError('contention');
           return !home || home.writeState === 'moved' ? [] : readFences(client, page);
-        });
+        };
+        const fences = snapshot ? await readFencesAt(snapshot) : await inSearchSnapshot(pool, readFencesAt);
         for (const [index, tuple] of page.entries()) {
           const fence = fences[index];
           observations?.set(`tuple:${JSON.stringify(tuple)}`, JSON.stringify(fence ?? null));
@@ -360,6 +376,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
       expected,
       observations,
       reserveNative,
+      snapshot,
     );
     return prepared
       .filter((item) => item.dependencies.every((id) => visible.has(id)) && (!item.tuple || unfenced.has(item.tuple)))
@@ -744,6 +761,17 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
 
   const source = {
     readConceptStatements,
+    async projectSelectedRelationsInSnapshot(
+      snapshot: CommandTransaction,
+      subject: SourceSubject,
+      rows: readonly SelectedStatement[],
+      releases: ReadonlyMap<string, Release>,
+      runtime: NonNullable<Prepared['runtime']>,
+    ) {
+      const expected = new Map([[subject.id, subject]]);
+      const statements = await disclosed(rows, releases, expected, runtime, undefined, undefined, snapshot);
+      return statements.map(({ statement }) => statement);
+    },
     async prepare(
       client: PoolClient,
       subjects: readonly SourceSubject[],

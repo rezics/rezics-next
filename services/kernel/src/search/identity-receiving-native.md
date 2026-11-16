@@ -187,11 +187,13 @@ reading one active term head and its complete fact slot. Each owned turn commits
 of the terms read so far. The native reader recovers the cursor from the preceding slot's indexed key and
 requires that head to remain current. An empty next seek closes term traversal. The continuation keeps term
 text in Source custody. Assembly replays the committed term work, requires the same complete digest, and uses
-the ordinary document serializer and installed name normalizer. An indexed seek bounds the complete descriptive
-selection. The writer uses the ordinary statement disclosure, imported-source fences and release normalization
-before adding the adopted values to the document. It stores the exact input count, release and digest in the plan.
-Dispatch checks that digest against a fresh read and also checks the Source build, Rating, Library and relation
-roster. Larger selections, outgoing relation inputs and credited creator inputs still require staged assembly.
+the ordinary document serializer and installed name normalizer. An indexed seek bounds the complete active
+selection. The writer uses ordinary statement disclosure, imported-source fences and release normalization for
+descriptive fields. For outgoing relation facets, it also checks Global acceptance and the current public
+original and terminal identities using the ordinary relation projection. Foreign owner state is checked in the
+same native snapshot. The plan retains the exact input count, release and digest. Dispatch checks that digest
+against a fresh read and checks the Source build, Rating, Library and relation roster. Larger selections and
+credited creator inputs still require staged assembly.
 
 For indexing and removal, the dispatch turn commits the original validated bulk item while the writer retains the
 dispatch token. The retained item carries the fields required to validate the target, external version and shard

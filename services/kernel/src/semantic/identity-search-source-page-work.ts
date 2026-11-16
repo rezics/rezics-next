@@ -89,30 +89,37 @@ export function identitySearchSourcePageCosts(): readonly PageCost[] {
       return Object.freeze({ sql, work, footprint });
     };
     return Object.freeze([
-      declare(readCanonicalStatementsSql, [65535, maxId, SEARCH_INDEX_STATEMENT_KEYS], (values) => {
-        const [route, id, keys] = values;
-        if (
-          values.length !== 3 ||
-          typeof id !== 'string' ||
-          routeOf(id) !== route ||
-          typeof keys !== 'number' ||
-          !Number.isInteger(keys) ||
-          keys < 1 ||
-          keys > SEARCH_INDEX_STATEMENT_KEYS
-        )
-          return undefined;
-        const points = 5 * keys + 1;
-        return Object.freeze({
-          candidateKeys: 0,
-          identityMetadataRows: 0,
-          nativeRows: points,
-          nativePoints: points,
-          witnessKeys: 0,
-          statements: 1,
-          bytes: 4096 + keys * (SEARCH_INDEX_STATEMENT_BYTES + 4096),
-          emptySeeks: points,
-        });
-      }),
+      declare(
+        readCanonicalStatementsSql,
+        [65535, maxId, SEARCH_INDEX_STATEMENT_KEYS, ['a'.repeat(16380)]],
+        (values) => {
+          const [route, id, keys, facets] = values;
+          if (
+            values.length !== 4 ||
+            typeof id !== 'string' ||
+            routeOf(id) !== route ||
+            typeof keys !== 'number' ||
+            !Number.isInteger(keys) ||
+            keys < 1 ||
+            keys > SEARCH_INDEX_STATEMENT_KEYS ||
+            !Array.isArray(facets) ||
+            !facets.every((facet) => typeof facet === 'string') ||
+            Buffer.byteLength(JSON.stringify(facets)) > 16384
+          )
+            return undefined;
+          const points = (facets.length ? 7 : 5) * keys + 1;
+          return Object.freeze({
+            candidateKeys: 0,
+            identityMetadataRows: 0,
+            nativeRows: points,
+            nativePoints: points,
+            witnessKeys: 0,
+            statements: 1,
+            bytes: 4096 + Buffer.byteLength(JSON.stringify(facets)) + keys * (SEARCH_INDEX_STATEMENT_BYTES + 8192),
+            emptySeeks: points,
+          });
+        },
+      ),
       declare(
         provenance.sql,
         provenance.params.map((key) =>

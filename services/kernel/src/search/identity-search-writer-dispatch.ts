@@ -271,7 +271,7 @@ export async function advanceSearchIdentityDispatch(
         !(await verifyCanonicalIdentityDocumentAtDispatch(
           tx,
           action.document,
-          configuration.routeKey,
+          configuration,
           basis.obligations.statementInput,
         )))
     )
