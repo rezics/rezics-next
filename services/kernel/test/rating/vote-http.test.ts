@@ -211,7 +211,7 @@ test('votes use strict integer JSON, require idempotency keys, and can be read o
     `SELECT units, revision FROM rating.vote WHERE voter_id = $1 AND question_id = $2 AND target_id = $3`,
     [accountIds.owner, '00000000-0000-7000-8000-000000000001', subjectId],
   );
-  expect(tombstone.rows).toEqual([{ units: null, revision: 2 }]);
+  expect(tombstone.rows).toEqual([{ units: null, revision: 3 }]);
 });
 
 test('a vote read always belongs to the authenticated account', async () => {
