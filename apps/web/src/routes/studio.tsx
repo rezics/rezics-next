@@ -6,7 +6,6 @@ import {
   createPostDocumentPort,
   createStudioAccountPort,
   hostedFailure,
-  hostedId,
   HostedBookInventory,
   HostedRootAppendEntry,
   HostedDraftPointEntry,
@@ -16,7 +15,6 @@ import {
   HostedDraftPicker,
   hostedBookNative,
   openHostedStudio,
-  readOwnedHostedBook,
   StudioWorkspace,
   type ExactDocument,
   type StudioDocument,
@@ -28,6 +26,8 @@ import {
   type HostedStudioBinding,
   type HostedTarget,
 } from '../studio';
+import { readOwnedHostedBook } from '../studio/hosted-actions';
+import { hostedId } from '../studio/hosted-contract';
 import {
   ownDraftBrowserWritingReader,
   ownDraftNativeCommandTransport,

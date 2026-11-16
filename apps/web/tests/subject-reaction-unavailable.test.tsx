@@ -214,7 +214,7 @@ const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvide
 const { sessionQuery } = await import('../src/session/query');
 const { loadSubjectReactions, readOwnReaction } = await import('../src/features/pages/subject-reactions');
 const { ZoneSubjectPage, loadZoneSubjectPersonal } = await import('../src/zones/zone-shell');
-const { SubjectOverview } = await import('../src/routes/subjects/$id_.$slug');
+const { SubjectOverview } = await import('../src/routes/subjects/-overview');
 const { subjectFrameQuery, subjectRelationsQuery, subjectRatingQuery } =
   await import('../src/features/pages/subject-queries');
 const { subjectPageType, pageRelationProperties } = await import('../src/features/pages/subject');

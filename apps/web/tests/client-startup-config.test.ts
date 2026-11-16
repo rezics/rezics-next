@@ -149,6 +149,10 @@ test('installed serve composition bounds client dependency optimization without 
             ['editions/new', '/content-editions/edition-create-route'],
             ['editions/index', '/content-editions/creator-editions-route'],
             ['editions/$id', '/content-editions/edition-route'],
+            ['studio', '/src/studio/index.ts'],
+            ['zones/$id', '/zones/zone-shell.tsx'],
+            ['knowledge/new', '/knowledge/private-page.tsx'],
+            ['search', '/search/search.tsx'],
           ]) {
             const path = '/src/routes/' + file + '.tsx';
             const reference = await routes.environments.ssr.transformRequest(path);
@@ -157,13 +161,17 @@ test('installed serve composition bounds client dependency optimization without 
             const visited = await routes.environments.ssr.transformRequest(path + '?tsr-split=component');
             assert.ok(visited.code.includes(view), file + ': visiting loads the unchanged view');
           }
+          const studioLoader = await routes.environments.ssr.transformRequest('/src/routes/studio.tsx?tsr-split=loader');
+          assert.ok(studioLoader.code.includes('/studio/hosted-actions.ts'), 'Studio retains the owned Book loader');
+          assert.ok(!studioLoader.code.includes('/studio/index.ts'), 'Studio loader stays independent of the editor');
           const subjectReference = await routes.environments.ssr.transformRequest(
             '/src/routes/subjects/$id_.$slug.tsx',
           );
           assert.ok(subjectReference.code.includes('lazyRouteComponent'), 'Subject view is lazy');
           assert.ok(!subjectReference.code.includes('/features/pages/subject.tsx'), 'Subject view stays out of the route reference');
           assert.ok(
-            !subjectReference.code.includes('/features/catalogue/page-render-binding.tsx'),
+            !subjectReference.code.includes('/routes/subjects/-overview.tsx') &&
+              !subjectReference.code.includes('/features/catalogue/page-render-binding.tsx'),
             'route loaders do not import the Subject React binding',
           );
           const rules = await routes.environments.ssr.transformRequest('/src/community/realm-rules-authoring/panel.tsx');

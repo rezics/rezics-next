@@ -237,7 +237,7 @@ const { createRoot, hydrateRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider, dehydrate, useQuery } = await import('@tanstack/react-query');
 const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
   await import('@tanstack/react-router');
-const { SubjectOverview } = await import('../src/routes/subjects/$id_.$slug');
+const { SubjectOverview } = await import('../src/routes/subjects/-overview');
 const { SubjectRatingPopulations } = await import('../src/features/pages/subject-rating-populations-view');
 const { readSubjectRatingPopulations, validatePopulationInput } =
   await import('../src/features/pages/subject-rating-populations-actions');

@@ -3,13 +3,8 @@ import { m } from '../../../paraglide/messages.js';
 import { getLocale } from '../../../paraglide/runtime.js';
 import { pageHead } from '../../../shell/head';
 import { pageHeadContext } from '../../../shell/head-context';
-import {
-  KnowledgeDocumentPending,
-  KnowledgeDocumentRoute,
-  knowledgeDocumentRequest,
-  knowledgeDocumentSearch,
-  loadKnowledgeDocumentVisit,
-} from '../../../knowledge/route';
+import { knowledgeDocumentRequest, knowledgeDocumentSearch } from '../../../knowledge/document-request';
+import { KnowledgeDocumentPending, KnowledgeDocumentRoute, loadKnowledgeDocumentVisit } from '../../../knowledge/route';
 
 export const Route = createFileRoute('/knowledge/documents/$id')({
   staleTime: 0,

@@ -2,7 +2,7 @@ import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNod
 import { FilePenLine, FileText, Folders, House, Inbox, Library, ReceiptText, Search, ShieldCheck } from 'lucide-react';
 import { useOperation } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
-import { knowledgeNavigation } from '../knowledge/route';
+import { knowledgeNavigation } from '../knowledge/navigation';
 import { bookCatalogueNavigation } from '../books/catalogue/navigation';
 import {
   createNavigation,
