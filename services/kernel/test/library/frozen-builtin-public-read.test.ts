@@ -5,8 +5,8 @@ import { createCurrentConsentReader } from '@rezics/auth/current-consent';
 import { builtinCollectionId } from '../../src/library/builtin-identity.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { startConsentServer, type ConsentServer } from '../community/membership-fixture.ts';
-import { testRouteKey } from '../support/test-kernel.ts';
 import { deletePersona } from '../support/account-deletion.ts';
+import { testRouteKey } from '../support/test-kernel.ts';
 import { createOwnedErasureFixture } from './support/erasure-worker.ts';
 
 async function waitFor<T>(phase: string, read: () => Promise<T>, ready: (value: T) => boolean): Promise<T> {
@@ -48,7 +48,11 @@ test('anonymous members retain the selected built-in generation after curator er
         expect(value.phase).not.toBe('refused');
         return value.phase === 'complete';
       },
-    );
+    ).catch(async (error: unknown) => {
+      const workflow = await f.client.getWorkflow(admitted.id);
+      if (workflow?.status === 'ERROR') await f.client.retrieveWorkflow(admitted.id).getResult();
+      throw new Error(`Publication workflow status: ${workflow?.status ?? 'absent'}`, { cause: error });
+    });
     const generation: string = completed.publication.generation;
     const members = selected.map((subjectId) => ({ kind: 'dynamic', subjectId }));
     const live = await waitFor(
@@ -67,18 +71,20 @@ test('anonymous members retain the selected built-in generation after curator er
     await deletePersona(f.options, owner);
     expect((await f.request(owner, 'GET', membersPath)).status).toBe(401);
     const retained = async () =>
-        (
-          await f.db.pool.query(
-            `SELECT c.curator_account_id,g.account_id,f.generation::text,f.members::int AS members
+      (
+        await f.db.pool.query(
+          `SELECT c.curator_account_id,g.account_id,f.generation::text,f.members::int AS members
              FROM library.collection c
              LEFT JOIN library.collection_retained_output f USING (route,collection_id)
              LEFT JOIN library.collection_source_output g USING (route,collection_id,generation)
              WHERE c.route=$1 AND c.collection_id=$2`,
-            [routeOf(id), id],
-          )
-        ).rows[0];
-    await waitFor('Terminal participant did not select the retained generation', retained, (row) =>
-      row?.generation === generation,
+          [routeOf(id), id],
+        )
+      ).rows[0];
+    await waitFor(
+      'Terminal participant did not select the retained generation',
+      retained,
+      (row) => row?.generation === generation,
     );
     await f.client.triggerSchedule('library.canonicalSource.every-10-minutes');
     const frozen = await waitFor(

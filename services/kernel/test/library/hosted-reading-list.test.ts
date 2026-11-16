@@ -267,7 +267,13 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
   const ownerId = f.native.system.actors.other.actor.accountId;
   const ownerRoute = routeOf(ownerId)!;
   const catalogueRoute = routeOf(f.catalogueId)!;
-  const subjectRoutes = [ownerRoute, ownerRoute ^ 0x10, ownerRoute ^ 0x20, ownerRoute ^ 0x30, ownerRoute ^ 0x40];
+  const subjectRoutes = [
+    catalogueRoute,
+    catalogueRoute ^ 0x10,
+    catalogueRoute ^ 0x20,
+    catalogueRoute ^ 0x30,
+    catalogueRoute ^ 0x40,
+  ];
   const subjectOne = await subjectOnRoute(subjectRoutes[0]!);
   const subjectTwo = await subjectOnRoute(subjectRoutes[1]!);
   const subjectThree = await subjectOnRoute(subjectRoutes[2]!);

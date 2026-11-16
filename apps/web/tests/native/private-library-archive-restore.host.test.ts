@@ -133,7 +133,7 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
         headers: {
           authorization: alice.authorization,
           'content-type': 'application/json',
-          'idempotency-key': crypto.randomUUID(),
+          'idempotency-key': key(),
         },
         body: JSON.stringify({ title: collectionTitle, visibility: 'private' }),
       },
@@ -150,7 +150,7 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
         headers: {
           authorization: alice.authorization,
           'content-type': 'application/json',
-          'idempotency-key': crypto.randomUUID(),
+          'idempotency-key': key(),
         },
         body: JSON.stringify({ subjectId: subject.id }),
       },
@@ -167,7 +167,7 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
         headers: {
           authorization: alice.authorization,
           'content-type': 'application/json',
-          'idempotency-key': crypto.randomUUID(),
+          'idempotency-key': key(),
         },
         body: JSON.stringify({ subjectId: subject.id }),
       },
@@ -184,7 +184,7 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
         headers: {
           authorization: alice.authorization,
           'content-type': 'application/json',
-          'idempotency-key': crypto.randomUUID(),
+          'idempotency-key': key(),
         },
         body: JSON.stringify({ note: 'First archived note' }),
       },
@@ -201,7 +201,7 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
         headers: {
           authorization: alice.authorization,
           'content-type': 'application/json',
-          'idempotency-key': crypto.randomUUID(),
+          'idempotency-key': key(),
         },
         body: JSON.stringify({ note: 'Repeated occurrence' }),
       },
@@ -218,7 +218,7 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
         headers: {
           authorization: alice.authorization,
           'content-type': 'application/json',
-          'idempotency-key': crypto.randomUUID(),
+          'idempotency-key': key(),
         },
         body: JSON.stringify({ after: null }),
       },
@@ -235,7 +235,7 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
         headers: {
           authorization: alice.authorization,
           'content-type': 'application/json',
-          'idempotency-key': crypto.randomUUID(),
+          'idempotency-key': key(),
         },
         body: JSON.stringify({ name: `Archive label ${marker}` }),
       },
@@ -252,7 +252,7 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
         headers: {
           authorization: alice.authorization,
           'content-type': 'application/json',
-          'idempotency-key': crypto.randomUUID(),
+          'idempotency-key': key(),
         },
         body: JSON.stringify({ subjectId: subject.id }),
       },
@@ -269,7 +269,7 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
         headers: {
           authorization: alice.authorization,
           'content-type': 'application/json',
-          'idempotency-key': crypto.randomUUID(),
+          'idempotency-key': key(),
         },
         body: JSON.stringify({ subjectId: subject.id, mode: 'scalar_amount', unit: 'page', total: '12' }),
       },

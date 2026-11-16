@@ -1825,7 +1825,7 @@ test('a merged canonical target invalidates the reviewed observation identity', 
     if (typeof admission.operation?.id !== 'string') throw new Error('Native merge admission has no operation');
     await f.drainIdentityMerge(admission.operation.id);
   } else expect(admission).toMatchObject({ survivor, redirected });
-  for (const id of [survivor, redirected]) await f.awaitCurrentIdentity(id);
+  expect(await identityEpochStore().readMapping(f.pool, survivor)).toMatchObject({ state: 'mapped', terminal: survivor });
   expect(await identityEpochStore().readMapping(f.pool, redirected)).toMatchObject({ state: 'mapped', terminal: survivor });
   const applied = await json(await send(identityOwner, 'POST', `${mergePath}/${id}/apply`, selected([row.ordinal])));
   expect(applied.applied).toMatchObject([{ status: 'stale' }]);
