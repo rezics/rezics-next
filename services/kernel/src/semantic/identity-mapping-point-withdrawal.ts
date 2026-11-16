@@ -18,6 +18,7 @@ export type IdentityMappingPointFrame = Readonly<{
   scopeDigest: string;
   planDigest: string;
   original: string;
+  foreignUnregistered: boolean;
   inputs: readonly IdentityMappingPointInput[];
 }>;
 type Work = { statements: number; points: number; rows: number; bytes: number };
@@ -100,7 +101,7 @@ export async function beginIdentityMappingPointWithdrawal(
   }));
   const row = (await query<BeginRow>(tx,begin.sql,[
     frame.home,frame.job,frame.epoch,frame.unit,frame.scope,frame.plan,frame.frame,frame.route,frame.original,
-    JSON.stringify(inputs),
+    JSON.stringify(inputs),input.foreignUnregistered,
   ],work)).rows[0];
   if (row?.status==='legacy') return 'legacy';
   if (row?.status==='foreign-control')

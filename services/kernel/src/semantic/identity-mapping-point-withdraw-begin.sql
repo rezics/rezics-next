@@ -1,7 +1,7 @@
 WITH args AS MATERIALIZED (
  SELECT $1::integer AS home,$2::uuid AS job,$3::bigint AS job_epoch,$4::integer AS unit,
   $5::text AS scope_digest,$6::text AS plan_digest,$7::uuid AS frame,
-  $8::integer AS route,$9::uuid AS original,$10::jsonb AS inputs
+  $8::integer AS route,$9::uuid AS original,$10::jsonb AS inputs,$11::boolean AS foreign_unregistered
 ), effect AS MATERIALIZED (
  SELECT e.* FROM semantic.identity_epoch_mapping_effect e
  WHERE e.partition_no=(SELECT home FROM args) AND e.job_id=(SELECT job FROM args) AND e.job_epoch=(SELECT job_epoch FROM args)
@@ -186,7 +186,27 @@ WITH args AS MATERIALIZED (
   AND NOT EXISTS(SELECT 1 FROM semantic.identity_epoch_bootstrap_row pending
    WHERE pending.partition_no=p.partition_no AND pending.transaction_id=m.closure_export_transaction
     AND pending.original=m.original)
+  AND NOT (SELECT foreign_unregistered FROM args)
   AND NOT EXISTS(SELECT 1 FROM qualified)
+), foreign_unregistered AS MATERIALIZED (
+ SELECT m.original FROM args a
+ JOIN semantic.identity_epoch_mapping m ON (m.route,m.original)=(a.route,a.original) AND m.route/16=a.home
+ JOIN owner p ON p.epoch=m.owner_epoch
+ JOIN input i ON (i.control_partition,i.terminal)=(m.control_partition,m.control_group)
+  AND i.terminal=m.terminal AND i.control_partition<>p.partition_no
+ JOIN semantic.identity_epoch_native_commit n ON (n.partition_no,n.transaction_id)=(p.partition_no,m.recorded_transaction_id)
+  AND n.purpose='mapping' AND n.xmin=m.xmin AND n.epoch=p.epoch AND n.position<=p.position
+ JOIN semantic.identity_epoch_mapping_effect e ON (e.partition_no,e.transaction_id)=(n.partition_no,n.transaction_id)
+  AND e.xmin=n.xmin AND e.job_epoch=m.epoch
+ WHERE a.foreign_unregistered AND m.closure_state='legacy' AND m.origin='published'
+  AND NOT m.closure_cancelled_successor AND ROW(
+   m.closure_enrollment,m.closure_generation,m.closure_incarnation,m.closure_immediate,m.closure_export_transaction,
+   m.closure_hold_transaction,m.closure_hold_xid,m.closure_registration_transaction,m.closure_install_transaction,
+   m.closure_install_xid,m.closure_ack_transaction,m.closure_ack_xid,m.closure_source_reservation,m.closure_claim,
+   m.closure_withdraw_transaction,m.closure_withdraw_xid,m.closure_successor_ticket,m.closure_successor_original,
+   m.closure_ticket_reservation,m.closure_mutation_xid
+  ) IS NULL
+ FOR UPDATE OF m
 ), held AS MATERIALIZED (
  SELECT * FROM qualified UNION ALL SELECT * FROM foreign_qualified
 ), withdrawn AS (
@@ -196,7 +216,11 @@ WITH args AS MATERIALIZED (
 )
 SELECT CASE
  WHEN NOT EXISTS(SELECT 1 FROM frame) THEN 'unavailable'
- WHEN (SELECT closure_state FROM source)='legacy' THEN 'legacy'
+ WHEN EXISTS(
+    SELECT 1 FROM source m JOIN input i ON (i.control_partition,i.terminal)=(m.control_partition,m.control_group)
+     AND i.terminal=m.terminal AND i.control_partition=(SELECT home FROM args)
+    WHERE m.closure_state='legacy'
+   ) OR EXISTS(SELECT 1 FROM foreign_unregistered) THEN 'legacy'
  WHEN EXISTS(SELECT 1 FROM withdrawn) THEN 'withdrawn'
  ELSE 'unavailable' END AS status,
  (SELECT control_group FROM withdrawn) AS control_group,
