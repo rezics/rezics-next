@@ -527,8 +527,8 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
           // Lock the actual independently verified terminal while its funded
           // settlement frontier is still partial. The attempted jump remains
           // inside 0..4096, so only the contiguous-prefix guard can reject it.
-          const pending = await native.query<{ bootstrap: string; execution: string }>(
-            `SELECT t.bootstrap::text,t.execution
+          const pending = await native.query<{ bootstrap: string; execution: string; ack_after: number }>(
+            `SELECT t.bootstrap::text,t.execution,t.ack_after
              FROM semantic.public_filter_repair_step t
              JOIN semantic.public_filter_bootstrap b USING(partition_no,bootstrap)
              WHERE b.state='adopted' AND b.consumer LIKE $1
@@ -538,13 +538,26 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
           );
           const terminal = pending.rows[0];
           if (terminal) {
+            // Keep a real unfunded receipt fixed while testing the jump. A
+            // receiver ACK can commit before the Source frontier catches up.
+            const gap = await native.query(
+              `SELECT h.source_home
+               FROM semantic.public_filter_home_enrollment e
+               JOIN search.public_filter_coverage_home h
+                 ON (h.partition_no,h.registration,h.source_home)=(e.registration_partition,e.registration,e.partition_no)
+               WHERE e.bootstrap=$1 AND e.partition_no BETWEEN $3 AND $3+1
+                 AND (h.acknowledged_baseline IS DISTINCT FROM e.bootstrap OR h.acknowledged_execution IS DISTINCT FROM $2)
+               ORDER BY h.source_home LIMIT 1 FOR UPDATE OF h SKIP LOCKED`,
+              [terminal.bootstrap, terminal.execution, terminal.ack_after],
+            );
+            if (!gap.rowCount) return;
             await expect(
               native.query(
                 `UPDATE semantic.public_filter_repair_step SET ack_after=ack_after+2
                WHERE (partition_no,bootstrap,execution)=(0,$1,$2) AND complete`,
                 [terminal.bootstrap, terminal.execution],
               ),
-            ).rejects.toMatchObject({ code: '23514' });
+            ).rejects.toMatchObject({ code: '23514', constraint: 'public_filter_repair_ack_receiver_prefix' });
             rejectedAckGap = true;
           }
         } finally {

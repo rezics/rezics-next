@@ -15,6 +15,7 @@ import { subjectListingSource } from '../../src/library/listing-counts.ts';
 import { subjectConsumer } from '../../src/search/runner.ts';
 import { createDefaultPublicFilterRuntime } from '../../src/search/public-runtime.ts';
 import { PUBLIC_PREPARATION_BUDGET_MS } from '../../src/search/public-preparation-store.ts';
+import { PUBLIC_FILTER_REPAIR_ACK_BATCH_LIMIT } from '../../src/semantic/public-filter-repair-chain.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 
 // Actual generation, original Source, ordinary writer and engine: no home/ACK/phase setters.
@@ -344,7 +345,7 @@ test('an unfenced engine page completes after exact inline replay of an advanced
   }
 }, 120_000);
 
-test('native publication starts repair from the original adopted Source execution', async () => {
+test('native publication starts repair from the original adopted Source execution and acknowledges a bounded prefix', async () => {
   const f = await fixture();
   const search = createOpenSearch(process.env.OPENSEARCH_URL!);
   const prefix = `source-repair-start-${crypto.randomUUID().slice(0, 8)}-`;
@@ -382,6 +383,7 @@ test('native publication starts repair from the original adopted Source executio
     expect(retained.data.meaning.release).toEqual({ authority: 'semantic.readRelease', digest: f.meaning.digest });
     let activate = false;
     let boundAttempts = 0;
+    let acknowledged = 0;
     let last = 'registered';
     for (let turn = 0; turn < 500 && Date.now() < deadline; turn++) {
       if (!activate) {
@@ -398,12 +400,18 @@ test('native publication starts repair from the original adopted Source executio
         observation: string;
         execution: string;
         root: boolean;
+        ack_after: number;
+        bootstrap: string;
       }>(
-        `SELECT b.state, b.publication_observation AS observation, b.publication_execution AS execution,
+        `SELECT b.bootstrap::text,b.state,b.publication_observation AS observation,b.publication_execution AS execution,
                 EXISTS(SELECT 1 FROM semantic.public_filter_repair_step r
                   WHERE (r.partition_no,r.bootstrap,r.execution)=(b.partition_no,b.bootstrap,b.publication_execution)
-                  AND r.predecessor IS NULL) AS root
+                  AND r.predecessor IS NULL) AS root,
+                COALESCE(t.ack_after,0) AS ack_after
            FROM semantic.public_filter_bootstrap b
+           LEFT JOIN semantic.public_filter_repair_step t
+             ON (t.partition_no,t.bootstrap,t.execution)=(b.partition_no,b.bootstrap,b.publication_execution)
+             AND t.complete AND t.verified_root IS NOT NULL AND t.verified_next IS NULL
           WHERE (b.partition_no,b.publication_job)=(0,$1::uuid)`,
         [job.job],
       );
@@ -411,10 +419,47 @@ test('native publication starts repair from the original adopted Source executio
       if (original?.state !== 'adopted') continue;
       expect(original.execution).toBe(job.job);
       expect(original.observation).toMatch(/^0:/);
-      if (original.root) return;
-      if (++boundAttempts === 8) break;
+      if (!original.root) {
+        if (++boundAttempts === 8) break;
+        continue;
+      }
+      const advanced = original.ack_after - acknowledged;
+      expect(advanced).toBeGreaterThanOrEqual(0);
+      expect(advanced).toBeLessThanOrEqual(PUBLIC_FILTER_REPAIR_ACK_BATCH_LIMIT);
+      acknowledged = original.ack_after;
+      if (advanced < 2) continue;
+      expect(result).toMatchObject({ status: 'preparing', next: 'activate', advanced: true });
+      expect(result.cost.inputKeys).toBeLessThanOrEqual(1000);
+      const receipts = await f.db.pool.query<{ homes: number }>(
+        `SELECT count(*)::int AS homes
+         FROM search.public_filter_coverage_home h
+         JOIN search.public_filter_coverage_baseline b
+           ON (b.partition_no,b.registration,b.source_home,b.bootstrap)=
+              (h.partition_no,h.registration,h.source_home,h.acknowledged_baseline)
+         WHERE h.acknowledged_baseline=$1 AND h.acknowledged_observation=$2 AND h.acknowledged_execution=$3
+           AND h.acknowledged_settlement IS NOT NULL AND h.source_home<$4
+           AND h.acknowledged_position=b.source_position
+           AND h.acknowledged_native_enqueue=b.native_enqueue_revision
+           AND h.acknowledged_native_revision IS NOT DISTINCT FROM b.native_revision
+           AND h.acknowledged_native_claim_revision IS NOT DISTINCT FROM b.native_claim_revision`,
+        [original.bootstrap, original.observation, original.execution, acknowledged],
+      );
+      expect(receipts.rows[0]?.homes).toBe(acknowledged);
+      console.info(
+        'Native original Source acknowledgement prefix',
+        JSON.stringify({
+          job: job.job,
+          observation: original.observation,
+          acknowledged,
+          advanced,
+          inputKeys: result.cost.inputKeys,
+        }),
+      );
+      return;
     }
-    throw new Error(`Original Source repair root stayed absent after ${boundAttempts} bound turns, last result ${last}`);
+    throw new Error(
+      `Original Source repair did not acknowledge a batch, ${acknowledged} homes acknowledged, last result ${last}`,
+    );
   } finally {
     try {
       await runtime.close();
