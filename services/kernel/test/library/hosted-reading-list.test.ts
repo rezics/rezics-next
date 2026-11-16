@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import type { Pool, PoolClient } from 'pg';
 import { hostedChaptersFixture } from '../content/support/hosted-chapters-fixture.ts';
+import { nativeOperator } from '../content/support/native-system.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { readHostedReadingExportPage } from '../../src/library/hosted-reading.ts';
 import { peekHostedReadingPort } from '../../src/library/hosted-reading-bind.ts';
@@ -12,6 +13,17 @@ setDefaultTimeout(180_000);
 let f: Awaited<ReturnType<typeof hostedChaptersFixture>>;
 beforeAll(async () => {
   f = await hostedChaptersFixture();
+  const { system } = f.native;
+  const response = await system.kernel.handle(
+    new Request('https://content.test/v1/platform/exposure/reading_progress:open', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${nativeOperator(system).bearer}`,
+        'idempotency-key': JSON.stringify(crypto.randomUUID()),
+      },
+    }),
+  );
+  expect(response.status, await response.text()).toBe(200);
 });
 afterAll(async () => {
   restorePositionProjection?.();
@@ -255,7 +267,13 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
   const ownerId = f.native.system.actors.other.actor.accountId;
   const ownerRoute = routeOf(ownerId)!;
   const catalogueRoute = routeOf(f.catalogueId)!;
-  const subjectRoutes = [ownerRoute, ownerRoute ^ 0x10, ownerRoute ^ 0x20, ownerRoute ^ 0x30, ownerRoute ^ 0x40];
+  const subjectRoutes = [
+    catalogueRoute,
+    catalogueRoute ^ 0x10,
+    catalogueRoute ^ 0x20,
+    catalogueRoute ^ 0x30,
+    catalogueRoute ^ 0x40,
+  ];
   const subjectOne = await subjectOnRoute(subjectRoutes[0]!);
   const subjectTwo = await subjectOnRoute(subjectRoutes[1]!);
   const subjectThree = await subjectOnRoute(subjectRoutes[2]!);
