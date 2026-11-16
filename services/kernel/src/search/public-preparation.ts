@@ -34,8 +34,7 @@ export type PublicPreparationOptions = {
   runtime: DefaultPublicFilterRuntime;
 };
 
-// Bound how many independently metered native publication turns can share one
-// maintenance delivery and its original deadline.
+// Yield ordinary reconciliation after four independently metered turns.
 const publicationTurnsPerDelivery = 4;
 
 const databaseLifetimeOptions = {
@@ -97,7 +96,9 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     const state = `${name}:${message}`;
     if (failures.get(kind) === state) return;
     failures.set(kind, state);
-    console.warn(JSON.stringify({ event: 'search.public_preparation.failed', prefix: options.prefix, kind, name, message }));
+    console.warn(
+      JSON.stringify({ event: 'search.public_preparation.failed', prefix: options.prefix, kind, name, message }),
+    );
   };
   const reportUnavailable = (phase: PublicationPhase, generation: number, result: PublicFilterConsumerUnavailable) => {
     const state = `${generation}:${result.reason}`;
@@ -127,10 +128,10 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     record: PreparationRecord,
     state: PopulationFrontier,
     context: PublicFilterConsumerContext,
-    mayContinue: boolean,
+    mayContinue: (sourceAdvanced: boolean) => boolean,
   ): Promise<string | undefined> {
-    const advance = async (locator: PreparationLocator | null, delayMs = 0, ready = false) => {
-      const continueInline = mayContinue && ready;
+    const advance = async (locator: PreparationLocator | null, delayMs = 0, ready = false, sourceAdvanced = false) => {
+      const continueInline = ready && mayContinue(sourceAdvanced);
       const revision = await store.advance(record, locator, delayMs, context.deadline, continueInline);
       return continueInline ? (revision ?? undefined) : undefined;
     };
@@ -218,6 +219,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
         next,
         activated.advanced ? 0 : 1000,
         activated.advanced === true,
+        activated.sourceAdvanced === true,
       );
     }
     // An unready activation can have durably restarted reconciliation. The subsequent step
@@ -273,10 +275,16 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     },
     run(id: string, revision: string, deadline = deadlineFor(PUBLIC_PREPARATION_BUDGET_MS)): Promise<void> {
       const context = {
-        deadline: Math.min(deadline, deadlineFor(PUBLIC_PREPARATION_BUDGET_MS), Date.now() + PUBLIC_PREPARATION_BUDGET_MS),
+        deadline: Math.min(
+          deadline,
+          deadlineFor(PUBLIC_PREPARATION_BUDGET_MS),
+          Date.now() + PUBLIC_PREPARATION_BUDGET_MS,
+        ),
       };
       return track(context.deadline, async () => {
-        for (let turn = 1; turn <= publicationTurnsPerDelivery && !paused && !stopped; turn++) {
+        let longestTurnMs = 0;
+        for (let turn = 1; !paused && !stopped; turn++) {
+          const started = Date.now();
           const record = await store.claim(id, revision, context.deadline);
           if (!record) return;
           if (Number(record.expires_at) <= Date.now()) {
@@ -285,7 +293,19 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
           }
           try {
             if (record.locator.kind === 'population') {
-              const next = await population(record, record.locator, context, turn < publicationTurnsPerDelivery);
+              const next = await population(record, record.locator, context, (sourceAdvanced) => {
+                const now = Date.now();
+                longestTurnMs = Math.max(longestTurnMs, now - started);
+                // Cold Source preparation needs hundreds of metered turns. Keep its
+                // committed successor on this delivery while there is room to claim it.
+                // Leave time for both the handoff write and a turn of the observed cost.
+                return (
+                  !paused &&
+                  !stopped &&
+                  (turn < publicationTurnsPerDelivery || sourceAdvanced) &&
+                  now + 2 * longestTurnMs < context.deadline
+                );
+              });
               failures.delete(record.locator.kind);
               if (next === undefined) return;
               revision = next;

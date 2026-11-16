@@ -103,7 +103,7 @@ export type SearchGenerationPublication = Readonly<{
         cost: SearchPublicFilterCost;
         next?: 'step' | 'activate';
         advanced?: boolean;
-        enrollmentAdvanced?: boolean;
+        sourceAdvanced?: boolean;
       }
     | PublicFilterConsumerUnavailable
   >;
@@ -503,7 +503,7 @@ export function createSearchGenerationPublication(
     if (!('definition' in custody)) throw new Pending('source_pending');
     const remainingInputs = PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - meter.inputKeys;
     if (remainingInputs <= 0 || (enrollmentOnly && remainingInputs <= PUBLIC_FILTER_PREPARATION_INPUT_RESERVE))
-      return { complete: false, advanced: false, enrollmentAdvanced: false };
+      return { complete: false, advanced: false, sourceAdvanced: false };
     const completion = await advanceNativeGenerationSource(
       {
         pool,
@@ -540,7 +540,8 @@ export function createSearchGenerationPublication(
     return {
       complete: completion.status === 'complete',
       advanced: completion.advanced === true,
-      enrollmentAdvanced: completion.enrollmentAdvanced === true,
+      sourceAdvanced:
+        completion.advanced === true && (completion.enrollmentAdvanced === true || 'publication' in completion),
     };
   }
 
@@ -1591,12 +1592,12 @@ export function createSearchGenerationPublication(
     activate(input, context) {
       return run(context, (meter) =>
         locked(input, context, meter, 'activate', async (job, client, current) => {
-          const preparing = (next: 'activate' | 'step', advanced = false, enrollmentAdvanced = false) => ({
+          const preparing = (next: 'activate' | 'step', advanced = false, sourceAdvanced = false) => ({
             status: 'preparing' as const,
             job: reference(job),
             next,
             advanced,
-            ...(enrollmentAdvanced ? { enrollmentAdvanced } : {}),
+            ...(sourceAdvanced ? { sourceAdvanced } : {}),
             cost: meter,
           });
           const superseded = newerSubjectAlias(job, current);
@@ -1618,7 +1619,7 @@ export function createSearchGenerationPublication(
           if (!job.fence) {
             const sourceCompletion = await completeSource(job, client, context, meter);
             if (!sourceCompletion.complete)
-              return preparing('activate', sourceCompletion.advanced, sourceCompletion.enrollmentAdvanced);
+              return preparing('activate', sourceCompletion.advanced, sourceCompletion.sourceAdvanced);
             await installFence(job, client, context, meter);
           }
           try {
