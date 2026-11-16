@@ -186,6 +186,7 @@ function SecurityPageView({
   const [passkeysLoad, setPasskeysLoad] = useState<PasskeysLoad>({ kind: 'hidden' });
   const [passkeys, setPasskeys] = useState<SecurityPasskey[]>([]);
   const [passkeyName, setPasskeyName] = useState('');
+  const [passkeyRenameDrafts, setPasskeyRenameDrafts] = useState<ReadonlySet<string>>(() => new Set());
   const [passkeyNotice, setPasskeyNotice] = useState('');
   const [passkeyError, setPasskeyError] = useState('');
   const [renameUnknown, setRenameUnknown] = useState(false);
@@ -222,7 +223,9 @@ function SecurityPageView({
   const registrationRecovery = operation?.kind === 'registration-review' ? operation : null;
   const reading = recovery?.reading ?? false;
   const operationBlocked = operation !== null;
-  const departureProtected = Boolean(passwordDraftPresent || passkeyName.trim() || operation);
+  const departureProtected = Boolean(
+    passwordDraftPresent || passkeyName.trim() || passkeyRenameDrafts.size || operation,
+  );
   if (departure) departure.current.protected = departureProtected;
   const [signedOutNotice, setSignedOutNotice] = useState('');
   const [targetReturn, setTargetReturn] = useState<SecurityTargetReturnOutcome | null>(null);
@@ -508,6 +511,16 @@ function SecurityPageView({
     setConsentHistoryValue(history);
   }
 
+  function updatePasskeyRenameDraft(id: string, present: boolean) {
+    setPasskeyRenameDrafts((drafts) => {
+      if (drafts.has(id) === present) return drafts;
+      const next = new Set(drafts);
+      if (present) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
   function beginPasskeyRename(): PasskeyRenameLease | null {
     if (activeOperation.current || !activeAccount.current) return null;
     const previousUnknown = renameUnknown;
@@ -580,6 +593,7 @@ function SecurityPageView({
     setPasswordDraftPresent(false);
     setPasswordLimits(null);
     setPasskeyName('');
+    setPasskeyRenameDrafts(new Set());
     setPasswordError('');
     setSessionNotice('');
     setSessionError('');
@@ -1374,6 +1388,7 @@ function SecurityPageView({
                                     passkey={passkey}
                                     disabled={operationBlocked}
                                     begin={beginPasskeyRename}
+                                    onDraftPresenceChange={updatePasskeyRenameDraft}
                                     observe={(id, name) =>
                                       setPasskeys((rows) =>
                                         name === null
