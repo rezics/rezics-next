@@ -18,6 +18,14 @@ import mappingSources from './identity-epoch-read-sources.sql';
 import mappingPending from './identity-epoch-read-pending.sql';
 import mappingCurrent from './identity-terminal-closure-current.sql';
 import projectionSubjects from './search-source-subjects.sql';
+import provenance from './scope-leaf-selection-provenance.sql';
+import sourceFencesRead from '../content/read-source-fences.sql';
+import {
+  readCanonicalStatementsSql,
+  SEARCH_INDEX_PROVENANCE_BYTES,
+  SEARCH_INDEX_STATEMENT_BYTES,
+  SEARCH_INDEX_STATEMENT_KEYS,
+} from './identity-search-index-statements.ts';
 import { readIdentitySearchIndexTermsSql, SEARCH_INDEX_TERM_REPLAY_POINTS } from './identity-search-index-terms.ts';
 import { prepareSearchIdentityOriginalSql } from '../search/identity-search-writer-plan-sql.ts';
 
@@ -81,6 +89,101 @@ export function identitySearchSourcePageCosts(): readonly PageCost[] {
       return Object.freeze({ sql, work, footprint });
     };
     return Object.freeze([
+      declare(readCanonicalStatementsSql, [65535, maxId, SEARCH_INDEX_STATEMENT_KEYS], (values) => {
+        const [route, id, keys] = values;
+        if (
+          values.length !== 3 ||
+          typeof id !== 'string' ||
+          routeOf(id) !== route ||
+          typeof keys !== 'number' ||
+          !Number.isInteger(keys) ||
+          keys < 1 ||
+          keys > SEARCH_INDEX_STATEMENT_KEYS
+        )
+          return undefined;
+        const points = 5 * keys + 1;
+        return Object.freeze({
+          candidateKeys: 0,
+          identityMetadataRows: 0,
+          nativeRows: points,
+          nativePoints: points,
+          witnessKeys: 0,
+          statements: 1,
+          bytes: 4096 + keys * (SEARCH_INDEX_STATEMENT_BYTES + 4096),
+          emptySeeks: points,
+        });
+      }),
+      declare(
+        provenance.sql,
+        provenance.params.map((key) =>
+          key === 'max_bytes'
+            ? SEARCH_INDEX_PROVENANCE_BYTES
+            : Array(SEARCH_INDEX_STATEMENT_KEYS).fill(key === 'routes' ? 65535 : maxId),
+        ),
+        (values) => {
+          const bound = values[provenance.params.indexOf('max_bytes')];
+          const routes = values[provenance.params.indexOf('routes')];
+          if (
+            values.length !== 5 ||
+            bound !== SEARCH_INDEX_PROVENANCE_BYTES ||
+            !Array.isArray(routes) ||
+            routes.length < 1 ||
+            routes.length > SEARCH_INDEX_STATEMENT_KEYS
+          )
+            return undefined;
+          for (const name of ['subjects', 'candidates', 'slots'] as const) {
+            const ids = values[provenance.params.indexOf(name)];
+            if (!Array.isArray(ids) || ids.length !== routes.length || !ids.every(uuid)) return undefined;
+          }
+          const points = 4 * routes.length;
+          return Object.freeze({
+            candidateKeys: 0,
+            identityMetadataRows: 0,
+            nativeRows: points,
+            nativePoints: points,
+            witnessKeys: 0,
+            statements: 1,
+            bytes: 4096 + routes.length * (SEARCH_INDEX_PROVENANCE_BYTES + 1024),
+            emptySeeks: points,
+          });
+        },
+      ),
+      Object.freeze({
+        sql: sourceFencesRead.sql,
+        work: Object.freeze({
+          candidateKeys: 0,
+          identityMetadataRows: 0,
+          nativeRows: 100,
+          nativePoints: 100,
+          witnessKeys: 0,
+          statements: 1,
+          bytes: 4096 + 131072 + 1536 * 100,
+          emptySeeks: 100,
+        }),
+        footprint(values: readonly unknown[]) {
+          const home = values[sourceFencesRead.params.indexOf('partition')];
+          const data = values[sourceFencesRead.params.indexOf('tuples')];
+          if (values.length !== 2 || !partition(home) || typeof data !== 'string' || Buffer.byteLength(data) > 131072)
+            return undefined;
+          let tuples: unknown;
+          try {
+            tuples = JSON.parse(data);
+          } catch {
+            return undefined;
+          }
+          if (!Array.isArray(tuples) || tuples.length < 1 || tuples.length > 100) return undefined;
+          return Object.freeze({
+            candidateKeys: 0,
+            identityMetadataRows: 0,
+            nativeRows: tuples.length,
+            nativePoints: tuples.length,
+            witnessKeys: 0,
+            statements: 1,
+            bytes: 4096 + Buffer.byteLength(data) + 1536 * tuples.length,
+            emptySeeks: tuples.length,
+          });
+        },
+      }),
       declare(readIdentitySearchIndexTermsSql, [65535, maxId, SEARCH_INDEX_TERM_REPLAY_POINTS], (values) => {
         const [route, subject, points] = values;
         if (

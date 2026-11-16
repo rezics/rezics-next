@@ -187,11 +187,16 @@ reading one active term head and its complete fact slot. Each owned turn commits
 of the terms read so far. The native reader recovers the cursor from the preceding slot's indexed key and
 requires that head to remain current. An empty next seek closes term traversal. The continuation keeps term
 text in Source custody. Assembly replays the committed term work, requires the same complete digest, and uses
-the ordinary document serializer and installed name normalizer. The writer can retain a versioned index action
-when an exact seek proves no adopted statements. It reads native Credit eligibility, Rating and Library in the
-same source snapshot. Dispatch rechecks the Source build, selection absence and current serialized Rating,
-Library and relation-roster fields in the dispatch command. Larger term bodies or adopted statements still require
-staged assembly. Recovery of an uncertain dispatch requires evidence from the original operation.
+the ordinary document serializer and installed name normalizer. An indexed seek bounds the complete descriptive
+selection. The writer uses the ordinary statement disclosure, imported-source fences and release normalization
+before adding the adopted values to the document. It stores the exact input count, release and digest in the plan.
+Dispatch checks that digest against a fresh read and also checks the Source build, Rating, Library and relation
+roster. Larger selections, outgoing relation inputs and credited creator inputs still require staged assembly.
+
+With adopted descriptive inputs, the dispatch turn commits the validated original bulk response while the writer
+still owns the dispatch token. A later turn resolves that committed response, immutable action and exact physical
+allocation, then records visibility and the final writer receipt together. A lost allocation lookup leaves the
+response available for settlement. A dispatch without original response evidence remains pending.
 
 ## Cost
 

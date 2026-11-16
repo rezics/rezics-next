@@ -9,15 +9,18 @@ import commandNoEffect from '../../src/command/no-effect-fence.sql';
 import { installNativeHistoryPreload } from '../../src/composition/preload.ts';
 import { composeSearchNativePorts } from '../../src/composition/search-native.ts';
 import partitionRead from '../../src/partition/read.sql';
-import { newId } from '../../src/route/route.ts';
+import { newId, partitionOf } from '../../src/route/route.ts';
+import { tupleRoute } from '../../src/content/imported-contract.ts';
 import stepSql from '../../src/search/identity-epoch-participant-step.sql';
 import {
   dispatchSearchIdentityOriginalSql,
   readBoundedSearchIdentityActionSql,
   readBoundedSearchIdentityReceiptSql,
+  readSearchIdentityBulkResponseSql,
   readSearchIdentityDispatchBasisSql,
   readSearchIdentityPlanBodySizeSql,
   retainSearchIdentityWriterReceiptSql,
+  retainSearchIdentityBulkResponseSql,
 } from '../../src/search/identity-search-writer-dispatch-sql.ts';
 import nativeDefinition from '../../src/search/identity-receiving-native-definition.sql';
 import {
@@ -77,7 +80,14 @@ import {
   readIdentitySearchIndexTermSlotSql,
   readIdentitySearchIndexTermsSql,
 } from '../../src/semantic/identity-search-index-terms.ts';
-import { readCanonicalStatementPresenceSql } from '../../src/search/identity-search-writer-document.ts';
+import {
+  readCanonicalStatementCountSql,
+  readCanonicalStatementPresenceSql,
+  readCanonicalStatementsSql,
+  SEARCH_INDEX_PROVENANCE_BYTES,
+} from '../../src/semantic/identity-search-index-statements.ts';
+import candidateProvenance from '../../src/semantic/scope-leaf-selection-provenance.sql';
+import sourceFences from '../../src/content/read-source-fences.sql';
 import activeDefinition from '../../src/semantic/definitions-active.sql';
 import publicFigures from '../../src/rating/public-figures-read.sql';
 import { STANDARD_QUESTION_ID } from '../../src/rating/standard-question.ts';
@@ -112,6 +122,7 @@ import {
   advanceSearchIdentityOriginalSql,
   readSearchIdentityMaterializedOriginalSql,
   readSearchIdentityOriginalPlanSql,
+  searchIdentityOriginalPlanPresentSql,
   readSearchIdentityWriterAdmissionSql,
   readSearchIdentityWriterSupportSql,
 } from '../../src/search/identity-search-receiving-directory-sql.ts';
@@ -169,7 +180,7 @@ test.each([
     mode: 'canonical-terms',
   },
   {
-    label: 'indexes and retires a visible canonical merge survivor',
+    label: 'indexes and retires a visible canonical merge survivor with an adopted name',
     intent: 'merge',
     resumed: false,
     mode: 'canonical-merge',
@@ -225,18 +236,24 @@ test.each([
   const termReads: unknown[] = [];
   let canonicalBuildCurrent = true;
   let changedTermReplay = false;
-  let canonicalStatements = false;
+  const adoptedName = mode === 'canonical-merge';
+  let blockedRelation = false;
+  let nameDisclosed = true;
+  let nameFenced = false;
+  const nameSlot = crypto.randomUUID();
+  const nameCandidate = crypto.randomUUID();
   let activeCollectionCount = '2';
   let normalizationCalls = 0;
+  let unavailableAllocation = false;
   const canonicalDocument = {
     id: second,
     partition: writerHome,
     type: 'schema:Person',
     security_revision: 1,
-    names: ['Canonical name', 'Native alias', 'Alternate alias'],
+    names: ['Canonical name', 'Native alias', 'Alternate alias', ...(adoptedName ? ['Adopted public name'] : [])],
     descriptions: [],
     name_sort: 'canonical name',
-    statements: [],
+    statements: adoptedName ? ['schema:name=Adopted public name'] : [],
     facts: [],
     public_collection_count: 2,
     rating_score: 0.7,
@@ -256,6 +273,20 @@ test.each([
   const selected = mode === 'materialized' ? first : intent === 'unmerge' || canonicalTerms ? second : first;
   const pool = new Pool();
   const routeKey = new Uint8Array(32);
+  const importedName = {
+    source: 'catalogue',
+    external_id: 'adopted-name',
+    field_group: 'facts',
+    record_revision: '1',
+    converter_revision: '1',
+    digest: 'a'.repeat(64),
+  };
+  const nameTuple = {
+    route: tupleRoute(routeKey, importedName.source, importedName.external_id),
+    source: importedName.source,
+    external_id: importedName.external_id,
+    field_group: importedName.field_group,
+  };
   const routeDigest = createHash('sha256').update(routeKey).digest('hex');
   const sourceId = crypto.randomUUID();
   const sourceConfig = crypto.randomUUID();
@@ -311,6 +342,8 @@ test.each([
   let writingOperation: OperationRow | undefined;
   let committedOperation: OperationRow | undefined;
   let receiptText: string | undefined;
+  let writingBulk: { kind: string; transaction: string; bulk: unknown } | undefined;
+  let retainedBulk: typeof writingBulk;
   let bulkCalls = 0;
   let hold: HoldRow | undefined;
   let commonPlan: { binding: unknown; binding_digest: string; transaction_id: string } | undefined;
@@ -337,7 +370,8 @@ test.each([
   let controlApplied: unknown[] | undefined;
   let writingHoldRelease: string | undefined;
   let releasePosition: string | undefined;
-  let appliedPosition = 33;
+  const applicationPosition = adoptedName ? 34 : 33;
+  let appliedPosition = applicationPosition;
   let retiredScope = false;
   let copyLocator: unknown;
   let copySettlement: { partition: number; transactionId: string; epoch: number; position: string } | undefined;
@@ -347,9 +381,13 @@ test.each([
       ? committedOperation?.state === 'applied'
         ? String(appliedPosition)
         : committedOperation?.state === 'visible'
-          ? '32'
+          ? adoptedName
+            ? '33'
+            : '32'
           : committedOperation
-            ? '31'
+            ? retainedBulk
+              ? '32'
+              : '31'
             : '30'
       : accepting
         ? '21'
@@ -444,6 +482,8 @@ test.each([
       } else if (sql === readSearchIdentityMaterializedOriginalSql) {
         expect(values).toEqual([jobHome, jobId, after]);
         rows = mode === 'materialized' ? [{ original: first, previous_terminal: first, terminal: second }] : [];
+      } else if (sql === searchIdentityOriginalPlanPresentSql) {
+        rows = retainedPlan ? [{}] : [];
       } else if (sql === readSearchIdentityOriginalPlanSql) {
         expect(values).toEqual([
           writerHome,
@@ -557,7 +597,53 @@ test.each([
         ];
       } else if (canonicalTerms && sql === readCanonicalStatementPresenceSql) {
         expect(values).toEqual([writerHome << 4, second]);
-        rows = canonicalStatements ? [{}] : [];
+        rows = adoptedName || blockedRelation ? [{}] : [];
+      } else if (canonicalTerms && sql === readCanonicalStatementCountSql) {
+        expect(values).toEqual([writerHome << 4, second]);
+        rows = [{ count: Number(adoptedName || blockedRelation), relations: blockedRelation }];
+      } else if (adoptedName && sql === readCanonicalStatementsSql) {
+        expect(values).toEqual([writerHome << 4, second, 1]);
+        rows = [
+          {
+            route: writerHome << 4,
+            subject_id: second,
+            slot_id: nameSlot,
+            candidate_id: nameCandidate,
+            property: 'schema:name',
+            rank: 'preferred',
+            ordinal: 1,
+            release: bundledDigest,
+            relation: false,
+            concealed: !nameDisclosed,
+            body: nameDisclosed
+              ? { value: { type: 'value', content: { language: 'en', text: 'Adopted public name' } } }
+              : null,
+          },
+        ];
+      } else if (adoptedName && sql === candidateProvenance.sql) {
+        const args = {
+          routes: [writerHome << 4],
+          subjects: [second],
+          candidates: [nameCandidate],
+          slots: [nameSlot],
+          max_bytes: SEARCH_INDEX_PROVENANCE_BYTES,
+        };
+        expect(values).toEqual(candidateProvenance.params.map((key) => args[key as keyof typeof args]));
+        rows = [
+          {
+            subject_id: second,
+            id: nameCandidate,
+            source: importedName,
+            source_bytes: Buffer.byteLength(JSON.stringify(importedName)),
+          },
+        ];
+      } else if (adoptedName && sql === sourceFences.sql) {
+        expect(values).toEqual(
+          sourceFences.params.map((key) =>
+            key === 'partition' ? partitionOf(nameTuple.route) : JSON.stringify([nameTuple]),
+          ),
+        );
+        rows = nameFenced ? [{ ...nameTuple, takenDown: true, securityRevision: '1' }] : [];
       } else if (canonicalTerms && sql === activeDefinition.sql) {
         expect(values).toEqual(['0']);
         rows = [[bundledDigest, '1']];
@@ -821,6 +907,22 @@ test.each([
       } else if (sql === retainSearchIdentityWriterReceiptSql) {
         receiptText = String(values[4]);
         rows = [{}];
+      } else if (sql === retainSearchIdentityBulkResponseSql) {
+        expect(values.slice(0, 7)).toEqual([
+          writerHome,
+          index,
+          selected,
+          retainedPlan?.source.locator.planId,
+          hold?.hold_id,
+          committedOperation?.operation_id,
+          committedOperation?.writer_token,
+        ]);
+        writingBulk = JSON.parse(String(values[7]));
+        expect(writingBulk?.kind).toBe('identity-original-bulk');
+        rows = [{}];
+      } else if (sql === readSearchIdentityBulkResponseSql) {
+        expect(values).toEqual([writerHome, index, selected, retainedPlan?.source.locator.planId, hold?.hold_id]);
+        rows = retainedBulk ? [{ ...committedOperation, bulk: retainedBulk.bulk }] : [];
       } else if (sql === planSql.visible.sql) {
         expect(values[2]).toBe(committedOperation?.operation_id);
         expect(values[5]).toBe(createHash('sha256').update(receiptText!).digest('hex'));
@@ -887,7 +989,12 @@ test.each([
           },
         ];
       else if (sql === receivingStatements.acknowledgeApplied) {
-        expect(values.slice(4)).toEqual([writerHome, 1, '33', committedOperation?.applied_transaction_id]);
+        expect(values.slice(4)).toEqual([
+          writerHome,
+          1,
+          String(applicationPosition),
+          committedOperation?.applied_transaction_id,
+        ]);
         controlApplied = values;
         rows = [{}];
       } else if (sql === receivingStatements.controlCustody || sql === planSql.control.sql)
@@ -901,7 +1008,7 @@ test.each([
         rows = [{}];
       } else if (sql === searchNativeReleaseAppliedSql()) {
         expect(values.slice(-2)).toEqual([committedOperation?.applied_transaction_id, hold?.hold_id]);
-        rows = [{ epoch: 1, position: '33' }];
+        rows = [{ epoch: 1, position: String(applicationPosition) }];
       } else if (sql === planSql.release.sql) {
         expect(controlCustody).toBeDefined();
         expect(values[2]).toBe(hold?.hold_id);
@@ -922,7 +1029,12 @@ test.each([
         rows = [{ revision: writingContinuation.revision }];
       } else if (sql === advanceSearchIdentityOriginalSql) {
         expect(receivingContinuation.state).toBe('released');
-        expect(values.slice(6, 10)).toEqual([writerHome, 1, '33', committedOperation?.applied_transaction_id]);
+        expect(values.slice(6, 10)).toEqual([
+          writerHome,
+          1,
+          String(applicationPosition),
+          committedOperation?.applied_transaction_id,
+        ]);
         retiredScope = true;
         rows = [{}];
       } else if (sql === receivingLookup.sql)
@@ -962,7 +1074,7 @@ test.each([
           state: 'applied',
           applied_transaction_id: String(values[3]),
           frontier: JSON.parse(String(values[4])),
-          applied_position: '33',
+          applied_position: String(applicationPosition),
         };
         rows = [{ operation_id: writingOperation.operation_id }];
       } else if (sql === receivingJob.sql) rows = [{ state: 'pending', scope_digest: directoryScope }];
@@ -1078,6 +1190,8 @@ test.each([
         if (writing) committed.push(writing);
         if (stagingPlan) retainedPlan = stagingPlan;
         if (writingOperation) committedOperation = writingOperation;
+        if (writingBulk) retainedBulk = writingBulk;
+        writingBulk = undefined;
         if (writingContinuation) {
           receivingContinuation = writingContinuation;
           appliedPosition++;
@@ -1142,6 +1256,7 @@ test.each([
       }
       expect([method, path]).toEqual(['GET', `/${index}`]);
       engineReads++;
+      if (unavailableAllocation) throw new Error('Synthetic allocation lookup lost');
       return {
         status: 200,
         body: {
@@ -1342,11 +1457,11 @@ test.each([
         expect(await prepare(pool, progress.receipt)).toEqual({ state: 'pending' });
         expect(normalizationCalls).toBe(0);
         changedTermReplay = false;
-        canonicalStatements = true;
+        blockedRelation = true;
         expect(await prepare(pool, progress.receipt)).toEqual({ state: 'pending' });
         expect(normalizationCalls).toBe(0);
         expect(retainedPlan).toBeUndefined();
-        canonicalStatements = false;
+        blockedRelation = false;
       } else {
         if (mode === 'retire') {
           await nextSupport(['terminal', 'retiring', oldBuild, '5', 0]);
@@ -1473,11 +1588,38 @@ test.each([
             expect(bulkCalls).toBe(0);
             activeCollectionCount = '2';
           }
+          if (adoptedName) {
+            nameDisclosed = false;
+            await expect(prepare(pool, request)).rejects.toThrow('Canonical Search Source changed before dispatch');
+            expect(committedOperation).toBeUndefined();
+            expect(bulkCalls).toBe(0);
+            nameDisclosed = true;
+            nameFenced = true;
+            await expect(prepare(pool, request)).rejects.toThrow('Canonical Search Source changed before dispatch');
+            expect(committedOperation).toBeUndefined();
+            expect(bulkCalls).toBe(0);
+            nameFenced = false;
+            const captured = await prepare(pool, request);
+            expect(captured).toEqual({ state: 'progress', transactionId: retainedBulk?.transaction });
+            expect(committedOperation?.state).toBe('dispatched');
+            expect(receiptText).toBeUndefined();
+            const resumed = await withIdentitySourceConsumerMaintenance(
+              { pool, env: {} },
+              { deadline: Date.now() + 5000 },
+              () => step(pool, job),
+            );
+            expect(resumed.receipt).toEqual(request);
+            expect(resumed.frontier).toEqual(staged.frontier);
+            unavailableAllocation = true;
+            await expect(prepare(pool, request)).rejects.toThrow('Synthetic allocation lookup lost');
+            expect(bulkCalls).toBe(1);
+            unavailableAllocation = false;
+          }
           expect(await prepare(pool, request)).toEqual({ state: 'prepared' });
           expect(committedOperation?.state).toBe('visible');
           expect(receiptText).toContain('"kind":"bulk"');
           expect(await prepare(pool, request)).toEqual({ state: 'prepared' });
-          expect(engineReads).toBe(canonicalTerms ? 6 : 4);
+          expect(engineReads).toBe(adoptedName ? 9 : canonicalTerms ? 6 : 4);
           const applied = await withIdentitySourceConsumerMaintenance(
             { pool, env: {} },
             { deadline: Date.now() + 5000 },
@@ -1485,9 +1627,9 @@ test.each([
           );
           expect(applied.state).toBe('more');
           expect(applied.frontier.after).toEqual([selected, retainedPlan?.effect_key]);
-          expect(applied.receipt.native.position).toBe(33n);
+          expect(applied.receipt.native.position).toBe(BigInt(applicationPosition));
           expect(committedOperation?.state).toBe('applied');
-          expect(engineReads).toBe(canonicalTerms ? 6 : 4);
+          expect(engineReads).toBe(adoptedName ? 9 : canonicalTerms ? 6 : 4);
           for (const phase of priorVisible
             ? [null, 'original', null]
             : canonicalTerms
@@ -1513,7 +1655,7 @@ test.each([
           );
           expect(retired.frontier.after).toEqual(['search-directory', selected, 1]);
           expect(retiredScope).toBe(true);
-          expect(engineReads).toBe(canonicalTerms ? 6 : 4);
+          expect(engineReads).toBe(adoptedName ? 9 : canonicalTerms ? 6 : 4);
         }
         expect(bulkCalls).toBe(1);
       }

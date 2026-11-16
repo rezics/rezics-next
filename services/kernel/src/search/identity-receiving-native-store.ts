@@ -19,6 +19,7 @@ import {
 } from '../command/command.ts';
 import type { IdentityFrontier, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import { identityJobPartition } from '../semantic/identity-adapters/identity-epoch-contract.ts';
+import { SEARCH_INDEX_STATEMENT_KEYS } from '../semantic/identity-search-index-statements.ts';
 import { serializeIdentityValue as json } from '../semantic/identity-core/encoding.ts';
 import { subjectPartition } from './source.ts';
 import { decodeSearchRepairWriterReceipt, validateSearchRepairWriterEvidence } from './writer-guard.ts';
@@ -626,6 +627,18 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
         const locator = input.selection.native;
         const own = await owner(tx, work, locator);
         const source = { ...input.source, plan: own };
+        const statementInput = input.references.statementInput;
+        if (
+          statementInput &&
+          (source.original !== source.terminal ||
+            !input.references.originalSupport ||
+            !Number.isInteger(statementInput.keys) ||
+            statementInput.keys < 1 ||
+            statementInput.keys > SEARCH_INDEX_STATEMENT_KEYS ||
+            !digest.test(statementInput.digest) ||
+            !/^sha256:[a-f0-9]{64}$/.test(statementInput.release))
+        )
+          work.fail('changed', 'Invalid canonical statement input reference');
         const plan = {
           selection: input.selection,
           source,

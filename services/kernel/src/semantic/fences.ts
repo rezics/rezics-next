@@ -8,6 +8,7 @@ import { readFences, type SourceFence, type SourceFenceTuple } from '../content/
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { partitionOf } from '../route/route.ts';
+import { readPartition } from '../partition/partition.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { withReadTransaction } from './read.ts';
 
@@ -178,6 +179,7 @@ export async function fencedIds(
   client: Pick<PoolClient, 'query'>,
   routeKey: Uint8Array,
   rows: readonly { id: string; source: CandidateSource | null }[],
+  requireActiveOwner = false,
 ): Promise<Set<string>> {
   const tuples: SourceFenceTuple[] = [];
   const owners = new Map<string, string[]>();
@@ -187,6 +189,7 @@ export async function fencedIds(
     try {
       tuple = sourceTuple(routeKey, row.source);
     } catch {
+      if (requireActiveOwner) throw new FencePending();
       continue;
     }
     const key = fenceKey(tuple);
@@ -206,7 +209,9 @@ export async function fencedIds(
     byPartition.set(partition, group);
   }
   const gone = new Set<string>();
-  for (const group of byPartition.values()) {
+  for (const [partition, group] of byPartition) {
+    if (requireActiveOwner && (await readPartition(client, partition))?.writeState !== 'active')
+      throw new FencePending();
     for (let offset = 0; offset < group.length; offset += 100) {
       const fences = await readFences(client, group.slice(offset, offset + 100));
       for (const fence of fences) {
@@ -224,6 +229,7 @@ type ProvenanceRow = { route: number; subject_id: string; candidate_id: string; 
 export async function candidateSources(
   client: Pick<PoolClient, 'query'>,
   entries: readonly ProvenanceRow[],
+  maxBytes = 2147483647,
 ): Promise<Map<string, CandidateSource | null>> {
   const sources = new Map<string, CandidateSource | null>();
   if (entries.length > 256) throw new TypeError('A source fence read accepts at most 256 ids');
@@ -233,17 +239,25 @@ export async function candidateSources(
     subjects: entries.map((entry) => entry.subject_id),
     candidates: entries.map((entry) => entry.candidate_id),
     slots: entries.map((entry) => entry.slot_id ?? null),
-    max_bytes: 2147483647,
+    max_bytes: maxBytes,
   };
   const result = await client.query<{
     subject_id: string;
     id: string;
     source: CandidateSource | null;
+    source_bytes: number;
   }>(
     provenance.sql,
     provenance.params.map((name) => parameters[name as keyof typeof parameters]),
   );
-  for (const row of result.rows) sources.set(`${row.subject_id}\n${row.id}`, row.source);
+  for (const row of result.rows) {
+    if (
+      maxBytes < 2147483647 &&
+      (!Number.isInteger(row.source_bytes) || row.source_bytes < 0 || row.source_bytes > maxBytes)
+    )
+      throw new FencePending();
+    sources.set(`${row.subject_id}\n${row.id}`, row.source);
+  }
   return sources;
 }
 
@@ -251,9 +265,15 @@ export async function withoutFencedEntries<T extends ProvenanceRow>(
   client: Pick<PoolClient, 'query'>,
   routeKey: Uint8Array,
   entries: readonly T[],
+  provenanceBytes?: number,
 ): Promise<T[]> {
   if (entries.length === 0) return [];
-  const sources = await candidateSources(client, entries);
+  const sources = await candidateSources(client, entries, provenanceBytes);
+  if (
+    provenanceBytes !== undefined &&
+    entries.some((entry) => !sources.has(`${entry.subject_id}\n${entry.candidate_id}`))
+  )
+    throw new FencePending();
   const gone = await fencedIds(
     client,
     routeKey,
@@ -261,6 +281,7 @@ export async function withoutFencedEntries<T extends ProvenanceRow>(
       id: entry.candidate_id,
       source: sources.get(`${entry.subject_id}\n${entry.candidate_id}`) ?? null,
     })),
+    provenanceBytes !== undefined,
   );
   return entries.filter((entry) => !gone.has(entry.candidate_id));
 }
