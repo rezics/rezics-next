@@ -1081,15 +1081,24 @@ test('mounted boundary rejects malformed batches and non-authors; cancel and sta
     key: epochBoundKey,
   });
   expect(epochBoundStart.status).toBe(202);
-  await f.native.pool.query(
-    `UPDATE content.hosted_publication_staging SET owner_epoch=owner_epoch+1
-     WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
-    [routeOf(book.catalogueId), book.catalogueId, epochBoundStartBody.stageId],
-  );
+  const { previous, current } = await f.native.rotateAuthorSessions();
+  expect(current.actor.accountId).toBe(previous.actor.accountId);
+  expect(current.actor.authnEpoch).toBeGreaterThan(previous.actor.authnEpoch);
+  const revokedReplay = await f.native.call('POST', `${book.path}:prepareRelease`, epochBoundStartBody, {
+    key: epochBoundKey,
+    bearer: previous.bearer,
+  });
+  expect(revokedReplay.status).toBe(401);
+  expect(revokedReplay.value.code).toBe('invalid_credentials');
   const wrongEpochReplay = await f.native.call('POST', `${book.path}:prepareRelease`, epochBoundStartBody, {
     key: epochBoundKey,
   });
   expect(wrongEpochReplay.status).toBe(404);
+  const freshEpochStart = await f.native.call('POST', `${book.path}:prepareRelease`, {
+    ...epochBoundStartBody,
+    stageId: book.newId(),
+  });
+  expect(freshEpochStart.status).toBe(202);
   expect(await selectedRelease(book.catalogueId)).toBe(book.published.revisionId);
 });
 

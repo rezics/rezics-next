@@ -40,7 +40,17 @@ export async function postPublicationFixture() {
     }),
   );
   const pool = system.database.pool;
-  const author = system.actors.author;
+  let author = system.actors.author;
+  async function rotateAuthorSessions() {
+    const previous = author;
+    await system.nativeAuth.internal.revokeSessions(previous.actor.accountId);
+    author = await system.auth.issue({
+      accountId: previous.actor.accountId,
+      clientId: system.auth.ordinaryClient.id,
+      scopes: system.auth.ordinaryScopes,
+    });
+    return { previous, current: author };
+  }
   async function call(
     method: string,
     path: string,
@@ -51,6 +61,7 @@ export async function postPublicationFixture() {
       key?: string;
       head?: string;
       kernel?: ContentSystem['kernel'];
+      bearer?: string;
     } = {},
   ) {
     const response = await (options.kernel ?? system.kernel).handle(
@@ -60,7 +71,7 @@ export async function postPublicationFixture() {
           ...(options.anonymous
             ? {}
             : {
-                authorization: `Bearer ${(options.other ? system.actors.other : author).bearer}`,
+                authorization: `Bearer ${options.bearer ?? (options.other ? system.actors.other : author).bearer}`,
               }),
           ...(method === 'GET'
             ? {}
@@ -236,7 +247,10 @@ export async function postPublicationFixture() {
     return {
       system,
       pool,
-      author,
+      get author() {
+        return author;
+      },
+      rotateAuthorSessions,
       board,
       realm,
       call,
