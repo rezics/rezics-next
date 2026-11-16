@@ -65,7 +65,7 @@ export function RealmBanOutcome({
   const accountId = result.action === 'ban' ? result.ban.accountId : result.accountId;
   return (
     <ContentItemFrame
-      as="article"
+      as="div"
       role="status"
       id={boundaryId}
       tabIndex={boundaryId ? -1 : undefined}

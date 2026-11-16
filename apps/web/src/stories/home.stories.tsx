@@ -31,7 +31,7 @@ async function advanceHome(canvasElement: HTMLElement) {
     await waitFor(() => expect(held.requests).toHaveLength(1));
     await expect(next).toBeDisabled();
     await expect(next).toHaveTextContent(m.home_feed_loading());
-    await expect(canvasElement.querySelector('main')).toHaveAttribute('aria-busy', 'true');
+    await expect(canvasElement.querySelector('[data-home-feed-state]')).toHaveAttribute('aria-busy', 'true');
     await expect(
       [...canvasElement.querySelectorAll('[data-feed-id]')].map((row) => row.getAttribute('data-feed-id')),
     ).toEqual(previous);
@@ -44,7 +44,9 @@ async function advanceHome(canvasElement: HTMLElement) {
     held.release();
     await expect(await canvas.findByRole('link', { name: 'Books I come back to' })).toBeVisible();
     await waitFor(() =>
-      expect(canvasElement.ownerDocument.activeElement).toBe(canvas.getByRole('region', { name: m.nav_home() })),
+      expect(canvasElement.ownerDocument.activeElement).toBe(
+        canvas.getByRole('region', { name: m.home_feed_discovery() }),
+      ),
     );
     await expect(canvasElement.querySelectorAll('[data-feed-id]')).toHaveLength(1);
     await expect(canvas.queryByRole('link', { name: 'Letters from B-612' })).toBeNull();
@@ -63,8 +65,8 @@ export const SignedIn: Story = {
     const canvas = within(context.canvasElement);
     await expect(await canvas.findByRole('link', { name: 'Letters from B-612' })).toBeVisible();
     await expect(context.canvasElement.querySelector('[data-feed-source="continue"]')).not.toBeNull();
-    await expect(canvas.getByRole('region', { name: m.nav_home() })).toBeVisible();
-    await expect(canvas.getByRole('list', { name: m.nav_home() })).toBeVisible();
+    await expect(canvas.getByRole('region', { name: m.home_feed_discovery() })).toBeVisible();
+    await expect(canvas.getByRole('list', { name: m.home_feed_discovery() })).toBeVisible();
     await expect(context.canvasElement.querySelector('main main')).toBeNull();
     const nativeOrder = [...context.canvasElement.querySelectorAll('[data-feed-id]')].map((row) =>
       row.getAttribute('data-feed-source'),
@@ -81,8 +83,8 @@ export const ContinuationInteraction: Story = {
     const canvas = within(context.canvasElement);
     await expect(await canvas.findByRole('link', { name: 'Letters from B-612' })).toBeVisible();
     await expect(context.canvasElement.querySelector('[data-feed-source="continue"]')).not.toBeNull();
-    await expect(canvas.getByRole('region', { name: m.nav_home() })).toBeVisible();
-    await expect(canvas.getByRole('list', { name: m.nav_home() })).toBeVisible();
+    await expect(canvas.getByRole('region', { name: m.home_feed_discovery() })).toBeVisible();
+    await expect(canvas.getByRole('list', { name: m.home_feed_discovery() })).toBeVisible();
     await expect(context.canvasElement.querySelector('main main')).toBeNull();
     const nativeOrder = [...context.canvasElement.querySelectorAll('[data-feed-id]')].map((row) =>
       row.getAttribute('data-feed-source'),
@@ -105,10 +107,11 @@ export const PartialSources: Story = {
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
-    await expect(await canvas.findByRole('link', { name: 'Letters from B-612' })).toBeVisible();
     await expect(await canvas.findByText(m.home_presentation_partial())).toBeVisible();
     await waitFor(() => expect(canvas.getAllByRole('status')).toHaveLength(1));
-    const retry = canvas.getByRole('button', { name: m.library_follow_retry() });
+    const results = canvas.getByRole('region', { name: m.home_feed_discovery() });
+    await expect(results.querySelector('[data-feed-source="discovery"]')).toBeVisible();
+    const retry = within(results).getByRole('button', { name: m.library_follow_retry(), exact: true });
     await expect(retry).toBeEnabled();
   },
 };
@@ -119,14 +122,15 @@ export const PartialSourcesRetryInteraction: Story = {
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
-    await expect(await canvas.findByRole('link', { name: 'Letters from B-612' })).toBeVisible();
     await expect(await canvas.findByText(m.home_presentation_partial())).toBeVisible();
     await waitFor(() => expect(canvas.getAllByRole('status')).toHaveLength(1));
-    const retry = canvas.getByRole('button', { name: m.library_follow_retry() });
+    const results = canvas.getByRole('region', { name: m.home_feed_discovery() });
+    await expect(results.querySelector('[data-feed-source="discovery"]')).toBeVisible();
+    const retry = within(results).getByRole('button', { name: m.library_follow_retry(), exact: true });
     await expect(retry).toBeEnabled();
     await userEvent.click(retry);
-    await expect(await canvas.findByRole('link', { name: 'Letters from B-612' })).toBeVisible();
-    await expect(canvas.getByText(m.home_presentation_partial())).toBeVisible();
+    await expect(results.querySelector('[data-feed-source="discovery"]')).toBeVisible();
+    await expect(await canvas.findByText(m.home_presentation_partial())).toBeVisible();
   },
 };
 export const Preparing: Story = {

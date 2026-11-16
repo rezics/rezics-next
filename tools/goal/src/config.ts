@@ -359,6 +359,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     sink: job,
     managerSocket: settings.integration.managerSocket,
     supermanager: settings.integration.supermanager,
+    pools: settings.pools,
     ...(settings.integration.hourlyReportNotifier
       ? {
           hourlyEfficiencyReport: {

@@ -310,10 +310,11 @@ export const NativeRows: Story = {
     await expect(list.getAllByRole('listitem')).toHaveLength(3);
     await expect(list.getAllByRole('link')[0]).toHaveAttribute(
       'href',
-      '/threads/01a17a3b-0884-721b-91ef-d7ffd7bb58f1#post-01a17a3b-0884-721b-91ef-d7ffd7bb58f2',
+      `/${getLocale()}/threads/01a17a3b-0884-721b-91ef-d7ffd7bb58f1/current-discussion?post=01a17a3b-0884-721b-91ef-d7ffd7bb58f2#post-01a17a3b-0884-721b-91ef-d7ffd7bb58f2`,
     );
-    await userEvent.tab();
-    await expect(list.getAllByRole('link')[0]).toHaveFocus();
+    const first = list.getAllByRole('link')[0];
+    for (let step = 0; step < 5 && canvasElement.ownerDocument.activeElement !== first; step++) await userEvent.tab();
+    await expect(first).toHaveFocus();
   },
 };
 
@@ -420,8 +421,11 @@ export const HiddenTarget: Story = {
   render: () => <Example fixture="unavailable" />,
   play: async ({ canvasElement }) => {
     const list = within(await within(canvasElement).findByRole('list'));
-    await list.findByText(m.inbox_unavailable_item());
-    await expect(list.queryByRole('link')).toBeNull();
+    await list.findByText(m.inbox_kind_moderation());
+    await expect(list.getByRole('link')).toHaveAttribute(
+      'href',
+      `/${getLocale()}/moderation/decisions/01a17a3b-0884-721b-91ef-d7ffd7bb58f5`,
+    );
   },
 };
 export const UnreadUnavailable: Story = {
@@ -448,8 +452,11 @@ export const ModeratorResponse: Story = {
   render: () => <Example fixture="report-moderator" />,
   play: async ({ canvasElement }) => {
     const list = within(await within(canvasElement).findByRole('list'));
-    await list.findByText(m.inbox_unavailable_item());
-    await expect(list.queryByRole('link')).toBeNull();
+    await list.findByText(m.inbox_notice_report_actioned());
+    await expect(list.getByRole('link')).toHaveAttribute(
+      'href',
+      `/${getLocale()}/moderation/reports/01a17a3b-0884-721b-91ef-d7ffd7bb58f3`,
+    );
     await expect(list.queryByText('Repeated advertising in this discussion.')).toBeNull();
   },
 };

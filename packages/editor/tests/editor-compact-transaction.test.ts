@@ -125,6 +125,11 @@ test('non-monotone/structural and foreign method steps use the ordinary path wit
   const ordinary = compactTransaction(state).step(foreign);
   expect(ordinary.steps[0]).toBe(foreign);
   expect(compactTransactionMetrics(ordinary)!.ordinarySteps).toBe(1);
+  const modified = tr.steps[0]!;
+  modified.invert = foreign.invert;
+  const replay = compactTransaction(state).step(modified);
+  expect(replay.steps[0]).toBe(modified);
+  expect(identityPreservingBatch([replay])).toBe(false);
 });
 
 test('native mapped/merged history preserves partial-member deletion, bookmarks, undo and redo', () => {

@@ -332,6 +332,99 @@ function managerHasDecision(db: Database, id: string, threadId: string, turnId: 
   );
 }
 
+const managerSessionMigration = {
+  module: 'managers',
+  version: 1,
+  sql: 'CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL);',
+} as const;
+
+/** Persist an external resident without constructing the managed session host. */
+export function registerResidentSupermanager(
+  db: Database,
+  id: string,
+  sessionId: string,
+  options: { provider?: ResidentSupermanagerState['provider']; replaceSession?: string } = {},
+  now = Date.now(),
+): ResidentSupermanagerState {
+  if (!id || id.trim() !== id) throw new Error('Configured supermanager identity is missing or malformed');
+  const provider = options.provider ?? 'claude';
+  if (provider !== 'claude' && provider !== 'codex') throw new Error('Resident provider is unsupported');
+  const validSession = (value: unknown) =>
+    typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  if (!validSession(sessionId)) throw new Error('Resident provider session ID is malformed');
+  if (options.replaceSession !== undefined && !validSession(options.replaceSession))
+    throw new Error('Previous resident session ID is malformed');
+  migrate(db, [managerSessionMigration]);
+  let registered!: ResidentSupermanagerState;
+  db
+    .transaction(() => {
+      const rows = db.query('SELECT id, state FROM manager_sessions').all() as {
+        id: string;
+        state: string;
+      }[];
+      const parsed = rows.map((row) => {
+        try {
+          return {
+            row,
+            state: JSON.parse(row.state) as {
+              id?: unknown;
+              kind?: unknown;
+              provider?: unknown;
+              status?: unknown;
+              threadId?: unknown;
+              sessionId?: unknown;
+            },
+          };
+        } catch {
+          return { row, state: undefined };
+        }
+      });
+      const assignedElsewhere = parsed.find(
+        ({ row, state }) => row.id !== id && (state?.threadId === sessionId || state?.sessionId === sessionId),
+      );
+      if (assignedElsewhere)
+        throw new Error(`Provider session is already assigned to manager ${assignedElsewhere.row.id}`);
+
+      const current = parsed.find(({ row }) => row.id === id);
+      const state = current?.state as Partial<ResidentSupermanagerState> | undefined;
+      const resident =
+        state?.kind === 'resident-supermanager' &&
+        state.id === id &&
+        (state.provider === 'claude' || state.provider === 'codex') &&
+        state.status === 'running';
+      if (options.replaceSession !== undefined && (!resident || state?.threadId !== options.replaceSession))
+        throw new Error('Resident session replacement mismatch; the registered session has changed or is missing');
+      if (current) {
+        if (!resident)
+          throw new Error(
+            `Manager ${id} already has a persisted session; refusing to replace it with a resident session`,
+          );
+        if (state?.threadId === sessionId && state.provider === provider) {
+          registered = state as ResidentSupermanagerState;
+          return;
+        }
+        if (options.replaceSession === undefined)
+          throw new Error(
+            `Resident supermanager ${id} is already registered to another session; use --replace-session <previous-thread-id>`,
+          );
+      }
+
+      registered = {
+        kind: 'resident-supermanager',
+        id,
+        provider,
+        threadId: sessionId,
+        status: 'running',
+        registeredAt: new Date(now).toISOString(),
+      };
+      db.query(
+        'INSERT INTO manager_sessions(id, state) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET state = excluded.state',
+      ).run(id, JSON.stringify(registered));
+    })
+    .immediate();
+  return registered;
+}
+
 export class ManagerSessions {
   private chains = new Map<string, Promise<unknown>>();
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -355,13 +448,7 @@ export class ManagerSessions {
       inbox.stateDirectory,
       (notification) => this.notification(notification),
     );
-    migrate(db, [
-      {
-        module: 'managers',
-        version: 1,
-        sql: 'CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL);',
-      },
-    ]);
+    migrate(db, [managerSessionMigration]);
     migrate(db, [managerDecisionMigration, managerSleepMigration]);
     this.watcher = watchOrPoll(
       inbox.signalDirectory,
@@ -425,82 +512,7 @@ export class ManagerSessions {
     sessionId: string,
     options: { provider?: ResidentSupermanagerState['provider']; replaceSession?: string } = {},
   ): Promise<ResidentSupermanagerState> {
-    return this.serial(id, async () => {
-      if (!id || id.trim() !== id) throw new Error('Configured supermanager identity is missing or malformed');
-      const provider = options.provider ?? 'claude';
-      if (provider !== 'claude' && provider !== 'codex') throw new Error('Resident provider is unsupported');
-      const validSession = (value: unknown) =>
-        typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
-      if (!validSession(sessionId)) throw new Error('Resident provider session ID is malformed');
-      if (options.replaceSession !== undefined && !validSession(options.replaceSession))
-        throw new Error('Previous resident session ID is malformed');
-      let registered!: ResidentSupermanagerState;
-      this.db
-        .transaction(() => {
-          const rows = this.db.query('SELECT id, state FROM manager_sessions').all() as {
-            id: string;
-            state: string;
-          }[];
-          const parsed = rows.map((row) => {
-            try {
-              return {
-                row,
-                state: JSON.parse(row.state) as {
-                  id?: unknown;
-                  kind?: unknown;
-                  provider?: unknown;
-                  status?: unknown;
-                  threadId?: unknown;
-                  sessionId?: unknown;
-                },
-              };
-            } catch {
-              return { row, state: undefined };
-            }
-          });
-          const assignedElsewhere = parsed.find(
-            ({ row, state }) => row.id !== id && (state?.threadId === sessionId || state?.sessionId === sessionId),
-          );
-          if (assignedElsewhere)
-            throw new Error(`Provider session is already assigned to manager ${assignedElsewhere.row.id}`);
-
-          const current = parsed.find(({ row }) => row.id === id);
-          const state = current?.state as Partial<ResidentSupermanagerState> | undefined;
-          const resident =
-            state?.kind === 'resident-supermanager' &&
-            state.id === id &&
-            (state.provider === 'claude' || state.provider === 'codex') &&
-            state.status === 'running';
-          if (options.replaceSession !== undefined && (!resident || state?.threadId !== options.replaceSession))
-            throw new Error('Resident session replacement mismatch; the registered session has changed or is missing');
-          if (current) {
-            if (!resident)
-              throw new Error(
-                `Manager ${id} already has a persisted session; refusing to replace it with a resident session`,
-              );
-            if (state?.threadId === sessionId && state.provider === provider) {
-              registered = state as ResidentSupermanagerState;
-              return;
-            }
-            if (options.replaceSession === undefined)
-              throw new Error(
-                `Resident supermanager ${id} is already registered to another session; use --replace-session <previous-thread-id>`,
-              );
-          }
-
-          registered = {
-            kind: 'resident-supermanager',
-            id,
-            provider,
-            threadId: sessionId,
-            status: 'running',
-            registeredAt: new Date(this.now()).toISOString(),
-          };
-          this.save(registered);
-        })
-        .immediate();
-      return registered;
-    });
+    return this.serial(id, async () => registerResidentSupermanager(this.db, id, sessionId, options, this.now()));
   }
   private serial<T>(id: string, action: () => Promise<T>): Promise<T> {
     const next = (this.chains.get(id) ?? Promise.resolve()).catch(() => {}).then(action);

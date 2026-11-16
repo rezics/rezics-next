@@ -1023,7 +1023,10 @@ export function createSearchGenerationPublication(
       let response: { status: number; body: unknown };
       try {
         response = await engine<unknown>(context, meter, 'POST', '/_search', {
-          size: 0,
+          // OpenSearch 3.9 flags size-zero count-free searches as terminated early.
+          // Keep one metadata-only hit and use only the composite buckets for reconciliation.
+          size: 1,
+          _source: false,
           track_total_hits: false,
           pit: { id: job.pit, keep_alive: '5m' },
           aggs: {

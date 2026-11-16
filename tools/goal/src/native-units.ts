@@ -1,7 +1,7 @@
 import type { Database } from 'bun:sqlite';
 import { createHash } from 'node:crypto';
 import { readFileSync, realpathSync } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join, relative, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { databaseStage, migrate, openReadOnlyDb } from './db.ts';
 import { type NativeUnitContext, nativeUnitContext, NATIVE_UNIT_CONTEXT_VARIABLE } from './native-unit-context.ts';
@@ -41,6 +41,11 @@ export const nativeUnitMigrations = [
     PRIMARY KEY(run_id, invocation_id)
   );`,
   },
+  {
+    module: 'native-units',
+    version: 2,
+    sql: 'ALTER TABLE native_execution_units ALTER COLUMN pane DROP NOT NULL;',
+  },
 ] as const;
 
 export type NativeUnit = {
@@ -48,7 +53,8 @@ export type NativeUnit = {
   id: string;
   threadId: string;
   goalId: string;
-  pane: string;
+  /** Desktop units have no termspaces pane. */
+  pane: string | null;
   worktree: string;
   briefPath: string;
   briefHash: string;
@@ -60,20 +66,35 @@ export type NativeUnit = {
 };
 
 type NativeGoal = { goal_id: string; objective: string; status: string; updated_at_ms: number };
-type NativeThread = { id: string; cwd: string; rollout_path: string; source: string };
+type NativeThread = {
+  id: string;
+  cwd: string;
+  rollout_path: string;
+  source: string;
+  originator?: string;
+  archived?: number;
+};
 
-export function readNativeGoal(codexHome: string, threadId: string): { goal: NativeGoal; thread: NativeThread } {
+export function readNativeGoal(
+  codexHome: string,
+  threadId: string,
+  desktop = false,
+): { goal: NativeGoal; thread: NativeThread } {
   const goals = openReadOnlyDb(join(codexHome, 'goals_1.sqlite'));
   let threads: Database | undefined;
   try {
     threads = openReadOnlyDb(join(codexHome, 'state_5.sqlite'));
-    const goal = databaseStage(goals, 'native Goal lookup', () => goals
-      .query('SELECT goal_id, objective, status, updated_at_ms FROM thread_goals WHERE thread_id=?')
-      .get(threadId)) as NativeGoal | null;
-    const thread = databaseStage(threads, 'native thread lookup', () => threads!
-      .query('SELECT id, cwd, rollout_path, source FROM threads WHERE id=?')
-      .get(threadId)) as NativeThread | null;
+    const goal = databaseStage(goals, 'native Goal lookup', () =>
+      goals.query('SELECT goal_id, objective, status, updated_at_ms FROM thread_goals WHERE thread_id=?').get(threadId),
+    ) as NativeGoal | null;
+    const desktopFields = desktop ? ', originator, archived' : '';
+    const thread = databaseStage(threads, 'native thread lookup', () =>
+      threads!.query(`SELECT id, cwd, rollout_path, source${desktopFields} FROM threads WHERE id=?`).get(threadId),
+    ) as NativeThread | null;
     if (!goal || !thread) throw new Error('Native unit needs an existing Codex thread and native Goal');
+    if (desktop && (thread.source !== 'vscode' || thread.originator !== 'Codex Desktop' || thread.archived !== 0))
+      throw new Error('Native desktop units require an unarchived Codex Desktop thread');
+    if (desktop && goal.status !== 'active') throw new Error('Native desktop Goal must be active');
     return { goal, thread };
   } finally {
     goals.close();
@@ -81,8 +102,8 @@ export function readNativeGoal(codexHome: string, threadId: string): { goal: Nat
   }
 }
 
-function gitRoot(path: string): string {
-  const result = spawnSync('git', ['-C', path, 'rev-parse', '--path-format=absolute', '--git-common-dir'], {
+function gitRoot(path: string, field = '--git-common-dir'): string {
+  const result = spawnSync('git', ['-C', path, 'rev-parse', '--path-format=absolute', field], {
     encoding: 'utf8',
   });
   if (result.status !== 0) throw new Error(`Native unit worktree is not a Git checkout: ${path}`);
@@ -138,9 +159,11 @@ function readUnitAcceptance(briefPath: string): { hash: string; acceptance: Nati
 
 export function registeredNativeUnits(db: Database): NativeUnit[] {
   if (!db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='native_execution_units'").get()) return [];
-  return (databaseStage(db, 'native registry lookup', () => db.query('SELECT body FROM native_execution_units ORDER BY id').all()) as { body: string }[]).map((row) =>
-    JSON.parse(row.body),
-  );
+  return (
+    databaseStage(db, 'native registry lookup', () =>
+      db.query('SELECT body FROM native_execution_units ORDER BY id').all(),
+    ) as { body: string }[]
+  ).map((row) => JSON.parse(row.body));
 }
 
 export function registerNativeUnit(
@@ -148,27 +171,35 @@ export function registerNativeUnit(
   input: {
     id: string;
     threadId: string;
-    pane: string;
     worktree: string;
     briefPath: string;
     codexHome: string;
     pool: string;
     mainCheckout: string;
-    termspacesStatus: unknown;
     stateDirectory: string;
-  },
+  } & ({ pane: string; termspacesStatus: unknown } | { pane: null }),
   now = new Date(),
 ): NativeUnit {
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,100}$/.test(input.id)) throw new Error('Invalid native unit name');
-  if (!/^%\d+$/.test(input.pane)) throw new Error('Native unit pane must be an actual tmux pane id');
+  const desktop = input.pane === null;
+  if (!desktop && !/^%\d+$/.test(input.pane)) throw new Error('Native unit pane must be an actual tmux pane id');
   const worktree = realpathSync(input.worktree);
   if (gitRoot(worktree) !== gitRoot(input.mainCheckout)) throw new Error('Native unit must use this repository');
-  verifyNativeUnitPane(input.termspacesStatus, input.pane, worktree, input.threadId);
+  if (!desktop) {
+    verifyNativeUnitPane(input.termspacesStatus, input.pane, worktree, input.threadId);
+  } else if (worktree === realpathSync(input.mainCheckout) || gitRoot(worktree, '--show-toplevel') !== worktree) {
+    throw new Error('Native desktop units require an assigned linked worktree root');
+  }
   const codexHome = realpathSync(input.codexHome);
-  const { goal, thread } = readNativeGoal(codexHome, input.threadId);
+  const { goal, thread } = readNativeGoal(codexHome, input.threadId, desktop);
   if (goal.status !== 'active')
     throw new Error(`Native unit Goal is ${goal.status}; it must be active for registration`);
-  if (gitRoot(thread.cwd) !== gitRoot(worktree)) throw new Error('Native unit thread belongs to another repository');
+  if (desktop) {
+    if (realpathSync(thread.cwd) !== worktree)
+      throw new Error('Native desktop thread must be in its assigned worktree');
+  } else if (gitRoot(thread.cwd) !== gitRoot(worktree)) {
+    throw new Error('Native unit thread belongs to another repository');
+  }
   const briefPath = realpathSync(input.briefPath);
   const brief = readUnitAcceptance(briefPath);
   const previous = registeredNativeUnits(db).find((unit) => unit.id === input.id);
@@ -193,14 +224,15 @@ export function registerNativeUnit(
     registry: join(realpathSync(input.stateDirectory), 'goal.sqlite'),
   };
   migrate(db, nativeUnitMigrations);
-  db.query(`INSERT INTO native_execution_units(id, thread_id, pane, worktree, body) VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET body=excluded.body`).run(
-    unit.id,
-    unit.threadId,
-    unit.pane,
-    unit.worktree,
-    JSON.stringify(unit),
-  );
+  const result = db
+    .query(`INSERT INTO native_execution_units(id, thread_id, pane, worktree, body) VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET body=excluded.body
+    WHERE native_execution_units.thread_id=excluded.thread_id
+      AND native_execution_units.pane IS excluded.pane
+      AND native_execution_units.worktree=excluded.worktree
+      AND json_extract(native_execution_units.body, '$.registeredAt')=json_extract(excluded.body, '$.registeredAt')`)
+    .run(unit.id, unit.threadId, unit.pane, unit.worktree, JSON.stringify(unit));
+  if (!result.changes) throw new Error('Native unit registration changed concurrently; retry registration');
   return unit;
 }
 
@@ -210,9 +242,12 @@ export function nativeUnitEnvironment(
   now = new Date(),
   sourceRevision?: string,
 ): Record<string, string> {
-  const { goal } = readNativeGoal(unit.codexHome, unit.threadId);
+  const desktop = unit.pane === null;
+  const { goal, thread } = readNativeGoal(unit.codexHome, unit.threadId, desktop);
   if (goal.goal_id !== unit.goalId || goal.status !== 'active')
     throw new Error('Native unit Goal changed or is no longer active');
+  if (desktop && realpathSync(thread.cwd) !== unit.worktree)
+    throw new Error('Native desktop thread must be in its assigned worktree');
   const brief = readUnitAcceptance(unit.briefPath);
   if (brief.hash !== unit.briefHash)
     throw new Error('Native unit Goal brief changed; the root manager must update its registration');
@@ -241,13 +276,21 @@ export function nativeUnitEnvironment(
 }
 
 /** Local launches must match root registration and the actual still-active native Goal. */
-export function observeNativeUnitContext(env: Record<string, string | undefined>): NativeUnitContext | undefined {
+export function observeNativeUnitContext(
+  env: Record<string, string | undefined>,
+  cwd?: string,
+): NativeUnitContext | undefined {
   const context = nativeUnitContext(env);
   if (!context) return undefined;
   const db = openReadOnlyDb(context.registry);
   try {
     const unit = registeredNativeUnits(db).find((candidate) => candidate.id === context.unit);
     if (!unit) throw new Error('Native unit check context is not registered');
+    if (cwd && unit.pane === null) {
+      const path = relative(unit.worktree, realpathSync(cwd));
+      if (path === '..' || path.startsWith(`..${sep}`) || isAbsolute(path))
+        throw new Error('Native desktop check must start in its assigned worktree');
+    }
     const observed = nativeUnitContext(
       nativeUnitEnvironment(unit, new Date(context.goalObservedAt), context.sourceRevision),
     );

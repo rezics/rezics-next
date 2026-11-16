@@ -8,7 +8,6 @@ import { cloneFormattingStep, FormattingPrefix, nativeFormattingStep } from './e
 import { editorSnapshot } from './rich-text-editor-snapshot.ts';
 import { collectNativeMarkRemoval } from './editor-native-marks.ts';
 
-type Prefix = { segment: Segment | FormattingPrefix; count: number };
 type Segment = {
   base: Node;
   index: TextDocumentIndex;
@@ -29,7 +28,7 @@ type Metrics = {
 };
 const trusted = new WeakSet<Transaction>();
 const textReplayBatches = new WeakSet<Transaction>();
-const ownedSteps = new WeakSet<Step>();
+const ownedSteps = new WeakMap<Step, Step['invert'] | null>();
 const metrics = new WeakMap<Transaction, Metrics>();
 const nativeMaybeStep = Transaction.prototype.maybeStep;
 const nativeAddMark = Transaction.prototype.addMark;
@@ -45,6 +44,49 @@ const nativeResolveNoCache = (
   }
 ).resolveNoCache;
 
+class PrefixDocument {
+  readonly #segment: Segment | FormattingPrefix;
+  readonly #count: number;
+  readonly #read: (node: Node) => Node;
+
+  constructor(segment: Segment | FormattingPrefix, count: number, read: (node: Node) => Node) {
+    this.#segment = segment;
+    this.#count = count;
+    this.#read = read;
+  }
+
+  get type() {
+    return this.#segment.base.type;
+  }
+  get attrs() {
+    return this.#segment.base.attrs;
+  }
+  get marks() {
+    return this.#segment.base.marks;
+  }
+  get content() {
+    return this.#read(this.asNode()).content;
+  }
+
+  asNode(): Node {
+    return this as unknown as Node;
+  }
+
+  resolve(position: number): ResolvedPos {
+    return nativeResolveNoCache.call(this.asNode(), position);
+  }
+
+  materialize(): Node {
+    if (this.#segment instanceof FormattingPrefix) return this.#segment.document(this.#count);
+    const edits = this.#segment.edits.slice(0, this.#count);
+    if (this.#segment.direction === 'down') edits.reverse();
+    return buildTextDocument(this.#segment.base, edits, maxSnapshotBytes);
+  }
+}
+
+// Share the lazy accessors across prefixes while retaining the native Node methods on their own receiver.
+Object.setPrototypeOf(PrefixDocument.prototype, Node.prototype);
+
 function mapOwnedStep(this: Step, mapping: Mappable): Step | null {
   const mapped = (Object.getPrototypeOf(this) as Step).map.call(this, indexedNativeMapping(mapping));
   return mapped ? ownStep(mapped) : null;
@@ -55,17 +97,23 @@ function mergeOwnedStep(this: Step, other: Step): Step | null {
   return merged ? ownStep(merged) : null;
 }
 
-function ownStep<T extends Step>(step: T): T {
-  if (ownedSteps.has(step)) return step;
-  Object.defineProperties(step, { map: { value: mapOwnedStep }, merge: { value: mergeOwnedStep } });
-  ownedSteps.add(step);
+function ownStep<T extends Step>(step: T, inversion?: Step['invert']): T {
+  step.map = mapOwnedStep;
+  step.merge = mergeOwnedStep;
+  if (inversion) step.invert = inversion;
+  ownedSteps.set(step, inversion ?? null);
   return step;
 }
 
 function unmodifiedStep(step: Step): boolean {
+  if (Object.hasOwn(step, 'apply') || Object.hasOwn(step, 'getMap') || Object.hasOwn(step, 'toJSON')) return false;
+  const inversion = ownedSteps.get(step);
+  if (inversion === undefined)
+    return !Object.hasOwn(step, 'invert') && !Object.hasOwn(step, 'map') && !Object.hasOwn(step, 'merge');
   return (
-    ownedSteps.has(step) ||
-    !['apply', 'invert', 'getMap', 'map', 'merge', 'toJSON'].some((key) => Object.hasOwn(step, key))
+    step.map === mapOwnedStep &&
+    step.merge === mergeOwnedStep &&
+    (inversion ? step.invert === inversion : !Object.hasOwn(step, 'invert'))
   );
 }
 
@@ -132,7 +180,6 @@ export function compactTransaction(state: EditorState): Transaction {
     skippedMaps: 0,
   };
   metrics.set(transaction, stats);
-  const prefixes = new WeakMap<Node, Prefix>();
   const cache = new Map<Node, Node>();
   let logical = state.doc;
   let observed: { logical: Node; real: Node } | null = { logical, real: state.doc };
@@ -149,15 +196,8 @@ export function compactTransaction(state: EditorState): Transaction {
       cache.set(node, found);
       return found;
     }
-    const prefix = prefixes.get(node);
-    if (!prefix) return node;
-    let real: Node;
-    if (prefix.segment instanceof FormattingPrefix) real = prefix.segment.document(prefix.count);
-    else {
-      const edits = prefix.segment.edits.slice(0, prefix.count);
-      if (prefix.segment.direction === 'down') edits.reverse();
-      real = buildTextDocument(prefix.segment.base, edits, maxSnapshotBytes);
-    }
+    if (!(node instanceof PrefixDocument)) return node;
+    const real = node.materialize();
     stats.materializations++;
     cache.set(node, real);
     if (cache.size > 2) cache.delete(cache.keys().next().value!);
@@ -176,22 +216,14 @@ export function compactTransaction(state: EditorState): Transaction {
       logical = value;
     },
   });
-  const prefixNode = (owner: Segment | FormattingPrefix, count: number): Node => {
-    const node = Object.create(Node.prototype) as Node;
-    Object.defineProperties(node, {
-      type: { value: owner.base.type, enumerable: true },
-      attrs: { value: owner.base.attrs, enumerable: true },
-      marks: { value: owner.base.marks, enumerable: true },
-      content: { get: () => materialize(node).content, enumerable: true },
-      resolve: {
-        value(this: Node, position: number) {
-          return nativeResolveNoCache.call(this, position);
-        },
-      },
-    });
-    prefixes.set(node, { segment: owner, count });
-    return node;
-  };
+  const inversionAt = (before: Node, inverse: Step): Step['invert'] =>
+    function (this: Step, doc: Node) {
+      if (doc === before) {
+        stats.cachedInversions++;
+        return inverse;
+      }
+      return (Object.getPrototypeOf(this) as Step).invert.call(this, doc);
+    };
   const ordinary = (step: Step): StepResult => {
     publicDoc();
     segment = null;
@@ -218,19 +250,8 @@ export function compactTransaction(state: EditorState): Transaction {
         }
         const inverse = formatting.append(step, unmodifiedStep);
         if (!inverse) return ordinary(step);
-        const before = logical;
-        const native = ownStep(cloneFormattingStep(step, state.schema));
-        const cached = ownStep(inverse);
-        Object.defineProperty(native, 'invert', {
-          value(doc: Node) {
-            if (doc === before) {
-              stats.cachedInversions++;
-              return cached;
-            }
-            return (Object.getPrototypeOf(this) as Step).invert.call(this, doc);
-          },
-        });
-        const after = prefixNode(formatting, formatting.steps.length);
+        const native = ownStep(cloneFormattingStep(step, state.schema), inversionAt(logical, ownStep(inverse)));
+        const after = new PrefixDocument(formatting, formatting.steps.length, materialize).asNode();
         recording = true;
         try {
           nativeAddStep.call(transaction, native, after);
@@ -270,23 +291,13 @@ export function compactTransaction(state: EditorState): Transaction {
       const admitted = owner.index.edit(from, to, step.slice);
       if (!admitted) return ordinary(step);
       owner.direction = direction;
-      const before = logical;
       const inverse = ownStep(new ReplaceStep(step.from, step.from + step.slice.size, admitted.removed));
-      const native = ownStep(new ReplaceStep(step.from, step.to, step.slice));
-      Object.defineProperty(native, 'invert', {
-        value(doc: Node) {
-          if (doc === before) {
-            stats.cachedInversions++;
-            return inverse;
-          }
-          return ReplaceStep.prototype.invert.call(this, doc);
-        },
-      });
+      const native = ownStep(new ReplaceStep(step.from, step.to, step.slice), inversionAt(logical, inverse));
       owner.edits.push(admitted.edit);
       owner.delta += step.slice.size - (to - from);
       owner.firstFrom = Math.min(owner.firstFrom, from);
       owner.outputEnd = to + owner.delta;
-      const after = prefixNode(owner, owner.edits.length);
+      const after = new PrefixDocument(owner, owner.edits.length, materialize).asNode();
       recording = true;
       try {
         nativeAddStep.call(transaction, native, after);

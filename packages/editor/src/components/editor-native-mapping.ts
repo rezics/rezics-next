@@ -3,16 +3,28 @@ import { MapResult, Mapping, StepMap, type Mappable } from '@tiptap/pm/transform
 // Native leaf/recovery evaluation adapts prosemirror-transform 1.12.4 src/map.ts (MIT).
 // Exact source, version and complete notice are in ../../THIRD_PARTY_NOTICES.md.
 // This private evaluator changes no StepMap or history Item. Its producer is the native history command.
-type Summary = { low: number; high: number; delta: number; minimum: number; maximum: number };
-type Tree = { from: number; to: number; summary: Summary; left?: Tree; right?: Tree };
+type Tree = {
+  from: number;
+  to: number;
+  low: number;
+  high: number;
+  delta: number;
+  minimum: number;
+  maximum: number;
+  left: Tree | null;
+  right: Tree | null;
+};
 type RuntimeResult = MapResult & { readonly delInfo: number; readonly recover: number | null };
 type RecoverableMap = StepMap & { recover(value: number): number };
 const NativeResult = MapResult as unknown as { new (position: number, deletion: number, recover: null): MapResult };
 
-function summary(map: StepMap): Summary | null {
+function leaf(map: StepMap, index: number): Tree | null {
   if (
     Object.getPrototypeOf(map) !== StepMap.prototype ||
-    ['map', 'mapResult', 'forEach', 'recover'].some((key) => Object.hasOwn(map, key))
+    Object.hasOwn(map, 'map') ||
+    Object.hasOwn(map, 'mapResult') ||
+    Object.hasOwn(map, 'forEach') ||
+    Object.hasOwn(map, 'recover')
   )
     return null;
   let low = Infinity,
@@ -21,8 +33,15 @@ function summary(map: StepMap): Summary | null {
     previous = -Infinity,
     valid = true;
   map.forEach((from, to, nextFrom, nextTo) => {
+    const before = to - from;
+    const after = nextTo - nextFrom;
     if (
-      ![from, to, nextFrom, nextTo, to - from, nextTo - nextFrom].every(Number.isSafeInteger) ||
+      !Number.isSafeInteger(from) ||
+      !Number.isSafeInteger(to) ||
+      !Number.isSafeInteger(nextFrom) ||
+      !Number.isSafeInteger(nextTo) ||
+      !Number.isSafeInteger(before) ||
+      !Number.isSafeInteger(after) ||
       from < previous ||
       to < from ||
       nextTo < nextFrom
@@ -30,25 +49,39 @@ function summary(map: StepMap): Summary | null {
       valid = false;
     low = Math.min(low, from);
     high = Math.max(high, to);
-    delta += nextTo - nextFrom - (to - from);
+    delta += after - before;
     previous = to;
   });
   return valid && Number.isSafeInteger(delta)
-    ? { low, high, delta, minimum: Math.min(0, delta), maximum: Math.max(0, delta) }
+    ? {
+        from: index,
+        to: index + 1,
+        low,
+        high,
+        delta,
+        minimum: Math.min(0, delta),
+        maximum: Math.max(0, delta),
+        left: null,
+        right: null,
+      }
     : null;
 }
 
-function compose(a: Summary, b: Summary): Summary | null {
-  if (a.low === Infinity) return b;
-  if (b.low === Infinity) return a;
-  const result = {
-    low: Math.min(a.low, b.low),
-    high: Math.max(a.high, b.high - a.delta),
-    delta: a.delta + b.delta,
-    minimum: Math.min(a.minimum, a.delta + b.minimum),
-    maximum: Math.max(a.maximum, a.delta + b.maximum),
-  };
-  return Object.values(result).every(Number.isSafeInteger) ? result : null;
+function compose(a: Tree, b: Tree): Tree | null {
+  const low = Math.min(a.low, b.low);
+  const high = Math.max(a.high, b.high - a.delta);
+  const delta = a.delta + b.delta;
+  const minimum = Math.min(a.minimum, a.delta + b.minimum);
+  const maximum = Math.max(a.maximum, a.delta + b.maximum);
+  if (
+    low !== Infinity &&
+    (!Number.isSafeInteger(high) ||
+      !Number.isSafeInteger(delta) ||
+      !Number.isSafeInteger(minimum) ||
+      !Number.isSafeInteger(maximum))
+  )
+    return null;
+  return { from: a.from, to: b.to, low, high, delta, minimum, maximum, left: a, right: b };
 }
 
 class Sequence {
@@ -61,20 +94,18 @@ class Sequence {
     if (maps.length < this.count || (this.count && maps[this.count - 1] !== this.last)) return false;
     while (this.count < maps.length) {
       const index = this.count++;
-      const item = summary(maps[index]!);
-      if (!item) {
+      let node = leaf(maps[index]!, index);
+      if (!node) {
         this.supported = false;
         break;
       }
-      let node: Tree = { from: index, to: index + 1, summary: item };
       while (this.roots.length && this.roots.at(-1)!.to - this.roots.at(-1)!.from === node.to - node.from) {
         const left = this.roots.pop()!;
-        const summary = compose(left.summary, node.summary);
-        if (!summary) {
+        node = compose(left, node);
+        if (!node) {
           this.supported = false;
           return false;
         }
-        node = { from: left.from, to: node.to, summary, left, right: node };
       }
       this.roots.push(node);
     }
@@ -150,19 +181,15 @@ export class NativeMappingIndex {
         index = from;
       const walk = (node: Tree) => {
         if (index >= to || index >= node.to || node.from >= to || node.to <= from) return;
-        const range = node.summary;
-        const safe =
-          Number.isSafeInteger(position) &&
-          Number.isSafeInteger(position + range.minimum) &&
-          Number.isSafeInteger(position + range.maximum);
         if (
-          safe &&
           node.from >= index &&
-          node.from >= from &&
           node.to <= to &&
-          (position < range.low || position > range.high)
+          (position < node.low || position > node.high) &&
+          Number.isSafeInteger(position) &&
+          Number.isSafeInteger(position + node.minimum) &&
+          Number.isSafeInteger(position + node.maximum)
         ) {
-          if (position > range.high) position += range.delta;
+          if (position > node.high) position += node.delta;
           this.skippedMaps += node.to - node.from;
           index = node.to;
           return;

@@ -18,6 +18,7 @@ import { AccountList } from './account-page-application';
 import { linkClass, linkColor, webUrl } from './shared';
 import { ContributionReturnRecovery, ContributionRow } from '../../accounts/public-profile/contributions/row';
 import { subjectHref } from '../../subject/load-subject';
+import { accountHref } from '../../subject/subject-href';
 import { AccountFollow } from '../../accounts/public-profile/follow';
 /** Private controls start after hydration and disappear throughout every refresh. */
 function AccountManagementLinks({ id, value }: { id: string; value: OverviewValue }) {
@@ -193,7 +194,13 @@ export function AccountIdentity(props: Record<string, unknown>) {
             data-slot="agent-actions"
             className={`${profile.bio ? 'mt-5 ' : ''}flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 empty:hidden`}
           >
-            {value.subject ? <AccountFollow targetId={value.subject} /> : null}
+            {value.subject && profile.handle ? (
+              <AccountFollow
+                targetId={value.subject}
+                accountId={profile.id}
+                returnTo={accountHref(value.locale, profile.handle)}
+              />
+            ) : null}
             <AccountManagementLinks key={profile.id} id={profile.id} value={value} />
           </div>
           {hasSecondaryDetails && (

@@ -68,9 +68,7 @@ export const UnavailableTarget: Story = {
       }),
     );
     const body = within(canvasElement.ownerDocument.body);
-    const remove =
-      body.queryByRole('menuitem', { name: m.library_follow_unfollow() }) ??
-      body.getByRole('button', { name: m.library_follow_unfollow() });
+    const remove = await body.findByRole('menuitem', { name: m.library_follow_unfollow() });
     await userEvent.click(remove);
     await expect(canvas.getByText(m.library_follow_removed())).toBeVisible();
   },

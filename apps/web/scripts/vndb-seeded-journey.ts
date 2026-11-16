@@ -1,4 +1,5 @@
 /** Actual Subject → supplied Board → thread → author contribution walk, inside dev-stack.ts walk. */
+import { walkAcceptanceId } from '../../../scripts/stack-run.ts';
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -205,7 +206,7 @@ async function withPage<T>(
 }
 
 assert(
-  process.env.GOAL_TASK_ID && /native|browser/.test(process.env.GOAL_ACCEPTANCE_REQUIRES ?? ''),
+  walkAcceptanceId(process.env),
   'Run through the controller-owned dev-stack.ts walk',
 );
 await mkdir(evidence, { recursive: true });
