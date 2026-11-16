@@ -532,7 +532,7 @@ export async function retireWalkJournals(repository = root): Promise<void> {
 }
 
 const SEED_PHASE_LINE =
-  /^Cross-media seed finalization state=(?:started|completed|failed) scope=(?:seed|publication|books)(?: phase=[a-z-]+)? remaining=[a-z,-]+$/;
+  /^Cross-media seed finalization state=(?:started|completed|failed) scope=(?:seed|record-import|publication|books)(?: phase=[a-z-]+)? remaining=[a-z,-]+$/;
 
 export async function captureSeedStderr(
   stream: ReadableStream<Uint8Array>,

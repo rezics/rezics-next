@@ -426,8 +426,10 @@ test('walk seed env uses native Auth transport and keeps the issuer for CSRF aud
 test('the walk forwards only seed phase evidence and retains the child stderr', async () => {
   const started = 'Cross-media seed finalization state=started scope=seed phase=record-import remaining=record-import';
   const completed = 'Cross-media seed finalization state=completed scope=seed remaining=none';
+  const records =
+    'Cross-media seed finalization state=started scope=record-import phase=vndb-records remaining=vndb-records,graph-delivery';
   const other = 'private transport detail';
-  const content = [started, other, completed].join('\n');
+  const content = [started, other, records, completed].join('\n');
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -438,7 +440,7 @@ test('the walk forwards only seed phase evidence and retains the child stderr', 
   });
   const progress: string[] = [];
   expect(await captureSeedStderr(stream, (line) => progress.push(line))).toBe(content);
-  expect(progress).toEqual([started, completed]);
+  expect(progress).toEqual([started, records, completed]);
 });
 
 test('ordinary CLI admits loopback HTTP Auth with the kernel test origin', async () => {

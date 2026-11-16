@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
+import { bundledDigest } from '@rezics/definitions/bundled';
 import type { MediaImportRequest, MediaImportStatus } from '@rezics/definitions/media-import';
 import {
   crossMediaAliases,
@@ -138,6 +139,7 @@ test(
     let reservations = 0;
     let statusReads = 0;
     let terminal: 'reserved' | 'uploaded' | 'available' = 'reserved';
+    let availableOnStatusRead = Infinity;
     let sealedBody = '';
     let sealedKey = '';
     let mediaRequest: MediaImportRequest | undefined;
@@ -209,6 +211,7 @@ test(
         },
         async mediaStatus(id: string) {
           statusReads += 1;
+          if (statusReads === availableOnStatusRead) terminal = 'available';
           expect(id).toBe(mediaId);
           const request = mediaRequest!;
           const media: MediaImportStatus['media'] =
@@ -263,6 +266,17 @@ test(
       expect((await run()).mediaOutcomes[0]).toMatchObject({ status: 'unavailable' });
       expect(reservations).toBe(0);
       refusal = undefined;
+      firstPlan.characterAppearances = [
+        {
+          subjectId: '101',
+          characterId: 11546,
+          sourceIndex: 0,
+          roleCode: 1,
+          order: 0,
+          sourceRow: { subject_id: 101, character_id: 11546, type: 1, order: 0 },
+        },
+      ];
+      resumedPlan.characterAppearances = firstPlan.characterAppearances;
       const initial = await seedCrossMedia(
         firstPlan,
         statePath,
@@ -279,6 +293,8 @@ test(
         containerId: subjectId,
         sourceUrl,
       });
+      expect(initial.runs.bangumi?.status).toBe('bulk-failed');
+      expect(initial.runs.bangumiCharacterFidelity).toBeUndefined();
       expect(mediaRequest).toMatchObject({ containerId: subjectId, sourceUrl });
       expect(mediaRequest!.provenance).toMatchObject({
         source: crossMediaAliases.bangumi,
@@ -316,10 +332,12 @@ test(
         { providers: ['bangumi'], mediaDeadlineMs: 0 },
       );
       expect(uploading.mediaOutcomes[0]).toMatchObject({ status: 'pending', mediaState: 'uploaded' });
+      expect(uploading.runs.bangumi?.runId).toBe(initial.runs.bangumi?.runId);
+      expect(uploading.runs.bangumiCharacterFidelity).toBeUndefined();
       expect(reservations).toBe(1);
       expect(statusReads).toBe(2);
 
-      terminal = 'available';
+      availableOnStatusRead = statusReads + 2;
       const resumed = await seedCrossMedia(
         resumedPlan,
         statePath,
@@ -329,6 +347,7 @@ test(
           providers: ['bangumi'],
           mediaDeadlineMs: 0,
         },
+        { releaseDigest: bundledDigest, schemes: [], concepts: [] },
       );
       expect(resumed.mediaOutcomes[0]).toMatchObject({
         status: 'available',
@@ -336,8 +355,11 @@ test(
         containerId: subjectId,
         mediaId,
       });
+      expect(resumed.runs.bangumi).toMatchObject({ status: 'committed', runId: initial.runs.bangumi?.runId });
+      expect(resumed.runs.bangumiCharacterFidelity?.status).toBe('committed');
+      expect(resumed.runs.bangumiCharacterFidelity?.runId).not.toBe(resumed.runs.bangumi?.runId);
       expect(reservations).toBe(1);
-      expect(statusReads).toBe(3);
+      expect(statusReads).toBe(4);
       expect(sealedBody).toBe(JSON.stringify(mediaRequest));
       expect(sealedKey).toBeTruthy();
     } finally {
