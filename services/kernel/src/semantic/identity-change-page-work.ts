@@ -80,7 +80,7 @@ export function identityChangePageCosts(): readonly ChangePageCost[] {
         return values.length === 5 &&
           uuid(generation) &&
           (after === null || uuid(after)) &&
-          (limit === 50 || limit === 100) &&
+          (limit === 1 || limit === 50 || limit === 100) &&
           uuid(terminal) &&
           partition(home)
           ? indexedRead(originals.sql, values)
