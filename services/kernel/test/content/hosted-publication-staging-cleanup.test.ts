@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
+import { afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test';
 import type { PoolClient } from 'pg';
 import type { HostedDependencies } from '../../src/content/hosted-chapters-model.ts';
 import {
@@ -20,10 +20,10 @@ import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 
 setDefaultTimeout(180_000);
 let f: Awaited<ReturnType<typeof hostedChaptersFixture>>;
-beforeAll(async () => {
+beforeEach(async () => {
   f = await hostedChaptersFixture();
 });
-afterAll(async () => {
+afterEach(async () => {
   await f?.close();
 });
 
