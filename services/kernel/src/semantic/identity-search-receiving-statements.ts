@@ -9,6 +9,7 @@ import receivingPlan from './identity-epoch-store-receiving-plan.sql';
 import receivingLookup from './identity-epoch-store-receiving-lookup.sql';
 import receivingSelection from './identity-receiving-selection-read.sql';
 import searchProgressRead from './identity-search-receiving-progress-read.sql';
+import searchProgressObserve from './identity-search-receiving-progress-observe.sql';
 import searchProgressInsert from './identity-search-receiving-progress-insert.sql';
 import searchProgressAdvance from './identity-search-receiving-progress-advance.sql';
 import searchProgressRelease from './identity-search-receiving-progress-release.sql';
@@ -232,6 +233,7 @@ export function commonSearchReceivingStatements(): readonly string[] {
           receivingLookup.sql,
           receivingSelection.sql,
           searchProgressRead.sql,
+          searchProgressObserve.sql,
           searchProgressInsert.sql,
           searchProgressAdvance.sql,
           searchProgressRelease.sql,
@@ -345,6 +347,7 @@ export function searchReceivingCapturedStatementCosts(): SearchReceivingWorkDecl
     [receivingLookup.sql, [8, 8, 1, 16384, 1]],
     [receivingSelection.sql, [3, 3, 1, 512, 1]],
     [searchProgressRead.sql, [2, 2, 1, 2560, 1]],
+    [searchProgressObserve.sql, [2, 2, 1, 2560, 1]],
     [searchProgressInsert.sql, [2, 2, 1, 512, 0]],
     [searchProgressAdvance.sql, [1, 1, 1, 2560, 0]],
     [searchProgressRelease.sql, [1, 1, 1, 512, 0]],
