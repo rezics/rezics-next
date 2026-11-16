@@ -212,6 +212,16 @@ export async function readNativePost(client: KernelClient, postId: string) {
   return data.post;
 }
 
+export async function openHostedBookReadingProgress(stack: NativeWebStack): Promise<void> {
+  const response = await stack.kernel(
+    '/v1/platform/exposure/reading_progress:open',
+    { method: 'POST', headers: { 'idempotency-key': JSON.stringify(randomUUID()) } },
+    'governor',
+  );
+  if (response.status !== 200)
+    throw new Error(`Opening the Hosted Book reading_progress exposure returned HTTP ${response.status}`);
+}
+
 export async function createPrepublishedReaderControl(stack: NativeWebStack): Promise<HostedReaderControl> {
   const base = await createJourneySubject(stack, 'Prepublished reader control');
   const opening = await createPost(
@@ -231,6 +241,12 @@ export async function createPrepublishedReaderControl(stack: NativeWebStack): Pr
   );
   const creationKey = randomUUID();
   const occurrenceId = await hostedOccurrenceId(opening.postId, creationKey);
+  const target = {
+    threadId: chapter.threadId,
+    postId: chapter.postId,
+    revisionId: chapter.revisionId,
+    sha256: chapter.sha256,
+  };
   const created = await base.author.hostedCatalogues.post(
     {
       postId: opening.postId,
@@ -242,12 +258,7 @@ export async function createPrepublishedReaderControl(stack: NativeWebStack): Pr
           position: 0,
           title: 'Control chapter · Beside the harbor steps',
           kind: 'chapter',
-          target: {
-            threadId: chapter.threadId,
-            postId: chapter.postId,
-            revisionId: chapter.revisionId,
-            sha256: chapter.sha256,
-          },
+          target,
         },
       ],
     },
@@ -257,6 +268,17 @@ export async function createPrepublishedReaderControl(stack: NativeWebStack): Pr
     catalogueId: string;
     revisionId: string;
   };
+  if (structure.catalogueId !== opening.postId) throw new Error('Generated control outline changed its catalogue identity');
+  const consent = await base.author.posts({ id: target.postId }).$issueRevisionDisclosure.post(
+    { catalogueId: structure.catalogueId, target },
+    { headers: { 'idempotency-key': JSON.stringify(randomUUID()) } },
+  );
+  const permission = admitted(consent, 200, 'Generated exact control chapter permission') as {
+    catalogueId: string;
+    state: string;
+  };
+  if (permission.catalogueId !== structure.catalogueId || permission.state !== 'issued')
+    throw new Error('Generated control permission did not acknowledge the selected Book');
   const published = await base.author.hostedCatalogues({ id: opening.postId }).$publish.post(
     {
       expectedRevisionId: structure.revisionId,
@@ -269,8 +291,7 @@ export async function createPrepublishedReaderControl(stack: NativeWebStack): Pr
     catalogueId: string;
     revisionId: string;
   };
-  if (structure.catalogueId !== opening.postId || release.catalogueId !== opening.postId)
-    throw new Error('Generated control outline changed its catalogue identity');
+  if (release.catalogueId !== opening.postId) throw new Error('Generated control publication changed its catalogue identity');
   return {
     subjectId: base.subjectId,
     subjectTitle: base.subjectTitle,
