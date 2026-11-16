@@ -2,6 +2,7 @@ import { expect, setDefaultTimeout } from 'bun:test';
 import type { Page, Response as PlaywrightResponse } from 'playwright';
 import { documentText, serializeDocument } from '@rezics/document';
 import type { KernelClient } from '@rezics/client';
+import { partitionOf, routeOf } from '../../../../services/kernel/src/route/route.ts';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
 import {
   createHostedBookJourneySeed,
@@ -112,6 +113,120 @@ async function pageObservation(page: Page): Promise<string> {
   return `url=${page.url()} alerts=${JSON.stringify(alerts.slice(-4))} statuses=${JSON.stringify(statuses.slice(-6))}`;
 }
 
+async function observeContentFailure(statement: string, parameters: readonly (string | number)[]): Promise<string> {
+  const { Pool } = await import('pg');
+  const pool = new Pool({
+    connectionString: stack.databaseUrl,
+    connectionTimeoutMillis: 750,
+    statement_timeout: 750,
+    query_timeout: 1_000,
+    options: '-c default_transaction_read_only=on',
+    max: 1,
+  });
+  try {
+    const result = await pool.query(statement, [...parameters]);
+    return JSON.stringify(result.rows[0] ?? null);
+  } catch {
+    return 'unavailable';
+  } finally {
+    await pool.end();
+  }
+}
+
+async function observeCoverWork(mediaId: string): Promise<string> {
+  const route = routeOf(mediaId);
+  if (route === null) return 'unavailable';
+  return observeContentFailure(
+    `SELECT m.state,b.transaction_id IS NOT NULL AS upload_basis,
+       o.event_seq IS NOT NULL AS upload_event,
+       CASE WHEN o.event_seq IS NULL OR c.epoch IS NULL THEN NULL
+            WHEN c.epoch<>o.epoch THEN 'other-epoch'
+            WHEN c.position>=o.position THEN 'reached'
+            ELSE 'behind' END AS effects_checkpoint,
+       relay.status AS image_effect,s.status AS image_work,
+       (SELECT count(*)::int FROM (
+          SELECT 1 FROM content.media_variant v WHERE (v.route,v.media_id)=(m.route,m.media_id) LIMIT 13
+        ) variants) AS variant_count
+     FROM content.media m
+     LEFT JOIN editorial.write_basis b ON (b.partition_no,b.transaction_id)=($3,m.transaction_id)
+     LEFT JOIN core.outbox o ON (o.partition_no,o.position,o.epoch)=(b.partition_no,b.position,b.epoch)
+       AND o.type='com.rezics.content.media.uploaded.v1' AND o.subject=m.media_id::text
+     LEFT JOIN core.consumer_checkpoint c ON c.partition_no=o.partition_no AND c.consumer='effects'
+     LEFT JOIN dbos.workflow_status relay
+       ON relay.workflow_uuid=concat('fx:',o.epoch,':',o.partition_no,':',o.position,':',o.event_seq,':content_media_image')
+       AND o.event_seq IS NOT NULL
+     LEFT JOIN dbos.workflow_status s
+       ON s.workflow_uuid=concat('fx:',o.epoch,':',o.partition_no,':',o.position,':',o.event_seq,':content_image')
+       AND o.event_seq IS NOT NULL
+     WHERE (m.route,m.media_id)=($1,$2) LIMIT 1`,
+    [route, mediaId, partitionOf(route)],
+  );
+}
+
+async function observeDraftReadiness(authorId: string, postId: string, revisionId: string): Promise<string> {
+  const authorRoute = routeOf(authorId);
+  const postRoute = routeOf(postId);
+  if (authorRoute === null || postRoute === null) return 'unavailable';
+  return observeContentFailure(
+    `SELECT p.draft_locator_pending,a.draft_state,
+       a.draft_revision_id=p.head_revision_id AS exact_head_projected,
+       g.complete AS coverage_complete,
+       p.head_revision_id=$5 AS saved_revision_is_head,
+       b.transaction_id IS NOT NULL AS saved_revision_basis,
+       o.position::text AS saved_revision_event_position,
+       CASE WHEN o.event_seq IS NULL OR c.epoch IS NULL THEN NULL
+            WHEN c.epoch<>o.epoch THEN 'other-epoch'
+            WHEN c.position>=o.position THEN 'reached'
+            ELSE 'behind' END AS effects_checkpoint,
+       l.state AS locator_obligation,s.status AS locator_effect,s.queue_name AS locator_queue
+     FROM content.post p
+     LEFT JOIN content.revision r ON (r.route,r.thread_id,r.post_id,r.revision_id)=
+       (p.route,p.thread_id,p.post_id,$5)
+     LEFT JOIN editorial.write_basis b ON (b.partition_no,b.transaction_id)=($6,r.recorded_transaction_id)
+     LEFT JOIN core.outbox o ON (o.partition_no,o.epoch,o.position)=(b.partition_no,b.epoch,b.position)
+       AND o.type='com.rezics.content.revision.created.v1'
+       AND o.data->>'itemId'=p.post_id::text AND o.data->>'revisionId'=r.revision_id::text
+     LEFT JOIN core.consumer_checkpoint c ON c.partition_no=o.partition_no AND c.consumer='effects'
+     LEFT JOIN LATERAL (
+       SELECT concat('fx:',o.epoch,':',o.partition_no,':',o.position,':',o.event_seq,':content_author_item') AS id
+       WHERE o.event_seq IS NOT NULL
+     ) w ON true
+     LEFT JOIN access.erasure_locator_work l ON l.workflow_id=w.id
+     LEFT JOIN dbos.workflow_status s ON s.workflow_uuid=w.id
+     LEFT JOIN content.author_item a ON (a.route,a.author_account_id,a.item_kind,a.item_id)=($1,$2,'post',$4)
+     LEFT JOIN content.own_draft_progress g ON g.singleton=0
+     WHERE (p.route,p.post_id,p.author_account_id)=($3,$4,$2) LIMIT 1`,
+    [authorRoute, authorId, postRoute, postId, revisionId, partitionOf(postRoute)],
+  );
+}
+
+async function observeBookDiscovery(
+  book: Pick<HostedReaderControl, 'subjectId' | 'catalogueId'>,
+  publicationId: string,
+): Promise<string> {
+  const subjectRoute = routeOf(book.subjectId);
+  const catalogueRoute = routeOf(book.catalogueId);
+  if (subjectRoute === null || catalogueRoute === null) return 'unavailable';
+  return observeContentFailure(
+    `SELECT (c.route=$1 AND $2::uuid=ANY(r.subject_ids)) AS same_route_reference,
+       st.source_epoch AS subject_thread_epoch,st.source_position::text AS subject_thread_position,
+       c.publication_id=$5 AS exact_current_release,
+       p.availability,p.visibility,p.author_erased,s.placement_count::text AS publication_placements
+     FROM content.hosted_catalogue c
+     LEFT JOIN content.post p ON (p.route,p.thread_id,p.post_id)=(c.route,c.thread_id,c.catalogue_id)
+     LEFT JOIN content.revision r ON (r.route,r.thread_id,r.post_id,r.revision_id)=
+       (p.route,p.thread_id,p.post_id,p.head_revision_id)
+     LEFT JOIN content.subject_thread st ON (st.route,st.subject_id,st.thread_id)=($1,$2,c.thread_id)
+       AND st.thread_route=c.route
+     LEFT JOIN content.hosted_version_revision v ON (v.route,v.catalogue_id,v.revision_id)=
+       (c.route,c.catalogue_id,c.publication_id) AND v.revision_kind='publication' AND v.generation_kind='candidate'
+     LEFT JOIN content.hosted_tree_snapshot_version s ON (s.route,s.catalogue_id,s.generation_id,s.sequence)=
+       (v.route,v.catalogue_id,v.generation_id,v.sequence)
+     WHERE (c.route,c.catalogue_id)=($3,$4) LIMIT 1`,
+    [subjectRoute, book.subjectId, catalogueRoute, book.catalogueId, publicationId],
+  );
+}
+
 async function hydrate(page: Page) {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
   await page.getByRole('main').waitFor({ state: 'attached' });
@@ -124,6 +239,10 @@ function pageFrom(journey: { context: { pages(): Page[] } }): Page {
   return page;
 }
 
+function chapterStudioPath(draft: JourneyPost) {
+  return `/en/studio?postId=${encodeURIComponent(draft.postId)}`;
+}
+
 async function saveChapterDraft(
   page: Page,
   author: KernelClient,
@@ -131,9 +250,8 @@ async function saveChapterDraft(
   bodyText: string,
   includeCover: boolean,
 ) {
-  await page.goto(`${stack.web}/en/studio?postId=${encodeURIComponent(draft.postId)}`, {
-    waitUntil: 'domcontentloaded',
-  });
+  const href = new URL(chapterStudioPath(draft), stack.web).href;
+  if (page.url() !== href) await page.goto(href, { waitUntil: 'domcontentloaded' });
   await hydrate(page);
   const editor = page.locator('.ProseMirror[contenteditable="true"]').last();
   await editor.waitFor({ state: 'visible' });
@@ -184,24 +302,27 @@ async function saveChapterDraft(
           .waitFor({ state: 'visible' });
       } catch (cause) {
         const selected = [upload, ...polls];
-        const states = await settledWithin(
-          Promise.all(
-            selected.map(async (response) => {
-              const body = (await response.json().catch(() => null)) as { media?: { state?: unknown } } | null;
-              const state = body?.media?.state;
-              const knownState =
-                state === 'reserved' || state === 'uploaded' || state === 'available' || state === 'rejected';
-              return {
-                method: response.request().method(),
-                status: response.status(),
-                state: knownState ? state : null,
-              };
-            }),
-          ),
-          1_000,
-        ).catch(() => undefined);
+        const [work, states] = await Promise.all([
+          observeCoverWork(mediaId),
+          settledWithin(
+            Promise.all(
+              selected.map(async (response) => {
+                const body = (await response.json().catch(() => null)) as { media?: { state?: unknown } } | null;
+                const state = body?.media?.state;
+                const knownState =
+                  state === 'reserved' || state === 'uploaded' || state === 'available' || state === 'rejected';
+                return {
+                  method: response.request().method(),
+                  status: response.status(),
+                  state: knownState ? state : null,
+                };
+              }),
+            ),
+            1_000,
+          ).catch(() => undefined),
+        ]);
         throw new Error(
-          `${errorText(cause)}; exact cover responses=${JSON.stringify(states ?? selected.map((response) => ({ method: response.request().method(), status: response.status() })))}; preview response=${JSON.stringify(preview ?? null)}`,
+          `${errorText(cause)}; exact cover responses=${JSON.stringify(states ?? selected.map((response) => ({ method: response.request().method(), status: response.status() })))}; preview response=${JSON.stringify(preview ?? null)}; exact image work=${work}`,
           { cause },
         );
       }
@@ -352,10 +473,15 @@ async function assertPublishedLanguage(
   return value;
 }
 
+async function openBookPlacementForm(page: Page) {
+  const outline = page.getByRole('region', { name: 'Book table of contents', exact: true });
+  await outline.getByRole('button', { name: 'Add part or chapter', exact: true }).click();
+  return page.getByRole('form', { name: 'Add part or chapter', exact: true });
+}
+
 async function addChapterFromPicker(page: Page, title: string, draftTitle: string) {
   await pickDraft(page, draftTitle);
-  const form = page.locator('details.studio-placement-form');
-  await form.locator('summary').click();
+  const form = await openBookPlacementForm(page);
   await form.getByLabel('Placement title', { exact: true }).fill(title);
   await form.getByRole('button', { name: 'Add chapter', exact: true }).click();
   await page.getByRole('button', { name: title, exact: true }).waitFor({ state: 'visible' });
@@ -363,9 +489,7 @@ async function addChapterFromPicker(page: Page, title: string, draftTitle: strin
 
 async function addPartInStudio(page: Page, title: string) {
   const organizer = page.getByRole('region', { name: 'Book table of contents', exact: true });
-  await organizer.waitFor({ state: 'visible' });
-  const form = organizer.locator('details.studio-placement-form');
-  await form.locator('summary').click();
+  const form = await openBookPlacementForm(page);
   await form.getByRole('combobox', { name: 'Add', exact: true }).click();
   await page.getByRole('option', { name: 'Part', exact: true }).click();
   await form.getByLabel('Placement title', { exact: true }).fill(title);
@@ -376,17 +500,18 @@ async function addPartInStudio(page: Page, title: string) {
 async function movePlacementUnderPart(page: Page, placementTitle: string, partTitle: string) {
   const organizer = page.getByRole('region', { name: 'Book table of contents', exact: true });
   await organizer.getByRole('button', { name: `Organize ${placementTitle}`, exact: true }).click();
-  await organizer.getByRole('button', { name: 'Move to…', exact: true }).click();
-  await organizer.getByRole('combobox', { name: 'Destination', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Move to…', exact: true }).click();
+  const form = page.getByRole('form', { name: 'Move to…', exact: true });
+  await form.getByRole('combobox', { name: 'Destination', exact: true }).click();
   await page.getByRole('option', { name: new RegExp(partTitle) }).click();
-  await organizer.getByRole('button', { name: 'Move placement', exact: true }).click();
+  await form.getByRole('button', { name: 'Move placement', exact: true }).click();
   await organizer.getByText(partTitle, { exact: true }).waitFor({ state: 'visible' });
 }
 
 async function movePlacementUp(page: Page, placementTitle: string) {
   const organizer = page.getByRole('region', { name: 'Book table of contents', exact: true });
   await organizer.getByRole('button', { name: `Organize ${placementTitle}`, exact: true }).click();
-  await organizer.getByRole('button', { name: `Move up ${placementTitle}`, exact: true }).click();
+  await page.getByRole('menuitem', { name: `Move up ${placementTitle}`, exact: true }).click();
 }
 
 async function openBookStudio(page: Page, catalogueId: string) {
@@ -478,10 +603,6 @@ nativeTest(
     let preparationOperands: string | undefined;
     let activationOperands: PrivateActivationOperands | undefined;
     let candidateSealed = false;
-    const ownerJourney = await auth.signIn('alice');
-    const page = pageFrom(ownerJourney);
-    await page.setViewportSize({ width: 1440, height: 1000 });
-
     seed = await journal.run('generated private manuscript setup', async () => {
       const value = await createHostedBookJourneySeed(stack, 'Private draft journey');
       return {
@@ -501,6 +622,14 @@ nativeTest(
           value.chapterTwo.postId,
       };
     });
+
+    if (!seed) {
+      await journal.finish('Mounted private Hosted Book manuscript setup');
+      throw new Error('Mounted Hosted Book setup did not return the author manuscript');
+    }
+    const ownerJourney = await auth.signIn('alice', { returnTo: chapterStudioPath(seed.chapterOne) });
+    const page = pageFrom(ownerJourney);
+    await page.setViewportSize({ width: 1440, height: 1000 });
 
     const frenchText =
       'Mara comptait les lanternes depuis le pont du bac et dessinait le port silencieux sur sa carte.';
@@ -763,7 +892,13 @@ nativeTest(
                 placement.target?.revisionId,
             };
           },
-          () => pageObservation(page),
+          async () => {
+            const [browser, draft] = await Promise.all([
+              pageObservation(page),
+              observeDraftReadiness(seed!.authorAccountId, chapterTwo!.id, chapterTwo!.revisionId),
+            ]);
+            return `${browser}; exact draft readiness=${draft}`;
+          },
         );
       } else {
         journal.unreached('mounted Root Append', 'Book start or chapter two saved-version readback failed');
@@ -1405,7 +1540,7 @@ nativeTest(
       };
     });
 
-    const ownerJourney = await auth.signIn('alice');
+    const ownerJourney = await auth.signIn('alice', { returnTo: chapterStudioPath(control!.chapter) });
     const ownerPage = pageFrom(ownerJourney);
     await ownerPage.setViewportSize({ width: 1440, height: 1000 });
     let pointRevision: Awaited<ReturnType<typeof readNativePost>> | undefined;
@@ -1458,7 +1593,13 @@ nativeTest(
               placement.target?.sha256,
           };
         },
-        () => pageObservation(ownerPage),
+        async () => {
+          const [browser, draft] = await Promise.all([
+            pageObservation(ownerPage),
+            observeDraftReadiness(control!.authorAccountId, control!.chapter.postId, pointRevision!.revisionId),
+          ]);
+          return `${browser}; exact draft readiness=${draft}`;
+        },
       );
     } else {
       journal.unreached(
@@ -1599,7 +1740,8 @@ nativeTest(
       );
     }
 
-    const memberJourney = await auth.signIn('bob');
+    const discoveryPath = `/en/books/${encodeURIComponent(control!.subjectId)}/read?view=catalogues`;
+    const memberJourney = await auth.signIn('bob', { returnTo: discoveryPath });
     const memberPage = pageFrom(memberJourney);
     await memberPage.setViewportSize({ width: 1280, height: 900 });
     const discovery = await journal.run(
@@ -1615,9 +1757,8 @@ nativeTest(
           (item) => item.catalogueId === control!.catalogueId && item.revisionId === currentReleaseRevisionId,
         );
         if (index < 0) throw new Error('Generated Book subject discovery omitted the separate control');
-        await memberPage.goto(`${stack.web}/en/books/${encodeURIComponent(control!.subjectId)}/read?view=catalogues`, {
-          waitUntil: 'domcontentloaded',
-        });
+        const discoveryHref = new URL(discoveryPath, stack.web).href;
+        if (memberPage.url() !== discoveryHref) await memberPage.goto(discoveryHref, { waitUntil: 'domcontentloaded' });
         await hydrate(memberPage);
         const catalogueTitle = body.items[index]!.title?.trim() || 'Published book ' + (index + 1);
         await memberPage.getByRole('link', { name: catalogueTitle, exact: true }).click();
@@ -1633,7 +1774,13 @@ nativeTest(
         exactReaderHref = memberPage.url();
         return { value: exactReaderHref, observation: `discovery-index=${index + 1} exact-url=${exactReaderHref}` };
       },
-      () => pageObservation(memberPage),
+      async () => {
+        const [browser, native] = await Promise.all([
+          pageObservation(memberPage),
+          observeBookDiscovery(control!, currentReleaseRevisionId ?? control!.publicationRevisionId),
+        ]);
+        return `${browser}; exact discovery readiness=${native}`;
+      },
     );
 
     if (discovery && occurrence) {
