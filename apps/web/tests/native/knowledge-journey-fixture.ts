@@ -167,7 +167,7 @@ export type KnowledgeJourneyFixture = {
   privateHref(notebookId: string, documentId: string): string;
   hydrate(page: Page): Promise<void>;
   open(page: Page, path: string): Promise<void>;
-  labeledValue(page: Page, label: string): Promise<string>;
+  readNotebookId(page: Page): Promise<string>;
   fillTitle(page: Page, label: string, value: string): Promise<void>;
   fillBody(page: Page, value: string): Promise<void>;
   waitEnabled(page: Page, name: string): Promise<void>;
@@ -283,11 +283,15 @@ export async function startKnowledgeJourneyFixture(): Promise<KnowledgeJourneyFi
           );
         await fixture.hydrate(page);
       },
-      async labeledValue(page, label) {
-        const value = page
-          .getByRole('term', { name: label, exact: true })
-          .locator('xpath=following-sibling::dd')
-          .first();
+      async readNotebookId(page) {
+        const label = m.knowledge_private_notebook_id();
+        const labelText = page.getByText(label, { exact: true });
+        const details = page.locator('details').filter({ has: page.locator('dt').and(labelText) });
+        await details
+          .locator(':scope > summary')
+          .and(page.getByText(m.knowledge_workspace_notebook_details(), { exact: true }))
+          .click();
+        const value = details.getByRole('term').and(labelText).locator('xpath=following-sibling::dd').first();
         await expect(value).toBeVisible();
         const text = (await value.innerText()).trim();
         if (!text) throw new Error(`${fixture.evidence.stage} page omitted ${label}`);
@@ -522,7 +526,6 @@ export function knowledgeJourneyCopy() {
     createDocument: m.knowledge_private_create_document(),
     notebookTitle: m.knowledge_private_notebook_title(),
     documentTitle: m.knowledge_private_document_title(),
-    notebookId: m.knowledge_private_notebook_id(),
     documentId: m.knowledge_private_document_id(),
     placementId: m.knowledge_private_placement_id(),
     revisionId: m.knowledge_private_revision(),

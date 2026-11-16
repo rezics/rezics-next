@@ -93,7 +93,7 @@ nativeTest(
     await fixture.fillTitle(page, copy.notebookTitle, text.notebook);
     await knowledgeJourneyClick(page, copy.createNotebook);
     await fixture.waitStatus(page, copy.notebookAcknowledged);
-    const sourceNotebookId = await fixture.labeledValue(page, copy.notebookId);
+    const sourceNotebookId = await fixture.readNotebookId(page);
     expect(isKnowledgeJourneyId(sourceNotebookId)).toBe(true);
     fixture.evidence.sourceNotebookId = sourceNotebookId;
     const notebooks = await fixture.readOwnedNotebooks('private-save', 'alice', alice);
@@ -389,7 +389,7 @@ nativeTest(
     await fixture.fillTitle(page, copy.notebookTitle, text.reuseNotebook);
     await knowledgeJourneyClick(page, copy.createNotebook);
     await fixture.waitStatus(page, copy.notebookAcknowledged);
-    const reuseNotebookId = await fixture.labeledValue(page, copy.notebookId);
+    const reuseNotebookId = await fixture.readNotebookId(page);
     expect(isKnowledgeJourneyId(reuseNotebookId)).toBe(true);
     expect(reuseNotebookId).not.toBe(sourceNotebookId);
     fixture.evidence.reuseNotebookId = reuseNotebookId;
