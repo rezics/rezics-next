@@ -30,6 +30,7 @@ import {
   currentAnimeCharacterIds,
   firstPublicRow,
   licensedVndbArchive,
+  mountedVisitsForRow,
   operatorResponseEvidence,
   retireWalkJournals,
   selectPublished,
@@ -69,6 +70,20 @@ test('the journey visits the selected anime and both light-novel families once e
   expect(works.find((work) => work.sourceKey === '233')).toMatchObject({ role: 'anime' });
   expect(works.find((work) => work.sourceKey === '5329')).toMatchObject({ role: 'volume', series: '2815' });
   expect(works.find((work) => work.sourceKey === '10862')).toMatchObject({ role: 'volume', series: '2815' });
+});
+
+test('mounted result rows retain only completed visits for their sources', () => {
+  const phone = journeyTargets.map((target) => ({
+    ...target,
+    viewport: 'phone',
+    path: `/en/${target.sourceKey}`,
+    targets: [],
+  }));
+  const desktop = { ...phone.find((visit) => visit.sourceKey === '233')!, viewport: 'desktop' };
+  const visits = [...phone, desktop];
+  expect(mountedVisitsForRow('I05', visits).map(({ sourceKey }) => sourceKey)).toEqual(['10380', '51', '233', '233']);
+  expect(mountedVisitsForRow('I11', visits).map(({ sourceKey }) => sourceKey)).toEqual(['499', '26']);
+  expect(mountedVisitsForRow('I12', visits).map(({ sourceKey }) => sourceKey)).toEqual(['233', '2815', '5329', '10862', '233']);
 });
 
 test('a missing or duplicated target stops the journey by its exact source key', () => {

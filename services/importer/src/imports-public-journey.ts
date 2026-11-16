@@ -38,6 +38,7 @@ import {
   runBangumiJourney,
   selectJourneyWorks,
   startWalkStackActions,
+  type JourneyMountedVisit,
   type JourneyPublishedRow,
 } from './showcase-bangumi-journey.ts';
 import type { CrossMediaSeedReport } from './cross-media-seed.ts';
@@ -166,6 +167,14 @@ export function walkSeedChildEnv(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function mountedVisitsForRow(id: 'I05' | 'I11' | 'I12', visits: readonly JourneyMountedVisit[]) {
+  if (id === 'I05') return visits.filter((visit) => visit.role === 'anime');
+  const series = id === 'I11' ? '499' : '2815';
+  return visits.filter(
+    (visit) => (visit.series ?? visit.sourceKey) === series || (id === 'I12' && visit.sourceKey === '233'),
+  );
 }
 
 export function walkInventorySummary(inventory: WalkInventory): string {
@@ -1464,13 +1473,19 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
       }),
     );
 
+    const browserVisits: JourneyMountedVisit[] = [];
     const browser = await walkRow('I05', async () => {
       const frontends = await startWalkStackActions(
         ['pages', 'web'],
         [`${origins.issuer}/.well-known/openid-configuration`, origins.web],
       );
       try {
-        await runBangumiJourney({ skipPersona: true, skipSeed: true, startFrontends: false });
+        await runBangumiJourney({
+          skipPersona: true,
+          skipSeed: true,
+          startFrontends: false,
+          onMountedVisit: (visit) => browserVisits.push(visit),
+        });
         return { browser: 'passing' };
       } finally {
         await frontends.stop();
@@ -1482,7 +1497,12 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
       rows[index] = {
         ...current,
         elapsedMs: current.elapsedMs! + browser.elapsedMs!,
-        evidence: { ...current.evidence, browser: browser.result },
+        evidence: {
+          ...current.evidence,
+          browser: browser.result,
+          browserVisits: mountedVisitsForRow(id, browserVisits),
+          ...(browser.cause ? { browserError: browser.cause } : {}),
+        },
         ...(browser.result === 'failing' && current.result === 'passing'
           ? { result: 'failing' as const, cause: browser.cause }
           : {}),

@@ -1114,7 +1114,17 @@ async function captureOriginalAuthJourneys(selected: readonly CaptureId[]): Prom
               'old-session read',
             ]
           : id === 'J04'
-            ? ['signup', 'sign-in', 'stage', 'approve', 'apply', 'old/new-password sign-in', 'current-session read']
+            ? [
+                'signup',
+                'sign-in',
+                'original-session read',
+                'stage',
+                'approve',
+                'apply',
+                'old-session read',
+                'old/new-password sign-in',
+                'current-session read',
+              ]
             : ['signup', 'website OAuth', 'admitted Kernel read', 'revoke', 'formerly admitted Kernel bearer denial'],
       owner:
         'existing manager_event_idle visual/seed owner via Content and supermanager; SDK startup repair retains its existing owner',
@@ -2181,12 +2191,18 @@ async function originalJ04(stack: Origins): Promise<string> {
   const person = await signup(stack, 'j04');
   capturePhase('fresh same-subject Security management step-up');
   const session = await signIn(stack, person, AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.security);
+  const readSessions = (cookie: string) =>
+    send(`${stack.native}/sessions`, { method: 'GET', cookie, origin: stack.issuer });
+  capturePhase('original management-session read');
+  requireStatus(await readSessions(session.cookie), 'original management session', 200);
   capturePhase('credential replacement');
   const changed = await credentialEffect(stack, session, session.accountId, {
     kind: 'password',
     password: nextPassword,
   });
   if (changed.status !== 200) throw new Error(`credential effect HTTP ${changed.status}: ${summarize(changed.value)}`);
+  capturePhase('original management-session read refusal');
+  requireStatus(await readSessions(session.cookie), 'original management session after credential replacement', 401);
   capturePhase('old-password sign-in refusal');
   const stale = await auth(
     stack,
@@ -2199,12 +2215,7 @@ async function originalJ04(stack: Origins): Promise<string> {
   capturePhase('new-password sign-in');
   const fresh = await signIn(stack, person, 'login', [], nextPassword);
   capturePhase('current-session readback');
-  const listed = await send(`${stack.native}/sessions`, {
-    method: 'GET',
-    cookie: fresh.cookie,
-    origin: stack.issuer,
-  });
-  requireStatus(listed, 'security sessions', [200, 204]);
+  requireStatus(await readSessions(fresh.cookie), 'security sessions', 200);
   return `password replaced HTTP ${changed.status}`;
 }
 
