@@ -962,9 +962,10 @@ export async function releaseIdentityPrearmHome(pool: Pool, ref: IdentityJobRef,
     );
     await query(
       tx,
-      `UPDATE semantic.identity_epoch_group SET pending_job=NULL,pending_epoch=NULL
+      `UPDATE semantic.identity_epoch_group SET pending_job=NULL,pending_epoch=NULL,
+        published_epoch=CASE WHEN $4::boolean THEN $3::bigint ELSE published_epoch END
       WHERE partition_no=$1 AND pending_job=$2 AND pending_epoch=$3`,
-      [home, ref.jobId, ref.epoch.toString()],
+      [home, ref.jobId, ref.epoch.toString(), terminal.state === 'published'],
       work,
     );
     await query(
