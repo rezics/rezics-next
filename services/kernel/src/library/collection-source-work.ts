@@ -36,6 +36,7 @@ import publicationRecoverySQL from './collection-publication-recovery.sql';
 import publicationSupersededSQL from './collection-publication-superseded.sql';
 import { collectionPublicationOutputProducer } from './collection-publication-output.ts';
 import { reclaimSupersededCollectionOutput } from './collection-publication-reclaim.ts';
+import { reinspectFrozenCollection } from './collection-retention.ts';
 import frozenCaptureSQL from './collection-publication-frozen-capture.sql';
 import { publicOutputFreezeWork, publicOutputFrozenCaptureWork, publicOutputRetireWork } from '../semantic/identity-public-output-work.ts';
 import { withCollectionReadConnection } from './collection-read-connection.ts';
@@ -112,22 +113,34 @@ async function retainFrozenPublication(
   row: { route: number; collection: string },
 ): Promise<boolean> {
   const deadline = workStepDeadline();
-  const capture = await withCollectionReadConnection(context.pool, deadline, async (tx) =>
-    (
-      await tx.query<{
-        generation: string;
-        transactionId: string;
-        position: string;
-        sourceGeneration: string;
-        releaseDigest: string | null;
-        sealedBindingDigest: string | null;
-      }>(frozenCaptureSQL.sql, [row.route, row.collection])
-    ).rows[0],
+  const capture = await withCollectionReadConnection(
+    context.pool,
+    deadline,
+    async (tx) =>
+      (
+        await tx.query<{
+          generation: string;
+          transactionId: string;
+          position: string;
+          sourceGeneration: string;
+          releaseDigest: string | null;
+          sealedBindingDigest: string | null;
+          cleanupAccountId: string | null;
+        }>(frozenCaptureSQL.sql, [row.route, row.collection])
+      ).rows[0],
   );
   if (!capture) return false;
+  if (capture.cleanupAccountId) {
+    const page = await reinspectFrozenCollection(
+      context.pool,
+      { accountId: capture.cleanupAccountId, collectionId: row.collection, retainedGeneration: capture.generation },
+      deadline,
+    );
+    return page.status === 'progress' || page.status === 'purged';
+  }
   const producer = collectionPublicationOutputProducer(context);
   if (capture.sealedBindingDigest) {
-    await producer.retainFrozen(
+    const result = await producer.retainFrozen(
       {
         kind: 'public-output',
         partition: partitionOf(row.route),
@@ -136,7 +149,7 @@ async function retainFrozenPublication(
       },
       { deadline, allowance: { reservationId: capture.generation, remaining: publicOutputFreezeWork() } },
     );
-    return false;
+    return result.status === 'applied';
   }
   const { generation, transactionId, position, sourceGeneration } = capture;
   const result = await producer.advanceFrozenPublication(
@@ -222,7 +235,7 @@ export async function registerCollectionSourceWork(context: WorkContext): Promis
       if (!row) return { ...input, partition: input.partition + 1, route: null, collection: null };
       if (row.builtin === 'everything' || row.builtin === 'state') {
         if (row.owner) await recoverCollectionPublication(context, { ...row, owner: row.owner }, input.root);
-        // Revisit only when the retained capture advanced. The existing segment still caps invocations.
+        // Revisit after capture, transfer or terminal cleanup progresses.
         if (await retainFrozenPublication(context, row)) return input;
         await retireSupersededPublication(context, row);
       }

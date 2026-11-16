@@ -4,7 +4,8 @@ SELECT f.generation::text AS generation,f.transaction_id::text AS "transactionId
  COALESCE(c.builtin_release_digest,(
    SELECT digest FROM semantic.definition_activation WHERE route=0 ORDER BY head DESC LIMIT 1
  )) AS "releaseDigest",
- CASE WHEN s.capture_id IS NOT NULL THEN b.binding_digest END AS "sealedBindingDigest"
+ CASE WHEN s.capture_id IS NOT NULL THEN b.binding_digest END AS "sealedBindingDigest",
+ cleanup.account_id::text AS "cleanupAccountId"
 FROM library.collection_retained_output f
 JOIN library.collection c ON c.route=f.route AND c.collection_id=f.collection_id
 JOIN LATERAL library.frozen_public_output_origin(f.route,f.collection_id,f.generation) origin ON true
@@ -15,4 +16,10 @@ LEFT JOIN library.native_public_output_binding b
 LEFT JOIN library.native_public_output_hold h
  ON h.partition_no=b.partition_no AND h.hold_id=b.hold_id AND h.consumed_by IS NULL
 LEFT JOIN semantic.identity_public_output_seal s ON s.partition_no=b.partition_no AND s.capture_id=b.capture_id
-WHERE f.route=$1 AND f.collection_id=$2 AND (b.capture_id IS NULL OR h.hold_id IS NOT NULL);
+LEFT JOIN LATERAL (
+ SELECT c.curator_account_id AS account_id
+ WHERE b.capture_id IS NOT NULL AND h.hold_id IS NULL
+   AND library.may_deidentify_frozen_output(f.route,f.collection_id,f.generation)
+) cleanup ON true
+WHERE f.route=$1 AND f.collection_id=$2
+ AND (b.capture_id IS NULL OR h.hold_id IS NOT NULL OR cleanup.account_id IS NOT NULL);

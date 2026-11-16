@@ -831,7 +831,9 @@ the immutable disposition remain available.
 Once terminal retention selects a public built-in generation, the ordinary reader uses its exact retained
 publication and still-held seal. The Source sweep transfers the hold through Semantic's original applied
 disposition, with the same generation and seal. Terminal cleanup can detach the curator and original account
-publication row only when this is the sole remaining hold. Subsequent member reads revalidate the committed
+publication row only when this is the sole remaining hold. The same sweep revisits the exact Collection after
+the transfer commits and resumes one terminal cleanup page at a time. A later sweep can also find that committed
+successor after interruption. Subsequent member reads revalidate the committed
 successor, account-free retained generation and current identity scope. Other held or uncertain copies keep
 de-identification pending. The same sweep can capture a retained built-in output whose original capture was
 missing or unfinished at T. It reads only the immutable frozen set under its actual activation, and resumes
@@ -1937,9 +1939,9 @@ copy blocks ordinary/terminal parent/control removal until shared disposition ex
 copies. Neither output absence nor these family obligations certify global no-data or destination release.
 A capture-family pending entry does not assert a receipt or hold row exists for every unfinished capture.
 
-There is no delivered release-to-terminal reinspection/wakeup or foreign Source/destination disposition custody
-port. The existing terminal pending/recovery boundary names that gap; ordinary scheduled sweeps retry released
-private due captures. No new participant, scheduler, ACK or inferred destination erasure is introduced. These
+General Source holds and foreign destination disposition remain pending at the terminal recovery boundary.
+The Source sweep resumes terminal cleanup of a frozen built-in generation after its exact committed successor
+becomes current. Ordinary scheduled sweeps retry released private due captures. These
 guards create no capture, permission evidence or second Source engine.
 `createCollectionSource` and canonical publication functions are still unavailable implementations in this tree;
 there is no ordinary destination-disposition export to bind. Current metadata/raw readers, listing stamps, DBOS
