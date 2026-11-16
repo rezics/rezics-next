@@ -289,9 +289,7 @@ export function applyWalkInventoryToCapabilities(markdown: string, inventory: Wa
     OBSERVED_WALK_HEADING,
     '',
     `Command: \`${inventory.command}\`. Revision \`${inventory.revision}\`. Started ${inventory.startedAt}; ended ${inventory.endedAt}. ${inventory.passing}/${inventory.total} passing.`,
-    slowest
-      ? `Slowest failing: ${slowest.id} ${slowest.elapsedMs}ms ${slowest.cause}.`
-      : 'No measured row failure.',
+    slowest ? `Slowest failing: ${slowest.id} ${slowest.elapsedMs}ms ${slowest.cause}.` : 'No measured row failure.',
     ...(unreached ? [`${unreached} rows were unreached after a prerequisite failed.`] : []),
     ...(inventory.browserStageFailure ? [`Mounted stage failure: ${inventory.browserStageFailure}.`] : []),
     '',
@@ -738,7 +736,10 @@ const operatorSpecs: Record<'I01' | 'I02' | 'I03' | 'I04', OperatorSpec> = {
 export async function operatorResponseEvidence(response: Response) {
   const payload: unknown =
     response.body && response.headers.get('content-type')?.includes('json')
-      ? await response.clone().json().catch(() => undefined)
+      ? await response
+          .clone()
+          .json()
+          .catch(() => undefined)
       : undefined;
   const problems =
     isRecord(payload) && Array.isArray(payload.results)
@@ -1377,25 +1378,32 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
   await mkdir(evidenceRoot, { recursive: true, mode: 0o700 });
   const origins = stackOrigins();
   const rows: WalkRowResult[] = [];
+  const recordStage = async (stage: 'setup' | 'operators' | 'seed' | 'seed-reopen' | 'catalogue-readback') => {
+    const path = resolve(evidenceRoot, 'run.json');
+    const pending = `${path}.pending`;
+    await writeFile(
+      pending,
+      JSON.stringify({
+        command: retainedCommand,
+        revision,
+        startedAt,
+        stage,
+        stageStartedAt: new Date().toISOString(),
+      }),
+      { mode: 0o600 },
+    );
+    await rename(pending, path);
+  };
   let persona: SeedEnv | undefined;
   let sharedStartup: string | null = null;
   let browserStageFailure: string | undefined;
+  await recordStage('setup');
   try {
     persona = await loadPersona();
     await grantOwner(persona);
   } catch (error) {
     sharedStartup = walkFailureCause(error);
   }
-
-  await writeFile(
-    resolve(evidenceRoot, 'run.json'),
-    JSON.stringify({
-      command: retainedCommand,
-      revision,
-      startedAt,
-    }),
-    { mode: 0o600 },
-  );
 
   const operator = persona;
   const recordOperator = async (id: keyof typeof operatorSpecs) => {
@@ -1414,8 +1422,10 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
     await writeWalkRow(row);
   };
 
-  // Run the ordinary cover import before the bulk seed can spend this account's upload quota.
-  await recordOperator('I01');
+  // Finish independent operator evidence before the shared catalogue seed.
+  // Bangumi precedes the bulk upload quota, and Open Library is the last operator.
+  await recordStage('operators');
+  for (const id of ['I01', 'I02', 'I04', 'I03'] as const) await recordOperator(id);
 
   const seedStarted = Date.now();
   let seedElapsedMs = 0;
@@ -1427,8 +1437,10 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
     try {
       const seedArgs = ['bun', 'scripts/datasets/cross-media-seed.ts', '--dev-catalogue'];
       const seedEnv = walkSeedChildEnv(origins, persona?.file ?? {});
+      await recordStage('seed');
       await command('seed', seedArgs, seedEnv);
       const first = await loadSeedReport();
+      await recordStage('seed-reopen');
       await command('seed-reopen', seedArgs, seedEnv);
       const reopened = await loadSeedReport();
       assertUnchangedSeedReopen(first.publication, reopened.publication);
@@ -1464,6 +1476,7 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
         evidence: { sharedStartup: Boolean(sharedStartup), seed: true },
       });
   } else {
+    await recordStage('catalogue-readback');
     const api = stackOrigins().kernel;
     const published = publication;
     const seeded = report;
@@ -1591,9 +1604,6 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
 
   for (const row of rows) await writeWalkRow(row);
 
-  // These callers share the ordinary account/source authority. Keep native writes serial.
-  // Open Library is last so its unresolved operation cannot hide the other observations.
-  for (const id of ['I02', 'I04', 'I03'] as const) await recordOperator(id);
   rows.sort((left, right) => left.id.localeCompare(right.id));
 
   const endedAt = new Date().toISOString();
