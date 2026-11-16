@@ -347,6 +347,13 @@ export function RealmShelf({
     <>
       <RealmCommunityBoards
         returnFor={(id) => returnFor('boards', id)}
+        canonicalLinkFor={(board) =>
+          !!realm.nativeObservation &&
+          realm.visibility === 'public' &&
+          board.visibility === 'published' &&
+          !selection.node &&
+          boards.cursors.get(board.id) === null
+        }
         current={current}
         focus={boardFocus}
         boards={boardRestoring ? [] : boards.items}

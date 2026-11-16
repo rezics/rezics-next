@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createContext, useContext, useSyncExternalStore, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
@@ -1114,6 +1114,50 @@ test('installed Home and Board shelf mappings retain native recent and Board vis
     next: null,
     unavailable: 0,
   });
+});
+
+test('the initial public native Board link is canonical and recent discussion retains the supplying shelf', async () => {
+  native = fixture(1, 'anonymous');
+  native.boards.items.push({
+    id: id(80),
+    realmId: id(1),
+    route: 1,
+    securityRevision: '1',
+    createdAt: '2026-10-01T00:00:00Z',
+    title: 'A long community name for patient readers, careful notes, and shared discoveries · Discussion',
+    purpose: 'discussion',
+    visibility: 'published',
+    availability: 'available',
+    recent: {
+      state: 'current',
+      complete: true,
+      threads: [
+        {
+          thread: { id: id(81), title: 'Ordinary thread' },
+          target: { kind: 'thread', id: id(81), boardId: id(80) },
+          comments: { state: 'unavailable' },
+        },
+      ],
+    },
+  });
+  session = { state: 'signed-out', subject: '', csrfToken: '' };
+  await paint(await readNativeRealmHome(operations, input));
+
+  const board = host.querySelector<HTMLAnchorElement>('[data-slot="realm-board-link"]')!;
+  expect(board.textContent).toBe(native.boards.items[0]!.title);
+  expect(board.getAttribute('href')).toBe(`/en/boards/${id(80)}`);
+  const recent = host.querySelector<HTMLAnchorElement>('[data-slot="realm-board-recent-link"]')!;
+  const boardReturn = new URL(recent.href).searchParams.get('boardReturn')!;
+  expect(new URL(boardReturn, recent.origin).searchParams.get('returnTo')).toBe(
+    `/en/spaces/realm?node=boards#realm-board-${id(80)}`,
+  );
+  const navigate = spyOn(window.location, 'assign').mockImplementation(() => {});
+  try {
+    board.click();
+    expect(navigate).toHaveBeenCalledWith(boardReturn);
+  } finally {
+    navigate.mockRestore();
+  }
 });
 
 test('a banned current reader keeps public shelves and never receives a join control', async () => {
