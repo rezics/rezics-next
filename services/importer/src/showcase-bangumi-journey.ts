@@ -150,6 +150,11 @@ export type JourneyBrowserTarget = {
   holder: string;
   kind: 'episode' | 'person' | 'organization' | 'book' | 'book-series' | 'anime' | 'character';
 };
+export type JourneyMountedVisit = JourneyTarget & {
+  viewport: string;
+  path: string;
+  targets: readonly JourneyBrowserTarget[];
+};
 type PublicLink = {
   subject: string;
   property: string;
@@ -437,6 +442,7 @@ export type BangumiJourneyOptions = {
   skipPersona?: boolean;
   skipSeed?: boolean;
   startFrontends?: boolean | 'web';
+  onMountedVisit?(visit: JourneyMountedVisit): void;
 };
 
 export async function startWalkStackActions(actions: readonly ('pages' | 'web')[], readyUrls: readonly string[]) {
@@ -666,12 +672,14 @@ export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
           assert.equal(response?.status(), 200, `mounted ${name} work ${work.sourceKey}`);
           await page.locator('main').waitFor();
           const text = await page.locator('main').innerText();
+          const url = page.url();
+          const targets = browserTargets.get(work.sourceKey) ?? [];
           visits.push({
             viewport: name,
             sourceKey: work.sourceKey,
-            url: page.url(),
+            url,
             text,
-            targets: browserTargets.get(work.sourceKey) ?? [],
+            targets,
           });
           const read = currentReads.get(work.sourceKey)!;
           for (const label of undNames(read))
@@ -680,13 +688,20 @@ export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
             (await page.locator('main a[href*="bgm.tv"]').count()) > 0,
             `${name} ${work.sourceKey} renders its Bangumi citation`,
           );
-          for (const target of browserTargets.get(work.sourceKey) ?? [])
-            await checkBrowserTarget(page, web, work.row.subjectId, target, name);
+          for (const target of targets) await checkBrowserTarget(page, web, work.row.subjectId, target, name);
           // Required visits are the selected comic, both Kara volumes, the anime counterpart and anime detail targets.
           if (work.sourceKey === '26')
             assert.ok(text.includes('文学少女'), `${name} Book Girl volume retains its exact title`);
           if (work.sourceKey === '233')
             assert.ok(text.includes('劇場版 空の境界 第一章 俯瞰風景'), `${name} anime 233 shows its exact und name`);
+          options.onMountedVisit?.({
+            sourceKey: work.sourceKey,
+            role: work.role,
+            ...(work.series ? { series: work.series } : {}),
+            viewport: name,
+            path: new URL(url).pathname,
+            targets,
+          });
         }
       } finally {
         await context.close();
