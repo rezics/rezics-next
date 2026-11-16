@@ -393,6 +393,8 @@ test('21-target authority restarts after cross-home consent revoke and activates
     metadataSpy.mockRestore();
   }
   expect(invalidated).toBe(true);
+  const lastPage = await advanceActivation(activationDeps, f.native.author, catalogueId, candidate.stageId);
+  expect(lastPage.value).toMatchObject({ state: 'ready', checkedTargetCount: '22', totalTargetCount: '22' });
 
   const beforeStaleRestartEvents = await activationEventCounts(catalogueId);
   const staleFinal = await activateCandidate(activationDeps, f.native.author, catalogueId, candidate.stageId);

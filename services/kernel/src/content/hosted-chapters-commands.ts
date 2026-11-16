@@ -190,15 +190,6 @@ export async function prepareHostedPublicationPointCommand(
       });
       return evidence;
     },
-    async authorize(tx, attempt, evidence) {
-      return base.authorize(tx, attempt, evidence);
-    },
-    async finalize(tx, attempt, evidence) {
-      await base.finalize?.(tx, attempt, evidence);
-      const prepared = preparedByTime.get(attempt.time);
-      if (!prepared) throw new Error('Hosted point command reached finalization without preparation');
-      await prepared.final(tx);
-    },
   };
 
   return {
@@ -247,7 +238,7 @@ export async function publishHostedPublicationPoint(
     deps.pool,
     { ...commandOptions, authorization: command.authorization },
     async (tx, { transactionId, time }) => {
-      const current = await hostedCatalogue(tx, catalogueId, true);
+      const current = await hostedCatalogue(tx, catalogueId);
       if (!current || current.thread_id !== command.threadId) throw new ContentNotFoundError();
       if (
         current.head_revision_id !== operation.input.expectedRevisionId ||
@@ -255,17 +246,24 @@ export async function publishHostedPublicationPoint(
       )
         throw new RevisionPreconditionError();
 
+      const prepared = command.prepared(time);
+      await prepared.final(tx);
       try {
         await commitHostedVersionPublicationPoint(tx, {
           catalogueId,
           revisionId,
           recordedTransactionId: transactionId,
           recordedAt: authoritativeTimeValue(time),
-          selection: command.prepared(time).selection,
+          selection: prepared.selection,
         });
-        const languageRows = command.prepared(time).languageRows;
-        if (languageRows !== null)
-          await commitHostedChapterLanguageNamespace(tx, catalogueId, command.namespaceId, revisionId, languageRows);
+        if (prepared.languageRows !== null)
+          await commitHostedChapterLanguageNamespace(
+            tx,
+            catalogueId,
+            command.namespaceId,
+            revisionId,
+            prepared.languageRows,
+          );
       } catch (error) {
         if (error instanceof HostedVersionPublicationWriteError) throw new RevisionPreconditionError();
         throw error;
