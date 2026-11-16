@@ -478,7 +478,7 @@ export function createSearchGenerationPublication(
     add(meter, custody.cost);
     if (!('definition' in custody)) throw new Pending('source_pending');
     const remainingInputs = PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - meter.inputKeys;
-    if (enrollmentOnly && remainingInputs <= PUBLIC_FILTER_PREPARATION_INPUT_RESERVE)
+    if (remainingInputs <= 0 || (enrollmentOnly && remainingInputs <= PUBLIC_FILTER_PREPARATION_INPUT_RESERVE))
       return { complete: false, advanced: false, enrollmentAdvanced: false };
     const completion = await advanceNativeGenerationSource(
       {
@@ -497,7 +497,8 @@ export function createSearchGenerationPublication(
         consumer: job.consumer,
         capture: publicationCapture(custody.definition.capture) as PublicFilterConsumerCaptureInput,
         ...(job.observation ? { observation: job.observation } : {}),
-        ...(enrollmentOnly ? { enrollmentInputLimit: remainingInputs } : {}),
+        inputLimit: remainingInputs,
+        enrollmentOnly,
       },
       context,
     );

@@ -507,6 +507,7 @@ export type NativePublicFilterPublication = Readonly<{
   execution: string;
 }>;
 export type NativePublicFilterPublicationRequest = NativePublicFilterPublication | Readonly<{ job: string }>;
+type NativePublicationSpent = Readonly<Pick<BindingCost, 'inputKeys' | 'bytes'>>;
 export type NativePublicFilterPublicationCompletion =
   | Readonly<{
       status: 'pending';
@@ -534,6 +535,7 @@ const nativePublicationCompletions = new WeakMap<
   (
     request: NativePublicFilterPublicationRequest,
     context: PublicFilterConsumerContext,
+    spent?: NativePublicationSpent,
   ) => Promise<NativePublicFilterPublicationCompletion>
 >();
 
@@ -553,10 +555,11 @@ export async function readNativePublicFilterPublicationCompletion(
   binding: PublicFilterSourceBinding,
   request: NativePublicFilterPublicationRequest,
   context: PublicFilterConsumerContext,
+  spent?: NativePublicationSpent,
 ): Promise<NativePublicFilterPublicationCompletion> {
   const read = nativePublicationCompletions.get(binding);
   return read
-    ? read(request, context)
+    ? read(request, context, spent)
     : {
         status: 'unready',
         reason: 'source_missing',
@@ -3216,7 +3219,7 @@ export function createNativePublicFilterSourceBinding(
       return fail('observation_lost', retained.cost);
     return { ...result, cost: retained.cost };
   });
-  nativePublicationCompletions.set(bootstrapBinding, async (request, context) => {
+  nativePublicationCompletions.set(bootstrapBinding, async (request, context, spent) => {
     const input = structuredClone(request),
       deadline = context.deadline;
     return run({ deadline }, async (cost, db) => {
@@ -3315,7 +3318,14 @@ export function createNativePublicFilterSourceBinding(
       );
       if (terminal.rowCount === 0)
         return { status: 'pending' as const, publication, reason: 'owner_unavailable' as const, cost };
-      const settled = await settleNative(publication, { deadline }, cost);
+      // Prior Search reads consume the same allowance. They fund no additional
+      // Source work and must not be charged again in the returned Source cost.
+      const settlementSpent = {
+        ...cost,
+        inputKeys: cost.inputKeys + (spent?.inputKeys ?? 0),
+        bytes: cost.bytes + (spent?.bytes ?? 0),
+      };
+      const settled = await settleNative(publication, { deadline }, settlementSpent);
       addCost(cost, settled.cost);
       if (settled.status !== 'joined')
         return {

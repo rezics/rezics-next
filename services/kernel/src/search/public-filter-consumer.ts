@@ -757,7 +757,8 @@ type NativeGenerationInput = Readonly<{
   consumer: PublicFilterConsumer;
   capture: PublicFilterConsumerCaptureInput;
   observation?: string;
-  enrollmentInputLimit?: number;
+  inputLimit: number;
+  enrollmentOnly: boolean;
 }>;
 type NativeGenerationOutcome = (NativePublicFilterPublicationCompletion | PublicFilterConsumerUnavailable) &
   Readonly<{ advanced?: boolean; enrollmentAdvanced?: boolean }>;
@@ -809,12 +810,14 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     void operation.finally(() => pending.delete(operation)).catch(() => {});
     return operation;
   };
-  function meter(context: PublicFilterConsumerContext, maintenance = false, enrollmentInputLimit?: number) {
+  function meter(
+    context: PublicFilterConsumerContext,
+    maintenance = false,
+    offeredInputs = PUBLIC_FILTER_PREPARATION_INPUT_LIMIT,
+    enrollmentOnly = false,
+  ) {
     context = { deadline: context.deadline };
-    const inputLimit = Math.min(
-      enrollmentInputLimit ?? PUBLIC_FILTER_PREPARATION_INPUT_LIMIT,
-      PUBLIC_FILTER_PREPARATION_INPUT_LIMIT,
-    );
+    const inputLimit = Math.min(offeredInputs, PUBLIC_FILTER_PREPARATION_INPUT_LIMIT);
     const cost: ConsumerMeter = emptyConsumerCost();
     let preparationInputKeys = 0;
     const add = (next: PublicFilterCost) => {
@@ -1116,7 +1119,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       native,
       pool,
       inputLimit,
-      enrollmentOnly: enrollmentInputLimit !== undefined,
+      enrollmentOnly,
       enrollmentAdvanced: false,
     };
   }
@@ -1560,7 +1563,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         await config.source.readPublicFilterProjectionPage({
           subject: hit.id,
           meaning,
-          inputLimit: Math.max(1, 1000 - m.cost.inputKeys),
+          inputLimit: Math.max(1, m.inputLimit - m.cost.inputKeys),
           frontier: null,
           context,
         }),
@@ -2617,7 +2620,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         };
         if (!page) {
           m.check();
-          if (1000 - m.cost.inputKeys < PUBLIC_FILTER_REPAIR_INPUT_RESERVE) return m.unavailable('source_pending');
+          if (m.inputLimit - m.cost.inputKeys < PUBLIC_FILTER_REPAIR_INPUT_RESERVE)
+            return m.unavailable('source_pending');
           const sourcePage = m.take(
             await binding.repairPage(
               {
@@ -2986,10 +2990,19 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     },
   };
   generationSources.set(operations, async (input, context) => {
-    const m = meter(context, true, input.enrollmentInputLimit);
+    const m = meter(context, true, input.inputLimit, input.enrollmentOnly);
+    const spent = () => ({
+      inputKeys: PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - m.inputLimit + m.cost.inputKeys,
+      bytes: m.cost.bytes,
+    });
     try {
       if (!m.enrollmentOnly) {
-        const original = await readNativePublicFilterPublicationCompletion(binding, { job: input.job }, context);
+        const original = await readNativePublicFilterPublicationCompletion(
+          binding,
+          { job: input.job },
+          context,
+          spent(),
+        );
         m.add(original.cost);
         if ('publication' in original) {
           if (original.status === 'pending') {
@@ -3100,6 +3113,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           execution: work.execution,
         },
         context,
+        spent(),
       );
       m.add(completion.cost);
       if (completion.status === 'pending') {
