@@ -272,7 +272,7 @@ test('assign, unassign and restore use one idempotent write and the server-provi
     method: 'POST',
     path: `/v1/libraryLabels/${labelId}:assign`,
     body: { subjectId },
-    key: assignKey,
+    key: JSON.stringify(assignKey),
     authorization: 'Bearer native-web-token',
   });
 
@@ -366,8 +366,8 @@ test('a new label prepares separate creation and assignment steps with distinct 
     `POST /v1/libraryLabels/${labelId}:assign`,
   ]);
   expect(requests[0]).toMatchObject({ query: { q: 'New reading list', limit: '20' } });
-  expect(requests[1]).toMatchObject({ body: { name: 'New reading list' }, key: createKey });
-  expect(requests[2]).toMatchObject({ body: { subjectId }, key: assignKey });
+  expect(requests[1]).toMatchObject({ body: { name: 'New reading list' }, key: JSON.stringify(createKey) });
+  expect(requests[2]).toMatchObject({ body: { subjectId }, key: JSON.stringify(assignKey) });
 });
 
 test('capacity and each restore refusal remain distinct mutation results', async () => {

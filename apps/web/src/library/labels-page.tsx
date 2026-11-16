@@ -66,7 +66,8 @@ function LabelExposure({
   return page.operations.includes(name) && (!current || current(name)) ? children : null;
 }
 const fieldClass = 'min-w-0 max-w-full';
-const actionClass = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center';
+const actionClass =
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:min-h-7 sm:min-w-0';
 type LabelAction = {
   operation: 'rename' | 'delete';
   label: LabelsPage['labels'][number];
@@ -771,9 +772,7 @@ export function LabelsPageView({
       />
     );
   if (!page.operations.includes('library_label.list'))
-    return (
-      <LabelDirectoryWorkspace heading={pageHeading} state={<p>{m.library_labels_unavailable()}</p>} />
-    );
+    return <LabelDirectoryWorkspace heading={pageHeading} state={<p>{m.library_labels_unavailable()}</p>} />;
   const description = <p className="max-w-xl text-muted-foreground">{m.library_labels_directory_description()}</p>;
   const privacy = (
     <p className="flex items-center gap-2 text-sm text-muted-foreground">

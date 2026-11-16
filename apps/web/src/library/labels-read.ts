@@ -83,7 +83,7 @@ function readLabelInput(value: unknown, validateName: boolean): LabelInput {
     idempotencyKey: input.idempotencyKey,
     ...(typeof input.id === 'string' ? { id: input.id } : {}),
     ...(typeof input.name === 'string' ? { name: input.name } : {}),
-    ...(typeof input.revision === 'number' ? { revision: input.revision } : {}),
+    ...(operation !== 'create' && typeof input.revision === 'number' ? { revision: input.revision } : {}),
   };
 }
 

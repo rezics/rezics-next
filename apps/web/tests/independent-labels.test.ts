@@ -154,7 +154,7 @@ test('Independent labels work from catalogue to subject assignment and label she
   );
   expect(calls.slice(beforeRestore)).toHaveLength(1);
   expect(await calls.at(-1)!.json()).toEqual({ subjectId, assignmentId, revision: 89 });
-  expect(calls.at(-1)!.headers.get('idempotency-key')).toBe(restoreKey);
+  expect(calls.at(-1)!.headers.get('idempotency-key')).toBe(JSON.stringify(restoreKey));
   const current = catalogue.labels[0]!;
   const deleteKey = crypto.randomUUID();
   const deleted = await submitLabel(client, request(true), env, {
@@ -272,7 +272,7 @@ test('a stale native catalogue reply retains the rendered Undo episode after the
   expect(catalogue.calls).toHaveLength(1);
   expect(catalogue.calls[0]).toMatchObject({
     method: 'PATCH',
-    key,
+    key: JSON.stringify(key),
     body: { name: 'New name', revision: label.revision },
   });
 });

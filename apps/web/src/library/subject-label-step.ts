@@ -158,7 +158,7 @@ export async function executeSubjectLabelStep(
     return { ok: false, reason: 'signed-out' };
   const headers = {
     authorization: capture.authorization,
-    'idempotency-key': capture.kind === 'create' ? capture.createKey : capture.assignKey,
+    'idempotency-key': JSON.stringify(capture.kind === 'create' ? capture.createKey : capture.assignKey),
   };
   if (capture.kind === 'create') {
     const result = await client.libraryLabels.post({ name: capture.name }, { headers });

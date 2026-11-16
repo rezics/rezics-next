@@ -102,7 +102,7 @@ test('Default private label management keeps filter rename delete undo and conti
   const initial = markup(page);
   expect(initial).toContain('href="/en/library?label=first"');
   expect(initial).toContain('cursor=opaque%2Bnext%2Fcursor');
-  expect(initial.match(/<details\b/g)).toHaveLength(4);
+  expect(initial.match(/<details\b[^>]*\bname="library-label-action"/g)).toHaveLength(4);
   expect(initial).not.toMatch(/<details\b[^>]*\sopen(?:=|>)/);
   phoneActions(initial);
   const filtered = markup({ ...page, query: 'Winter' });
@@ -133,7 +133,7 @@ test('Default private label management keeps filter rename delete undo and conti
     expect.objectContaining({
       path: '/v1/libraryLabels/first',
       body: { name: 'Reading again', revision: 9 },
-      key: rename.body.get('idempotencyKey'),
+      key: JSON.stringify(rename.body.get('idempotencyKey')),
       authorization: 'Bearer owner-token',
     }),
   ]);
@@ -151,13 +151,13 @@ test('Default private label management keeps filter rename delete undo and conti
   const retained = selectedForm(refused, 'rename', 'first');
   expect(retained.body.get('name')).toBe('My unfinished name');
   expect(retained.html).toContain('aria-invalid="true"');
-  expect(retained.html).toContain('aria-describedby="rename-error-first"');
+  expect(retained.html).toContain('aria-describedby="rename-help-first rename-error-first"');
   expect(retained.body.get('library_label_revision')).toBe('10');
   expect(fake.labels[0]?.name).toBe('Changed elsewhere');
   expect(fake.calls.filter((call) => call.method === 'PATCH')).toHaveLength(2);
   expect(fake.calls.filter((call) => call.method === 'PATCH')[1]).toMatchObject({
     body: { name: 'My unfinished name', revision: 10 },
-    key: stale.body.get('idempotencyKey'),
+    key: JSON.stringify(stale.body.get('idempotencyKey')),
   });
 
   // Delete remains a separate, exact target/revision confirmation; merely opening it sends no write.
@@ -173,7 +173,7 @@ test('Default private label management keeps filter rename delete undo and conti
     expect.objectContaining({
       path: '/v1/libraryLabels/second',
       query: { revision: '3' },
-      key: deletion.body.get('idempotencyKey'),
+      key: JSON.stringify(deletion.body.get('idempotencyKey')),
     }),
   ]);
   const reads = fake.calls.filter((call) => call.path === '/v1/libraryLabels' && call.method === 'GET');
@@ -193,7 +193,7 @@ test('Default private label management keeps filter rename delete undo and conti
     expect.objectContaining({
       method: 'POST',
       body: { revision: 73 },
-      key: restore.body.get('idempotencyKey'),
+      key: JSON.stringify(restore.body.get('idempotencyKey')),
       authorization: 'Bearer owner-token',
     }),
   ]);

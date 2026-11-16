@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { subjectLabelStepForm } from '../src/library/subject-label-step-form';
 import { m } from '../src/paraglide/messages.js';
-import { applySubjectLabelMutation } from '../src/library/subject-labels';
+import { applySubjectLabelMutation } from '../src/library/subject-labels.ts';
 
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-000000000201';
 const labelId = '0192f3a0-6c1e-7b2a-9d4e-000000000301';

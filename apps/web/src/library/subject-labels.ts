@@ -156,7 +156,7 @@ export async function applySubjectLabelMutation(
     if (input.intent === 'label-step') return await executeSubjectLabelStep(request, sessionEnv, input, client);
     if (input.intent === 'create-and-assign' || input.intent === 'capture-assign')
       return await prepareSubjectLabelStep(request, sessionEnv, input, client);
-    const headers = { authorization, 'idempotency-key': input.idempotencyKey };
+    const headers = { authorization, 'idempotency-key': JSON.stringify(input.idempotencyKey) };
     if (input.intent === 'assign') {
       const assigned = await client
         .libraryLabels({ id: input.labelId })

@@ -73,7 +73,7 @@ const request = (method = 'GET', cookie = sessionCookie) =>
     method,
     headers: { cookie, origin, 'x-csrf-token': csrfToken },
   });
-function setup(size = 3) {
+function setup(size = 3, currentCursor?: string) {
   const fake = createLibraryLabelsFake({
     labels: Array.from({ length: size }, (_, index) => ({
       id: `label-${index}`,
@@ -81,6 +81,7 @@ function setup(size = 3) {
       revision: 9,
     })),
     next: 'opaque+next/cursor',
+    ...(currentCursor === undefined ? {} : { currentCursor }),
     deleteRevision: 73,
   });
   const client = createKernelClient('https://kernel.example.test', { fetch: fake.fetch });
@@ -123,7 +124,7 @@ async function postForm(client: Parameters<typeof loadLabelsPage>[0], body: URLS
 
 test("the labels page lists the owner's labels from one catalogue read of up to 100, in the kernel's order, with a link to the next page when next is set", async () => {
   for (const size of [3, 100]) {
-    const { fake, client } = setup(size);
+    const { fake, client } = setup(size, 'starting-cursor');
     const page = await loadLabelsPage(client, request(), env, 'starting-cursor');
     const reads = fake.calls.filter((call) => call.path === '/v1/libraryLabels');
     expect(reads).toHaveLength(1);
@@ -208,8 +209,8 @@ test('rename buttons compose only outline styling before and after a revision co
     for (const rename of renames) {
       const classes = /<button\b[^>]*class="([^"]*)"/.exec(rename)?.[1]?.split(/\s+/) ?? [];
       expect(classes).toContain('border-border');
-      expect(classes).toContain('bg-background');
-      expect(classes).toContain('dark:bg-transparent');
+      expect(classes).toContain('hover:bg-input/50');
+      expect(classes).toContain('dark:bg-input/30');
       expect(classes).not.toContain('bg-primary');
       expect(classes).not.toContain('text-primary-foreground');
       expect(classes).not.toContain('hover:bg-primary/80');
@@ -401,7 +402,7 @@ test('a refused name stays beside its field with the draft and kernel reason; mi
   const html = markup(page);
   expect(html).toContain('The label name contains a control character.');
   expect(html).toContain('value="Rejected draft"');
-  expect(html).toContain('aria-describedby="create-error"');
+  expect(html).toContain('aria-describedby="create-name-help create-error"');
   fake.deleteRevision = null;
   const result = await submitLabel(client, request('POST'), env, {
     operation: 'delete',
@@ -508,9 +509,11 @@ test('the unprofiled subject stays on its catalogue route rather than inheriting
   expect(loaded.page.account).toBeUndefined();
   expect(JSON.stringify(loaded.page.document)).toContain('"name":"actions"');
   const route = await source('src/routes/subjects/$id_.$slug.tsx');
-  expect(route).toContain('subjectLibraryQuery(id, locale');
-  expect(route).toContain('actions={(subject) => (');
-  expect(route).toContain('<SubjectLibrarySlot');
+  const overview = await source('src/routes/subjects/-overview.tsx');
+  expect(route).toContain('<SubjectOverview');
+  expect(overview).toContain('subjectLibraryQuery(id, locale');
+  expect(overview).toContain('actions={(subject) => (');
+  expect(overview).toContain('<SubjectLibrarySlot');
 });
 
 test('the unprofiled story creates a generic label on its actual subject and keeps assignments subject-local', async () => {
@@ -519,7 +522,7 @@ test('the unprofiled story creates a generic label on its actual subject and kee
   const { resetLabelAssignmentStory, setLibraryLabelStorySizes } =
     await import('../src/kernel/fake/library-label-assignments');
   const { setLabelCatalogueStory } = await import('../src/kernel/fake/library-labels');
-  const { applySubjectLabelMutation, readSubjectLabelAssignments } = await import('../src/library/subject-labels');
+  const { applySubjectLabelMutation, readSubjectLabelAssignments } = await import('../src/library/subject-labels.ts');
   const { loadSubjectLibrarySlot } = await import('../src/library/subject-slot');
   setLabelCatalogueStory(false);
   resetLabelAssignmentStory();

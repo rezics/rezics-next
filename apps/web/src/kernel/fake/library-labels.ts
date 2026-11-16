@@ -37,6 +37,7 @@ export function createLibraryLabelsFake(
   options: {
     labels?: Label[];
     next?: string | null;
+    currentCursor?: string;
     deleteRevision?: number | null;
     externalRename?: string;
   } = {},
@@ -80,7 +81,12 @@ export function createLibraryLabelsFake(
         const failure = labelReadStoryFailure();
         if (failure) return failure;
       }
-      if (request.method === 'GET' && url.searchParams.has('cursor')) return { status: 200, labels: [], next: null };
+      if (
+        request.method === 'GET' &&
+        url.searchParams.has('cursor') &&
+        url.searchParams.get('cursor') !== options.currentCursor
+      )
+        return { status: 200, labels: [], next: null };
       if (request.method === 'GET' && url.searchParams.has('q')) {
         const q = normalizeLibraryLabelName(url.searchParams.get('q')!);
         return {
