@@ -665,7 +665,7 @@ function observePool(pool: Pool): void {
   if (!pools.has(pool)) {
     pools.add(pool);
     const connect = pool.connect.bind(pool);
-    pool.connect = ((...args: unknown[]) => {
+    pool.connect = ((callback?: Parameters<Pool['connect']>[0]) => {
       for (const required of requiredFootprints.getStore() ?? [])
         if (required.pool === pool) {
           if (!required.active) throw new ProblemError('dependency_unavailable');
@@ -685,12 +685,19 @@ function observePool(pool: Pool): void {
           throw error;
         }
       }
-      return (connect as unknown as (...args: unknown[]) => unknown)(...args);
+      const bindCheckout = (client: PoolClient) => {
+        checkoutObservations.set(client, active);
+        observeNativeCollectionClient(client, pool);
+        return client;
+      };
+      if (!callback) return connect().then(bindCheckout);
+      // pg-pool can dispatch a waiter from the previous borrower's release.
+      // Preserve the requesting context through callback checkouts and pool.query.
+      const inRequest = AsyncLocalStorage.snapshot();
+      return connect((error, client, release) =>
+        inRequest(() => callback(error, client && bindCheckout(client), release)),
+      );
     }) as Pool['connect'];
-    pool.on('acquire', (client) => {
-      checkoutObservations.set(client, observing.getStore());
-      observeNativeCollectionClient(client, pool);
-    });
   }
 }
 
