@@ -6,6 +6,7 @@ import {
   nativePublicOutputWorkDimensions,
 } from '../library/native-public-output-bounds.ts';
 import { repeatBound, sumBounds } from '@rezics/bounds';
+import { nativePublicOutputFootprint } from '../library/native-public-output-work.ts';
 import selectedCaptureSQL from './identity-public-output-selected-capture.sql';
 import readableOriginalsSQL from './identity-public-output-readable-originals.sql';
 import resumeSQL from './identity-public-output-resume.sql';
@@ -195,7 +196,7 @@ export function outputCaptureFootprint(
   const statement = sql.replace(/[ \n]\/\*file='(?:[\w.%!()*~-]|\\')*'\*\/(?=;?$)/, '');
   const control = controls.has(statement) || /^SET LOCAL statement_timeout = '[1-9][0-9]*ms'$/.test(statement);
   let plan = plans().get(statement);
-  if (!plan && !control) return undefined;
+  if (!plan && !control) return nativePublicOutputFootprint(statement, values, work);
   if (!plan) plan = [0, 0, 0, 0, 0, 0, 0];
   let [identityMetadataRows, nativeRows, nativePoints, bytes, candidateKeys, witnessKeys, emptySeeks, statements = 1] =
     plan;

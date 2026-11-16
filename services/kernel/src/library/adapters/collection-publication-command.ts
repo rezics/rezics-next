@@ -243,7 +243,7 @@ export function createNativeCollectionPublicationEpisodes(
             tx,
             partitionOf(route),
             { accountRoute: route, accountId: actor.accountId },
-            1,
+            2,
           );
           const prior = (
             await tx.query<{ sourceId: string; publicationId: string }>(
@@ -348,7 +348,7 @@ export function createNativeCollectionPublicationEpisodes(
             tx,
             COLLECTION_PUBLICATION_COMMAND,
             { accountRoute: route, accountId: actor.accountId },
-            1,
+            2,
           );
           const collection = creation ? await creation.materialize(tx) : undefined;
           if (materialization) {

@@ -1,7 +1,7 @@
 import { memoizedValue } from '../memoized.ts';
-import type { PoolClient, QueryConfig, QueryResult } from 'pg';
+import type { Pool, PoolClient, QueryConfig, QueryResult } from 'pg';
 import type { WorkDimensions } from './contract/work-dimensions.ts';
-import { NativeCollectionWork } from './collection-native-work.ts';
+import { NativeCollectionWork, instrumentNativeCollectionWork } from './collection-native-work.ts';
 import {
   nativePublicOutputStatement,
   nativePublicOutputWorkDimensions,
@@ -48,11 +48,6 @@ export function nativePublicOutputFootprint(
   return entry ? nativePublicOutputWorkDimensions(entry.bound) : undefined;
 }
 
-type ControlSlot = {
-  reservation: ReturnType<NativeCollectionWork['reserve']>;
-  entry: NativePublicOutputStatement;
-};
-
 function requestOf(config: string | QueryConfig, params: unknown[] = []) {
   const sql = typeof config === 'string' ? config : config.text;
   const values = (typeof config === 'string' ? params : config.values) ?? [];
@@ -72,87 +67,32 @@ function admitResult(entry: NativePublicOutputStatement, result: QueryResult | u
   if (encoded > entry.resultBytes) throw new TypeError('Native public output projection exceeds its plan');
 }
 
-/** No checkout or new executor: all locks remain on the original caller transaction.
- * Dispatch charges the closed plan-node bound. Returned row count cannot replace it.
+/**
+ * Keep all native queries on the caller's connection. Pool reads already own a child
+ * observer. A Core transaction exposes only a query forwarder, so observe that
+ * forwarder within the transferred Library reservation.
  */
 export function nativePublicOutputClient(
   tx: Pick<PoolClient, 'query'>,
   work: NativeCollectionWork,
   deadline: number,
+  commandPool?: Pool,
 ): Pick<PoolClient, 'query'> {
-  let terminal:
-    | {
-        commit?: ControlSlot;
-        rollback?: ControlSlot;
-      }
-    | undefined;
-  const cancelTerminal = () => {
-    terminal?.commit?.reservation.cancel();
-    terminal?.rollback?.reservation.cancel();
-    terminal = undefined;
-  };
+  const footprint = (sql: string, values: readonly unknown[]) => nativePublicOutputFootprint(sql, values, work);
   return {
     query: (async (config: string | QueryConfig, params: unknown[] = []) => {
       const { sql, values } = requestOf(config, params);
-      const beginning = sql === 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY';
-      const finishing = sql === 'COMMIT' ? 'commit' : sql === 'ROLLBACK' ? 'rollback' : undefined;
       const entry = nativePublicOutputStatement(sql, values, work);
-      let reservation: ReturnType<NativeCollectionWork['reserve']>;
-      let planned: NativePublicOutputStatement;
-      let beganReservation = false;
-      try {
-        if (finishing && terminal) {
-          const slot = terminal[finishing];
-          if (!slot) throw new TypeError('Native public output transaction control already dispatched');
-          ({ reservation, entry: planned } = slot);
-          delete terminal[finishing];
-        } else {
-          if (!entry) work.reserve(undefined);
-          if (!entry) throw new TypeError('Unknown public output statement');
-          planned = entry;
-          if (beginning) {
-            const commitEntry = nativePublicOutputStatement('COMMIT', [], work);
-            const rollbackEntry = nativePublicOutputStatement('ROLLBACK', [], work);
-            if (!commitEntry || !rollbackEntry) work.reserve(undefined);
-            if (!commitEntry || !rollbackEntry) throw new TypeError('Public output transaction controls are missing');
-            const commit = work.reserve(nativePublicOutputWorkDimensions(commitEntry.bound), true);
-            try {
-              const rollback = work.reserve(nativePublicOutputWorkDimensions(rollbackEntry.bound), true);
-              terminal = {
-                commit: { reservation: commit, entry: commitEntry },
-                rollback: { reservation: rollback, entry: rollbackEntry },
-              };
-              beganReservation = true;
-            } catch (error) {
-              commit.cancel();
-              throw error;
-            }
-          }
-          reservation = work.reserve(nativePublicOutputWorkDimensions(planned.bound), finishing !== undefined);
-        }
-        reservation.dispatch();
-      } catch (error) {
-        if (beganReservation) cancelTerminal();
-        if (error instanceof Error) work.failure = error;
-        throw error;
+      if (!entry) {
+        work.reserve(undefined);
+        throw new TypeError('Unknown public output statement');
       }
-      let result: QueryResult | undefined;
-      try {
-        const request = { text: sql, values, query_timeout: Math.max(1, deadline - Date.now()) };
-        result = await reservation.query(() => tx.query(request));
-        admitResult(planned, result);
+      const query = async () => {
+        const result = await tx.query({ text: sql, values, query_timeout: Math.max(1, deadline - Date.now()) });
+        admitResult(entry, result);
         return result;
-      } finally {
-        reservation.settle();
-        if (beginning && result === undefined) cancelTerminal();
-        else if (sql === 'COMMIT' && result !== undefined) {
-          terminal?.rollback?.reservation.cancel();
-          terminal = undefined;
-        } else if (sql === 'ROLLBACK') {
-          terminal?.commit?.reservation.cancel();
-          terminal = undefined;
-        }
-      }
+      };
+      return commandPool ? instrumentNativeCollectionWork(commandPool, work, footprint, query, tx) : query();
     }) as PoolClient['query'],
   };
 }
