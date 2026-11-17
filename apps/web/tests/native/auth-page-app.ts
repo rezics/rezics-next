@@ -3,7 +3,12 @@ import { existsSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, relative, sep } from 'node:path';
 import { nativeViteEnvironment } from './vite-environment.ts';
-import type { NativeProcessOwnership, NativeTestLifecycle } from './lifecycle.ts';
+import {
+  describeNativeProcessGroup,
+  nativeProcessGroupIsGone,
+  type NativeProcessOwnership,
+  type NativeTestLifecycle,
+} from './lifecycle.ts';
 
 type App = {
   owner: NativeProcessOwnership;
@@ -33,6 +38,10 @@ export function createNativeAuthPageApp(
       await app.owner.force();
     }
     await app.exited;
+    if (!nativeProcessGroupIsGone(app.owner.identity))
+      throw new Error(
+        `Native Auth page app group remained after shutdown: ${describeNativeProcessGroup(app.owner.identity)}`,
+      );
     if (app.persistenceDirectory && existsSync(app.persistenceDirectory))
       throw new Error(`Auth Worker left its owned persistence after shutdown: ${app.persistenceDirectory}`);
     if (resident === app) resident = undefined;
@@ -44,7 +53,8 @@ export function createNativeAuthPageApp(
   async function launch() {
     if (closing) throw new Error('Native Auth page app is closing');
     lifecycle.assertOpen('start native Auth page app');
-    const child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', new URL(origin).port, '--strictPort'], {
+    const command = ['bun', 'run', 'dev', '--host', '127.0.0.1', '--port', new URL(origin).port, '--strictPort'];
+    const child = spawn('python3', [`${import.meta.dir}/auth-page-app-reaper.py`, ...command], {
       cwd: root,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -142,8 +152,7 @@ export function createNativeAuthPageApp(
       return task;
     },
     async settled() {
-      await opening;
-      await retiring;
+      while (opening || retiring) await Promise.all([opening, retiring]);
       if (retirementFailure) throw retirementFailure;
     },
     process() {

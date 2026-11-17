@@ -7,6 +7,7 @@ import { sampleNativeMemory } from './native-memory.ts';
 import { startNativeWebStack } from './stack.ts';
 import {
   NativeTestLifecycle,
+  describeNativeProcessGroup,
   inspectNativeProcessGroup,
   nativeProcessGroupIsGone,
   nativeAfterAll,
@@ -57,13 +58,16 @@ function pageAppMemory(identity: NativeProcessIdentity) {
   return { processes: group.identities.length, pssBytes: bytes('Pss'), privateDirtyBytes: bytes('Private_Dirty') };
 }
 
-async function groupExited(identity: NativeProcessIdentity) {
+async function assertGroupExited(identity: NativeProcessIdentity, resident: NativeProcessIdentity | undefined) {
   const deadline = Date.now() + 1_500;
   while (Date.now() < deadline) {
-    if (nativeProcessGroupIsGone(identity)) return true;
+    if (nativeProcessGroupIsGone(identity)) return;
     await Bun.sleep(25);
   }
-  return nativeProcessGroupIsGone(identity);
+  if (!nativeProcessGroupIsGone(identity))
+    throw new Error(
+      `Auth retirement left resident=${resident?.pid ?? 'none'}, group=${describeNativeProcessGroup(identity)}`,
+    );
 }
 
 describe('native Auth and web stack', () => {
@@ -90,9 +94,10 @@ describe('native Auth and web stack', () => {
       expect(before.processes).toBeGreaterThan(0);
       expect(before.pssBytes).toBeGreaterThan(0);
       const commandBefore = sampleNativeMemory([{ role: 'fixture-host', pid: process.pid }]).cgroup.command;
+      await writeControl({ outcome: 'incomplete', phase: 'alice-signed-in', firstApp, before, commandBefore });
       const alicePage = alice.continueOnPage();
       await auth.settlePageApp();
-      expect(await groupExited(firstApp)).toBe(true);
+      await assertGroupExited(firstApp, auth.pageAppProcess());
       expect(auth.pageAppProcess()).toBeUndefined();
       expect(alicePage.isClosed()).toBe(false);
       const after = pageAppMemory(firstApp);
@@ -115,7 +120,7 @@ describe('native Auth and web stack', () => {
       expect(secondApp).not.toEqual(firstApp);
       const bobPage = bob.continueOnPage();
       await auth.settlePageApp();
-      expect(await groupExited(secondApp)).toBe(true);
+      await assertGroupExited(secondApp, auth.pageAppProcess());
       expect(alicePage.isClosed()).toBe(false);
       expect(bobPage.isClosed()).toBe(false);
       expect(alice.visitedUrls.some((url) => new URL(url).pathname === '/consent')).toBe(false);
