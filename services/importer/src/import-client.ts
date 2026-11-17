@@ -39,6 +39,7 @@ import {
   MAX_IMPORT_DEADLINE_MS,
   MAX_IMPORT_WAIT_MS,
   MAX_IMPORT_TOTAL_WAIT_MS,
+  SUBJECT_NOT_READY_TYPE,
   type ImportHttpOptions,
   importCorrelationId,
   importNetworkCode,
@@ -1031,7 +1032,7 @@ export function createImportTransport(options: ImportTransportOptions) {
                 error.code,
                 error.retryable,
                 error.retry,
-                error.type === 'https://rezics.com/problems/semantic_not_ready' ? 'readiness' : 'SubjectGET503',
+                error.type === SUBJECT_NOT_READY_TYPE ? 'readiness' : 'SubjectGET503',
                 copiedDiagnostics(error),
               );
             throw error;

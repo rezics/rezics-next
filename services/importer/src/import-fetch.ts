@@ -6,8 +6,10 @@ export const MAX_IMPORT_WAIT_MS = 30000;
 export const MAX_IMPORT_TOTAL_WAIT_MS = 60000;
 export const MAX_IMPORT_DEADLINE_MS = 120000;
 export const MAX_IMPORT_ATTEMPTS = 5;
+export const SUBJECT_NOT_READY_TYPE = 'https://rezics.com/problems/semantic_not_ready';
 
 const BULK_WRITE_PATH = '/v1/subjects:batchWrite';
+const SUBJECT_PATH = /^\/v1\/subjects\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
 /** Local retry admission only: no remote body, header text or credential is retained. */
 export type ImportRetryState = Readonly<{
@@ -660,6 +662,7 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
       const body = await readBody(request, maxBodyBytes, source);
       request.signal.throwIfAborted();
       const retryable = mayRetry(request, body);
+      const currentSubject = request.method === 'GET' && url.search === '' && SUBJECT_PATH.test(url.pathname);
       const headers = new Headers(request.headers);
       const accessToken = async (fresh?: boolean): Promise<string> => {
         try {
@@ -695,7 +698,7 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
         } catch (error) {
           request.signal.throwIfAborted();
           const delay = backoff(attempt);
-          if (!retryable || attempt === maxAttempts || delay > maxWaitMs || delay > maxTotalWaitMs - scheduledWait) {
+          if (!retryable || attempt >= maxAttempts || delay > maxWaitMs || delay > maxTotalWaitMs - scheduledWait) {
             rememberRequestFailure(error, requestDiagnostics(request, 'network', error));
             throw error;
           }
@@ -715,6 +718,7 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
         const adaptable = response.status === 429 || response.status === 503;
         const hint = adaptable ? retryAfter(response, receivedAt) : undefined;
         let overload = response.status === 429;
+        let projectionPreparing = false;
         if (response.status === 503 && hint !== undefined) {
           // Interpret 503 hints only for the same public retryable classifier as
           // the coordinator. Buffer before parsing, under the existing body cap.
@@ -726,9 +730,15 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
               .json()
               .catch(() => null),
           );
-          overload =
-            typeof problem === 'object' && problem !== null && 'retryable' in problem && problem.retryable === true;
+          if (typeof problem === 'object' && problem !== null && 'retryable' in problem && problem.retryable === true) {
+            overload = true;
+            projectionPreparing = currentSubject && 'type' in problem && problem.type === SUBJECT_NOT_READY_TYPE;
+          }
         }
+        // A full Subject read can return before the native links checkpoint catches up.
+        // Use the remaining shared attempt allowance without starting a new request series.
+        const attemptLimit =
+          projectionPreparing && options.maxAttempts === undefined ? MAX_IMPORT_ATTEMPTS : maxAttempts;
         const notBefore = overload ? hint : undefined;
         const delay =
           notBefore === null ? null : notBefore === undefined ? backoff(attempt) : Math.max(0, notBefore - now());
@@ -766,7 +776,7 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
         };
         if (
           !retryable ||
-          attempt === maxAttempts ||
+          attempt >= attemptLimit ||
           !(response.status === 429 || (response.status >= 500 && response.status <= 599))
         )
           return await finish();
