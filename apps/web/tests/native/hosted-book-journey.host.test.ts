@@ -1373,17 +1373,24 @@ nativeTest(
               ` unselectedRevision=${chapterTwo?.revisionId ?? 'unavailable'}`;
             await page.getByRole('button', { name: 'Seal private candidate', exact: true }).click();
             await page
-              .getByText('Private candidate sealed. It has not been published. The existing release stays current.', {
-                exact: true,
-              })
+              .getByRole('region', { name: 'Activate this prepared Book release', exact: true })
+              .getByRole('button', { name: 'Check this sealed candidate', exact: true })
               .waitFor({ state: 'visible', timeout: 90_000 });
+            const sealed = await seed!.author
+              .hostedCatalogues({ id: catalogueId! })
+              .publicationPreparations({ stageId: stageId! })
+              .$progress.post({}, { headers: { 'idempotency-key': JSON.stringify(crypto.randomUUID()) } });
+            expect(sealed.status).toBe(200);
+            expect(sealed.data).toMatchObject({
+              catalogueId,
+              stageId,
+              candidate: { sealed: true, chapterCount: '1' },
+            });
             const afterSeal = await readOwnedBook(seed!.author, seed!.authorAccountId, catalogueId!);
             expect(afterSeal.item.headRevisionId).toBe(sourceHead);
             expect(afterSeal.item.publicationId).toBeNull();
             const omittedDraft = await seed!.member.posts({ id: chapterTwo!.id }).get();
             expect(omittedDraft.status).toBe(404);
-            const view = await page.locator('main').innerText();
-            expect(view).toMatch(/Candidate chapters\s+1/u);
             candidateSealed = true;
             return {
               value: stageId,
