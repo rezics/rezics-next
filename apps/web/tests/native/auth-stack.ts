@@ -53,6 +53,7 @@ export type NativeAuthStack = {
   origin: string;
   context(persona: AuthPersona): Promise<BrowserContext>;
   newContext(persona: AuthPersona): Promise<BrowserContext>;
+  submitSignIn(page: Page, persona: 'alice' | 'bob'): Promise<void>;
   signIn(persona: Exclude<AuthPersona, 'newcomer' | 'anonymous'>, options?: NativeSignInOptions): Promise<AuthJourney>;
   signUp(
     persona: 'newcomer',
@@ -63,6 +64,11 @@ export type NativeAuthStack = {
 
 const authRoot = resolve(import.meta.dir, '../../../auth');
 const password = 'semantic outcome registration password with enough entropy';
+
+async function fillNativeSignIn(page: Page, email: string) {
+  await page.getByLabel(/email/i).fill(email);
+  await page.locator('input[name="password"]').fill(password);
+}
 
 /** Private supervisor messages to the existing Auth host, never browser credentials. */
 export async function nativeAuthFixtureRequest(
@@ -449,8 +455,7 @@ export async function startAuthStack(
           throw new Error('Native Auth sign-up returned no account ID');
         registration = { accountId: receipt.accountId, handle };
       } else {
-        await page.getByLabel(/email/i).fill(email);
-        await page.locator('input[name="password"]').fill(formPassword);
+        await fillNativeSignIn(page, email);
         assertActive('submit native Auth sign-in form');
         if (persona !== 'suspended')
           callbackResponse = page.waitForResponse(
@@ -627,6 +632,12 @@ export async function startAuthStack(
       },
       signIn(persona, options) {
         return journey(persona, false, options);
+      },
+      async submitSignIn(page, persona) {
+        assertActive('submit native Auth sign-in form');
+        const { email } = await stack.authPersona(persona);
+        await fillNativeSignIn(page, email);
+        await page.getByRole('button', { name: 'Sign in', exact: true }).click();
       },
       async signUp(persona, options) {
         const result = await journey(persona, true, options);

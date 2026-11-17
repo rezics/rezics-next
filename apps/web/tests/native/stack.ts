@@ -103,8 +103,11 @@ export type NativeWebStack = {
   /** The canonical issuer advertised by discovery, before the optional proxy listener. */
   issuerOrigin: string;
   web: string;
-  /** Read fixture identity for form entry, without creating a website session. */
-  authPersona(persona: string): Promise<{ accountId: string; email: string; authorization: string }>;
+  /** Read fixture identity for form entry. Explicit scopes request a fresh native Auth credential for that account. */
+  authPersona(
+    persona: string,
+    scopes?: readonly string[],
+  ): Promise<{ accountId: string; email: string; authorization: string }>;
   /** Confirm the production Auth host has its native operation boundary configured. */
   enableAccountOperations(): Promise<void>;
   /** Read real Auth /session proofs observed on account-operation requests. */
@@ -1398,8 +1401,10 @@ async function startStack(): Promise<
       authIssuer: authServer.url.origin,
       issuerOrigin: auth.issuer,
       web: webOrigin,
-      async authPersona(persona) {
-        const { accountId, bearer } = await getAccount(persona);
+      async authPersona(persona, scopes) {
+        const account = await getAccount(persona);
+        const { accountId, bearer } =
+          scopes === undefined ? account : await driver!.fixtures.scopeVariant(account, scopes);
         const result = await auth.database.query<{ email: string }>('SELECT email FROM "user" WHERE id=$1', [
           accountId,
         ]);
@@ -1603,6 +1608,7 @@ type HostCall = {
   method:
     | 'credentials'
     | 'authPersona'
+    | 'scopedAuthPersona'
     | 'enableAccountOperations'
     | 'accountOperationActors'
     | 'createAutomatedActor'
@@ -1978,9 +1984,13 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
         lifecycle.assertOpen('read native account credentials');
         return credentials(persona);
       },
-      async authPersona(persona) {
+      async authPersona(persona, scopes) {
         lifecycle.assertOpen('read native account identity');
-        return (await call('authPersona', persona)) as {
+        const result =
+          scopes === undefined
+            ? await call('authPersona', persona)
+            : await call('scopedAuthPersona', JSON.stringify({ persona, scopes }));
+        return result as {
           accountId: string;
           email: string;
           authorization: string;
@@ -2171,7 +2181,10 @@ if (process.env.NATIVE_WEB_STACK_HOST === '1' && process.send) {
         let value: unknown;
         if (method === 'credentials') value = await stack.credentials(argument!);
         else if (method === 'authPersona') value = await stack.authPersona(argument!);
-        else if (method === 'enableAccountOperations') await stack.enableAccountOperations();
+        else if (method === 'scopedAuthPersona') {
+          const input = JSON.parse(argument!) as { persona: string; scopes: string[] };
+          value = await stack.authPersona(input.persona, input.scopes);
+        } else if (method === 'enableAccountOperations') await stack.enableAccountOperations();
         else if (method === 'accountOperationActors') value = stack.accountOperationActors();
         else if (method === 'createAutomatedActor') {
           const input = JSON.parse(argument!) as {

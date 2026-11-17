@@ -42,7 +42,7 @@ export type WebFixture = CommunityFixture & {
   closed: { operation: string; anonymous: number; owner: number; outsider: number }[];
 };
 
-const communityOwnerActions = [
+export const communityOwnerActions = [
   'board:create',
   'space:create',
   'realm:create',
