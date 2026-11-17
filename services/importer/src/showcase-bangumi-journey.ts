@@ -441,7 +441,9 @@ async function checkTarget(work: JourneyWork, subjectIds: ReadonlyMap<string, st
 export type BangumiJourneyOptions = {
   skipPersona?: boolean;
   skipSeed?: boolean;
+  seedReport?: CrossMediaSeedReport;
   startFrontends?: boolean | 'web';
+  onMountedStart?(target: JourneyTarget): void | Promise<void>;
   onMountedVisit?(visit: JourneyMountedVisit): void | Promise<void>;
 };
 
@@ -492,7 +494,7 @@ export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
     phase = 'persona';
     await command('persona', ['bun', 'services/auth/scripts/dev-stack.ts', 'persona']);
   }
-  if (!options.skipSeed) {
+  if (!options.skipSeed && !options.seedReport) {
     phase = 'seed';
     await command('seed', [
       'bun',
@@ -501,7 +503,8 @@ export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
       '--dev',
     ]);
   }
-  const reportValue: unknown = JSON.parse(await readFile(resolve(root, '.temp/cross-media-seed/result.json'), 'utf8'));
+  const reportValue: unknown =
+    options.seedReport ?? JSON.parse(await readFile(resolve(root, '.temp/cross-media-seed/result.json'), 'utf8'));
   if (!isRecord(reportValue) || !isRecord(reportValue.showcase) || !Array.isArray(reportValue.showcase.published))
     throw new TypeError('Cross-media seed result has no published showcase identities');
   const report = reportValue as unknown as CrossMediaSeedReport;
@@ -666,6 +669,7 @@ export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
       const page = await context.newPage();
       try {
         for (const work of works) {
+          await options.onMountedStart?.(work);
           const route = work.row.readerRoute;
           assert.ok(route, `journey target bangumi:${work.sourceKey} has no reader route`);
           const response = await page.goto(`${web}/en${route}`);

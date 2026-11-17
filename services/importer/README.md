@@ -207,6 +207,18 @@ Creator/voice candidates retain exact source relationships, Person identity, rol
 
 Decision: anime 233's Work journey checks episodes through inverse `schema:isPartOf`, voice cast through `wdt:P725`, and staff through released Bangumi credit properties; every displayed endpoint keeps its exact current identity, source citation and return address. Both BookSeries journeys check their publisher links, while series-grain author and illustrator facts remain exact `property_not_admitted` gaps. The journey runs as the command of `dev-stack.ts walk`, which owns its bounded slot, ports, database, search and attempt cleanup. The stack starts the issuer and Pages with the workflow worker, waits for that DBOS initialization before Kernel, then starts Web after Kernel readiness. The driver runs `persona` and `scripts/datasets/cross-media-seed.ts --dev`, then asserts public reads of anime 233, BookSeries 499 and 2815 and volumes 26, 5329 and 10862, including current `wdt:P179`, publisher and `rezics:crossMediaCounterpart` links plus exact `und` aliases on phone and desktop. Its target list is `journeyTargets`; a missing or duplicated published target fails before any browser effect.
 
+The [first-public qualification](../../docs/goals/imports.capabilities.md#first-public-catalogue-qualification) uses the same admitted stack.
+
+```sh
+bun services/auth/scripts/dev-stack.ts walk --import-catalogue -- bun services/importer/src/imports-public-journey.ts --scope operators
+bun services/auth/scripts/dev-stack.ts walk --import-catalogue -- bun services/importer/src/imports-public-journey.ts --scope catalogue
+```
+
+Omit `--scope` or use `--scope all` for I01–I12. The catalogue reads and mounted visits use the first published
+`--dev-catalogue` result. Append `--reopen-seed` to the catalogue or whole-walk command to exercise composed replay
+on the same journals after those observations. Return the private `.temp/imports-walk` evidence with the original
+selection, revision, seed results, row observations and any shared failure.
+
 ### Reviewed catalogue
 
 Definitions owns the released reviewed inventory as public data (`@rezics/definitions/reviewed-vocabulary`, revision `reviewed-vocabulary@1`). Importer planning, binding and native review live in one application (`reviewed-catalogue-application.ts`) behind a vocabulary port. The request/result, ledger, receipt and pure seed helper vocabulary is the import-acyclic `reviewed-catalogue-contract.ts`; the compatibility facade re-exports it and delegates to the application. The ordinary CLI, resume path, operator seed CLI and development seed bind the released vocabulary with live transport and the run ledger; they do not import Definitions private JSON or construct native review at module load. Complete inventory preflight, source/revision/digest, Bangumi scheme bindings, source fences and owner identity stay exact. Acceptance and adoption remain separate authorized operations with independent current reads.

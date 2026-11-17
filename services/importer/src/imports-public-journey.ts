@@ -1,6 +1,6 @@
-/** Walk every first-public Imports path on one admitted dev-stack session.
+/** Walk selected first-public Imports paths on one admitted dev-stack session.
  *
- *   bun services/auth/scripts/dev-stack.ts walk --import-catalogue -- bun services/importer/src/imports-public-journey.ts
+ *   bun services/auth/scripts/dev-stack.ts walk --import-catalogue -- bun services/importer/src/imports-public-journey.ts [--scope operators|catalogue|all] [--reopen-seed]
  *
  * Operators import licensed fixtures through the ordinary CLI, then separately accept/adopt and independently
  * read. Catalogue rows share one fresh seed. A row failure is recorded; independent rows continue.
@@ -8,8 +8,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, readFileSync } from 'node:fs';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { relative, resolve } from 'node:path';
 import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { walkStackAdmitted } from '../../../scripts/stack-run.ts';
 import { createAccountTokenProvider, IMPORTER_SCOPES, VNDB_IMPORTER_SCOPES } from './credentials.ts';
@@ -18,10 +18,9 @@ import { createImporter } from './importer.ts';
 import { reviewedCatalogueProblem } from './http.ts';
 import { createImportTransport, importTransportCause, ImportTransportError } from './import-client.ts';
 import {
-  formatSeedFailure,
-  mergeRemainingRequest,
   readSeedRemainingRequest,
   remainingRequestFromPreparedJournal,
+  type SeedRemainingRequest,
 } from './seed-remaining-request.ts';
 import { importCorrelationId, MAX_IMPORT_DEADLINE_MS } from './import-fetch.ts';
 import { ImportSession } from './import-session.ts';
@@ -116,23 +115,79 @@ export const FIRST_PUBLIC_IMPORT_ROWS = [
 
 export type FirstPublicImportRowId = (typeof FIRST_PUBLIC_IMPORT_ROWS)[number]['id'];
 
+export type WalkSelection = { scope: 'operators' | 'catalogue' | 'all'; reopenSeed: boolean };
+
+const operatorRows = ['I01', 'I02', 'I04', 'I03'] as const;
+
+export function parseWalkSelection(args: readonly string[]): WalkSelection {
+  const [flag, scope, ...rest] = args;
+  const selectedScope =
+    flag === '--scope' && (scope === 'operators' || scope === 'catalogue' || scope === 'all') ? scope : undefined;
+  const flags = selectedScope ? rest : args;
+  const reopenSeed = flags.length === 1 && flags[0] === '--reopen-seed';
+  if ((flags.length > 0 && !reopenSeed) || (selectedScope === 'operators' && reopenSeed))
+    throw new Error(
+      'Usage: imports-public-journey.ts [--scope operators|catalogue|all] [--reopen-seed (catalogue or all)]',
+    );
+  return { scope: selectedScope ?? 'all', reopenSeed };
+}
+
+function isOperatorRow(id: FirstPublicImportRowId): id is (typeof operatorRows)[number] {
+  return operatorRows.some((row) => row === id);
+}
+
+function selectedRow(selection: WalkSelection, id: FirstPublicImportRowId): boolean {
+  return selection.scope === 'all' || isOperatorRow(id) === (selection.scope === 'operators');
+}
+
+export async function runWalkSelection<Seed>(
+  selection: WalkSelection,
+  actions: {
+    operators(): Promise<void>;
+    seed(): Promise<Seed | null>;
+    catalogue(seed: Seed): Promise<void>;
+    reopenSeed(seed: Seed): Promise<void>;
+  },
+): Promise<void> {
+  if (selection.scope !== 'catalogue') await actions.operators();
+  if (selection.scope === 'operators') return;
+  const fresh = await actions.seed();
+  if (fresh === null) return;
+  await actions.catalogue(fresh);
+  if (selection.reopenSeed) await actions.reopenSeed(fresh);
+}
+
 export type WalkRowResult = {
   id: FirstPublicImportRowId;
   path: string;
-  result: 'passing' | 'failing';
+  result: 'passing' | 'failing' | 'unreached' | 'unselected';
   elapsedMs: number | null;
   cause: string | null;
   evidence: Record<string, unknown>;
 };
 
-export type WalkInventory = {
+type WalkPrerequisite = {
+  stage: 'setup' | 'seed' | 'seed-reopen';
+  elapsedMs: number;
+  cause: string | null;
+  manifest?: string;
+  report?: string;
+  remainingRequest?: SeedRemainingRequest;
+};
+
+type WalkRun = {
   command: string;
   revision: string;
   startedAt: string;
+  selection: WalkSelection;
+  prerequisites: WalkPrerequisite[];
+  browserStageFailure?: string;
+};
+
+export type WalkInventory = WalkRun & {
   endedAt: string;
   passing: number;
   total: number;
-  browserStageFailure?: string;
   slowestFailing: { id: FirstPublicImportRowId; path: string; elapsedMs: number; cause: string } | null;
   rows: WalkRowResult[];
 };
@@ -203,26 +258,60 @@ export function mountedWalkRow(
   );
   return {
     ...row,
-    elapsedMs: row.elapsedMs === null ? null : row.elapsedMs + elapsedMs,
-    result: row.result === 'passing' && complete ? 'passing' : 'failing',
-    cause: row.cause ?? (complete ? null : (browserFailure ?? 'Required mounted visits are incomplete')),
+    elapsedMs:
+      row.result === 'failing' ? row.elapsedMs : complete && row.elapsedMs !== null ? row.elapsedMs + elapsedMs : null,
+    result: row.result === 'passing' && !complete ? 'unreached' : row.result,
+    cause:
+      row.cause ??
+      (complete ? null : browserFailure ? 'shared mounted stage failed' : 'Required mounted visits are incomplete'),
     evidence: {
       ...row.evidence,
       native: row.result,
       browser: complete ? 'passing' : browserFailure ? 'failing' : 'pending',
       browserVisits,
-      ...(!complete && browserFailure ? { browserError: browserFailure } : {}),
     },
   };
 }
 
-function prerequisiteFailed(row: WalkRowResult): boolean {
-  return row.result === 'failing' && (row.evidence.seed === true || row.evidence.sharedStartup === true);
+function inactiveWalkRow(
+  id: FirstPublicImportRowId,
+  result: 'unselected' | 'unreached',
+  prerequisite?: WalkPrerequisite['stage'],
+): WalkRowResult {
+  return {
+    id,
+    path: firstPublicRow(id).path,
+    result,
+    elapsedMs: null,
+    cause: prerequisite ? `shared ${prerequisite} failed` : null,
+    evidence: prerequisite ? { prerequisite, fixture: rowFixture(id) } : {},
+  };
+}
+
+function orderedWalkRows(selection: WalkSelection, rows: readonly WalkRowResult[]): WalkRowResult[] {
+  const observed = new Map<FirstPublicImportRowId, WalkRowResult>();
+  for (const row of rows) {
+    if (!FIRST_PUBLIC_IMPORT_ROWS.some(({ id }) => id === row.id) || observed.has(row.id))
+      throw new Error(`Invalid or duplicate walk observation for ${row.id}`);
+    if (!['passing', 'failing', 'unreached', 'unselected'].includes(row.result))
+      throw new Error(`Invalid walk result for ${row.id}`);
+    if (selectedRow(selection, row.id) === (row.result === 'unselected'))
+      throw new Error(`Walk observation for ${row.id} disagrees with selection ${selection.scope}`);
+    if ((row.result === 'unselected' || row.result === 'unreached') && row.elapsedMs !== null)
+      throw new Error(`Inactive walk row ${row.id} has an elapsed time`);
+    observed.set(row.id, row);
+  }
+  return FIRST_PUBLIC_IMPORT_ROWS.map(({ id }) => {
+    const row = observed.get(id);
+    if (row) return row;
+    if (!selectedRow(selection, id)) return inactiveWalkRow(id, 'unselected');
+    throw new Error(`No returned walk observation for ${id}`);
+  });
 }
 
 function slowestReachedFailure(rows: readonly WalkRowResult[]): WalkInventory['slowestFailing'] {
   const slowest = rows
-    .filter((row) => row.result === 'failing' && row.elapsedMs !== null && !prerequisiteFailed(row))
+    .filter((row) => row.result === 'failing' && row.elapsedMs !== null)
     .sort((left, right) => right.elapsedMs! - left.elapsedMs!)[0];
   return slowest && slowest.elapsedMs !== null
     ? { id: slowest.id, path: slowest.path, elapsedMs: slowest.elapsedMs, cause: slowest.cause ?? 'failed' }
@@ -230,12 +319,17 @@ function slowestReachedFailure(rows: readonly WalkRowResult[]): WalkInventory['s
 }
 
 export function walkInventorySummary(inventory: WalkInventory): string {
-  const unreached = inventory.rows.filter(prerequisiteFailed).length;
-  const failing = inventory.rows.filter((row) => row.result === 'failing').length - unreached;
+  const unreached = inventory.rows.filter((row) => row.result === 'unreached').length;
+  const unselected = inventory.rows.filter((row) => row.result === 'unselected').length;
+  const failing = inventory.rows.filter((row) => row.result === 'failing').length;
   const slowest = slowestReachedFailure(inventory.rows);
+  const failedPrerequisites = inventory.prerequisites
+    .filter(({ cause }) => cause !== null)
+    .map(({ stage, elapsedMs, cause }) => `; shared ${stage} failed after ${elapsedMs}ms: ${cause}`)
+    .join('');
   return `${inventory.passing}/${inventory.total} passing; slowest failing ${
     slowest ? `${slowest.id} ${slowest.elapsedMs}ms ${slowest.cause}` : 'none'
-  }; ${failing} failing${unreached ? `; ${unreached} unreached` : ''}`;
+  }; ${failing} failing${unreached ? `; ${unreached} unreached` : ''}${unselected ? `; ${unselected} unselected` : ''}${failedPrerequisites}`;
 }
 
 const OBSERVED_WALK_HEADING = '### Observed walk';
@@ -270,7 +364,8 @@ function currentReadEvidence(evidence: Record<string, unknown>): string {
 }
 
 export function capabilitiesResultCell(row: WalkRowResult): string {
-  if (prerequisiteFailed(row)) return markdownTableCell(`unreached; ${row.cause ?? 'prerequisite failed'}`);
+  if (row.result === 'unselected') return 'unselected';
+  if (row.result === 'unreached') return markdownTableCell(`unreached; ${row.cause ?? 'prerequisite failed'}`);
   const detail = row.result === 'passing' ? currentReadEvidence(row.evidence) : (row.cause ?? 'failed');
   return markdownTableCell(
     `${row.result}; ${row.elapsedMs === null ? 'duration unknown' : `${row.elapsedMs}ms`}; ${detail}`,
@@ -280,23 +375,37 @@ export function capabilitiesResultCell(row: WalkRowResult): string {
 export function applyWalkInventoryToCapabilities(markdown: string, inventory: WalkInventory): string {
   let text = markdown;
   for (const row of inventory.rows) {
+    if (row.result === 'unselected') continue;
     const pattern = new RegExp(`(\\| ${row.id}\\s+\\| [^|\\n]+\\| )[^|\\n]+`);
     if (!pattern.test(text)) throw new Error(`capabilities table is missing ${row.id}`);
-    text = text.replace(pattern, `$1${capabilitiesResultCell(row)} `);
+    text = text.replace(pattern, (_match, prefix: string) => `${prefix}${capabilitiesResultCell(row)} `);
   }
   const slowest = slowestReachedFailure(inventory.rows);
-  const unreached = inventory.rows.filter(prerequisiteFailed).length;
+  const heading =
+    inventory.selection.scope === 'all'
+      ? OBSERVED_WALK_HEADING
+      : `${OBSERVED_WALK_HEADING} (${inventory.selection.scope})`;
   const record = [
-    OBSERVED_WALK_HEADING,
+    heading,
     '',
     `Command: \`${inventory.command}\`. Revision \`${inventory.revision}\`. Started ${inventory.startedAt}; ended ${inventory.endedAt}. ${inventory.passing}/${inventory.total} passing.`,
     slowest ? `Slowest failing: ${slowest.id} ${slowest.elapsedMs}ms ${slowest.cause}.` : 'No measured row failure.',
-    ...(unreached ? [`${unreached} rows were unreached after a prerequisite failed.`] : []),
+    ...inventory.prerequisites.map(
+      ({ stage, elapsedMs, cause, manifest }) =>
+        `Shared ${stage}: ${elapsedMs}ms. ${cause ?? (manifest ? `Published manifest \`${manifest}\`.` : 'Complete.')}`,
+    ),
+    ...(['unreached', 'unselected'] as const).flatMap((result) => {
+      const ids = inventory.rows.filter((row) => row.result === result).map((row) => row.id);
+      return ids.length ? [`${result === 'unreached' ? 'Unreached' : 'Unselected'}: ${ids.join(', ')}.`] : [];
+    }),
     ...(inventory.browserStageFailure ? [`Mounted stage failure: ${inventory.browserStageFailure}.`] : []),
-    '',
+    '\n',
   ].join('\n');
-  if (text.includes(OBSERVED_WALK_HEADING)) {
-    text = text.replace(/### Observed walk\n(?:.*\n)*?(?=Books owner-grant)/, `${record}`);
+  const start = text.indexOf(`${heading}\n`);
+  if (start >= 0) {
+    const body = start + heading.length + 1;
+    const next = text.slice(body).search(/^(?:### |Books owner-grant)/m);
+    text = text.slice(0, start) + record + (next < 0 ? '' : text.slice(body + next));
   } else {
     text = text.replace('\nBooks owner-grant', `\n${record}Books owner-grant`);
   }
@@ -323,7 +432,7 @@ Manager: ${owner.manager}
 
 Command: \`${inventory.command}\`
 Revision: \`${inventory.revision}\`
-Elapsed: ${row.elapsedMs}ms
+Elapsed: ${row.elapsedMs === null ? 'unknown' : `${row.elapsedMs}ms`}
 Cause: ${row.cause}
 
 Current public reads, rights and exact provenance decide success. Do not weaken the walk assertions or add a parallel driver.
@@ -336,6 +445,21 @@ Reproduce with the retained walk command on one admitted stack. Fix the owning m
 
 /** Remote returns are outputs: never declare the owner document or shared continuation directory. */
 export async function writeWalkInventoryArtifacts(inventory: WalkInventory, repository = root): Promise<void> {
+  const ordered = orderedWalkRows(inventory.selection, inventory.rows);
+  if (
+    inventory.total !== ordered.length ||
+    inventory.rows.length !== ordered.length ||
+    inventory.passing !== ordered.filter((row) => row.result === 'passing').length
+  )
+    throw new Error('Walk inventory counts do not match its observations');
+  for (const row of ordered) {
+    if (row.result !== 'unreached') continue;
+    const blocked = inventory.prerequisites.some(
+      (step) => step.cause !== null && step.stage === row.evidence.prerequisite,
+    );
+    const mounted = isMountedRow(row.id) && (row.evidence.browser === 'pending' || row.evidence.browser === 'failing');
+    if (!blocked && !mounted) throw new Error(`No blocking prerequisite or incomplete visit for ${row.id}`);
+  }
   const output = resolve(repository, '.temp/imports-walk');
   const capabilitiesPath = resolve(repository, 'docs/goals/imports.capabilities.md');
   const markdown = applyWalkInventoryToCapabilities(await readFile(capabilitiesPath, 'utf8'), inventory);
@@ -343,9 +467,8 @@ export async function writeWalkInventoryArtifacts(inventory: WalkInventory, repo
   await writeFile(resolve(output, 'imports.capabilities.md'), markdown);
   const drafts = resolve(output, 'continuation');
   await mkdir(drafts, { recursive: true, mode: 0o700 });
-  const failing = inventory.rows.filter((row) => row.result === 'failing');
-  const shared = failing.length === inventory.total && failing.every((row) => row.evidence.sharedStartup === true);
-  if (shared && failing[0]) {
+  const startup = inventory.prerequisites.find(({ stage }) => stage === 'setup');
+  if (startup?.cause) {
     await writeFile(
       resolve(drafts, 'imports-walk-shared-startup.md'),
       `# Shared walk startup
@@ -356,20 +479,24 @@ Manager: semantic
 Command: ${inventory.command}
 Revision: ${inventory.revision}
 Started: ${inventory.startedAt}; ended: ${inventory.endedAt}
-All twelve rows failed before product paths ran: ${failing[0].cause}
+Elapsed: ${startup.elapsedMs}ms
+Affected rows: ${inventory.rows
+        .filter((row) => row.evidence.prerequisite === 'setup')
+        .map((row) => row.id)
+        .join(', ')}
+Cause: ${startup.cause}
 
 Reproduce with the retained walk command on one admitted stack. Restore ordinary Auth persona setup before claiming any path passed. Preserve the existing assertions and independently read the current facts.
 `,
     );
-    return;
   }
-  const seedRows = failing.filter((row) => row.evidence.seed === true);
-  if (seedRows[0]) {
-    const cause = seedRows[0].cause ?? 'seed unavailable';
-    const owner = /sourceFences/.test(cause) ? 'Content d66' : 'Semantic cf23';
+  for (const { stage, cause, elapsedMs, remainingRequest } of inventory.prerequisites) {
+    if (stage === 'setup' || cause === null) continue;
+    const owner = /sourceFences/.test(remainingRequest?.path ?? cause) ? 'Content d66' : 'Semantic cf23';
+    const first = stage === 'seed';
     await writeFile(
-      resolve(drafts, 'imports-walk-seed.md'),
-      `# Resume catalogue paths after shared seed failure
+      resolve(drafts, `imports-walk-${stage}.md`),
+      `# ${first ? 'Resume catalogue paths after shared seed failure' : 'Repair whole-seed reopen'}
 
 Goal: imports
 Manager: semantic
@@ -377,18 +504,25 @@ Manager: semantic
 Command: ${inventory.command}
 Revision: ${inventory.revision}
 Started: ${inventory.startedAt}; ended: ${inventory.endedAt}
-Elapsed seed work: ${seedRows[0].elapsedMs}ms
-Affected rows: ${seedRows.map((row) => row.id).join(', ')}
+Elapsed seed work: ${elapsedMs}ms
+${
+  first
+    ? `Affected rows: ${inventory.rows
+        .filter((row) => row.evidence.prerequisite === 'seed')
+        .map((row) => row.id)
+        .join(', ')}`
+    : 'Catalogue observations used the first published result.'
+}
 Cause: ${cause}
 
-Existing owner: ${owner}. This is input for that repair, not a second implementation assignment. Proposal contention and sourceFences remain separate incidents. Operation/partition/server phase are unretained unless present in the safe request evidence. No catalogue current read or browser path was exercised after the failed seed.
+Existing owner: ${owner}. Proposal contention and sourceFences remain separate incidents. Operation/partition/server phase are available when present in the safe request evidence.${first ? ' No catalogue current read or browser path was exercised after the failed seed.' : ''}
 
-Use the returned seed.log and remaining-request.json, retaining the exact prepared source tuple, native type, converter, method/path/status and any safe problem/correlation. Resume only through ordinary APIs and the original sealed body/key. The complete fresh manifest must finish before catalogue reads. Rerun this same twelve-row command; preserve exact id/type, public facts, provenance, separate acceptance/adoption and phone/desktop assertions. Tags' same-handle continuation and Semantic's concurrent Sources erasure keep their existing owners.
+Use the returned ${stage}.log and ${first ? 'remaining-request.json' : 'seed-reopen-remaining-request.json'} when present. Retain the exact prepared source tuple, native type, converter, method/path/status and any safe problem/correlation. Resume through ordinary APIs and the original sealed body/key. Rerun the recorded command with its original selection. Preserve exact id/type, public facts, provenance, separate acceptance/adoption and phone/desktop assertions.
 `,
     );
   }
-  for (const row of failing) {
-    if (row.evidence.seed === true) continue;
+  for (const row of inventory.rows) {
+    if (row.result !== 'failing') continue;
     const skip = walkRepairSkipReason(row);
     if (skip) continue;
     await writeFile(resolve(drafts, `imports-walk-${row.id.toLowerCase()}.md`), walkRepairBrief(inventory, row));
@@ -400,21 +534,24 @@ Use the returned seed.log and remaining-request.json, retaining the exact prepar
  * subtracting clocks from different hosts or converting the entire run lifetime into row time.
  */
 export function sealInterruptedWalkInventory(
-  run: Pick<WalkInventory, 'command' | 'revision' | 'startedAt'>,
+  run: WalkRun,
   rows: readonly WalkRowResult[],
   active: { id: FirstPublicImportRowId; startedAt: string },
   terminal: { finishedAt: string; cause: string; checkId: string; runElapsedMs: number },
 ): WalkInventory {
-  const observed = new Map(rows.map((row) => [row.id, row]));
-  const activeRow = observed.get(active.id);
+  if (!selectedRow(run.selection, active.id)) throw new Error(`Active walk row ${active.id} was unselected`);
+  const observed = [...rows];
+  const activeIndex = rows.findIndex(({ id }) => id === active.id);
+  const activeRow = observed[activeIndex];
   if (!activeRow || (activeRow.evidence.native === 'passing' && activeRow.evidence.browser === 'pending')) {
-    observed.set(active.id, {
+    const interrupted: WalkRowResult = {
       id: active.id,
       path: firstPublicRow(active.id).path,
       result: 'failing',
       elapsedMs: null,
       cause: terminal.cause,
       evidence: {
+        fixture: rowFixture(active.id),
         ...activeRow?.evidence,
         interrupted: true,
         activeStartedAt: active.startedAt,
@@ -423,12 +560,12 @@ export function sealInterruptedWalkInventory(
         runElapsedMs: terminal.runElapsedMs,
         ...(activeRow ? {} : { currentRead: 'not reached' }),
       },
-    });
+    };
+    if (activeIndex < 0) observed.push(interrupted);
+    else observed[activeIndex] = interrupted;
   }
-  // A returned partial directory cannot establish outcomes for unobserved rows.
-  const missing = FIRST_PUBLIC_IMPORT_ROWS.filter((row) => !observed.has(row.id));
-  if (missing.length) throw new Error(`No returned walk observation for ${missing.map((row) => row.id).join(', ')}`);
-  const ordered = FIRST_PUBLIC_IMPORT_ROWS.map((row) => observed.get(row.id)!);
+  // The original selection accounts for unselected rows. Selected rows require returned observations.
+  const ordered = orderedWalkRows(run.selection, observed);
   return {
     ...run,
     endedAt: terminal.finishedAt,
@@ -485,8 +622,6 @@ export function firstPublicRow(id: FirstPublicImportRowId) {
   return FIRST_PUBLIC_IMPORT_ROWS.find((row) => row.id === id)!;
 }
 
-const CHILD_ERROR_LINE = /^(?:error:|Error:|TypeError:|remote-check:.*failed|task: Failed)/;
-
 export function walkFailureCause(error: unknown): string {
   return importTransportCause(error);
 }
@@ -509,15 +644,6 @@ async function retryWalkTransport<T>(run: () => Promise<T>): Promise<T> {
   throw new Error('walk transport retry exhausted');
 }
 
-export function walkChildFailure(name: string, code: number, stdout: string, stderr: string): Error {
-  const lines = `${stdout}\n${stderr}`.split('\n');
-  const marked = lines.find((line) => CHILD_ERROR_LINE.test(line.trim()));
-  const fromStderr = stderr.split('\n').findLast((line) => line.trim().length > 0);
-  const fromStdout = stdout.split('\n').findLast((line) => line.trim().length > 0);
-  const error = marked?.trim() || fromStderr?.trim() || fromStdout?.trim();
-  return new Error(`${name} exited ${code}${error ? `: ${error}` : ''}`);
-}
-
 /** Slot ports reuse a database URL after wipe; leftover native IDs cannot replay. Sibling seeded walks archive first. */
 export async function retireWalkJournals(repository = root): Promise<void> {
   const archives = resolve(repository, '.temp/local-stack/seed-archives');
@@ -533,8 +659,15 @@ export async function retireWalkJournals(repository = root): Promise<void> {
 
 const SEED_PHASE_LINE =
   /^Cross-media seed finalization state=(?:started|completed|failed) scope=(?:seed|record-import|publication|books)(?: phase=[a-z-]+)? remaining=[a-z,-]+$/;
+const SEED_FAILURE_LINE =
+  /^(?:Cross-media seed (?:import failed|publication incomplete|readiness failed|source failure|failed)|Import transport failed status=|Credential request failed )/;
 const RESERVED_COVER_CONTINUATION =
   /^Cross-media seed import failed provider=bangumi kind=bulk-failed generation=([1-9][0-9]{0,19}) run\{phase=media reason=cover-pending keyDigest=([a-f0-9]{64}) mediaState=reserved\}[^\n]* finalization\{scope=record-import phase=bangumi-cover-continuation /m;
+
+export function walkChildFailure(name: string, code: number, stderr: string): Error {
+  const firstFailure = stderr.split('\n').find((line) => SEED_FAILURE_LINE.test(line));
+  return new Error(`${name} exited ${code}${firstFailure ? `: ${firstFailure}` : ''}`);
+}
 
 export async function captureSeedStderr(
   stream: ReadableStream<Uint8Array>,
@@ -559,8 +692,7 @@ export async function captureSeedStderr(
   return stderr;
 }
 
-async function command(name: string, args: string[], env: NodeJS.ProcessEnv = process.env) {
-  await mkdir(evidenceRoot, { recursive: true, mode: 0o700 });
+async function command(name: 'seed' | 'seed-reopen', args: string[], env: NodeJS.ProcessEnv) {
   // The admitted walk owns this child's process group and its existing end-to-end budget.
   const child = Bun.spawn(args, { cwd: root, env, stdout: 'pipe', stderr: 'pipe' });
   const [stdout, stderr, code] = await Promise.all([
@@ -601,7 +733,7 @@ async function command(name: string, args: string[], env: NodeJS.ProcessEnv = pr
     diagnostic = `\n${line}\n`;
   }
   await writeFile(resolve(evidenceRoot, `${name}.log`), `${stdout}${stderr}${diagnostic}`, { mode: 0o600 });
-  if (code !== 0) throw walkChildFailure(name, code, stdout, stderr);
+  if (code !== 0) throw walkChildFailure(name, code, stderr);
 }
 
 async function parseEnv(path: string): Promise<Record<string, string>> {
@@ -705,7 +837,8 @@ async function grantOwner(persona: SeedEnv) {
         },
         body: JSON.stringify(body),
       });
-      return { status: response.status, text: await response.text() };
+      const problem = reviewedCatalogueProblem(await response.json().catch(() => undefined));
+      return { status: response.status, text: problem.code ?? '' };
     },
   });
 }
@@ -794,6 +927,12 @@ const operatorSpecs: Record<'I01' | 'I02' | 'I03' | 'I04', OperatorSpec> = {
     scopes: [...IMPORTER_SCOPES, 'subject:read'],
   },
 };
+
+function rowFixture(id: FirstPublicImportRowId): string {
+  if (!isOperatorRow(id)) return 'seed-result.json';
+  const dump = operatorSpecs[id].dump;
+  return dump ? relative(root, dump) : 'specs/fixtures/imports/vndb-tables/db (licensedVndbArchive)';
+}
 
 export async function operatorResponseEvidence(response: Response) {
   const payload: unknown =
@@ -1031,15 +1170,28 @@ async function runOperator(
   };
 }
 
-async function loadSeedReport(): Promise<{
-  report: CrossMediaSeedReport;
-  publication: ShowcasePublicationResult;
-}> {
-  const reportValue: unknown = JSON.parse(await readFile(resolve(root, '.temp/cross-media-seed/result.json'), 'utf8'));
+export function publishedWalkSeed(reportValue: unknown) {
   if (!isRecord(reportValue) || !isRecord(reportValue.showcase) || !Array.isArray(reportValue.showcase.published))
     throw new TypeError('Cross-media seed result has no published showcase identities');
+  if (reportValue.showcase.status !== 'published')
+    throw new TypeError('Cross-media seed did not publish the selected catalogue');
+  if (
+    !isRecord(reportValue.showcase.manifest) ||
+    typeof reportValue.showcase.manifest.digest !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(reportValue.showcase.manifest.digest)
+  )
+    throw new TypeError('Cross-media seed result has no published manifest digest');
+  const sourceDigests = reportValue.sourceDigests;
+  if (
+    !isRecord(sourceDigests) ||
+    Object.keys(sourceDigests).length === 0 ||
+    Object.values(sourceDigests).some((digest) => typeof digest !== 'string' || !/^[a-f0-9]{64}$/.test(digest))
+  )
+    throw new TypeError('Cross-media seed result has no exact source digests');
   const report = reportValue as unknown as CrossMediaSeedReport;
-  return { report, publication: report.showcase as ShowcasePublicationResult };
+  const publication = report.showcase!;
+  selectJourneyWorks(publication.published);
+  return { report, publication };
 }
 
 export function assertCurrentOperatorFact(
@@ -1114,19 +1266,19 @@ function samePublishedIdentities(publication: ShowcasePublicationResult): string
     .sort();
 }
 
-function assertUnchangedSeedReopen(first: ShowcasePublicationResult, reopened: ShowcasePublicationResult): void {
-  assert.equal(reopened.status, 'published', 'unchanged seed reopen did not finish publication');
-  assert.equal(reopened.manifest.digest, first.manifest.digest, 'unchanged seed reopen changed its manifest');
-  const firstIdentities = samePublishedIdentities(first);
-  const reopenedIdentities = samePublishedIdentities(reopened);
-  if (first.status === 'published') assert.deepEqual(reopenedIdentities, firstIdentities);
-  else {
-    for (const identity of firstIdentities)
-      assert.ok(
-        reopenedIdentities.includes(identity),
-        `seed continuation dropped prior published identity ${identity}`,
-      );
-  }
+type PublishedWalkSeed = ReturnType<typeof publishedWalkSeed>;
+
+export function assertUnchangedSeedReopen(first: PublishedWalkSeed, reopened: PublishedWalkSeed): void {
+  assert.equal(
+    reopened.publication.manifest.digest,
+    first.publication.manifest.digest,
+    'unchanged seed reopen changed its manifest',
+  );
+  assert.deepEqual(
+    samePublishedIdentities(reopened.publication),
+    samePublishedIdentities(first.publication),
+    'unchanged seed reopen changed its published Subject IDs or their provenance',
+  );
 }
 
 async function walkGameReleaseCounterpart(api: string, publication: ShowcasePublicationResult) {
@@ -1412,10 +1564,18 @@ async function walkRow(
   const started = Date.now();
   await markActiveWalkRow(id, started);
   let row: WalkRowResult;
-  const reached: Record<string, unknown> = {};
+  const fixture = rowFixture(id);
+  const reached: Record<string, unknown> = { fixture };
   try {
     const evidence = await run(reached);
-    row = { id, path: meta.path, result: 'passing', elapsedMs: Date.now() - started, cause: null, evidence };
+    row = {
+      id,
+      path: meta.path,
+      result: 'passing',
+      elapsedMs: Date.now() - started,
+      cause: null,
+      evidence: { ...evidence, fixture },
+    };
   } catch (error) {
     const elapsedMs = Date.now() - started;
     const cause = walkFailureCause(error);
@@ -1430,10 +1590,13 @@ async function walkRow(
     };
   }
   await writeWalkRow(mountedWalkRow(row, []));
+  await rm(resolve(evidenceRoot, 'active-row.json'), { force: true });
   return row;
 }
 
-export async function runImportsPublicJourney(): Promise<WalkInventory> {
+export async function runImportsPublicJourney(args: readonly string[] = []): Promise<WalkInventory> {
+  const selection = parseWalkSelection(args);
+  const commandLine = [retainedCommand, ...args].join(' ');
   if (process.env.REZICS_WALK_IMPORT_CATALOGUE !== '1' || !walkStackAdmitted(process.env, root))
     throw new Error('Use the admitted dev-stack.ts walk --import-catalogue fixture');
 
@@ -1441,17 +1604,18 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
   const revision = (await Bun.$`git rev-parse HEAD`.cwd(root).text()).trim();
   await retireWalkJournals();
   await mkdir(evidenceRoot, { recursive: true, mode: 0o700 });
-  const origins = stackOrigins();
   const rows: WalkRowResult[] = [];
-  const recordStage = async (stage: 'setup' | 'operators' | 'seed' | 'seed-reopen' | 'catalogue-readback') => {
+  const prerequisites: WalkPrerequisite[] = [];
+  const run: WalkRun = { command: commandLine, revision, startedAt, selection, prerequisites };
+  const recordStage = async (
+    stage: WalkPrerequisite['stage'] | 'operators' | 'catalogue-readback' | 'mounted' | 'complete',
+  ) => {
     const path = resolve(evidenceRoot, 'run.json');
     const pending = `${path}.pending`;
     await writeFile(
       pending,
       JSON.stringify({
-        command: retainedCommand,
-        revision,
-        startedAt,
+        ...run,
         stage,
         stageStartedAt: new Date().toISOString(),
       }),
@@ -1459,93 +1623,76 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
     );
     await rename(pending, path);
   };
-  let persona: SeedEnv | undefined;
-  let sharedStartup: string | null = null;
-  let browserStageFailure: string | undefined;
-  await recordStage('setup');
-  try {
-    // The admitted host provisions its persona before answering native readiness.
-    persona = await readPersona();
-    await grantOwner(persona);
-  } catch (error) {
-    sharedStartup = walkFailureCause(error);
-  }
-
-  const operator = persona;
-  const recordOperator = async (id: keyof typeof operatorSpecs) => {
-    const row: WalkRowResult =
-      !operator || sharedStartup
-        ? {
-            id,
-            path: firstPublicRow(id).path,
-            result: 'failing',
-            elapsedMs: 0,
-            cause: sharedStartup ?? 'persona unavailable',
-            evidence: { sharedStartup: true },
-          }
-        : await walkRow(id, (reached) => runOperator(id, operator, reached));
-    rows.push(row);
+  const recordInactive = async (row: WalkRowResult) => {
     await writeWalkRow(row);
+    rows.push(row);
   };
+  await recordStage('setup');
+  const selected = FIRST_PUBLIC_IMPORT_ROWS.filter(({ id }) => selectedRow(selection, id));
+  for (const { id } of FIRST_PUBLIC_IMPORT_ROWS)
+    if (!selectedRow(selection, id)) await recordInactive(inactiveWalkRow(id, 'unselected'));
 
-  // Finish independent operator evidence before the shared catalogue seed.
-  // Bangumi precedes the bulk upload quota, and Open Library is the last operator.
-  await recordStage('operators');
-  for (const id of ['I01', 'I02', 'I04', 'I03'] as const) await recordOperator(id);
-
-  const seedStarted = Date.now();
-  let seedElapsedMs = 0;
-  let seedCause: string | null = sharedStartup;
-  let publication: ShowcasePublicationResult | undefined;
-  let report: CrossMediaSeedReport | undefined;
-  let seedReopenEvidence: Record<string, unknown> | undefined;
-  if (!seedCause) {
+  const setupStarted = Date.now();
+  let persona: SeedEnv;
+  const runSeed = async (stage: 'seed' | 'seed-reopen', first?: PublishedWalkSeed) => {
+    await recordStage(stage);
+    const started = Date.now();
+    const directory = resolve(root, '.temp/cross-media-seed');
+    const result = resolve(directory, 'result.json');
+    const reportName = `${stage}-result.json`;
+    const artifact = resolve(evidenceRoot, reportName);
+    let report: string | undefined;
+    let remainingRequest: SeedRemainingRequest | undefined;
     try {
       const seedArgs = ['bun', 'scripts/datasets/cross-media-seed.ts', '--dev-catalogue'];
-      const seedEnv = walkSeedChildEnv(origins, persona?.file ?? {});
-      await recordStage('seed');
-      await command('seed', seedArgs, seedEnv);
-      const first = await loadSeedReport();
-      await recordStage('seed-reopen');
-      await command('seed-reopen', seedArgs, seedEnv);
-      const reopened = await loadSeedReport();
-      assertUnchangedSeedReopen(first.publication, reopened.publication);
-      seedReopenEvidence = {
-        identityStable: true,
-        priorComplete: first.publication.status === 'published',
-        manifest: reopened.publication.manifest.digest,
-        publishedIdentities: reopened.publication.published.length,
-      };
-      report = reopened.report;
-      publication = reopened.publication;
-      selectJourneyWorks(publication.published);
-    } catch (error) {
-      const directory = resolve(root, '.temp/cross-media-seed');
-      const written = await readSeedRemainingRequest(directory);
-      const journal = remainingRequestFromPreparedJournal(resolve(directory, 'showcase.sqlite'));
-      const remaining = written ?? (journal ? mergeRemainingRequest(journal) : undefined);
-      seedCause = remaining ? formatSeedFailure(error, remaining) : walkFailureCause(error);
-    }
-  }
-
-  seedElapsedMs = Date.now() - seedStarted;
-  if (seedCause) console.error(`shared seed failing; ${seedElapsedMs}ms; ${seedCause}`);
-  const catalogueFromSeed = ['I05', 'I06', 'I07', 'I08', 'I09', 'I10', 'I11', 'I12'] as const;
-  if (seedCause || !publication || !report) {
-    for (const id of catalogueFromSeed)
-      rows.push({
-        id,
-        path: firstPublicRow(id).path,
-        result: 'failing',
-        elapsedMs: seedElapsedMs,
-        cause: seedCause ?? 'seed report unavailable',
-        evidence: { sharedStartup: Boolean(sharedStartup), seed: true },
+      try {
+        await command(stage, seedArgs, walkSeedChildEnv(stackOrigins(), persona.file));
+      } catch (error) {
+        remainingRequest =
+          (await readSeedRemainingRequest(directory)) ??
+          remainingRequestFromPreparedJournal(resolve(directory, 'showcase.sqlite'));
+        if (stage === 'seed') {
+          // A publication refusal can still produce a report. The fresh journal has no stale result.
+          report = await copyFile(result, artifact).then(
+            () => reportName,
+            () => undefined,
+          );
+        }
+        throw error;
+      }
+      await copyFile(result, artifact);
+      report = reportName;
+      const seeded = publishedWalkSeed(JSON.parse(await readFile(artifact, 'utf8')));
+      if (first) assertUnchangedSeedReopen(first, seeded);
+      prerequisites.push({
+        stage,
+        elapsedMs: Date.now() - started,
+        cause: null,
+        report,
+        manifest: seeded.publication.manifest.digest,
       });
-  } else {
+      return seeded;
+    } catch (error) {
+      prerequisites.push({
+        stage,
+        elapsedMs: Date.now() - started,
+        cause: walkFailureCause(error),
+        ...(report ? { report } : {}),
+        ...(remainingRequest ? { remainingRequest } : {}),
+      });
+      if (remainingRequest) {
+        const name = stage === 'seed' ? 'remaining-request.json' : 'seed-reopen-remaining-request.json';
+        await writeFile(resolve(evidenceRoot, name), JSON.stringify(remainingRequest), { mode: 0o600 });
+      }
+      return null;
+    }
+  };
+
+  const catalogue = async ({ report: seeded, publication: published }: PublishedWalkSeed) => {
     await recordStage('catalogue-readback');
-    const api = stackOrigins().kernel;
-    const published = publication;
-    const seeded = report;
+    const origins = stackOrigins();
+    const api = origins.kernel;
+
     rows.push(
       await walkRow('I05', async () => {
         const works = selectJourneyWorks(published.published);
@@ -1580,12 +1727,7 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
     rows.push(await walkRow('I06', () => walkGameReleaseCounterpart(api, published)));
     rows.push(await walkRow('I07', () => walkPersonCredits(api, seeded, published)));
     rows.push(await walkRow('I08', () => walkFranchise(api, published)));
-    rows.push(
-      await walkRow('I09', async () => ({
-        ...(await walkTags(api, published)),
-        seedReopen: seedReopenEvidence,
-      })),
-    );
+    rows.push(await walkRow('I09', () => walkTags(api, published)));
     rows.push(await walkRow('I10', () => walkSelectedSynopsis(api, published)));
     rows.push(
       await walkRow('I11', async () => {
@@ -1628,7 +1770,9 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
     );
 
     const browserVisits: JourneyMountedVisit[] = [];
-    const nativeRows = rows.map((row, index) => ({ row, index })).filter(({ row }) => isMountedRow(row.id));
+    const nativeRows = rows
+      .map((row, index) => ({ row, index }))
+      .filter(({ row }) => row.result !== 'unselected' && isMountedRow(row.id));
     const browserStarted = Date.now();
     const recordMountedRows = async (cause?: string) => {
       for (const { row, index } of nativeRows) {
@@ -1638,7 +1782,7 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
         rows[index] = updated;
       }
     };
-    await markActiveWalkRow('I05', browserStarted);
+    await recordStage('mounted');
     try {
       const frontends = await startWalkStackActions(
         ['pages', 'web'],
@@ -1647,42 +1791,72 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
       try {
         await runBangumiJourney({
           skipPersona: true,
-          skipSeed: true,
+          seedReport: seeded,
           startFrontends: false,
+          async onMountedStart(work) {
+            const id = work.role === 'anime' ? 'I05' : (work.series ?? work.sourceKey) === '499' ? 'I11' : 'I12';
+            await markActiveWalkRow(id, Date.now());
+          },
           async onMountedVisit(visit) {
             browserVisits.push(visit);
             await recordMountedRows();
           },
         });
       } catch (error) {
-        browserStageFailure = walkFailureCause(error);
+        run.browserStageFailure = walkFailureCause(error);
       } finally {
         await frontends.stop();
       }
     } catch (error) {
       const cause = walkFailureCause(error);
-      if (browserStageFailure) console.error(`mounted stage cleanup failed; ${cause}`);
-      browserStageFailure ??= cause;
+      if (run.browserStageFailure) console.error(`mounted stage cleanup failed; ${cause}`);
+      run.browserStageFailure ??= cause;
     }
-    if (browserStageFailure) console.error(`mounted stage failed; ${browserStageFailure}`);
-    await recordMountedRows(browserStageFailure);
+    if (run.browserStageFailure) console.error(`mounted stage failed; ${run.browserStageFailure}`);
+    await recordMountedRows(run.browserStageFailure);
+    await rm(resolve(evidenceRoot, 'active-row.json'), { force: true });
+  };
+
+  try {
+    // The admitted host provisions its persona before answering native readiness.
+    persona = await readPersona();
+    await grantOwner(persona);
+    prerequisites.push({ stage: 'setup', elapsedMs: Date.now() - setupStarted, cause: null });
+  } catch (error) {
+    prerequisites.push({ stage: 'setup', elapsedMs: Date.now() - setupStarted, cause: walkFailureCause(error) });
+    for (const { id } of selected) await recordInactive(inactiveWalkRow(id, 'unreached', 'setup'));
   }
-
-  for (const row of rows) await writeWalkRow(row);
-
-  rows.sort((left, right) => left.id.localeCompare(right.id));
-
+  if (prerequisites[0]!.cause === null) {
+    await runWalkSelection(selection, {
+      async operators() {
+        await recordStage('operators');
+        // Bangumi precedes the bulk upload quota, and Open Library is the last operator.
+        for (const id of operatorRows) rows.push(await walkRow(id, (reached) => runOperator(id, persona, reached)));
+      },
+      async seed() {
+        const seeded = await runSeed('seed');
+        if (!seeded) {
+          for (const { id } of selected)
+            if (!isOperatorRow(id)) await recordInactive(inactiveWalkRow(id, 'unreached', 'seed'));
+        }
+        return seeded;
+      },
+      catalogue,
+      async reopenSeed(first) {
+        await runSeed('seed-reopen', first);
+      },
+    });
+  }
+  await recordStage('complete');
+  const ordered = orderedWalkRows(selection, rows);
   const endedAt = new Date().toISOString();
   const inventory: WalkInventory = {
-    command: retainedCommand,
-    revision,
-    startedAt,
+    ...run,
     endedAt,
-    passing: rows.filter((row) => row.result === 'passing').length,
+    passing: ordered.filter((row) => row.result === 'passing').length,
     total: FIRST_PUBLIC_IMPORT_ROWS.length,
-    ...(browserStageFailure ? { browserStageFailure } : {}),
-    slowestFailing: slowestReachedFailure(rows),
-    rows,
+    slowestFailing: slowestReachedFailure(ordered),
+    rows: ordered,
   };
   await writeFile(resolve(evidenceRoot, 'inventory.json'), JSON.stringify(inventory, null, 2), { mode: 0o600 });
   await writeWalkInventoryArtifacts(inventory);
@@ -1691,6 +1865,11 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
 }
 
 if (import.meta.main) {
-  const inventory = await runImportsPublicJourney();
-  if (inventory.passing < inventory.total || inventory.browserStageFailure) process.exitCode = 1;
+  const inventory = await runImportsPublicJourney(Bun.argv.slice(2));
+  if (
+    inventory.rows.some(({ result }) => result === 'failing' || result === 'unreached') ||
+    inventory.prerequisites.some(({ cause }) => cause !== null) ||
+    inventory.browserStageFailure
+  )
+    process.exitCode = 1;
 }

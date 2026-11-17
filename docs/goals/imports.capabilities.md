@@ -125,11 +125,23 @@ fresh seed on the integrated candidate and run the catalogue and mounted reads a
 Verify unchanged-input replay and interrupted recovery with bounded native samples using their original journals.
 Use whole-seed reopen when a change affects the composed seed or publication replay contract.
 
+Run the operator and catalogue selections on their own admitted stacks.
+
+```sh
+bun services/auth/scripts/dev-stack.ts walk --import-catalogue -- bun services/importer/src/imports-public-journey.ts --scope operators
+bun services/auth/scripts/dev-stack.ts walk --import-catalogue -- bun services/importer/src/imports-public-journey.ts --scope catalogue
+```
+
+Use `--scope all` or omit the scope to run all twelve paths in one session. Append `--reopen-seed` to the catalogue or
+whole-walk command when qualifying composed replay. The mounted and native catalogue reads use the first published
+result. The optional reopen then verifies publication and stable Subject IDs for the same exact provider referents.
+
 Record the exact revision and fixture or seed for each of the twelve paths. A pass requires the complete visible
 path and its applicable native current reads. Follow [shared prerequisite accounting](../development/verification.md#check-selection-and-failures)
 for a seed failure. Preserve completed observations after infrastructure termination and leave an interrupted
-row's duration unknown. Reject inventories with unaccounted inactive rows. Report passing/12 and the slowest
-measured failure.
+row's duration unknown. Reject inventories with unaccounted inactive rows. Record the shared seed failure and time
+once, mark I05–I12 unreached, and record rows outside the selection as unselected. Report passing/12 and the slowest
+measured row failure.
 Record completed mounted visits as they finish. Each mounted row requires its own current reads and all of its
 phone and desktop visits. A later shared browser failure preserves completed rows and is recorded separately.
 
