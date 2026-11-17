@@ -184,6 +184,10 @@ readers follow exact chapters after moves, save progress and continue; later pri
 change the publication. Record the parity/improvement required above. Neither Content's native gate nor a flat slice
 substitutes for these mounted journeys.
 
+The native Auth memory check observes the page-app process group exit while Alice's Web page and issuer session
+remain usable. The same issuer serves Auth pages again and Bob signs in with his own context. The mounted catalogue
+journey keeps the initiating Books page alive through the reader's exact shelf popup and browser Back to typed Search.
+
 Run focused interface/integration suites through owning app/package runners. Connect native
 [page](../../specs/pages-outcomes.test.ts), [Search](../../specs/search-outcomes.test.ts),
 [Library](../../specs/library-outcomes.test.ts) and [media](../../specs/content-media-outcomes.test.ts) outcomes to their

@@ -438,40 +438,29 @@ export async function startAuthStack(
         method: string;
         error: string | undefined;
       }[] = [];
-      const functionResponses = new Map<
-        import('playwright').Request,
-        {
-          resolve(response: PlaywrightResponse): void;
-          promise: Promise<PlaywrightResponse>;
-        }
-      >();
       const recordRequest = (request: import('playwright').Request) => {
         pageRequests.push(request);
         if (request.isNavigationRequest() && request.frame() === page.mainFrame()) visitedUrls.push(request.url());
         const { origin, pathname } = new URL(request.url());
-        if (pathname.startsWith('/_serverFn/')) {
-          if (origin === webOrigin) webFunctions.requests += 1;
-          let resolve!: (response: PlaywrightResponse) => void;
-          const promise = new Promise<PlaywrightResponse>((done) => (resolve = done));
-          functionResponses.set(request, { resolve, promise });
-        }
+        if (origin === webOrigin && pathname.startsWith('/_serverFn/')) webFunctions.requests += 1;
       };
-      page.on('request', recordRequest);
-      page.on('response', (response) => {
+      const recordResponse = (response: PlaywrightResponse) => {
         const url = new URL(response.url());
         if (url.origin === webOrigin && url.pathname.startsWith('/_serverFn/')) {
           webFunctions.responses += 1;
           if (!response.ok()) webFunctions.failures += 1;
         }
         if (url.pathname === '/signin') authResponses.push(response);
-        functionResponses.get(response.request())?.resolve(response);
-      });
-      page.on('requestfailed', (request) => {
+      };
+      const recordFailure = (request: import('playwright').Request) => {
         if (pageFailures.length >= 8) return;
         const url = new URL(request.url());
         if (url.origin !== webOrigin) return;
         pageFailures.push({ path: url.pathname, method: request.method(), error: request.failure()?.errorText });
-      });
+      };
+      page.on('request', recordRequest);
+      page.on('response', recordResponse);
+      page.on('requestfailed', recordFailure);
       assertActive('read native Auth account for browser sign-in');
       const email = signup ? `${crypto.randomUUID()}@example.test` : (await stack.authPersona(persona)).email;
       const formPassword = signup ? `newcomer-${crypto.randomUUID()}` : password;
@@ -578,7 +567,7 @@ export async function startAuthStack(
           `Native Auth sign-in: ${Math.round(performance.now() - journeyStarted)}ms; browser peak RSS: ${browserPeakMemoryBytes}bytes`,
         );
       const current = page.url();
-      const response = () => {
+      const response = async () => {
         const latest = authResponses.at(-1);
         if (!latest) throw new Error(`Auth did not receive a ${signup ? 'sign-up' : 'sign-in'} submission`);
         return latest;
@@ -590,6 +579,8 @@ export async function startAuthStack(
         ...(registration ? { registration } : {}),
         continueOnPage() {
           page.off('request', recordRequest);
+          page.off('response', recordResponse);
+          page.off('requestfailed', recordFailure);
           retirementRequested = true;
           retirePages();
           return page;
@@ -602,7 +593,7 @@ export async function startAuthStack(
           const requests = pageRequests.filter((request) => new URL(request.url()).pathname.startsWith('/_serverFn/'));
           return Promise.all(
             requests.map(async (request) => {
-              const response = await functionResponses.get(request)?.promise;
+              const response = await request.response();
               const headers = await request.allHeaders();
               for (const name of ['cookie', 'authorization', 'host', 'content-length']) delete headers[name];
               return {
@@ -696,7 +687,7 @@ export async function startAuthStack(
       origin,
       pageAppProcess: () => pageApp.process(),
       async settlePageApp() {
-        await Promise.all(pendingPageResponses);
+        while (pendingPageResponses.size) await Promise.all(pendingPageResponses);
         retirePages();
         await pageApp.settled();
       },

@@ -470,6 +470,8 @@ function processGroupIdentities(identity: NativeProcessIdentity): ProcessGroupOb
   });
   if (result.error)
     return { status: 'unavailable', detail: `${result.error.name}${result.error.code ? `:${result.error.code}` : ''}` };
+  // ps exits 1 for an empty selection. Confirm the group is gone before reporting zero members.
+  if (result.status === 1 && !processGroupExists(identity.pgid)) return { status: 'observed', identities: [] };
   if (result.status !== 0) return { status: 'unavailable', detail: `ps exited with status ${result.status}` };
 
   const identities: NativeProcessIdentity[] = [];
