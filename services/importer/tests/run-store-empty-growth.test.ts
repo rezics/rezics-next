@@ -305,10 +305,32 @@ test('no-effect resolution stays indexed with unrelated same-source history and 
       step++;
       cumulative += scale;
       expect(
-        RUN_TABLES.map(
-          (table) => (store.database.query(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n,
+        Object.fromEntries(
+          RUN_TABLES.map((table) => [
+            table,
+            (store.database.query(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n,
+          ]),
         ),
-      ).toEqual([1, scale + step, scale + cumulative + step, previousMembers, scale + (step > 1 ? 1 : 0), 0, 0, 0]);
+      ).toEqual({
+        run_sources: 1,
+        run_generations: scale + step,
+        run_entries: scale + cumulative + step,
+        run_members: previousMembers,
+        run_acknowledged: scale + (step > 1 ? 1 : 0),
+        run_commands: 0,
+        run_payloads: 0,
+        run_envelopes: 0,
+        run_conversion_diagnostics: 0,
+        run_conversion_diagnostic_records: 0,
+        run_aggregate_operations: 0,
+        run_aggregate_heads: 0,
+        run_classification_heads: 0,
+        run_staging_checkpoints: 0,
+        run_staging_prefix: 0,
+        run_retention_work: 0,
+        run_disappearance_stops: 0,
+        run_disappearance_missing: 0,
+      });
       store.database.exec('ANALYZE');
       const measure = <T>(name: string, operation: () => T) => {
         const sample = probe.measure(operation);

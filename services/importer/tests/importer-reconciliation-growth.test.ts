@@ -82,8 +82,8 @@ function fake() {
 function directory() {
   return mkdtempSync(join(tmpdir(), 'importer-local-'));
 }
-// Capture all synchronous production SQLite entry points, including nested bindings,
-// store methods and ownership. Actual SQL, returned rows and EQP come from the probe.
+// Attribute nested calls to the outer synchronous entry point so the totals count
+// each SQL execution once. Actual SQL, returned rows and EQP come from the probe.
 function instrument(importer: Importer, probe: ReturnType<typeof createSqliteProbe>) {
   let enabled = false,
     depth = 0;
@@ -181,9 +181,11 @@ test('actual coordinator fixed work searches same-source keys/history at three s
       expect(inputRecordsRead).toBe(scale);
       inputSamples.push({ scale, counted: countedSample([{ 'input records read': inputRecordsRead }]) });
       f.transport.batchWrite = batchWrite;
-      expect(
-        (await importer.runRecords(registration, records(row(1, 'Baseline')), { disappearanceThreshold: 1 })).status,
-      ).toBe('committed');
+      const trimmed = await importer.runRecords(registration, records(row(1, 'Baseline')), {
+        disappearanceThreshold: 1,
+      });
+      expect(trimmed.status).toBe('committed');
+      expect(trimmed.counts).toEqual({ new: 0, changed: 0, unchanged: 1, vanished: scale - 1 });
       importer.session.store.database.exec('ANALYZE');
       const beforeRequests = f.requests.length,
         beforeFences = f.fenceCalls;
@@ -205,7 +207,7 @@ test('actual coordinator fixed work searches same-source keys/history at three s
       coordinatorSamples.push({ scale, counted: countedSample([totals]) });
       for (const key of [
         'store.stage',
-        'session.acquire',
+        'session.beginOperation',
         'session.reopen',
         'session.release',
         'store.key',
@@ -220,7 +222,7 @@ test('actual coordinator fixed work searches same-source keys/history at three s
         'store.pageVanished',
         'store.pagePending',
       ])
-        expect(costs.has(key)).toBe(true);
+        expect([...costs.keys()]).toContain(key);
       for (const [key, cost] of costs) {
         const group = samples.get(key) ?? [];
         group.push({ scale, counted: countedSample([cost]) });

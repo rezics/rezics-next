@@ -120,10 +120,32 @@ test('larger sanitized record stage and exact key/page reads stay indexed as unr
       step++;
       cumulative += scale;
       expect(
-        RUN_TABLES.map(
-          (table) => (store.database.query(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n,
+        Object.fromEntries(
+          RUN_TABLES.map((table) => [
+            table,
+            (store.database.query(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n,
+          ]),
         ),
-      ).toEqual([1, scale + 2 * step, scale + 2 * cumulative + 3 * (step - 1), scale, scale, 0, 0, 0]);
+      ).toEqual({
+        run_sources: 1,
+        run_generations: scale + 2 * step,
+        run_entries: scale + 2 * cumulative + 3 * (step - 1),
+        run_members: scale,
+        run_acknowledged: scale,
+        run_commands: 0,
+        run_payloads: 0,
+        run_envelopes: 0,
+        run_conversion_diagnostics: 0,
+        run_conversion_diagnostic_records: 0,
+        run_aggregate_operations: 0,
+        run_aggregate_heads: 0,
+        run_classification_heads: 0,
+        run_staging_checkpoints: 0,
+        run_staging_prefix: 0,
+        run_retention_work: 0,
+        run_disappearance_stops: 0,
+        run_disappearance_missing: 0,
+      });
       store.database.exec('ANALYZE');
       const evidence = deferredProbe(store.database);
       const inputBytes: number[] = [];
