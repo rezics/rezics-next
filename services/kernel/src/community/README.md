@@ -657,12 +657,17 @@ promotion remain distinct integration verification obligations. Focused cases li
 
 #### Cost: tuple capability readiness
 
-Each installation and tuple counter row generates its own digest input at write time. The readiness statement
-recomputes the ordered digests from the current rows in one snapshot.
+Each installation and tuple counter row generates its own digest input at write time. The native tables stamp
+their changed keys with the top-level transaction ID in the same commit. A physical database session can reuse its
+last full observation when an indexed seek in the current statement snapshot finds no visible marker at or above
+the prior snapshot's minimum transaction ID. A writer in flight at the full read is covered even if its ID precedes
+another visible write. Truncation also stamps its authority and storage identity changes force a full read.
+Every observation reads the current producer in the same snapshot. The ordered digests and readiness predicates
+retain their existing encoding.
 
-- Touches: One aggregate query reads the fixed 4,096 dependency-install rows, the fixed 4,096 per-partition tuple counters and the singleton producer row; it does not join native resource partitions.
-- Bound: 8,193 summary rows and one statement, with at most about 1 MB of aggregate text input from the schema's fixed UUID/position widths and 20-digit counters, plus PostgreSQL tuple/index overhead.
-- Growth check: Space count, tuple history and unrelated scopes do not increase these row or byte bounds; the partition count is fixed at 4,096.
+- Touches: One statement checks the marker index and the singleton producer. A cold session or any potentially new change recomputes the ordered aggregates over both complete authority sets.
+- Bound: One live marker per authority row and one per authority for truncation. A full read adds up to 8,192 summary rows and about 1 MB of aggregate text input. A long-running transaction can keep the minimum transaction ID behind an already visible change and cause conservative full reads.
+- Growth check: Space count, tuple history and unrelated scopes do not increase these row or byte bounds. Each write updates its own authority key's marker.
 
 #### Cost: source producer registration
 
@@ -690,7 +695,7 @@ recomputes the ordered digests from the current rows in one snapshot.
 
 #### Cost: current tuple witness read
 
-- Touches: Two exact owner rounds cover at most 100 requested Spaces, their current expected/reference tuple prefixes and one native capability point per owner partition; two grouped current-fence reads cover at most 5,000 tuples, and two capability observations scan the fixed install/counter summaries.
+- Touches: Two exact owner rounds cover at most 100 requested Spaces, their current expected/reference tuple prefixes and one native capability point per owner partition. Two grouped current-fence reads cover at most 5,000 tuples. Both capability observations recheck the marker and producer in their respective snapshots.
 - Bound: Each owner contributes at most 50 tuples, with at most 51 rows from each expected/reference prefix to reject overflow; each source-fence statement carries at most 100. In the worst spread, each fence round reads at most 5,000 tuple identities across at most 4,096 tuple homes, with one anchor per home. The two owner rounds retain at most 20,400 expected/reference rows, 200 owner rows and 200 capability points, plus at most 10,000 fence rows across both rounds, before fixed transaction and index overhead.
 - Growth check: Work is bounded by the 100-key interface and 50-tuple witness limit, not by source-fence table history, unrelated Spaces or unrelated tuples.
 
