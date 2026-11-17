@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import type { BrowserContext, Page } from 'playwright';
+import type { BrowserContext, Page, Response as PlaywrightResponse } from 'playwright';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
 import {
@@ -96,6 +96,24 @@ async function hydrate(page: Page) {
 
 async function expectVisible(locator: { waitFor: (options: { state: 'visible'; timeout: number }) => Promise<void> }) {
   await locator.waitFor({ state: 'visible', timeout: 30_000 });
+}
+
+function waitForUploadResponse(page: Page) {
+  const response = page.waitForResponse(
+    (result) => /^\/media\/[^/]+$/.test(new URL(result.url()).pathname) && result.request().method() === 'PUT',
+  );
+  // Reserve can fail before this PUT is sent. Keep its error primary during cleanup.
+  void response.catch(() => {});
+  return response;
+}
+
+async function expectMediaReservation(response: PlaywrightResponse, phase: string) {
+  if (response.status() === 201) return;
+  const problem = (await response.json().catch(() => null)) as { code?: unknown } | null;
+  const code = typeof problem?.code === 'string' && /^[a-z][a-z0-9_]{0,63}$/u.test(problem.code) ? problem.code : '';
+  const failure = `${phase}:HTTP ${response.status()}${code ? ` ${code}` : ''}`;
+  sequence.push(failure);
+  throw new Error(failure);
 }
 
 async function editor(page: Page) {
@@ -223,12 +241,10 @@ async function publishAttachmentReply() {
   const reserved = authorPage.waitForResponse(
     (response) => new URL(response.url()).pathname === '/media' && response.request().method() === 'POST',
   );
-  const uploaded = authorPage.waitForResponse(
-    (response) => /^\/media\/[^/]+$/.test(new URL(response.url()).pathname) && response.request().method() === 'PUT',
-  );
+  const uploaded = waitForUploadResponse(authorPage);
   await failedRow.getByRole('button', { name: 'Retry upload', exact: true }).click();
   const reservation = await reserved;
-  expect(reservation.status()).toBe(201);
+  await expectMediaReservation(reservation, 'author-reserve-retry');
   expect((await reservation.request().headerValue('idempotency-key')) === originalReservationKey).toBe(true);
   expect(reservation.request().postData() === originalReservation.postData()).toBe(true);
   const mediaId = ((await reservation.json()) as { media: NativeAttachment }).media.id;
@@ -316,16 +332,14 @@ async function publishAttachmentReply() {
   const replyReserved = replyPage.waitForResponse(
     (response) => new URL(response.url()).pathname === '/media' && response.request().method() === 'POST',
   );
-  const replyUploaded = replyPage.waitForResponse(
-    (response) => /^\/media\/[^/]+$/.test(new URL(response.url()).pathname) && response.request().method() === 'PUT',
-  );
+  const replyUploaded = waitForUploadResponse(replyPage);
   await replaceRow.locator('input[type="file"]').setInputFiles({
     name: 'reply.png',
     mimeType: 'image/png',
     buffer: png,
   });
   const replyReservation = await replyReserved;
-  expect(replyReservation.status()).toBe(201);
+  await expectMediaReservation(replyReservation, 'replier-reserve-replacement');
   const replacementReservationKey = await replyReservation.request().headerValue('idempotency-key');
   expect(Boolean(replacementReservationKey) && replacementReservationKey !== refusedReservationKey).toBe(true);
   const replyMediaId = ((await replyReservation.json()) as { media: NativeAttachment }).media.id;
